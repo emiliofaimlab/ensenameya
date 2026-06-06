@@ -1,0 +1,6 @@
+# Supabase CLI (estado local efímero)
+.branches
+.temp
+
+# Secretos locales de Edge Functions
+.env

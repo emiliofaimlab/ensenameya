@@ -1,0 +1,12 @@
+-- ============================================================================
+-- Seed local. Se ejecuta automáticamente con `npm run db:reset`.
+-- ============================================================================
+-- Para crear usuarios de prueba: usa Supabase Studio (http://127.0.0.1:54323
+-- → Authentication → Add user) o la API de Auth. El trigger handle_new_user
+-- crea automáticamente su `profile` y le asigna el rol 'alumno'.
+--
+-- Para promover un usuario a admin tras crearlo, copia su UUID y descomenta:
+--
+-- insert into public.user_roles (user_id, role)
+-- values ('<uuid-del-usuario>', 'admin')
+-- on conflict do nothing;
