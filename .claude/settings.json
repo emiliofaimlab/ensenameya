@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Bash(npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run db:start:*)",
+      "Bash(npm run db:stop:*)",
+      "Bash(npm run db:types:*)",
+      "Bash(npm run db:diff:*)",
+      "Bash(npm run functions:serve:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)"
+    ],
+    "deny": [
+      "Bash(npm run db:reset:*)",
+      "Bash(npx supabase db reset:*)",
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(rm:*)"
+    ]
+  }
+}
