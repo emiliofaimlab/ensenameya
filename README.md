@@ -6,7 +6,8 @@ Marketplace de tutorías 1:1 en vivo entre alumnos y tutores. Monorepo: frontend
 - **Frontend:** React + Next.js (App Router) + TypeScript + Tailwind → despliegue en Vercel.
 - **Backend:** Supabase (Postgres + RLS, Auth, Storage, Edge Functions).
 - **Arquitectura completa:** ver [`docs/context/REVISION-docs-1-3.md`](docs/context/REVISION-docs-1-3.md) → **Anexo A**.
-- **Contexto del producto:** ver [`docs/context/`](docs/context/) (Docs 0–9).
+- **Contexto del producto (técnico):** ver [`docs/context/`](docs/context/) (Docs 0–9 + revisión).
+- **Visión para el cliente (comercial):** [`docs/context/APROBACION-CLIENTE-FAIMLAB.md`](docs/context/APROBACION-CLIENTE-FAIMLAB.md) — propuesta y aprobación: perfiles, ~49 pantallas, flujos, procesos de pago por geografía y las 15 decisiones a confirmar (`C-01…C-15`).
 
 ## Requisitos
 
@@ -102,7 +103,8 @@ prod ≡ staging ≡ local.
 │  ├─ config.toml           # config del stack local
 │  ├─ migrations/           # esquema versionado (fuente de verdad)
 │  └─ seed.sql              # datos de prueba locales
-└─ docs/context/            # documentación del producto (Docs 0–9 + revisión)
+└─ docs/context/            # docs del producto: Docs 0–9 + revisión (técnico)
+                            #   + APROBACION-CLIENTE-FAIMLAB.md (aprobación comercial)
 ```
 
 ## Seguridad (recordatorios clave)

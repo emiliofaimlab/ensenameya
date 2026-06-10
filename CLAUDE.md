@@ -1,7 +1,7 @@
 # Enséñame Ya — Manual del proyecto
 
 > MVP web: marketplace de tutorías **1:1 en vivo** (alumno ↔ tutor) con reservas,
-> pagos (Stripe + fallback por geografía), videollamada (Daily) y panel admin.
+> pagos (**capa agnóstica** por geografía; proveedor pendiente — C-01/DP-01, hoy se evalúa DLocal + Stripe de respaldo), videollamada (Daily) y panel admin.
 > **Monorepo:** frontend Next.js + backend Supabase en este mismo repo.
 
 ## Stack
@@ -24,6 +24,7 @@ npm run dev        # frontend → http://localhost:3000
 | `npm run db:diff` | Genera SQL de migración desde cambios locales |
 | `npm run db:push` | Aplica migraciones al proyecto cloud enlazado |
 | `npm run db:types` | Regenera `src/lib/database.types.ts` desde el esquema |
+| `npm run functions:serve` | Sirve las Edge Functions en local (donde vive el dinero, reglas 2/7) |
 | `npm run lint` · `npx tsc --noEmit` | Lint y typecheck |
 
 Tras cambiar el esquema: `npm run db:reset` (local) **y** `npm run db:types`.
@@ -50,7 +51,7 @@ src/lib/supabase/middleware.ts helper de sesión usado por proxy.ts
 src/lib/database.types.ts     tipos generados (no editar a mano)
 supabase/migrations/          esquema versionado (fuente de verdad)
 supabase/config.toml          config del stack local
-docs/context/                 documentación del producto (Docs 0–9 + revisión)
+docs/context/                 documentación del producto (Docs 0–9 + revisión + aprobación cliente)
 ```
 
 ## Patrón RLS (referencia rápida)
@@ -58,8 +59,9 @@ docs/context/                 documentación del producto (Docs 0–9 + revisió
 - Propiedad: `using ( (select auth.uid()) = <owner_col> )` (el `select` ayuda al planner).
 - Rol admin: helper `public.has_role('admin')` (SECURITY DEFINER, evita recursión).
 - Alta de perfil + rol `alumno` automática al registrarse (trigger `handle_new_user`).
+- **Docs vs código:** los Docs 0–9 son el **objetivo** (p. ej. nombran el enum `user_role` y `has_role(uid, role)` de dos args); el **código manda** en nombres concretos (enum real `app_role`, `has_role('admin')` de un arg). Ante divergencia, gana la migración.
 
-## Contexto profundo (lee el doc relevante, no los 10)
+## Contexto profundo (lee el doc relevante, no los 12)
 
 | Doc | Cubre |
 | :-- | :-- |
@@ -71,6 +73,16 @@ docs/context/                 documentación del producto (Docs 0–9 + revisió
 | `REVISION-docs-1-3.md` → **Anexo A** | Arquitectura del proyecto |
 
 Todos en `docs/context/`.
+
+**Visión comercial / aprobación del cliente:** `APROBACION-CLIENTE-FAIMLAB.md`
+(v1 · 2026-06-09) — resumen **completo y no técnico** para firma del cliente:
+perfiles, ~49 pantallas, flujos FL-01…05, procesos de pago por geografía y
+**15 decisiones a confirmar `C-01…C-15`** (4 **BLOQUEANTES**: C-01 proveedores ·
+C-03 reembolsos · C-13 mercado/Venezuela · C-14 requisitos para aprobar tutor).
+Los `C-xx` son la cara-cliente de las `DP-xx`/supuestos (C-01→DP-01, C-02→DP-02,
+C-03→DP-03, C-04→DP-06, C-05→DP-08, C-10→DP-04, C-11→DP-05, C-15→DP-07); cuando el
+cliente responda se consumen como **configuración** (regla de oro 8), no como código.
+El **detalle técnico** sigue viviendo en los Docs 0–9, que **mandan en lo técnico**.
 
 ## Skills del proyecto
 
