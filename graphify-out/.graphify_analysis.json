@@ -1,0 +1,825 @@
+{
+  "communities": {
+    "0": [
+      "concept_admin",
+      "concept_alumno",
+      "concept_categoria",
+      "concept_clase_grupal",
+      "concept_disponibilidad",
+      "concept_documento_verificacion",
+      "concept_fl_03",
+      "concept_modelo_de_precio",
+      "concept_paquete",
+      "concept_principio_vender_resultado",
+      "concept_producto",
+      "concept_resultado_outcome",
+      "concept_rn_04",
+      "concept_rn_06",
+      "concept_rn_07",
+      "concept_rn_09",
+      "concept_rn_24",
+      "concept_rn_29",
+      "concept_rn_31",
+      "concept_split",
+      "concept_tier",
+      "concept_tutor",
+      "concept_usuario",
+      "concept_verificacion_identidad",
+      "context_00_glosario_y_modelo_conceptual_doc",
+      "context_01_modelo_de_datos_availability_exceptions",
+      "context_01_modelo_de_datos_availability_rules",
+      "context_01_modelo_de_datos_categories",
+      "context_01_modelo_de_datos_doc",
+      "context_01_modelo_de_datos_has_role",
+      "context_01_modelo_de_datos_product_categories",
+      "context_01_modelo_de_datos_products",
+      "context_01_modelo_de_datos_profiles",
+      "context_01_modelo_de_datos_tutor_profiles",
+      "context_01_modelo_de_datos_tutor_tiers",
+      "context_01_modelo_de_datos_user_roles",
+      "context_01_modelo_de_datos_verification_documents",
+      "context_02_maquinas_de_estado_doc",
+      "context_02_maquinas_de_estado_m1",
+      "context_02_maquinas_de_estado_m2",
+      "context_02_maquinas_de_estado_m3",
+      "context_02_maquinas_de_estado_m8",
+      "context_03_roles_y_permisos_rls_doc",
+      "context_04_mapa_de_pantallas_y_flujos_scr_ad05",
+      "context_04_mapa_de_pantallas_y_flujos_scr_ad12",
+      "context_04_mapa_de_pantallas_y_flujos_scr_tu02",
+      "context_04_mapa_de_pantallas_y_flujos_scr_tu05"
+    ],
+    "1": [
+      "concept_c_05",
+      "concept_charge_flow",
+      "concept_daily_integration",
+      "concept_dp_03",
+      "concept_dp_08",
+      "concept_ep_08",
+      "concept_fl_01",
+      "concept_fl_05",
+      "concept_ntf_04",
+      "concept_ntf_05",
+      "concept_ntf_09",
+      "concept_ntf_10",
+      "concept_pago",
+      "concept_resena",
+      "concept_reserva",
+      "concept_risk_05",
+      "concept_risk_11",
+      "concept_risk_14",
+      "concept_risk_15",
+      "concept_rn_11",
+      "concept_rn_12",
+      "concept_rn_17",
+      "concept_rn_18",
+      "concept_rn_25",
+      "concept_rn_28",
+      "concept_rn_34",
+      "concept_sala_de_video",
+      "concept_sesion",
+      "concept_webhook_idempotency",
+      "context_01_modelo_de_datos_bookings",
+      "context_01_modelo_de_datos_payments",
+      "context_01_modelo_de_datos_reviews",
+      "context_01_modelo_de_datos_sessions",
+      "context_02_maquinas_de_estado_m4",
+      "context_02_maquinas_de_estado_m5",
+      "context_02_maquinas_de_estado_m6",
+      "context_02_maquinas_de_estado_orquestacion",
+      "context_04_mapa_de_pantallas_y_flujos_doc",
+      "context_04_mapa_de_pantallas_y_flujos_scr_ad08",
+      "context_04_mapa_de_pantallas_y_flujos_scr_al04",
+      "context_04_mapa_de_pantallas_y_flujos_scr_al05",
+      "context_04_mapa_de_pantallas_y_flujos_scr_al08",
+      "context_04_mapa_de_pantallas_y_flujos_scr_lv01",
+      "context_05_spec_por_pantalla_doc"
+    ],
+    "2": [
+      "package",
+      "package_dependencies",
+      "package_dependencies_class_variance_authority",
+      "package_dependencies_clsx",
+      "package_dependencies_lucide_react",
+      "package_dependencies_next",
+      "package_dependencies_next_themes",
+      "package_dependencies_radix_ui",
+      "package_dependencies_react",
+      "package_dependencies_react_dom",
+      "package_dependencies_shadcn",
+      "package_dependencies_sonner",
+      "package_dependencies_supabase_ssr",
+      "package_dependencies_supabase_supabase_js",
+      "package_dependencies_tailwind_merge",
+      "package_dependencies_tw_animate_css",
+      "package_devdependencies",
+      "package_devdependencies_eslint",
+      "package_devdependencies_eslint_config_next",
+      "package_devdependencies_tailwindcss",
+      "package_devdependencies_tailwindcss_postcss",
+      "package_devdependencies_types_node",
+      "package_devdependencies_types_react",
+      "package_devdependencies_types_react_dom",
+      "package_devdependencies_typescript",
+      "package_name",
+      "package_private",
+      "package_scripts",
+      "package_scripts_build",
+      "package_scripts_db_diff",
+      "package_scripts_db_push",
+      "package_scripts_db_reset",
+      "package_scripts_db_start",
+      "package_scripts_db_stop",
+      "package_scripts_db_types",
+      "package_scripts_dev",
+      "package_scripts_functions_serve",
+      "package_scripts_lint",
+      "package_scripts_start",
+      "package_version"
+    ],
+    "3": [
+      "concept_adapter_bamboo",
+      "concept_adapter_crypto_usdt",
+      "concept_adapter_dlocal",
+      "concept_adapter_mercadopago",
+      "concept_adapter_stripe",
+      "concept_aprobacion_cliente",
+      "concept_c_01",
+      "concept_c_03",
+      "concept_c_09",
+      "concept_c_13",
+      "concept_c_14",
+      "concept_capa_agnostica_pagos",
+      "concept_corredor",
+      "concept_dp_01",
+      "concept_ep_07",
+      "concept_orquestacion_pagos",
+      "concept_payment_provider",
+      "concept_payment_router",
+      "concept_payment_routing_rules",
+      "concept_payment_split",
+      "concept_risk_01",
+      "concept_risk_02",
+      "concept_rn_15",
+      "concept_rn_16",
+      "concept_rn_30",
+      "concept_rn_33",
+      "concept_service_role",
+      "concept_tabla_routing_pagos",
+      "concept_traceability_matrix",
+      "concept_venezuela_corridor",
+      "context_01_modelo_de_datos_payment_routing_rules",
+      "context_01_modelo_de_datos_payout_items",
+      "docs_plan_desarrollo_blocking_tracker",
+      "docs_plan_desarrollo_m1",
+      "docs_plan_desarrollo_m10",
+      "docs_plan_desarrollo_m3",
+      "docs_plan_desarrollo_m6",
+      "docs_plan_desarrollo_plan",
+      "docs_plan_desarrollo_walking_skeleton"
+    ],
+    "4": [
+      "claude_claude_md",
+      "concept_database_types",
+      "concept_doc_routing_table",
+      "concept_edge_functions",
+      "concept_environments_dev_staging_prod",
+      "concept_golden_rule_1_rls",
+      "concept_golden_rule_2_money_server_side",
+      "concept_golden_rule_3_service_role",
+      "concept_golden_rule_4_utc",
+      "concept_golden_rule_5_migrations_truth",
+      "concept_golden_rule_6_generated_types",
+      "concept_golden_rule_8_no_inventing_dp",
+      "concept_handle_new_user",
+      "concept_has_role",
+      "concept_migrations_dir",
+      "concept_nextjs",
+      "concept_readme",
+      "concept_rls_pattern",
+      "concept_rn_26",
+      "concept_s_15",
+      "concept_shadcn",
+      "concept_supabase",
+      "concept_supabase_client_server",
+      "concept_tailwind",
+      "concept_vercel",
+      "docs_plan_desarrollo_definition_of_done",
+      "docs_plan_desarrollo_m0",
+      "docs_plan_desarrollo_m7",
+      "docs_plan_desarrollo_vibecode_loop",
+      "skill_nueva_migracion",
+      "skill_nueva_pantalla"
+    ],
+    "5": [
+      "concept_ad_01",
+      "concept_ad_02",
+      "concept_ad_03",
+      "concept_anexo_a_arquitectura",
+      "concept_c_11",
+      "concept_c_12",
+      "concept_create_booking",
+      "concept_dp_05",
+      "concept_edge_functions_service_role",
+      "concept_email_provider",
+      "concept_email_provider_port",
+      "concept_ep_12",
+      "concept_ep_14",
+      "concept_financial_writes_service_role",
+      "concept_golden_rule_7_controlled_functions",
+      "concept_h_13",
+      "concept_h_2",
+      "concept_h_4",
+      "concept_nextjs_vercel",
+      "concept_notifications_table",
+      "concept_ntf_03",
+      "concept_payment_provider_stub",
+      "concept_risk_12",
+      "concept_risk_13",
+      "concept_risk_18",
+      "concept_rn_36",
+      "concept_supabase_auth",
+      "concept_supabase_backend",
+      "docs_plan_desarrollo_m4",
+      "docs_plan_desarrollo_m8"
+    ],
+    "6": [
+      "app_page",
+      "app_page_roothome",
+      "layout_container",
+      "layout_container_container",
+      "layout_section",
+      "layout_section_section",
+      "layout_site_footer",
+      "layout_site_footer_sitefooter",
+      "layout_site_header_siteheader",
+      "public_layout",
+      "public_layout_publiclayout",
+      "public_page",
+      "public_page_features",
+      "public_page_homepage",
+      "ui_card",
+      "ui_card_card",
+      "ui_card_cardaction",
+      "ui_card_cardcontent",
+      "ui_card_carddescription",
+      "ui_card_cardfooter",
+      "ui_card_cardheader",
+      "ui_card_cardtitle"
+    ],
+    "7": [
+      "components",
+      "components_aliases",
+      "components_aliases_components",
+      "components_aliases_hooks",
+      "components_aliases_lib",
+      "components_aliases_ui",
+      "components_aliases_utils",
+      "components_iconlibrary",
+      "components_menuaccent",
+      "components_menucolor",
+      "components_registries",
+      "components_rsc",
+      "components_rtl",
+      "components_schema",
+      "components_style",
+      "components_tailwind",
+      "components_tailwind_basecolor",
+      "components_tailwind_config",
+      "components_tailwind_css",
+      "components_tailwind_cssvariables",
+      "components_tailwind_prefix",
+      "components_tsx"
+    ],
+    "8": [
+      "lib_database_types",
+      "lib_database_types_compositetypes",
+      "lib_database_types_constants",
+      "lib_database_types_database",
+      "lib_database_types_databasewithoutinternals",
+      "lib_database_types_defaultschema",
+      "lib_database_types_enums",
+      "lib_database_types_json",
+      "lib_database_types_tables",
+      "lib_database_types_tablesinsert",
+      "lib_database_types_tablesupdate",
+      "src_proxy",
+      "src_proxy_config",
+      "src_proxy_proxy",
+      "supabase_client",
+      "supabase_client_createclient",
+      "supabase_middleware",
+      "supabase_middleware_updatesession",
+      "supabase_server",
+      "supabase_server_createclient"
+    ],
+    "9": [
+      "tsconfig",
+      "tsconfig_compileroptions",
+      "tsconfig_compileroptions_allowjs",
+      "tsconfig_compileroptions_esmoduleinterop",
+      "tsconfig_compileroptions_incremental",
+      "tsconfig_compileroptions_isolatedmodules",
+      "tsconfig_compileroptions_jsx",
+      "tsconfig_compileroptions_lib",
+      "tsconfig_compileroptions_module",
+      "tsconfig_compileroptions_moduleresolution",
+      "tsconfig_compileroptions_noemit",
+      "tsconfig_compileroptions_paths",
+      "tsconfig_compileroptions_plugins",
+      "tsconfig_compileroptions_resolvejsonmodule",
+      "tsconfig_compileroptions_skiplibcheck",
+      "tsconfig_compileroptions_strict",
+      "tsconfig_compileroptions_target",
+      "tsconfig_exclude",
+      "tsconfig_include",
+      "tsconfig_paths"
+    ],
+    "10": [
+      "concept_c_02",
+      "concept_c_04",
+      "concept_c_15",
+      "concept_dp_02",
+      "concept_dp_06",
+      "concept_dp_07",
+      "concept_ep_10",
+      "concept_fl_02",
+      "concept_h_1",
+      "concept_ntf_12",
+      "concept_payout",
+      "concept_payout_flow",
+      "concept_periodo_retencion",
+      "concept_risk_03",
+      "concept_risk_04",
+      "context_01_modelo_de_datos_payouts",
+      "context_02_maquinas_de_estado_m7",
+      "context_04_mapa_de_pantallas_y_flujos_scr_ad15",
+      "context_04_mapa_de_pantallas_y_flujos_scr_tu09"
+    ],
+    "11": [
+      "lib_utils_cn",
+      "ui_avatar",
+      "ui_avatar_avatar",
+      "ui_avatar_avatarbadge",
+      "ui_avatar_avatarfallback",
+      "ui_avatar_avatargroup",
+      "ui_avatar_avatargroupcount",
+      "ui_avatar_avatarimage",
+      "ui_label",
+      "ui_label_label",
+      "ui_table",
+      "ui_table_table",
+      "ui_table_tablebody",
+      "ui_table_tablecaption",
+      "ui_table_tablecell",
+      "ui_table_tablefooter",
+      "ui_table_tablehead",
+      "ui_table_tableheader",
+      "ui_table_tablerow"
+    ],
+    "12": [
+      "layout_site_header",
+      "layout_site_header_navlinks",
+      "ui_button",
+      "ui_button_button",
+      "ui_button_buttonvariants",
+      "ui_sheet",
+      "ui_sheet_sheet",
+      "ui_sheet_sheetclose",
+      "ui_sheet_sheetcontent",
+      "ui_sheet_sheetdescription",
+      "ui_sheet_sheetfooter",
+      "ui_sheet_sheetheader",
+      "ui_sheet_sheetoverlay",
+      "ui_sheet_sheetportal",
+      "ui_sheet_sheettitle",
+      "ui_sheet_sheettrigger"
+    ],
+    "13": [
+      "ui_dropdown_menu",
+      "ui_dropdown_menu_dropdownmenu",
+      "ui_dropdown_menu_dropdownmenucheckboxitem",
+      "ui_dropdown_menu_dropdownmenucontent",
+      "ui_dropdown_menu_dropdownmenugroup",
+      "ui_dropdown_menu_dropdownmenuitem",
+      "ui_dropdown_menu_dropdownmenulabel",
+      "ui_dropdown_menu_dropdownmenuportal",
+      "ui_dropdown_menu_dropdownmenuradiogroup",
+      "ui_dropdown_menu_dropdownmenuradioitem",
+      "ui_dropdown_menu_dropdownmenuseparator",
+      "ui_dropdown_menu_dropdownmenushortcut",
+      "ui_dropdown_menu_dropdownmenusub",
+      "ui_dropdown_menu_dropdownmenusubcontent",
+      "ui_dropdown_menu_dropdownmenusubtrigger",
+      "ui_dropdown_menu_dropdownmenutrigger"
+    ],
+    "14": [
+      "layout_page_header",
+      "layout_page_header_pageheader",
+      "layout_page_header_pageheaderprops",
+      "lib_utils",
+      "ui_badge",
+      "ui_badge_badge",
+      "ui_badge_badgevariants",
+      "ui_input",
+      "ui_input_input",
+      "ui_separator",
+      "ui_separator_separator",
+      "ui_skeleton",
+      "ui_skeleton_skeleton",
+      "ui_textarea",
+      "ui_textarea_textarea"
+    ],
+    "15": [
+      "app_layout",
+      "app_layout_geistmono",
+      "app_layout_geistsans",
+      "app_layout_metadata",
+      "app_layout_rootlayout",
+      "components_theme_provider",
+      "components_theme_provider_themeprovider",
+      "ui_sonner",
+      "ui_sonner_toaster",
+      "ui_tooltip",
+      "ui_tooltip_tooltip",
+      "ui_tooltip_tooltipcontent",
+      "ui_tooltip_tooltipprovider",
+      "ui_tooltip_tooltiptrigger"
+    ],
+    "16": [
+      "ui_dialog",
+      "ui_dialog_dialog",
+      "ui_dialog_dialogclose",
+      "ui_dialog_dialogcontent",
+      "ui_dialog_dialogdescription",
+      "ui_dialog_dialogfooter",
+      "ui_dialog_dialogheader",
+      "ui_dialog_dialogoverlay",
+      "ui_dialog_dialogportal",
+      "ui_dialog_dialogtitle",
+      "ui_dialog_dialogtrigger"
+    ],
+    "17": [
+      "ui_select",
+      "ui_select_select",
+      "ui_select_selectcontent",
+      "ui_select_selectgroup",
+      "ui_select_selectitem",
+      "ui_select_selectlabel",
+      "ui_select_selectscrolldownbutton",
+      "ui_select_selectscrollupbutton",
+      "ui_select_selectseparator",
+      "ui_select_selecttrigger",
+      "ui_select_selectvalue"
+    ],
+    "18": [
+      "concept_c_10",
+      "concept_dp_04",
+      "concept_ep_13",
+      "concept_fl_04",
+      "concept_referido",
+      "concept_referral_factory",
+      "concept_rn_21"
+    ],
+    "19": [
+      "ui_alert",
+      "ui_alert_alert",
+      "ui_alert_alertaction",
+      "ui_alert_alertdescription",
+      "ui_alert_alerttitle",
+      "ui_alert_alertvariants"
+    ],
+    "20": [
+      "ui_tabs",
+      "ui_tabs_tabs",
+      "ui_tabs_tabscontent",
+      "ui_tabs_tabslist",
+      "ui_tabs_tabslistvariants",
+      "ui_tabs_tabstrigger"
+    ],
+    "21": [
+      "claude_settings",
+      "claude_settings_permissions",
+      "claude_settings_permissions_allow",
+      "claude_settings_permissions_deny"
+    ],
+    "22": [
+      "claude_settings_local",
+      "claude_settings_local_permissions",
+      "claude_settings_local_permissions_allow"
+    ],
+    "23": [
+      "concept_rls",
+      "concept_rn_19",
+      "context_03_roles_y_permisos_rls_default_deny"
+    ],
+    "24": [
+      "concept_rn_01",
+      "concept_rn_02",
+      "concept_utc_timezone"
+    ],
+    "25": [
+      "concept_daily",
+      "docs_plan_desarrollo_m5"
+    ],
+    "26": [
+      "concept_ep_15",
+      "concept_sentry_monitoring"
+    ],
+    "27": [
+      "concept_ntf_11",
+      "concept_rn_35"
+    ],
+    "28": [
+      "eslint_config",
+      "eslint_config_eslintconfig"
+    ],
+    "29": [
+      "next_config",
+      "next_config_nextconfig"
+    ],
+    "30": [
+      "postcss_config",
+      "postcss_config_config"
+    ],
+    "31": [
+      "concept_c_06"
+    ],
+    "32": [
+      "concept_c_07"
+    ],
+    "33": [
+      "concept_c_08"
+    ],
+    "34": [
+      "concept_ep_01"
+    ],
+    "35": [
+      "concept_ep_02"
+    ],
+    "36": [
+      "concept_ep_03"
+    ],
+    "37": [
+      "concept_ep_06"
+    ],
+    "38": [
+      "concept_ep_11"
+    ],
+    "39": [
+      "concept_h_3"
+    ],
+    "40": [
+      "concept_ntf_01"
+    ],
+    "41": [
+      "concept_ntf_02"
+    ],
+    "42": [
+      "concept_ntf_06"
+    ],
+    "43": [
+      "concept_ntf_07"
+    ],
+    "44": [
+      "concept_ntf_08"
+    ],
+    "45": [
+      "concept_ntf_13"
+    ],
+    "46": [
+      "concept_ntf_14"
+    ],
+    "47": [
+      "concept_ntf_15"
+    ],
+    "48": [
+      "concept_ntf_16"
+    ],
+    "49": [
+      "concept_oauth"
+    ],
+    "50": [
+      "concept_onboarding"
+    ],
+    "51": [
+      "concept_rn_03"
+    ],
+    "52": [
+      "concept_rn_10"
+    ],
+    "53": [
+      "concept_rn_22"
+    ],
+    "54": [
+      "docs_plan_desarrollo_m2"
+    ],
+    "55": [
+      "docs_plan_desarrollo_m9"
+    ]
+  },
+  "cohesion": {
+    "0": 0.05272895467160037,
+    "1": 0.05708245243128964,
+    "2": 0.05,
+    "3": 0.07017543859649122,
+    "4": 0.09462365591397849,
+    "5": 0.08045977011494253,
+    "6": 0.12987012987012986,
+    "7": 0.09090909090909091,
+    "8": 0.12631578947368421,
+    "9": 0.1,
+    "10": 0.1286549707602339,
+    "11": 0.19298245614035087,
+    "12": 0.2,
+    "13": 0.125,
+    "14": 0.14285714285714285,
+    "15": 0.17582417582417584,
+    "16": 0.18181818181818182,
+    "17": 0.18181818181818182,
+    "18": 0.38095238095238093,
+    "19": 0.4,
+    "20": 0.4,
+    "21": 0.5,
+    "22": 0.6666666666666666,
+    "23": 0.6666666666666666,
+    "24": 0.6666666666666666,
+    "25": 1.0,
+    "26": 1.0,
+    "27": 1.0,
+    "28": 1.0,
+    "29": 1.0,
+    "30": 1.0,
+    "31": 1.0,
+    "32": 1.0,
+    "33": 1.0,
+    "34": 1.0,
+    "35": 1.0,
+    "36": 1.0,
+    "37": 1.0,
+    "38": 1.0,
+    "39": 1.0,
+    "40": 1.0,
+    "41": 1.0,
+    "42": 1.0,
+    "43": 1.0,
+    "44": 1.0,
+    "45": 1.0,
+    "46": 1.0,
+    "47": 1.0,
+    "48": 1.0,
+    "49": 1.0,
+    "50": 1.0,
+    "51": 1.0,
+    "52": 1.0,
+    "53": 1.0,
+    "54": 1.0,
+    "55": 1.0
+  },
+  "gods": [
+    {
+      "id": "lib_utils_cn",
+      "label": "cn()",
+      "degree": 90
+    },
+    {
+      "id": "tsconfig_compileroptions",
+      "label": "compilerOptions",
+      "degree": 16
+    },
+    {
+      "id": "package_scripts",
+      "label": "scripts",
+      "degree": 12
+    },
+    {
+      "id": "concept_dp_03",
+      "label": "DP-03 — política de reembolsos",
+      "degree": 10
+    },
+    {
+      "id": "skill_nueva_migracion",
+      "label": "Skill /nueva-migracion",
+      "degree": 9
+    },
+    {
+      "id": "concept_tutor",
+      "label": "Tutor",
+      "degree": 8
+    },
+    {
+      "id": "concept_reserva",
+      "label": "Reserva (booking)",
+      "degree": 8
+    },
+    {
+      "id": "context_01_modelo_de_datos_profiles",
+      "label": "profiles (tabla)",
+      "degree": 8
+    },
+    {
+      "id": "context_02_maquinas_de_estado_m4",
+      "label": "M4 — booking_status",
+      "degree": 8
+    },
+    {
+      "id": "concept_s_15",
+      "label": "S-15 — escritura financiera solo vía service role/webhooks",
+      "degree": 8
+    }
+  ],
+  "surprises": [
+    {
+      "source": "C-02 — Días de retención del payout",
+      "target": "DP-02 — periodo de retención de payout (15 vs 30 días)",
+      "source_files": [
+        "docs/context/APROBACION-CLIENTE-FAIMLAB.md",
+        "docs/context/00-glosario-y-modelo-conceptual.md"
+      ],
+      "confidence": "INFERRED",
+      "relation": "semantically_similar_to",
+      "why": "inferred connection - not explicitly stated in source; semantically similar concepts with no structural link; peripheral node `C-02 — Días de retención del payout` unexpectedly reaches hub `DP-02 — periodo de retención de payout (15 vs 30 días)`"
+    },
+    {
+      "source": "Regla de oro 1 — RLS default-deny",
+      "target": "RISK-13 — Mala configuración de RLS → fuga",
+      "source_files": [
+        "CLAUDE.md",
+        "docs/context/09-riesgos-y-decisiones-pendientes.md"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "Edge Function create-booking",
+      "target": "Supabase Edge Functions",
+      "source_files": [
+        "docs/PLAN-DESARROLLO.md",
+        "CLAUDE.md"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "implements",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "Edge Function create-booking",
+      "target": "Regla de oro 7 — Snapshots financieros vía función controlada",
+      "source_files": [
+        "docs/PLAN-DESARROLLO.md",
+        "CLAUDE.md"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "implements",
+      "why": "connects across different repos/directories; peripheral node `Regla de oro 7 — Snapshots financieros vía función controlada` unexpectedly reaches hub `Edge Function create-booking`"
+    },
+    {
+      "source": "Skill /nueva-pantalla",
+      "target": "Regla de oro 3 — service_role jamás en el cliente",
+      "source_files": [
+        ".claude/skills/nueva-pantalla/SKILL.md",
+        "CLAUDE.md"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "implements",
+      "why": "connects across different repos/directories; peripheral node `Regla de oro 3 — service_role jamás en el cliente` unexpectedly reaches hub `Skill /nueva-pantalla`"
+    }
+  ],
+  "questions": [
+    {
+      "type": "ambiguous_edge",
+      "question": "What is the exact relationship between `Paquete (N sesiones 1:1)` and `Clase grupal (fuera de alcance)`?",
+      "why": "Edge tagged AMBIGUOUS (relation: conceptually_related_to) - confidence is low."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `cn()` connect `Community 11` to `Community 6`, `Community 12`, `Community 13`, `Community 14`, `Community 15`, `Community 16`, `Community 17`, `Community 19`, `Community 20`?",
+      "why": "High betweenness centrality (0.058) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `S-15 — escritura financiera solo vía service role/webhooks` connect `Community 4` to `Community 1`, `Community 10`, `Community 3`?",
+      "why": "High betweenness centrality (0.042) - this node is a cross-community bridge."
+    },
+    {
+      "type": "bridge_node",
+      "question": "Why does `profiles (tabla)` connect `Community 0` to `Community 1`, `Community 10`?",
+      "why": "High betweenness centrality (0.033) - this node is a cross-community bridge."
+    },
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `allow`, `deny`, `allow` to the rest of the system?",
+      "why": "203 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 0` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.05272895467160037 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 1` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.05708245243128964 - nodes in this community are weakly interconnected."
+    }
+  ]
+}

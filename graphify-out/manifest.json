@@ -1,0 +1,332 @@
+{
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/.claude/settings.json": {
+    "mtime": 1780762318.4406612,
+    "ast_hash": "b042503c278a67f3d0640ee5d7d87c7a",
+    "semantic_hash": "b042503c278a67f3d0640ee5d7d87c7a"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/.claude/settings.local.json": {
+    "mtime": 1781057296.4141505,
+    "ast_hash": "ef4347e0b1719359433f33816b81e67f",
+    "semantic_hash": "ef4347e0b1719359433f33816b81e67f"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/components.json": {
+    "mtime": 1781058493.994593,
+    "ast_hash": "f9b838065323828efd209f38da0e25f2",
+    "semantic_hash": "f9b838065323828efd209f38da0e25f2"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/eslint.config.mjs": {
+    "mtime": 1780758852.0,
+    "ast_hash": "dfa1f5f6a7037bf39dc510f30b180002",
+    "semantic_hash": "dfa1f5f6a7037bf39dc510f30b180002"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/next.config.ts": {
+    "mtime": 1780758852.0,
+    "ast_hash": "9b77af189a21a7a64e4bd7a426f64176",
+    "semantic_hash": "9b77af189a21a7a64e4bd7a426f64176"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/package.json": {
+    "mtime": 1781058552.1428165,
+    "ast_hash": "7a7ae45d1e7d897742332b9714b1ed6f",
+    "semantic_hash": "7a7ae45d1e7d897742332b9714b1ed6f"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/postcss.config.mjs": {
+    "mtime": 1780758852.0,
+    "ast_hash": "239f3ebf717465dc636818a1a619398d",
+    "semantic_hash": "239f3ebf717465dc636818a1a619398d"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/app/(public)/layout.tsx": {
+    "mtime": 1781058766.0555499,
+    "ast_hash": "f41ae80cbb45b4c6e41af5a7ee72df79",
+    "semantic_hash": "f41ae80cbb45b4c6e41af5a7ee72df79"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/app/(public)/page.tsx": {
+    "mtime": 1781058772.0232182,
+    "ast_hash": "0c27f8067bdceb77c2fe3e31711782a2",
+    "semantic_hash": "0c27f8067bdceb77c2fe3e31711782a2"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/app/layout.tsx": {
+    "mtime": 1781058747.16194,
+    "ast_hash": "dc8c6614046a82dea06ab55be826e9d3",
+    "semantic_hash": "dc8c6614046a82dea06ab55be826e9d3"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/app/page.tsx": {
+    "mtime": 1781059100.8580868,
+    "ast_hash": "925b35a10803ab9ab06153cf56f1e3ef",
+    "semantic_hash": "925b35a10803ab9ab06153cf56f1e3ef"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/layout/container.tsx": {
+    "mtime": 1781058748.7259247,
+    "ast_hash": "7f674f0f4d0c6ab04dc26be3bee3aabc",
+    "semantic_hash": "7f674f0f4d0c6ab04dc26be3bee3aabc"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/layout/page-header.tsx": {
+    "mtime": 1781058752.9294214,
+    "ast_hash": "dc1675a0ec9da233494bf0ddada58d74",
+    "semantic_hash": "dc1675a0ec9da233494bf0ddada58d74"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/layout/section.tsx": {
+    "mtime": 1781058750.123095,
+    "ast_hash": "4fbd5c903694f1bb3888d83ad486db45",
+    "semantic_hash": "4fbd5c903694f1bb3888d83ad486db45"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/layout/site-footer.tsx": {
+    "mtime": 1781058756.0938063,
+    "ast_hash": "19b87fb64a99374e7da46766ba0504d5",
+    "semantic_hash": "19b87fb64a99374e7da46766ba0504d5"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/layout/site-header.tsx": {
+    "mtime": 1781058764.3028808,
+    "ast_hash": "afa4102714f0a07b76140bda59391a12",
+    "semantic_hash": "afa4102714f0a07b76140bda59391a12"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/theme-provider.tsx": {
+    "mtime": 1781058742.5915763,
+    "ast_hash": "48f7be828685a7896b95e06044d237c4",
+    "semantic_hash": "48f7be828685a7896b95e06044d237c4"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/alert.tsx": {
+    "mtime": 1781058553.05018,
+    "ast_hash": "739c28799fae98b4fa01132494788e85",
+    "semantic_hash": "739c28799fae98b4fa01132494788e85"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/avatar.tsx": {
+    "mtime": 1781058552.845367,
+    "ast_hash": "b48244919ef33575fecf5509063b7310",
+    "semantic_hash": "b48244919ef33575fecf5509063b7310"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/badge.tsx": {
+    "mtime": 1781058552.8194983,
+    "ast_hash": "633c33997e6137921ae433dd2dd0cb31",
+    "semantic_hash": "633c33997e6137921ae433dd2dd0cb31"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/button.tsx": {
+    "mtime": 1781058552.6897254,
+    "ast_hash": "37ff09090166aa7d6fae96e0b081e492",
+    "semantic_hash": "37ff09090166aa7d6fae96e0b081e492"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/card.tsx": {
+    "mtime": 1781058552.797548,
+    "ast_hash": "bd5f88ad2d983dd6c4561d63824c80ba",
+    "semantic_hash": "bd5f88ad2d983dd6c4561d63824c80ba"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/dialog.tsx": {
+    "mtime": 1781058553.1223145,
+    "ast_hash": "e01132db6e9067b7b8cc2e322fdd34ff",
+    "semantic_hash": "e01132db6e9067b7b8cc2e322fdd34ff"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/dropdown-menu.tsx": {
+    "mtime": 1781058552.933237,
+    "ast_hash": "63fc04368c0f92980d3ab4ae34f01a18",
+    "semantic_hash": "63fc04368c0f92980d3ab4ae34f01a18"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/input.tsx": {
+    "mtime": 1781058552.7262285,
+    "ast_hash": "2b0e9e810580f227dd255d9b78a83835",
+    "semantic_hash": "2b0e9e810580f227dd255d9b78a83835"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/label.tsx": {
+    "mtime": 1781058552.7519374,
+    "ast_hash": "e7e0c4ad98f3485ecd3c0ca516d0a8bf",
+    "semantic_hash": "e7e0c4ad98f3485ecd3c0ca516d0a8bf"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/select.tsx": {
+    "mtime": 1781058552.9753616,
+    "ast_hash": "611b5699ced6aad54c9a0e8cb865da7f",
+    "semantic_hash": "611b5699ced6aad54c9a0e8cb865da7f"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/separator.tsx": {
+    "mtime": 1781058552.865589,
+    "ast_hash": "f57449eae78fbd87d99e4edc45ab3c1e",
+    "semantic_hash": "f57449eae78fbd87d99e4edc45ab3c1e"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/sheet.tsx": {
+    "mtime": 1781058553.1475823,
+    "ast_hash": "136091919ca01aa135e9413cc05b2d23",
+    "semantic_hash": "136091919ca01aa135e9413cc05b2d23"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/skeleton.tsx": {
+    "mtime": 1781058552.8843238,
+    "ast_hash": "0e6e825c43d858d98c9903f4da975382",
+    "semantic_hash": "0e6e825c43d858d98c9903f4da975382"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/sonner.tsx": {
+    "mtime": 1781058553.0312717,
+    "ast_hash": "f46214bc2a6a5153a6e04fad523d5587",
+    "semantic_hash": "f46214bc2a6a5153a6e04fad523d5587"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/table.tsx": {
+    "mtime": 1781058553.0960262,
+    "ast_hash": "44f87727e60080863edb00fdd2fcd8da",
+    "semantic_hash": "44f87727e60080863edb00fdd2fcd8da"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/tabs.tsx": {
+    "mtime": 1781058552.9956994,
+    "ast_hash": "485d47f9e6f866e564685e6584e1e747",
+    "semantic_hash": "485d47f9e6f866e564685e6584e1e747"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/textarea.tsx": {
+    "mtime": 1781058552.7728758,
+    "ast_hash": "d448d2a90e48542e51b93a1189127bf2",
+    "semantic_hash": "d448d2a90e48542e51b93a1189127bf2"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/components/ui/tooltip.tsx": {
+    "mtime": 1781058553.0743961,
+    "ast_hash": "b0b931c1a15ec3924fa5fecebaa15685",
+    "semantic_hash": "b0b931c1a15ec3924fa5fecebaa15685"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/lib/database.types.ts": {
+    "mtime": 1780761168.8198478,
+    "ast_hash": "7921c92b75132010ddd48362eeea6443",
+    "semantic_hash": "7921c92b75132010ddd48362eeea6443"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/lib/supabase/client.ts": {
+    "mtime": 1780759161.9981844,
+    "ast_hash": "2aa5f1879074d35b7a25321e35acb768",
+    "semantic_hash": "2aa5f1879074d35b7a25321e35acb768"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/lib/supabase/middleware.ts": {
+    "mtime": 1780759179.024914,
+    "ast_hash": "5e6b9090a6b11378a80748bec7af6fa9",
+    "semantic_hash": "5e6b9090a6b11378a80748bec7af6fa9"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/lib/supabase/server.ts": {
+    "mtime": 1780759594.0409346,
+    "ast_hash": "552598bca545690986cf2e851deeee53",
+    "semantic_hash": "552598bca545690986cf2e851deeee53"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/lib/utils.ts": {
+    "mtime": 1781058501.7389452,
+    "ast_hash": "5a6fd53fdcf2be529e9cc0b718fde352",
+    "semantic_hash": "5a6fd53fdcf2be529e9cc0b718fde352"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/src/proxy.ts": {
+    "mtime": 1780759587.9241319,
+    "ast_hash": "1047c63930ddf9a91c25802a24539bf7",
+    "semantic_hash": "1047c63930ddf9a91c25802a24539bf7"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/supabase/migrations/20260606121500_init.sql": {
+    "mtime": 1780759209.4773731,
+    "ast_hash": "ac43cc5accaa804cb4964684f5ca6a86",
+    "semantic_hash": "ac43cc5accaa804cb4964684f5ca6a86"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/supabase/seed.sql": {
+    "mtime": 1780759214.865999,
+    "ast_hash": "7c50f2ea05835ed515d30594d37ab132",
+    "semantic_hash": "7c50f2ea05835ed515d30594d37ab132"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/tsconfig.json": {
+    "mtime": 1780758852.0,
+    "ast_hash": "ee17fd1c97c735e9f3564e3f5251f125",
+    "semantic_hash": "ee17fd1c97c735e9f3564e3f5251f125"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/.claude/skills/nueva-migracion/SKILL.md": {
+    "mtime": 1780762337.91518,
+    "ast_hash": "4c1a712de6a9b41c79344c13df990c9d",
+    "semantic_hash": "4c1a712de6a9b41c79344c13df990c9d"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/.claude/skills/nueva-pantalla/SKILL.md": {
+    "mtime": 1780762353.6416562,
+    "ast_hash": "07fa5bd1d06fd9885a61046d091d3b3d",
+    "semantic_hash": "07fa5bd1d06fd9885a61046d091d3b3d"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/CLAUDE.md": {
+    "mtime": 1781057169.147437,
+    "ast_hash": "b9288018f9d7e53fca47499698d58533",
+    "semantic_hash": "b9288018f9d7e53fca47499698d58533"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/README.md": {
+    "mtime": 1781056941.6272678,
+    "ast_hash": "d8405033df1bed3f7bbddf67f36a7db9",
+    "semantic_hash": "d8405033df1bed3f7bbddf67f36a7db9"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/PLAN-DESARROLLO.md": {
+    "mtime": 1781059131.2036004,
+    "ast_hash": "dad929587dcca511448fa847f513291e",
+    "semantic_hash": "dad929587dcca511448fa847f513291e"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/00-glosario-y-modelo-conceptual.md": {
+    "mtime": 1780431024.0,
+    "ast_hash": "0bc5c05b39c0815249b655c02aa42950",
+    "semantic_hash": "0bc5c05b39c0815249b655c02aa42950"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/01-modelo-de-datos.md": {
+    "mtime": 1780492832.0,
+    "ast_hash": "b0f1d2c78ed959640f562e71ded7048e",
+    "semantic_hash": "b0f1d2c78ed959640f562e71ded7048e"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/02-maquinas-de-estado.md": {
+    "mtime": 1780493924.0,
+    "ast_hash": "c4339e87af027520638b93947409ddbf",
+    "semantic_hash": "c4339e87af027520638b93947409ddbf"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/03-roles-y-permisos-rls.md": {
+    "mtime": 1780494004.0,
+    "ast_hash": "bcbfd782528a6d018887e00ff001b16b",
+    "semantic_hash": "bcbfd782528a6d018887e00ff001b16b"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/04-mapa-de-pantallas-y-flujos.md": {
+    "mtime": 1780494108.0,
+    "ast_hash": "e6e1efeae2e99aadb4e4c6e03379cdb2",
+    "semantic_hash": "e6e1efeae2e99aadb4e4c6e03379cdb2"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/05-spec-por-pantalla.md": {
+    "mtime": 1780494232.0,
+    "ast_hash": "de461f6a98ba63616efed62eb14fff77",
+    "semantic_hash": "de461f6a98ba63616efed62eb14fff77"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/06-arquitectura-de-pagos-e-integraciones.md": {
+    "mtime": 1780494328.0,
+    "ast_hash": "cf12388c706e61613e472ee5c3c5740a",
+    "semantic_hash": "cf12388c706e61613e472ee5c3c5740a"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/07-matriz-de-notificaciones.md": {
+    "mtime": 1780494436.0,
+    "ast_hash": "ce38c23a3b4e23269de496f8fe09432a",
+    "semantic_hash": "ce38c23a3b4e23269de496f8fe09432a"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/08-backlog-y-trazabilidad.md": {
+    "mtime": 1780494534.0,
+    "ast_hash": "52207becfc3a961e0543ce764d56737d",
+    "semantic_hash": "52207becfc3a961e0543ce764d56737d"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/09-riesgos-y-decisiones-pendientes.md": {
+    "mtime": 1780494622.0,
+    "ast_hash": "8b2ae9e0309ee4197e9fe5be59f15e2d",
+    "semantic_hash": "8b2ae9e0309ee4197e9fe5be59f15e2d"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/APROBACION-CLIENTE-FAIMLAB.md": {
+    "mtime": 1781056923.9688447,
+    "ast_hash": "9792267a0c3625b99091edadbcd764e2",
+    "semantic_hash": "9792267a0c3625b99091edadbcd764e2"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/docs/context/REVISION-docs-1-3.md": {
+    "mtime": 1780757845.8703191,
+    "ast_hash": "a6d603d1aae6f7d3ff499e1bfa4c6826",
+    "semantic_hash": "a6d603d1aae6f7d3ff499e1bfa4c6826"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/public/file.svg": {
+    "mtime": 1780758852.0,
+    "ast_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71",
+    "semantic_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/public/globe.svg": {
+    "mtime": 1780758852.0,
+    "ast_hash": "2aaafa6a49b6563925fe440891e32717",
+    "semantic_hash": "2aaafa6a49b6563925fe440891e32717"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/public/next.svg": {
+    "mtime": 1780758852.0,
+    "ast_hash": "8e061864f388b47f33a1c3780831193e",
+    "semantic_hash": "8e061864f388b47f33a1c3780831193e"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/public/vercel.svg": {
+    "mtime": 1780758852.0,
+    "ast_hash": "c0af2f507b369b085b35ef4bbe3bcf1e",
+    "semantic_hash": "c0af2f507b369b085b35ef4bbe3bcf1e"
+  },
+  "/Users/moramjose/Documents/Projects/FaimLab/ensenameya/public/window.svg": {
+    "mtime": 1780758852.0,
+    "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": "a2760511c65806022ad20adf74370ff3"
+  }
+}
