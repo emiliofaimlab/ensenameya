@@ -1,9 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { MenuIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { LogOutIcon, MenuIcon, UserIcon } from "lucide-react";
 
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  Avatar,
+  AvatarFallback,
+} from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -13,6 +27,12 @@ import {
 } from "@/components/ui/sheet";
 import { Container } from "@/components/layout/container";
 
+/** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
+export type HeaderUser = {
+  email: string;
+  name: string | null;
+};
+
 const navLinks = [
   { href: "/tutors", label: "Tutores" },
   { href: "/classes", label: "Clases" },
@@ -20,7 +40,21 @@ const navLinks = [
   { href: "/how-it-works", label: "Cómo funciona" },
 ];
 
-export function SiteHeader() {
+function initials(user: HeaderUser): string {
+  const base = user.name?.trim() || user.email;
+  return base.slice(0, 2).toUpperCase();
+}
+
+export function SiteHeader({ user }: { user?: HeaderUser | null }) {
+  const router = useRouter();
+
+  async function signOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/");
+    router.refresh();
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/60">
       <Container className="flex h-14 items-center justify-between gap-4">
@@ -41,12 +75,47 @@ export function SiteHeader() {
         </nav>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/login">Entrar</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link href="/signup">Crear cuenta</Link>
-          </Button>
+          {user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full"
+                  aria-label="Abrir menú de cuenta"
+                >
+                  <Avatar className="size-8">
+                    <AvatarFallback>{initials(user)}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
+                  {user.email}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/app">
+                    <UserIcon />
+                    Mi panel
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={signOut}>
+                  <LogOutIcon />
+                  Cerrar sesión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/login">Entrar</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link href="/signup">Crear cuenta</Link>
+              </Button>
+            </>
+          )}
         </div>
 
         <Sheet>
@@ -76,12 +145,25 @@ export function SiteHeader() {
               ))}
             </nav>
             <div className="mt-2 flex flex-col gap-2 px-4">
-              <Button asChild variant="outline">
-                <Link href="/login">Entrar</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/signup">Crear cuenta</Link>
-              </Button>
+              {user ? (
+                <>
+                  <Button asChild variant="outline">
+                    <Link href="/app">Mi panel</Link>
+                  </Button>
+                  <Button variant="ghost" onClick={signOut}>
+                    Cerrar sesión
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button asChild variant="outline">
+                    <Link href="/login">Entrar</Link>
+                  </Button>
+                  <Button asChild>
+                    <Link href="/signup">Crear cuenta</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </SheetContent>
         </Sheet>

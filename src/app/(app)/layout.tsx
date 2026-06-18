@@ -1,14 +1,15 @@
-import { getUser } from "@/lib/auth/server";
+import { requireUser } from "@/lib/auth/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 
-export default async function PublicLayout({
+export default async function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const user = await getUser();
+  // Área autenticada: sin sesión → /login?next=… (SCR-AU01).
+  const { user } = await requireUser();
   return (
     <div className="flex min-h-svh flex-col">
       <SiteHeader user={toHeaderUser(user)} />

@@ -7,6 +7,9 @@ import type { Database } from "@/lib/database.types";
  * la respuesta. Patrón oficial de @supabase/ssr para Next.js App Router.
  */
 export async function updateSession(request: NextRequest) {
+  // Expone la ruta actual a los Server Components (guardas de rol → ?next=).
+  request.headers.set("x-pathname", request.nextUrl.pathname);
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(

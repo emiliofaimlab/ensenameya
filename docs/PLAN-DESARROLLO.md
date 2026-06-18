@@ -62,22 +62,23 @@ Marcar la fecha/respuesta cuando el cliente confirme.
 - [x] Clientes Supabase (`client.ts` / `server.ts` / `middleware.ts`) + `proxy.ts` (refresco de sesión)
 - [x] `database.types.ts` generado
 - [x] **Layout base + design tokens**: shadcn/ui (Radix, base neutral) → capa de tokens en `globals.css`; primitivos en `src/components/ui/`; layout primitives (`Container`/`Section`/`PageHeader`); shell público (`SiteHeader`/`SiteFooter`) en route group `(public)`; dark mode (next-themes); home-esqueleto neutra. **Rediseño = tokens + `ui/`.** · _S-38 (es), responsive S-36_
-  - [ ] ⚠️ Borrar `src/app/page.tsx` (temporal) para que `(public)/page.tsx` tome `/` nativo — pendiente recarga del permiso `rm`
-- [ ] **Guardas de ruta por rol** (alumno/tutor/admin/anon) reutilizables · _Doc 3_
+  - [x] Borrado `src/app/page.tsx` (temporal): `(public)/page.tsx` ya toma `/` nativo (vía `git rm`)
+- [x] **Guardas de ruta por rol** (alumno/tutor/admin/anon) reutilizables · _Doc 3_ — `src/lib/auth/{roles,server,header-user}.ts` (`requireUser`/`requireGuest`/`requireRole`/`pickHome`); el proxy inyecta `x-pathname` para reconstruir `?next=`
 
 **Pantallas:**
-- [ ] **AU01 · Login** `/login`
+- [x] **AU01 · Login** `/login`
   - **UI:** email+password + Google OAuth; enlaces a reset/registro.
   - **✅ Listo:** login válido abre sesión → destino previo o dashboard por rol; error genérico sin revelar cuenta. _SCR-AU01 · US-102 · S-40_
-- [ ] **AU02 · Registro** `/signup`
+- [x] **AU02 · Registro** `/signup`
   - **UI:** email/Google + **elección de intención** (alumno/tutor, S-37); aceptar términos; captura `referral_code` si viene `?ref=` (S-18).
   - **✅ Listo:** crea cuenta → onboarding por rol; email duplicado se rechaza; dispara NTF-01 (stub en M8). _SCR-AU02 · US-101 · RN-31_
 - [ ] **AU03 · Recuperar contraseña** `/reset`
   - **UI:** solicitar enlace + pantalla de nueva contraseña vía token.
   - **✅ Listo:** envía NTF-02 (stub); token vigente permite cambiar. _SCR-AU03 · US-103_
-- [ ] **AU04 · Callback OAuth / verificación** `/auth/callback`
+- [x] **AU04 · Callback OAuth / verificación** `/auth/callback`
   - **UI:** procesa retorno de Google / confirmación de correo; crea `profiles` si es primera vez.
   - **✅ Listo:** éxito → onboarding/dashboard; error → login con mensaje. _SCR-AU04_
+  - _Notas:_ login/registro con email **y** botón Google cableado (OAuth → `/auth/callback`); el provider Google **no está configurado en local** (config.toml), sólo funciona en cloud. Tras autenticarse se enruta por rol (`pickHome`); en M0 todos son `alumno` → **`/app`** (placeholder mínimo de AL02; el panel completo es M4). El destino de registro pasará a **AL01 onboarding** cuando exista.
 - [ ] **AL01 · Onboarding Alumno** `/onboarding`
   - **UI:** nombre, **`timezone`** (autodetectado, obligatorio RN-01), preferencias, avatar opcional.
   - **✅ Listo:** guarda `profiles`; `timezone` requerido; continúa al destino previo o `/app`. _SCR-AL01 · US-201_
@@ -277,4 +278,4 @@ Marcar la fecha/respuesta cuando el cliente confirme.
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada. Última edición: 2026-06-09.*
+*Documento vivo. Se actualiza con cada rebanada cerrada. Última edición: 2026-06-10.*
