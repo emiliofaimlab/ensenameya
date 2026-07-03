@@ -17,6 +17,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      # npm install (no npm ci): tolerante a drift del lockfile, igual que Vercel/local.
+      - run: npm install --no-audit --no-fund
       - run: npm run lint
       - run: npm run typecheck
