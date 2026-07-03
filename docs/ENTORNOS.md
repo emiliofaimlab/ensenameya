@@ -92,8 +92,9 @@ dev / PRs  ───▶  Preview             ───▶  ensenameya-dev   (lbt
 - [x] `.env.local` apunta la app a **dev cloud**.
 - [x] CI **activo y validado**: `main`→prod aplicado por Actions (no-op OK). Tolerante si falta el secret.
 - [x] GitHub Environments (production/development) + secret `SUPABASE_DB_URL` + ramas `main`/`dev`.
-- [ ] Auth config por proyecto (§3B).
-- [ ] Vercel proyecto + env vars (§3C).
+- [x] Vercel: proyecto importado, **prod desplegado** (`ensenameya.vercel.app`); env vars Production→prod, Preview→dev.
+- [x] Auth: Site URL + Redirect URLs en prod y dev; "Confirm email" **off** en dev.
+- [ ] Google OAuth por proyecto (Client ID/Secret) — pendiente (email/password ya funciona).
 - [ ] Access token (PAT) para `gen types` sin Docker.
 - [ ] Rotar secret keys antes del primer usuario real.
 
