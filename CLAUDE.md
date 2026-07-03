@@ -9,7 +9,7 @@
 - **`docs/BACKLOG.md`** — backlog vigente (18 épicas / 60 historias / 4 sprints), **espejo de Jira**. Manda en *qué y cuándo*.
 - **`docs/PLAN-DESARROLLO.md`** — estado de ejecución (hecho / en curso / pendiente) por sprint.
 - **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
-- **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (+ local Docker) en Supabase + Vercel y su checklist (US-1603).
+- **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (sin local) en Supabase + Vercel, flujo de trabajo y checklist (US-1603).
 
 Sprint activo: **Sprint 1** (fundaciones, auth, onboarding, descubrimiento, RLS, ambientes).
 
@@ -17,26 +17,22 @@ Sprint activo: **Sprint 1** (fundaciones, auth, onboarding, descubrimiento, RLS,
 
 - **Frontend:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · React 19 → deploy en **Vercel**.
 - **Backend:** **Supabase** — Postgres + RLS, Auth (email + Google OAuth), Storage, Edge Functions.
-- **Local:** stack de Supabase en **Docker**; Next.js nativo en Node (no en Docker).
+- **Sin stack local:** la app corre en local (`npm run dev`) contra la **BD de dev cloud**; deploy en Vercel (`main`→prod, `dev`/PR→preview). Detalle y flujo en `docs/ENTORNOS.md`.
 
 ## Comandos (rutina diaria)
 
 ```bash
-npm run db:start   # backend local (requiere Docker abierto). Idempotente.
-npm run dev        # frontend → http://localhost:3000
+npm run dev        # frontend → http://localhost:3000 (contra dev cloud)
 ```
 
 | Comando | Para qué |
 | :-- | :-- |
-| `npm run db:stop` | Apaga el stack local (los datos persisten) |
-| `npm run db:reset` | ⚠️ Re-aplica migraciones + seed **borrando** los datos locales |
-| `npm run db:diff` | Genera SQL de migración desde cambios locales |
-| `npm run db:push` | Aplica migraciones al proyecto cloud enlazado |
-| `npm run db:types` | Regenera `src/lib/database.types.ts` desde el esquema |
-| `npm run functions:serve` | Sirve las Edge Functions en local (donde vive el dinero, reglas 2/7) |
-| `npm run lint` · `npx tsc --noEmit` | Lint y typecheck |
+| `npm run db:push` | Aplica migraciones al proyecto **dev** enlazado |
+| `npm run db:types` | Regenera `src/lib/database.types.ts` (requiere link) |
+| `npm run lint` · `npm run typecheck` | Lint y typecheck |
 
-Tras cambiar el esquema: `npm run db:reset` (local) **y** `npm run db:types`.
+Enlace único del CLI a dev (pide access token): `npx supabase link --project-ref lbtpnszjjsxbeileqsja`.
+Tras cambiar el esquema: `npm run db:push` **y** `npm run db:types`. A **prod** llega por **CI** al mergear a `main`.
 
 ## Reglas de oro (no romper)
 
@@ -59,7 +55,7 @@ src/lib/supabase/server.ts    cliente Server Components (ANON + RLS, async)
 src/lib/supabase/middleware.ts helper de sesión usado por proxy.ts
 src/lib/database.types.ts     tipos generados (no editar a mano)
 supabase/migrations/          esquema versionado (fuente de verdad)
-supabase/config.toml          config del stack local
+supabase/config.toml          config del CLI de Supabase (link, migraciones)
 docs/BACKLOG.md               backlog vigente (sprints, espejo de Jira)
 docs/PLAN-DESARROLLO.md       estado de ejecución por sprint
 docs/ENTORNOS.md              ambientes dev + prod (Supabase + Vercel) + local
@@ -71,6 +67,7 @@ docs/context/                 docs técnicos (Docs 0–9 + adenda + revisión + 
 - Propiedad: `using ( (select auth.uid()) = <owner_col> )` (el `select` ayuda al planner).
 - Rol admin: helper `public.has_role('admin')` (SECURITY DEFINER, evita recursión).
 - Alta de perfil + rol `alumno` automática al registrarse (trigger `handle_new_user`).
+- **Grants:** los proyectos tienen "auto-expose new tables" **OFF** → cada tabla expuesta al cliente declara sus `grant` (públicas→`anon`, privadas→`authenticated`) junto a sus políticas. RLS sigue siendo la barrera default-deny.
 - **Docs vs código:** los Docs 0–9 son el **objetivo** (p. ej. nombran el enum `user_role` y `has_role(uid, role)` de dos args); el **código manda** en nombres concretos (enum real `app_role`, `has_role('admin')` de un arg). Ante divergencia, gana la migración.
 
 ## Contexto profundo (lee el doc relevante, no los 12)

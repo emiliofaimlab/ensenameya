@@ -51,8 +51,9 @@ dev / PRs  ───▶  Preview             ───▶  ensenameya-dev   (lbt
 - **Convención de grants (auto-expose OFF):** toda tabla expuesta al cliente declara sus `grant`
   junto a sus políticas RLS (ver `20260703120000_data_api_grants.sql`). Públicas → `anon`; privadas →
   `authenticated`. RLS sigue siendo la barrera default-deny; el grant solo deja al rol llegar a la tabla.
-- ⚠️ Los scripts `db:start` / `db:stop` / `db:reset` / `db:types --local` de `package.json` eran para el
-  stack local (Docker) y **ya no aplican**. Se refactorizarán al flujo cloud.
+- **Scripts (`package.json`):** ya son cloud — `db:push` (aplica al proyecto enlazado) y
+  `db:types` (`--linked`). Requieren enlazar el CLI una vez: `npx supabase link --project-ref <ref>`
+  (pide access token). Los antiguos `db:start`/`db:stop`/`db:reset` (Docker) se eliminaron.
 
 ---
 

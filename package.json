@@ -7,13 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:start": "npx supabase start",
-    "db:stop": "npx supabase stop",
-    "db:reset": "npx supabase db reset",
-    "db:diff": "npx supabase db diff",
+    "typecheck": "tsc --noEmit",
     "db:push": "npx supabase db push",
-    "db:types": "npx supabase gen types typescript --local > src/lib/database.types.ts",
-    "functions:serve": "npx supabase functions serve"
+    "db:types": "npx supabase gen types typescript --linked > src/lib/database.types.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

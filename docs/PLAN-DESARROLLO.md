@@ -19,13 +19,13 @@
 Cada sesión = **una rebanada** (lo más pequeño que deje algo funcionando):
 
 1. **Elegir** la siguiente historia `[ ]` no bloqueada del sprint activo (empareja con su tarjeta de Jira).
-2. **Backend** (si aplica): `/nueva-migracion` → tabla + RLS + funciones → `npm run db:reset` → `npm run db:types`.
+2. **Backend** (si aplica): `/nueva-migracion` → tabla + RLS + grants + funciones → `npm run db:push` (a dev cloud) → `npm run db:types`.
 3. **Frontend:** `/nueva-pantalla` → App Router (server vs client), cliente Supabase correcto, locale `es`, responsive, UTC→hora local.
 4. **Verificar:** `/run` o `/verify` con la app corriendo; `npm run lint` + `npx tsc --noEmit` en verde.
 5. **Marcar** `[x]` aquí, mover la tarjeta en Jira, y anotar lo relevante (PR, decisión, deuda).
 
 ### Definición de "Hecho" (toda rebanada)
-- Migración aplicada con `db:reset` y `db:types` regenerado (sin editar `database.types.ts` a mano).
+- Migración aplicada a **dev cloud** (`db:push`) y `db:types` regenerado (sin editar `database.types.ts` a mano).
 - **RLS probada por rol** (anon / alumno / tutor / admin): nadie ve lo que no debe.
 - Fechas **UTC** en BD, render en **hora local** del usuario.
 - Escritura financiera **solo server-side** (`service_role`); el cliente solo lee.
@@ -62,7 +62,7 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 > tutores y productos. **63 SP.** El grueso de las fundaciones ya está de la etapa previa (bootstrap M0).
 
 ### Fundaciones ya listas (base técnica)
-- [x] Bootstrap Next.js 16 + TS + Tailwind v4 + React 19 · Supabase local (Docker) + `config.toml`
+- [x] Bootstrap Next.js 16 + TS + Tailwind v4 + React 19 · Supabase CLI + `config.toml`
 - [x] Migración base: `profiles`, `user_roles`, enum `app_role`, `has_role()`, trigger `handle_new_user` (rol `alumno`), RLS en ambas tablas
 - [x] Clientes Supabase (`client`/`server`/`middleware`) + `proxy.ts` · `database.types.ts` generado
 - [x] Layout base + design tokens (shadcn/ui, primitivos `ui/`, shell público, dark mode)
@@ -103,7 +103,7 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 - [~] **US-1403 · Anti-escalada de privilegios** — `has_role` + admin por seed; **falta** bloquear auto-set de `approval_status`/`tier_id` cuando existan esas columnas.
 
 ### EP-16 · Ambientes (adelanto en S1)
-- [ ] **US-1603 · dev/staging/prod** — Supabase proyecto por ambiente; Vercel preview por PR + prod desde `main`; secretos en env. → **`docs/ENTORNOS.md`** (guía + checklist).
+- [x] **US-1603 · dev + prod cloud** — proyecto Supabase por ambiente; Vercel preview por PR + prod desde `main` (`ensenameya.vercel.app`); CI de migraciones + lint/typecheck; Auth. → **`docs/ENTORNOS.md`**.
 
 ---
 

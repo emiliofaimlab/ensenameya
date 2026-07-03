@@ -1,0 +1,22 @@
+name: CI
+
+# Lint + typecheck en cada push/PR. Red de seguridad para desarrollar sin local
+# (Modo B: editar directo en GitHub / teléfono) — atrapa código roto antes de mergear.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+
+jobs:
+  lint-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
