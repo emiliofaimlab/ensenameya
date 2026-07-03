@@ -90,10 +90,10 @@ dev / PRs  ───▶  Preview             ───▶  ensenameya-dev   (lbt
 - [x] Repo `emiliofaimlab/ensenameya` · `gh` CLI autenticado · Jira `EY` conectado.
 - [x] Supabase **dev** y **prod** creados; esquema base + grants aplicados a ambos.
 - [x] `.env.local` apunta la app a **dev cloud**.
-- [x] CI `.github/workflows/supabase-migrations.yml` (ramas `main`/`dev`; usa `SUPABASE_DB_URL`).
+- [x] CI **activo y validado**: `main`→prod aplicado por Actions (no-op OK). Tolerante si falta el secret.
+- [x] GitHub Environments (production/development) + secret `SUPABASE_DB_URL` + ramas `main`/`dev`.
 - [ ] Auth config por proyecto (§3B).
 - [ ] Vercel proyecto + env vars (§3C).
-- [ ] GitHub Environments + `SUPABASE_DB_URL` + rama `dev` (§3D).
 - [ ] Access token (PAT) para `gen types` sin Docker.
 - [ ] Rotar secret keys antes del primer usuario real.
 
