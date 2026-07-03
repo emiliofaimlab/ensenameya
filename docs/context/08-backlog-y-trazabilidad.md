@@ -1,5 +1,11 @@
 # DOC 8 — Backlog y Matriz de Trazabilidad
 
+> ⚠️ **SUPERADO como backlog operativo.** El backlog vigente es **`docs/BACKLOG.md`** (v1.0,
+> 2026-06-24, cargado en **Jira**), que amplía éste con EP-17/18, US-606/607/1004 y RN-37..44.
+> Este documento se **conserva** por su **matriz de trazabilidad §8.4** (épica→pantalla→entidad→
+> estado→notif→DP), que sigue siendo útil como mapa cruzado. Para *qué construir y en qué sprint*,
+> usa `docs/BACKLOG.md`; para los deltas, `docs/context/ADENDA-BACKLOG-v1.md`.
+
 > **Enséñame Ya — MVP Web.** Épicas, historias de usuario con criterios de aceptación y trazabilidad cruzada de todo el alcance.
 
 | Campo | Valor |

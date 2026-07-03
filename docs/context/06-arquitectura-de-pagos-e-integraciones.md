@@ -288,4 +288,22 @@ Los **diagramas de secuencia** (charge y payout), el **diagrama de componentes**
 
 ---
 
+## 6.18 Integraciones v3 — Chat (EP-17) y Grabación (EP-18)
+
+> Absorbido del PDF `INTEGRACION-CHAT-Y-GRABACION` (retirado). Modelo de datos en Doc 01 §1.10.
+
+**Chat (EP-17, complejidad baja, sin coste nuevo):**
+- **Supabase Realtime** sobre la tabla `messages` — ya es parte del stack; **cero dependencias/costes nuevos**.
+- El chat integrado de **Daily no se usa**: es efímero, no persiste ni se descarga (incumple 3 de 4 requisitos).
+- Ventana "2 días antes" = guarda por fecha UTC. Retención 30 días vía **pg_cron** (nativo). Export `.txt`/`.json`.
+- Encaja con las reglas: RLS por participantes, UTC, no toca el módulo de pagos.
+
+**Grabación (EP-18, complejidad media, con coste):**
+- **Add-on de grabación en la nube de Daily** (de pago) + almacenamiento mensual → **gasto operativo**, no solo horas.
+- Flujo: activar cloud recording → webhook "recording ready" → guardar `url` en `recordings` → botón de descarga con retención 30 días.
+- **Consentimiento mutuo obligatorio** (RN-42) antes de entrar a la sala; sin ambos, no se graba (tema legal, no solo técnico).
+- Es una función **fuera del alcance del MVP base**: requiere decisión de negocio para entrar (coste + reglas).
+
+---
+
 *Fin del Documento 6.*

@@ -4,6 +4,15 @@
 > pagos (**capa agnóstica** por geografía; proveedor pendiente — C-01/DP-01, hoy se evalúa DLocal + Stripe de respaldo), videollamada (Daily) y panel admin.
 > **Monorepo:** frontend Next.js + backend Supabase en este mismo repo.
 
+## Planificación — qué construir y en qué orden
+
+- **`docs/BACKLOG.md`** — backlog vigente (18 épicas / 60 historias / 4 sprints), **espejo de Jira**. Manda en *qué y cuándo*.
+- **`docs/PLAN-DESARROLLO.md`** — estado de ejecución (hecho / en curso / pendiente) por sprint.
+- **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
+- **`docs/ENTORNOS.md`** — ambientes dev/staging/prod (Supabase + Vercel) y su checklist (US-1603).
+
+Sprint activo: **Sprint 1** (fundaciones, auth, onboarding, descubrimiento, RLS, ambientes).
+
 ## Stack
 
 - **Frontend:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · React 19 → deploy en **Vercel**.
@@ -51,7 +60,10 @@ src/lib/supabase/middleware.ts helper de sesión usado por proxy.ts
 src/lib/database.types.ts     tipos generados (no editar a mano)
 supabase/migrations/          esquema versionado (fuente de verdad)
 supabase/config.toml          config del stack local
-docs/context/                 documentación del producto (Docs 0–9 + revisión + aprobación cliente)
+docs/BACKLOG.md               backlog vigente (sprints, espejo de Jira)
+docs/PLAN-DESARROLLO.md       estado de ejecución por sprint
+docs/ENTORNOS.md              ambientes dev/staging/prod (Supabase + Vercel)
+docs/context/                 docs técnicos (Docs 0–9 + adenda + revisión + aprobación cliente)
 ```
 
 ## Patrón RLS (referencia rápida)
@@ -69,7 +81,7 @@ docs/context/                 documentación del producto (Docs 0–9 + revisió
 | 01 / 02 / 03 | Modelo de datos / máquinas de estado / roles y RLS |
 | 04 / 05 | Mapa de pantallas y flujos / spec por pantalla |
 | 06 / 07 | Arquitectura de pagos e integraciones / matriz de notificaciones |
-| 08 / 09 | Backlog y trazabilidad / riesgos y decisiones pendientes |
+| 08 / 09 | Backlog (⚠️ superado por `docs/BACKLOG.md`; conserva la matriz de trazabilidad §8.4) / riesgos y decisiones pendientes |
 | `REVISION-docs-1-3.md` → **Anexo A** | Arquitectura del proyecto |
 
 Todos en `docs/context/`.
@@ -77,8 +89,9 @@ Todos en `docs/context/`.
 **Visión comercial / aprobación del cliente:** `APROBACION-CLIENTE-FAIMLAB.md`
 (v1 · 2026-06-09) — resumen **completo y no técnico** para firma del cliente:
 perfiles, ~49 pantallas, flujos FL-01…05, procesos de pago por geografía y
-**15 decisiones a confirmar `C-01…C-15`** (4 **BLOQUEANTES**: C-01 proveedores ·
-C-03 reembolsos · C-13 mercado/Venezuela · C-14 requisitos para aprobar tutor).
+**15 decisiones a confirmar `C-01…C-15`** (bloqueantes restantes: C-01 proveedores ·
+C-13 mercado/Venezuela · C-14 requisitos para aprobar tutor). **C-03 reembolsos →
+RESUELTO por RN-37** (≥24h=100%, <24h alumno=50%, tutor=100%; ver adenda §6).
 Los `C-xx` son la cara-cliente de las `DP-xx`/supuestos (C-01→DP-01, C-02→DP-02,
 C-03→DP-03, C-04→DP-06, C-05→DP-08, C-10→DP-04, C-11→DP-05, C-15→DP-07); cuando el
 cliente responda se consumen como **configuración** (regla de oro 8), no como código.

@@ -401,4 +401,43 @@ El diagrama entidad-relación se generará en la pasada final de diagramas (Merm
 
 ---
 
+## 1.10 Entidades v3 — Chat (EP-17) y Grabación (EP-18)
+
+> Absorbido del PDF `INTEGRACION-CHAT-Y-GRABACION` (retirado). Ambas son **v3 / Should**; el chat
+> se construye sobre el stack actual sin dependencias nuevas; la grabación requiere add-on de pago.
+
+### `messages` — chat 1:1 de la reserva (RN-41)
+
+| Columna | Tipo | Nota |
+| :-- | :-- | :-- |
+| `id` | uuid PK | |
+| `booking_id` | uuid FK → `bookings` | el hilo es 1:1 por reserva |
+| `sender_id` | uuid FK → `profiles` | alumno o tutor de esa reserva |
+| `body` | text | contenido |
+| `created_at` | timestamptz (UTC) | |
+| `expires_at` | timestamptz (UTC) | `= created_at + 30 días`; purga por pg_cron |
+
+- **RLS:** solo el alumno y el tutor **de esa `booking`** leen/escriben (participantes).
+- **Apertura:** habilitado **2 días antes** de la sesión (guarda por fecha, UTC).
+- **Realtime:** Supabase Realtime sobre la tabla (ya en el stack). El chat nativo de Daily **no** sirve (efímero, no descargable).
+- **Purga:** job diario pg_cron borra filas con `expires_at` vencido. Descarga = `.txt`/`.json` armado en cliente/Edge.
+
+### `recordings` — grabación de la sesión (RN-42)
+
+| Columna | Tipo | Nota |
+| :-- | :-- | :-- |
+| `id` | uuid PK | |
+| `session_id` | uuid FK → `sessions` | |
+| `provider_recording_id` | text | id en Daily |
+| `url` | text | enlace de descarga (firmado/temporal) |
+| `status` | enum | `pending` → `available` → `expired` |
+| `consent_student` / `consent_tutor` | bool | **ambos** true para grabar (RN-42) |
+| `completed_at` | timestamptz | inicio de la ventana de 30 días |
+| `expires_at` | timestamptz | `completed_at + 30 días`; luego `expired` + purga |
+
+- **Sin consentimiento mutuo no se graba** (solicitado antes de entrar a la sala).
+- Es **add-on de pago** de Daily + coste de almacenamiento → decisión de negocio (fuera del MVP base).
+
+---
+
 *Fin del Documento 1.*

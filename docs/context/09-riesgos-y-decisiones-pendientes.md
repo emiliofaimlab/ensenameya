@@ -1,5 +1,8 @@
 # DOC 9 — Riesgos y Decisiones Pendientes
 
+> ✅ **Delta v1.0:** **DP-03 / C-03 (reembolsos) RESUELTA** por **RN-37** — política única de plataforma:
+> ≥24h=100%, <24h alumno=50%, tutor=100%. Se consume como configuración. Ver `docs/context/ADENDA-BACKLOG-v1.md` §6.
+
 > **Enséñame Ya — MVP Web.** Registro consolidado de decisiones abiertas (DP), riesgos, supuestos a confirmar, divergencias y gobierno de decisiones.
 
 | Campo | Valor |

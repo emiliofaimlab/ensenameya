@@ -1,5 +1,9 @@
 # DOC 2 — Máquinas de Estado
 
+> 🔀 **Delta v1.0:** la máquina de **reserva (M4)** ahora incluye **`pending_acceptance`** — tras el
+> pago el tutor **acepta/rechaza en 24h** antes de `confirmed` (RN-38, US-606, NTF-17). Ver el diagrama
+> actualizado en `docs/context/ADENDA-BACKLOG-v1.md` §2 hasta que se reescriba este doc.
+
 > **Enséñame Ya — MVP Web.** Estados y transiciones de las entidades con ciclo de vida, derivadas de los `enum` del Doc 1.
 
 | Campo | Valor |
