@@ -82,6 +82,11 @@ export default async function TutorOnboardingPage() {
               youtube={str(s.youtube)}
               website={str(s.website)}
             />
+            {tp ? (
+              <Button asChild variant="outline">
+                <Link href="/tutor/verification">Verificar mi identidad →</Link>
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
       </Section>

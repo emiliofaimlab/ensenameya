@@ -80,7 +80,7 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 - [x] **US-201 · Onboarding Alumno** `/onboarding` — nombre, `timezone` (IANA, autodetectada) + teléfono E.164 (RN-01/44) obligatorios → `onboarding_complete=true` (migración `20260706130000` añade `phone`+flag). Verificado E2E. _SCR-AL01_
   - _Gancho:_ ✅ cableado — signup→`/onboarding` **y gate en `requireUser`**: fuerza el onboarding en cualquier entrada (email/OAuth/login) antes del área autenticada. Nombre espejado a `user_metadata` para header/saludo.
 - [x] **US-202 · Onboarding Tutor** `/tutor/onboarding` — headline, bio, **redes** (jsonb) → `approval: pending`; escritura acotada por **column-grants** (el rol `tutor` se otorga al aprobar, US-1101). Intent "Quiero enseñar" enrutado desde US-201. Verificado E2E. _Diferidos: foto (Storage), categorías (al crear productos); teléfono ya en US-201._ _SCR-TU01, RN-44_
-- [ ] **US-203 · KYC Tutor** `/tutor/verification` — subir `id_document, degree, certificate, diploma, transcript, cv, social_media` → `identity: pending`; NTF-06 (stub). _SCR-TU02 · [!] C-14 (set final de docs)_
+- [x] **US-203 · KYC Tutor** `/tutor/verification` — bucket privado `kyc-documents` (S-42: 10MB, tipos) + `verification_documents` + trigger `identity: pending` + **column-grants** anti-escalada + RLS de Storage (carpeta=uid). Set provisional `id_front/id_back/selfie` **configurable** → C-14 lo amplía. NTF-06 stub. Verificado E2E (upload 200, trigger, auto-aprobar→403). _SCR-TU02_
 
 ### EP-03 · Descubrimiento (catálogo público, solo lectura)
 **Backend del sprint (migraciones + RLS pública):**
@@ -102,7 +102,7 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 - [ ] **P01 · Landing** `/` — hero + buscador + destacados (hoy hay home-esqueleto neutra). _SCR-P01_
 
 ### EP-14 · Seguridad / RLS (transversal)
-- [~] **US-1401 · RLS default-deny** — ya en `profiles`/`user_roles`; **aplicar a cada tabla nueva** de EP-03 al crearla.
+- [x] **US-1401 · RLS default-deny** — en todas las tablas (profiles/user_roles/categorías/tutor_profiles/products/product_categories/verification_documents) **y Storage**; grants explícitos por rol. Verificado por rol esta sesión (anon `[]` en lo privado, tutor `403` anti-escalada, admin por `has_role`). Práctica transversal: cada tabla nueva nace con ella.
 - [ ] **US-1402 · Escritura financiera solo service_role** — sin tablas financieras aún; guarda al llegar EP-06/07.
 - [x] **US-1403 · Anti-escalada de privilegios** — roles sin escritura de cliente (default-deny); `tutor_profiles` con **column-grants**: el tutor no puede tocar `approval_status`/tier. **Verificado**: PATCH `approval_status` → 403; `headline` → 200. `tier_id` (S3) hereda el patrón.
 
