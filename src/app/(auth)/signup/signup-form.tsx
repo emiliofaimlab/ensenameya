@@ -7,7 +7,6 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { safeNext } from "@/lib/auth/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -70,7 +69,7 @@ export function SignupForm({
     }
 
     if (data.session) {
-      // Local (enable_confirmations=false): sesión inmediata.
+      // Sesión inmediata (sin confirmación por correo).
       if (referralCode && data.user) {
         // RLS profiles_update_own permite escribir el propio perfil.
         await supabase
@@ -78,8 +77,8 @@ export function SignupForm({
           .update({ referral_code: referralCode })
           .eq("id", data.user.id);
       }
-      // M0: el onboarding (AL01) llega en la próxima rebanada → por ahora al panel.
-      router.push(safeNext(next, "/app"));
+      // US-201: onboarding obligatorio tras registrarse; conserva el destino previo.
+      router.push(`/onboarding${next ? `?next=${encodeURIComponent(next)}` : ""}`);
       router.refresh();
       return;
     }

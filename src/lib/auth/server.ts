@@ -16,25 +16,34 @@ import { pickHome, type AppRole } from "./roles";
 type SessionContext = {
   user: User | null;
   roles: AppRole[];
+  onboardingComplete: boolean;
 };
 
-/** Lee el usuario validado (auth server) y sus roles en una sola pasada. */
+/** Lee el usuario validado (auth server), sus roles y el flag de onboarding. */
 export async function getSessionContext(): Promise<SessionContext> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { user: null, roles: [] };
+  if (!user) return { user: null, roles: [], onboardingComplete: false };
 
-  // RLS `user_roles_select_own` ya limita a las filas propias; el filtro es
-  // explícito para que la intención se lea en el código.
-  const { data } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", user.id);
+  // RLS ya limita a las filas propias; los filtros son explícitos para leer la
+  // intención. Roles + flag de onboarding en paralelo.
+  const [{ data: roleRows }, { data: profile }] = await Promise.all([
+    supabase.from("user_roles").select("role").eq("user_id", user.id),
+    supabase
+      .from("profiles")
+      .select("onboarding_complete")
+      .eq("id", user.id)
+      .maybeSingle(),
+  ]);
 
-  return { user, roles: (data ?? []).map((r) => r.role) };
+  return {
+    user,
+    roles: (roleRows ?? []).map((r) => r.role),
+    onboardingComplete: profile?.onboarding_complete ?? false,
+  };
 }
 
 /** Usuario actual o `null` (sin redirección). */
@@ -56,6 +65,11 @@ export async function requireUser(): Promise<{ user: User; roles: AppRole[] }> {
   if (!ctx.user) {
     const next = await currentPath();
     redirect(`/login?next=${encodeURIComponent(next)}`);
+  }
+  // US-201 / RN-44: onboarding obligatorio antes de usar el área autenticada.
+  const path = await currentPath();
+  if (!ctx.onboardingComplete && path !== "/onboarding") {
+    redirect(`/onboarding?next=${encodeURIComponent(path)}`);
   }
   return { user: ctx.user, roles: ctx.roles };
 }

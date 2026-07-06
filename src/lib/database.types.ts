@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -34,11 +39,141 @@ export type Database = {
   }
   public: {
     Tables: {
+      categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      product_categories: {
+        Row: {
+          category_id: string
+          product_id: string
+        }
+        Insert: {
+          category_id: string
+          product_id: string
+        }
+        Update: {
+          category_id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_categories_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          cancellation_policy: Json | null
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          outcome: string | null
+          package_num_sessions: number | null
+          price_amount: number
+          pricing_model: Database["public"]["Enums"]["pricing_model"]
+          search_vector: unknown
+          session_duration_min: number | null
+          slug: string | null
+          status: Database["public"]["Enums"]["product_status"]
+          title: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancellation_policy?: Json | null
+          created_at?: string
+          currency: string
+          description?: string | null
+          id?: string
+          outcome?: string | null
+          package_num_sessions?: number | null
+          price_amount: number
+          pricing_model: Database["public"]["Enums"]["pricing_model"]
+          search_vector?: unknown
+          session_duration_min?: number | null
+          slug?: string | null
+          status?: Database["public"]["Enums"]["product_status"]
+          title: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancellation_policy?: Json | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          outcome?: string | null
+          package_num_sessions?: number | null
+          price_amount?: number
+          pricing_model?: Database["public"]["Enums"]["pricing_model"]
+          search_vector?: unknown
+          session_duration_min?: number | null
+          slug?: string | null
+          status?: Database["public"]["Enums"]["product_status"]
+          title?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
           full_name: string | null
           id: string
+          onboarding_complete: boolean
+          phone: string | null
           referral_code: string | null
           timezone: string
           updated_at: string
@@ -47,6 +182,8 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id: string
+          onboarding_complete?: boolean
+          phone?: string | null
           referral_code?: string | null
           timezone?: string
           updated_at?: string
@@ -55,11 +192,63 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id?: string
+          onboarding_complete?: boolean
+          phone?: string | null
           referral_code?: string | null
           timezone?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      tutor_profiles: {
+        Row: {
+          approval_status: Database["public"]["Enums"]["tutor_approval_status"]
+          approved_at: string | null
+          bio: string | null
+          created_at: string
+          headline: string | null
+          identity_verification_status: Database["public"]["Enums"]["identity_verification_status"]
+          profile_id: string
+          rating_avg: number | null
+          rating_count: number
+          socials: Json
+          updated_at: string
+        }
+        Insert: {
+          approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
+          approved_at?: string | null
+          bio?: string | null
+          created_at?: string
+          headline?: string | null
+          identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
+          profile_id: string
+          rating_avg?: number | null
+          rating_count?: number
+          socials?: Json
+          updated_at?: string
+        }
+        Update: {
+          approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
+          approved_at?: string | null
+          bio?: string | null
+          created_at?: string
+          headline?: string | null
+          identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
+          profile_id?: string
+          rating_avg?: number | null
+          rating_count?: number
+          socials?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_profiles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -91,6 +280,14 @@ export type Database = {
     }
     Enums: {
       app_role: "alumno" | "tutor" | "admin"
+      identity_verification_status:
+        | "not_submitted"
+        | "pending"
+        | "approved"
+        | "rejected"
+      pricing_model: "per_session" | "per_hour" | "per_package"
+      product_status: "draft" | "active" | "paused" | "archived"
+      tutor_approval_status: "pending" | "approved" | "rejected" | "suspended"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -222,7 +419,15 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["alumno", "tutor", "admin"],
+      identity_verification_status: [
+        "not_submitted",
+        "pending",
+        "approved",
+        "rejected",
+      ],
+      pricing_model: ["per_session", "per_hour", "per_package"],
+      product_status: ["draft", "active", "paused", "archived"],
+      tutor_approval_status: ["pending", "approved", "rejected", "suspended"],
     },
   },
 } as const
-
