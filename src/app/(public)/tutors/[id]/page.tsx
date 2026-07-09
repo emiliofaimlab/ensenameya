@@ -4,6 +4,7 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { RatingStars } from "@/components/catalog/rating";
 import { ProductCard } from "@/components/catalog/product-card";
+import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { getTutorDetail } from "@/lib/catalog/queries";
 import { initialsFrom } from "@/lib/catalog/format";
 
@@ -64,6 +65,8 @@ export default async function TutorProfilePage({
             </div>
           )}
         </div>
+
+        <CancellationPolicy className="max-w-md" />
       </Section>
     </Container>
   );

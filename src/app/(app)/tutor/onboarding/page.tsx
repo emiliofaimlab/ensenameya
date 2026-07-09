@@ -40,8 +40,11 @@ export default async function TutorOnboardingPage() {
               <CardTitle className="text-xl">Ya eres tutor</CardTitle>
               <CardDescription>Tu perfil está publicado.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-wrap gap-3">
               <Button asChild>
+                <Link href="/tutor/products">Mis productos</Link>
+              </Button>
+              <Button asChild variant="outline">
                 <Link href={`/tutors/${user.id}`}>Ver mi perfil público</Link>
               </Button>
             </CardContent>
@@ -83,9 +86,14 @@ export default async function TutorOnboardingPage() {
               website={str(s.website)}
             />
             {tp ? (
-              <Button asChild variant="outline">
-                <Link href="/tutor/verification">Verificar mi identidad →</Link>
-              </Button>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild variant="outline">
+                  <Link href="/tutor/verification">Verificar mi identidad →</Link>
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/tutor/products">Mis productos</Link>
+                </Button>
+              </div>
             ) : null}
           </CardContent>
         </Card>

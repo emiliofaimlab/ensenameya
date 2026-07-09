@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { RatingStars } from "@/components/catalog/rating";
 import { ReserveButton } from "@/components/catalog/reserve-button";
+import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { priceLabel, initialsFrom } from "@/lib/catalog/format";
 import { getUser } from "@/lib/auth/server";
@@ -87,10 +88,7 @@ export default async function ProductPage({
 
         <div className="flex flex-col gap-2">
           <ReserveButton isAuthed={!!user} productId={product.id} />
-          <p className="text-xs text-muted-foreground">
-            Política de cancelación única de la plataforma (RN-37): ≥24h 100 %,
-            &lt;24h 50 %.
-          </p>
+          <CancellationPolicy compact />
         </div>
       </Section>
     </Container>
