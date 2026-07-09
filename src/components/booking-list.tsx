@@ -23,6 +23,12 @@ export type BookingRow = {
   sessions: { start_at: string; status: string }[];
 };
 
+const CANCELLABLE = new Set<BookingStatus>([
+  "pending_payment",
+  "pending_acceptance",
+  "confirmed",
+]);
+
 const badgeVariant = (s: BookingStatus) =>
   s === "confirmed" || s === "completed"
     ? "default"
@@ -57,6 +63,26 @@ export function BookingList({
     setBusy(null);
     if (error) return toast.error(error.message || "No se pudo actualizar la reserva.");
     toast.success(accept ? "Reserva confirmada." : "Reserva rechazada y reembolsada.");
+    router.refresh();
+  }
+
+  async function cancel(id: string) {
+    if (
+      !window.confirm(
+        "¿Cancelar la reserva? Se aplica la política de reembolso: ≥24 h = 100 %, <24 h = 50 % (si cancela el tutor, 100 %).",
+      )
+    ) {
+      return;
+    }
+    setBusy(id);
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("cancel_booking", { p_booking_id: id });
+    setBusy(null);
+    if (error) return toast.error(error.message || "No se pudo cancelar la reserva.");
+    const pct = (data as { refund_pct?: number } | null)?.refund_pct;
+    toast.success(
+      pct != null ? `Reserva cancelada. Reembolso del ${pct} %.` : "Reserva cancelada.",
+    );
     router.refresh();
   }
 
@@ -112,6 +138,15 @@ export function BookingList({
                       Rechazar
                     </Button>
                   </div>
+                ) : CANCELLABLE.has(b.status) ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy === b.id}
+                    onClick={() => cancel(b.id)}
+                  >
+                    Cancelar
+                  </Button>
                 ) : null}
               </div>
             </CardContent>

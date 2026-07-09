@@ -692,6 +692,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
       confirm_payment: {
         Args: { p_booking_id: string; p_success?: boolean }
         Returns: string
