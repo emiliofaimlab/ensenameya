@@ -242,6 +242,44 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_methods: {
+        Row: {
+          brand: string | null
+          created_at: string
+          id: string
+          last4: string | null
+          profile_id: string
+          provider: string
+          provider_token: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          id?: string
+          last4?: string | null
+          profile_id: string
+          provider: string
+          provider_token: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          id?: string
+          last4?: string | null
+          profile_id?: string
+          provider?: string
+          provider_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_methods_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_routing_rules: {
         Row: {
           charge_provider: string
