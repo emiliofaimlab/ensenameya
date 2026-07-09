@@ -242,6 +242,45 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_routing_rules: {
+        Row: {
+          charge_provider: string
+          created_at: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          payee_country: string
+          payer_country: string | null
+          payout_provider: string
+          priority: number
+          updated_at: string
+        }
+        Insert: {
+          charge_provider: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          payee_country: string
+          payer_country?: string | null
+          payout_provider: string
+          priority?: number
+          updated_at?: string
+        }
+        Update: {
+          charge_provider?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          payee_country?: string
+          payer_country?: string | null
+          payout_provider?: string
+          priority?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           booking_id: string
@@ -653,6 +692,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      confirm_payment: {
+        Args: { p_booking_id: string; p_success?: boolean }
+        Returns: string
+      }
+      create_booking: {
+        Args: { p_product_id: string; p_slots: string[] }
+        Returns: string
+      }
       get_available_slots: {
         Args: { p_from?: string; p_product_id: string; p_to?: string }
         Returns: {
