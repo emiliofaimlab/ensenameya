@@ -121,6 +121,94 @@ export type Database = {
           },
         ]
       }
+      bookings: {
+        Row: {
+          cancellation_policy: Json | null
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          currency: string
+          id: string
+          num_sessions: number
+          payee_country: string | null
+          payer_country: string | null
+          pricing_model: Database["public"]["Enums"]["pricing_model"]
+          product_id: string
+          session_duration_min: number
+          status: Database["public"]["Enums"]["booking_status"]
+          student_id: string
+          subtotal_amount: number
+          tier_split_pct: number
+          total_amount: number
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancellation_policy?: Json | null
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          currency: string
+          id?: string
+          num_sessions: number
+          payee_country?: string | null
+          payer_country?: string | null
+          pricing_model: Database["public"]["Enums"]["pricing_model"]
+          product_id: string
+          session_duration_min: number
+          status?: Database["public"]["Enums"]["booking_status"]
+          student_id: string
+          subtotal_amount: number
+          tier_split_pct: number
+          total_amount: number
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancellation_policy?: Json | null
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          num_sessions?: number
+          payee_country?: string | null
+          payer_country?: string | null
+          pricing_model?: Database["public"]["Enums"]["pricing_model"]
+          product_id?: string
+          session_duration_min?: number
+          status?: Database["public"]["Enums"]["booking_status"]
+          student_id?: string
+          subtotal_amount?: number
+          tier_split_pct?: number
+          total_amount?: number
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -153,6 +241,83 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      payments: {
+        Row: {
+          booking_id: string
+          created_at: string
+          currency: string
+          failed_at: string | null
+          fx_rate: number | null
+          gross_amount: number
+          id: string
+          paid_at: string | null
+          payee_country: string | null
+          payer_country: string | null
+          platform_fee_amount: number
+          provider: string | null
+          provider_metadata: Json | null
+          provider_payment_id: string | null
+          refunded_amount: number
+          settlement_currency: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          tier_split_pct: number
+          tutor_net_amount: number
+          updated_at: string
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          currency: string
+          failed_at?: string | null
+          fx_rate?: number | null
+          gross_amount: number
+          id?: string
+          paid_at?: string | null
+          payee_country?: string | null
+          payer_country?: string | null
+          platform_fee_amount: number
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payment_id?: string | null
+          refunded_amount?: number
+          settlement_currency?: string | null
+          status?: Database["public"]["Enums"]["payment_status"]
+          tier_split_pct: number
+          tutor_net_amount: number
+          updated_at?: string
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          currency?: string
+          failed_at?: string | null
+          fx_rate?: number | null
+          gross_amount?: number
+          id?: string
+          paid_at?: string | null
+          payee_country?: string | null
+          payer_country?: string | null
+          platform_fee_amount?: number
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payment_id?: string | null
+          refunded_amount?: number
+          settlement_currency?: string | null
+          status?: Database["public"]["Enums"]["payment_status"]
+          tier_split_pct?: number
+          tutor_net_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       product_categories: {
         Row: {
@@ -282,6 +447,85 @@ export type Database = {
         }
         Relationships: []
       }
+      sessions: {
+        Row: {
+          access_closes_at: string | null
+          access_opens_at: string | null
+          booking_id: string
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          daily_room_name: string | null
+          daily_room_url: string | null
+          end_at: string
+          id: string
+          sequence_no: number | null
+          start_at: string
+          status: Database["public"]["Enums"]["session_status"]
+          student_id: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          access_closes_at?: string | null
+          access_opens_at?: string | null
+          booking_id: string
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          daily_room_name?: string | null
+          daily_room_url?: string | null
+          end_at: string
+          id?: string
+          sequence_no?: number | null
+          start_at: string
+          status?: Database["public"]["Enums"]["session_status"]
+          student_id: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          access_closes_at?: string | null
+          access_opens_at?: string | null
+          booking_id?: string
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          daily_room_name?: string | null
+          daily_room_url?: string | null
+          end_at?: string
+          id?: string
+          sequence_no?: number | null
+          start_at?: string
+          status?: Database["public"]["Enums"]["session_status"]
+          student_id?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tutor_profiles: {
         Row: {
           approval_status: Database["public"]["Enums"]["tutor_approval_status"]
@@ -409,6 +653,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_available_slots: {
+        Args: { p_from?: string; p_product_id: string; p_to?: string }
+        Returns: {
+          slot_end: string
+          slot_start: string
+        }[]
+      }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
@@ -417,14 +668,35 @@ export type Database = {
     Enums: {
       app_role: "alumno" | "tutor" | "admin"
       availability_exception_type: "block" | "open"
+      booking_status:
+        | "pending_payment"
+        | "pending_acceptance"
+        | "confirmed"
+        | "in_progress"
+        | "completed"
+        | "cancelled"
+        | "refunded"
       document_status: "pending" | "approved" | "rejected"
       identity_verification_status:
         | "not_submitted"
         | "pending"
         | "approved"
         | "rejected"
+      payment_status:
+        | "pending"
+        | "authorized"
+        | "paid"
+        | "failed"
+        | "partially_refunded"
+        | "refunded"
       pricing_model: "per_session" | "per_hour" | "per_package"
       product_status: "draft" | "active" | "paused" | "archived"
+      session_status:
+        | "scheduled"
+        | "in_progress"
+        | "completed"
+        | "cancelled"
+        | "no_show"
       tutor_approval_status: "pending" | "approved" | "rejected" | "suspended"
     }
     CompositeTypes: {
@@ -558,6 +830,15 @@ export const Constants = {
     Enums: {
       app_role: ["alumno", "tutor", "admin"],
       availability_exception_type: ["block", "open"],
+      booking_status: [
+        "pending_payment",
+        "pending_acceptance",
+        "confirmed",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "refunded",
+      ],
       document_status: ["pending", "approved", "rejected"],
       identity_verification_status: [
         "not_submitted",
@@ -565,8 +846,23 @@ export const Constants = {
         "approved",
         "rejected",
       ],
+      payment_status: [
+        "pending",
+        "authorized",
+        "paid",
+        "failed",
+        "partially_refunded",
+        "refunded",
+      ],
       pricing_model: ["per_session", "per_hour", "per_package"],
       product_status: ["draft", "active", "paused", "archived"],
+      session_status: [
+        "scheduled",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "no_show",
+      ],
       tutor_approval_status: ["pending", "approved", "rejected", "suspended"],
     },
   },

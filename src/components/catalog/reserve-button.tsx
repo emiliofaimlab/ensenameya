@@ -3,8 +3,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 /**
- * CTA "Reservar". Sin sesión → login conservando el destino (S-35). Con sesión,
- * el flujo de reserva/checkout llega en EP-06 (S2), así que hoy queda inhabilitado.
+ * CTA "Reservar". Sin sesión → login conservando el destino (S-35). Con sesión →
+ * selección de horario (US-601, SCR-AL04).
  */
 export function ReserveButton({
   isAuthed,
@@ -13,16 +13,12 @@ export function ReserveButton({
   isAuthed: boolean;
   productId: string;
 }) {
-  if (!isAuthed) {
-    return (
-      <Button asChild size="lg">
-        <Link href={`/login?next=/products/${productId}`}>Reservar</Link>
-      </Button>
-    );
-  }
+  const href = isAuthed
+    ? `/reservar/${productId}`
+    : `/login?next=/reservar/${productId}`;
   return (
-    <Button size="lg" disabled title="La reserva llega en el próximo sprint">
-      Reservar (pronto)
+    <Button asChild size="lg">
+      <Link href={href}>Reservar</Link>
     </Button>
   );
 }
