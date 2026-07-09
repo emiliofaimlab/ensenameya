@@ -39,6 +39,88 @@ export type Database = {
   }
   public: {
     Tables: {
+      availability_exceptions: {
+        Row: {
+          created_at: string
+          date: string
+          end_time: string | null
+          id: string
+          reason: string | null
+          start_time: string | null
+          tutor_id: string
+          type: Database["public"]["Enums"]["availability_exception_type"]
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          end_time?: string | null
+          id?: string
+          reason?: string | null
+          start_time?: string | null
+          tutor_id: string
+          type: Database["public"]["Enums"]["availability_exception_type"]
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          end_time?: string | null
+          id?: string
+          reason?: string | null
+          start_time?: string | null
+          tutor_id?: string
+          type?: Database["public"]["Enums"]["availability_exception_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_exceptions_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      availability_rules: {
+        Row: {
+          created_at: string
+          end_time: string
+          id: string
+          is_active: boolean
+          start_time: string
+          tutor_id: string
+          updated_at: string
+          weekday: number
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          id?: string
+          is_active?: boolean
+          start_time: string
+          tutor_id: string
+          updated_at?: string
+          weekday: number
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          start_time?: string
+          tutor_id?: string
+          updated_at?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_rules_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -334,6 +416,7 @@ export type Database = {
     }
     Enums: {
       app_role: "alumno" | "tutor" | "admin"
+      availability_exception_type: "block" | "open"
       document_status: "pending" | "approved" | "rejected"
       identity_verification_status:
         | "not_submitted"
@@ -474,6 +557,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["alumno", "tutor", "admin"],
+      availability_exception_type: ["block", "open"],
       document_status: ["pending", "approved", "rejected"],
       identity_verification_status: [
         "not_submitted",

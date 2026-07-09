@@ -92,7 +92,7 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 - [x] `tutor_profiles` (1:1 con `profiles`; lectura pública solo si `approval_status='approved'`) — sin `tier_id`/`payout_*` (diferidos a S3)
 - [x] `products` (lectura pública si `active` + tutor aprobado, RN-24; `search_vector` tsvector `spanish` + GIN)
 - [x] `product_categories` (puente N–M, RN-09) · ~~`availability_rules` + `availability_exceptions`~~ → **EP-05/S2**
-- [~] **Seed demo:** tutores aprobados + productos activos → `supabase/seed/ep03-demo.sql` (**dev-only**, fuera de migrations); **pendiente aplicar a dev** (SQL Editor / psql — necesita service_role o password de BD)
+- [x] **Seed demo:** tutores aprobados + productos activos → `supabase/seed/ep03-demo.sql` (**dev-only**, fuera de migrations); **aplicado a dev** (verificado: 3 tutores `approved` + productos activos públicos, p.ej. `b0000000-…-0001`)
 
 **Pantallas:**
 - [x] **US-301 · Explorar Tutores** `/tutors` — solo `approved`; **filtro por categoría** + paginación; orden por rating. Verificado en dev con seed. _(rating/precio como filtro → diferido; rating ya se muestra)_ _SCR-P04_
@@ -115,8 +115,15 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 
 > **74 SP.** Cierra el flujo del dinero (proveedor **simulado**) y deja el esqueleto andando.
 
-- [ ] **EP-04** US-401 crear/editar productos · US-402 publicar/pausar/archivar (RN-23) · US-403 política única de plataforma (RN-37)
-- [ ] **EP-05** US-501 horarios recurrentes (`end>start`) · US-502 excepciones `block`/`open`
+- [x] **EP-04** Catálogo del tutor
+  - _Backend (migración `20260709120000_ep04_product_write.sql`, aplicada a dev):_ RLS de escritura del tutor sobre SUS `products` + `product_categories`; trigger `products_publish_guard` (RN-23: publicar exige tutor aprobado). Sirve a US-401 y US-402.
+  - [x] **US-401 · Crear/editar productos** `/tutor/products` (+`/new`, `/[id]/edit`) — form con modelo de precio, duración ≥30 (RN-03), paquete ≥1 (RN-22), categorías N–M (RN-09); alta como `draft`. Guard `requireTutorProfile` (borradores permitidos antes de aprobación). Moneda USD única (ponytail → C-13). **Verificado E2E** (signup→onboarding→tutor→crear/editar draft). _SCR-TU04_
+  - [x] **US-402 · Publicar/pausar/archivar** — `<ProductStatusActions>` en la lista con la máquina M3 (Doc 2 §2.6): `draft`→Publicar/Descartar · `active`→Pausar/Archivar · `paused`→Reanudar/Archivar · `archived` terminal. Publicar/Reanudar gated en UI por aprobación + respaldado por el trigger `products_publish_guard` (RN-23). **Verificado E2E** (tutor pending): Publicar disabled con tooltip, Descartar→archived, terminal sin acciones. _Boundary: publish/pause/reanudar happy-path exigen tutor aprobado → se cierra al llegar US-1101 (admin, S3)._ _SCR-TU03_
+  - [x] **US-403 · Política de cancelación** — única de plataforma (RN-37: ≥24h=100%, <24h alumno=50%, tutor=100%). Fuente única `src/lib/policy.ts` (`CANCELLATION_POLICY`) + `<CancellationPolicy>` (compacta / tarjeta), consumible por US-604. Visible en detalle de producto y perfil de tutor (checkout la reusa en EP-06). Reemplaza el stub inline incompleto de US-304. **Verificado** en dev con seed. _SCR-TU04, RN-11/37_
+- [x] **EP-05** Disponibilidad
+  - _Backend (migración `20260709130000_ep05_availability.sql`, aplicada a dev + `db:types`):_ `availability_rules` (weekday 0=dom, `end_time>start_time`, `is_active`) + `availability_exceptions` (enum `availability_exception_type` block/open, rango parcial opcional con check both-or-neither) + RLS (lectura pública si tutor aprobado, tutor gestiona los suyos, admin lee). Doc 1 §1.4.8/1.4.9.
+  - [x] **US-501 · Horarios recurrentes** `/tutor/availability` — `<AvailabilityManager>`: alta (día/desde/hasta, `end>start` en cliente + BD), lista agrupada por día, pausar/activar, eliminar; en hora local del tutor. Enlace cruzado con productos. **Verificado E2E** (alta, validación end≤start, toggle, delete). _SCR-TU05_
+  - [x] **US-502 · Excepciones puntuales** — `<ExceptionsManager>` en la misma página: alta (fecha `<input type=date>`, tipo block/open, rango opcional both-or-neither = check de BD, motivo), lista futura ordenada por fecha, eliminar. Fecha formateada sin desfase de tz. **Verificado E2E** (bloqueo día completo, open con rango, validación both-or-neither, orden). _SCR-TU05, S-03_
 - [ ] **EP-06** US-601 elegir slot · US-602 checkout (card-on-file RN-43) · US-603 confirmación · US-604 cancelar (reembolso RN-37) · US-605 autocancelar 20 min · **US-606 aceptar/rechazar 24h (`pending_acceptance`, RN-38)** · US-607 card-on-file
 - [ ] **EP-07** US-701 routing por geografía · US-702 split por tier (snapshot) · US-703 webhooks idempotentes · US-705 nuevos proveedores sin tocar el core · [!] **C-01** (proveedor real → post-MVP)
 
