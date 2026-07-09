@@ -701,6 +701,10 @@ export type Database = {
         Args: { p_product_id: string; p_slots: string[] }
         Returns: string
       }
+      expire_stale_bookings: {
+        Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
+        Returns: Json
+      }
       get_available_slots: {
         Args: { p_from?: string; p_product_id: string; p_to?: string }
         Returns: {
