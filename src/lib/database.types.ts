@@ -319,6 +319,32 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_webhook_events: {
+        Row: {
+          booking_id: string | null
+          event_id: string
+          processed_at: string
+        }
+        Insert: {
+          booking_id?: string | null
+          event_id: string
+          processed_at?: string
+        }
+        Update: {
+          booking_id?: string | null
+          event_id?: string
+          processed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhook_events_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           booking_id: string
@@ -732,7 +758,7 @@ export type Database = {
     Functions: {
       cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
       confirm_payment: {
-        Args: { p_booking_id: string; p_success?: boolean }
+        Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }
         Returns: string
       }
       create_booking: {
