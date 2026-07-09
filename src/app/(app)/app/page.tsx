@@ -39,6 +39,9 @@ export default async function AppHome() {
                 <Link href="/tutors">Explorar tutores</Link>
               </Button>
               <Button asChild variant="outline">
+                <Link href="/reservas">Mis reservas</Link>
+              </Button>
+              <Button asChild variant="outline">
                 <Link href="/classes">Ver clases</Link>
               </Button>
             </div>

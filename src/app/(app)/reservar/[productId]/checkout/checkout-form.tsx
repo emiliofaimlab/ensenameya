@@ -75,7 +75,7 @@ export function CheckoutForm({
           avisaremos; si no responde, se reembolsa el 100 %.
         </p>
         <Button asChild className="w-fit">
-          <Link href="/app">Ir a mi panel</Link>
+          <Link href="/reservas">Ver mis reservas</Link>
         </Button>
       </div>
     );

@@ -45,6 +45,9 @@ export default async function TutorProductsPage() {
           actions={
             <>
               <Button asChild variant="outline">
+                <Link href="/tutor/reservas">Reservas</Link>
+              </Button>
+              <Button asChild variant="outline">
                 <Link href="/tutor/availability">Disponibilidad</Link>
               </Button>
               <Button asChild>

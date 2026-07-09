@@ -711,6 +711,10 @@ export type Database = {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      respond_booking: {
+        Args: { p_accept: boolean; p_booking_id: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "alumno" | "tutor" | "admin"
