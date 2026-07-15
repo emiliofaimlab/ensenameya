@@ -76,12 +76,13 @@ function DocRow({
       return;
     }
 
-    const db = await supabase
-      .from("verification_documents")
-      .upsert(
-        { tutor_id: userId, doc_type: type, storage_path: path },
-        { onConflict: "tutor_id,doc_type" },
-      );
+    // Vía RPC, no upsert: las column-grants no permiten UPDATE de `tutor_id`/
+    // `doc_type` (US-1403), así que un upsert falla siempre. La RPC además
+    // devuelve el documento a `pending` al re-subirlo (repostular).
+    const db = await supabase.rpc("submit_document", {
+      p_doc_type: type,
+      p_storage_path: path,
+    });
     if (db.error) {
       toast.error("No se pudo registrar el documento.");
       setLoading(false);

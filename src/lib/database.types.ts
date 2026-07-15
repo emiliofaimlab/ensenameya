@@ -795,6 +795,10 @@ export type Database = {
         Args: { p_approve: boolean; p_reason?: string; p_tutor_id: string }
         Returns: string
       }
+      submit_document: {
+        Args: { p_doc_type: string; p_storage_path: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "alumno" | "tutor" | "admin"
