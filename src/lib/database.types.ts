@@ -631,6 +631,7 @@ export type Database = {
       }
       tutor_profiles: {
         Row: {
+          approval_notes: string | null
           approval_status: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at: string | null
           bio: string | null
@@ -644,6 +645,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          approval_notes?: string | null
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
           bio?: string | null
@@ -657,6 +659,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          approval_notes?: string | null
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
           bio?: string | null
@@ -782,6 +785,14 @@ export type Database = {
       }
       respond_booking: {
         Args: { p_accept: boolean; p_booking_id: string }
+        Returns: string
+      }
+      review_document: {
+        Args: { p_approve: boolean; p_doc_id: string; p_notes?: string }
+        Returns: string
+      }
+      review_tutor: {
+        Args: { p_approve: boolean; p_reason?: string; p_tutor_id: string }
         Returns: string
       }
     }

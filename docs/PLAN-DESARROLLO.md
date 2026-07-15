@@ -42,13 +42,13 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 
 | Dec. | Tema | Bloquea | Estado | Default operable |
 | :-- | :-- | :-- | :-- | :-- |
-| **C-01** | Proveedor de pago | Pago real (S2/prod) | [ ] pendiente | Proveedor **simulado** |
+| ~~C-01~~ | ~~Proveedor de pago~~ | EP-20 | ✅ **resuelto: DLocal + Stripe** — ahora bloqueado por **credenciales**, no por decisión | Proveedor **simulado** (hecho) |
 | ~~C-03~~ | ~~Reembolsos~~ | — | ✅ **resuelto** (RN-37: 100/50/100) | — |
 | **C-07** | Ventana de pago | US-605 | [ ] pendiente | **20 min** |
 | **C-08** | Ventana de sala | US-801 | [ ] pendiente | 10/10 min |
 | **C-09** | %s de tiers | US-1103 | [ ] pendiente | 75/85/90 seed |
 | **C-13** | Mercado/Venezuela | Payouts/corredores | [ ] pendiente | 1 corredor demo |
-| **C-14** | Docs para aprobar tutor | US-203 KYC | [ ] pendiente | Set provisional (id/título) |
+| ~~C-14~~ | ~~Docs para aprobar tutor~~ | US-203 KYC · US-1101 | ✅ **resuelto por UX-203 (EY-100): 7 documentos** — implica migración (hoy hay 3) | Set provisional (id_front/id_back/selfie) |
 | C-02/C-04 | Retención / agrupación payout | US-1002 | [ ] pendiente | Config |
 | C-05 | No-show | US-604/802 | [ ] pendiente | Default Doc 2 |
 | C-10 | Reglas de referidos | US-1301 | [ ] pendiente | Solo captura `?ref=` |
@@ -134,24 +134,55 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
   - [x] **US-607 · Card-on-file** (migración `20260709200000`): tabla `payment_methods` (**sin columna de PAN**, solo `provider_token` + marca/últimos4, RN-43) + RLS del dueño. Gestión en `/account` (guardar/listar/eliminar tarjeta simulada). **Verificado E2E** (add "Visa •••• 4242" + delete). Token real → C-01.
   - [x] **US-703 · Webhooks idempotentes** (migración `20260709210000`): tabla `payment_webhook_events` (dedup por `event_id`) + `confirm_payment` v2 con `p_event_id` opcional → un evento repetido es no-op (doble idempotencia: por event-id y por estado). **Verificado** (evt_A procesa, evt_A repetido no-op). Firma RN-34 → endpoint HTTP del webhook con proveedor real (C-01).
   - [x] **US-705 · Proveedores sin tocar el core** — satisfecho por el diseño de US-701: `payment_routing_rules` (admin-writable) + `provider`/`charge_provider` como **texto** (S-16) → un proveedor nuevo = fila en la tabla (runtime) + su adaptador, sin migración ni cambio de negocio. `create_booking` resuelve el provider desde la tabla (verificado). Sin interfaz de un-solo-impl (llega con el 2º proveedor real, C-01).
-- [x] **EP-07** (integrado arriba con EP-06; US-704 reembolso manual admin → S3)
-- [ ] **EP-07** US-701 routing por geografía · US-702 split por tier (snapshot) · US-703 webhooks idempotentes · US-705 nuevos proveedores sin tocar el core · [!] **C-01** (proveedor real → post-MVP)
+- [x] **EP-07** — US-701/702/703/705 cerradas arriba junto a EP-06 (todas `Done` en Jira). Pendientes: US-704 (reembolso manual admin) → **S3**; el cableado con proveedor real → **EP-20** (bloqueada por credenciales).
 
 > **Hito visible:** registro → descubrir → reservar → "pagar" (simulado) → tutor acepta → reserva confirmada con sesiones. 🦴
 
 ---
 
-## Sprint 3 — Sala en vivo · Reseñas · Payouts · Admin · Notificaciones · Chat
+## Sprint 3 — Sala en vivo · Reseñas · Payouts · Admin · Notificaciones · Chat ← **SPRINT ACTIVO**
 
-> **83 SP.**
+> **19 historias / 83 SP.** Todas `To Do` en Jira al abrir el sprint (2026-07-14).
 
-- [ ] **EP-08** US-801 entrar a sala (Daily, token server-side) · US-802 ciclo de sesión · US-803 sala móvil · [!] C-08
-- [ ] **EP-09** US-901 dejar reseña (solo `completed`) · US-902 ver reseñas
-- [ ] **EP-10** US-1001 ver ingresos/payouts · US-1002 liquidación lote semanal (7d) · US-1003 gestión admin · US-1004 retiro self-service (RN-40)
-- [ ] **EP-11** US-1101 aprobar tutores+KYC · US-1102 categorías · US-1103 tiers (75/85/90, [!] C-09) · US-1104 supervisar pagos/reservas · US-1105 estadísticas
-- [ ] **EP-12** US-1201 emails transaccionales (puerto `EmailProvider` + stub, [!] C-11) · US-1202 registro idempotente
-- [ ] **EP-07** US-704 reembolso manual admin
-- [ ] **EP-17** US-1701 chat 1:1 (Realtime, RLS participantes, 2d antes/30d) · US-1703 purga pg_cron
+**Orden sugerido.** `US-1101` primero: es la llave que abre el resto — sin tutor aprobable desde la
+app, el happy-path de publicar producto (US-402) y el E2E de reserva siguen dependiendo de aprobar a
+mano en la BD. Cierra además el *boundary* que S2 dejó abierto.
+
+- [ ] **EP-11 · Panel Admin** — `EY-68`…`EY-72`
+  - [x] **US-1101 · Aprobar/rechazar tutores + KYC** `EY-68` (migración `20260714120000`): RPC `review_document` (la identidad es el **agregado** de los documentos: uno rechazado la tumba, todos aprobados la aprueban — no se marca a mano) + `review_tutor` (RN-29: aprobar exige `identity='approved'`; **otorga el rol `tutor`** al aprobar y lo **retira** al rechazar). Ambas verifican `has_role('admin')` dentro; el cliente no escribe por PATCH. Pantallas `/admin` (cola, pendientes arriba) + `/admin/tutores/[id]` (SCR-AD05, enlaces firmados 5 min al bucket privado). **Verificado E2E en la app**: aprobar doc → identidad `approved` sola → se desbloquea "Aprobar tutor" → tutor `approved` + rol `tutor` + `reviewed_by`/`approved_at`. Anti-escalada re-probada (anon / auto-aprobarse / aprobar su propio doc / PATCH `approval_status` / INSERT de rol → todos 42501). NTF-03 stub. _Bootstrap del primer admin: `supabase/seed/admin-bootstrap.sql` (huevo-y-gallina, ver el archivo)._ _Lista los documentos de forma **genérica** → pasar a 7 (UX-203) no toca esta pantalla._
+    - ⚠️ _Todo admin recién sembrado debe completar `/onboarding` antes de entrar al panel (gate de `requireUser`, RN-44). No es bug; tenerlo en cuenta en prod._
+  - [ ] **US-1102 · Gestionar categorías** `EY-69`
+  - [ ] **US-1103 · Comisión y tiers** `EY-70` — [!] **C-09** (default 75/85/90 seed)
+  - [ ] **US-1104 · Supervisar pagos/reservas** `EY-71`
+  - [ ] **US-1105 · Estadísticas globales** `EY-72`
+- [ ] **EP-08 · Sala en vivo (Daily)** — US-801 entrar a sala (token server-side) `EY-59` · US-802 ciclo de sesión `EY-60` · US-803 sala móvil `EY-61` · [!] **C-08** (default 10/10 min)
+- [ ] **EP-09 · Reseñas** — US-901 dejar reseña (solo `completed`) `EY-62` · US-902 ver reseñas `EY-63`
+- [ ] **EP-10 · Payouts** — US-1001 ver ingresos `EY-64` · US-1002 liquidación lote semanal `EY-65` · US-1003 gestión admin `EY-66` · US-1004 retiro self-service (RN-40) `EY-67`
+- [ ] **EP-12 · Notificaciones** — US-1201 emails transaccionales (puerto `EmailProvider` + stub, [!] C-11) `EY-73` · US-1202 registro idempotente `EY-74`
+- [ ] **EP-07** — US-704 reembolso manual admin `EY-58`
+- [ ] **EP-17 · Chat** — US-1701 chat 1:1 (Realtime, RLS participantes, 2d antes/30d) `EY-75` · US-1703 purga pg_cron `EY-76`
+
+### Deuda que S3 debe saldar (heredada de S2)
+
+- **US-605:** `expire_stale_bookings()` tiene grant a `authenticated` por testabilidad → **revocar antes de prod** (solo cron/service_role).
+- ~~**US-402:** happy-path de publicar/pausar/reanudar sin ejercitar con tutor aprobado~~ → ✅ **desbloqueado por US-1101**: ya se puede aprobar un tutor desde la app (queda ejercitar el happy-path).
+- 🐞 **US-203 (EY-33, reabierta):** la subida de KYC **está rota hoy** — `verification-form.tsx:81` usa `.upsert()`, que PostgREST convierte en `ON CONFLICT DO UPDATE SET tutor_id…, doc_type…`; Postgres exige UPDATE sobre esas columnas al planificar y las column-grants solo dan `update (storage_path)` (a propósito, US-1403). Falla siempre, incluso en la 1ª subida. **No conceder `update (tutor_id, doc_type)`** (abre la escalada que la migración evita): la salida es una RPC `submit_document` que además resetee `status` a `pending` al re-subir (lo exige "repostular sin límite" de UX-203). Detalle y reproducción en el comentario de EY-33.
+
+---
+
+## Tracks paralelos (fuera de S1–S4) — sync Jira 2026-07-14
+
+No consumen SP del sprint. Se filtran en Jira por label.
+
+- **EP-19 · Diseño UI** (`EY-87`, label `Sprint-Diseño`) — DS-01…04 (`EY-88`…`EY-91`) **In Review**, asignadas a Diana Rivera. Entregable **Figma**, no código (mismo matiz que EP-00). Al aprobarse, implica rediseño visual de pantallas ya construidas → historias de dev aún **no creadas**.
+- **EP-20 · Activación Comercial** (`EY-92`, label `Sprint-Activacion-Comercial`) — PAC-01…04 (`EY-93`…`EY-96`) 🔒 **bloqueadas**: falta cuenta + API keys de **DLocal y Stripe**. El motor simulado ya está hecho y probado; esto es solo el cableado real. **C-01 está decidido** (DLocal + Stripe); el bloqueo ahora es administrativo.
+- **EP-21 · UX Onboarding Tutor** (`EY-97`, label `Sprint-Mejoras-UX`) — UX-201…204 (`EY-98`…`EY-101`).
+  ⚠️ **Redefine historias ya `Done`** (US-201/202/203). No es solo documentación:
+  - **UX-203** (`EY-100`): **7 documentos** de KYC (`id_document`, `degree`, `certificate`, `diploma`, `transcript`, `cv`, `social_media`) vs los **3** construidos (`id_front`/`id_back`/`selfie`) → **resuelve C-14** y pide migración del set.
+  - **UX-202** (`EY-99`): asistente **secuencial** de 5 pasos (contacto → headline/bio → **foto** → redes → **categorías**) vs el form único actual. Foto y categorías estaban **diferidas** en US-202 — aquí vuelven.
+  - **UX-204** (`EY-101`): gate "Enviar a revisión" exige ≥1 producto `draft` — no existe hoy.
+
+  Están redactadas como *requisitos de pantalla* (entregable = documento), pero su AC implica **re-trabajo de código**. Decidir si se abren historias de dev derivadas o se reabren US-202/203.
 
 ---
 
@@ -168,4 +199,4 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-06.*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-14 (sync Jira + apertura de Sprint 3).*

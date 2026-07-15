@@ -11,7 +11,7 @@
 - **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
 - **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (sin local) en Supabase + Vercel, flujo de trabajo y checklist (US-1603).
 
-Sprint activo: **Sprint 1** (fundaciones, auth, onboarding, descubrimiento, RLS, ambientes).
+Sprint activo: **Sprint 3** (sala en vivo, reseñas, payouts, admin, notificaciones, chat). S1 y S2 cerrados.
 
 ## Stack
 
