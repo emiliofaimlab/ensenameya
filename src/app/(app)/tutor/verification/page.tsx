@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { PageHeader } from "@/components/layout/page-header";
-import { VerificationForm, type DocStatus } from "./verification-form";
+import { VerificationForm, type DocState } from "./verification-form";
 
 export const metadata = { title: "Verificación de identidad · Enséñame Ya" };
 
@@ -43,11 +43,11 @@ export default async function VerificationPage() {
 
   const { data: docs } = await supabase
     .from("verification_documents")
-    .select("doc_type, status")
+    .select("doc_type, status, link_url")
     .eq("tutor_id", user.id);
 
-  const statusByType: Record<string, DocStatus> = Object.fromEntries(
-    (docs ?? []).map((d) => [d.doc_type, d.status]),
+  const docsByType: Record<string, DocState> = Object.fromEntries(
+    (docs ?? []).map((d) => [d.doc_type, { status: d.status, linkUrl: d.link_url }]),
   );
 
   const note = IDENTITY_NOTE[tp.identity_verification_status];
@@ -64,7 +64,7 @@ export default async function VerificationPage() {
             {note.text}
           </p>
         ) : null}
-        <VerificationForm userId={user.id} statusByType={statusByType} />
+        <VerificationForm userId={user.id} docsByType={docsByType} />
       </Section>
     </Container>
   );

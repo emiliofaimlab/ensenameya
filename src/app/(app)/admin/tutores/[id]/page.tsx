@@ -42,13 +42,17 @@ export default async function AdminTutorPage({
 
   const { data: docRows } = await supabase
     .from("verification_documents")
-    .select("id, doc_type, storage_path, status, review_notes")
+    .select("id, doc_type, storage_path, link_url, status, review_notes")
     .eq("tutor_id", id)
     .order("doc_type");
 
-  // Un enlace firmado por documento, en lote. Si Storage falla, la fila se
-  // muestra igual sin enlace: el admin ve el estado aunque no pueda abrirlo.
-  const paths = (docRows ?? []).map((d) => d.storage_path);
+  // Un enlace firmado por documento-archivo, en lote. `social_media` es un
+  // enlace externo (link_url) y no pasa por Storage: firmarlo daría error.
+  // Si Storage falla, la fila se muestra igual sin enlace: el admin ve el
+  // estado aunque no pueda abrirlo.
+  const paths = (docRows ?? [])
+    .map((d) => d.storage_path)
+    .filter((p): p is string => p !== null);
   const { data: signed } = paths.length
     ? await supabase.storage.from("kyc-documents").createSignedUrls(paths, SIGNED_URL_TTL)
     : { data: null };
@@ -62,7 +66,9 @@ export default async function AdminTutorPage({
     docType: d.doc_type,
     status: d.status,
     reviewNotes: d.review_notes,
-    url: urlByPath.get(d.storage_path) ?? null,
+    // Externo → se abre tal cual y se avisa en la UI; interno → enlace firmado.
+    url: d.link_url ?? (d.storage_path ? (urlByPath.get(d.storage_path) ?? null) : null),
+    isExternal: d.link_url !== null,
   }));
 
   const approval = APPROVAL_BADGE[tutor.approval_status];

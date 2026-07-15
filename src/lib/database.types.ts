@@ -705,11 +705,12 @@ export type Database = {
           created_at: string
           doc_type: string
           id: string
+          link_url: string | null
           review_notes: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: Database["public"]["Enums"]["document_status"]
-          storage_path: string
+          storage_path: string | null
           tutor_id: string
           updated_at: string
         }
@@ -717,11 +718,12 @@ export type Database = {
           created_at?: string
           doc_type: string
           id?: string
+          link_url?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["document_status"]
-          storage_path: string
+          storage_path?: string | null
           tutor_id: string
           updated_at?: string
         }
@@ -729,11 +731,12 @@ export type Database = {
           created_at?: string
           doc_type?: string
           id?: string
+          link_url?: string | null
           review_notes?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: Database["public"]["Enums"]["document_status"]
-          storage_path?: string
+          storage_path?: string | null
           tutor_id?: string
           updated_at?: string
         }
@@ -796,7 +799,11 @@ export type Database = {
         Returns: string
       }
       submit_document: {
-        Args: { p_doc_type: string; p_storage_path: string }
+        Args: {
+          p_doc_type: string
+          p_link_url?: string
+          p_storage_path?: string
+        }
         Returns: string
       }
     }

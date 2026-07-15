@@ -21,15 +21,20 @@ export type ReviewDoc = {
   status: DocStatus;
   reviewNotes: string | null;
   url: string | null;
+  isExternal: boolean;
 };
 
 // C-14: los tipos vienen de la BD (`doc_type` es texto). Este mapa solo traduce
 // los que conocemos; uno nuevo se muestra con su propio identificador, sin
-// romper la pantalla. Al ampliar a 7 docs (UX-203/EY-100) se añaden entradas.
+// romper la pantalla. Set final de 7 confirmado en UX-203 (EY-100).
 const DOC_LABELS: Record<string, string> = {
-  id_front: "Documento de identidad — frente",
-  id_back: "Documento de identidad — reverso",
-  selfie: "Selfie sosteniendo el documento",
+  id_document: "Documento de identidad (cédula o pasaporte)",
+  degree: "Título académico",
+  certificate: "Certificado",
+  diploma: "Diploma",
+  transcript: "Expediente académico",
+  cv: "Currículum vitae",
+  social_media: "Redes sociales (enlace)",
 };
 
 /** Revisión de UN documento. La identidad la recalcula la RPC, no la UI. */
@@ -74,15 +79,23 @@ export function DocumentReview({ doc }: { doc: ReviewDoc }) {
         </div>
         {doc.url ? (
           <Button asChild variant="outline" size="sm">
-            {/* Enlace firmado y efímero al bucket privado. */}
+            {/* Interno: enlace firmado y efímero al bucket privado.
+                Externo (redes): URL que escribió el tutor — `noreferrer` evita
+                filtrarle la ruta del panel admin. */}
             <a href={doc.url} target="_blank" rel="noreferrer">
-              Ver documento
+              {doc.isExternal ? "Abrir enlace ↗" : "Ver documento"}
             </a>
           </Button>
         ) : (
           <span className="text-xs text-muted-foreground">Enlace no disponible</span>
         )}
       </div>
+
+      {doc.isExternal ? (
+        <p className="break-all text-xs text-muted-foreground">
+          Enlace externo aportado por el tutor: {doc.url}
+        </p>
+      ) : null}
 
       <Textarea
         value={notes}
