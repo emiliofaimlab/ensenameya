@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { APPROVAL_BADGE, IDENTITY_BADGE } from "./badges";
+import { AdminNav } from "./admin-nav";
 
 export const metadata = { title: "Panel admin · Enséñame Ya" };
 
@@ -47,6 +48,7 @@ export default async function AdminPage() {
               : "No hay tutores esperando revisión."
           }
         />
+        <AdminNav />
 
         {queue.length === 0 ? (
           <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
