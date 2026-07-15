@@ -642,6 +642,7 @@ export type Database = {
           rating_avg: number | null
           rating_count: number
           socials: Json
+          tier_id: string | null
           updated_at: string
         }
         Insert: {
@@ -656,6 +657,7 @@ export type Database = {
           rating_avg?: number | null
           rating_count?: number
           socials?: Json
+          tier_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -670,6 +672,7 @@ export type Database = {
           rating_avg?: number | null
           rating_count?: number
           socials?: Json
+          tier_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -680,7 +683,44 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tutor_profiles_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "tutor_tiers"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      tutor_tiers: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_default: boolean
+          name: string
+          split_pct: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          split_pct: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          split_pct?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
@@ -762,6 +802,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      assign_tutor_tier: {
+        Args: { p_tier_id: string; p_tutor_id: string }
+        Returns: string
+      }
       cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
       confirm_payment: {
         Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }

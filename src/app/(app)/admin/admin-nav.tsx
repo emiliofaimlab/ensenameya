@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/admin", label: "Tutores" },
   { href: "/admin/categorias", label: "Categorías" },
+  { href: "/admin/tiers", label: "Comisión y tiers" },
 ];
 
 export function AdminNav() {

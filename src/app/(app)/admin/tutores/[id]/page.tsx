@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { APPROVAL_BADGE, IDENTITY_BADGE } from "../../badges";
-import { DocumentReview, TutorReview, type ReviewDoc } from "./review-actions";
+import { DocumentReview, TierPicker, TutorReview, type ReviewDoc } from "./review-actions";
 
 export const metadata = { title: "Revisar tutor · Enséñame Ya" };
 
@@ -33,12 +33,18 @@ export default async function AdminTutorPage({
   const { data: tutor } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, profiles(full_name)",
+      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, profiles(full_name)",
     )
     .eq("profile_id", id)
     .maybeSingle();
 
   if (!tutor) notFound();
+
+  // US-1103 / RN-06: el tier decide el split de sus próximas reservas.
+  const { data: tierRows } = await supabase
+    .from("tutor_tiers")
+    .select("id, name, split_pct")
+    .order("split_pct");
 
   const { data: docRows } = await supabase
     .from("verification_documents")
@@ -129,6 +135,16 @@ export default async function AdminTutorPage({
             docs.map((d) => <DocumentReview key={d.id} doc={d} />)
           )}
         </div>
+
+        <TierPicker
+          tutorId={tutor.profile_id}
+          tierId={tutor.tier_id}
+          tiers={(tierRows ?? []).map((t) => ({
+            id: t.id,
+            name: t.name,
+            splitPct: Number(t.split_pct),
+          }))}
+        />
 
         <TutorReview
           tutorId={tutor.profile_id}
