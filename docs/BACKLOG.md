@@ -10,15 +10,21 @@
 
 | Indicador | Valor |
 | :-- | :-- |
-| Épicas | **19** (EP-00 + EP-01…EP-18) |
-| Historias | **66** (incl. EP-00 diseño) |
-| Puntos estimados | 259 SP (backlog dev) |
+| Épicas | **22** (EP-00 + EP-01…EP-21) |
+| Historias | **73** (incl. EP-00 diseño) |
+| Puntos estimados | 259 SP (backlog dev original EP-01…EP-18) |
 | Historias Must | 40 |
-| Sprints | 4 (+ EP-00 pre-desarrollo) |
-| **Sprint 1** | **15 historias / 63 SP** |
+| Sprints | 4 de dev (+ EP-00 pre-desarrollo, + 3 tracks paralelos) |
+| **Sprint activo** | **Sprint 3** — 19 historias / 83 SP |
 
 > **Jira es la fuente operativa** (proyecto `EY` en `faimlab.atlassian.net`). Jira añadió **EP-00 —
 > Diseño UX/UI y Contenido** (pre-desarrollo), que el docx original no traía. Este `.md` lo refleja.
+>
+> **Sync 2026-07-14:** Jira añadió tres épicas que el docx v1.0 no traía: **EP-19** (diseño UI, track
+> paralelo), **EP-20** (activación comercial: DLocal + Stripe reales, **bloqueada** por credenciales)
+> y **EP-21** (UX del onboarding del tutor). No pertenecen a los sprints S1–S4 de dev; se rastrean
+> por **label de Jira** (`Sprint-Diseño`, `Sprint-Activacion-Comercial`, `Sprint-Mejoras-UX`), no por
+> el campo Sprint. Ver §4.1.
 
 ---
 
@@ -45,6 +51,9 @@
 | EP-16 | Responsive / QA / Lanzamiento | M | 13 | S4 (+US-1603 en S1) |
 | EP-17 | Chat de la Reserva (v3) | S | 13 | S3 |
 | EP-18 | Grabación de la Sesión (v3) | S | 13 | S4 |
+| EP-19 | Diseño UI — Implementación Visual · Jira EY-87 | M | — | Track diseño (paralelo) |
+| EP-20 | Activación Comercial — DLocal + Stripe reales · Jira EY-92 | M | — | 🔒 Bloqueada (credenciales) |
+| EP-21 | UX Onboarding Continuo del Tutor · Jira EY-97 | S | — | Track UX (paralelo) |
 
 ---
 
@@ -220,6 +229,30 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 - **S2:** US-401,402,403,501,502,601,602,603,604,605,606,607,701,702,703,705.
 - **S3:** US-704,801,802,803,901,902,1001,1002,1003,1004,1101,1102,1103,1104,1105,1201,1202,1701,1703.
 - **S4:** US-1203,1301,1302,1501,1502,1601,1602,1702,1801,1802.
+
+**Estado (sync Jira 2026-07-14):** S1 ✅ y S2 ✅ cerrados (39 issues `Done`). **S3 en curso.**
+
+### 4.1 Tracks paralelos (fuera de S1–S4)
+
+No consumen SP de los sprints de dev. Se filtran en Jira por label.
+
+| Track | Épica | Jira | Estado | Nota |
+| :-- | :-- | :-- | :-- | :-- |
+| `Sprint-Diseño` | EP-19 | EY-88…91 (DS-01…04) | **In Review** (Diana Rivera) | Entregable Figma, no código. Precede al rediseño visual de pantallas ya construidas. |
+| `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) | 🔒 **Bloqueada** | C-01 **decidido: DLocal + Stripe**. Falta cuenta + API keys de ambos. El motor simulado ya está hecho y probado. |
+| `Sprint-Mejoras-UX` | EP-21 | EY-98…101 (UX-201…204) | To Do | ⚠️ **Redefine** US-201/202/203 (ya `Done`) — ver aviso abajo. |
+
+> ⚠️ **EP-21 no es documentación: es alcance nuevo sobre historias cerradas.**
+> - **UX-203** pide **7 documentos** de KYC (`id_document`, `degree`, `certificate`, `diploma`,
+>   `transcript`, `cv`, `social_media`); lo construido en US-203 son **3** (`id_front`, `id_back`,
+>   `selfie`). Esto **resuelve C-14** y obliga a migración del set de documentos.
+> - **UX-202** pide asistente **secuencial** de 5 pasos (contacto → headline/bio → foto → redes →
+>   categorías); lo construido en US-202 es un **form único** sin foto ni categorías.
+> - **UX-204** exige ≥1 producto `draft` para habilitar "Enviar a revisión" — hoy no existe ese gate.
+>
+> Las historias UX-2xx están redactadas como *requisitos de pantalla* (entregable: documento), pero su
+> AC implica **re-trabajo de código**. Antes de ejecutarlas hay que decidir si se abren historias de dev
+> derivadas o se reabren US-202/203.
 
 ---
 
