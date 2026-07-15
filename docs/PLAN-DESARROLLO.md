@@ -73,34 +73,38 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 - [x] **US-101 · Registro** `/signup` — email/Google + intención alumno/tutor + términos. _SCR-AU02, NTF-01 (stub)_
   - [x] **AU04 · Callback OAuth** `/auth/callback` — crea `profiles` en primer login; enruta por rol.
   - [ ] Captura `?ref=` → `profiles.referral_code` (parte de US-1302, S4; capturar ya aunque la lógica sea externa)
-- [ ] **US-103 · Recuperar contraseña** `/reset` — solicitar enlace + nueva contraseña vía token; NTF-02 (stub). _SCR-AU03_
-- [ ] **US-104 · Cuenta / logout** `/account` (SCR-G03) — editar perfil, `timezone`, cambiar contraseña, activar rol tutor, cerrar sesión. _(S)_
+- [x] **US-103 · Recuperar contraseña** `/reset` (+`/reset/update`) — solicitar enlace + nueva contraseña vía token; respuesta genérica (S-40); NTF-02 = email por defecto de Supabase Auth. _SCR-AU03_
+- [x] **US-104 · Cuenta / logout** `/account` (SCR-G03) — editar perfil (nombre, `timezone` IANA), cambiar contraseña, CTA rol tutor (→ `/tutor/onboarding`, US-202), cerrar sesión. _(S)_
 
 ### EP-02 · Onboarding (Alumno/Tutor)
-- [ ] **US-201 · Onboarding Alumno** `/onboarding` — nombre, **`timezone` (IANA)** + **teléfono (E.164)** obligatorios (RN-01/44); `onboarding_complete=true`. _SCR-AL01_
-  - _Gancho:_ signup hoy manda a `/app` directo; cuando exista, será el destino post-registro.
-- [ ] **US-202 · Onboarding Tutor** `/tutor/onboarding` — headline, bio, **foto**, teléfono, **redes**, categorías → `approval: pending`. _SCR-TU01, RN-44_
-- [ ] **US-203 · KYC Tutor** `/tutor/verification` — subir `id_document, degree, certificate, diploma, transcript, cv, social_media` → `identity: pending`; NTF-06 (stub). _SCR-TU02 · [!] C-14 (set final de docs)_
+- [x] **US-201 · Onboarding Alumno** `/onboarding` — nombre, `timezone` (IANA, autodetectada) + teléfono E.164 (RN-01/44) obligatorios → `onboarding_complete=true` (migración `20260706130000` añade `phone`+flag). Verificado E2E. _SCR-AL01_
+  - _Gancho:_ ✅ cableado — signup→`/onboarding` **y gate en `requireUser`**: fuerza el onboarding en cualquier entrada (email/OAuth/login) antes del área autenticada. Nombre espejado a `user_metadata` para header/saludo.
+- [x] **US-202 · Onboarding Tutor** `/tutor/onboarding` — headline, bio, **redes** (jsonb) → `approval: pending`; escritura acotada por **column-grants** (el rol `tutor` se otorga al aprobar, US-1101). Intent "Quiero enseñar" enrutado desde US-201. Verificado E2E. _Diferidos: foto (Storage), categorías (al crear productos); teléfono ya en US-201._ _SCR-TU01, RN-44_
+- [x] **US-203 · KYC Tutor** `/tutor/verification` — bucket privado `kyc-documents` (S-42: 10MB, tipos) + `verification_documents` + trigger `identity: pending` + **column-grants** anti-escalada + RLS de Storage (carpeta=uid). Set provisional `id_front/id_back/selfie` **configurable** → C-14 lo amplía. NTF-06 stub. Verificado E2E (upload 200, trigger, auto-aprobar→403). _SCR-TU02_
 
 ### EP-03 · Descubrimiento (catálogo público, solo lectura)
 **Backend del sprint (migraciones + RLS pública):**
-- [ ] `categories` (lectura pública `is_active`, escritura admin, `slug` único, planas S-13)
-- [ ] `tutor_profiles` (1:1 con `profiles`; lectura pública solo si `approval_status='approved'`)
-- [ ] `products` (lectura pública si `active` + tutor aprobado, RN-24; índice de texto `title/description`)
-- [ ] `product_categories` (puente N–M, RN-09) · `availability_rules` + `availability_exceptions` (lectura pública de aprobados)
-- [ ] **Seed demo:** tutores aprobados + productos activos + categorías
+> Migración `20260706120000_ep03_catalog.sql` **aplicada a dev** (`db:push` ✅) + `db:types` ✅ + RLS
+> pública **verificada por lectura anon** (categories=8; products/tutor_profiles=`[]` sin seed → default-deny OK).
+> Falta la matriz por rol (alumno/tutor/admin), que se cierra con el seed + pantallas. `availability_*`
+> **diferido a EP-05/S2** (lo pide la reserva, no el catálogo).
+- [x] `categories` (lectura pública `is_active`, escritura admin, `slug` único, planas S-13) — + seed de 8 categorías reales en la migración
+- [x] `tutor_profiles` (1:1 con `profiles`; lectura pública solo si `approval_status='approved'`) — sin `tier_id`/`payout_*` (diferidos a S3)
+- [x] `products` (lectura pública si `active` + tutor aprobado, RN-24; `search_vector` tsvector `spanish` + GIN)
+- [x] `product_categories` (puente N–M, RN-09) · ~~`availability_rules` + `availability_exceptions`~~ → **EP-05/S2**
+- [x] **Seed demo:** tutores aprobados + productos activos → `supabase/seed/ep03-demo.sql` (**dev-only**, fuera de migrations); **aplicado a dev** (verificado: 3 tutores `approved` + productos activos públicos, p.ej. `b0000000-…-0001`)
 
 **Pantallas:**
-- [ ] **US-301 · Explorar Tutores** `/tutors` — solo `approved`; filtros (categoría/rating/precio); paginación. _SCR-P04_
-- [ ] **US-302 · Explorar Productos/Categorías** `/classes` + `/categories/{slug}` — activos por categoría N–M. _SCR-P05/P06_
-- [ ] **US-303 · Búsqueda** `/search?q=` — título/desc/tutor/categoría; sin resultados → sugerencias. _(S) SCR-P09_
-- [ ] **US-304 · Perfil Tutor / Detalle Producto** `/tutors/{id}` + `/products/{id}` — bio, productos, rating, política, CTA Reservar. _SCR-P07/P08_
+- [x] **US-301 · Explorar Tutores** `/tutors` — solo `approved`; **filtro por categoría** + paginación; orden por rating. Verificado en dev con seed. _(rating/precio como filtro → diferido; rating ya se muestra)_ _SCR-P04_
+- [x] **US-302 · Explorar Productos/Categorías** `/classes` + `/categories` + `/categories/{slug}` — activos por categoría N–M; filtro por categoría + paginación. Verificado en dev. _(filtros precio/modelo/duración → diferidos)_ _SCR-P05/P06_
+- [x] **US-303 · Búsqueda** `/search?q=` — full-text en `products` (`search_vector` tsvector `spanish`); sin `q`/sin resultados → sugerencias por categoría. Verificado (`app`→"Tu primera app web"). _(tutor/categoría como resultado → diferido)_ _SCR-P09_
+- [x] **US-304 · Perfil Tutor / Detalle Producto** `/tutors/{id}` + `/products/{id}` — headline, bio, rating, clases con categorías, precio por modelo, CTA Reservar (→ login sin sesión). Verificado en dev. _Diferido a su épica: reseñas (US-902/S3), disponibilidad (EP-05/S2), checkout real (EP-06/S2)._ _SCR-P07/P08_
 - [ ] **P01 · Landing** `/` — hero + buscador + destacados (hoy hay home-esqueleto neutra). _SCR-P01_
 
 ### EP-14 · Seguridad / RLS (transversal)
-- [~] **US-1401 · RLS default-deny** — ya en `profiles`/`user_roles`; **aplicar a cada tabla nueva** de EP-03 al crearla.
-- [ ] **US-1402 · Escritura financiera solo service_role** — sin tablas financieras aún; guarda al llegar EP-06/07.
-- [~] **US-1403 · Anti-escalada de privilegios** — `has_role` + admin por seed; **falta** bloquear auto-set de `approval_status`/`tier_id` cuando existan esas columnas.
+- [x] **US-1401 · RLS default-deny** — en todas las tablas (profiles/user_roles/categorías/tutor_profiles/products/product_categories/verification_documents) **y Storage**; grants explícitos por rol. Verificado por rol esta sesión (anon `[]` en lo privado, tutor `403` anti-escalada, admin por `has_role`). Práctica transversal: cada tabla nueva nace con ella.
+- [x] **US-1402 · Escritura financiera solo service_role** — con EP-06 Fase 1/3: `payments`/`bookings`/`sessions` sin grant de escritura de cliente (403 verificado); todo cambio por RPC `SECURITY DEFINER` (create_booking/confirm_payment). El cliente solo lee lo suyo.
+- [x] **US-1403 · Anti-escalada de privilegios** — roles sin escritura de cliente (default-deny); `tutor_profiles` con **column-grants**: el tutor no puede tocar `approval_status`/tier. **Verificado**: PATCH `approval_status` → 403; `headline` → 200. `tier_id` (S3) hereda el patrón.
 
 ### EP-16 · Ambientes (adelanto en S1)
 - [x] **US-1603 · dev + prod cloud** — proyecto Supabase por ambiente; Vercel preview por PR + prod desde `main` (`ensenameya.vercel.app`); CI de migraciones + lint/typecheck; Auth. → **`docs/ENTORNOS.md`**.
@@ -111,9 +115,26 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 
 > **74 SP.** Cierra el flujo del dinero (proveedor **simulado**) y deja el esqueleto andando.
 
-- [ ] **EP-04** US-401 crear/editar productos · US-402 publicar/pausar/archivar (RN-23) · US-403 política única de plataforma (RN-37)
-- [ ] **EP-05** US-501 horarios recurrentes (`end>start`) · US-502 excepciones `block`/`open`
-- [ ] **EP-06** US-601 elegir slot · US-602 checkout (card-on-file RN-43) · US-603 confirmación · US-604 cancelar (reembolso RN-37) · US-605 autocancelar 20 min · **US-606 aceptar/rechazar 24h (`pending_acceptance`, RN-38)** · US-607 card-on-file
+- [x] **EP-04** Catálogo del tutor
+  - _Backend (migración `20260709120000_ep04_product_write.sql`, aplicada a dev):_ RLS de escritura del tutor sobre SUS `products` + `product_categories`; trigger `products_publish_guard` (RN-23: publicar exige tutor aprobado). Sirve a US-401 y US-402.
+  - [x] **US-401 · Crear/editar productos** `/tutor/products` (+`/new`, `/[id]/edit`) — form con modelo de precio, duración ≥30 (RN-03), paquete ≥1 (RN-22), categorías N–M (RN-09); alta como `draft`. Guard `requireTutorProfile` (borradores permitidos antes de aprobación). Moneda USD única (ponytail → C-13). **Verificado E2E** (signup→onboarding→tutor→crear/editar draft). _SCR-TU04_
+  - [x] **US-402 · Publicar/pausar/archivar** — `<ProductStatusActions>` en la lista con la máquina M3 (Doc 2 §2.6): `draft`→Publicar/Descartar · `active`→Pausar/Archivar · `paused`→Reanudar/Archivar · `archived` terminal. Publicar/Reanudar gated en UI por aprobación + respaldado por el trigger `products_publish_guard` (RN-23). **Verificado E2E** (tutor pending): Publicar disabled con tooltip, Descartar→archived, terminal sin acciones. _Boundary: publish/pause/reanudar happy-path exigen tutor aprobado → se cierra al llegar US-1101 (admin, S3)._ _SCR-TU03_
+  - [x] **US-403 · Política de cancelación** — única de plataforma (RN-37: ≥24h=100%, <24h alumno=50%, tutor=100%). Fuente única `src/lib/policy.ts` (`CANCELLATION_POLICY`) + `<CancellationPolicy>` (compacta / tarjeta), consumible por US-604. Visible en detalle de producto y perfil de tutor (checkout la reusa en EP-06). Reemplaza el stub inline incompleto de US-304. **Verificado** en dev con seed. _SCR-TU04, RN-11/37_
+- [x] **EP-05** Disponibilidad
+  - _Backend (migración `20260709130000_ep05_availability.sql`, aplicada a dev + `db:types`):_ `availability_rules` (weekday 0=dom, `end_time>start_time`, `is_active`) + `availability_exceptions` (enum `availability_exception_type` block/open, rango parcial opcional con check both-or-neither) + RLS (lectura pública si tutor aprobado, tutor gestiona los suyos, admin lee). Doc 1 §1.4.8/1.4.9.
+  - [x] **US-501 · Horarios recurrentes** `/tutor/availability` — `<AvailabilityManager>`: alta (día/desde/hasta, `end>start` en cliente + BD), lista agrupada por día, pausar/activar, eliminar; en hora local del tutor. Enlace cruzado con productos. **Verificado E2E** (alta, validación end≤start, toggle, delete). _SCR-TU05_
+  - [x] **US-502 · Excepciones puntuales** — `<ExceptionsManager>` en la misma página: alta (fecha `<input type=date>`, tipo block/open, rango opcional both-or-neither = check de BD, motivo), lista futura ordenada por fecha, eliminar. Fecha formateada sin desfase de tz. **Verificado E2E** (bloqueo día completo, open con rango, validación both-or-neither, orden). _SCR-TU05, S-03_
+- [x] **EP-06 / EP-07** Reserva · Checkout · Pagos (núcleo del dinero, PSP simulado)
+  - [x] **Fase 1 · Modelo de datos** (migración `20260709140000_ep06_booking_core.sql`, aplicada + `db:types`): `bookings` (M4, con `pending_acceptance`), `sessions` (M5), `payments` (M6) — enums, snapshots financieros, RLS **solo-lectura de lo propio** y **grants sin INSERT/UPDATE/DELETE de cliente** → toda escritura será por RPC `SECURITY DEFINER`. **Verificado** (403 permission denied en POST bookings/payments; lectura propia `[]`). _Cierra el guard de **US-1402** cuando aterricen las RPC de escritura._ Diferidos a su historia: `payment_methods` (US-607), `payment_routing_rules` (US-701), payouts/reviews (S3).
+  - [x] **US-601 · Elegir slot** — función controlada `get_available_slots` (migración `20260709150000`): reglas − excepciones(block)+open − sesiones ocupadas (S-41), tz del tutor → UTC vía `AT TIME ZONE` (DST correcto), solo futuro, ventana 21 días. Pantalla `/reservar/[productId]` + `SlotPicker` (agrupa por día local, single/N-select por RN-12) + `ReserveButton` habilitado. **Verificado E2E** con tutor aprobado real (Caracas UTC-4): Lun 09:00→13:00 UTC, Mié 14-16→2 slots, n=9 correcto, render en hora local, selección+gating. _Doble-reserva se ejercita en Fase 3 (crea sessions)._ _SCR-AL04, RN-12/32_
+  - [x] **US-602 + US-701 + US-702 · Checkout simulado** (Fase 3, migración `20260709160000`): `payment_routing_rules` + corredor demo VE/simulated; RPC `create_booking` (valida slots S-41 con índice único anti-carrera, congela total/split 75%/provider, crea booking+payment+sessions-hold) y `confirm_payment` (webhook simulado idempotente → `pending_acceptance` | fallo → `cancelled`+libera hold). Pantalla `/reservar/[id]/checkout` + `CheckoutForm` (Pagar/Simular fallo). **Verificado E2E**: pago 18 US$ → split 13,50/4,50, `pending_acceptance`, S-41 (slot desaparece y re-reserva falla), idempotencia. _SCR-AL05, M6, RN-33/43, C-01 simulado._
+  - [x] **US-606 + US-603 · Aceptar/rechazar + confirmación** (Fase 4, migración `20260709170000`): RPC `respond_booking` (tutor, solo desde `pending_acceptance`): aceptar→`confirmed` | rechazar→`cancelled` + **reembolso 100%** (RN-38) + libera sesiones. Pantalla tutor `/tutor/reservas` (acciones) + alumno `/reservas` (US-603, read-only) con `<BookingList>` compartido. Entradas desde hub tutor / panel alumno / éxito de checkout. **Verificado E2E**: aceptar→Confirmada, rechazar→Cancelada + payment `refunded` (1800=gross) + slot 13-jul liberado. NTF-05/17 stub. _Timeout auto-24h → job Fase 5._ _SCR-TU07b/AL06, M4._
+  - [x] **US-604 · Cancelar + reembolso RN-37** (migración `20260709180000`): RPC `cancel_booking` (alumno o tutor; solo estados cancelables): tutor→100%, alumno ≥24h de la 1ª sesión→100%, <24h→50%; booking+sessions→cancelled, payment→refunded/partially_refunded. Botón Cancelar en `<BookingList>` (ambos modos). **Verificado**: 3 tramos por API (100/100/50, con 2ª cuenta de alumno) + botón E2E.
+  - [x] **US-605 · Autocancelar por timeout** (migración `20260709190000`): `expire_stale_bookings()` (SECURITY DEFINER, cutoffs parametrizables) — pending_payment >20 min → cancelled + slot liberado (RN-27, C-07); pending_acceptance >24 h → cancelled + reembolso 100% (RN-38). `pg_cron` cada 5 min con cutoffs reales. **Verificado** (forzando cutoffs a 0): ambos caminos + release de slot + reembolso. ⚠️ _Ceiling: grant a `authenticated` para testabilidad → revocar antes de prod (solo cron/service_role)._
+  - [x] **US-607 · Card-on-file** (migración `20260709200000`): tabla `payment_methods` (**sin columna de PAN**, solo `provider_token` + marca/últimos4, RN-43) + RLS del dueño. Gestión en `/account` (guardar/listar/eliminar tarjeta simulada). **Verificado E2E** (add "Visa •••• 4242" + delete). Token real → C-01.
+  - [x] **US-703 · Webhooks idempotentes** (migración `20260709210000`): tabla `payment_webhook_events` (dedup por `event_id`) + `confirm_payment` v2 con `p_event_id` opcional → un evento repetido es no-op (doble idempotencia: por event-id y por estado). **Verificado** (evt_A procesa, evt_A repetido no-op). Firma RN-34 → endpoint HTTP del webhook con proveedor real (C-01).
+  - [x] **US-705 · Proveedores sin tocar el core** — satisfecho por el diseño de US-701: `payment_routing_rules` (admin-writable) + `provider`/`charge_provider` como **texto** (S-16) → un proveedor nuevo = fila en la tabla (runtime) + su adaptador, sin migración ni cambio de negocio. `create_booking` resuelve el provider desde la tabla (verificado). Sin interfaz de un-solo-impl (llega con el 2º proveedor real, C-01).
+- [x] **EP-07** (integrado arriba con EP-06; US-704 reembolso manual admin → S3)
 - [ ] **EP-07** US-701 routing por geografía · US-702 split por tier (snapshot) · US-703 webhooks idempotentes · US-705 nuevos proveedores sin tocar el core · [!] **C-01** (proveedor real → post-MVP)
 
 > **Hito visible:** registro → descubrir → reservar → "pagar" (simulado) → tutor acepta → reserva confirmada con sesiones. 🦴
@@ -147,4 +168,4 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-03.*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-06.*

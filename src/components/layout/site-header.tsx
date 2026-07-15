@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOutIcon, MenuIcon, UserIcon } from "lucide-react";
+import { LogOutIcon, MenuIcon, SettingsIcon, UserIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -100,6 +100,12 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                     Mi panel
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/account">
+                    <SettingsIcon />
+                    Mi cuenta
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={signOut}>
                   <LogOutIcon />
                   Cerrar sesión
@@ -149,6 +155,9 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                 <>
                   <Button asChild variant="outline">
                     <Link href="/app">Mi panel</Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <Link href="/account">Mi cuenta</Link>
                   </Button>
                   <Button variant="ghost" onClick={signOut}>
                     Cerrar sesión

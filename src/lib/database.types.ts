@@ -7,6 +7,11 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
+  __InternalSupabase: {
+    PostgrestVersion: "14.5"
+  }
   graphql_public: {
     Tables: {
       [_ in never]: never
@@ -34,11 +39,491 @@ export type Database = {
   }
   public: {
     Tables: {
+      availability_exceptions: {
+        Row: {
+          created_at: string
+          date: string
+          end_time: string | null
+          id: string
+          reason: string | null
+          start_time: string | null
+          tutor_id: string
+          type: Database["public"]["Enums"]["availability_exception_type"]
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          end_time?: string | null
+          id?: string
+          reason?: string | null
+          start_time?: string | null
+          tutor_id: string
+          type: Database["public"]["Enums"]["availability_exception_type"]
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          end_time?: string | null
+          id?: string
+          reason?: string | null
+          start_time?: string | null
+          tutor_id?: string
+          type?: Database["public"]["Enums"]["availability_exception_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_exceptions_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      availability_rules: {
+        Row: {
+          created_at: string
+          end_time: string
+          id: string
+          is_active: boolean
+          start_time: string
+          tutor_id: string
+          updated_at: string
+          weekday: number
+        }
+        Insert: {
+          created_at?: string
+          end_time: string
+          id?: string
+          is_active?: boolean
+          start_time: string
+          tutor_id: string
+          updated_at?: string
+          weekday: number
+        }
+        Update: {
+          created_at?: string
+          end_time?: string
+          id?: string
+          is_active?: boolean
+          start_time?: string
+          tutor_id?: string
+          updated_at?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_rules_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bookings: {
+        Row: {
+          cancellation_policy: Json | null
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          currency: string
+          id: string
+          num_sessions: number
+          payee_country: string | null
+          payer_country: string | null
+          pricing_model: Database["public"]["Enums"]["pricing_model"]
+          product_id: string
+          session_duration_min: number
+          status: Database["public"]["Enums"]["booking_status"]
+          student_id: string
+          subtotal_amount: number
+          tier_split_pct: number
+          total_amount: number
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancellation_policy?: Json | null
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          currency: string
+          id?: string
+          num_sessions: number
+          payee_country?: string | null
+          payer_country?: string | null
+          pricing_model: Database["public"]["Enums"]["pricing_model"]
+          product_id: string
+          session_duration_min: number
+          status?: Database["public"]["Enums"]["booking_status"]
+          student_id: string
+          subtotal_amount: number
+          tier_split_pct: number
+          total_amount: number
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancellation_policy?: Json | null
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          num_sessions?: number
+          payee_country?: string | null
+          payer_country?: string | null
+          pricing_model?: Database["public"]["Enums"]["pricing_model"]
+          product_id?: string
+          session_duration_min?: number
+          status?: Database["public"]["Enums"]["booking_status"]
+          student_id?: string
+          subtotal_amount?: number
+          tier_split_pct?: number
+          total_amount?: number
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      categories: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payment_methods: {
+        Row: {
+          brand: string | null
+          created_at: string
+          id: string
+          last4: string | null
+          profile_id: string
+          provider: string
+          provider_token: string
+        }
+        Insert: {
+          brand?: string | null
+          created_at?: string
+          id?: string
+          last4?: string | null
+          profile_id: string
+          provider: string
+          provider_token: string
+        }
+        Update: {
+          brand?: string | null
+          created_at?: string
+          id?: string
+          last4?: string | null
+          profile_id?: string
+          provider?: string
+          provider_token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_methods_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_routing_rules: {
+        Row: {
+          charge_provider: string
+          created_at: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          payee_country: string
+          payer_country: string | null
+          payout_provider: string
+          priority: number
+          updated_at: string
+        }
+        Insert: {
+          charge_provider: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          payee_country: string
+          payer_country?: string | null
+          payout_provider: string
+          priority?: number
+          updated_at?: string
+        }
+        Update: {
+          charge_provider?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          payee_country?: string
+          payer_country?: string | null
+          payout_provider?: string
+          priority?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payment_webhook_events: {
+        Row: {
+          booking_id: string | null
+          event_id: string
+          processed_at: string
+        }
+        Insert: {
+          booking_id?: string | null
+          event_id: string
+          processed_at?: string
+        }
+        Update: {
+          booking_id?: string | null
+          event_id?: string
+          processed_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_webhook_events_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          booking_id: string
+          created_at: string
+          currency: string
+          failed_at: string | null
+          fx_rate: number | null
+          gross_amount: number
+          id: string
+          paid_at: string | null
+          payee_country: string | null
+          payer_country: string | null
+          platform_fee_amount: number
+          provider: string | null
+          provider_metadata: Json | null
+          provider_payment_id: string | null
+          refunded_amount: number
+          settlement_currency: string | null
+          status: Database["public"]["Enums"]["payment_status"]
+          tier_split_pct: number
+          tutor_net_amount: number
+          updated_at: string
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          currency: string
+          failed_at?: string | null
+          fx_rate?: number | null
+          gross_amount: number
+          id?: string
+          paid_at?: string | null
+          payee_country?: string | null
+          payer_country?: string | null
+          platform_fee_amount: number
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payment_id?: string | null
+          refunded_amount?: number
+          settlement_currency?: string | null
+          status?: Database["public"]["Enums"]["payment_status"]
+          tier_split_pct: number
+          tutor_net_amount: number
+          updated_at?: string
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          currency?: string
+          failed_at?: string | null
+          fx_rate?: number | null
+          gross_amount?: number
+          id?: string
+          paid_at?: string | null
+          payee_country?: string | null
+          payer_country?: string | null
+          platform_fee_amount?: number
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payment_id?: string | null
+          refunded_amount?: number
+          settlement_currency?: string | null
+          status?: Database["public"]["Enums"]["payment_status"]
+          tier_split_pct?: number
+          tutor_net_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_categories: {
+        Row: {
+          category_id: string
+          product_id: string
+        }
+        Insert: {
+          category_id: string
+          product_id: string
+        }
+        Update: {
+          category_id?: string
+          product_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_categories_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          cancellation_policy: Json | null
+          created_at: string
+          currency: string
+          description: string | null
+          id: string
+          outcome: string | null
+          package_num_sessions: number | null
+          price_amount: number
+          pricing_model: Database["public"]["Enums"]["pricing_model"]
+          search_vector: unknown
+          session_duration_min: number | null
+          slug: string | null
+          status: Database["public"]["Enums"]["product_status"]
+          title: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancellation_policy?: Json | null
+          created_at?: string
+          currency: string
+          description?: string | null
+          id?: string
+          outcome?: string | null
+          package_num_sessions?: number | null
+          price_amount: number
+          pricing_model: Database["public"]["Enums"]["pricing_model"]
+          search_vector?: unknown
+          session_duration_min?: number | null
+          slug?: string | null
+          status?: Database["public"]["Enums"]["product_status"]
+          title: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancellation_policy?: Json | null
+          created_at?: string
+          currency?: string
+          description?: string | null
+          id?: string
+          outcome?: string | null
+          package_num_sessions?: number | null
+          price_amount?: number
+          pricing_model?: Database["public"]["Enums"]["pricing_model"]
+          search_vector?: unknown
+          session_duration_min?: number | null
+          slug?: string | null
+          status?: Database["public"]["Enums"]["product_status"]
+          title?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
           full_name: string | null
           id: string
+          onboarding_complete: boolean
+          phone: string | null
           referral_code: string | null
           timezone: string
           updated_at: string
@@ -47,6 +532,8 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id: string
+          onboarding_complete?: boolean
+          phone?: string | null
           referral_code?: string | null
           timezone?: string
           updated_at?: string
@@ -55,11 +542,142 @@ export type Database = {
           created_at?: string
           full_name?: string | null
           id?: string
+          onboarding_complete?: boolean
+          phone?: string | null
           referral_code?: string | null
           timezone?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      sessions: {
+        Row: {
+          access_closes_at: string | null
+          access_opens_at: string | null
+          booking_id: string
+          cancelled_at: string | null
+          completed_at: string | null
+          created_at: string
+          daily_room_name: string | null
+          daily_room_url: string | null
+          end_at: string
+          id: string
+          sequence_no: number | null
+          start_at: string
+          status: Database["public"]["Enums"]["session_status"]
+          student_id: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          access_closes_at?: string | null
+          access_opens_at?: string | null
+          booking_id: string
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          daily_room_name?: string | null
+          daily_room_url?: string | null
+          end_at: string
+          id?: string
+          sequence_no?: number | null
+          start_at: string
+          status?: Database["public"]["Enums"]["session_status"]
+          student_id: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          access_closes_at?: string | null
+          access_opens_at?: string | null
+          booking_id?: string
+          cancelled_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          daily_room_name?: string | null
+          daily_room_url?: string | null
+          end_at?: string
+          id?: string
+          sequence_no?: number | null
+          start_at?: string
+          status?: Database["public"]["Enums"]["session_status"]
+          student_id?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sessions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tutor_profiles: {
+        Row: {
+          approval_status: Database["public"]["Enums"]["tutor_approval_status"]
+          approved_at: string | null
+          bio: string | null
+          created_at: string
+          headline: string | null
+          identity_verification_status: Database["public"]["Enums"]["identity_verification_status"]
+          profile_id: string
+          rating_avg: number | null
+          rating_count: number
+          socials: Json
+          updated_at: string
+        }
+        Insert: {
+          approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
+          approved_at?: string | null
+          bio?: string | null
+          created_at?: string
+          headline?: string | null
+          identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
+          profile_id: string
+          rating_avg?: number | null
+          rating_count?: number
+          socials?: Json
+          updated_at?: string
+        }
+        Update: {
+          approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
+          approved_at?: string | null
+          bio?: string | null
+          created_at?: string
+          headline?: string | null
+          identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
+          profile_id?: string
+          rating_avg?: number | null
+          rating_count?: number
+          socials?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_profiles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -79,18 +697,127 @@ export type Database = {
         }
         Relationships: []
       }
+      verification_documents: {
+        Row: {
+          created_at: string
+          doc_type: string
+          id: string
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["document_status"]
+          storage_path: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          doc_type: string
+          id?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["document_status"]
+          storage_path: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          doc_type?: string
+          id?: string
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["document_status"]
+          storage_path?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "verification_documents_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "verification_documents_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
+      confirm_payment: {
+        Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }
+        Returns: string
+      }
+      create_booking: {
+        Args: { p_product_id: string; p_slots: string[] }
+        Returns: string
+      }
+      expire_stale_bookings: {
+        Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
+        Returns: Json
+      }
+      get_available_slots: {
+        Args: { p_from?: string; p_product_id: string; p_to?: string }
+        Returns: {
+          slot_end: string
+          slot_start: string
+        }[]
+      }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      respond_booking: {
+        Args: { p_accept: boolean; p_booking_id: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "alumno" | "tutor" | "admin"
+      availability_exception_type: "block" | "open"
+      booking_status:
+        | "pending_payment"
+        | "pending_acceptance"
+        | "confirmed"
+        | "in_progress"
+        | "completed"
+        | "cancelled"
+        | "refunded"
+      document_status: "pending" | "approved" | "rejected"
+      identity_verification_status:
+        | "not_submitted"
+        | "pending"
+        | "approved"
+        | "rejected"
+      payment_status:
+        | "pending"
+        | "authorized"
+        | "paid"
+        | "failed"
+        | "partially_refunded"
+        | "refunded"
+      pricing_model: "per_session" | "per_hour" | "per_package"
+      product_status: "draft" | "active" | "paused" | "archived"
+      session_status:
+        | "scheduled"
+        | "in_progress"
+        | "completed"
+        | "cancelled"
+        | "no_show"
+      tutor_approval_status: "pending" | "approved" | "rejected" | "suspended"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -222,7 +949,41 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["alumno", "tutor", "admin"],
+      availability_exception_type: ["block", "open"],
+      booking_status: [
+        "pending_payment",
+        "pending_acceptance",
+        "confirmed",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "refunded",
+      ],
+      document_status: ["pending", "approved", "rejected"],
+      identity_verification_status: [
+        "not_submitted",
+        "pending",
+        "approved",
+        "rejected",
+      ],
+      payment_status: [
+        "pending",
+        "authorized",
+        "paid",
+        "failed",
+        "partially_refunded",
+        "refunded",
+      ],
+      pricing_model: ["per_session", "per_hour", "per_package"],
+      product_status: ["draft", "active", "paused", "archived"],
+      session_status: [
+        "scheduled",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "no_show",
+      ],
+      tutor_approval_status: ["pending", "approved", "rejected", "suspended"],
     },
   },
 } as const
-
