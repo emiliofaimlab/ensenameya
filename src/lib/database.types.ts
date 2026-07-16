@@ -1013,6 +1013,10 @@ export type Database = {
         Returns: string
       }
       process_scheduled_payouts: { Args: never; Returns: Json }
+      refund_payment: {
+        Args: { p_amount?: number; p_payment_id: string }
+        Returns: Json
+      }
       request_withdrawal: {
         Args: { p_retention_days?: number }
         Returns: string

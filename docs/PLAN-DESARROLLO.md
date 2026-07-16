@@ -176,7 +176,7 @@ mano en la BD. Cierra además el *boundary* que S2 dejó abierto.
   - [x] **US-1004 · Retiro self-service** `EY-67` (RN-40): `request_withdrawal` — el tutor adelanta su saldo disponible; botón en `/tutor/payouts`. **Verificado**: crea payout scheduled; sin saldo → rechazado.
   - _Seguridad re-probada_: anon→28000, admin-no-tutor retiro→42501, tutor manage_payout→42501, tutor run_payout_batch (solo cron)→42501, escritura directa de payouts→42501.
 - [ ] **EP-12 · Notificaciones** — US-1201 emails transaccionales (puerto `EmailProvider` + stub, [!] C-11) `EY-73` · US-1202 registro idempotente `EY-74`
-- [ ] **EP-07** — US-704 reembolso manual admin `EY-58`
+- [x] **EP-07 · US-704 · Reembolso manual admin** `EY-58` (migración `20260716160000`): RPC `refund_payment` (admin) total/parcial sobre un pago cobrado (M6, DP-03), en la pantalla de detalle de pago (SCR-AD08). Distinto de `cancel_booking` (política RN-37): es corrección financiera del admin. **S-29**: reembolso total antes de liquidar **excluye el `payout_item`** del payout no pagado y lo revierte (borra el payout si se queda vacío); si el payout ya está `paid` → **flag de clawback manual** (el reembolso al alumno igual procede). Total → reserva `refunded` (M4); parcial no toca la reserva. **Verificado**: parcial (por UI, 5/18)→`partially_refunded`; total→`refunded`+reserva `refunded`; sobre-reembolso→rechazado; clawback cuando el payout ya se pagó (flag + item no se auto-revierte); tutor/anon→42501. NTF-10 stub.
 - [ ] **EP-17 · Chat** — US-1701 chat 1:1 (Realtime, RLS participantes, 2d antes/30d) `EY-75` · US-1703 purga pg_cron `EY-76`
 
 ### Deuda que S3 debe saldar (heredada de S2)

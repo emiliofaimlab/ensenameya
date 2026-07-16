@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PAYMENT_BADGE } from "../../badges";
 import { Timeline, type TimelineEntry } from "../../timeline";
+import { RefundForm } from "./refund-form";
 
 export const metadata = { title: "Detalle de pago · Enséñame Ya" };
 
@@ -79,6 +80,15 @@ export default async function AdminPaymentPage({
             value={p.refundedAmount > 0 ? formatMoney(p.refundedAmount, p.currency) : "—"}
           />
         </div>
+
+        {/* US-704 — reembolso manual (total/parcial), solo si el pago está cobrado. */}
+        {p.status === "paid" || p.status === "partially_refunded" ? (
+          <RefundForm
+            paymentId={p.id}
+            currency={p.currency}
+            remaining={p.grossAmount - p.refundedAmount}
+          />
+        ) : null}
 
         <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
           <Field label="Referencia del proveedor" value={p.providerPaymentId ?? "—"} />
