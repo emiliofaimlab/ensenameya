@@ -17,6 +17,7 @@ const LINKS = [
   { href: "/admin/payments", label: "Pagos" },
   { href: "/admin/categorias", label: "Categorías" },
   { href: "/admin/tiers", label: "Comisión y tiers" },
+  { href: "/admin/stats", label: "Estadísticas" },
 ];
 
 export function AdminNav() {

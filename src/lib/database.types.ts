@@ -802,6 +802,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       assign_tutor_tier: {
         Args: { p_tier_id: string; p_tutor_id: string }
         Returns: string
