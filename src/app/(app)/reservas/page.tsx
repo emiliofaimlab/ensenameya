@@ -17,7 +17,7 @@ export default async function ReservasPage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("bookings")
-    .select("id, status, total_amount, currency, products(title), sessions(start_at, status)")
+    .select("id, status, total_amount, currency, products(title), sessions(id, start_at, status)")
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
 

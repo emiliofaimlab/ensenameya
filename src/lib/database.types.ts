@@ -808,6 +808,8 @@ export type Database = {
         Returns: string
       }
       cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
+      close_expired_sessions: { Args: never; Returns: Json }
+      complete_session: { Args: { p_session_id: string }; Returns: string }
       confirm_payment: {
         Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }
         Returns: string
@@ -831,6 +833,7 @@ export type Database = {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      join_session: { Args: { p_session_id: string }; Returns: Json }
       respond_booking: {
         Args: { p_accept: boolean; p_booking_id: string }
         Returns: string
@@ -842,6 +845,10 @@ export type Database = {
       review_tutor: {
         Args: { p_approve: boolean; p_reason?: string; p_tutor_id: string }
         Returns: string
+      }
+      session_access_window: {
+        Args: { p_end: string; p_start: string }
+        Returns: unknown
       }
       submit_document: {
         Args: {

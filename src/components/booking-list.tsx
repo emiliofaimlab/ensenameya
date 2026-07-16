@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -20,8 +21,14 @@ export type BookingRow = {
   total_amount: number;
   currency: string;
   product_title: string;
-  sessions: { start_at: string; status: string }[];
+  sessions: { id: string; start_at: string; status: string }[];
 };
+
+// La reserva debe estar viva y la sesión aún abierta para ofrecer la sala. El
+// gate real de la ventana (RN-18) lo pone el server; el enlace lleva a la sala,
+// que muestra la cuenta regresiva si aún no abre.
+const ROOM_BOOKING = new Set<BookingStatus>(["confirmed", "in_progress"]);
+const ROOM_SESSION = new Set(["scheduled", "in_progress"]);
 
 const CANCELLABLE = new Set<BookingStatus>([
   "pending_payment",
@@ -109,13 +116,23 @@ export function BookingList({
                 </Badge>
               </div>
 
-              <ul className="text-muted-foreground flex flex-col gap-0.5 text-sm">
+              <ul className="text-muted-foreground flex flex-col gap-1 text-sm">
                 {b.sessions
                   .slice()
                   .sort((a, c) => a.start_at.localeCompare(c.start_at))
                   .map((s) => (
-                    <li key={s.start_at} className="first-letter:uppercase">
-                      {formatSessionTime(s.start_at)}
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-2"
+                    >
+                      <span className="first-letter:uppercase">
+                        {formatSessionTime(s.start_at)}
+                      </span>
+                      {ROOM_BOOKING.has(b.status) && ROOM_SESSION.has(s.status) ? (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/room/${s.id}`}>Ir a la sala</Link>
+                        </Button>
+                      ) : null}
                     </li>
                   ))}
               </ul>
