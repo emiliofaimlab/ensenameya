@@ -17,7 +17,9 @@ export default async function ReservasPage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("bookings")
-    .select("id, status, total_amount, currency, products(title), sessions(id, start_at, status)")
+    .select(
+      "id, status, total_amount, currency, products(title), sessions(id, start_at, status), reviews(rating, comment)",
+    )
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -28,6 +30,8 @@ export default async function ReservasPage() {
     currency: b.currency,
     product_title: b.products?.title ?? "Producto",
     sessions: b.sessions ?? [],
+    // `reviews.booking_id` es UNIQUE (1:1) → Supabase lo da como objeto.
+    review: b.reviews ?? null,
   }));
 
   return (

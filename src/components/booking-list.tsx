@@ -12,6 +12,7 @@ import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { ReviewDialog } from "@/components/review-dialog";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -22,6 +23,7 @@ export type BookingRow = {
   currency: string;
   product_title: string;
   sessions: { id: string; start_at: string; status: string }[];
+  review?: { rating: number; comment: string | null } | null;
 };
 
 // La reserva debe estar viva y la sesión aún abierta para ofrecer la sala. El
@@ -164,6 +166,13 @@ export function BookingList({
                   >
                     Cancelar
                   </Button>
+                ) : mode === "student" && b.status === "completed" ? (
+                  // US-901 (RN-17): reseñar solo tras completar; editar la existente.
+                  <ReviewDialog
+                    bookingId={b.id}
+                    productTitle={b.product_title}
+                    existing={b.review}
+                  />
                 ) : null}
               </div>
             </CardContent>

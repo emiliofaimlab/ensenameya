@@ -5,7 +5,8 @@ import { Section } from "@/components/layout/section";
 import { RatingStars } from "@/components/catalog/rating";
 import { ProductCard } from "@/components/catalog/product-card";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
-import { getTutorDetail } from "@/lib/catalog/queries";
+import { TutorReviews } from "@/components/catalog/tutor-reviews";
+import { getTutorDetail, listTutorReviews } from "@/lib/catalog/queries";
 import { initialsFrom } from "@/lib/catalog/format";
 
 export async function generateMetadata({
@@ -26,7 +27,7 @@ export default async function TutorProfilePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const data = await getTutorDetail(id);
+  const [data, reviews] = await Promise.all([getTutorDetail(id), listTutorReviews(id)]);
   if (!data) notFound();
   const { tutor, products } = data;
 
@@ -64,6 +65,13 @@ export default async function TutorProfilePage({
               ))}
             </div>
           )}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <h2 className="text-lg font-semibold">
+            Reseñas{tutor.ratingCount > 0 ? ` (${tutor.ratingCount})` : ""}
+          </h2>
+          <TutorReviews reviews={reviews} />
         </div>
 
         <CancellationPolicy className="max-w-md" />

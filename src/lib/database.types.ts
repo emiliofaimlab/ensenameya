@@ -550,6 +550,71 @@ export type Database = {
         }
         Relationships: []
       }
+      reviews: {
+        Row: {
+          booking_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          product_id: string
+          rating: number
+          student_id: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          booking_id: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          product_id: string
+          rating: number
+          student_id: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          booking_id?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          product_id?: string
+          rating?: number
+          student_id?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sessions: {
         Row: {
           access_closes_at: string | null
@@ -856,6 +921,10 @@ export type Database = {
           p_link_url?: string
           p_storage_path?: string
         }
+        Returns: string
+      }
+      submit_review: {
+        Args: { p_booking_id: string; p_comment?: string; p_rating: number }
         Returns: string
       }
     }
