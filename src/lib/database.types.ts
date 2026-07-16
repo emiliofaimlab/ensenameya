@@ -422,6 +422,107 @@ export type Database = {
           },
         ]
       }
+      payout_items: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          payment_id: string
+          payout_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          payment_id: string
+          payout_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          payment_id?: string
+          payout_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_items_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_items_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "payouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payouts: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          failed_at: string | null
+          failure_reason: string | null
+          id: string
+          paid_at: string | null
+          provider: string | null
+          provider_metadata: Json | null
+          provider_payout_id: string | null
+          retention_until: string | null
+          scheduled_for: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          paid_at?: string | null
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payout_id?: string | null
+          retention_until?: string | null
+          scheduled_for?: string | null
+          status?: Database["public"]["Enums"]["payout_status"]
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          paid_at?: string | null
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payout_id?: string | null
+          retention_until?: string | null
+          scheduled_for?: string | null
+          status?: Database["public"]["Enums"]["payout_status"]
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_categories: {
         Row: {
           category_id: string
@@ -872,6 +973,14 @@ export type Database = {
         Args: { p_tier_id: string; p_tutor_id: string }
         Returns: string
       }
+      build_payout_for_tutor: {
+        Args: {
+          p_retention_days: number
+          p_status?: Database["public"]["Enums"]["payout_status"]
+          p_tutor_id: string
+        }
+        Returns: string
+      }
       cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
@@ -899,6 +1008,15 @@ export type Database = {
         Returns: boolean
       }
       join_session: { Args: { p_session_id: string }; Returns: Json }
+      manage_payout: {
+        Args: { p_action: string; p_payout_id: string }
+        Returns: string
+      }
+      process_scheduled_payouts: { Args: never; Returns: Json }
+      request_withdrawal: {
+        Args: { p_retention_days?: number }
+        Returns: string
+      }
       respond_booking: {
         Args: { p_accept: boolean; p_booking_id: string }
         Returns: string
@@ -911,6 +1029,7 @@ export type Database = {
         Args: { p_approve: boolean; p_reason?: string; p_tutor_id: string }
         Returns: string
       }
+      run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
       session_access_window: {
         Args: { p_end: string; p_start: string }
         Returns: unknown
@@ -927,6 +1046,7 @@ export type Database = {
         Args: { p_booking_id: string; p_comment?: string; p_rating: number }
         Returns: string
       }
+      tutor_balance: { Args: { p_retention_days?: number }; Returns: Json }
     }
     Enums: {
       app_role: "alumno" | "tutor" | "admin"
@@ -952,6 +1072,13 @@ export type Database = {
         | "failed"
         | "partially_refunded"
         | "refunded"
+      payout_status:
+        | "pending"
+        | "scheduled"
+        | "processing"
+        | "paid"
+        | "failed"
+        | "on_hold"
       pricing_model: "per_session" | "per_hour" | "per_package"
       product_status: "draft" | "active" | "paused" | "archived"
       session_status:
@@ -1116,6 +1243,14 @@ export const Constants = {
         "failed",
         "partially_refunded",
         "refunded",
+      ],
+      payout_status: [
+        "pending",
+        "scheduled",
+        "processing",
+        "paid",
+        "failed",
+        "on_hold",
       ],
       pricing_model: ["per_session", "per_hour", "per_package"],
       product_status: ["draft", "active", "paused", "archived"],

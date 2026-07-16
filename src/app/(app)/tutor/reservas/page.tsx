@@ -42,9 +42,14 @@ export default async function TutorReservasPage() {
           title="Reservas recibidas"
           description="Acepta o rechaza las reservas de tus alumnos (tienes 24 h)."
           actions={
-            <Button asChild variant="outline">
-              <Link href="/tutor/products">Mis productos</Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button asChild variant="outline">
+                <Link href="/tutor/products">Mis productos</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/tutor/payouts">Cobros</Link>
+              </Button>
+            </div>
           }
         />
         <BookingList bookings={bookings} mode="tutor" />
