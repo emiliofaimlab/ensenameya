@@ -242,6 +242,48 @@ export type Database = {
         }
         Relationships: []
       }
+      messages: {
+        Row: {
+          body: string
+          booking_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          booking_id: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          booking_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           channel: string
@@ -1072,6 +1114,7 @@ export type Database = {
       }
       process_notifications: { Args: never; Returns: Json }
       process_scheduled_payouts: { Args: never; Returns: Json }
+      purge_expired_messages: { Args: never; Returns: Json }
       refund_payment: {
         Args: { p_amount?: number; p_payment_id: string }
         Returns: Json
@@ -1093,6 +1136,10 @@ export type Database = {
         Returns: string
       }
       run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
+      send_message: {
+        Args: { p_body: string; p_booking_id: string }
+        Returns: string
+      }
       session_access_window: {
         Args: { p_end: string; p_start: string }
         Returns: unknown

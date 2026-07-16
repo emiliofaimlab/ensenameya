@@ -32,6 +32,9 @@ export type BookingRow = {
 const ROOM_BOOKING = new Set<BookingStatus>(["confirmed", "in_progress"]);
 const ROOM_SESSION = new Set(["scheduled", "in_progress"]);
 
+// Chat disponible mientras la reserva está viva o recién completada (EP-17).
+const CHAT_BOOKING = new Set<BookingStatus>(["confirmed", "in_progress", "completed"]);
+
 const CANCELLABLE = new Set<BookingStatus>([
   "pending_payment",
   "pending_acceptance",
@@ -143,6 +146,11 @@ export function BookingList({
                 <span className="text-sm font-medium">
                   {formatMoney(b.total_amount, b.currency)}
                 </span>
+                {CHAT_BOOKING.has(b.status) ? (
+                  <Button asChild size="sm" variant="ghost">
+                    <Link href={`/chat/${b.id}`}>Chat</Link>
+                  </Button>
+                ) : null}
                 {mode === "tutor" && b.status === "pending_acceptance" ? (
                   <div className="flex gap-2">
                     <Button size="sm" disabled={busy === b.id} onClick={() => respond(b.id, true)}>
