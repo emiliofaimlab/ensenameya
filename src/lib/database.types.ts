@@ -242,6 +242,53 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          channel: string
+          created_at: string
+          id: string
+          idempotency_key: string
+          payload: Json
+          recipient_id: string
+          sent_at: string | null
+          status: Database["public"]["Enums"]["notification_status"]
+          template: string
+          type: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          payload?: Json
+          recipient_id: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["notification_status"]
+          template: string
+          type: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          payload?: Json
+          recipient_id?: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["notification_status"]
+          template?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_methods: {
         Row: {
           brand: string | null
@@ -992,6 +1039,17 @@ export type Database = {
         Args: { p_product_id: string; p_slots: string[] }
         Returns: string
       }
+      enqueue_notification: {
+        Args: {
+          p_channel: string
+          p_key: string
+          p_payload: Json
+          p_recipient: string
+          p_template: string
+          p_type: string
+        }
+        Returns: undefined
+      }
       expire_stale_bookings: {
         Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
         Returns: Json
@@ -1012,6 +1070,7 @@ export type Database = {
         Args: { p_action: string; p_payout_id: string }
         Returns: string
       }
+      process_notifications: { Args: never; Returns: Json }
       process_scheduled_payouts: { Args: never; Returns: Json }
       refund_payment: {
         Args: { p_amount?: number; p_payment_id: string }
@@ -1069,6 +1128,7 @@ export type Database = {
         | "pending"
         | "approved"
         | "rejected"
+      notification_status: "pending" | "sent" | "failed"
       payment_status:
         | "pending"
         | "authorized"
@@ -1240,6 +1300,7 @@ export const Constants = {
         "approved",
         "rejected",
       ],
+      notification_status: ["pending", "sent", "failed"],
       payment_status: [
         "pending",
         "authorized",
