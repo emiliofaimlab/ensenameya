@@ -10,8 +10,15 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Mi panel · Enséñame Ya" };
+
+type BookingStatus = Database["public"]["Enums"]["booking_status"];
+
+// El chat vive mientras la reserva está viva o recién completada (EP-17); la
+// ventana real (2 días antes) la gobierna `send_message`.
+const CHAT_BOOKING = new Set<BookingStatus>(["confirmed", "in_progress", "completed"]);
 
 /**
  * SCR-AL02 — Dashboard del alumno. Destino de `pickHome` tras entrar (Doc 3):
@@ -137,6 +144,12 @@ export default async function AppHome() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      {/* El chat cuelga de la reserva (EP-17), no de la sesión. */}
+                      {CHAT_BOOKING.has(b.status) ? (
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={`/chat/${b.id}`}>Chat</Link>
+                        </Button>
+                      ) : null}
                       {/* RN-17/28: reseñar solo si está completada y sin reseña. */}
                       {b.status === "completed" && !b.reviews ? (
                         <Button asChild size="sm" variant="ghost">

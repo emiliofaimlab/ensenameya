@@ -10,9 +10,15 @@ import { Section } from "@/components/layout/section";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { Database } from "@/lib/database.types";
 import { APPROVAL_BADGE } from "../admin/badges";
 
 export const metadata = { title: "Panel del tutor · Enséñame Ya" };
+
+type BookingStatus = Database["public"]["Enums"]["booking_status"];
+
+// El chat cuelga de la reserva (EP-17), no de la sesión.
+const CHAT_BOOKING = new Set<BookingStatus>(["confirmed", "in_progress", "completed"]);
 
 function moneyLine(list: { currency: string; amount: number }[]): string {
   return list.length === 0 ? "—" : list.map((m) => formatMoney(m.amount, m.currency)).join(" · ");
@@ -154,7 +160,14 @@ export default async function TutorHomePage() {
                         {formatMoney(b.total_amount, b.currency)}
                       </p>
                     </div>
-                    <Badge variant="outline">{BOOKING_STATUS_LABEL[b.status]}</Badge>
+                    <div className="flex items-center gap-2">
+                      {CHAT_BOOKING.has(b.status) ? (
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={`/chat/${b.id}`}>Chat</Link>
+                        </Button>
+                      ) : null}
+                      <Badge variant="outline">{BOOKING_STATUS_LABEL[b.status]}</Badge>
+                    </div>
                   </li>
                 ))}
               </ul>
