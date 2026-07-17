@@ -242,6 +242,95 @@ export type Database = {
         }
         Relationships: []
       }
+      messages: {
+        Row: {
+          body: string
+          booking_id: string
+          created_at: string
+          expires_at: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          booking_id: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          booking_id?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          channel: string
+          created_at: string
+          id: string
+          idempotency_key: string
+          payload: Json
+          recipient_id: string
+          sent_at: string | null
+          status: Database["public"]["Enums"]["notification_status"]
+          template: string
+          type: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          id?: string
+          idempotency_key: string
+          payload?: Json
+          recipient_id: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["notification_status"]
+          template: string
+          type: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          id?: string
+          idempotency_key?: string
+          payload?: Json
+          recipient_id?: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["notification_status"]
+          template?: string
+          type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_recipient_id_fkey"
+            columns: ["recipient_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_methods: {
         Row: {
           brand: string | null
@@ -422,6 +511,107 @@ export type Database = {
           },
         ]
       }
+      payout_items: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          payment_id: string
+          payout_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          payment_id: string
+          payout_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          payment_id?: string
+          payout_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_items_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: true
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_items_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "payouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payouts: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          failed_at: string | null
+          failure_reason: string | null
+          id: string
+          paid_at: string | null
+          provider: string | null
+          provider_metadata: Json | null
+          provider_payout_id: string | null
+          retention_until: string | null
+          scheduled_for: string | null
+          status: Database["public"]["Enums"]["payout_status"]
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          paid_at?: string | null
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payout_id?: string | null
+          retention_until?: string | null
+          scheduled_for?: string | null
+          status?: Database["public"]["Enums"]["payout_status"]
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          failed_at?: string | null
+          failure_reason?: string | null
+          id?: string
+          paid_at?: string | null
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payout_id?: string | null
+          retention_until?: string | null
+          scheduled_for?: string | null
+          status?: Database["public"]["Enums"]["payout_status"]
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payouts_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_categories: {
         Row: {
           category_id: string
@@ -550,6 +740,71 @@ export type Database = {
         }
         Relationships: []
       }
+      reviews: {
+        Row: {
+          booking_id: string
+          comment: string | null
+          created_at: string
+          id: string
+          product_id: string
+          rating: number
+          student_id: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          booking_id: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          product_id: string
+          rating: number
+          student_id: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          booking_id?: string
+          comment?: string | null
+          created_at?: string
+          id?: string
+          product_id?: string
+          rating?: number
+          student_id?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reviews_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reviews_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sessions: {
         Row: {
           access_closes_at: string | null
@@ -642,6 +897,7 @@ export type Database = {
           rating_avg: number | null
           rating_count: number
           socials: Json
+          tier_id: string | null
           updated_at: string
         }
         Insert: {
@@ -656,6 +912,7 @@ export type Database = {
           rating_avg?: number | null
           rating_count?: number
           socials?: Json
+          tier_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -670,6 +927,7 @@ export type Database = {
           rating_avg?: number | null
           rating_count?: number
           socials?: Json
+          tier_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -680,7 +938,44 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tutor_profiles_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "tutor_tiers"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      tutor_tiers: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_default: boolean
+          name: string
+          split_pct: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          name: string
+          split_pct: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean
+          name?: string
+          split_pct?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
@@ -762,7 +1057,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
+      assign_tutor_tier: {
+        Args: { p_tier_id: string; p_tutor_id: string }
+        Returns: string
+      }
+      build_payout_for_tutor: {
+        Args: {
+          p_retention_days: number
+          p_status?: Database["public"]["Enums"]["payout_status"]
+          p_tutor_id: string
+        }
+        Returns: string
+      }
       cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
+      close_expired_sessions: { Args: never; Returns: Json }
+      complete_session: { Args: { p_session_id: string }; Returns: string }
       confirm_payment: {
         Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }
         Returns: string
@@ -770,6 +1080,17 @@ export type Database = {
       create_booking: {
         Args: { p_product_id: string; p_slots: string[] }
         Returns: string
+      }
+      enqueue_notification: {
+        Args: {
+          p_channel: string
+          p_key: string
+          p_payload: Json
+          p_recipient: string
+          p_template: string
+          p_type: string
+        }
+        Returns: undefined
       }
       expire_stale_bookings: {
         Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
@@ -786,6 +1107,22 @@ export type Database = {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      join_session: { Args: { p_session_id: string }; Returns: Json }
+      manage_payout: {
+        Args: { p_action: string; p_payout_id: string }
+        Returns: string
+      }
+      process_notifications: { Args: never; Returns: Json }
+      process_scheduled_payouts: { Args: never; Returns: Json }
+      purge_expired_messages: { Args: never; Returns: Json }
+      refund_payment: {
+        Args: { p_amount?: number; p_payment_id: string }
+        Returns: Json
+      }
+      request_withdrawal: {
+        Args: { p_retention_days?: number }
+        Returns: string
+      }
       respond_booking: {
         Args: { p_accept: boolean; p_booking_id: string }
         Returns: string
@@ -798,6 +1135,15 @@ export type Database = {
         Args: { p_approve: boolean; p_reason?: string; p_tutor_id: string }
         Returns: string
       }
+      run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
+      send_message: {
+        Args: { p_body: string; p_booking_id: string }
+        Returns: string
+      }
+      session_access_window: {
+        Args: { p_end: string; p_start: string }
+        Returns: unknown
+      }
       submit_document: {
         Args: {
           p_doc_type: string
@@ -806,6 +1152,11 @@ export type Database = {
         }
         Returns: string
       }
+      submit_review: {
+        Args: { p_booking_id: string; p_comment?: string; p_rating: number }
+        Returns: string
+      }
+      tutor_balance: { Args: { p_retention_days?: number }; Returns: Json }
     }
     Enums: {
       app_role: "alumno" | "tutor" | "admin"
@@ -824,6 +1175,7 @@ export type Database = {
         | "pending"
         | "approved"
         | "rejected"
+      notification_status: "pending" | "sent" | "failed"
       payment_status:
         | "pending"
         | "authorized"
@@ -831,6 +1183,13 @@ export type Database = {
         | "failed"
         | "partially_refunded"
         | "refunded"
+      payout_status:
+        | "pending"
+        | "scheduled"
+        | "processing"
+        | "paid"
+        | "failed"
+        | "on_hold"
       pricing_model: "per_session" | "per_hour" | "per_package"
       product_status: "draft" | "active" | "paused" | "archived"
       session_status:
@@ -988,6 +1347,7 @@ export const Constants = {
         "approved",
         "rejected",
       ],
+      notification_status: ["pending", "sent", "failed"],
       payment_status: [
         "pending",
         "authorized",
@@ -995,6 +1355,14 @@ export const Constants = {
         "failed",
         "partially_refunded",
         "refunded",
+      ],
+      payout_status: [
+        "pending",
+        "scheduled",
+        "processing",
+        "paid",
+        "failed",
+        "on_hold",
       ],
       pricing_model: ["per_session", "per_hour", "per_package"],
       product_status: ["draft", "active", "paused", "archived"],

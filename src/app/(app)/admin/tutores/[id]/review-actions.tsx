@@ -116,6 +116,65 @@ export function DocumentReview({ doc }: { doc: ReviewDoc }) {
   );
 }
 
+/**
+ * US-1103 / RN-06 — el tier del tutor decide su split. Va por RPC
+ * (`assign_tutor_tier`) porque `tier_id` está fuera de los column-grants del
+ * tutor (US-1403): no puede auto-asignarse una comisión mejor.
+ */
+export function TierPicker({
+  tutorId,
+  tierId,
+  tiers,
+}: {
+  tutorId: string;
+  tierId: string | null;
+  tiers: { id: string; name: string; splitPct: number }[];
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function assign(id: string) {
+    if (!id || id === tierId) return;
+    setBusy(true);
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc("assign_tutor_tier", {
+      p_tutor_id: tutorId,
+      p_tier_id: id,
+    });
+    setBusy(false);
+
+    if (error) {
+      toast.error(error.message || "No se pudo asignar el tier.");
+      return;
+    }
+    toast.success(`Tier asignado: ${data}.`);
+    router.refresh();
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-4">
+      <h2 className="text-sm font-medium">Tier y comisión</h2>
+      <p className="text-sm text-muted-foreground">
+        Define el % que se lleva en cada reserva. Solo afecta a{" "}
+        <strong>reservas nuevas</strong>: las existentes conservan su split.
+      </p>
+      <select
+        className="h-9 rounded-md border bg-transparent px-3 text-sm sm:max-w-xs"
+        value={tierId ?? ""}
+        disabled={busy}
+        onChange={(e) => assign(e.target.value)}
+      >
+        {tierId ? null : <option value="">Sin tier asignado</option>}
+        {tiers.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name} — {t.splitPct}% para el tutor
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 /** Aprobación del tutor (M1). RN-29: exige identidad aprobada — la BD lo fuerza. */
 export function TutorReview({
   tutorId,

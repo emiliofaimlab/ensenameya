@@ -17,7 +17,7 @@ export default async function TutorReservasPage() {
   const supabase = await createClient();
   const { data } = await supabase
     .from("bookings")
-    .select("id, status, total_amount, currency, products(title), sessions(start_at, status)")
+    .select("id, status, total_amount, currency, products(title), sessions(id, start_at, status)")
     .eq("tutor_id", userId)
     .order("created_at", { ascending: false });
 
@@ -42,9 +42,14 @@ export default async function TutorReservasPage() {
           title="Reservas recibidas"
           description="Acepta o rechaza las reservas de tus alumnos (tienes 24 h)."
           actions={
-            <Button asChild variant="outline">
-              <Link href="/tutor/products">Mis productos</Link>
-            </Button>
+            <div className="flex gap-2">
+              <Button asChild variant="outline">
+                <Link href="/tutor/products">Mis productos</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/tutor/payouts">Cobros</Link>
+              </Button>
+            </div>
           }
         />
         <BookingList bookings={bookings} mode="tutor" />

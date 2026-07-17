@@ -13,7 +13,12 @@ import { cn } from "@/lib/utils";
  */
 const LINKS = [
   { href: "/admin", label: "Tutores" },
+  { href: "/admin/bookings", label: "Reservas" },
+  { href: "/admin/payments", label: "Pagos" },
+  { href: "/admin/payouts", label: "Payouts" },
   { href: "/admin/categorias", label: "Categorías" },
+  { href: "/admin/tiers", label: "Comisión y tiers" },
+  { href: "/admin/stats", label: "Estadísticas" },
 ];
 
 export function AdminNav() {
