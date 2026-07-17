@@ -13,7 +13,7 @@
 -- los saldos, las reseñas del tutor y el chat). Esto solo mueve fechas de datos
 -- de demo fabricados.
 --
--- Reparte a 4, 13, 22, 31, 40 días atrás: la primera sigue dentro de la
+-- Reparte a 2, 11, 20, 29, 38 días atrás: la primera sigue dentro de la
 -- retención de 7 días (mantiene "En retención" con saldo, que también hay que
 -- enseñar) y el resto vence y pasa a "Disponible para retirar".
 --
@@ -22,17 +22,30 @@
 
 with ordenadas as (
   -- `::int` porque row_number() es bigint y make_interval solo acepta int.
-  select id, (row_number() over (order by id))::int as n
-    from public.bookings
-   where status = 'completed'
+  select b.id, (row_number() over (order by b.id))::int as n
+    from public.bookings b
+   where b.status = 'completed'
      -- El tutor se identifica por una reserva suya conocida, no por nombre.
-     and tutor_id = (
+     and b.tutor_id = (
        select tutor_id from public.bookings
         where id = 'a2307575-ee95-4b43-8cbc-6cb05b4a0e83'
      )
+     -- Las ya liquidadas quedan fuera del reparto: `tutor_balance` las excluye
+     -- de "Disponible" y "En retención" (cuentan como "Ya pagado"), así que si
+     -- una cae en el hueco reciente, ese hueco no lo llena nadie y "En
+     -- retención" sale vacío. Mover su fecha tampoco significaría nada: su
+     -- payout ya está cerrado.
+     and not exists (
+       select 1
+         from public.payout_items pi
+         join public.payments p on p.id = pi.payment_id
+        where p.booking_id = b.id
+     )
 ),
 fechas as (
-  select id, date_trunc('hour', now() - make_interval(days => n * 9 - 5)) as inicio
+  -- 2, 11, 20, 29, 38 días atrás: la primera cae dentro de la retención de 7
+  -- días y el resto vence. Así los tres contadores del panel tienen número.
+  select id, date_trunc('hour', now() - make_interval(days => (n - 1) * 9 + 2)) as inicio
     from ordenadas
 ),
 -- CTE que escribe: Postgres la ejecuta entera aunque la consulta final no la
@@ -45,7 +58,7 @@ mueve_reservas as (
    where b.id = f.id
   returning 1
 )
--- La clase se dio cuando se reservó: si no, quedan reservas de hace 40 días con
+-- La clase se dio cuando se reservó: si no, quedan reservas de hace semanas con
 -- la sesión hoy, y eso se ve al entrar en "Reservas".
 update public.sessions s
    set start_at = f.inicio,
