@@ -14,6 +14,10 @@
 -- Algoritmos"), para que la fila se lea como una clase real.
 --
 -- Ejecutar en el SQL Editor de Supabase (dev). Reejecutable: fija por id.
+--
+-- OJO: ejecútalo ENTERO (sin nada seleccionado, o Cmd+A antes). Con texto
+-- seleccionado el editor cambia a "Run selected" y corre solo el trozo.
+-- El `returning` del final debe devolver 7 filas: si devuelve 0, no aplicó.
 
 update public.products as p
    set title = v.title
@@ -27,4 +31,5 @@ update public.products as p
     ('0092844a-6722-4c1a-b1c6-252625306db5', 'Bucles y condicionales'),            -- Sala futura
     ('bb19bcf8-aaa7-44d2-9ebb-304d17989df3', 'Introducción a la terminal')         -- Sala EP-08 (fixture)
   ) as v (id, title)
- where p.id = v.id::uuid;
+ where p.id = v.id::uuid
+returning p.id, p.title;
