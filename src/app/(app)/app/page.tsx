@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime, BOOKING_STATUS_LABEL } from "@/lib/booking";
+import { formatSessionTime, formatShortDate, BOOKING_STATUS_LABEL } from "@/lib/booking";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { PageHeader } from "@/components/layout/page-header";
@@ -45,7 +45,9 @@ export default async function AppHome() {
       .limit(4),
     supabase
       .from("bookings")
-      .select("id, status, total_amount, currency, products(title), reviews(rating)")
+      // La fecha distingue varias clases del mismo producto. El nombre del
+      // tutor lo haría mejor, pero `profiles` es RLS own-only.
+      .select("id, status, total_amount, currency, created_at, products(title), reviews(rating)")
       .eq("student_id", user.id)
       .order("created_at", { ascending: false })
       .limit(4),
@@ -146,8 +148,9 @@ export default async function AppHome() {
                       <p className="truncate text-sm font-medium">
                         {b.products?.title ?? "Clase"}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatMoney(b.total_amount, b.currency)}
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatMoney(b.total_amount, b.currency)} ·{" "}
+                        {formatShortDate(b.created_at)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

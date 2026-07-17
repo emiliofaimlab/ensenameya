@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime, BOOKING_STATUS_LABEL } from "@/lib/booking";
+import { formatSessionTime, formatShortDate, BOOKING_STATUS_LABEL } from "@/lib/booking";
 import type { TutorBalance } from "@/lib/payouts";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
@@ -56,6 +56,9 @@ export default async function TutorHomePage() {
         .limit(4),
       supabase
         .from("bookings")
+        // Sin fecha, varias clases del mismo producto se ven como una fila
+        // repetida. El nombre del alumno distinguiría mejor, pero `profiles`
+        // es RLS own-only: el tutor no puede leer el perfil de su alumno.
         .select("id, status, total_amount, currency, created_at, products(title)")
         .eq("tutor_id", userId)
         .order("created_at", { ascending: false })
@@ -161,8 +164,9 @@ export default async function TutorHomePage() {
                       <p className="truncate text-sm font-medium">
                         {b.products?.title ?? "Clase"}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatMoney(b.total_amount, b.currency)}
+                      <p className="truncate text-xs text-muted-foreground">
+                        {formatMoney(b.total_amount, b.currency)} ·{" "}
+                        {formatShortDate(b.created_at)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
