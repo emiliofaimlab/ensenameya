@@ -44,7 +44,7 @@ export default async function TutorHomePage() {
       supabase.rpc("tutor_balance"),
       supabase
         .from("sessions")
-        .select("id, start_at, status, bookings(products(title))")
+        .select("id, start_at, status, booking_id, bookings(products(title))")
         .eq("tutor_id", userId)
         .in("status", ["scheduled", "in_progress"])
         // Se filtra por el FIN, no por el inicio: una clase que empezó hace un
@@ -129,9 +129,14 @@ export default async function TutorHomePage() {
                         {formatSessionTime(s.start_at)}
                       </p>
                     </div>
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={`/room/${s.id}`}>Ir a la sala</Link>
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button asChild size="sm" variant="ghost">
+                        <Link href={`/chat/${s.booking_id}`}>Chat</Link>
+                      </Button>
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/room/${s.id}`}>Ir a la sala</Link>
+                      </Button>
+                    </div>
                   </li>
                 ))}
               </ul>

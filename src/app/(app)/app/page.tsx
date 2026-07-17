@@ -35,7 +35,7 @@ export default async function AppHome() {
     supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
     supabase
       .from("sessions")
-      .select("id, start_at, status, bookings(products(title))")
+      .select("id, start_at, status, booking_id, bookings(products(title))")
       .eq("student_id", user.id)
       .in("status", ["scheduled", "in_progress"])
       // Por el FIN, no por el inicio: una clase empezada sigue entrable hasta
@@ -113,9 +113,16 @@ export default async function AppHome() {
                           {formatSessionTime(s.start_at)}
                         </p>
                       </div>
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/room/${s.id}`}>Ir a la sala</Link>
-                      </Button>
+                      {/* El chat es más útil ANTES de la clase que después: la
+                          próxima clase es justo donde se pregunta "¿llevo algo?". */}
+                      <div className="flex items-center gap-2">
+                        <Button asChild size="sm" variant="ghost">
+                          <Link href={`/chat/${s.booking_id}`}>Chat</Link>
+                        </Button>
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/room/${s.id}`}>Ir a la sala</Link>
+                        </Button>
+                      </div>
                     </li>
                   ))}
                 </ul>
