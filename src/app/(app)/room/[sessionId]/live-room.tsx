@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import type { DailyCall } from "@daily-co/daily-js";
 
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
@@ -13,10 +14,16 @@ type SessionStatus = Database["public"]["Enums"]["session_status"];
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
 // RN-18 / S-45: la ventana abre 10 min antes y cierra 10 min después. El server
-// es la barrera real; aquí solo se pinta el estado y la cuenta regresiva.
+// es la barrera real; aquí solo se pinta el estado.
 const WINDOW_MIN = 10;
 
-type Joined = { roomUrl: string; token: string; endsAt: string };
+type Joined = {
+  roomUrl: string;
+  token: string | null;
+  endsAt: string;
+  /** Sin credenciales de Daily la sala va simulada (ver `lib/daily.ts`). */
+  simulated: boolean;
+};
 
 /** ms → "2 h 05 min" / "4 min 12 s" para la cuenta regresiva. */
 function human(ms: number): string {
@@ -50,10 +57,11 @@ export function LiveRoom({
   const [now, setNow] = useState(() => Date.now());
   const [joined, setJoined] = useState<Joined | null>(null);
   const [busy, setBusy] = useState(false);
-  // Controles locales (con Daily real accionan el track; simulado, demuestran
-  // que los toques funcionan en móvil — US-803).
+  // Controles locales de la sala simulada (con Daily real los trae el SDK).
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const callRef = useRef<DailyCall | null>(null);
 
   const opensAt = new Date(startAt).getTime() - WINDOW_MIN * 60000;
   const closesAt = new Date(endAt).getTime() + WINDOW_MIN * 60000;
@@ -72,22 +80,72 @@ export function LiveRoom({
   const beforeWindow = now < opensAt;
   const afterWindow = now > closesAt;
 
-  // "En vivo" es un estado DERIVADO: uniste y la ventana sigue abierta. Al vencer
-  // se cae solo al estado "ventana cerró" sin tocar el state en un efecto.
+  // "En vivo" es un estado DERIVADO: uniste y la ventana sigue abierta.
   const live = joined !== null && !afterWindow;
+
+  // Embed de Daily: se monta al unirse y se destruye al salir/desmontar. El SDK
+  // trae los controles (micro, cámara, salir, compartir pantalla) y la
+  // reconexión automática ante caída de red (US-803).
+  useEffect(() => {
+    if (!live || !joined || joined.simulated || !frameRef.current || callRef.current) return;
+
+    let cancelled = false;
+    void (async () => {
+      const DailyIframe = (await import("@daily-co/daily-js")).default;
+      if (cancelled || !frameRef.current) return;
+
+      const call = DailyIframe.createFrame(frameRef.current, {
+        showLeaveButton: true,
+        showFullscreenButton: true,
+        iframeStyle: { width: "100%", height: "100%", border: "0" },
+      });
+      callRef.current = call;
+
+      call.on("left-meeting", () => {
+        setJoined(null);
+        router.refresh();
+      });
+      call.on("error", (e) => {
+        toast.error("Se perdió la conexión con la sala.");
+        console.error("[daily] error:", JSON.stringify(e));
+      });
+
+      try {
+        await call.join({ url: joined.roomUrl, token: joined.token ?? undefined });
+      } catch (e) {
+        console.error("[daily] join falló:", JSON.stringify(e));
+        toast.error("No pudimos conectar con la sala de video.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (callRef.current) {
+        void callRef.current.destroy();
+        callRef.current = null;
+      }
+    };
+  }, [live, joined, router]);
 
   async function join() {
     setBusy(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.rpc("join_session", { p_session_id: sessionId });
+    // El endpoint autoriza vía `join_session` (ventana, participante, ciclo) y
+    // firma el token contra Daily con la API key (server-only).
+    const res = await fetch(`/api/room/${sessionId}`, { method: "POST" });
+    const body = await res.json();
     setBusy(false);
-    if (error) {
-      toast.error(error.message || "No se pudo entrar a la sala.");
+
+    if (!res.ok) {
+      toast.error(body.error ?? "No se pudo entrar a la sala.");
       router.refresh();
       return;
     }
-    const d = data as { room_url: string; token: string; ends_at: string };
-    setJoined({ roomUrl: d.room_url, token: d.token, endsAt: d.ends_at });
+    setJoined({
+      roomUrl: body.roomUrl,
+      token: body.token,
+      endsAt: body.endsAt,
+      simulated: Boolean(body.simulated),
+    });
   }
 
   async function complete() {
@@ -109,49 +167,66 @@ export function LiveRoom({
   if (live && joined) {
     return (
       <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
-        {/* Área de video: crece para ocupar la pantalla (móvil y escritorio). */}
-        <div className="relative flex flex-1 items-center justify-center bg-neutral-900 text-neutral-300">
-          <div className="flex flex-col items-center gap-2 p-6 text-center">
-            <p className="text-sm uppercase tracking-wide text-neutral-500">Sala simulada</p>
-            <p className="max-w-sm text-sm">
-              El video real de Daily se conecta al cablear las credenciales del
-              proveedor. La sala, el token y la ventana ya funcionan.
-            </p>
-            <p className="mt-2 break-all font-mono text-xs text-neutral-600">
-              {joined.roomUrl}
-            </p>
+        {joined.simulated ? (
+          // Sin credenciales de Daily: la sala, el token y la ventana ya
+          // funcionan; falta solo el transporte de video.
+          <div className="relative flex flex-1 items-center justify-center bg-neutral-900 text-neutral-300">
+            <div className="flex flex-col items-center gap-2 p-6 text-center">
+              <p className="text-sm uppercase tracking-wide text-neutral-500">Sala simulada</p>
+              <p className="max-w-sm text-sm">
+                Falta configurar el proveedor de video. La sala, el token y la
+                ventana de acceso ya funcionan.
+              </p>
+              <p className="mt-2 break-all font-mono text-xs text-neutral-600">
+                {joined.roomUrl}
+              </p>
+            </div>
           </div>
-          <div className="absolute right-3 top-3 rounded-md bg-black/50 px-2 py-1 text-xs text-neutral-200">
-            Termina en {human(new Date(joined.endsAt).getTime() - now)}
-          </div>
-        </div>
+        ) : (
+          // El iframe de Daily ocupa el alto disponible (móvil y escritorio).
+          <div ref={frameRef} className="relative flex-1 bg-neutral-900" />
+        )}
 
-        {/* Barra de controles: objetivos táctiles grandes (US-803). */}
         <div className="flex flex-wrap items-center justify-center gap-2 border-t bg-background p-3">
-          <Button
-            variant={muted ? "default" : "outline"}
-            size="lg"
-            className="min-w-24"
-            onClick={() => setMuted((m) => !m)}
-          >
-            {muted ? "Activar micro" : "Silenciar"}
-          </Button>
-          <Button
-            variant={camOff ? "default" : "outline"}
-            size="lg"
-            className="min-w-24"
-            onClick={() => setCamOff((c) => !c)}
-          >
-            {camOff ? "Activar cámara" : "Apagar cámara"}
-          </Button>
+          <span className="mr-auto text-sm text-muted-foreground" suppressHydrationWarning>
+            Termina en {human(new Date(joined.endsAt).getTime() - now)}
+          </span>
+
+          {/* Con Daily real los controles los trae el SDK (y con ellos la
+              reconexión de red, US-803); en simulado se pintan aquí para que
+              los toques en móvil sean ejercitables. */}
+          {joined.simulated ? (
+            <>
+              <Button
+                variant={muted ? "default" : "outline"}
+                size="lg"
+                className="min-w-24"
+                onClick={() => setMuted((m) => !m)}
+              >
+                {muted ? "Activar micro" : "Silenciar"}
+              </Button>
+              <Button
+                variant={camOff ? "default" : "outline"}
+                size="lg"
+                className="min-w-24"
+                onClick={() => setCamOff((c) => !c)}
+              >
+                {camOff ? "Activar cámara" : "Apagar cámara"}
+              </Button>
+            </>
+          ) : null}
+
           {isTutor ? (
-            <Button variant="default" size="lg" disabled={busy} onClick={complete}>
+            <Button size="lg" disabled={busy} onClick={complete}>
               Marcar completada
             </Button>
           ) : null}
-          <Button variant="destructive" size="lg" onClick={() => setJoined(null)}>
-            Salir
-          </Button>
+
+          {joined.simulated ? (
+            <Button variant="destructive" size="lg" onClick={() => setJoined(null)}>
+              Salir
+            </Button>
+          ) : null}
         </div>
       </div>
     );
@@ -180,7 +255,11 @@ export function LiveRoom({
         <>
           <div className="rounded-lg border p-6">
             <p className="text-sm text-muted-foreground">La sala abre en</p>
-            <p className="mt-1 text-3xl font-semibold tabular-nums">{human(opensAt - now)}</p>
+            {/* El reloj del server y el del cliente difieren en segundos: es
+                esperado en una cuenta regresiva, no un fallo de render. */}
+            <p className="mt-1 text-3xl font-semibold tabular-nums" suppressHydrationWarning>
+              {human(opensAt - now)}
+            </p>
             <p className="mt-2 text-xs text-muted-foreground">
               Podrás entrar {WINDOW_MIN} min antes de la hora de inicio.
             </p>
@@ -200,7 +279,7 @@ export function LiveRoom({
         </>
       ) : (
         <>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground" suppressHydrationWarning>
             La sala está abierta. Cierra en {human(closesAt - now)}.
           </p>
           <Button size="lg" disabled={busy} onClick={join} className="min-w-40">
