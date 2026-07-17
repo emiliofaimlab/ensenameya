@@ -9,10 +9,10 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   // Área autenticada: sin sesión → /login?next=… (SCR-AU01).
-  const { user } = await requireUser();
+  const { user, roles } = await requireUser();
   return (
     <div className="flex min-h-svh flex-col">
-      <SiteHeader user={toHeaderUser(user)} />
+      <SiteHeader user={toHeaderUser(user, roles)} />
       <main className="flex-1">{children}</main>
       <SiteFooter />
     </div>
