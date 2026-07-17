@@ -104,12 +104,24 @@ export function DocumentReview({ doc }: { doc: ReviewDoc }) {
         rows={2}
       />
 
+      {/* Se desactiva el botón que repetiría la decisión vigente, no los dos:
+          el contrario sigue vivo a propósito para poder RECTIFICAR (aprobado
+          por error, título caducado). La RPC recalcula la identidad al hacerlo. */}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" disabled={busy} onClick={() => review(true)}>
-          Aprobar
+        <Button
+          size="sm"
+          disabled={busy || doc.status === "approved"}
+          onClick={() => review(true)}
+        >
+          {doc.status === "rejected" ? "Aprobar de todos modos" : "Aprobar"}
         </Button>
-        <Button size="sm" variant="destructive" disabled={busy} onClick={() => review(false)}>
-          Rechazar
+        <Button
+          size="sm"
+          variant="destructive"
+          disabled={busy || doc.status === "rejected"}
+          onClick={() => review(false)}
+        >
+          {doc.status === "approved" ? "Revocar" : "Rechazar"}
         </Button>
       </div>
     </div>

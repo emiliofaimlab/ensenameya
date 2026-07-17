@@ -68,8 +68,11 @@ export default async function TutorProfilePage({
         </div>
 
         <div className="flex flex-col gap-4">
+          {/* El contador sale de las reseñas QUE SE MUESTRAN, no de
+              `rating_count`: si no, un rating sembrado (o reseñas purgadas)
+              anuncia "Reseñas (37)" sobre una lista vacía. */}
           <h2 className="text-lg font-semibold">
-            Reseñas{tutor.ratingCount > 0 ? ` (${tutor.ratingCount})` : ""}
+            Reseñas{reviews.length > 0 ? ` (${reviews.length})` : ""}
           </h2>
           <TutorReviews reviews={reviews} />
         </div>

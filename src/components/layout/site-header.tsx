@@ -31,6 +31,8 @@ import { Container } from "@/components/layout/container";
 export type HeaderUser = {
   email: string;
   name: string | null;
+  /** Panel del usuario según su rol (lo resuelve `toHeaderUser` con pickHome). */
+  homeHref: string;
 };
 
 const navLinks = [
@@ -63,6 +65,13 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm md:flex">
+          {/* Con sesión, "Panel" es la vuelta a casa: sin él solo se llegaba
+              por URL o rebuscando en el menú del avatar. */}
+          {user ? (
+            <Link href={user.homeHref} className="font-medium transition-colors hover:text-foreground">
+              Panel
+            </Link>
+          ) : null}
           {navLinks.map((link) => (
             <Link
               key={link.href}
@@ -95,7 +104,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/app">
+                  <Link href={user.homeHref}>
                     <UserIcon />
                     Mi panel
                   </Link>
@@ -140,6 +149,14 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
               <SheetTitle>Enséñame Ya</SheetTitle>
             </SheetHeader>
             <nav className="flex flex-col gap-1 px-4">
+              {user ? (
+                <Link
+                  href={user.homeHref}
+                  className="rounded-md px-2 py-2 text-sm font-medium hover:bg-muted"
+                >
+                  Panel
+                </Link>
+              ) : null}
               {navLinks.map((link) => (
                 <Link
                   key={link.href}
@@ -154,7 +171,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
               {user ? (
                 <>
                   <Button asChild variant="outline">
-                    <Link href="/app">Mi panel</Link>
+                    <Link href={user.homeHref}>Mi panel</Link>
                   </Button>
                   <Button asChild variant="outline">
                     <Link href="/account">Mi cuenta</Link>

@@ -22,3 +22,8 @@ export function formatSessionTime(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/** Solo la fecha: para listas donde la hora no aporta (RN-01/02). */
+export function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("es", { day: "numeric", month: "short" });
+}
