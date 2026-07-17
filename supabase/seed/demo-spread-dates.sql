@@ -21,7 +21,8 @@
 -- que no cambia, así que repartir dos veces da el mismo resultado.
 
 with ordenadas as (
-  select id, row_number() over (order by id) as n
+  -- `::int` porque row_number() es bigint y make_interval solo acepta int.
+  select id, (row_number() over (order by id))::int as n
     from public.bookings
    where status = 'completed'
      -- El tutor se identifica por una reserva suya conocida, no por nombre.
