@@ -23,9 +23,15 @@ export const IDENTITY_BADGE: Record<Identity, BadgeSpec> = {
   not_submitted: { label: "sin enviar", variant: "outline" },
 };
 
+/**
+ * Ojo con `pending`: para el TUTOR es "En revisión" (se lo estamos revisando),
+ * pero aquí el lector es el admin, que ES quien revisa. Llamarlo "En revisión"
+ * le sugiere que ya hay una decisión en marcha y que no le toca actuar, justo
+ * al revés. El tutor tiene su propia etiqueta en `tutor/verification`.
+ */
 export const DOC_BADGE: Record<DocStatus, BadgeSpec> = {
   approved: { label: "Aprobado", variant: "default" },
-  pending: { label: "En revisión", variant: "secondary" },
+  pending: { label: "Sin revisar", variant: "secondary" },
   rejected: { label: "Rechazado", variant: "destructive" },
 };
 
