@@ -39,6 +39,8 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-primary-muted: var(--primary-muted);
+  --color-primary-muted-foreground: var(--primary-muted-foreground);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-brand-muted: var(--brand-muted);
@@ -70,6 +72,9 @@
   /* CTA del diseño = naranja. El azul es marca/enlace, no acción primaria. */
   --primary: #fe6a00;
   --primary-foreground: #ffffff;
+  /* Chip de modelo de precio en las tarjetas de producto (P01/P05/P06/P08). */
+  --primary-muted: #ffe5cc;
+  --primary-muted-foreground: #803800;
   --secondary: #f5f5f5;
   --secondary-foreground: #14141a;
   --muted: #f9fafc;

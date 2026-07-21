@@ -133,6 +133,60 @@ export async function listApprovedTutors(opts: {
   return { tutors, hasMore };
 }
 
+export type FeaturedTutor = TutorCardData & {
+  /** Precio más bajo entre sus productos activos (unidades menores). */
+  priceFromMinor: number | null;
+  currency: string | null;
+};
+
+/**
+ * P01 — "Tutores destacados": los mejor valorados, con su precio de entrada.
+ * El nombre real y la foto **no son públicos** (profiles solo lo lee su dueño),
+ * así que la tarjeta se apoya en `headline`, como el resto del catálogo.
+ */
+export async function listFeaturedTutors(limit = 4): Promise<FeaturedTutor[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tutor_profiles")
+    .select("profile_id, headline, bio, rating_avg, rating_count")
+    .eq("approval_status", "approved")
+    .order("rating_avg", { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  const rows = data ?? [];
+  if (rows.length === 0) return [];
+
+  const { data: prices } = await supabase
+    .from("products")
+    .select("tutor_id, price_amount, currency")
+    .eq("status", "active")
+    .in(
+      "tutor_id",
+      rows.map((r) => r.profile_id),
+    );
+
+  const cheapest = new Map<string, { amount: number; currency: string }>();
+  for (const p of prices ?? []) {
+    const current = cheapest.get(p.tutor_id);
+    if (!current || p.price_amount < current.amount) {
+      cheapest.set(p.tutor_id, {
+        amount: p.price_amount,
+        currency: p.currency,
+      });
+    }
+  }
+
+  return rows.map((r) => ({
+    id: r.profile_id,
+    headline: r.headline,
+    bio: r.bio,
+    ratingAvg: r.rating_avg,
+    ratingCount: r.rating_count,
+    priceFromMinor: cheapest.get(r.profile_id)?.amount ?? null,
+    currency: cheapest.get(r.profile_id)?.currency ?? null,
+  }));
+}
+
 /** US-304 (P07) — perfil público del tutor + sus clases activas. */
 export async function getTutorDetail(
   id: string,

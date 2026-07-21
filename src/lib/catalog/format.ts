@@ -29,12 +29,53 @@ export function priceLabel(p: {
   }
 }
 
+/** Chip de modelo, sin precio (P01/P05: el importe va aparte y más grande). */
+export function modelLabel(p: {
+  pricingModel: PricingModel;
+  packageNumSessions: number | null;
+}): string {
+  switch (p.pricingModel) {
+    case "per_session":
+      return "Clase única";
+    case "per_hour":
+      return "Por hora";
+    case "per_package":
+      return `Paquete · ${p.packageNumSessions ?? 1} sesiones`;
+  }
+}
+
+/** "4 × 60 min" — sesiones incluidas por duración de cada una. */
+export function sessionsLabel(p: {
+  sessionDurationMin: number | null;
+  packageNumSessions: number | null;
+}): string | null {
+  if (!p.sessionDurationMin) return null;
+  return `${p.packageNumSessions ?? 1} × ${p.sessionDurationMin} min`;
+}
+
+/** Conectores: sin filtrarlos, "Profesora de Matemáticas" daba "PD". */
+const STOPWORDS = new Set([
+  "de",
+  "del",
+  "la",
+  "las",
+  "el",
+  "los",
+  "y",
+  "en",
+  "para",
+  "con",
+  "a",
+]);
+
 /** Iniciales para el avatar-fallback (el nombre real no es público). */
 export function initialsFrom(text: string | null): string {
   const base = (text ?? "").trim();
   if (!base) return "T";
-  return base
+  const words = base
     .split(/\s+/)
+    .filter((w) => !STOPWORDS.has(w.toLowerCase()));
+  return (words.length > 0 ? words : base.split(/\s+/))
     .slice(0, 2)
     .map((w) => w[0]!)
     .join("")
