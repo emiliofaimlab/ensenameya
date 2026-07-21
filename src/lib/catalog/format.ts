@@ -44,6 +44,19 @@ export function modelLabel(p: {
   }
 }
 
+/** "Equivale a $16 por sesión · 6 sesiones" — solo tiene sentido en paquetes. */
+export function perSessionLabel(p: {
+  pricingModel: PricingModel;
+  priceAmount: number;
+  currency: string;
+  packageNumSessions: number | null;
+}): string | null {
+  if (p.pricingModel !== "per_package") return null;
+  const n = p.packageNumSessions ?? 0;
+  if (n < 2) return null;
+  return `Equivale a ${formatMoney(Math.round(p.priceAmount / n), p.currency)} por sesión · ${n} sesiones`;
+}
+
 /** "4 × 60 min" — sesiones incluidas por duración de cada una. */
 export function sessionsLabel(p: {
   sessionDurationMin: number | null;

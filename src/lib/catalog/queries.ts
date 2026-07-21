@@ -22,6 +22,13 @@ export type TutorCardData = {
   ratingCount: number;
 };
 
+export type ProductTutor = {
+  id: string;
+  headline: string | null;
+  ratingAvg: number | null;
+  ratingCount: number;
+};
+
 export type ProductCardData = {
   id: string;
   title: string;
@@ -32,6 +39,8 @@ export type ProductCardData = {
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
   categories: CategoryTag[];
+  /** Solo lo rellena el listado de P05; `null` donde no se consultó. */
+  tutor?: ProductTutor | null;
 };
 
 export type ProductDetail = ProductCardData & {
@@ -91,11 +100,74 @@ export async function listActiveCategories(): Promise<CategoryTag[]> {
   return data ?? [];
 }
 
-/** US-301 — tutores aprobados, filtrables por categoría, paginados. */
+export type FeaturedTutor = TutorCardData & {
+  /** Precio más bajo entre sus productos activos (unidades menores). */
+  priceFromMinor: number | null;
+  currency: string | null;
+  /** Categorías de sus productos activos (P04 muestra un par en la tarjeta). */
+  categories: CategoryTag[];
+};
+
+type TutorRow = {
+  profile_id: string;
+  headline: string | null;
+  bio: string | null;
+  rating_avg: number | null;
+  rating_count: number;
+};
+
+/**
+ * Añade a cada tutor su precio de entrada y las categorías de sus productos
+ * activos. Una sola consulta extra para las dos cosas (P01 y P04 las piden).
+ */
+async function withProductFacts(rows: TutorRow[]): Promise<FeaturedTutor[]> {
+  if (rows.length === 0) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("products")
+    .select(
+      "tutor_id, price_amount, currency, product_categories(categories(slug, name))",
+    )
+    .eq("status", "active")
+    .in(
+      "tutor_id",
+      rows.map((r) => r.profile_id),
+    );
+
+  const cheapest = new Map<string, { amount: number; currency: string }>();
+  const cats = new Map<string, Map<string, string>>();
+  for (const p of data ?? []) {
+    const current = cheapest.get(p.tutor_id);
+    if (!current || p.price_amount < current.amount) {
+      cheapest.set(p.tutor_id, { amount: p.price_amount, currency: p.currency });
+    }
+    const bucket = cats.get(p.tutor_id) ?? new Map<string, string>();
+    for (const tag of toCategoryTags(p.product_categories)) {
+      bucket.set(tag.slug, tag.name);
+    }
+    cats.set(p.tutor_id, bucket);
+  }
+
+  return rows.map((r) => ({
+    id: r.profile_id,
+    headline: r.headline,
+    bio: r.bio,
+    ratingAvg: r.rating_avg,
+    ratingCount: r.rating_count,
+    priceFromMinor: cheapest.get(r.profile_id)?.amount ?? null,
+    currency: cheapest.get(r.profile_id)?.currency ?? null,
+    categories: [...(cats.get(r.profile_id) ?? new Map())].map(
+      ([slug, name]) => ({ slug, name }),
+    ),
+  }));
+}
+
+/** US-301 — tutores aprobados, filtrables por categoría y rating, paginados. */
 export async function listApprovedTutors(opts: {
   categorySlug?: string;
+  minRating?: number;
   page: number;
-}): Promise<{ tutors: TutorCardData[]; hasMore: boolean }> {
+}): Promise<{ tutors: FeaturedTutor[]; hasMore: boolean; total: number }> {
   const supabase = await createClient();
   const from = (opts.page - 1) * PAGE_SIZE;
 
@@ -108,36 +180,30 @@ export async function listApprovedTutors(opts: {
       .eq("status", "active")
       .eq("product_categories.categories.slug", opts.categorySlug);
     tutorIds = [...new Set((data ?? []).map((r) => r.tutor_id))];
-    if (tutorIds.length === 0) return { tutors: [], hasMore: false };
+    if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
   }
 
-  const base = supabase
+  let base = supabase
     .from("tutor_profiles")
-    .select("profile_id, headline, bio, rating_avg, rating_count")
+    .select("profile_id, headline, bio, rating_avg, rating_count", {
+      count: "exact",
+    })
     .eq("approval_status", "approved");
-  const filtered = tutorIds ? base.in("profile_id", tutorIds) : base;
+  if (tutorIds) base = base.in("profile_id", tutorIds);
+  if (opts.minRating) base = base.gte("rating_avg", opts.minRating);
 
-  const { data } = await filtered
+  const { data, count } = await base
     .order("rating_avg", { ascending: false, nullsFirst: false })
     .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 
   const rows = data ?? [];
   const hasMore = rows.length > PAGE_SIZE;
-  const tutors = rows.slice(0, PAGE_SIZE).map((r) => ({
-    id: r.profile_id,
-    headline: r.headline,
-    bio: r.bio,
-    ratingAvg: r.rating_avg,
-    ratingCount: r.rating_count,
-  }));
-  return { tutors, hasMore };
+  return {
+    tutors: await withProductFacts(rows.slice(0, PAGE_SIZE)),
+    hasMore,
+    total: count ?? rows.length,
+  };
 }
-
-export type FeaturedTutor = TutorCardData & {
-  /** Precio más bajo entre sus productos activos (unidades menores). */
-  priceFromMinor: number | null;
-  currency: string | null;
-};
 
 /**
  * P01 — "Tutores destacados": los mejor valorados, con su precio de entrada.
@@ -153,38 +219,7 @@ export async function listFeaturedTutors(limit = 4): Promise<FeaturedTutor[]> {
     .order("rating_avg", { ascending: false, nullsFirst: false })
     .limit(limit);
 
-  const rows = data ?? [];
-  if (rows.length === 0) return [];
-
-  const { data: prices } = await supabase
-    .from("products")
-    .select("tutor_id, price_amount, currency")
-    .eq("status", "active")
-    .in(
-      "tutor_id",
-      rows.map((r) => r.profile_id),
-    );
-
-  const cheapest = new Map<string, { amount: number; currency: string }>();
-  for (const p of prices ?? []) {
-    const current = cheapest.get(p.tutor_id);
-    if (!current || p.price_amount < current.amount) {
-      cheapest.set(p.tutor_id, {
-        amount: p.price_amount,
-        currency: p.currency,
-      });
-    }
-  }
-
-  return rows.map((r) => ({
-    id: r.profile_id,
-    headline: r.headline,
-    bio: r.bio,
-    ratingAvg: r.rating_avg,
-    ratingCount: r.rating_count,
-    priceFromMinor: cheapest.get(r.profile_id)?.amount ?? null,
-    currency: cheapest.get(r.profile_id)?.currency ?? null,
-  }));
+  return withProductFacts(data ?? []);
 }
 
 /** US-304 (P07) — perfil público del tutor + sus clases activas. */
@@ -312,12 +347,26 @@ export async function getCategoryBySlug(
   return data ?? null;
 }
 
-/** US-302 — productos activos (de tutores aprobados por RLS), filtrables por
- *  categoría y paginados. */
+/**
+ * US-302 — productos activos (de tutores aprobados por RLS), filtrables y
+ * paginados. Precio y sesiones se filtran en la BD porque son columnas de
+ * `products`; no hace falta el rodeo que sí necesita el precio del tutor.
+ * ponytail: sin filtros de nivel ni idioma — el Figma los pide pero `products`
+ * no tiene esas columnas; requieren migración.
+ */
 export async function listActiveProducts(opts: {
   categorySlug?: string;
+  model?: PricingModel;
+  minPriceMinor?: number;
+  maxPriceMinor?: number;
+  minSessions?: number;
+  maxSessions?: number;
   page: number;
-}): Promise<{ products: ProductCardData[]; hasMore: boolean }> {
+}): Promise<{
+  products: ProductCardData[];
+  hasMore: boolean;
+  total: number;
+}> {
   const supabase = await createClient();
   const from = (opts.page - 1) * PAGE_SIZE;
 
@@ -331,28 +380,102 @@ export async function listActiveProducts(opts: {
       .eq("categories.slug", opts.categorySlug)
       .eq("products.status", "active");
     ids = [...new Set((data ?? []).map((r) => r.product_id))];
-    if (ids.length === 0) return { products: [], hasMore: false };
+    if (ids.length === 0) return { products: [], hasMore: false, total: 0 };
   }
 
-  const base = supabase
+  let base = supabase
     .from("products")
     .select(
-      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, product_categories(categories(slug, name))",
+      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, product_categories(categories(slug, name))",
+      { count: "exact" },
     )
     .eq("status", "active");
-  const filtered = ids ? base.in("id", ids) : base;
+  if (ids) base = base.in("id", ids);
+  if (opts.model) base = base.eq("pricing_model", opts.model);
+  if (opts.minPriceMinor) base = base.gte("price_amount", opts.minPriceMinor);
+  if (opts.maxPriceMinor) base = base.lte("price_amount", opts.maxPriceMinor);
+  if (opts.minSessions) {
+    base = base.gte("package_num_sessions", opts.minSessions);
+  }
+  if (opts.maxSessions) {
+    base = base.lte("package_num_sessions", opts.maxSessions);
+  }
 
-  const { data } = await filtered
+  const { data, count } = await base
     .order("created_at", { ascending: false })
     .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 
-  const rows = data ?? [];
-  const hasMore = rows.length > PAGE_SIZE;
-  return { products: rows.slice(0, PAGE_SIZE).map(mapProductCard), hasMore };
+  const rows = (data ?? []).slice(0, PAGE_SIZE);
+  const hasMore = (data ?? []).length > PAGE_SIZE;
+
+  // El tutor va aparte: products apunta a `profiles`, no a `tutor_profiles`,
+  // así que PostgREST no puede embeberlo desde aquí.
+  const tutors = new Map<string, ProductTutor>();
+  if (rows.length > 0) {
+    const { data: tp } = await supabase
+      .from("tutor_profiles")
+      .select("profile_id, headline, rating_avg, rating_count")
+      .in("profile_id", [...new Set(rows.map((r) => r.tutor_id))]);
+    for (const t of tp ?? []) {
+      tutors.set(t.profile_id, {
+        id: t.profile_id,
+        headline: t.headline,
+        ratingAvg: t.rating_avg,
+        ratingCount: t.rating_count,
+      });
+    }
+  }
+
+  return {
+    products: rows.map((r) => ({
+      ...mapProductCard(r),
+      tutor: tutors.get(r.tutor_id) ?? null,
+    })),
+    hasMore,
+    total: count ?? rows.length,
+  };
+}
+
+/**
+ * Deja el término apto para un patrón `ilike` dentro de un `or(...)`: quita las
+ * comas y paréntesis que romperían la gramática del filtro de PostgREST, y los
+ * comodines `%`/`_` para que el usuario no controle el patrón.
+ */
+function likeSafe(q: string): string {
+  return q.replace(/[,()%_*\\]/g, " ").trim().slice(0, 60);
+}
+
+/** US-303 — tutores cuyo headline o bio menciona el término. */
+export async function searchTutors(q: string): Promise<FeaturedTutor[]> {
+  const term = likeSafe(q);
+  if (!term) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tutor_profiles")
+    .select("profile_id, headline, bio, rating_avg, rating_count")
+    .eq("approval_status", "approved")
+    .or(`headline.ilike.%${term}%,bio.ilike.%${term}%`)
+    .order("rating_avg", { ascending: false, nullsFirst: false })
+    .limit(PAGE_SIZE);
+
+  return withProductFacts(data ?? []);
+}
+
+/** US-303 — categorías cuyo nombre menciona el término. */
+export async function searchCategories(q: string): Promise<CategoryTag[]> {
+  const term = likeSafe(q);
+  if (!term) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("categories")
+    .select("slug, name")
+    .ilike("name", `%${term}%`)
+    .order("sort_order");
+  return data ?? [];
 }
 
 /** US-303 — búsqueda por texto en productos (título+descripción, `search_vector`
- *  tsvector `spanish`, RN-20). Tutor/categoría como resultado → diferido. */
+ *  tsvector `spanish`, RN-20). */
 export async function searchProducts(q: string): Promise<ProductCardData[]> {
   const supabase = await createClient();
   const { data } = await supabase
