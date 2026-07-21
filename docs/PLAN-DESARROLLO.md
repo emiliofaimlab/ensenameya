@@ -195,11 +195,11 @@ mano en la BD. Cierra además el *boundary* que S2 dejó abierto.
 
 ---
 
-## Tracks paralelos (fuera de S1–S4) — sync Jira 2026-07-14
+## Tracks paralelos (fuera de S1–S4) — sync Jira 2026-07-20
 
 No consumen SP del sprint. Se filtran en Jira por label.
 
-- **EP-19 · Diseño UI** (`EY-87`, label `Sprint-Diseño`) — DS-01…04 (`EY-88`…`EY-91`) **In Review**, asignadas a Diana Rivera. Entregable **Figma**, no código (mismo matiz que EP-00). Al aprobarse, implica rediseño visual de pantallas ya construidas → historias de dev aún **no creadas**.
+- **EP-19 · Diseño UI** (`EY-87`, label `Sprint-Diseño`) — DS-01…04 (`EY-88`…`EY-91`) **In Review**, asignadas a Diana Rivera. Entregable **Figma**, no código (mismo matiz que EP-00). ~~Historias de dev aún no creadas~~ → **ya existen: EP-22.**
 - **EP-20 · Activación Comercial** (`EY-92`, label `Sprint-Activacion-Comercial`) — PAC-01…04 (`EY-93`…`EY-96`) 🔒 **bloqueadas**: falta cuenta + API keys de **DLocal y Stripe**. El motor simulado ya está hecho y probado; esto es solo el cableado real. **C-01 está decidido** (DLocal + Stripe); el bloqueo ahora es administrativo.
 - **EP-21 · UX Onboarding Tutor** (`EY-97`, label `Sprint-Mejoras-UX`) — UX-201…204 (`EY-98`…`EY-101`).
   ⚠️ **Redefine historias ya `Done`** (US-201/202/203). No es solo documentación:
@@ -208,6 +208,13 @@ No consumen SP del sprint. Se filtran en Jira por label.
   - **UX-204** (`EY-101`): gate "Enviar a revisión" exige ≥1 producto `draft` — no existe hoy.
 
   Están redactadas como *requisitos de pantalla* (entregable = documento), pero su AC implica **re-trabajo de código**. Decidir si se abren historias de dev derivadas o se reabren US-202/203.
+
+- **EP-22 · Integración Visual** (`EY-102`, label `Sprint-Integracion-Visual`) — IV-01…06 (`EY-103`…`EY-108`), todas `To Do`, **sin asignar**. Es el **lado de código** de EP-19: aplicar el look & feel sobre pantallas ya funcionales, sin tocar lógica ni datos. Detalle y mapeo a páginas de Figma en `docs/BACKLOG.md` §4.2.
+  - **Techo de estado: `In Review`.** Ninguna IV pasa a `Done` sin aprobación del cliente y copy final (labels `pendiente-contenido`, `sujeto-a-cambios`).
+  - Orden dictado por la entrega de Diana. **IV-01 (auth) está desbloqueada**: DS-01 `In Review` y las 4 pantallas `AUTH` existen en Figma.
+  - ⚠️ **El Figma no tiene design system** (0 variables / 0 estilos / 0 componentes, sin modos light-dark). Tokens derivados de las capas: **Poppins**, CTA `#fe6a00`, marca `#0080ff`, texto `#14141a`. `src/app/globals.css` sigue en defaults de shadcn → primer commit de IV-01 = reescribir tokens.
+  - ⚠️ **No hay diseño móvil** (todo a 1280px). Afecta a **US-1601** (S4): decidir si se pide diseño responsive o US-1601 corre con criterio de dev. **Preguntar al cliente / a diseño.**
+  - ⚠️ **IV-05 (tutor) e IV-06 (admin) no tienen DS-xx que las respalde**, aunque las pantallas sí existen en Figma.
 
 ---
 
@@ -224,4 +231,4 @@ No consumen SP del sprint. Se filtran en Jira por label.
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-14 (sync Jira + apertura de Sprint 3).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-20 (sync EP-22 · Integración Visual; auditoría del archivo Figma).*

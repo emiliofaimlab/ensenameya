@@ -1,13 +1,5 @@
 import Link from "next/link";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { SignupForm } from "./signup-form";
 
 export const metadata = { title: "Crear cuenta · Enséñame Ya" };
@@ -19,26 +11,29 @@ export default async function SignupPage({
 }) {
   const { next, ref } = await searchParams;
 
+  // AU02: misma card suelta que AU01 (radio 20, padding 40, sin separador).
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">Crea tu cuenta</CardTitle>
-        <CardDescription>
-          Aprende o enseña en clases 1:1 en vivo.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div className="rounded-[20px] border bg-card p-10 shadow-sm">
+      <h1 className="text-center text-[26px] font-bold tracking-tight">
+        Crea tu cuenta
+      </h1>
+      <p className="mt-2 text-center text-sm text-muted-foreground">
+        Aprende en vivo 1 a 1 con tutores verificados
+      </p>
+
+      <div className="mt-6">
         <SignupForm next={next ?? null} referralCode={ref ?? null} />
-      </CardContent>
-      <CardFooter className="justify-center text-sm text-muted-foreground">
-        ¿Ya tienes cuenta?&nbsp;
+      </div>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        ¿Ya tienes cuenta?{" "}
         <Link
           href={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
-          className="font-medium text-foreground hover:underline"
+          className="font-semibold text-brand hover:underline"
         >
           Inicia sesión
         </Link>
-      </CardFooter>
-    </Card>
+      </p>
+    </div>
   );
 }

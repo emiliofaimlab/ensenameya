@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 function GoogleIcon() {
   return (
@@ -37,17 +38,27 @@ function GoogleIcon() {
 export function GoogleButton({
   next,
   label,
+  className,
+  intent,
 }: {
   next: string | null;
   label: string;
+  className?: string;
+  /** AU02: el selector "quiero aprender/enseñar" está encima de este botón, así
+   *  que la intención tiene que viajar también por OAuth (la lee AU04). */
+  intent?: "alumno" | "tutor";
 }) {
   const [loading, setLoading] = useState(false);
 
   async function onClick() {
     setLoading(true);
     const supabase = createClient();
+    const params = new URLSearchParams();
+    if (next) params.set("next", next);
+    if (intent) params.set("intent", intent);
+    const query = params.toString();
     const redirectTo = `${window.location.origin}/auth/callback${
-      next ? `?next=${encodeURIComponent(next)}` : ""
+      query ? `?${query}` : ""
     }`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -63,7 +74,7 @@ export function GoogleButton({
     <Button
       type="button"
       variant="outline"
-      className="w-full"
+      className={cn("w-full", className)}
       onClick={onClick}
       disabled={loading}
     >

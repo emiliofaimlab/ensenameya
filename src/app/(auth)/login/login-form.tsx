@@ -12,6 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GoogleButton } from "@/components/auth/google-button";
 import { AuthDivider } from "@/components/auth/auth-divider";
+import {
+  AUTH_FIELD,
+  AUTH_LABEL,
+  AUTH_SUBMIT,
+} from "@/components/auth/field-classes";
 
 export function LoginForm({
   next,
@@ -22,6 +27,7 @@ export function LoginForm({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -52,46 +58,72 @@ export function LoginForm({
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <GoogleButton next={next} label="Continuar con Google" />
+    <div className="flex flex-col gap-5">
+      <GoogleButton
+        next={next}
+        label="Continuar con Google"
+        className={`${AUTH_FIELD} font-medium`}
+      />
       <AuthDivider />
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <div className="grid gap-2">
-          <Label htmlFor="email">Correo</Label>
+          <Label htmlFor="email" className={AUTH_LABEL}>
+            Correo
+          </Label>
           <Input
             id="email"
             name="email"
             type="email"
             autoComplete="email"
             required
-            placeholder="tu@correo.com"
+            placeholder="tucorreo@ejemplo.com"
+            className={AUTH_FIELD}
           />
         </div>
         <div className="grid gap-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Contraseña</Label>
-            <Link
-              href="/reset"
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+          <Label
+            htmlFor="password"
+            className={AUTH_LABEL}
+          >
+            Contraseña
+          </Label>
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              placeholder="Tu contraseña"
+              className={`${AUTH_FIELD} pr-20`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-pressed={showPassword}
+              className="absolute top-1/2 right-3 -translate-y-1/2 text-[13px] font-medium text-muted-foreground hover:text-foreground"
             >
-              ¿La olvidaste?
-            </Link>
+              {showPassword ? "Ocultar" : "Mostrar"}
+            </button>
           </div>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            required
-          />
+          <Link
+            href="/reset"
+            className="text-right text-[13px] font-medium text-brand hover:underline"
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
         </div>
         {oauthError ? (
           <p className="text-sm text-destructive">
             No se pudo completar el inicio con Google. Intenta de nuevo.
           </p>
         ) : null}
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading ? "Entrando…" : "Entrar"}
+        <Button
+          type="submit"
+          disabled={loading}
+          className={AUTH_SUBMIT}
+        >
+          {loading ? "Entrando…" : "Iniciar sesión"}
         </Button>
       </form>
     </div>

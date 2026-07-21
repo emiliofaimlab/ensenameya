@@ -1,42 +1,36 @@
 import Link from "next/link";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { ResetForm } from "./reset-form";
 
 export const metadata = { title: "Recuperar contraseña · Enséñame Ya" };
 
 /**
- * US-103 (SCR-AU03) — Solicitar enlace de restablecimiento. Correo → Supabase
- * envía el enlace de recuperación (NTF-02, email por defecto de Auth). El enlace
- * vuelve por /auth/callback (AU04) con `next=/reset/update`.
+ * US-103 (SCR-AU03, estado 1) — Solicitar enlace de restablecimiento. Correo →
+ * Supabase envía el enlace de recuperación (NTF-02, email por defecto de Auth).
+ * El enlace vuelve por /auth/callback (AU04) con `next=/reset/update`.
  */
 export default function ResetPage() {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-xl">¿Olvidaste tu contraseña?</CardTitle>
-        <CardDescription>
-          Escribe tu correo y te enviamos un enlace para crear una nueva.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <div className="rounded-[20px] border bg-card p-9 shadow-sm">
+      <h1 className="text-center text-2xl font-bold tracking-tight">
+        Recupera tu contraseña
+      </h1>
+      <p className="mt-2 text-center text-sm text-muted-foreground">
+        Ingresa tu correo y te enviaremos un enlace para restablecerla.
+      </p>
+
+      <div className="mt-6">
         <ResetForm />
-      </CardContent>
-      <CardFooter className="justify-center text-sm text-muted-foreground">
+      </div>
+
+      <p className="mt-6 text-center">
         <Link
           href="/login"
-          className="font-medium text-foreground hover:underline"
+          className="text-sm font-semibold text-brand hover:underline"
         >
-          Volver a iniciar sesión
+          ← Volver a iniciar sesión
         </Link>
-      </CardFooter>
-    </Card>
+      </p>
+    </div>
   );
 }

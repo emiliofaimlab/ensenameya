@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogOutIcon, MenuIcon, SettingsIcon, UserIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  LogOutIcon,
+  MenuIcon,
+  SearchIcon,
+  SettingsIcon,
+  UserIcon,
+} from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -35,16 +42,46 @@ export type HeaderUser = {
   homeHref: string;
 };
 
-const navLinks = [
-  { href: "/tutors", label: "Tutores" },
-  { href: "/classes", label: "Clases" },
-  { href: "/categories", label: "Categorías" },
-  { href: "/how-it-works", label: "Cómo funciona" },
+/** Agrupación de v3-header: los mismos destinos que las columnas del footer. */
+const navGroups = [
+  {
+    label: "Explorar",
+    links: [
+      { href: "/tutors", label: "Explorar tutores" },
+      { href: "/classes", label: "Explorar clases" },
+      { href: "/categories", label: "Categorías" },
+    ],
+  },
+  {
+    label: "Nosotros",
+    links: [
+      { href: "/about", label: "Sobre nosotros" },
+      { href: "/how-it-works", label: "¿Cómo funciona?" },
+    ],
+  },
 ];
 
 function initials(user: HeaderUser): string {
   const base = user.name?.trim() || user.email;
   return base.slice(0, 2).toUpperCase();
+}
+
+/** Form GET nativo: navega a /search?q=… sin JS, igual que la página de búsqueda. */
+function SearchBox({ className }: { className?: string }) {
+  return (
+    <form action="/search" className={className}>
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          name="q"
+          placeholder="Buscar tutores, clases o categorías"
+          aria-label="Buscar tutores, clases o categorías"
+          className="h-11 w-full rounded-lg bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        />
+      </div>
+    </form>
+  );
 }
 
 export function SiteHeader({ user }: { user?: HeaderUser | null }) {
@@ -59,31 +96,44 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/60">
-      <Container className="flex h-14 items-center justify-between gap-4">
-        <Link href="/" className="font-semibold tracking-tight">
-          Enséñame Ya
+      <Container className="flex h-18 items-center gap-4">
+        <Link
+          href="/"
+          className="shrink-0 text-lg font-bold tracking-tight text-brand"
+        >
+          Enséñame ya
         </Link>
 
-        <nav className="hidden items-center gap-6 text-sm md:flex">
+        <nav className="hidden items-center gap-1 md:flex">
           {/* Con sesión, "Panel" es la vuelta a casa: sin él solo se llegaba
               por URL o rebuscando en el menú del avatar. */}
           {user ? (
-            <Link href={user.homeHref} className="font-medium transition-colors hover:text-foreground">
-              Panel
-            </Link>
+            <Button asChild variant="ghost" size="sm">
+              <Link href={user.homeHref}>Panel</Link>
+            </Button>
           ) : null}
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {link.label}
-            </Link>
+          {navGroups.map((group) => (
+            <DropdownMenu key={group.label}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="font-medium">
+                  {group.label}
+                  <ChevronDownIcon className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52">
+                {group.links.map((link) => (
+                  <DropdownMenuItem key={link.href} asChild>
+                    <Link href={link.href}>{link.label}</Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <SearchBox className="hidden max-w-xl flex-1 md:block" />
+
+        <div className="ml-auto hidden items-center gap-2 md:flex">
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -124,9 +174,9 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
           ) : (
             <>
               <Button asChild variant="ghost" size="sm">
-                <Link href="/login">Entrar</Link>
+                <Link href="/login">Iniciar sesión</Link>
               </Button>
-              <Button asChild size="sm">
+              <Button asChild>
                 <Link href="/signup">Crear cuenta</Link>
               </Button>
             </>
@@ -138,7 +188,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="ml-auto md:hidden"
               aria-label="Abrir menú"
             >
               <MenuIcon />
@@ -146,8 +196,9 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
           </SheetTrigger>
           <SheetContent side="right" className="w-72">
             <SheetHeader>
-              <SheetTitle>Enséñame Ya</SheetTitle>
+              <SheetTitle className="text-brand">Enséñame ya</SheetTitle>
             </SheetHeader>
+            <SearchBox className="px-4" />
             <nav className="flex flex-col gap-1 px-4">
               {user ? (
                 <Link
@@ -157,7 +208,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                   Panel
                 </Link>
               ) : null}
-              {navLinks.map((link) => (
+              {navGroups.flatMap((group) => group.links).map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -183,7 +234,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
               ) : (
                 <>
                   <Button asChild variant="outline">
-                    <Link href="/login">Entrar</Link>
+                    <Link href="/login">Iniciar sesión</Link>
                   </Button>
                   <Button asChild>
                     <Link href="/signup">Crear cuenta</Link>

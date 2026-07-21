@@ -13,6 +13,10 @@
 
 Sprint activo: **Sprint 3** (sala en vivo, reseñas, payouts, admin, notificaciones, chat). S1 y S2 cerrados.
 
+**En curso ahora: EP-22 · Integración Visual** (track paralelo, `EY-102` / IV-01…06) — aplicar el
+Figma sobre el frontend ya construido. Detalle en `docs/BACKLOG.md` §4.2. Ojo: el Figma **no tiene
+design system ni diseño móvil**, y ninguna IV pasa de `In Review` sin aprobación del cliente.
+
 ## Stack
 
 - **Frontend:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · React 19 → deploy en **Vercel**.
