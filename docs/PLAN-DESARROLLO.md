@@ -195,7 +195,7 @@ mano en la BD. Cierra además el *boundary* que S2 dejó abierto.
 
 ---
 
-## Tracks paralelos (fuera de S1–S4) — sync Jira 2026-07-20
+## Tracks paralelos (fuera de S1–S4) — sync Jira 2026-07-21
 
 No consumen SP del sprint. Se filtran en Jira por label.
 
@@ -209,12 +209,21 @@ No consumen SP del sprint. Se filtran en Jira por label.
 
   Están redactadas como *requisitos de pantalla* (entregable = documento), pero su AC implica **re-trabajo de código**. Decidir si se abren historias de dev derivadas o se reabren US-202/203.
 
-- **EP-22 · Integración Visual** (`EY-102`, label `Sprint-Integracion-Visual`) — IV-01…06 (`EY-103`…`EY-108`), todas `To Do`, **sin asignar**. Es el **lado de código** de EP-19: aplicar el look & feel sobre pantallas ya funcionales, sin tocar lógica ni datos. Detalle y mapeo a páginas de Figma en `docs/BACKLOG.md` §4.2.
+- **EP-22 · Integración Visual** (`EY-102`, label `Sprint-Integracion-Visual`) — el **lado de código** de EP-19. Detalle y mapeo a páginas de Figma en `docs/BACKLOG.md` §4.2.
+  - [x] **IV-01** (`EY-103`) · auth — AU01…AU04 + **header y footer globales** (faltaban por completo en auth) + los tokens del Figma para toda la app. `In Review`, commit `95aacc6`.
+  - [ ] **IV-02** (`EY-104`) · onboarding alumno/tutor + KYC.
+  - [x] **IV-03** (`EY-105`) · públicas — P01…P09, incluidas `/about` y `/how-it-works` como rutas **nuevas**. `In Review`, commits `8a186a7` + `676972f`.
+  - [ ] **IV-04** (`EY-106`) · dashboard alumno · [ ] **IV-05** (`EY-107`) · dashboard tutor · [ ] **IV-06** (`EY-108`) · panel admin.
+  - Rama `feat/iv01-auth-visual` (local, **sin push ni PR**): 3 commits, 55 archivos, +3.218/−721. Las 11 rutas públicas responden 200.
   - **Techo de estado: `In Review`.** Ninguna IV pasa a `Done` sin aprobación del cliente y copy final (labels `pendiente-contenido`, `sujeto-a-cambios`).
-  - Orden dictado por la entrega de Diana. **IV-01 (auth) está desbloqueada**: DS-01 `In Review` y las 4 pantallas `AUTH` existen en Figma.
-  - ⚠️ **El Figma no tiene design system** (0 variables / 0 estilos / 0 componentes, sin modos light-dark). Tokens derivados de las capas: **Poppins**, CTA `#fe6a00`, marca `#0080ff`, texto `#14141a`. `src/app/globals.css` sigue en defaults de shadcn → primer commit de IV-01 = reescribir tokens.
+  - De paso se cerraron criterios de **US-301** (filtro por rating) y **US-303** (búsqueda de tutores y categorías) que estaban marcados como diferidos aquí mismo.
   - ⚠️ **No hay diseño móvil** (todo a 1280px). Afecta a **US-1601** (S4): decidir si se pide diseño responsive o US-1601 corre con criterio de dev. **Preguntar al cliente / a diseño.**
   - ⚠️ **IV-05 (tutor) e IV-06 (admin) no tienen DS-xx que las respalde**, aunque las pantallas sí existen en Figma.
+  - ⚠️ **Pendiente de verificar en preview:** el alta con Google (provider no configurado en local) — el `intent` por OAuth y el intercambio PKCE en cliente de AU04.
+
+- **EP-23 · Datos que el diseño necesita y no existen** (`EY-110`) — DD-01…08 (`EY-111`…`EY-118`), todas `To Do`. Salió de ejecutar EP-22: campos y relaciones que el Figma da por hechos y que el modelo no tiene (nombre y foto del tutor, imagen de producto, nivel e idioma, precio materializado, subcategorías, páginas legales, mensajería, seed incoherente). **No bloquean el despliegue; bloquean la fidelidad al diseño.** Tabla completa en `docs/BACKLOG.md` §4.3.
+
+- 🐞 **`EY-109` (en EP-03) — buscar sin tildes devuelve cero resultados.** `matematicas` → 0 vs `Matemáticas` → 4; `programacion` → 0 vs `Programación` → 6. Ni el `tsvector` español ni los `ilike` quitan acentos. Pide `unaccent` + wrapper `immutable` + regenerar `search_vector` y sus índices. **Prioridad alta**: es el buscador del header, en todas las páginas.
 
 ---
 
@@ -231,4 +240,4 @@ No consumen SP del sprint. Se filtran en Jira por label.
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-20 (sync EP-22 · Integración Visual; auditoría del archivo Figma).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-21 (IV-01 e IV-03 aplicadas y en `In Review`; alta de EP-23 y del bug EY-109).*

@@ -14,8 +14,14 @@
 Sprint activo: **Sprint 3** (sala en vivo, reseñas, payouts, admin, notificaciones, chat). S1 y S2 cerrados.
 
 **En curso ahora: EP-22 · Integración Visual** (track paralelo, `EY-102` / IV-01…06) — aplicar el
-Figma sobre el frontend ya construido. Detalle en `docs/BACKLOG.md` §4.2. Ojo: el Figma **no tiene
-design system ni diseño móvil**, y ninguna IV pasa de `In Review` sin aprobación del cliente.
+Figma sobre el frontend ya construido. **IV-01 (auth) e IV-03 (públicas) aplicadas y en `In Review`**;
+faltan IV-02, IV-04, IV-05 e IV-06 (área autenticada). Detalle en `docs/BACKLOG.md` §4.2.
+Ojo: el Figma **no tiene design system ni diseño móvil**, y ninguna IV pasa de `In Review` sin
+aprobación del cliente.
+
+**EP-23 · Datos que el diseño necesita** (`EY-110` / DD-01…08) — huecos de modelo destapados por
+EP-22: nombre y foto del tutor, imagen de producto, nivel/idioma, subcategorías, páginas legales,
+mensajería. Ver §4.3. Aparte, `EY-109`: **buscar sin tildes devuelve cero resultados**.
 
 ## Stack
 
