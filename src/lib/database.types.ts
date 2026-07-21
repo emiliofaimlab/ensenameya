@@ -896,6 +896,7 @@ export type Database = {
           profile_id: string
           rating_avg: number | null
           rating_count: number
+          search_text: string | null
           socials: Json
           tier_id: string | null
           updated_at: string
@@ -911,6 +912,7 @@ export type Database = {
           profile_id: string
           rating_avg?: number | null
           rating_count?: number
+          search_text?: string | null
           socials?: Json
           tier_id?: string | null
           updated_at?: string
@@ -926,6 +928,7 @@ export type Database = {
           profile_id?: string
           rating_avg?: number | null
           rating_count?: number
+          search_text?: string | null
           socials?: Json
           tier_id?: string | null
           updated_at?: string
@@ -1096,6 +1099,7 @@ export type Database = {
         Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
         Returns: Json
       }
+      f_unaccent: { Args: { "": string }; Returns: string }
       get_available_slots: {
         Args: { p_from?: string; p_product_id: string; p_to?: string }
         Returns: {

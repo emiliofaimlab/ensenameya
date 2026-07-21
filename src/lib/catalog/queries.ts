@@ -437,15 +437,27 @@ export async function listActiveProducts(opts: {
 }
 
 /**
- * Deja el término apto para un patrón `ilike` dentro de un `or(...)`: quita las
- * comas y paréntesis que romperían la gramática del filtro de PostgREST, y los
- * comodines `%`/`_` para que el usuario no controle el patrón.
+ * Quita tildes y diacríticos (EY-109). El lado almacenado ya viene sin ellos
+ * (`f_unaccent` en la migración `20260721120000`), así que normalizar aquí el
+ * término hace que "matematicas" y "Matemáticas" busquen lo mismo.
  */
-function likeSafe(q: string): string {
-  return q.replace(/[,()%_*\\]/g, " ").trim().slice(0, 60);
+function stripAccents(q: string): string {
+  return q.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-/** US-303 — tutores cuyo headline o bio menciona el término. */
+/**
+ * Deja el término apto para un patrón `ilike`: fuera los comodines `%`/`_`,
+ * para que el usuario no controle el patrón, y sin acentos.
+ */
+function likeSafe(q: string): string {
+  return stripAccents(q).replace(/[%_\\]/g, " ").trim().slice(0, 60);
+}
+
+/**
+ * US-303 — tutores cuyo headline o bio menciona el término. Busca contra
+ * `search_text`, la columna generada sin acentos (EY-109). Al ser una sola
+ * columna se acabó el `or(...)`: ya no hay gramática de PostgREST que romper.
+ */
 export async function searchTutors(q: string): Promise<FeaturedTutor[]> {
   const term = likeSafe(q);
   if (!term) return [];
@@ -454,37 +466,65 @@ export async function searchTutors(q: string): Promise<FeaturedTutor[]> {
     .from("tutor_profiles")
     .select("profile_id, headline, bio, rating_avg, rating_count")
     .eq("approval_status", "approved")
-    .or(`headline.ilike.%${term}%,bio.ilike.%${term}%`)
+    .ilike("search_text", `%${term}%`)
     .order("rating_avg", { ascending: false, nullsFirst: false })
     .limit(PAGE_SIZE);
 
   return withProductFacts(data ?? []);
 }
 
-/** US-303 — categorías cuyo nombre menciona el término. */
+/**
+ * US-303 — categorías cuyo nombre menciona el término.
+ * ponytail: filtrado en memoria. Son 8 filas que el buscador ya trae enteras
+ * para los chips; una consulta más (y una columna sin acentos en la tabla)
+ * sobraba.
+ */
 export async function searchCategories(q: string): Promise<CategoryTag[]> {
-  const term = likeSafe(q);
+  const term = likeSafe(q).toLowerCase();
   if (!term) return [];
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("categories")
-    .select("slug, name")
-    .ilike("name", `%${term}%`)
-    .order("sort_order");
-  return data ?? [];
+  const all = await listActiveCategories();
+  return all.filter((c) => stripAccents(c.name).toLowerCase().includes(term));
 }
 
-/** US-303 — búsqueda por texto en productos (título+descripción, `search_vector`
- *  tsvector `spanish`, RN-20). */
+const PRODUCT_CARD_SELECT =
+  "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, product_categories(categories(slug, name))";
+
+/**
+ * US-303 — búsqueda por texto en productos (título+descripción, `search_vector`
+ * tsvector `spanish`, RN-20).
+ *
+ * Se consulta con el término **tal cual** y, si lleva tildes, también sin
+ * ellas. El vector guarda las dos ramas (migración `20260721130000`), así que
+ * cada variante casa con la suya: la acentuada conserva el stemmer español
+ * (programación → program) y la otra permite teclear sin tildes (EY-109).
+ */
 export async function searchProducts(q: string): Promise<ProductCardData[]> {
+  const raw = q.trim();
+  if (!raw) return [];
+  const plain = stripAccents(raw);
+  const terms = plain === raw ? [raw] : [raw, plain];
+
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("products")
-    .select(
-      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, product_categories(categories(slug, name))",
-    )
-    .eq("status", "active")
-    .textSearch("search_vector", q, { type: "websearch", config: "spanish" })
-    .limit(PAGE_SIZE);
-  return (data ?? []).map(mapProductCard);
+  const results = await Promise.all(
+    terms.map((term) =>
+      supabase
+        .from("products")
+        .select(PRODUCT_CARD_SELECT)
+        .eq("status", "active")
+        .textSearch("search_vector", term, {
+          type: "websearch",
+          config: "spanish",
+        })
+        .limit(PAGE_SIZE),
+    ),
+  );
+
+  // Unir por id conservando el orden de la primera rama.
+  const seen = new Map<string, ProductCardData>();
+  for (const { data } of results) {
+    for (const row of data ?? []) {
+      if (!seen.has(row.id)) seen.set(row.id, mapProductCard(row));
+    }
+  }
+  return [...seen.values()].slice(0, PAGE_SIZE);
 }
