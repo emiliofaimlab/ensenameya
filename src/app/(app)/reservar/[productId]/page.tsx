@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeftIcon } from "lucide-react";
 
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
@@ -6,7 +8,6 @@ import { getProductDetail } from "@/lib/catalog/queries";
 import { priceLabel } from "@/lib/catalog/format";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
 import { SlotPicker } from "./slot-picker";
 
 export const metadata = { title: "Elegir horario · Enséñame Ya" };
@@ -37,14 +38,45 @@ export default async function ReservarPage({
     product.pricingModel === "per_package" ? (product.packageNumSessions ?? 1) : 1;
 
   return (
-    <Container>
-      <Section className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-        <PageHeader
-          title={`Reservar: ${product.title}`}
-          description={`${priceLabel(product)} · con ${product.tutor.headline ?? "tu tutor"}`}
-        />
-        <SlotPicker productId={productId} slots={slots ?? []} required={required} />
-      </Section>
-    </Container>
+    <div className="bg-muted">
+      <Container>
+        <Section className="flex flex-col gap-6">
+          <Link
+            href={`/products/${productId}`}
+            className="flex w-fit items-center gap-1.5 text-sm font-medium text-brand hover:underline"
+          >
+            <ArrowLeftIcon className="size-4" />
+            Volver a la mentoría
+          </Link>
+
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-[26px]">
+              {required > 1
+                ? `Agenda tu paquete: ${product.title}`
+                : `Agenda tu sesión: ${product.title}`}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {required > 1
+                ? `Elige ${required} sesiones`
+                : "Elige tu horario"}
+              {product.sessionDurationMin
+                ? ` de ${product.sessionDurationMin} min`
+                : ""}
+              . Todos los horarios están en tu hora local.
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {priceLabel(product)} · con{" "}
+              {product.tutor.headline ?? "tu tutor"}
+            </p>
+          </div>
+
+          <SlotPicker
+            productId={productId}
+            slots={slots ?? []}
+            required={required}
+          />
+        </Section>
+      </Container>
+    </div>
   );
 }
