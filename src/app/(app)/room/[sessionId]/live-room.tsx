@@ -25,6 +25,12 @@ type Joined = {
   simulated: boolean;
 };
 
+/** ms → "12:34" para el cronómetro de la sesión (AL/LV01). */
+function clock(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
 /** ms → "2 h 05 min" / "4 min 12 s" para la cuenta regresiva. */
 function human(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -38,6 +44,7 @@ function human(ms: number): string {
 
 export function LiveRoom({
   sessionId,
+  bookingId,
   startAt,
   endAt,
   sessionStatus,
@@ -46,6 +53,7 @@ export function LiveRoom({
   isTutor,
 }: {
   sessionId: string;
+  bookingId: string;
   startAt: string;
   endAt: string;
   sessionStatus: SessionStatus;
@@ -165,8 +173,27 @@ export function LiveRoom({
 
   // ── Estado en vivo (unido) ────────────────────────────────────────────────
   if (live && joined) {
+    const total = new Date(endAt).getTime() - new Date(startAt).getTime();
+    const elapsed = now - new Date(startAt).getTime();
+
     return (
       <div className="flex min-h-[calc(100dvh-4rem)] flex-col">
+        {/* Barra de sesión (LV01): qué clase es y cuánto lleva. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b bg-background px-4 py-3">
+          <h1 className="font-bold">{productTitle}</h1>
+          <div className="ml-auto text-right">
+            <p
+              className="font-mono text-lg tabular-nums"
+              suppressHydrationWarning
+            >
+              {clock(elapsed)} / {clock(total)}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Tiempo de sesión
+            </p>
+          </div>
+        </div>
+
         {joined.simulated ? (
           // Sin credenciales de Daily: la sala, el token y la ventana ya
           // funcionan; falta solo el transporte de video.
@@ -215,6 +242,12 @@ export function LiveRoom({
               </Button>
             </>
           ) : null}
+
+          {/* El Figma pone el chat dentro de la sala; vive en su propia ruta
+              (EP-17) y se enlaza en vez de duplicarlo aquí. */}
+          <Button asChild variant="outline" size="lg">
+            <Link href={`/chat/${bookingId}`}>Chat</Link>
+          </Button>
 
           {isTutor ? (
             <Button size="lg" disabled={busy} onClick={complete}>

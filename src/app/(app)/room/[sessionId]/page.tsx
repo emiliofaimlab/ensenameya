@@ -24,7 +24,7 @@ export default async function RoomPage({
   const { data: s } = await supabase
     .from("sessions")
     .select(
-      "id, status, start_at, end_at, tutor_id, student_id, bookings(status, products(title))",
+      "id, status, start_at, end_at, tutor_id, student_id, booking_id, bookings(status, products(title))",
     )
     .eq("id", sessionId)
     .maybeSingle();
@@ -34,6 +34,7 @@ export default async function RoomPage({
   return (
     <LiveRoom
       sessionId={s.id}
+      bookingId={s.booking_id}
       startAt={s.start_at}
       endAt={s.end_at}
       sessionStatus={s.status}
