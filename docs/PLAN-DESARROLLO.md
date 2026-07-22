@@ -45,7 +45,7 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 | ~~C-01~~ | ~~Proveedor de pago~~ | EP-20 | ✅ **resuelto: DLocal + Stripe** — ahora bloqueado por **credenciales**, no por decisión | Proveedor **simulado** (hecho) |
 | ~~C-03~~ | ~~Reembolsos~~ | — | ✅ **resuelto** (RN-37: 100/50/100) | — |
 | **C-07** | Ventana de pago | US-605 | [ ] pendiente | **20 min** |
-| **C-08** | Ventana de sala | US-801 | [ ] pendiente | 10/10 min |
+| ~~C-08~~ | ~~Ventana de sala~~ | US-801 | ✅ **resuelto** (el AC fija 10/10, constante nombrada) | 10/10 min |
 | **C-09** | %s de tiers | US-1103 | [ ] pendiente | 75/85/90 seed |
 | **C-13** | Mercado/Venezuela | Payouts/corredores | [ ] pendiente | 1 corredor demo |
 | ~~C-14~~ | ~~Docs para aprobar tutor~~ | US-203 KYC · US-1101 | ✅ **resuelto por UX-203 (EY-100): 7 documentos** — implica migración (hoy hay 3) | Set provisional (id_front/id_back/selfie) |
@@ -140,9 +140,12 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 
 ---
 
-## Sprint 3 — Sala en vivo · Reseñas · Payouts · Admin · Notificaciones · Chat ← **SPRINT ACTIVO**
+## Sprint 3 — Sala en vivo · Reseñas · Payouts · Admin · Notificaciones · Chat ✅ **CERRADO (2026-07-17)**
 
-> **19 historias / 83 SP.** Todas `To Do` en Jira al abrir el sprint (2026-07-14).
+> **19 historias / 83 SP · todas en `Done`** (+ US-203/EY-33, reabierta y cerrada con los 7 docs).
+> Mergeado a prod (PR #4, commit `5aabce7`); migraciones aplicadas por CI. **Única cola de S3:**
+> US-202 (EY-32, asistente de onboarding del tutor) queda `To Do` — el resto del onboarding vive,
+> falta el wizard de 5 pasos. Abierto 2026-07-14, cerrado 2026-07-17.
 
 **Orden sugerido.** `US-1101` primero: es la llave que abre el resto — sin tutor aprobable desde la
 app, el happy-path de publicar producto (US-402) y el E2E de reserva siguen dependiendo de aprobar a
@@ -161,11 +164,11 @@ mano en la BD. Cierra además el *boundary* que S2 dejó abierto.
     - _Robustez de filtros_: estado y fecha vienen de la query string, o sea texto libre. Se **validan e ignoran** si no encajan: un `?status=basura` llegaba al enum (`invalid input value`) y `?from=basura` dejaba la lista en cero fingiendo que no había datos.
     - ⚠️ _Ceiling_: los totales se suman en el servidor sobre todas las filas filtradas (PostgREST no agrega sin vista/función). Sirve al volumen del MVP; si crece → RPC de agregación. Monedas distintas no se suman: se avisa.
   - [x] **US-1105 · Estadísticas globales** `EY-72` (migración `20260715190000`): `/admin/stats` (SCR-AD13) con KPIs filtrables por período — reservas creadas/pagadas, **conversión**, tutores activos, y por moneda GMV/comisión/neto/reembolsado. Los agrega la RPC `admin_stats(from, to)` — **una consulta**, no miles de filas a JS (al revés que US-1104: aquí agregar es SQL), y verifica `has_role('admin')` dentro. **S-44 (vistas materializadas) se pospuso a propósito**: es un supuesto de rendimiento, la matview obliga a `pg_cron` de refresco (más piezas, datos con retraso) para un problema que aún no existe; el día que el histórico pese, se cambia la función por un `select` sobre matview sin tocar el frontend. Filtra por `created_at` (consistente con US-1104); el dinero se agrupa por moneda (RN-13, no se suman distintas). **Verificado**: histórico completo (21 reservas, 15 pagadas, 71,4% conversión, 5 tutores, GMV 253/comisión 63,25/neto 189,75/reembolsado −193); período vacío → ceros + "sin ingresos"; presets 7/30/90d; no-admin y anon → 42501.
-- [~] **EP-08 · Sala en vivo (Daily)** — proveedor **simulado** (no hay claves de Daily en el env, igual que el PSP). Toda la lógica del AC construida y probada; el embed real de video se cablea con las credenciales. Migración `20260716120000`.
-  - [x] **US-801 · Entrar a la sala** `EY-59`: RPC `join_session` (SECURITY DEFINER) — exige participante + reserva activa + `now()` dentro de la ventana **RN-18/S-45 (10 min antes / 10 después)**; provisiona la sala (simulada) y devuelve **token efímero generado server-side, no almacenado** (Doc 1 §1.4.11). Pantalla `/room/[sessionId]` (SCR-LV01). **C-08 resuelto**: el propio AC fija 10/10; queda como constante nombrada. **Verificado E2E por API**: dentro de ventana → token + sala; no-participante → rechazado; anón → 28000; confirmada-pero-a-destiempo → "fuera de la ventana"; reserva no confirmada → "no está activa".
+- [x] **EP-08 · Sala en vivo (Daily)** ✅ — Daily **cableado de verdad** (US-801, migración `20260717120000` + `src/lib/daily.ts` + `/api/room/[sessionId]`), con la **credencial como interruptor**: sin `DAILY_API_KEY` la sala va **simulada** (como el PSP); con la clave, Daily real, sin tocar código. En prod hoy corre simulada (la cuenta de Daily espera método de pago — ver PR #4). Migración base `20260716120000`.
+  - [x] **US-801 · Entrar a la sala** `EY-59`: RPC `join_session` (SECURITY DEFINER) — exige participante + reserva activa + `now()` dentro de la ventana **RN-18/S-45 (10 min antes / 10 después)**; nombre de sala determinista `ey-<sessionId>`. El **token de Daily lo firma el server** en `/api/room/[sessionId]` con `DAILY_API_KEY` (server-only), tras autorizar con la RPC — efímero, no almacenado (Doc 1 §1.4.11); el tutor entra como `owner`. Sin la clave, el endpoint devuelve sala simulada (**sin fallback silencioso**: un Daily configurado que falla se ve, no se disfraza de simulado). Pantalla `/room/[sessionId]` (SCR-LV01). **C-08 resuelto**: el propio AC fija 10/10, constante nombrada. **Verificado E2E**: por API (dentro de ventana → autoriza; no-participante → rechazado; anón → 28000; a-destiempo → "fuera de la ventana"; reserva no confirmada → "no está activa") y por navegador esta sesión (`POST /api/room → 200`, sala renderizada).
   - [x] **US-802 · Ciclo de vida** `EY-60`: primer join → sesión `in_progress` (y reserva `in_progress` si era la 1ª); el tutor cierra con `complete_session` → `completed` + reserva `completed` cuando no quedan sesiones abiertas; **cierre automático al vencer la ventana** por `close_expired_sessions()` en `pg_cron` cada 5 min (S-26), `no_show` si nadie entró. Grant revocado de PUBLIC → solo `service_role` (lección de US-605). **Verificado E2E**: join→in_progress→complete→completed; re-entrar tras cerrada → rechazado.
-  - [~] **US-803 · Responsive/móvil** `EY-61`: sala mobile-first con controles táctiles grandes (mute/cámara/salir/completar); **verificado a 375px** + cuenta regresiva. _La reconexión automática ante caída de red la aporta el SDK de Daily al cablear el proveedor real — con simulado no hay conexión que caer._
-  - _Entrada "Ir a la sala"_ desde `/reservas` y `/tutor/reservas` en reservas confirmadas/en curso. _Estados verificados en navegador: cuenta regresiva (desktop+móvil), "sesión terminó", punto de entrada._ ⚠️ _El happy-path en-vivo no se pudo screenshotear: sesiones `completed` de prueba ocupan la única banda horaria con ventana abierta ahora y no puedo borrarlas (sin grant). El join/ciclo está probado por API con las RPC reales — el mismo código que llama el botón._
+  - [x] **US-803 · Responsive/móvil** `EY-61`: sala mobile-first con controles táctiles grandes (mute/cámara/salir/completar); **verificado a 375px** + cuenta regresiva. La **reconexión automática ante caída de red** la aporta el SDK de Daily, ya cableado (US-801); en modo simulado se mantienen los controles locales para ejercitar los toques.
+  - _Entrada "Ir a la sala"_ desde `/reservas`, `/tutor/reservas` y los paneles `/app` + `/tutor` (junto a "Chat"), en reservas confirmadas/en curso. **Happy-path en-vivo verificado E2E en navegador esta sesión** (sembrando una sesión con ventana abierta, `demo-open-room.sql`): "Entrar a la sala" → `POST /api/room → 200` (`join_session` autoriza) → sala renderizada. Estados verificados: cuenta regresiva (desktop+móvil), "sesión terminó", fuera de ventana.
 - [x] **EP-09 · Reseñas** ✅ (migración `20260716130000`): tabla `reviews` (1 por reserva, RN-17) + trigger que mantiene `rating_avg`/`rating_count` del tutor (los creó vacíos EP-03).
   - [x] **US-901 · Dejar reseña** `EY-62`: RPC `submit_review` (SECURITY DEFINER) — **deriva** tutor/producto de la reserva para que el alumno no falsee a quién reseña; exige reserva **propia y `completed`** (RN-17); upsert por reserva (re-enviar edita, RN-17: una sola). Diálogo con estrellas clicables en `/reservas` (SCR-AL08), en completadas. **Verificado** por API (crear/editar, no-completada/ajena/fuera-de-rango → rechazadas) y por UI (editar 4→5★ → trigger recalcula rating).
   - [x] **US-902 · Ver reseñas** `EY-63`: lista en el perfil del tutor (SCR-P07) + rating agregado. RLS de lectura **pública** (anon incluido). **Anónimas a propósito**: el perfil es público (cliente anon) y `profiles.full_name` está protegido por RLS → no se puede atribuir nombre sin romper esa barrera; es además la opción privacy-friendly del MVP. **Verificado** en navegador (sección "Reseñas (1)", estrellas + comentario + fecha).
@@ -186,7 +189,7 @@ mano en la BD. Cierra además el *boundary* que S2 dejó abierto.
 
 ### Deuda que S3 debe saldar (heredada de S2)
 
-- **US-605:** `expire_stale_bookings()` tiene grant a `authenticated` por testabilidad → **revocar antes de prod** (solo cron/service_role).
+- [x] ✅ **US-605 saldada** (migración `20260715150000`): `expire_stale_bookings()` tenía `EXECUTE` a `authenticated` por testabilidad — **verificado explotable** (un tutor normal venció reservas ajenas con cutoff 0). Revocado de **`PUBLIC`** (no solo de `authenticated`: en Postgres `EXECUTE` es `PUBLIC` por defecto, revocar del rol no basta) → solo `service_role`/cron. Re-probado: tutor → 42501.
 - ~~**US-402:** happy-path de publicar/pausar/reanudar sin ejercitar con tutor aprobado~~ → ✅ **desbloqueado por US-1101**: ya se puede aprobar un tutor desde la app (queda ejercitar el happy-path).
 - [x] ✅ **US-203 (EY-33) cerrada** — set final de **7 documentos** (migración `20260715130000`, cierra **C-14**): `id_document` · `degree` · `certificate` · `diploma` · `transcript` · `cv` · `social_media`. Este último es un **enlace, no archivo**: entra por columna propia `link_url` (meterlo en `storage_path` habría reventado el `createSignedUrls()` de la pantalla admin), con check `num_nonnulls(storage_path, link_url) = 1`. Los 3 tipos provisionales (`id_front`/`id_back`/`selfie`) se **borran** en la migración: sin eso seguirían contando en el agregado de identidad y la dejarían clavada (el tutor ya no puede re-subirlos porque salen del formulario). Los archivos de Storage no se tocan; en prod es no-op. El trigger ahora también escucha `DELETE`. **Verificado**: 7 filas en orden en la UI, `social_media` como input de texto con validación de URL (basura → no guarda ni pisa la buena), XOR archivo/enlace rechaza ambos y ninguno, y el admin distingue enlace firmado vs externo (`rel="noreferrer"`).
 - [x] 🐞 **US-203 (EY-33) · subida de KYC rota** → ✅ **arreglado** (migración `20260715120000`). El `.upsert()` de `verification-form.tsx` fallaba **siempre** con 42501 (PostgREST lo vuelve `ON CONFLICT DO UPDATE SET tutor_id…, doc_type…` y las column-grants solo dan `update (storage_path)`, a propósito por US-1403). Solución: RPC `submit_document` (**no** se ampliaron las grants del cliente — eso abriría la escalada que la migración evitaba); valida que la ruta sea `<uid>/<doc_type>` porque corre como SECURITY DEFINER. Cierra además "repostular sin límite" (UX-203): re-subir devuelve el doc a `pending` y limpia `reviewed_*`/`review_notes`. **Verificado por la UI real** (subida → toast + badge Aprobado→En revisión) y por API (1ª subida, re-subida, rechazo→re-subida, ruta ajena → rechazada, anon → rechazado).
@@ -227,17 +230,22 @@ No consumen SP del sprint. Se filtran en Jira por label.
 
 ---
 
-## Sprint 4 — Referidos · Observabilidad · Responsive/QA · Grabación · Avisos · Lanzamiento
+## Sprint 4 — Observabilidad · Responsive/QA · Grabación · Avisos · Lanzamiento
 
-> **39 SP.**
+> **39 SP.** ⚠️ **Reordenado en la reunión del 17-jul** (`00:59:03` y `01:01:36`): los **referidos
+> bajan a los dos últimos sprints** — el cliente aún no busca leads y el widget es trabajo *externo*
+> (Referral Factory) que pararía el pulido de lo propio. Las **integraciones también van al final**.
+> El sprint pasa a dedicarse a **pegar el desarrollo al diseño aprobado** y a los módulos backend ya
+> validados, que son los que menos van a cambiar.
 
 - [ ] **EP-12** US-1203 avisos in-app
-- [ ] **EP-13** US-1301 widget Referral Factory · US-1302 captura `?ref=` ([!] C-10)
-- [ ] **EP-15** US-1501 Sentry · US-1502 métricas pago/payout/webhook
+- [ ] **EP-15** US-1501 Sentry · US-1502 métricas pago/payout/webhook — *(integración: al final)*
 - [ ] **EP-16** US-1601 responsive (360/768/1024/1280) · US-1602 QA + UAT (RLS por rol, webhooks idempotentes)
 - [ ] **EP-17** US-1702 descargar conversación
 - [ ] **EP-18** US-1801 grabar con consentimiento (RN-42, add-on Daily) · US-1802 ver/descargar 30 días · [!] decisión de negocio (coste)
+- ~~**EP-13** US-1301 widget Referral Factory · US-1302 captura `?ref=`~~ → **movido a los últimos
+  dos sprints** (17-jul). Necesita cuenta de Referral Factory con tarjeta del cliente, igual que Daily.
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-21 (IV-01 e IV-03 aplicadas y en `In Review`; alta de EP-23 y del bug EY-109).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-22 (cierre de Sprint 3 recuperado de `chore/sync-jira-s3-done`; IV-01…IV-06 aplicadas; alta de EP-23 y del bug EY-109; acuerdos de la reunión del 17-jul).*

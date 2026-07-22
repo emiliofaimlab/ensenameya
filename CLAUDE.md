@@ -11,7 +11,7 @@
 - **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
 - **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (sin local) en Supabase + Vercel, flujo de trabajo y checklist (US-1603).
 
-Sprint activo: **Sprint 3** (sala en vivo, reseñas, payouts, admin, notificaciones, chat). S1 y S2 cerrados.
+Próximo sprint: **Sprint 4** (observabilidad, responsive/QA, grabación, avisos in-app). **S1, S2 y S3 cerrados** — S3 con todas sus historias en `Done` y mergeado a prod (2026-07-17). Los **referidos (EP-13) bajaron a los dos últimos sprints** en la reunión del 17-jul, junto con el resto de integraciones.
 
 **En curso ahora: EP-22 · Integración Visual** (track paralelo, `EY-102` / IV-01…06) — aplicar el
 Figma sobre el frontend ya construido. **IV-01 (auth) e IV-03 (públicas) aplicadas y en `In Review`**;

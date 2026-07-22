@@ -15,7 +15,7 @@
 | Puntos estimados | 259 SP (backlog dev original EP-01…EP-18) |
 | Historias Must | 40 |
 | Sprints | 4 de dev (+ EP-00 pre-desarrollo, + 3 tracks paralelos) |
-| **Sprint activo** | **Sprint 3** — 19 historias / 83 SP |
+| **Sprint activo** | **Sprint 4** (próximo) — S1, S2 y **S3 ✅ cerrados** (S3 en `Done`, mergeado a prod 2026-07-17) |
 
 > **Jira es la fuente operativa** (proyecto `EY` en `faimlab.atlassian.net`). Jira añadió **EP-00 —
 > Diseño UX/UI y Contenido** (pre-desarrollo), que el docx original no traía. Este `.md` lo refleja.
@@ -235,13 +235,16 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 | **S1** | Fundaciones · Auth · Onboarding · Descubrimiento · RLS · Ambientes | 15 | 63 |
 | **S2** | Catálogo tutor · Disponibilidad · Reserva completa · Pagos · Webhooks | 16 | 74 |
 | **S3** | Sala en vivo · Reseñas · Payouts · Admin · Notificaciones · Chat | 19 | 83 |
-| **S4** | Referidos · Observabilidad · Responsive/QA · Grabación · Avisos in-app · Lanzamiento | 10 | 39 |
+| **S4** | Observabilidad · Responsive/QA · Grabación · Avisos in-app · Lanzamiento | 8 | 34 |
 
 - **S2:** US-401,402,403,501,502,601,602,603,604,605,606,607,701,702,703,705.
 - **S3:** US-704,801,802,803,901,902,1001,1002,1003,1004,1101,1102,1103,1104,1105,1201,1202,1701,1703.
-- **S4:** US-1203,1301,1302,1501,1502,1601,1602,1702,1801,1802.
+- **S4:** US-1203,1501,1502,1601,1602,1702,1801,1802. — **US-1301 (3 SP) y US-1302 (2 SP)**, los
+  referidos de EP-13, **salen de S4** por decisión de la reunión del 17-jul (`00:59:03`): bajan a los
+  dos últimos sprints. S4 pasa de 10 historias / 39 SP a **8 / 34**. ⚠️ El movimiento **aún no está
+  hecho en Jira** — este `.md` es espejo, así que hay que replicarlo allí.
 
-**Estado (sync Jira 2026-07-14):** S1 ✅ y S2 ✅ cerrados (39 issues `Done`). **S3 en curso.**
+**Estado (sync Jira 2026-07-17):** S1 ✅, S2 ✅ y **S3 ✅ cerrados** — las 19 historias de S3 en `Done` (+ US-203/EY-33, reabierta y cerrada con los 7 documentos), mergeadas a prod. Pendiente de S3: US-202 (EY-32, asistente de onboarding del tutor) sigue `To Do`. **S4 no iniciado.**
 
 ### 4.1 Tracks paralelos (fuera de S1–S4)
 
