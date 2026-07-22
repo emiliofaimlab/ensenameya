@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { PageHeader } from "@/components/layout/page-header";
-import { ChatThread, type ChatMessage } from "./chat-thread";
+import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 
 export const metadata = { title: "Chat de la reserva · Enséñame Ya" };
 
@@ -33,7 +33,7 @@ export default async function ChatPage({
 
   const { data: msgs } = await supabase
     .from("messages")
-    .select("id, sender_id, body, created_at")
+    .select("id, sender_id, body, created_at, attachment_path, attachment_name, attachment_size")
     .eq("booking_id", bookingId)
     .order("created_at");
 
@@ -45,6 +45,13 @@ export default async function ChatPage({
     senderId: m.sender_id,
     body: m.body,
     createdAt: m.created_at,
+    attachment: m.attachment_path
+      ? {
+          path: m.attachment_path,
+          name: m.attachment_name ?? "documento",
+          size: m.attachment_size ?? 0,
+        }
+      : null,
   }));
 
   return (

@@ -244,6 +244,9 @@ export type Database = {
       }
       messages: {
         Row: {
+          attachment_name: string | null
+          attachment_path: string | null
+          attachment_size: number | null
           body: string
           booking_id: string
           created_at: string
@@ -252,6 +255,9 @@ export type Database = {
           sender_id: string
         }
         Insert: {
+          attachment_name?: string | null
+          attachment_path?: string | null
+          attachment_size?: number | null
           body: string
           booking_id: string
           created_at?: string
@@ -260,6 +266,9 @@ export type Database = {
           sender_id: string
         }
         Update: {
+          attachment_name?: string | null
+          attachment_path?: string | null
+          attachment_size?: number | null
           body?: string
           booking_id?: string
           created_at?: string
@@ -1245,7 +1254,13 @@ export type Database = {
       }
       run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
       send_message: {
-        Args: { p_body: string; p_booking_id: string }
+        Args: {
+          p_attachment_name?: string
+          p_attachment_path?: string
+          p_attachment_size?: number
+          p_body: string
+          p_booking_id: string
+        }
         Returns: string
       }
       session_access_window: {
