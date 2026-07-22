@@ -199,7 +199,7 @@ export default async function AppHome() {
                               {BOOKING_STATUS_LABEL[b.status]}
                             </Badge>
                             <Button asChild size="sm" variant="outline">
-                              <Link href="/reservas">Ver detalle</Link>
+                              <Link href={`/reservas/${b.id}`}>Ver detalle</Link>
                             </Button>
                           </div>
                         </li>
