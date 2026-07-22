@@ -57,7 +57,7 @@ export default async function ProductPage({
             </Link>
             {" / "}
             <Link href="/classes" className="hover:underline">
-              Productos
+              Mentorías
             </Link>
             {" / "}
             <span className="text-white">{product.title}</span>

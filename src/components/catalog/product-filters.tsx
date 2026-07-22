@@ -49,7 +49,7 @@ export function ProductFilters({
       key: "cat" as const,
       options: categories.map((c) => ({ id: c.slug, label: c.name })),
     },
-    { title: "Tipo de producto", key: "model" as const, options: MODELS },
+    { title: "Tipo de mentoría", key: "model" as const, options: MODELS },
     { title: "Precio", key: "price" as const, options: PRICE_RANGES },
     { title: "Duración", key: "sessions" as const, options: SESSION_RANGES },
   ];
