@@ -33,7 +33,8 @@
 > **Sync 2026-07-21:** al ejecutar EP-22 se creó **EP-23 — Datos que el diseño necesita y no
 > existen** (`EY-110`, DD-01…08 / `EY-111`…`EY-118`): campos y relaciones que el Figma da por hechos
 > y que el modelo no tiene. También el bug **`EY-109`** (buscar sin tildes devuelve cero), colgado de
-> EP-03 porque es un defecto del buscador, no una carencia del diseño. Ver §4.3.
+> EP-03 porque es un defecto del buscador, no una carencia del diseño. Ver §4.3. — *`EY-109` ✅
+> corregido y en prod el 2026-07-22.*
 
 ---
 
@@ -255,8 +256,8 @@ No consumen SP de los sprints de dev. Se filtran en Jira por label.
 | `Sprint-Diseño` | EP-19 | EY-88…91 (DS-01…04) | **In Review** (Diana Rivera) | Entregable Figma, no código. Precede al rediseño visual de pantallas ya construidas. |
 | `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) | 🔒 **Bloqueada** | C-01 **decidido: DLocal + Stripe**. Falta cuenta + API keys de ambos. El motor simulado ya está hecho y probado. |
 | `Sprint-Mejoras-UX` | EP-21 | EY-98…101 (UX-201…204) | To Do | ⚠️ **Redefine** US-201/202/203 (ya `Done`) — ver aviso abajo. |
-| `Sprint-Integracion-Visual` | EP-22 | EY-103…108 (IV-01…06) | **IV-01 e IV-03 In Review**; resto To Do | **Código.** Aplica el Figma sobre pantallas ya funcionales. Ver §4.2. |
-| — | EP-23 | EY-111…118 (DD-01…08) | To Do | Huecos de modelo destapados por EP-22. No bloquean el despliegue; bloquean la fidelidad al diseño. Ver §4.3. |
+| `Sprint-Integracion-Visual` | EP-22 | EY-103…108 (IV-01…06) | **Las 6 IV `In Review`** · en prod 2026-07-22 | **Código.** Aplica el Figma sobre pantallas ya funcionales. Ver §4.2. |
+| — | EP-23 | EY-111…118 (DD-01…08) | To Do (infra parcial en IV-02) | Huecos de modelo destapados por EP-22. No bloquean el despliegue; bloquean la fidelidad al diseño. Ver §4.3. |
 
 > ⚠️ **EP-21 no es documentación: es alcance nuevo sobre historias cerradas.**
 > - **UX-203** pide **7 documentos** de KYC (`id_document`, `degree`, `certificate`, `diploma`,
@@ -274,17 +275,37 @@ No consumen SP de los sprints de dev. Se filtran en Jira por label.
 
 Aplicar el look & feel de Figma sobre el frontend **ya funcional**. No cambia lógica ni datos.
 
+**Las 6 en `In Review` y en producción desde el 2026-07-22** (PR #6→`dev`, PR #7→`main`).
+
 | ID | Jira | Alcance | Estado | Páginas Figma |
 | :-- | :-- | :-- | :-- | :-- |
 | IV-01 | EY-103 | Auth (login / registro / recuperar) | **In Review** · `95aacc6` | `AUTH` — AU01…AU04 |
-| IV-02 | EY-104 | Onboarding alumno y tutor + KYC | To Do | `ALUMNO` AL01, `TUTOR` TU01/TU02 |
+| IV-02 | EY-104 | Onboarding alumno y tutor + KYC | **In Review** · `b68b20c` + `1b0efb6` | `ALUMNO` AL01, `TUTOR` TU01 (5 pasos) |
 | IV-03 | EY-105 | Descubrimiento y páginas públicas | **In Review** · `8a186a7` + `676972f` | `HOME - Contenido` — P01…P09 |
-| IV-04 | EY-106 | Dashboard alumno (reservas, checkout, chat, reseñas) | To Do | `ALUMNO` AL02…AL08, `CHAT` |
-| IV-05 | EY-107 | Dashboard tutor (catálogo, disponibilidad, reservas, payouts) | To Do | `TUTOR` TU03…TU09 |
-| IV-06 | EY-108 | Panel admin | To Do | `ADMIN` AD01…AD15 |
+| IV-04 | EY-106 | Dashboard alumno (reservas, checkout, chat, reseñas) + **LV01 sala** | **In Review** · `dffa023`…`fa8bec9` | `ALUMNO` AL02…AL08, `CHAT`, `LV01` |
+| IV-05 | EY-107 | Dashboard tutor (catálogo, disponibilidad, reservas, payouts) | **In Review** · `036a346` | `TUTOR` TU03…TU09 |
+| IV-06 | EY-108 | Panel admin | **In Review** · `f521315` | `ADMIN` AD02…AD15 |
 
-Rama `feat/iv01-auth-visual` (local, sin push): 3 commits, 55 archivos, +3.218/−721. Los tokens ya
-alcanzan a **toda** la app; lo que falta en IV-02/04/05/06 es la maquetación de cada pantalla.
+Rama `feat/iv01-auth-visual` (mergeada y **borrada** tras el release): 25 commits. Los tokens alcanzan
+a **toda** la app. **Ninguna a `Done`**: falta aprobación del cliente y contenido final.
+
+**Notas de ejecución (además de la maquetación de cada pantalla):**
+
+- **IV-02** introdujo modelo nuevo (migración `20260722160000`): `profiles.avatar_path` + bucket
+  `avatars`, `tutor_categories`, `student_interests`, `tutor_materials` + bucket privado,
+  `tutor_profiles.teaching_level`. TU01 se hizo de **5 pasos** (el 5 no existía; se incluyó por la
+  conclusión con Jose). ⚠️ **Desencuentro con diseño en el paso 4**: el comentario #28 del Figma pedía
+  replicar el módulo de KYC; el frame que Diana añadió (`390:37`) dice "materiales de clase". Se
+  implementó lo del frame. **A aclarar con diseño.** AL01 **sin verificar en navegador**.
+- **IV-04 · LV01** se aplicó en dos tandas. La sala quedó a dos columnas (vídeo + panel de chat de
+  EP-17 reutilizado, no un chat nuevo) + "Subir documentos" (adjunto de `messages` + bucket privado
+  `chat-attachments`). **No** trae tiles ni barra de iconos de Daily: exigen el modo *call-object*
+  (reescribir EP-08), y **la reunión del 17-jul lo dio por innecesario** (los controles los pone Daily).
+- **IV-05/IV-06** comparten un shell de panel (`app-sidebar` + `*-shell`). Sobre IV-06, la reunión del
+  17-jul dejó **trabajo funcional pendiente** (no visual): panel de alertas con badges, detalle de tier
+  con tutores, categoría como desplegable, redirección de slug, log del tutor, subida por lotes.
+- **Acuerdos del 17-jul aplicados** (migración `20260722200000` + `daily.ts`): chat de Daily apagado,
+  prefijo `chat_` en adjuntos, **purga del chat parada** (`US-1703`/`EY-76` reabierta), switch de panel.
 
 **Regla de la épica (de Jira):** ninguna IV pasa a `Done` sin aprobación del cliente y contenido
 final. **Estado máximo durante el sprint: `In Review`.** Textos con placeholders donde el copy no
@@ -348,7 +369,7 @@ o alcance nuevo — no son trabajo visual.
 
 | ID | Jira | Qué falta | Afecta a |
 | :-- | :-- | :-- | :-- |
-| DD-01 | EY-111 | Nombre y foto públicos del tutor (`profiles` es privado a propósito; no hay avatar) | P01, P04, P05, P07, P08, P09 |
+| DD-01 | EY-111 | Nombre y foto públicos del tutor. **Infra de avatar ya añadida en IV-02** (`profiles.avatar_path` + bucket `avatars`); **sigue abierta** la parte del NOMBRE público (`profiles` es privado a propósito) y la lectura pública acotada | P01, P04, P05, P07, P08, P09 |
 | DD-02 | EY-112 | Imagen de portada del producto | P01, P05, P06, P09 |
 | DD-03 | EY-113 | Nivel e idioma del producto (2 de los 6 filtros del Figma) | P05, P06, P07, P08 |
 | DD-04 | EY-114 | Precio de entrada materializado en `tutor_profiles` → desbloquea el filtro de precio | P04 |
@@ -357,10 +378,15 @@ o alcance nuevo — no son trabajo visual.
 | DD-07 | EY-117 | Bandeja de mensajería alumno ↔ tutor (el FAB del diseño) | todas, con sesión |
 | DD-08 | EY-118 | 🐞 Seed de dev: ratings sembrados sin filas en `reviews` | dev/QA |
 
-**Aparte, en EP-03: `EY-109` — buscar sin tildes devuelve cero resultados.** `matematicas` → 0 vs
-`Matemáticas` → 4; `programacion` → 0 vs `Programación` → 6. Ni el `tsvector` español ni los `ilike`
-quitan acentos. Pide extensión `unaccent` + wrapper `immutable` + regenerar la columna generada y sus
-índices. Es el buscador del header, presente en todas las páginas.
+**Aparte, en EP-03: `EY-109` — buscar sin tildes devolvía cero resultados.** ✅ **Corregido y en prod**
+(`In Review`, migraciones `20260721120000` + `20260721130000`). El primer intento estuvo mal —indexar
+sobre texto ya sin tildes rompía el stemmer español— y se corrigió indexando **las dos ramas** (con y
+sin tilde). `matematicas`/`Matemáticas`, `programacion`/`Programación`, `calculo`/`cálculo`,
+`ingles`/`inglés` devuelven ya el mismo conjunto.
+
+> ℹ️ **`tutor_categories`, `student_interests` y `tutor_materials`** (creadas en IV-02) son tablas
+> **nuevas**, no cierran ninguna DD: cubren lo que el onboarding del Figma pedía, no los huecos del
+> catálogo público que lista EP-23.
 
 ---
 
@@ -398,4 +424,4 @@ Código en PR revisado · pruebas de **RLS por rol** · **webhooks idempotentes*
 
 ---
 
-*Espejo del backlog v1.0 (Faim Lab, 2026-06-24). Se sincroniza con Jira. Última edición: 2026-07-21 (IV-01 e IV-03 en `In Review`; alta de EP-23 y del bug EY-109).*
+*Espejo del backlog v1.0 (Faim Lab, 2026-06-24). Se sincroniza con Jira. Última edición: 2026-07-22 (las 6 IV en `In Review` y en producción; EY-109 corregido; acuerdos del 17-jul aplicados y `US-1703`/`EY-76` reabierta; referidos EP-13 fuera de S4).*

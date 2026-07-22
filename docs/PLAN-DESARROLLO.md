@@ -212,21 +212,23 @@ No consumen SP del sprint. Se filtran en Jira por label.
 
   Están redactadas como *requisitos de pantalla* (entregable = documento), pero su AC implica **re-trabajo de código**. Decidir si se abren historias de dev derivadas o se reabren US-202/203.
 
-- **EP-22 · Integración Visual** (`EY-102`, label `Sprint-Integracion-Visual`) — el **lado de código** de EP-19. Detalle y mapeo a páginas de Figma en `docs/BACKLOG.md` §4.2.
-  - [x] **IV-01** (`EY-103`) · auth — AU01…AU04 + **header y footer globales** (faltaban por completo en auth) + los tokens del Figma para toda la app. `In Review`, commit `95aacc6`.
-  - [ ] **IV-02** (`EY-104`) · onboarding alumno/tutor + KYC.
-  - [x] **IV-03** (`EY-105`) · públicas — P01…P09, incluidas `/about` y `/how-it-works` como rutas **nuevas**. `In Review`, commits `8a186a7` + `676972f`.
-  - [ ] **IV-04** (`EY-106`) · dashboard alumno · [ ] **IV-05** (`EY-107`) · dashboard tutor · [ ] **IV-06** (`EY-108`) · panel admin.
-  - Rama `feat/iv01-auth-visual` (local, **sin push ni PR**): 3 commits, 55 archivos, +3.218/−721. Las 11 rutas públicas responden 200.
-  - **Techo de estado: `In Review`.** Ninguna IV pasa a `Done` sin aprobación del cliente y copy final (labels `pendiente-contenido`, `sujeto-a-cambios`).
-  - De paso se cerraron criterios de **US-301** (filtro por rating) y **US-303** (búsqueda de tutores y categorías) que estaban marcados como diferidos aquí mismo.
+- **EP-22 · Integración Visual** (`EY-102`, label `Sprint-Integracion-Visual`) — el **lado de código** de EP-19. **Las 6 IV `In Review` y en producción (2026-07-22, PR #6→dev, PR #7→main).** Detalle y mapeo a páginas de Figma en `docs/BACKLOG.md` §4.2.
+  - [x] **IV-01** (`EY-103`) · auth — AU01…AU04 + **header y footer globales** + tokens del Figma para toda la app. `95aacc6`.
+  - [x] **IV-02** (`EY-104`) · onboarding — TU01 (5 pasos) + AL01 (3 pasos). Trajo **modelo nuevo** (migración `20260722160000`: `avatar_path` + bucket `avatars`, `tutor_categories`, `student_interests`, `tutor_materials` + bucket privado, `teaching_level`). `b68b20c` + `1b0efb6`. ⚠️ Paso 4 en **desencuentro con diseño** (KYC vs materiales de clase); **AL01 sin verificar en navegador**.
+  - [x] **IV-03** (`EY-105`) · públicas — P01…P09, incluidas `/about` y `/how-it-works` como rutas **nuevas**. `8a186a7` + `676972f`.
+  - [x] **IV-04** (`EY-106`) · dashboard alumno (AL02…AL08) + **LV01 sala en vivo**: chat lateral (reutiliza el hilo de EP-17) + "Subir documentos" (adjunto de `messages` + bucket `chat-attachments`). `dffa023`…`fa8bec9`.
+  - [x] **IV-05** (`EY-107`) · dashboard tutor (TU03…TU09) · [x] **IV-06** (`EY-108`) · panel admin (AD02…AD15). Shell de panel compartido. `036a346` + `f521315`.
+  - Rama `feat/iv01-auth-visual`: 25 commits, **mergeada y borrada** tras el release.
+  - **Techo de estado: `In Review`.** Ninguna IV pasa a `Done` sin aprobación del cliente y copy final. ⚠️ **Se publicó a prod sin ese go** (decisión de negocio, reunión del 17-jul `00:28:40`).
+  - De paso se cerraron criterios de **US-301** (filtro por rating) y **US-303** (búsqueda de tutores y categorías).
+  - **Acuerdos del 17-jul aplicados** (migración `20260722200000` + `daily.ts`): chat de Daily apagado (`enable_chat:false`), prefijo `chat_` en adjuntos, **purga del chat PARADA** (`US-1703`/`EY-76` reabierta — retención sin decidir), y **switch de panel** alumno/tutor/admin en el menú de cuenta.
   - ⚠️ **No hay diseño móvil** (todo a 1280px). Afecta a **US-1601** (S4): decidir si se pide diseño responsive o US-1601 corre con criterio de dev. **Preguntar al cliente / a diseño.**
-  - ⚠️ **IV-05 (tutor) e IV-06 (admin) no tienen DS-xx que las respalde**, aunque las pantallas sí existen en Figma.
-  - ⚠️ **Pendiente de verificar en preview:** el alta con Google (provider no configurado en local) — el `intent` por OAuth y el intercambio PKCE en cliente de AU04.
+  - ⚠️ **IV-05 (tutor) e IV-06 (admin) no tienen DS-xx que las respalde.** IV-06 dejó además **trabajo funcional pendiente** de la reunión (panel de alertas con badges, detalle de tier, categoría desplegable, redirección de slug, log del tutor, subida por lotes).
+  - ⚠️ **Pendiente de verificar en preview:** el alta con Google (provider no configurado en local) y el intercambio PKCE en cliente de AU04.
 
-- **EP-23 · Datos que el diseño necesita y no existen** (`EY-110`) — DD-01…08 (`EY-111`…`EY-118`), todas `To Do`. Salió de ejecutar EP-22: campos y relaciones que el Figma da por hechos y que el modelo no tiene (nombre y foto del tutor, imagen de producto, nivel e idioma, precio materializado, subcategorías, páginas legales, mensajería, seed incoherente). **No bloquean el despliegue; bloquean la fidelidad al diseño.** Tabla completa en `docs/BACKLOG.md` §4.3.
+- **EP-23 · Datos que el diseño necesita y no existen** (`EY-110`) — DD-01…08 (`EY-111`…`EY-118`), `To Do`. **`EY-109` (buscar sin tildes) ✅ corregido y en prod.** IV-02 añadió **infra de avatar** (adelanta parte de DD-01) pero DD-01 sigue abierta por el NOMBRE público; `tutor_categories`/`student_interests`/`tutor_materials` son tablas nuevas que **no cierran ninguna DD** (cubren el onboarding, no el catálogo público). **No bloquean el despliegue; bloquean la fidelidad al diseño.** Tabla completa en `docs/BACKLOG.md` §4.3.
 
-- 🐞 **`EY-109` (en EP-03) — buscar sin tildes devuelve cero resultados.** `matematicas` → 0 vs `Matemáticas` → 4; `programacion` → 0 vs `Programación` → 6. Ni el `tsvector` español ni los `ilike` quitan acentos. Pide `unaccent` + wrapper `immutable` + regenerar `search_vector` y sus índices. **Prioridad alta**: es el buscador del header, en todas las páginas.
+- 🐞 **`EY-109` (en EP-03) — buscar sin tildes devolvía cero resultados.** ✅ **Corregido y en prod** (`In Review`, migraciones `20260721120000` + `20260721130000`). El primer intento indexó sobre texto ya sin tildes y rompió el stemmer español; la corrección indexa **las dos ramas** (con y sin tilde). `matematicas`/`Matemáticas`, `programacion`/`Programación`, `calculo`/`cálculo`, `ingles`/`inglés` devuelven ya el mismo conjunto.
 
 ---
 

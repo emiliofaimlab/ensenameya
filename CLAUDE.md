@@ -13,15 +13,20 @@
 
 Próximo sprint: **Sprint 4** (observabilidad, responsive/QA, grabación, avisos in-app). **S1, S2 y S3 cerrados** — S3 con todas sus historias en `Done` y mergeado a prod (2026-07-17). Los **referidos (EP-13) bajaron a los dos últimos sprints** en la reunión del 17-jul, junto con el resto de integraciones.
 
-**En curso ahora: EP-22 · Integración Visual** (track paralelo, `EY-102` / IV-01…06) — aplicar el
-Figma sobre el frontend ya construido. **IV-01 (auth) e IV-03 (públicas) aplicadas y en `In Review`**;
-faltan IV-02, IV-04, IV-05 e IV-06 (área autenticada). Detalle en `docs/BACKLOG.md` §4.2.
-Ojo: el Figma **no tiene design system ni diseño móvil**, y ninguna IV pasa de `In Review` sin
-aprobación del cliente.
+**EP-22 · Integración Visual** (track paralelo, `EY-102` / IV-01…06) — aplicar el Figma sobre el
+frontend ya construido. **Las 6 IV aplicadas y en producción** (2026-07-22, PR #6→dev, PR #7→main);
+todas en `In Review`. Detalle en `docs/BACKLOG.md` §4.2. Ojo: el Figma **no tiene design system ni
+diseño móvil**, y **ninguna IV pasa de `In Review` sin aprobación del cliente** — que aún no llegó,
+así que producción quedó con el rediseño sin go formal (decisión de negocio, reunión del 17-jul).
+
+**Acuerdos de la reunión del 17-jul ya aplicados** (ver también la sala en vivo LV01, EY-106): chat de
+Daily apagado (`enable_chat:false`, su chat se cobra aparte), prefijo `chat_` en adjuntos del chat,
+**purga del chat PARADA** (`US-1703`/`EY-76` reabierta: retención sin decidir — 5 días activo vs 30 de
+retención + archivado descargable), y **switch de panel** alumno/tutor/admin en el menú de cuenta.
 
 **EP-23 · Datos que el diseño necesita** (`EY-110` / DD-01…08) — huecos de modelo destapados por
 EP-22: nombre y foto del tutor, imagen de producto, nivel/idioma, subcategorías, páginas legales,
-mensajería. Ver §4.3. Aparte, `EY-109`: **buscar sin tildes devuelve cero resultados**.
+mensajería. Ver §4.3. Aparte, `EY-109` (buscar sin tildes devolvía cero): ✅ **corregido y en prod**.
 
 ## Stack
 
