@@ -12,23 +12,23 @@ import { Section } from "@/components/layout/section";
 export const TRUST_POINTS = [
   {
     icon: ShieldCheckIcon,
-    title: "Tutores verificados",
-    text: "Identidad y experiencia revisadas antes de su primera clase.",
+    title: "Expertos verificados",
+    text: "Talento, identidad y credenciales verificadas por nuestro equipo.",
   },
   {
     icon: WalletIcon,
     title: "Pago seguro",
-    text: "Checkout protegido; tu tarjeta no se comparte.",
+    text: "Checkout 100% seguro; tus datos y tu inversión están totalmente protegidos.",
   },
   {
     icon: RotateCcwIcon,
     title: "Reembolso claro",
-    text: "Cancela ≥24h y recibe el 100%.",
+    text: "Flexibilidad total: cancela con 24h de anticipación y recibes el 100%.",
   },
   {
     icon: SparklesIcon,
-    title: "Reserva sin riesgo",
-    text: "Si el tutor no acepta, te devolvemos el 100%.",
+    title: "Reserva garantizada",
+    text: "Si el tutor no acepta en 24h, tu dinero regresa de inmediato.",
   },
 ];
 

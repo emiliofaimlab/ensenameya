@@ -22,7 +22,7 @@ export function FeaturedProducts({
         <Section>
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-2xl font-semibold tracking-tight">
-              Resultados listos para reservar
+              Tutorías destacadas listas para reservar
             </h2>
             <Link
               href="/classes"

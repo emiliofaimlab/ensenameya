@@ -7,23 +7,26 @@ import { Section } from "@/components/layout/section";
 const FAQ = [
   {
     q: "¿Necesito tarjeta para reservar?",
-    a: "Sí. El pago se realiza en un checkout protegido al reservar. Tu reserva espera la aceptación del tutor; si no acepta en 24h, te devolvemos el 100%.",
+    a: "Sí. El pago se realiza de manera segura al reservar para garantizar tu lugar. Tu inversión queda completamente protegida en la plataforma y el tutor confirma el bloque en un máximo de 24h; si por alguna razón no puede asistir, se te reembolsa el 100% de inmediato.",
   },
   {
     q: "¿Y si el tutor no acepta mi reserva?",
-    a: "Tienes hasta 24h de espera. Si no confirma a tiempo, el reembolso es automático y total. Nunca pagas por una clase que no ocurre.",
+    a: "El tutor cuenta con un tiempo límite de 24h para confirmar. Si no está disponible en ese horario, la reserva se cancela de forma automática y tu dinero regresa íntegro al 100% para que elijas otra opción.",
   },
   {
-    q: "¿Puedo cancelar una clase?",
-    a: "Sí. Con 24h o más de anticipación recibes el 100%. Con menos de 24h, recibes el 50%.",
+    q: "¿Puedo cambiar o cancelar una clase?",
+    a: "Por supuesto. Si lo haces con 24h o más de anticipación, recibes un reembolso completo del 100%. Para cancelaciones realizadas con menos de 24h de aviso, se te reembolsará el 50% para compensar el tiempo reservado por el tutor.",
   },
   {
     q: "¿Las clases se graban?",
-    a: "Las clases son privadas 1 a 1. Cualquier grabación requiere el consentimiento explícito de ambas partes.",
+    // ⚠️ El Figma añade aquí "y la tendrás disponible en tu perfil para
+    // repasar durante 30 días". Eso es US-1802 (EY-86), que está en To Do: la
+    // grabación no existe todavía. Se omite esa frase para no prometerla.
+    a: "Son sesiones interactivas 100% privadas. Las grabaciones se realizan únicamente con el consentimiento de ambas partes.",
   },
   {
-    q: "¿Cómo elijo al tutor correcto?",
-    a: "Filtra por resultado, materia, precio y rating. Cada tutor está verificado en identidad y experiencia.",
+    q: "¿Cómo elegir al tutor correcto?",
+    a: "Puedes filtrar con total facilidad según el resultado específico que buscas, materia, precio y las valoraciones de la comunidad. Además, cada tutor cuenta con una verificación manual de identidad y experiencia para tu máxima seguridad.",
   },
 ];
 

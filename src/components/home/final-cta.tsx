@@ -8,11 +8,12 @@ export function FinalCta() {
     <div className="bg-brand text-white">
       <Container className="flex flex-col items-center gap-6 py-14 text-center">
         <h2 className="text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
-          Empieza hoy: aprende o enseña
+          Da el siguiente paso: empieza a aprender o a enseñar
         </h2>
         <p className="max-w-2xl text-pretty text-white/90 sm:text-lg">
-          Crea tu cuenta gratis y reserva tu primera clase, o conviértete en
-          tutor y empieza a cobrar por tus resultados.
+          Crea tu cuenta sin costo en segundos y asegura tu primera sesión, o
+          conviértete en tutor y empieza a facturar con orgullo por lo que
+          sabes.
         </p>
         <div className="flex flex-wrap justify-center gap-3">
           <Button asChild className="h-12 px-6 text-[15px]">

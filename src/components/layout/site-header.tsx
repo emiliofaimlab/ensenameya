@@ -75,8 +75,8 @@ function SearchBox({ className }: { className?: string }) {
         <input
           type="search"
           name="q"
-          placeholder="Buscar tutores, clases o categorías"
-          aria-label="Buscar tutores, clases o categorías"
+          placeholder="Buscar tutores, mentorías o categorías"
+          aria-label="Buscar tutores, mentorías o categorías"
           className="h-11 w-full rounded-lg bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         />
       </div>

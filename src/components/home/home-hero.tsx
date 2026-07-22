@@ -1,10 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import {
+  AwardIcon,
   BriefcaseIcon,
   CodeIcon,
   FlaskConicalIcon,
   GraduationCapIcon,
+  HeartIcon,
   LanguagesIcon,
   MusicIcon,
   PaletteIcon,
@@ -29,6 +31,8 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   "arte-y-diseno": PaletteIcon,
   negocios: BriefcaseIcon,
   "preparacion-examenes": GraduationCapIcon,
+  "vida-y-creatividad": HeartIcon,
+  "habilidades-profesionales": AwardIcon,
 };
 
 export function HomeHero({ categories }: { categories: CategoryTag[] }) {
@@ -48,12 +52,12 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
 
         <Container className="flex flex-col items-center gap-6 py-20 text-center text-white sm:py-28">
           <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
-            Aprende lo que quieres lograr, con{" "}
-            <em className="text-primary not-italic">el tutor correcto</em>
+            Aprende a tu ritmo y conviértete en un PRO impulsando tu{" "}
+            <em className="text-primary">talento</em>
           </h1>
           <p className="max-w-2xl text-pretty text-white/90">
-            Tú eliges el resultado. Nosotros te conectamos con el tutor
-            verificado para lograrlo.
+            Tú eliges el objetivo que quieres alcanzar. Nosotros te conectamos
+            con el talento ideal para asegurar resultados desde el primer día.
           </p>
 
           {/* Form GET nativo: mismo destino que el buscador del header. */}
@@ -65,8 +69,8 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
             <input
               type="search"
               name="q"
-              placeholder="¿Qué quieres lograr? (ej. aprobar cálculo, hablar inglés…)"
-              aria-label="¿Qué quieres lograr?"
+              placeholder="¿Qué meta vas a conquistar hoy? (ej. hablar inglés fluido, dominar cálculo…)"
+              aria-label="¿Qué meta vas a conquistar hoy?"
               className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
             />
             <Button type="submit" className="h-10 shrink-0 px-6">

@@ -4,18 +4,18 @@ import { Section } from "@/components/layout/section";
 const STEPS = [
   {
     n: "01",
-    title: "Busca tu resultado",
-    text: "Dinos qué quieres lograr. Filtra por tutores o por productos con un objetivo concreto.",
+    title: "Elige tu meta",
+    text: "Cuéntanos qué quieres lograr. Encuentra tutorías diseñadas específicamente para alcanzar un objetivo real.",
   },
   {
     n: "02",
-    title: "Reserva y paga",
-    text: "Eliges horario y pagas en un checkout protegido. Tu reserva espera la aceptación del tutor (hasta 24h); si no acepta, te devolvemos el 100%.",
+    title: "Asegura tu espacio",
+    text: "Elige tu horario favorito y reserva en un checkout protegido, con la tranquilidad de que tu inversión está respaldada.",
   },
   {
     n: "03",
-    title: "Aprende en vivo",
-    text: "Tomas tu clase 1 a 1 en video. Al terminar dejas tu reseña y reservas tu próxima sesión.",
+    title: "Alcanza el éxito",
+    text: "Conéctate a tu videollamada privada, evoluciona a tu propio ritmo y califica tu experiencia.",
   },
 ];
 
@@ -25,7 +25,7 @@ export function ThreeSteps() {
       <Section>
         <div className="rounded-2xl bg-primary px-6 py-10 sm:px-10">
           <h2 className="text-center text-2xl font-semibold text-primary-foreground">
-            Reserva tu resultado en 3 pasos
+            Tu resultado asegurado en 3 simples pasos
           </h2>
 
           <ol className="mt-8 grid gap-6 lg:grid-cols-3">

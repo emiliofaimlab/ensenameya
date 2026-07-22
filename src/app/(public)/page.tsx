@@ -32,14 +32,14 @@ export default async function HomePage() {
       <HomeHero categories={categories} />
 
       <FeatureSplit
-        title="Clases en vivo 1 a 1, no videos pregrabados"
-        text="Cada sesión es por video y en tiempo real con tu tutor. Preguntas, practicas y avanzas a tu ritmo, siempre enfocados en el resultado que tú elegiste."
+        title="Clases en vivo 1 a 1: interactúa en tiempo real"
+        text="Avanza con total confianza y cara a cara con tu tutor, dedicando cada minuto exclusivamente al objetivo que elegiste lograr."
         points={[
-          { icon: VideoIcon, text: "Video en vivo de alta calidad" },
-          { icon: TargetIcon, text: "Enfoque en tu objetivo concreto" },
-          { icon: CalendarSyncIcon, text: "Reprograma sin coste con 24h" },
+          { icon: VideoIcon, text: "Video en vivo con alta calidad" },
+          { icon: TargetIcon, text: "Foco en tu meta concreta" },
+          { icon: CalendarSyncIcon, text: "Agenda flexible y a tu medida" },
         ]}
-        cta={{ href: "/tutors", label: "Explorar tutores" }}
+        cta={{ href: "/tutors", label: "Explorar tutores YA" }}
         image={{
           src: "/img/home-live.jpg",
           alt: "Alumna en una clase 1 a 1 por videollamada",
@@ -52,17 +52,14 @@ export default async function HomePage() {
 
       <FeatureSplit
         reverse
-        title="¿Sabes enseñar algo? Cobra por tus resultados"
-        text="Crea tu perfil, publica lo que enseñas y define tu precio y horario. Nosotros ponemos los pagos seguros y la confianza; tú pones el conocimiento."
+        title="¿Eres un crack en lo que haces? Monetiza tu talento YA"
+        text="Crea tu perfil de tutor, comparte tu formación, certificaciones y pasiones, y define tus tarifas con total libertad. Nosotros impulsamos tu crecimiento, aseguramos tus cobros y te conectamos con alumnos listos para aprender de ti."
         points={[
-          { icon: TagIcon, text: "Tú fijas tu precio y tu disponibilidad" },
-          { icon: ShieldCheckIcon, text: "Pagos seguros y reembolsos" },
-          { icon: BadgeCheckIcon, text: "Verificación que genera confianza" },
+          { icon: TagIcon, text: "Tú decides tu valor y tus horarios" },
+          { icon: ShieldCheckIcon, text: "Ingresos garantizados y respaldados" },
+          { icon: BadgeCheckIcon, text: "Verificación de perfil y credenciales" },
         ]}
-        // El Figma reutiliza aquí el botón "Explorar tutores" del bloque de
-        // arriba; es un copy-paste del diseño. En una llamada a tutores el
-        // destino correcto es el alta.
-        cta={{ href: "/signup", label: "Quiero enseñar" }}
+        cta={{ href: "/signup", label: "Quiero enseñar YA" }}
         image={{
           src: "/img/home-teach.jpg",
           alt: "Tutor impartiendo una clase desde su portátil",
