@@ -10,12 +10,12 @@
 
 | Indicador | Valor |
 | :-- | :-- |
-| Épicas | **22** (EP-00 + EP-01…EP-21) |
-| Historias | **73** (incl. EP-00 diseño) |
+| Épicas | **24** (EP-00 + EP-01…EP-23) |
+| Historias | **87** (incl. EP-00 diseño, EP-22 integración visual y EP-23 datos) + 1 bug (`EY-109`) |
 | Puntos estimados | 259 SP (backlog dev original EP-01…EP-18) |
 | Historias Must | 40 |
 | Sprints | 4 de dev (+ EP-00 pre-desarrollo, + 3 tracks paralelos) |
-| **Sprint activo** | **Sprint 3** — 19 historias / 83 SP |
+| **Sprint activo** | **Sprint 4** (próximo) — S1, S2 y **S3 ✅ cerrados** (S3 en `Done`, mergeado a prod 2026-07-17) |
 
 > **Jira es la fuente operativa** (proyecto `EY` en `faimlab.atlassian.net`). Jira añadió **EP-00 —
 > Diseño UX/UI y Contenido** (pre-desarrollo), que el docx original no traía. Este `.md` lo refleja.
@@ -25,6 +25,15 @@
 > y **EP-21** (UX del onboarding del tutor). No pertenecen a los sprints S1–S4 de dev; se rastrean
 > por **label de Jira** (`Sprint-Diseño`, `Sprint-Activacion-Comercial`, `Sprint-Mejoras-UX`), no por
 > el campo Sprint. Ver §4.1.
+>
+> **Sync 2026-07-20:** Jira añadió **EP-22 — Sprint Integración Visual (Look & Feel)** (`EY-102`,
+> label `Sprint-Integracion-Visual`), con IV-01…06 (`EY-103`…`EY-108`). Es el **lado de código** de
+> EP-19: aplicar el diseño de Figma sobre el frontend ya construido. Ver §4.1 y §4.2.
+>
+> **Sync 2026-07-21:** al ejecutar EP-22 se creó **EP-23 — Datos que el diseño necesita y no
+> existen** (`EY-110`, DD-01…08 / `EY-111`…`EY-118`): campos y relaciones que el Figma da por hechos
+> y que el modelo no tiene. También el bug **`EY-109`** (buscar sin tildes devuelve cero), colgado de
+> EP-03 porque es un defecto del buscador, no una carencia del diseño. Ver §4.3.
 
 ---
 
@@ -54,6 +63,8 @@
 | EP-19 | Diseño UI — Implementación Visual · Jira EY-87 | M | — | Track diseño (paralelo) |
 | EP-20 | Activación Comercial — DLocal + Stripe reales · Jira EY-92 | M | — | 🔒 Bloqueada (credenciales) |
 | EP-21 | UX Onboarding Continuo del Tutor · Jira EY-97 | S | — | Track UX (paralelo) |
+| EP-22 | Sprint Integración Visual — Look & Feel · Jira EY-102 | M | — | Track visual (paralelo, **dev**) |
+| EP-23 | Datos que el diseño necesita y no existen · Jira EY-110 | S | — | Derivada de EP-22 |
 
 ---
 
@@ -224,13 +235,16 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 | **S1** | Fundaciones · Auth · Onboarding · Descubrimiento · RLS · Ambientes | 15 | 63 |
 | **S2** | Catálogo tutor · Disponibilidad · Reserva completa · Pagos · Webhooks | 16 | 74 |
 | **S3** | Sala en vivo · Reseñas · Payouts · Admin · Notificaciones · Chat | 19 | 83 |
-| **S4** | Referidos · Observabilidad · Responsive/QA · Grabación · Avisos in-app · Lanzamiento | 10 | 39 |
+| **S4** | Observabilidad · Responsive/QA · Grabación · Avisos in-app · Lanzamiento | 8 | 34 |
 
 - **S2:** US-401,402,403,501,502,601,602,603,604,605,606,607,701,702,703,705.
 - **S3:** US-704,801,802,803,901,902,1001,1002,1003,1004,1101,1102,1103,1104,1105,1201,1202,1701,1703.
-- **S4:** US-1203,1301,1302,1501,1502,1601,1602,1702,1801,1802.
+- **S4:** US-1203,1501,1502,1601,1602,1702,1801,1802. — **US-1301 (3 SP) y US-1302 (2 SP)**, los
+  referidos de EP-13, **salen de S4** por decisión de la reunión del 17-jul (`00:59:03`): bajan a los
+  dos últimos sprints. S4 pasa de 10 historias / 39 SP a **8 / 34**. ⚠️ El movimiento **aún no está
+  hecho en Jira** — este `.md` es espejo, así que hay que replicarlo allí.
 
-**Estado (sync Jira 2026-07-14):** S1 ✅ y S2 ✅ cerrados (39 issues `Done`). **S3 en curso.**
+**Estado (sync Jira 2026-07-17):** S1 ✅, S2 ✅ y **S3 ✅ cerrados** — las 19 historias de S3 en `Done` (+ US-203/EY-33, reabierta y cerrada con los 7 documentos), mergeadas a prod. Pendiente de S3: US-202 (EY-32, asistente de onboarding del tutor) sigue `To Do`. **S4 no iniciado.**
 
 ### 4.1 Tracks paralelos (fuera de S1–S4)
 
@@ -241,6 +255,8 @@ No consumen SP de los sprints de dev. Se filtran en Jira por label.
 | `Sprint-Diseño` | EP-19 | EY-88…91 (DS-01…04) | **In Review** (Diana Rivera) | Entregable Figma, no código. Precede al rediseño visual de pantallas ya construidas. |
 | `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) | 🔒 **Bloqueada** | C-01 **decidido: DLocal + Stripe**. Falta cuenta + API keys de ambos. El motor simulado ya está hecho y probado. |
 | `Sprint-Mejoras-UX` | EP-21 | EY-98…101 (UX-201…204) | To Do | ⚠️ **Redefine** US-201/202/203 (ya `Done`) — ver aviso abajo. |
+| `Sprint-Integracion-Visual` | EP-22 | EY-103…108 (IV-01…06) | **IV-01 e IV-03 In Review**; resto To Do | **Código.** Aplica el Figma sobre pantallas ya funcionales. Ver §4.2. |
+| — | EP-23 | EY-111…118 (DD-01…08) | To Do | Huecos de modelo destapados por EP-22. No bloquean el despliegue; bloquean la fidelidad al diseño. Ver §4.3. |
 
 > ⚠️ **EP-21 no es documentación: es alcance nuevo sobre historias cerradas.**
 > - **UX-203** pide **7 documentos** de KYC (`id_document`, `degree`, `certificate`, `diploma`,
@@ -253,6 +269,98 @@ No consumen SP de los sprints de dev. Se filtran en Jira por label.
 > Las historias UX-2xx están redactadas como *requisitos de pantalla* (entregable: documento), pero su
 > AC implica **re-trabajo de código**. Antes de ejecutarlas hay que decidir si se abren historias de dev
 > derivadas o se reabren US-202/203.
+
+### 4.2 EP-22 · Sprint Integración Visual (`Sprint-Integracion-Visual`)
+
+Aplicar el look & feel de Figma sobre el frontend **ya funcional**. No cambia lógica ni datos.
+
+| ID | Jira | Alcance | Estado | Páginas Figma |
+| :-- | :-- | :-- | :-- | :-- |
+| IV-01 | EY-103 | Auth (login / registro / recuperar) | **In Review** · `95aacc6` | `AUTH` — AU01…AU04 |
+| IV-02 | EY-104 | Onboarding alumno y tutor + KYC | To Do | `ALUMNO` AL01, `TUTOR` TU01/TU02 |
+| IV-03 | EY-105 | Descubrimiento y páginas públicas | **In Review** · `8a186a7` + `676972f` | `HOME - Contenido` — P01…P09 |
+| IV-04 | EY-106 | Dashboard alumno (reservas, checkout, chat, reseñas) | To Do | `ALUMNO` AL02…AL08, `CHAT` |
+| IV-05 | EY-107 | Dashboard tutor (catálogo, disponibilidad, reservas, payouts) | To Do | `TUTOR` TU03…TU09 |
+| IV-06 | EY-108 | Panel admin | To Do | `ADMIN` AD01…AD15 |
+
+Rama `feat/iv01-auth-visual` (local, sin push): 3 commits, 55 archivos, +3.218/−721. Los tokens ya
+alcanzan a **toda** la app; lo que falta en IV-02/04/05/06 es la maquetación de cada pantalla.
+
+**Regla de la épica (de Jira):** ninguna IV pasa a `Done` sin aprobación del cliente y contenido
+final. **Estado máximo durante el sprint: `In Review`.** Textos con placeholders donde el copy no
+esté aprobado. Labels: `pendiente-contenido`, `sujeto-a-cambios`.
+
+**AU04 · el spinner costó un cambio de arquitectura.** El Figma dibuja una pantalla de espera
+("Verificando tu cuenta…"). `/auth/callback` era un **route handler de servidor**: intercambiaba el
+`code` PKCE y devolvía un 302 **sin renderizar nada**. Un Server Component no puede escribir cookies,
+así que para poder enseñar el spinner el intercambio tuvo que pasar al navegador — el mismo mecanismo
+que ya usa el login por correo (`createBrowserClient`), no un downgrade de seguridad. **Se implementó
+tal cual el diseño**, con guarda `useRef` porque el `code` es de un solo uso y StrictMode monta dos
+veces. Coste: un round-trip extra frente al 302 anterior; si se prefiere velocidad, se revierte.
+
+**Realidad del archivo Figma** (`Enseñame Ya - Diseño Final`, fileKey `tKTiQF8adZ7SMfNipylz86`) —
+verificado por API el 2026-07-20:
+
+- **No hay design system formal**: 0 variables, 0 estilos publicados, 0 componentes. Es maquetación
+  plana. **No hay modos** light/dark. Los tokens se **derivan de las capas**, no se importan.
+- Tokens de facto: **Poppins** (400/500/600/700, base 13px, LH ≈1.5) · CTA **`#fe6a00`** (naranja) ·
+  marca/enlaces `#0080ff` · texto `#14141a` / `#6b6b6b` · bordes `#e0e0e0` · fondos `#ffffff` /
+  `#f9fafc` · error `#e51a1a`. ✅ **Aplicados** en `src/app/globals.css` + `layout.tsx` (IV-01).
+- ⚠️ **Todas las pantallas están a 1280px: no existe diseño móvil.** El AC "según Figma" no es
+  aplicable a breakpoints. Choca con **US-1601** (responsive/QA, S4): o se pide diseño móvil, o
+  US-1601 se ejecuta con criterio propio de dev. **Decisión pendiente.**
+- ⚠️ EP-19 sólo cubre DS-01…04. **IV-05 y IV-06 no tienen historia de diseño** que las respalde,
+  aunque las pantallas `TUTOR` y `ADMIN` **sí existen** en Figma.
+- 🐞 **Error de diseño confirmado — el FAB de chat.** El Figma pinta el botón flotante `v2-chat`
+  en las 9 páginas públicas **y en el login**. Es incorrecto: **solo debe verse con sesión
+  iniciada**. Además su función es mensajería **alumno ↔ tutor(es) estilo LinkedIn** (bandeja con
+  varias conversaciones), no el chat por reserva de US-1701 (`/chat/[bookingId]`), que es lo único
+  construido. **No implementar el FAB tal como está dibujado**; la bandeja global es alcance nuevo
+  → **DD-07 (`EY-117`)**.
+- 🔗 **Enlaces sin destino.** El footer del diseño apunta a 5 rutas. `/about` y `/how-it-works` ✅
+  creadas en IV-03 (P02, P03); `/terms`, `/privacy` y `/cookies` **siguen en 404** — sin diseño y con
+  contenido legal que depende del cliente → **DD-06 (`EY-116`)**.
+- Acceso: el MCP de Figma se agota con asiento *View*; usar `FIGMA_API_KEY` (`.env.local`) contra la
+  REST API. El token es **personal de Diana Rivera** — si lo rota, se cae el acceso.
+
+**Contenido inventado que NO se implementó** (pendiente de decisión del cliente, con `TODO` en su
+posición exacta del código):
+
+- Cifras de P01/P02: "25k+ clases", "+1.200 tutores", "30+ países", "4.9★". Hay 12 tutores de seed.
+- 7 testimonios entre P01 y P02 — **cuatro firmados por la misma "Marina G."** con historias
+  distintas: es relleno de maquetación, no contenido para revisar.
+- Logos de pago (VISA, Mastercard, PayPal, Apple Pay, Amex, Stripe) del paso 02 de P01: afirman una
+  integración que no existe (motor simulado, EP-20 bloqueada por credenciales).
+- Insignia de tier (Élite/Intermedio/Base) en las tarjetas de P04: `tutor_tiers` es el **tramo de
+  comisión** (US-1103, RN-06, RLS admin/dueño). Publicarlo filtra margen comercial y el alumno lo lee
+  como ranking de calidad.
+
+**Correcciones aplicadas sobre el Figma** (para que la revisión no las tome por descuidos): el CTA
+del bloque "¿Sabes enseñar algo?" decía "Explorar tutores" (copy-paste) → "Quiero enseñar" a
+`/signup`; los 8 chips de categoría llevan etiqueta (el diseño deja 7 círculos sin texto); bordes de
+campo con el token `#e0e0e0` en vez del `#cccccc` que solo aparece en AUTH.
+
+### 4.3 EP-23 · Datos que el diseño necesita y no existen (`EY-110`)
+
+Salió de ejecutar EP-22: campos y relaciones que el Figma da por hechos y que el modelo no tiene.
+**No bloquean el despliegue; bloquean la fidelidad al diseño.** Cada una pide migración, política RLS
+o alcance nuevo — no son trabajo visual.
+
+| ID | Jira | Qué falta | Afecta a |
+| :-- | :-- | :-- | :-- |
+| DD-01 | EY-111 | Nombre y foto públicos del tutor (`profiles` es privado a propósito; no hay avatar) | P01, P04, P05, P07, P08, P09 |
+| DD-02 | EY-112 | Imagen de portada del producto | P01, P05, P06, P09 |
+| DD-03 | EY-113 | Nivel e idioma del producto (2 de los 6 filtros del Figma) | P05, P06, P07, P08 |
+| DD-04 | EY-114 | Precio de entrada materializado en `tutor_profiles` → desbloquea el filtro de precio | P04 |
+| DD-05 | EY-115 | Subcategorías / "Temas" — hoy las categorías son **planas por decisión** (S-13) | P04, P06, P07 |
+| DD-06 | EY-116 | Páginas legales `/terms`, `/privacy`, `/cookies` (404 desde el footer y desde AU02) | todas |
+| DD-07 | EY-117 | Bandeja de mensajería alumno ↔ tutor (el FAB del diseño) | todas, con sesión |
+| DD-08 | EY-118 | 🐞 Seed de dev: ratings sembrados sin filas en `reviews` | dev/QA |
+
+**Aparte, en EP-03: `EY-109` — buscar sin tildes devuelve cero resultados.** `matematicas` → 0 vs
+`Matemáticas` → 4; `programacion` → 0 vs `Programación` → 6. Ni el `tsvector` español ni los `ilike`
+quitan acentos. Pide extensión `unaccent` + wrapper `immutable` + regenerar la columna generada y sus
+índices. Es el buscador del header, presente en todas las páginas.
 
 ---
 
@@ -290,4 +398,4 @@ Código en PR revisado · pruebas de **RLS por rol** · **webhooks idempotentes*
 
 ---
 
-*Espejo del backlog v1.0 (Faim Lab, 2026-06-24). Se sincroniza con Jira. Última edición: 2026-07-03.*
+*Espejo del backlog v1.0 (Faim Lab, 2026-06-24). Se sincroniza con Jira. Última edición: 2026-07-21 (IV-01 e IV-03 en `In Review`; alta de EP-23 y del bug EY-109).*

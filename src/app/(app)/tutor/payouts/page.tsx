@@ -1,14 +1,10 @@
-import Link from "next/link";
 
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { PAYOUT_BADGE, type TutorBalance } from "@/lib/payouts";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { TutorShell } from "@/components/layout/tutor-shell";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { WithdrawButton } from "./withdraw-button";
 
 export const metadata = { title: "Cobros · Enséñame Ya" };
@@ -39,17 +35,10 @@ export default async function TutorPayoutsPage() {
   const hasAvailable = balance.available.length > 0;
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <TutorShell
           title="Cobros"
           description="Tus ganancias, la retención y el historial de liquidaciones."
-          actions={
-            <Button asChild variant="outline">
-              <Link href="/tutor/reservas">Mis reservas</Link>
-            </Button>
-          }
-        />
+    >
 
         <div className="grid gap-3 sm:grid-cols-3">
           <Balance label="Disponible para retirar" value={moneyLine(balance.available)} strong />
@@ -102,8 +91,7 @@ export default async function TutorPayoutsPage() {
             </ul>
           )}
         </div>
-      </Section>
-    </Container>
+    </TutorShell>
   );
 }
 

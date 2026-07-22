@@ -10,16 +10,23 @@ const FIELD_CLASS =
 export function TimezoneSelect({
   name = "timezone",
   defaultValue,
+  value,
+  onChange,
 }: {
   name?: string;
   defaultValue?: string;
+  /** Modo controlado (el asistente de onboarding lo necesita). */
+  value?: string;
+  onChange?: (tz: string) => void;
 }) {
   const timezones = useMemo(() => Intl.supportedValuesOf("timeZone"), []);
   return (
     <select
       id={name}
       name={name}
-      defaultValue={defaultValue}
+      {...(value !== undefined
+        ? { value, onChange: (e) => onChange?.(e.target.value) }
+        : { defaultValue })}
       className={FIELD_CLASS}
     >
       {timezones.map((tz) => (

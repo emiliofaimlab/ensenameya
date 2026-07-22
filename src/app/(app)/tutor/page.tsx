@@ -1,4 +1,11 @@
 import Link from "next/link";
+import {
+  ArrowRightIcon,
+  BookOpenIcon,
+  CalendarPlusIcon,
+  TicketIcon,
+  WalletIcon,
+} from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
@@ -6,8 +13,8 @@ import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, formatShortDate, BOOKING_STATUS_LABEL } from "@/lib/booking";
 import type { TutorBalance } from "@/lib/payouts";
 import { Container } from "@/components/layout/container";
+import { AppSidebar, TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/lib/database.types";
@@ -34,8 +41,13 @@ export default async function TutorHomePage() {
   const { userId, approvalStatus } = await requireTutorProfile();
   const supabase = await createClient();
 
-  const [{ data: profile }, { data: balanceData }, { data: nextSessions }, { data: bookings }] =
-    await Promise.all([
+  const [
+    { data: profile },
+    { data: balanceData },
+    { data: nextSessions },
+    { count: pendingCount },
+    { data: bookings },
+  ] = await Promise.all([
       supabase
         .from("tutor_profiles")
         .select("headline, approval_notes, identity_verification_status, profiles(full_name)")
@@ -56,6 +68,11 @@ export default async function TutorHomePage() {
         .limit(4),
       supabase
         .from("bookings")
+        .select("id", { count: "exact", head: true })
+        .eq("tutor_id", userId)
+        .eq("status", "pending_acceptance"),
+      supabase
+        .from("bookings")
         // Sin fecha, varias clases del mismo producto se ven como una fila
         // repetida. El nombre del alumno distinguiría mejor, pero `profiles`
         // es RLS own-only: el tutor no puede leer el perfil de su alumno.
@@ -70,13 +87,25 @@ export default async function TutorHomePage() {
   const firstName = profile?.profiles?.full_name?.split(" ")[0];
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
-          title={firstName ? `Hola, ${firstName}` : "Tu panel"}
-          description={profile?.headline ?? "Completa tu perfil para empezar a enseñar."}
-          actions={<Badge variant={approval.variant}>{approval.label}</Badge>}
-        />
+    <div className="bg-muted">
+      <Container>
+        <Section className="grid gap-6 lg:grid-cols-[232px_1fr]">
+          <AppSidebar items={TUTOR_ITEMS} />
+
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <h1 className="text-[28px] font-bold tracking-tight">
+                  {firstName ? `Hola, ${firstName}` : "Tu panel"}
+                </h1>
+                <p className="mt-1 text-[13px] text-muted-foreground">
+                  {profile?.headline ?? "Resumen de tu actividad como tutor."}
+                </p>
+              </div>
+              <Badge variant={approval.variant} className="ml-auto">
+                {approval.label}
+              </Badge>
+            </div>
 
         {/* Estado de aprobación: lo primero que necesita saber (M1/M2). */}
         {approvalStatus === "pending" ? (
@@ -103,11 +132,24 @@ export default async function TutorHomePage() {
         ) : null}
 
         {/* Ganancias (EP-10). El detalle vive en /tutor/payouts. */}
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Stat label="Disponible para retirar" value={moneyLine(balance.available)} strong />
-          <Stat label="En retención" value={moneyLine(balance.in_retention)} />
-          <Stat label="Ya pagado" value={moneyLine(balance.paid_out)} />
-        </div>
+            {/* El Figma pide además "Total ganado" (bruto, antes de comisión):
+                `tutor_balance` solo devuelve NETOS (tutor_net_amount), así que
+                habría que agregar payments.gross_amount aparte. Se deja fuera
+                antes que enseñar una cifra de dinero que no sé qué mide. */}
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <Stat
+                label="Saldo disponible"
+                value={moneyLine(balance.available)}
+                strong
+              />
+              <Stat label="En retención" value={moneyLine(balance.in_retention)} />
+              <Stat label="Ya pagado" value={moneyLine(balance.paid_out)} />
+              <Stat
+                label="Reservas por aceptar"
+                value={String(pendingCount ?? 0)}
+                strong={(pendingCount ?? 0) > 0}
+              />
+            </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Próximas sesiones, con acceso directo a la sala (RN-18 la gobierna). */}
@@ -184,29 +226,37 @@ export default async function TutorHomePage() {
           </div>
         </div>
 
-        {/* Accesos: hoy son la única navegación entre las pantallas del tutor. */}
-        <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-medium">Accesos</h2>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline">
-              <Link href="/tutor/products">Mis clases</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/tutor/availability">Disponibilidad</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/tutor/reservas">Reservas</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/tutor/payouts">Cobros</Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/tutor/verification">Verificación</Link>
-            </Button>
+            {/* Accesos rápidos (TU06). El sidebar ya navega; estas tarjetas
+                son el atajo visual del diseño. */}
+            <div>
+              <h2 className="text-[22px] font-bold tracking-tight">
+                Accesos rápidos
+              </h2>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { href: "/tutor/products", label: "Mis mentorías", icon: BookOpenIcon },
+                  { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
+                  { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
+                  { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },
+                ].map(({ href, label, icon: Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="flex items-center gap-3 rounded-2xl bg-card p-5 transition-colors hover:bg-brand-muted"
+                  >
+                    <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-muted text-brand">
+                      <Icon className="size-5" />
+                    </span>
+                    <span className="font-semibold">{label}</span>
+                    <ArrowRightIcon className="ml-auto size-4 text-muted-foreground" />
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      </Section>
-    </Container>
+        </Section>
+      </Container>
+    </div>
   );
 }
 

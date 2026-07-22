@@ -179,6 +179,7 @@ export function BookingList({
                   <ReviewDialog
                     bookingId={b.id}
                     productTitle={b.product_title}
+                    completedAt={b.sessions.at(-1)?.start_at ?? null}
                     existing={b.review}
                   />
                 ) : null}

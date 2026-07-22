@@ -3,11 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { PAYOUT_BADGE } from "@/lib/payouts";
 import type { Database } from "@/lib/database.types";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
-import { AdminNav } from "../admin-nav";
 import { AdminFilters } from "../payments/filters";
 import { PayoutActions } from "./payout-actions";
 
@@ -55,13 +52,10 @@ export default async function AdminPayoutsPage({
   const payouts = data ?? [];
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title="Payouts"
           description="Liquidaciones a tutores. Retén, libera o reintenta según su estado (M7)."
-        />
-        <AdminNav />
+    >
 
         <AdminFilters
           basePath="/admin/payouts"
@@ -100,7 +94,6 @@ export default async function AdminPayoutsPage({
             })}
           </ul>
         )}
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }

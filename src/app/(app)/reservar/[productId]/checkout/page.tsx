@@ -1,10 +1,11 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { ArrowLeftIcon } from "lucide-react";
 
 import { requireUser } from "@/lib/auth/server";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
 import { CheckoutForm } from "./checkout-form";
 
 export const metadata = { title: "Pagar reserva · Enséñame Ya" };
@@ -39,19 +40,37 @@ export default async function CheckoutPage({
       : product.priceAmount;
 
   return (
-    <Container>
-      <Section className="mx-auto flex w-full max-w-lg flex-col gap-6">
-        <PageHeader
-          title={`Pagar: ${product.title}`}
-          description={`con ${product.tutor.headline ?? "tu tutor"}`}
-        />
-        <CheckoutForm
-          productId={productId}
-          slots={slots}
-          total={total}
-          currency={product.currency}
-        />
-      </Section>
-    </Container>
+    <div className="bg-muted">
+      <Container>
+        <Section className="flex flex-col gap-6">
+          <Link
+            href={`/reservar/${productId}`}
+            className="flex w-fit items-center gap-1.5 text-sm font-medium text-brand hover:underline"
+          >
+            <ArrowLeftIcon className="size-4" />
+            Cambiar horario
+          </Link>
+
+          <div>
+            <h1 className="text-[28px] font-bold tracking-tight">
+              Confirmar pago
+            </h1>
+            <p className="mt-1 text-[13px] text-muted-foreground">
+              Revisa y completa el pago de tu reserva. El cobro lo procesa
+              nuestro proveedor de pagos.
+            </p>
+          </div>
+
+          <CheckoutForm
+            productId={productId}
+            slots={slots}
+            total={total}
+            currency={product.currency}
+            productTitle={product.title}
+            tutorName={product.tutor.headline ?? "tu tutor"}
+          />
+        </Section>
+      </Container>
+    </div>
   );
 }

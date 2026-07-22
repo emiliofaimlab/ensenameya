@@ -1,8 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { LogOutIcon, MenuIcon, SettingsIcon, UserIcon } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  ChevronDownIcon,
+  LogOutIcon,
+  MenuIcon,
+  SearchIcon,
+  SettingsIcon,
+  UserIcon,
+} from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -26,6 +34,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Container } from "@/components/layout/container";
+import { cn } from "@/lib/utils";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
 export type HeaderUser = {
@@ -33,13 +42,79 @@ export type HeaderUser = {
   name: string | null;
   /** Panel del usuario según su rol (lo resuelve `toHeaderUser` con pickHome). */
   homeHref: string;
+  /** Todos los paneles a los que puede entrar (`panelsFor`). Uno solo = sin switch. */
+  panels: { href: string; label: string }[];
 };
 
-const navLinks = [
-  { href: "/tutors", label: "Tutores" },
-  { href: "/classes", label: "Clases" },
-  { href: "/categories", label: "Categorías" },
-  { href: "/how-it-works", label: "Cómo funciona" },
+/**
+ * Switch de panel (acuerdo del 17-jul, 00:56:37). Son ENLACES, no estado: el
+ * panel activo es la URL, así que no hay preferencia que guardar ni que
+ * sincronizar con el server. Se reaprovecha el chip del registro ("Quiero
+ * aprender / Quiero enseñar"), que es la idea que se propuso en la reunión.
+ *
+ * ponytail: sin memoria de la última elección — "Panel" sigue llevando al rol
+ * más privilegiado. Se añade si molesta en uso real.
+ */
+function PanelSwitch({
+  panels,
+  pathname,
+  onNavigate,
+}: {
+  panels: HeaderUser["panels"];
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  if (panels.length < 2) return null;
+
+  return (
+    <div
+      role="group"
+      aria-label="Cambiar de panel"
+      className="grid gap-1 rounded-[10px] bg-accent p-1"
+      style={{ gridTemplateColumns: `repeat(${panels.length}, minmax(0, 1fr))` }}
+    >
+      {panels.map((p) => {
+        // Prefijo exacto: fuera de un panel (p. ej. /account) no se marca
+        // ninguno, que es más honesto que iluminar el de alumno por descarte.
+        const active = pathname === p.href || pathname.startsWith(`${p.href}/`);
+        return (
+          <Link
+            key={p.href}
+            href={p.href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "rounded-lg px-2 py-1.5 text-center text-[13px] transition-colors",
+              active
+                ? "bg-card font-semibold text-foreground shadow-sm"
+                : "font-medium text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {p.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Agrupación de v3-header: los mismos destinos que las columnas del footer. */
+const navGroups = [
+  {
+    label: "Explorar",
+    links: [
+      { href: "/tutors", label: "Explorar tutores" },
+      { href: "/classes", label: "Explorar clases" },
+      { href: "/categories", label: "Categorías" },
+    ],
+  },
+  {
+    label: "Nosotros",
+    links: [
+      { href: "/about", label: "Sobre nosotros" },
+      { href: "/how-it-works", label: "¿Cómo funciona?" },
+    ],
+  },
 ];
 
 function initials(user: HeaderUser): string {
@@ -47,8 +122,32 @@ function initials(user: HeaderUser): string {
   return base.slice(0, 2).toUpperCase();
 }
 
+/** Form GET nativo: navega a /search?q=… sin JS, igual que la página de búsqueda. */
+function SearchBox({ className }: { className?: string }) {
+  return (
+    <form action="/search" className={className}>
+      <div className="relative">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          name="q"
+          placeholder="Buscar tutores, mentorías o categorías"
+          aria-label="Buscar tutores, mentorías o categorías"
+          className="h-11 w-full rounded-lg bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        />
+      </div>
+    </form>
+  );
+}
+
 export function SiteHeader({ user }: { user?: HeaderUser | null }) {
   const router = useRouter();
+  const pathname = usePathname();
+  // El sheet no se cierra solo al navegar (Next navega en cliente, el diálogo
+  // no se entera). Se nota sobre todo en el switch de panel: cambias de panel y
+  // el menú te tapa el resultado.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
 
   async function signOut() {
     const supabase = createClient();
@@ -59,31 +158,44 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/60">
-      <Container className="flex h-14 items-center justify-between gap-4">
-        <Link href="/" className="font-semibold tracking-tight">
-          Enséñame Ya
+      <Container className="flex h-18 items-center gap-4">
+        <Link
+          href="/"
+          className="shrink-0 text-lg font-bold tracking-tight text-brand"
+        >
+          Enséñame ya
         </Link>
 
-        <nav className="hidden items-center gap-6 text-sm md:flex">
+        <nav className="hidden items-center gap-1 md:flex">
           {/* Con sesión, "Panel" es la vuelta a casa: sin él solo se llegaba
               por URL o rebuscando en el menú del avatar. */}
           {user ? (
-            <Link href={user.homeHref} className="font-medium transition-colors hover:text-foreground">
-              Panel
-            </Link>
+            <Button asChild variant="ghost" size="sm">
+              <Link href={user.homeHref}>Panel</Link>
+            </Button>
           ) : null}
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {link.label}
-            </Link>
+          {navGroups.map((group) => (
+            <DropdownMenu key={group.label}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="font-medium">
+                  {group.label}
+                  <ChevronDownIcon className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-52">
+                {group.links.map((link) => (
+                  <DropdownMenuItem key={link.href} asChild>
+                    <Link href={link.href}>{link.label}</Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           ))}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <SearchBox className="hidden max-w-xl flex-1 md:block" />
+
+        <div className="ml-auto hidden items-center gap-2 md:flex">
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -102,6 +214,13 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                 <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
                   {user.email}
                 </DropdownMenuLabel>
+
+                {user.panels.length > 1 ? (
+                  <div className="px-2 pb-2">
+                    <PanelSwitch panels={user.panels} pathname={pathname} />
+                  </div>
+                ) : null}
+
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href={user.homeHref}>
@@ -124,21 +243,21 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
           ) : (
             <>
               <Button asChild variant="ghost" size="sm">
-                <Link href="/login">Entrar</Link>
+                <Link href="/login">Iniciar sesión</Link>
               </Button>
-              <Button asChild size="sm">
+              <Button asChild>
                 <Link href="/signup">Crear cuenta</Link>
               </Button>
             </>
           )}
         </div>
 
-        <Sheet>
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="md:hidden"
+              className="ml-auto md:hidden"
               aria-label="Abrir menú"
             >
               <MenuIcon />
@@ -146,21 +265,24 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
           </SheetTrigger>
           <SheetContent side="right" className="w-72">
             <SheetHeader>
-              <SheetTitle>Enséñame Ya</SheetTitle>
+              <SheetTitle className="text-brand">Enséñame ya</SheetTitle>
             </SheetHeader>
+            <SearchBox className="px-4" />
             <nav className="flex flex-col gap-1 px-4">
               {user ? (
                 <Link
                   href={user.homeHref}
+                  onClick={closeMenu}
                   className="rounded-md px-2 py-2 text-sm font-medium hover:bg-muted"
                 >
                   Panel
                 </Link>
               ) : null}
-              {navLinks.map((link) => (
+              {navGroups.flatMap((group) => group.links).map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
+                  onClick={closeMenu}
                   className="rounded-md px-2 py-2 text-sm hover:bg-muted"
                 >
                   {link.label}
@@ -170,11 +292,20 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
             <div className="mt-2 flex flex-col gap-2 px-4">
               {user ? (
                 <>
+                  <PanelSwitch
+                    panels={user.panels}
+                    pathname={pathname}
+                    onNavigate={closeMenu}
+                  />
                   <Button asChild variant="outline">
-                    <Link href={user.homeHref}>Mi panel</Link>
+                    <Link href={user.homeHref} onClick={closeMenu}>
+                      Mi panel
+                    </Link>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link href="/account">Mi cuenta</Link>
+                    <Link href="/account" onClick={closeMenu}>
+                      Mi cuenta
+                    </Link>
                   </Button>
                   <Button variant="ghost" onClick={signOut}>
                     Cerrar sesión
@@ -183,7 +314,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
               ) : (
                 <>
                   <Button asChild variant="outline">
-                    <Link href="/login">Entrar</Link>
+                    <Link href="/login">Iniciar sesión</Link>
                   </Button>
                   <Button asChild>
                     <Link href="/signup">Crear cuenta</Link>

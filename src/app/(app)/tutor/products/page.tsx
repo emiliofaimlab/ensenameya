@@ -3,9 +3,7 @@ import Link from "next/link";
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
 import { priceLabel } from "@/lib/catalog/format";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { TutorShell } from "@/components/layout/tutor-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,25 +35,15 @@ export default async function TutorProductsPage() {
     .order("created_at", { ascending: false });
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
-          title="Mis productos"
-          description="Crea y edita las tutorías que ofreces."
-          actions={
-            <>
-              <Button asChild variant="outline">
-                <Link href="/tutor/reservas">Reservas</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/tutor/availability">Disponibilidad</Link>
-              </Button>
-              <Button asChild>
-                <Link href="/tutor/products/new">Crear producto</Link>
-              </Button>
-            </>
-          }
-        />
+    <TutorShell
+          title="Mis mentorías"
+          description="Crea y edita las mentorías que ofreces."
+      actions={
+        <Button asChild>
+          <Link href="/tutor/products/new">Crear mentoría</Link>
+        </Button>
+      }
+    >
 
         {approvalStatus !== "approved" ? (
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
@@ -119,7 +107,6 @@ export default async function TutorProductsPage() {
             })}
           </ul>
         )}
-      </Section>
-    </Container>
+    </TutorShell>
   );
 }
