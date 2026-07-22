@@ -45,15 +45,16 @@ export default async function TutorsPage({
         <Container className="py-10">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              Explora tutores
+              Explorar tutores
             </h1>
             <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold">
               {total} {total === 1 ? "tutor verificado" : "tutores verificados"}
             </span>
           </div>
           <p className="mt-3 max-w-3xl text-pretty text-white/90">
-            Encuentra a la persona correcta para el resultado que quieres
-            lograr, no solo por materia.
+            Encuentra a tu mentor ideal y asegura el resultado que buscas.
+            Conéctate con expertos verificados de toda Latinoamérica listos para
+            transformar tu forma de aprender en vivo.
           </p>
 
           {/* La búsqueda por texto vive en /search (US-303). */}
@@ -63,8 +64,8 @@ export default async function TutorsPage({
               <input
                 type="search"
                 name="q"
-                placeholder="Busca por resultado, materia o tutor…"
-                aria-label="Busca por resultado, materia o tutor"
+                placeholder="¿Qué habilidad pro vas a dominar hoy? (ej. hablar inglés, programar desde cero…)"
+                aria-label="¿Qué habilidad pro vas a dominar hoy?"
                 className="h-12 w-full rounded-[10px] bg-background pr-3 pl-9 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
               />
             </div>

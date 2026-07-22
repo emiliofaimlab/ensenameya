@@ -49,7 +49,7 @@ export default async function SearchPage({
       <div className="bg-brand text-white">
         <Container className="py-10">
           <h1 className="text-2xl font-bold tracking-tight sm:text-[26px]">
-            ¿Qué quieres aprender?
+            ¿Qué meta vas a conquistar hoy?
           </h1>
 
           {/* Form GET nativo: navega a /search?q=… sin JS. */}
@@ -60,7 +60,7 @@ export default async function SearchPage({
                 type="search"
                 name="q"
                 defaultValue={query}
-                placeholder="¿Qué quieres aprender?"
+                placeholder="¿Qué meta vas a conquistar hoy?"
                 aria-label="Buscar"
                 className="h-12 w-full rounded-[10px] bg-background pr-3 pl-9 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
               />
@@ -73,7 +73,7 @@ export default async function SearchPage({
           {/* El Figma fija una lista de búsquedas frecuentes; aquí salen las
               categorías reales, que además llevan a una búsqueda que funciona. */}
           <p className="mt-5 flex flex-wrap items-center gap-2 text-[13px]">
-            <span className="font-medium">Búsquedas frecuentes:</span>
+            <span className="font-medium">Explorar por categoría:</span>
             {allCategories.map((c) => (
               <Link
                 key={c.slug}
@@ -109,7 +109,7 @@ export default async function SearchPage({
                   [
                     ["todo", "Todo", total],
                     ["tutores", "Tutores", tutors.length],
-                    ["productos", "Productos", products.length],
+                    ["productos", "Mentorías", products.length],
                     ["categorias", "Categorías", matchedCategories.length],
                   ] as const
                 ).map(([id, label, n]) => (
@@ -151,7 +151,7 @@ export default async function SearchPage({
 
               {show("productos") && products.length > 0 ? (
                 <section className="mt-8">
-                  <h2 className="text-xl font-bold">Productos</h2>
+                  <h2 className="text-xl font-bold">Mentorías</h2>
                   <div className="mt-4 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                     {products.map((p) => (
                       <ProductCard key={p.id} product={p} />

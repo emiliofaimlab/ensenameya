@@ -5,42 +5,42 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { StepsBlock } from "@/components/home/steps-block";
 import { TrustCards } from "@/components/home/trust";
-import { HomeFaq } from "@/components/home/home-faq";
+import { FAQ_COMO_FUNCIONA, HomeFaq } from "@/components/home/home-faq";
 import { FinalCta } from "@/components/home/final-cta";
 
 export const metadata = {
   title: "¿Cómo funciona? · Enséñame Ya",
   description:
-    "Encuentras al tutor correcto, reservas con pago protegido y aprendes en vivo. Si enseñas, publicas tus resultados y cobras seguro.",
+    "Encuentras al tutor ideal, reservas con pago protegido y aseguras el éxito en vivo. Si vienes a enseñar, lanzas tus tutorías y cobras seguro.",
 };
 
 const STUDENT_STEPS = [
   {
-    title: "Busca tu resultado",
-    text: "Filtra por tutores o productos con un objetivo concreto. Cada producto promete un resultado claro, no solo un temario.",
+    title: "Encuentra tu meta",
+    text: "Cuéntanos qué quieres lograr. Filtra por tutores o tutorías con un objetivo concreto. Cada mentor te asegura un resultado claro y un aprendizaje dinámico.",
   },
   {
     title: "Reserva y paga seguro",
-    text: "Eliges horario y pagas en un checkout protegido. La reserva espera la aceptación del tutor hasta 24h; si no acepta, te devolvemos el 100%.",
+    text: "Eliges tu horario favorito y pagas en un checkout blindado. Tu reserva recibe la confirmación del tutor en menos de 24 horas; si por alguna razón no puede asistir, te devolvemos el 100% de inmediato.",
   },
   {
     title: "Aprende en vivo y avanza",
-    text: "Tomas tu clase 1 a 1 en video, enfocada en tu objetivo. Al terminar dejas tu reseña y reservas tu próxima sesión.",
+    text: "Conéctate en salas de video privadas 1 a 1. Avanzas a tu propio ritmo, logras el objetivo, dejas tu reseña y agendas la siguiente meta.",
   },
 ];
 
 const TUTOR_STEPS = [
   {
-    title: "Crea tu perfil y verifícate",
-    text: "Completa tu bio y tu headline de resultado. Pasa la verificación de identidad y experiencia que genera confianza.",
+    title: "Postúlate como tutor",
+    text: "Arma tu biografía y sube tus documentos en un clic. Nuestro equipo activa tu perfil tras una revisión manual para mantener la confianza en la comunidad bien arriba.",
   },
   {
-    title: "Publica tus resultados",
-    text: "Crea productos con un objetivo claro para el alumno. Tú fijas tu precio y tu disponibilidad.",
+    title: "Lanza tus tutorías",
+    text: "Diseña ofertas enfocadas en un resultado real. Tú pones las reglas: manejas tu propia disponibilidad y fijas tus precios por sesión con total libertad.",
   },
   {
-    title: "Imparte y cobra seguro",
-    text: "Aceptas la reserva y das tu clase en vivo 1 a 1. Retiras tus ganancias al banco con pagos gestionados.",
+    title: "Imparte la clase y cobra seguro",
+    text: "Aceptas la reserva en menos de 24 horas y das tu sesión en vivo 1 a 1. Retiras tus ganancias de forma rápida, transparente y garantizada.",
   },
 ];
 
@@ -53,23 +53,24 @@ export default function HowItWorksPage() {
             En vivo, 1 a 1
           </p>
           <h1 className="mt-3 max-w-3xl text-3xl font-bold tracking-tight text-balance sm:text-5xl">
-            Reserva tu resultado, de principio a fin
+            Elige tu meta, y asegura tu resultado de principio a fin
           </h1>
           <p className="mt-6 max-w-3xl text-pretty text-muted-foreground sm:text-lg">
-            Te explicamos cómo funciona Enséñame Ya en pocos pasos: encuentras
-            al tutor correcto, reservas con pago protegido y aprendes en vivo.
-            Si enseñas, publicas tus resultados y cobras seguro.
+            Lo que ya sabes vale oro y lo que puedes aprender también. En
+            Enséñame Ya encuentras al tutor ideal, reservas con pago protegido y
+            aseguras el éxito en vivo. Si vienes a enseñar, lanzas tus tutorías
+            y cobras seguro.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild className="h-11 bg-brand px-6 hover:bg-brand-foreground">
-              <Link href="/tutors">Explorar tutores</Link>
+              <Link href="/tutors">Aprende YA</Link>
             </Button>
             <Button
               asChild
               variant="outline"
               className="h-11 border-brand px-6 text-brand hover:bg-brand-muted hover:text-brand"
             >
-              <Link href="/signup">Quiero enseñar</Link>
+              <Link href="/signup">Enseña YA</Link>
             </Button>
           </div>
         </Section>
@@ -78,14 +79,15 @@ export default function HowItWorksPage() {
       <StepsBlock
         muted
         eyebrow="ESTUDIANTE"
-        title="Para quien aprende: reserva en 3 pasos"
+        title="Para quien aprende: habilidades pro en 3 pasos"
         steps={STUDENT_STEPS}
       />
 
       <Container>
         <Section>
           <p className="mx-auto max-w-3xl text-center text-2xl font-semibold tracking-tight text-balance sm:text-4xl">
-            Cada paso está pensado para que llegues rápido a tu resultado.
+            Cada paso está diseñado para que saques tu versión más pro y
+            multipliques tu talento.
           </p>
         </Section>
       </Container>
@@ -93,12 +95,13 @@ export default function HowItWorksPage() {
       <StepsBlock
         muted
         eyebrow="TUTOR"
-        title="Para quien enseña: empieza a cobrar en 3 pasos"
+        title="Para quien enseña: emprende y factura en 3 pasos"
         steps={TUTOR_STEPS}
+        cta={{ href: "/signup", label: "Regístrate YA" }}
       />
 
-      <TrustCards title="Reserva con la tranquilidad de siempre" />
-      <HomeFaq />
+      <TrustCards title="Aprende y enseña con la tranquilidad de siempre" />
+      <HomeFaq items={FAQ_COMO_FUNCIONA} />
       <FinalCta />
     </>
   );

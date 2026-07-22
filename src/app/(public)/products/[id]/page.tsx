@@ -109,7 +109,7 @@ export default async function ProductPage({
                 del hero. Repetirlo palabra por palabra no informa de nada. */}
             {product.description ? (
               <div>
-                <h2 className="text-xl font-bold">Cómo funciona</h2>
+                <h2 className="text-xl font-bold">Qué vas a conquistar</h2>
                 <p className="mt-3 text-pretty text-muted-foreground">
                   {product.description}
                 </p>

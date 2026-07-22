@@ -122,11 +122,11 @@ export default async function CategoryPage({
           </nav>
 
           <h1 className="mt-4 text-3xl font-bold tracking-tight text-primary sm:text-[36px]">
-            Explora {category.name}
+            Explorar {category.name}
           </h1>
           <p className="mt-3 max-w-3xl text-pretty text-white/90">
-            Elige tu resultado y reserva con tutores verificados, enfocados en
-            lo que quieres lograr.
+            Asegura los resultados que deseas de la mano de mentores validados,
+            enfocados en lo que quieres conquistar.
           </p>
 
           <dl className="mt-6 flex flex-wrap gap-8">
@@ -140,11 +140,11 @@ export default async function CategoryPage({
               </dd>
             </div>
             <div>
-              <dt className="sr-only">Productos</dt>
+              <dt className="sr-only">Mentorías</dt>
               <dd>
                 <span className="text-[17px] font-bold">{products.total}</span>{" "}
                 <span className="text-sm text-white/85">
-                  {products.total === 1 ? "producto" : "productos"}
+                  {products.total === 1 ? "mentoría" : "mentorías"}
                 </span>
               </dd>
             </div>
@@ -156,7 +156,7 @@ export default async function CategoryPage({
               <input
                 type="search"
                 name="q"
-                placeholder={`Busca un tema, tutor o curso de ${category.name}…`}
+                placeholder={`Busca una meta, tutor o mentoría de ${category.name}…`}
                 aria-label={`Buscar en ${category.name}`}
                 className="h-11 w-full rounded-[10px] bg-background pr-3 pl-9 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
               />
@@ -177,7 +177,7 @@ export default async function CategoryPage({
             className="flex gap-1 border-b"
           >
             {[
-              { id: "productos", label: "Productos", n: products.total },
+              { id: "productos", label: "Mentorías", n: products.total },
               { id: "tutores", label: "Tutores", n: tutors.total },
             ].map((t) => (
               <Link
@@ -211,7 +211,7 @@ export default async function CategoryPage({
               {tab === "productos" ? (
                 products.products.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Aún no hay clases en esta categoría.
+                    Aún no hay mentorías en esta categoría.
                   </p>
                 ) : (
                   <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">

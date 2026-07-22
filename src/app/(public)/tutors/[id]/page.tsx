@@ -121,10 +121,10 @@ export default async function TutorProfilePage({
             ) : null}
 
             <div>
-              <h2 className="text-xl font-bold">Sus clases</h2>
+              <h2 className="text-xl font-bold">Sus mentorías</h2>
               {products.length === 0 ? (
                 <p className="mt-3 text-sm text-muted-foreground">
-                  Este tutor aún no publicó clases.
+                  Este tutor aún no publicó mentorías.
                 </p>
               ) : (
                 <div className="mt-4 grid gap-5 sm:grid-cols-2">
@@ -161,12 +161,12 @@ export default async function TutorProfilePage({
                   Reserva una sesión suelta o un paquete con descuento.
                 </p>
                 <Button asChild className="mt-5 h-11 w-full">
-                  <Link href={`/reservar/${cheapest.id}`}>Reservar clase</Link>
+                  <Link href={`/reservar/${cheapest.id}`}>Reservar mentoría</Link>
                 </Button>
               </>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Este tutor aún no tiene clases disponibles para reservar.
+                Este tutor aún no tiene mentorías disponibles para reservar.
               </p>
             )}
             <CancellationPolicy className="mt-6" />

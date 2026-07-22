@@ -30,7 +30,33 @@ const FAQ = [
   },
 ];
 
-export function HomeFaq() {
+/** P03 usa su propio set. Verificadas contra el código: zona horaria (RN-01/02),
+ *  ventana de 24h (RN-38), sala Daily (US-801), reembolsos (RN-37) y payouts en
+ *  lote semanal (US-1002). */
+export const FAQ_COMO_FUNCIONA = [
+  {
+    q: "¿Cómo se coordinan los horarios de las tutorías?",
+    a: "La plataforma sincroniza las agendas de forma automática convirtiendo las horas a tu zona horaria local para que programar sea rápido y sencillo.",
+  },
+  {
+    q: "¿Qué pasa tras pagar mi clase?",
+    a: "Tu reserva queda confirmada y lista. El tutor cuenta con una ventana de hasta 24 horas para aceptarla. Al confirmar, todo queda agendado; si por algún motivo expira el tiempo, se cancela y tu dinero se reembolsa al 100% de inmediato.",
+  },
+  {
+    q: "¿Cómo accedo a las salas de video 1 a 1?",
+    a: "Entras directamente de forma nativa en la web. A la hora de tu sesión, ingresas a tu panel de control y tendrás un botón directo para conectarte a nuestra sala privada de video.",
+  },
+  {
+    q: "¿Puedo reprogramar o cambiar mi clase si me surge un imprevisto?",
+    a: "Por supuesto. Si avisas con 24 horas o más de anticipación, recuperas el 100% de tu inversión. Si es una modificación realizada con menos de 24 horas de aviso, la plataforma te reembolsa el 50% de la sesión.",
+  },
+  {
+    q: "¿Cómo y cuándo cobran los tutores?",
+    a: "Tus ingresos se acumulan de forma segura. Tras el periodo de retención para garantizar el éxito de la experiencia, procesamos tus payouts en lotes semanales listos para ser retirados desde tu panel.",
+  },
+];
+
+export function HomeFaq({ items = FAQ }: { items?: typeof FAQ }) {
   return (
     <div className="bg-muted">
       <Container>
@@ -41,7 +67,7 @@ export function HomeFaq() {
 
           {/* ponytail: <details> nativo — acordeón accesible sin JS ni librería. */}
           <div className="mx-auto mt-8 max-w-4xl divide-y divide-border">
-            {FAQ.map(({ q, a }) => (
+            {items.map(({ q, a }) => (
               <details key={q} className="group py-4">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold marker:hidden">
                   {q}

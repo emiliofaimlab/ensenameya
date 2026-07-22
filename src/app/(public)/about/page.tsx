@@ -25,24 +25,24 @@ export const metadata = {
 
 const VALUES = [
   {
-    icon: GlobeIcon,
-    title: "Acceso para todos",
-    text: "Aprender algo nuevo no debería depender de dónde vives ni de tu horario.",
-  },
-  {
     icon: TargetIcon,
-    title: "Resultados, no horas",
-    text: "Medimos el éxito por lo que logras, no por los minutos que pasas en clase.",
+    title: "Resultados validados",
+    text: "Evaluamos el éxito por tus metas cumplidas y por las nuevas habilidades que logras dominar.",
   },
   {
     icon: BadgeCheckIcon,
-    title: "Confianza verificada",
-    text: "Cada tutor pasa por revisión de identidad y experiencia antes de enseñar.",
+    title: "Talento garantizado",
+    text: "Validamos manualmente a cada tutor para asegurar su experiencia y energía propia antes de su primera sesión.",
   },
   {
     icon: SparklesIcon,
     title: "Transparencia total",
-    text: "Precios claros y reglas de reembolso sin letra pequeña ni sorpresas.",
+    text: "Cuentas claras y honestidad absoluta. Pagas exactamente por el resultado que decides aprender.",
+  },
+  {
+    icon: GlobeIcon,
+    title: "Conocimiento sin fronteras",
+    text: "Acercamos el aprendizaje de primer nivel a cada rincón de la comunidad hispanohablante.",
   },
 ];
 
@@ -63,37 +63,37 @@ export default function AboutPage() {
             Conectamos a quien quiere aprender con quien sabe enseñar
           </h1>
           <p className="mt-6 max-w-2xl text-pretty text-white/90 sm:text-lg">
-            Enséñame Ya nació para que aprender algo nuevo sea tan simple como
-            reservar una clase. Sin cursos pregrabados ni promesas vagas:
-            tutores reales, verificados, enfocados en el resultado que tú
-            eliges.
+            Enséñame Ya nació para garantizar que dominar un nuevo idioma,
+            materia o habilidad sea una experiencia emocionante y efectiva.
+            Consigue resultados reales de la mano de expertos que potencian tu
+            talento.
           </p>
         </Container>
       </section>
 
-      <TrustCards title="Reserva con la tranquilidad de siempre" />
+      <TrustCards title="Reserva con tranquilidad garantizada" />
 
       <FeatureSplit
-        title="Nacimos para transformar la forma de aprender"
-        text="Los cursos grabados muchas veces se abandonan y las academias tradicionales pueden ser rígidas y costosas. Por eso creamos una alternativa más cercana: acceso directo a buenos tutores, justo cuando los necesitas y enfocada en lo que quieres lograr."
+        title="Transformamos la forma de aprender para llevarte al siguiente nivel"
+        text="Diseñamos un espacio dinámico, moderno e interactivo donde avanzas con paso firme de la mano de un tutor enfocado exclusivamente en tu éxito."
         points={[
           {
             icon: UserIcon,
-            text: "Aprendizaje 1 a 1",
-            desc: "Clases personalizadas, no contenido masivo grabado.",
+            text: "Mentoría 1 a 1",
+            desc: "Clases totalmente personalizadas y adaptadas a tu propio ritmo de aprendizaje.",
           },
           {
             icon: TargetIcon,
-            text: "Enfocados en tu resultado",
-            desc: "Avanzas hacia tu objetivo, no recorres un temario.",
+            text: "Avanza con agilidad",
+            desc: "Ve directo hacia la meta elegida mediante explicaciones prácticas y dinámicas.",
           },
           {
             icon: ClockIcon,
-            text: "Flexible, a tu ritmo",
-            desc: "Tú eliges cuándo, con quién y a qué velocidad.",
+            text: "Control de tu agenda",
+            desc: "Tú decides cuándo y con quién conectarte con total libertad y flexibilidad.",
           },
         ]}
-        cta={{ href: "/tutors", label: "Explorar tutores", variant: "outline" }}
+        cta={{ href: "/tutors", label: "Explorar tutorías", variant: "outline" }}
         image={{
           src: "/img/about-mission.jpg",
           alt: "Alumna tomando una clase en vivo",
@@ -102,23 +102,23 @@ export default function AboutPage() {
 
       <FeatureSplit
         reverse
-        title="El tutor vende el resultado, no el proceso"
-        text="Es el principio que guía todo lo que construimos. Cuando reservas, no compras horas de clase: compras avanzar hacia un objetivo concreto. Por eso cada tutor describe lo que vas a lograr, no solo lo que sabe."
+        title="Enfocados en tus logros y en el valor de tus resultados"
+        text="Tu tutor diseña una ruta con objetivos claros para que cada sesión sea un paso certero hacia el éxito que planificaron."
         points={[
           {
             icon: TargetIcon,
-            text: "Resultado claro",
-            desc: "Cada producto promete lo que vas a lograr.",
+            text: "Resultados asegurados",
+            desc: "Cada tutoría detalla con precisión la meta real que vas a conquistar.",
           },
           {
             icon: ShieldCheckIcon,
-            text: "Tutores verificados",
-            desc: "Identidad y experiencia revisadas antes de enseñar.",
+            text: "Filtro de confianza",
+            desc: "Colaboramos únicamente con profesionales calificados y aprobados por nuestro equipo.",
           },
           {
             icon: WalletIcon,
-            text: "Pagos protegidos",
-            desc: "Reembolsos con reglas claras, sin sorpresas.",
+            text: "Tu inversión protegida",
+            desc: "Gestión de cobros y payouts con total claridad, transparencia y seguridad.",
           },
         ]}
         cta={{ href: "/how-it-works", label: "Conoce cómo funciona" }}

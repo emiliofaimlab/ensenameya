@@ -1,3 +1,6 @@
+import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 
@@ -6,11 +9,13 @@ export function StepsBlock({
   eyebrow,
   title,
   steps,
+  cta,
   muted = false,
 }: {
   eyebrow: string;
   title: string;
   steps: { title: string; text: string }[];
+  cta?: { href: string; label: string };
   muted?: boolean;
 }) {
   return (
@@ -35,6 +40,15 @@ export function StepsBlock({
               </li>
             ))}
           </ol>
+
+          {cta ? (
+            <Button
+              asChild
+              className="mt-8 h-11 bg-brand px-6 hover:bg-brand-foreground"
+            >
+              <Link href={cta.href}>{cta.label}</Link>
+            </Button>
+          ) : null}
         </Section>
       </Container>
     </div>

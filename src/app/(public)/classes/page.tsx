@@ -16,7 +16,7 @@ import {
 import { listActiveProducts, listActiveCategories } from "@/lib/catalog/queries";
 import type { Database } from "@/lib/database.types";
 
-export const metadata = { title: "Explorar clases · Enséñame Ya" };
+export const metadata = { title: "Explorar mentorías · Enséñame Ya" };
 
 type PricingModel = Database["public"]["Enums"]["pricing_model"];
 
@@ -73,7 +73,7 @@ export default async function ClassesPage({
         <Container className="py-10">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              Explora productos
+              Explorar mentorías
             </h1>
             <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold">
               {total} {total === 1 ? "resultado" : "resultados"} con objetivo
@@ -81,7 +81,9 @@ export default async function ClassesPage({
             </span>
           </div>
           <p className="mt-3 max-w-3xl text-pretty text-white/90">
-            Clases, paquetes y mentorías con un resultado claro y medible.
+            Elige el servicio ideal para ti y asegura el resultado que buscas
+            hoy. Clases, mentorías y paquetes con una meta clara, medible y
+            diseñada para tu éxito.
           </p>
 
           <form action="/search" className="mt-6 flex gap-2">
@@ -90,8 +92,8 @@ export default async function ClassesPage({
               <input
                 type="search"
                 name="q"
-                placeholder="Busca un producto o resultado…"
-                aria-label="Busca un producto o resultado"
+                placeholder="¿Qué resultado vas a lograr hoy? (ej. hablar inglés, aprobar cálculo…)"
+                aria-label="¿Qué resultado vas a lograr hoy?"
                 className="h-12 w-full rounded-[10px] bg-background pr-3 pl-9 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
               />
             </div>
@@ -143,12 +145,12 @@ export default async function ClassesPage({
           <div>
             <p className="text-[15px] font-medium">
               {total}{" "}
-              {total === 1 ? "producto disponible" : "productos disponibles"}
+              {total === 1 ? "mentoría disponible" : "mentorías disponibles"}
             </p>
 
             {products.length === 0 ? (
               <p className="mt-6 text-sm text-muted-foreground">
-                No hay clases para este filtro todavía. Prueba con otra
+                No hay mentorías para este filtro todavía. Prueba con otra
                 categoría.
               </p>
             ) : (
