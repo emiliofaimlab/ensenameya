@@ -3,9 +3,7 @@ import { notFound } from "next/navigation";
 
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { APPROVAL_BADGE, IDENTITY_BADGE } from "../../badges";
@@ -83,9 +81,7 @@ export default async function AdminTutorPage({
   const socialLinks = Object.entries(socials).filter(([, v]) => Boolean(v));
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title={tutor.profiles?.full_name ?? "Tutor sin nombre"}
           description={tutor.headline ?? "Sin titular"}
           actions={
@@ -93,7 +89,7 @@ export default async function AdminTutorPage({
               <Link href="/admin">Volver a la cola</Link>
             </Button>
           }
-        />
+    >
 
         <div className="flex flex-wrap gap-2">
           <Badge variant={approval.variant}>{approval.label}</Badge>
@@ -152,7 +148,6 @@ export default async function AdminTutorPage({
           identityStatus={tutor.identity_verification_status}
           approvalNotes={tutor.approval_notes}
         />
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }

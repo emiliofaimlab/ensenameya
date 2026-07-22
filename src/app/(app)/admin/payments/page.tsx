@@ -3,12 +3,9 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/server";
 import { listPayments, listPaymentProviders } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/catalog/format";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { Pager } from "@/components/catalog/pager";
-import { AdminNav } from "../admin-nav";
 import { PAYMENT_BADGE } from "../badges";
 import { AdminFilters } from "./filters";
 
@@ -63,13 +60,10 @@ export default async function AdminPaymentsPage({
   const single = totals.currencies.length === 1 ? totals.currencies[0] : null;
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title="Pagos"
           description="Cobros, comisiones y reembolsos. Filtra por estado, proveedor, corredor o fecha."
-        />
-        <AdminNav />
+    >
 
         <AdminFilters
           basePath="/admin/payments"
@@ -159,8 +153,7 @@ export default async function AdminPaymentsPage({
         )}
 
         <Pager page={page} hasMore={hasMore} hrefFor={pageHref} />
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }
 

@@ -2,13 +2,10 @@ import Link from "next/link";
 
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { APPROVAL_BADGE, IDENTITY_BADGE } from "./badges";
-import { AdminNav } from "./admin-nav";
 
 export const metadata = { title: "Panel admin · Enséñame Ya" };
 
@@ -38,17 +35,14 @@ export default async function AdminPage() {
   const pendingCount = tutors.filter((t) => t.approval_status === "pending").length;
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title="Revisión de tutores"
           description={
             pendingCount
               ? `${pendingCount} ${pendingCount === 1 ? "tutor espera" : "tutores esperan"} revisión.`
               : "No hay tutores esperando revisión."
           }
-        />
-        <AdminNav />
+    >
 
         {queue.length === 0 ? (
           <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
@@ -84,7 +78,6 @@ export default async function AdminPage() {
             })}
           </ul>
         )}
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }

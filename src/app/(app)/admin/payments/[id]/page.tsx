@@ -4,9 +4,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/server";
 import { getPaymentDetail } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/catalog/format";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PAYMENT_BADGE } from "../../badges";
@@ -44,9 +42,7 @@ export default async function AdminPaymentPage({
   ].sort((a, z) => a.at.localeCompare(z.at));
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title={productTitle}
           description={`Pago ${p.id.slice(0, 8)}…`}
           actions={
@@ -54,7 +50,7 @@ export default async function AdminPaymentPage({
               <Link href="/admin/payments">Volver a pagos</Link>
             </Button>
           }
-        />
+    >
 
         <div className="flex flex-wrap gap-2">
           <Badge variant={badge.variant}>{badge.label}</Badge>
@@ -115,8 +111,7 @@ export default async function AdminPaymentPage({
             </p>
           ) : null}
         </div>
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }
 

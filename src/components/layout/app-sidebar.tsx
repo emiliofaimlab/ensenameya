@@ -3,13 +3,18 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BarChart3Icon,
   BookOpenIcon,
   CalendarPlusIcon,
+  FolderTreeIcon,
   HomeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  PercentIcon,
+  ReceiptIcon,
   TicketIcon,
   UserIcon,
+  UsersIcon,
   WalletIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -23,6 +28,8 @@ type Item = {
   icon: LucideIcon;
   /** Solo activo en la ruta exacta (los "inicio", que son prefijo de las demás). */
   exact?: boolean;
+  /** Prefijo extra que también lo marca activo (detalles que cuelgan de otra ruta). */
+  alsoMatch?: string;
 };
 
 /**
@@ -50,6 +57,32 @@ export const TUTOR_ITEMS: Item[] = [
   { href: "/account", label: "Cuenta", icon: UserIcon },
 ];
 
+/**
+ * Menú del panel admin (AD02…AD15). "Dashboard" apunta a las estadísticas
+ * globales, que son las métricas que el Figma pinta en su pantalla de inicio;
+ * `/admin` en el código es la cola de tutores, así que va como "Tutores".
+ *
+ * Vive aquí y no en `admin-shell` a propósito: los iconos son componentes, y
+ * un Server Component no puede pasar funciones a uno de cliente.
+ * ponytail: fuera "Alertas" (AD14) — no existe esa pantalla.
+ */
+export const ADMIN_ITEMS: Item[] = [
+  { href: "/admin/stats", label: "Dashboard", icon: BarChart3Icon },
+  // El detalle vive en /admin/tutores/[id], fuera del prefijo de esta ruta.
+  {
+    href: "/admin",
+    label: "Tutores",
+    icon: UsersIcon,
+    exact: true,
+    alsoMatch: "/admin/tutores",
+  },
+  { href: "/admin/bookings", label: "Reservas", icon: TicketIcon },
+  { href: "/admin/payments", label: "Pagos", icon: ReceiptIcon },
+  { href: "/admin/payouts", label: "Payouts", icon: WalletIcon },
+  { href: "/admin/categorias", label: "Categorías", icon: FolderTreeIcon },
+  { href: "/admin/tiers", label: "Comisión y tiers", icon: PercentIcon },
+];
+
 export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -69,9 +102,9 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const { href, label, icon: Icon } = item;
-          const active = item.exact
-            ? pathname === href
-            : pathname.startsWith(href);
+          const active =
+            (item.exact ? pathname === href : pathname.startsWith(href)) ||
+            (item.alsoMatch ? pathname.startsWith(item.alsoMatch) : false);
           return (
             <li key={href}>
               <Link

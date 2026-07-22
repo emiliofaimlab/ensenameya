@@ -3,10 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
-import { AdminNav } from "../admin-nav";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { AdminFilters } from "../payments/filters";
 
 export const metadata = { title: "Estadísticas · Enséñame Ya" };
@@ -75,13 +72,10 @@ export default async function AdminStatsPage({
     from || to ? `${from ?? "inicio"} → ${to ?? "hoy"}` : "todo el histórico";
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title="Estadísticas globales"
           description={`KPIs de la plataforma · ${periodLabel}`}
-        />
-        <AdminNav />
+    >
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm text-muted-foreground">Período rápido:</span>
@@ -141,8 +135,7 @@ export default async function AdminStatsPage({
             </div>
           ))
         )}
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }
 
