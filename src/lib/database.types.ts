@@ -709,6 +709,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_path: string | null
           created_at: string
           full_name: string | null
           id: string
@@ -719,6 +720,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          avatar_path?: string | null
           created_at?: string
           full_name?: string | null
           id: string
@@ -729,6 +731,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          avatar_path?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
@@ -884,6 +887,104 @@ export type Database = {
           },
         ]
       }
+      student_interests: {
+        Row: {
+          category_id: string
+          student_id: string
+        }
+        Insert: {
+          category_id: string
+          student_id: string
+        }
+        Update: {
+          category_id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_interests_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_interests_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tutor_categories: {
+        Row: {
+          category_id: string
+          tutor_id: string
+        }
+        Insert: {
+          category_id: string
+          tutor_id: string
+        }
+        Update: {
+          category_id?: string
+          tutor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tutor_categories_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tutor_materials: {
+        Row: {
+          created_at: string
+          file_name: string
+          id: string
+          size_bytes: number
+          storage_path: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          id?: string
+          size_bytes: number
+          storage_path: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          id?: string
+          size_bytes?: number
+          storage_path?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_materials_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tutor_profiles: {
         Row: {
           approval_notes: string | null
@@ -898,6 +999,7 @@ export type Database = {
           rating_count: number
           search_text: string | null
           socials: Json
+          teaching_level: Database["public"]["Enums"]["teaching_level"] | null
           tier_id: string | null
           updated_at: string
         }
@@ -914,6 +1016,7 @@ export type Database = {
           rating_count?: number
           search_text?: string | null
           socials?: Json
+          teaching_level?: Database["public"]["Enums"]["teaching_level"] | null
           tier_id?: string | null
           updated_at?: string
         }
@@ -930,6 +1033,7 @@ export type Database = {
           rating_count?: number
           search_text?: string | null
           socials?: Json
+          teaching_level?: Database["public"]["Enums"]["teaching_level"] | null
           tier_id?: string | null
           updated_at?: string
         }
@@ -1202,6 +1306,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+      teaching_level: "basico" | "intermedio" | "avanzado"
       tutor_approval_status: "pending" | "approved" | "rejected" | "suspended"
     }
     CompositeTypes: {
@@ -1377,6 +1482,7 @@ export const Constants = {
         "cancelled",
         "no_show",
       ],
+      teaching_level: ["basico", "intermedio", "avanzado"],
       tutor_approval_status: ["pending", "approved", "rejected", "suspended"],
     },
   },
