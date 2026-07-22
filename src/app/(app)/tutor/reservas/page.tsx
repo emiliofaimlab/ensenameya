@@ -1,11 +1,7 @@
-import Link from "next/link";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
+import { TutorShell } from "@/components/layout/tutor-shell";
 import { BookingList, type BookingRow } from "@/components/booking-list";
 
 export const metadata = { title: "Reservas recibidas · Enséñame Ya" };
@@ -36,24 +32,11 @@ export default async function TutorReservasPage() {
     );
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <TutorShell
           title="Reservas recibidas"
           description="Acepta o rechaza las reservas de tus alumnos (tienes 24 h)."
-          actions={
-            <div className="flex gap-2">
-              <Button asChild variant="outline">
-                <Link href="/tutor/products">Mis productos</Link>
-              </Button>
-              <Button asChild variant="outline">
-                <Link href="/tutor/payouts">Cobros</Link>
-              </Button>
-            </div>
-          }
-        />
+    >
         <BookingList bookings={bookings} mode="tutor" />
-      </Section>
-    </Container>
+    </TutorShell>
   );
 }

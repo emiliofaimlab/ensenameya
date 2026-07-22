@@ -3,18 +3,27 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  BookOpenIcon,
   CalendarPlusIcon,
   HomeIcon,
+  LayoutDashboardIcon,
   LogOutIcon,
   TicketIcon,
   UserIcon,
+  WalletIcon,
   type LucideIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
-type Item = { href: string; label: string; icon: LucideIcon };
+type Item = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  /** Solo activo en la ruta exacta (los "inicio", que son prefijo de las demás). */
+  exact?: boolean;
+};
 
 /**
  * Menú lateral del área autenticada (AL02 y siguientes).
@@ -25,9 +34,19 @@ type Item = { href: string; label: string; icon: LucideIcon };
  * duplicar "Cuenta" (`/account`).
  */
 const STUDENT_ITEMS: Item[] = [
-  { href: "/app", label: "Inicio", icon: HomeIcon },
+  { href: "/app", label: "Inicio", icon: HomeIcon, exact: true },
   { href: "/reservas", label: "Mis reservas", icon: TicketIcon },
   { href: "/tutors", label: "Agendar", icon: CalendarPlusIcon },
+  { href: "/account", label: "Cuenta", icon: UserIcon },
+];
+
+/** Menú del tutor (TU06). Mismos criterios: solo rutas que existen. */
+export const TUTOR_ITEMS: Item[] = [
+  { href: "/tutor", label: "Dashboard", icon: LayoutDashboardIcon, exact: true },
+  { href: "/tutor/products", label: "Mis mentorías", icon: BookOpenIcon },
+  { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
+  { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
+  { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
 ];
 
@@ -48,10 +67,11 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
       className="h-fit rounded-2xl bg-card p-3 lg:sticky lg:top-24"
     >
       <ul className="flex flex-col gap-1">
-        {items.map(({ href, label, icon: Icon }) => {
-          // `/app` solo coincide exacto; el resto acepta sus subrutas.
-          const active =
-            href === "/app" ? pathname === href : pathname.startsWith(href);
+        {items.map((item) => {
+          const { href, label, icon: Icon } = item;
+          const active = item.exact
+            ? pathname === href
+            : pathname.startsWith(href);
           return (
             <li key={href}>
               <Link
