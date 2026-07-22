@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ChevronDownIcon,
   LogOutIcon,
@@ -33,6 +34,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Container } from "@/components/layout/container";
+import { cn } from "@/lib/utils";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
 export type HeaderUser = {
@@ -40,7 +42,61 @@ export type HeaderUser = {
   name: string | null;
   /** Panel del usuario según su rol (lo resuelve `toHeaderUser` con pickHome). */
   homeHref: string;
+  /** Todos los paneles a los que puede entrar (`panelsFor`). Uno solo = sin switch. */
+  panels: { href: string; label: string }[];
 };
+
+/**
+ * Switch de panel (acuerdo del 17-jul, 00:56:37). Son ENLACES, no estado: el
+ * panel activo es la URL, así que no hay preferencia que guardar ni que
+ * sincronizar con el server. Se reaprovecha el chip del registro ("Quiero
+ * aprender / Quiero enseñar"), que es la idea que se propuso en la reunión.
+ *
+ * ponytail: sin memoria de la última elección — "Panel" sigue llevando al rol
+ * más privilegiado. Se añade si molesta en uso real.
+ */
+function PanelSwitch({
+  panels,
+  pathname,
+  onNavigate,
+}: {
+  panels: HeaderUser["panels"];
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  if (panels.length < 2) return null;
+
+  return (
+    <div
+      role="group"
+      aria-label="Cambiar de panel"
+      className="grid gap-1 rounded-[10px] bg-accent p-1"
+      style={{ gridTemplateColumns: `repeat(${panels.length}, minmax(0, 1fr))` }}
+    >
+      {panels.map((p) => {
+        // Prefijo exacto: fuera de un panel (p. ej. /account) no se marca
+        // ninguno, que es más honesto que iluminar el de alumno por descarte.
+        const active = pathname === p.href || pathname.startsWith(`${p.href}/`);
+        return (
+          <Link
+            key={p.href}
+            href={p.href}
+            onClick={onNavigate}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "rounded-lg px-2 py-1.5 text-center text-[13px] transition-colors",
+              active
+                ? "bg-card font-semibold text-foreground shadow-sm"
+                : "font-medium text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {p.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Agrupación de v3-header: los mismos destinos que las columnas del footer. */
 const navGroups = [
@@ -86,6 +142,12 @@ function SearchBox({ className }: { className?: string }) {
 
 export function SiteHeader({ user }: { user?: HeaderUser | null }) {
   const router = useRouter();
+  const pathname = usePathname();
+  // El sheet no se cierra solo al navegar (Next navega en cliente, el diálogo
+  // no se entera). Se nota sobre todo en el switch de panel: cambias de panel y
+  // el menú te tapa el resultado.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
 
   async function signOut() {
     const supabase = createClient();
@@ -152,6 +214,13 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                 <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
                   {user.email}
                 </DropdownMenuLabel>
+
+                {user.panels.length > 1 ? (
+                  <div className="px-2 pb-2">
+                    <PanelSwitch panels={user.panels} pathname={pathname} />
+                  </div>
+                ) : null}
+
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href={user.homeHref}>
@@ -183,7 +252,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
           )}
         </div>
 
-        <Sheet>
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>
             <Button
               variant="ghost"
@@ -203,6 +272,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
               {user ? (
                 <Link
                   href={user.homeHref}
+                  onClick={closeMenu}
                   className="rounded-md px-2 py-2 text-sm font-medium hover:bg-muted"
                 >
                   Panel
@@ -212,6 +282,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                 <Link
                   key={link.href}
                   href={link.href}
+                  onClick={closeMenu}
                   className="rounded-md px-2 py-2 text-sm hover:bg-muted"
                 >
                   {link.label}
@@ -221,11 +292,20 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
             <div className="mt-2 flex flex-col gap-2 px-4">
               {user ? (
                 <>
+                  <PanelSwitch
+                    panels={user.panels}
+                    pathname={pathname}
+                    onNavigate={closeMenu}
+                  />
                   <Button asChild variant="outline">
-                    <Link href={user.homeHref}>Mi panel</Link>
+                    <Link href={user.homeHref} onClick={closeMenu}>
+                      Mi panel
+                    </Link>
                   </Button>
                   <Button asChild variant="outline">
-                    <Link href="/account">Mi cuenta</Link>
+                    <Link href="/account" onClick={closeMenu}>
+                      Mi cuenta
+                    </Link>
                   </Button>
                   <Button variant="ghost" onClick={signOut}>
                     Cerrar sesión

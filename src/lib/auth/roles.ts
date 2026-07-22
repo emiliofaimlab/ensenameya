@@ -26,6 +26,24 @@ export function pickHome(roles: AppRole[]): string {
 }
 
 /**
+ * Paneles a los que el usuario puede entrar, en orden de lectura
+ * (aprender → enseñar → administrar). Alimenta el switch del menú de cuenta
+ * (acuerdo de la reunión del 17-jul, 00:56:37): quien es alumno y tutor a la
+ * vez tiene que poder cambiar de panel sin cerrar sesión.
+ *
+ * Los roles se ACUMULAN (S-14), así que esto es un filtro, no un `switch`.
+ * Con un solo panel el switch no se pinta: no habría nada que elegir.
+ */
+export function panelsFor(roles: AppRole[]): { href: string; label: string }[] {
+  const all: { role: AppRole; href: string; label: string }[] = [
+    { role: "alumno", href: ROLE_HOME.alumno, label: "Aprender" },
+    { role: "tutor", href: ROLE_HOME.tutor, label: "Enseñar" },
+    { role: "admin", href: ROLE_HOME.admin, label: "Administrar" },
+  ];
+  return all.filter((p) => roles.includes(p.role)).map(({ href, label }) => ({ href, label }));
+}
+
+/**
  * Sanea un `?next=` para evitar open-redirect: sólo rutas internas
  * (`/algo`), nunca `//host` ni URLs absolutas. Si no es válido, usa `fallback`.
  */
