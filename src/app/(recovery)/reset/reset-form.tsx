@@ -6,6 +6,11 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  AUTH_FIELD,
+  AUTH_LABEL,
+  AUTH_SUBMIT,
+} from "@/components/auth/field-classes";
 
 export function ResetForm() {
   const [loading, setLoading] = useState(false);
@@ -41,17 +46,20 @@ export function ResetForm() {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
       <div className="grid gap-2">
-        <Label htmlFor="email">Correo</Label>
+        <Label htmlFor="email" className={AUTH_LABEL}>
+          Correo
+        </Label>
         <Input
           id="email"
           name="email"
           type="email"
           autoComplete="email"
           required
-          placeholder="tu@correo.com"
+          placeholder="tucorreo@ejemplo.com"
+          className={AUTH_FIELD}
         />
       </div>
-      <Button type="submit" disabled={loading} className="w-full">
+      <Button type="submit" disabled={loading} className={AUTH_SUBMIT}>
         {loading ? "Enviando…" : "Enviar enlace"}
       </Button>
     </form>

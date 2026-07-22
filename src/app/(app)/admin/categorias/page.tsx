@@ -1,9 +1,6 @@
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
-import { AdminNav } from "../admin-nav";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { CategoryManager, type CategoryRow } from "./category-manager";
 
 export const metadata = { title: "Categorías · Enséñame Ya" };
@@ -36,15 +33,11 @@ export default async function AdminCategoriasPage() {
   }));
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title="Categorías"
           description="Las que ven alumnos y tutores al explorar y al clasificar sus clases."
-        />
-        <AdminNav />
+    >
         <CategoryManager categories={categories} />
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }

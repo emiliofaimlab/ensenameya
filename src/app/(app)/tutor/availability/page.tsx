@@ -1,11 +1,7 @@
-import Link from "next/link";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
+import { TutorShell } from "@/components/layout/tutor-shell";
 import { AvailabilityManager } from "./availability-manager";
 import { ExceptionsManager } from "./exceptions-manager";
 
@@ -36,17 +32,10 @@ export default async function TutorAvailabilityPage() {
   ]);
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <TutorShell
           title="Mi disponibilidad"
           description="Define los bloques semanales en los que puedes dar clases (tu hora local)."
-          actions={
-            <Button asChild variant="outline">
-              <Link href="/tutor/products">Mis productos</Link>
-            </Button>
-          }
-        />
+    >
 
         {approvalStatus !== "approved" ? (
           <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
@@ -70,7 +59,6 @@ export default async function TutorAvailabilityPage() {
           </div>
           <ExceptionsManager userId={userId} exceptions={exceptions ?? []} />
         </div>
-      </Section>
-    </Container>
+    </TutorShell>
   );
 }

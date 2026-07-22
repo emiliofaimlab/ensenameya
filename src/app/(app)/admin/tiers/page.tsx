@@ -1,9 +1,6 @@
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
-import { AdminNav } from "../admin-nav";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { TierManager, type TierRow } from "./tier-manager";
 
 export const metadata = { title: "Comisión y tiers · Enséñame Ya" };
@@ -35,15 +32,11 @@ export default async function AdminTiersPage() {
   }));
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title="Comisión y tiers"
           description="El split es el % que se lleva el tutor; el resto es comisión de la plataforma."
-        />
-        <AdminNav />
+    >
         <TierManager tiers={tiers} />
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }

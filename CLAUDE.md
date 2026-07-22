@@ -11,7 +11,17 @@
 - **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
 - **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (sin local) en Supabase + Vercel, flujo de trabajo y checklist (US-1603).
 
-Sprint activo: **Sprint 3** (sala en vivo, reseñas, payouts, admin, notificaciones, chat). S1 y S2 cerrados.
+Próximo sprint: **Sprint 4** (observabilidad, responsive/QA, grabación, avisos in-app). **S1, S2 y S3 cerrados** — S3 con todas sus historias en `Done` y mergeado a prod (2026-07-17). Los **referidos (EP-13) bajaron a los dos últimos sprints** en la reunión del 17-jul, junto con el resto de integraciones.
+
+**En curso ahora: EP-22 · Integración Visual** (track paralelo, `EY-102` / IV-01…06) — aplicar el
+Figma sobre el frontend ya construido. **IV-01 (auth) e IV-03 (públicas) aplicadas y en `In Review`**;
+faltan IV-02, IV-04, IV-05 e IV-06 (área autenticada). Detalle en `docs/BACKLOG.md` §4.2.
+Ojo: el Figma **no tiene design system ni diseño móvil**, y ninguna IV pasa de `In Review` sin
+aprobación del cliente.
+
+**EP-23 · Datos que el diseño necesita** (`EY-110` / DD-01…08) — huecos de modelo destapados por
+EP-22: nombre y foto del tutor, imagen de producto, nivel/idioma, subcategorías, páginas legales,
+mensajería. Ver §4.3. Aparte, `EY-109`: **buscar sin tildes devuelve cero resultados**.
 
 ## Stack
 

@@ -4,9 +4,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/server";
 import { getBookingDetail } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/catalog/format";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { BOOKING_BADGE, PAYMENT_BADGE } from "../../badges";
@@ -44,9 +42,7 @@ export default async function AdminBookingPage({
   ].sort((a, z) => a.at.localeCompare(z.at));
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title={productTitle}
           description={`${studentName} → ${tutorName}`}
           actions={
@@ -54,7 +50,7 @@ export default async function AdminBookingPage({
               <Link href="/admin/bookings">Volver a reservas</Link>
             </Button>
           }
-        />
+    >
 
         <div className="flex flex-wrap gap-2">
           <Badge variant={badge.variant}>{badge.label}</Badge>
@@ -136,8 +132,7 @@ export default async function AdminBookingPage({
           <h2 className="text-sm font-medium">Traza</h2>
           <Timeline entries={timeline} />
         </div>
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }
 

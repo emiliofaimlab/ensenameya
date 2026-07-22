@@ -53,7 +53,15 @@ export async function ensureRoom(name: string, expiresAt: Date): Promise<string>
     body: JSON.stringify({
       name,
       privacy: "private", // sin token no se entra
-      properties: { exp, eject_at_room_exp: true },
+      properties: {
+        exp,
+        eject_at_room_exp: true,
+        // Acuerdo de la reunión del 17-jul (00:24:48): el chat de la sala es el
+        // NUESTRO (EP-17, panel lateral de LV01). El de Daily se apaga por dos
+        // razones: no queremos dos chats, y el suyo se cobra aparte como
+        // almacenamiento. Es propiedad de SALA, no del iframe.
+        enable_chat: false,
+      },
     }),
   });
 

@@ -3,12 +3,9 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/server";
 import { listBookings } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/catalog/format";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
+import { AdminShell } from "@/components/layout/admin-shell";
 import { Badge } from "@/components/ui/badge";
 import { Pager } from "@/components/catalog/pager";
-import { AdminNav } from "../admin-nav";
 import { BOOKING_BADGE } from "../badges";
 import { AdminFilters } from "../payments/filters";
 
@@ -45,13 +42,10 @@ export default async function AdminBookingsPage({
   };
 
   return (
-    <Container>
-      <Section className="flex flex-col gap-6">
-        <PageHeader
+    <AdminShell
           title="Reservas"
           description={`${count} ${count === 1 ? "reserva" : "reservas"} con los filtros actuales.`}
-        />
-        <AdminNav />
+    >
 
         <AdminFilters
           basePath="/admin/bookings"
@@ -97,7 +91,6 @@ export default async function AdminBookingsPage({
         )}
 
         <Pager page={page} hasMore={hasMore} hrefFor={pageHref} />
-      </Section>
-    </Container>
+    </AdminShell>
   );
 }

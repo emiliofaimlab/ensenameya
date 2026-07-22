@@ -25,11 +25,30 @@ export default async function TutorOnboardingPage() {
   const { user } = await requireUser();
 
   const supabase = await createClient();
-  const { data: tp } = await supabase
-    .from("tutor_profiles")
-    .select("headline, bio, socials, approval_status")
-    .eq("profile_id", user.id)
-    .maybeSingle();
+  const [{ data: tp }, { data: prof }, { data: cats }, { data: myCats }, { data: mats }] =
+    await Promise.all([
+      supabase
+        .from("tutor_profiles")
+        .select("headline, bio, socials, approval_status, teaching_level")
+        .eq("profile_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("timezone, phone, avatar_path")
+        .eq("id", user.id)
+        .maybeSingle(),
+      supabase.from("categories").select("id, name").order("sort_order"),
+      supabase.from("tutor_categories").select("category_id").eq("tutor_id", user.id),
+      supabase
+        .from("tutor_materials")
+        .select("id, file_name, size_bytes")
+        .eq("tutor_id", user.id)
+        .order("created_at"),
+    ]);
+
+  const avatarUrl = prof?.avatar_path
+    ? supabase.storage.from("avatars").getPublicUrl(prof.avatar_path).data.publicUrl
+    : null;
 
   if (tp?.approval_status === "approved") {
     return (
@@ -58,46 +77,27 @@ export default async function TutorOnboardingPage() {
   const str = (v: unknown) => (typeof v === "string" ? v : "");
 
   return (
-    <Container>
-      <Section className="mx-auto flex w-full max-w-lg flex-col">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Enseña en Enséñame Ya</CardTitle>
-            <CardDescription>
-              {tp
-                ? "Tu solicitud está en revisión. Puedes ajustar tu perfil mientras tanto."
-                : "Crea tu perfil de tutor. Un admin lo revisará antes de publicarlo."}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {tp ? (
-              <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
-                En revisión — te avisaremos cuando esté aprobado.
-              </p>
-            ) : null}
-            <TutorOnboardingForm
-              userId={user.id}
-              exists={!!tp}
-              headline={tp?.headline ?? ""}
-              bio={tp?.bio ?? ""}
-              instagram={str(s.instagram)}
-              linkedin={str(s.linkedin)}
-              youtube={str(s.youtube)}
-              website={str(s.website)}
-            />
-            {tp ? (
-              <div className="flex flex-wrap gap-3">
-                <Button asChild variant="outline">
-                  <Link href="/tutor/verification">Verificar mi identidad →</Link>
-                </Button>
-                <Button asChild variant="outline">
-                  <Link href="/tutor/products">Mis productos</Link>
-                </Button>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-      </Section>
-    </Container>
+    <div className="bg-muted">
+      <Container>
+        <Section>
+          <TutorOnboardingForm
+            userId={user.id}
+            exists={!!tp}
+            headline={tp?.headline ?? ""}
+            bio={tp?.bio ?? ""}
+            instagram={str(s.instagram)}
+            linkedin={str(s.linkedin)}
+            avatarPath={prof?.avatar_path ?? null}
+            avatarUrl={avatarUrl}
+            timezone={prof?.timezone ?? "UTC"}
+            phone={prof?.phone ?? ""}
+            level={tp?.teaching_level ?? null}
+            categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
+            selectedCategories={(myCats ?? []).map((r) => r.category_id)}
+            materials={mats ?? []}
+          />
+        </Section>
+      </Container>
+    </div>
   );
 }

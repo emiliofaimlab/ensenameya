@@ -1,63 +1,76 @@
-import Link from "next/link";
+import {
+  BadgeCheckIcon,
+  CalendarSyncIcon,
+  ShieldCheckIcon,
+  TagIcon,
+  TargetIcon,
+  VideoIcon,
+} from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
+import { HomeHero } from "@/components/home/home-hero";
+import { FeatureSplit } from "@/components/home/feature-split";
+import { FeaturedTutors } from "@/components/home/featured-tutors";
+import { ThreeSteps } from "@/components/home/three-steps";
+import { FeaturedProducts } from "@/components/home/featured-products";
+import { HomeFaq } from "@/components/home/home-faq";
+import { FinalCta } from "@/components/home/final-cta";
+import {
+  listActiveCategories,
+  listActiveProducts,
+  listFeaturedTutors,
+} from "@/lib/catalog/queries";
 
-const features = [
-  {
-    title: "Descubre",
-    description: "Explora tutores y clases por categoría o búsqueda.",
-  },
-  {
-    title: "Reserva",
-    description: "Agenda en tu hora local y paga de forma segura.",
-  },
-  {
-    title: "Aprende en vivo",
-    description: "Clase 1:1 por videollamada y deja tu reseña.",
-  },
-];
+export default async function HomePage() {
+  const [categories, featuredTutors, { products }] = await Promise.all([
+    listActiveCategories(),
+    listFeaturedTutors(),
+    listActiveProducts({ page: 1 }),
+  ]);
 
-export default function HomePage() {
   return (
-    <Container>
-      <Section className="flex flex-col items-start gap-6">
-        <span className="text-sm font-medium uppercase tracking-widest text-muted-foreground">
-          Tutorías 1:1 en vivo
-        </span>
-        <h1 className="max-w-2xl text-4xl font-semibold tracking-tight text-balance sm:text-5xl">
-          Aprende lo que te propones, con un tutor para ti
-        </h1>
-        <p className="max-w-xl text-lg text-muted-foreground text-pretty">
-          Descubre tutores, reserva clases en vivo y avanza hacia un resultado
-          concreto.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <Button asChild size="lg">
-            <Link href="/tutors">Explorar tutores</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link href="/how-it-works">Cómo funciona</Link>
-          </Button>
-        </div>
-      </Section>
+    <>
+      <HomeHero categories={categories} />
 
-      <Section className="border-t">
-        <div className="grid gap-4 sm:grid-cols-3">
-          {features.map((feature) => (
-            <Card key={feature.title}>
-              <CardHeader>
-                <CardTitle>{feature.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">
-                {feature.description}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </Section>
-    </Container>
+      <FeatureSplit
+        title="Clases en vivo 1 a 1: interactúa en tiempo real"
+        text="Avanza con total confianza y cara a cara con tu tutor, dedicando cada minuto exclusivamente al objetivo que elegiste lograr."
+        points={[
+          { icon: VideoIcon, text: "Video en vivo con alta calidad" },
+          { icon: TargetIcon, text: "Foco en tu meta concreta" },
+          { icon: CalendarSyncIcon, text: "Agenda flexible y a tu medida" },
+        ]}
+        cta={{ href: "/tutors", label: "Explorar tutores YA" }}
+        image={{
+          src: "/img/home-live.jpg",
+          alt: "Alumna en una clase 1 a 1 por videollamada",
+        }}
+      />
+
+      <FeaturedTutors tutors={featuredTutors} />
+      <ThreeSteps />
+      <FeaturedProducts products={products.slice(0, 4)} />
+
+      <FeatureSplit
+        reverse
+        title="¿Eres un crack en lo que haces? Monetiza tu talento YA"
+        text="Crea tu perfil de tutor, comparte tu formación, certificaciones y pasiones, y define tus tarifas con total libertad. Nosotros impulsamos tu crecimiento, aseguramos tus cobros y te conectamos con alumnos listos para aprender de ti."
+        points={[
+          { icon: TagIcon, text: "Tú decides tu valor y tus horarios" },
+          { icon: ShieldCheckIcon, text: "Ingresos garantizados y respaldados" },
+          { icon: BadgeCheckIcon, text: "Verificación de perfil y credenciales" },
+        ]}
+        cta={{ href: "/signup", label: "Quiero enseñar YA" }}
+        image={{
+          src: "/img/home-teach.jpg",
+          alt: "Tutor impartiendo una clase desde su portátil",
+        }}
+      />
+
+      {/* TODO IV-03: faltan las cifras y los testimonios de P01 — contenido
+          inventado en el diseño, pendiente de decisión del cliente. */}
+
+      <HomeFaq />
+      <FinalCta />
+    </>
   );
 }
