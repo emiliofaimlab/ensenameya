@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
@@ -19,14 +20,27 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+/** Etiqueta de la puntuación, como en AL08 ("4 de 5 — Muy buena"). */
+const RATING_LABEL = [
+  "",
+  "Muy mala",
+  "Mala",
+  "Regular",
+  "Muy buena",
+  "Excelente",
+];
+
 /** US-901 (SCR-AL08) — dejar/editar reseña de una reserva completada (RN-17). */
 export function ReviewDialog({
   bookingId,
   productTitle,
+  completedAt,
   existing,
 }: {
   bookingId: string;
   productTitle: string;
+  /** Fecha de la sesión, para dar contexto de qué se está reseñando. */
+  completedAt?: string | null;
   existing?: { rating: number; comment: string | null } | null;
 }) {
   const router = useRouter();
@@ -35,6 +49,8 @@ export function ReviewDialog({
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState(existing?.comment ?? "");
   const [busy, setBusy] = useState(false);
+
+  const shown = hover || rating;
 
   async function submit() {
     if (rating < 1) {
@@ -67,48 +83,92 @@ export function ReviewDialog({
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Tu reseña</DialogTitle>
-          <DialogDescription>{productTitle}</DialogDescription>
+          <DialogTitle>Deja tu reseña</DialogTitle>
+          <DialogDescription>
+            Tu opinión ayuda a otros estudiantes a elegir.
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
-          {/* Estrellas clicables (objetivos táctiles grandes también en móvil). */}
-          <div className="flex gap-1" role="radiogroup" aria-label="Puntuación">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                aria-label={`${n} ${n === 1 ? "estrella" : "estrellas"}`}
-                aria-checked={rating === n}
-                role="radio"
-                className="p-1"
-                onMouseEnter={() => setHover(n)}
-                onMouseLeave={() => setHover(0)}
-                onClick={() => setRating(n)}
-              >
-                <StarIcon
-                  className={cn(
-                    "size-8 transition-colors",
-                    n <= (hover || rating)
-                      ? "fill-current text-amber-500"
-                      : "text-muted-foreground/30",
-                  )}
-                />
-              </button>
-            ))}
+        <div className="rounded-xl bg-muted p-4">
+          <p className="font-semibold">{productTitle}</p>
+          {completedAt ? (
+            <p className="text-[13px] text-muted-foreground">
+              Sesión completada el{" "}
+              {new Date(completedAt).toLocaleDateString("es", {
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col gap-5">
+          <div>
+            <p className="text-sm font-semibold">Tu calificación</p>
+            {/* Estrellas clicables (objetivos táctiles grandes también en móvil). */}
+            <div
+              className="mt-2 flex gap-1"
+              role="radiogroup"
+              aria-label="Puntuación"
+            >
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  aria-label={`${n} ${n === 1 ? "estrella" : "estrellas"}`}
+                  aria-checked={rating === n}
+                  role="radio"
+                  className="p-1"
+                  onMouseEnter={() => setHover(n)}
+                  onMouseLeave={() => setHover(0)}
+                  onClick={() => setRating(n)}
+                >
+                  <StarIcon
+                    className={cn(
+                      "size-8 transition-colors",
+                      n <= shown
+                        ? "fill-current text-amber-500"
+                        : "text-muted-foreground/30",
+                    )}
+                  />
+                </button>
+              ))}
+            </div>
+            {/* Alto fijo: sin él, la etiqueta empuja el textarea al pasar el ratón. */}
+            <p className="mt-1 h-4 text-xs text-muted-foreground">
+              {shown > 0 ? `${shown} de 5 — ${RATING_LABEL[shown]}` : null}
+            </p>
           </div>
 
-          <Textarea
-            placeholder="Cuenta cómo fue la clase (opcional)."
-            rows={4}
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-          />
+          <div>
+            <p className="text-sm font-semibold">Comentario (opcional)</p>
+            <Textarea
+              className="mt-2"
+              placeholder="Cuéntanos qué te ayudó más de la clase…"
+              rows={4}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+            />
+          </div>
+
+          {/* El Figma dice "podrás editarla durante 24 h", pero `submit_review`
+              hace upsert sin ventana: se puede editar siempre. Se cuenta lo que
+              el sistema hace de verdad. */}
+          <p className="text-xs text-muted-foreground">
+            Podrás editar tu reseña más adelante si cambias de opinión.
+          </p>
         </div>
 
         <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="ghost">Ahora no</Button>
+          </DialogClose>
           <Button disabled={busy} onClick={submit}>
-            {busy ? "Guardando…" : existing ? "Guardar cambios" : "Publicar reseña"}
+            {busy
+              ? "Guardando…"
+              : existing
+                ? "Guardar cambios"
+                : "Publicar reseña"}
           </Button>
         </DialogFooter>
       </DialogContent>
