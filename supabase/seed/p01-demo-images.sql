@@ -11,35 +11,33 @@
 -- de su uid: la RLS de Storage exige que el primer segmento sea el del que
 -- sube). Aquí solo se apuntan las columnas a esas rutas.
 --
--- Aplicar SOLO a dev, desde el SQL Editor de Supabase o:
---   psql "<connection string de DEV>" -f supabase/seed/p01-demo-images.sql
+-- Aplicar SOLO a dev, pegándolo en el SQL Editor de Supabase. SQL plano, sin
+-- meta-comandos de psql (`\set` no funciona en el editor): la carpeta
+-- 'ed5c4ff6-…' (uid de tutor.us401) va literal en cada ruta.
 -- ============================================================================
-
--- Carpeta de la cuenta que subió los ficheros (tutor.us401).
-\set folder 'ed5c4ff6-77f7-4aa8-b235-f06b6c3a3618'
 
 -- ── Foto pública de los tutores demo (DD-01) ─────────────────────────────────
 update public.tutor_profiles
-   set avatar_path = :'folder' || '/demo-ana.png'
+   set avatar_path = 'ed5c4ff6-77f7-4aa8-b235-f06b6c3a3618/demo-ana.png'
  where profile_id = 'a0000000-0000-4000-8000-000000000001';
 
 update public.tutor_profiles
-   set avatar_path = :'folder' || '/demo-diego.png'
+   set avatar_path = 'ed5c4ff6-77f7-4aa8-b235-f06b6c3a3618/demo-diego.png'
  where profile_id = 'a0000000-0000-4000-8000-000000000002';
 
 update public.tutor_profiles
-   set avatar_path = :'folder' || '/demo-lucia.png'
+   set avatar_path = 'ed5c4ff6-77f7-4aa8-b235-f06b6c3a3618/demo-lucia.png'
  where profile_id = 'a0000000-0000-4000-8000-000000000003';
 
 -- ── Miniatura de los productos demo (DD-02) ──────────────────────────────────
 update public.products
-   set image_path = :'folder' || '/demo-calculo.jpg'
+   set image_path = 'ed5c4ff6-77f7-4aa8-b235-f06b6c3a3618/demo-calculo.jpg'
  where id = 'b0000000-0000-4000-8000-000000000001';
 
 update public.products
-   set image_path = :'folder' || '/demo-marketing.jpg'
+   set image_path = 'ed5c4ff6-77f7-4aa8-b235-f06b6c3a3618/demo-marketing.jpg'
  where id = 'b0000000-0000-4000-8000-000000000002';
 
 update public.products
-   set image_path = :'folder' || '/demo-ingles.jpg'
+   set image_path = 'ed5c4ff6-77f7-4aa8-b235-f06b6c3a3618/demo-ingles.jpg'
  where id = 'b0000000-0000-4000-8000-000000000003';
