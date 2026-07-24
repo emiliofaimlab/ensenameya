@@ -392,4 +392,135 @@ No consumen SP del sprint. Se filtran en Jira por label.
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-24 (revisión nodo a nodo COMPLETA del Figma: **P01–P09, AL01–AL08, TU01–TU09 y AD01–AD15** — todo el producto sobre `PanelShell` compartido; 🐞 corregidos: reserva duplicada + botón de sala en pendiente + fecha `created_at` (AL02), `/reservas` sin enlaces, `/tutor/payouts` rebotando a `/app` por `requireRole`; rutas nuevas AL06/AL07/AL08, TU08, AD02 y AD14; migración `20260724120000_ad13_admin_charts` en dev; **DD-01 y DD-02 cerradas**; 🐞 catálogo público vacío para `anon` corregido — **faltan tickets en Jira** — y semilla `p01-demo-images.sql` pendiente de aplicar en dev).*
+## Reunión 24-jul · Revisión con el cliente → Plan de acción (Sprints 4–7)
+
+> **Qué es esto.** Ajustes y mejoras que salieron de la demo del **24-jul** (Emilio + Veronica + Jose).
+> Fuentes: correo de Veronica *"AJUSTES [ENSÉÑAME YA] SESIÓN DESARROLLO"* (lista priorizada) + notas
+> de Gemini (resumen + próximos pasos + detalles con timestamps).
+> **Deadline duro:** demo al cliente **martes 2:30pm** — todo error visual/funcional resuelto para
+> entonces. **Capacidad:** 50% Enséñame Ya / 50% BaileBen, **estabilidad primero**.
+> **Marco de sprints de la reunión** (`01:17:46`): **S4 visual → S5 onboarding continuo (EP-21) →
+> S6 activación comercial (EP-20) → S7 integraciones finales**.
+> Handles `R24-xx` = trazabilidad interna; cada uno se abre como historia en su épica en Jira.
+
+### Impacto en lo ya entregado (ojo antes de tocar)
+- **Verificación de identidad entra al onboarding** (penúltimo paso, `00:38:38`) reutilizando el
+  módulo TU02. El **borrador / enviar a revisión** que se construyó el 24-jul (migraciones
+  `20260724130000` + `20260724130100`, estado `draft`) **encaja de una**: los pasos guardan borrador
+  y el último envía a revisión. La página suelta `/tutor/verification` se queda para re-subir
+  documentos rechazados. → **R24-15**.
+- **Switch Aprender/Enseñar siempre visible** (commit `ac4604a`) **validado por el cliente**
+  (`00:31:39`, "sale siempre" → "Buenísimo"). Solo se le antepone la **pantalla cero** (R24-11).
+- **Materiales de clase** salen del onboarding y se mueven a la **creación de la oferta** (TU04) → R24-16.
+
+### 🅐 Antes del martes — pulido visual + estabilidad (Sprint 4)
+
+| Handle | Ítem | Épica | Esf. | Nota |
+| :-- | :-- | :-- | :-- | :-- |
+| **R24-01** | **Full-width en TODO el sitio** (no solo Home/Nosotros) + video de fondo Home/Nosotros | EP-22/16 | **L** | ⚠️ **Validar antes de aplicar** — ver nota abajo. Hoy el `Container` (1152) encajona todo |
+| **R24-02** | Hover roto en Nosotros ("tranquilidad garantizada") + márgenes + **bug ñ / caracteres especiales** | EP-22 | S | El acento naranja debe ser hover, no estático (`00:24:35`) |
+| **R24-03** | Burbujas de categoría: colapsar a **solo íconos hasta hover/selección** (como el home) + límite / "ver más" / scroll | EP-03/22 | S/M | Evita 50 burbujas al crecer el catálogo (`00:10:14`) |
+| **R24-04** | 🐞 **Buscar por nombre de tutor** (hoy solo por habilidad; "Emilio" no salía) | EP-03 | S/M | Medio bug medio mejora (`00:06:53`) |
+| **R24-05** | **Buscador global con sugerencias** desplegables subdivididas (Tutores/Clases/Categorías), ~4, empezando por la sección actual | EP-03 | M | Estilo "Emilio \| Clases de Emilio" |
+| **R24-06** | Tarjeta de mentoría: **título arriba, precio abajo** | EP-22 | S | El precio no destaca (`01:00:41`) |
+| **R24-07** | **Página "Mi cuenta"** (estudiante): menú lateral izq. + módulos (nombre, correo, contraseña, foto). Hoy abre el panel viejo | EP-01 | M | Hueco real; perfil = "Mi cuenta" (`00:31:39`) |
+| **R24-08** | Admin: **historial del tutor en orden inverso** | EP-11 | S | (`00:53:44`) |
+| **R24-09** | Admin: **botón crear/editar tiers** que abra un modal | EP-11 | S | (`00:56:47`) |
+| **R24-10** | **Edición rápida de disponibilidad**: botón "editar" al lado de cada día | EP-05 | S/M | En vez del módulo global (`00:48:09`) |
+| **R24-11** | **Pantalla cero** "Todavía no tienes cuenta de tutor, conviértete en tutor YA" antes del onboarding | EP-21 | S | Cierra el flujo del switch |
+| **R24-12** | 🐞 **Bug zona horaria**: las clases muestran la hora del servidor, no la del usuario (México vs Venezuela) | EP-05/16 | M | RN-01/02 · RISK-12. Estabilidad, no cosmético (`01:03:30`) |
+
+### 🅑 Post-demo — estructural (Sprints 5–6)
+
+| Handle | Ítem | Épica | Esf. | Nota |
+| :-- | :-- | :-- | :-- | :-- |
+| **R24-13** | **Selector de clase en el calendario** + reserva directa (clase → día → horario), disponibilidad atada a la clase | EP-05/06 | **L** | El grande: hoy la disponibilidad es por-tutor; ligarla por-producto (`00:12:49`) |
+| **R24-14** | **Precios dinámicos**: quitar el precio fijo del calendario; calcular al elegir clase+horario | EP-06 | M | Acoplado a R24-13 (`00:17:43`) |
+| **R24-15** | **Verificación como penúltimo paso del onboarding** (reutiliza TU02 + su borrador/envío) | EP-02/21 | M | Ya soportado por el `draft` del 24-jul |
+| **R24-16** | **Materiales de clase**: de onboarding → creación de la oferta (TU04) | EP-04/21 | S/M | |
+| **R24-17** | **FAQ por mentoría**: el tutor las define al crear la clase (hoy genéricas de plataforma) | EP-04/23 | M | Necesita modelo de datos (FAQ por producto) (`00:20:26`) |
+| **R24-18** | **Notificación "perfil aprobado"** al tutor | EP-12 | S | ⚠️ Aclarar "las primeras 5 sesiones" (ambiguo) (`00:55:18`) |
+| **R24-19** | **Aceptar clases automáticamente** (toggle por tutor, no solo manual) | EP-06 | S/M | Toca el accept de TU07 (`respond_booking`) |
+| **R24-20** | **Módulo de métodos de pago** independiente de "Mi cuenta" | EP-07 | S/M | (`01:05:19`) |
+| **R24-21** | **Chat como burbuja flotante** abrible | EP-17 | S/M | ⚠️ Reconciliar con `chat-fab-error-diseno` (solo con sesión, tipo bandeja) |
+| **R24-22** | **Sin sesión: horario por ubicación** del usuario (IP/geo) | EP-03/16 | S/M | (`00:29:00`) |
+
+### 🅒 Bloqueados / ops en paralelo (no gatean el dev)
+
+| Ítem | Épica | Estado |
+| :-- | :-- | :-- |
+| Cuentas de prueba DLocal + Stripe del cliente | EP-20 | 🔒 Veronica las pide al cliente |
+| Webhooks DLocal/Stripe (trazabilidad de órdenes, reclamos bancarios) | EP-07/20 | Tras las cuentas (`01:26:55`) |
+| Métodos de pago Venezuela (tarjetas, cripto, Binance, PayPal) | EP-07 | Decisión C-01/C-13 (`01:22:55`) |
+| Sentry (monitoreo de errores) | EP-15 | Se puede arrancar ya (US-1501) |
+| Responsive tablet/escritorio | EP-16 | ⏳ Diana entrega diseños la próxima semana |
+| Marcar inicio/cierre de sprints 4–7 en Jira | ops | Jose |
+| Enviar enlace de dev a Emilio | ops | Jose |
+| Selector de idioma (burbuja de traducción) | — | 💰 Costo extra, Emilio negocia con el cliente |
+
+### ⚠️ Full-width (R24-01) — validar ANTES de aplicar a cada página
+El cliente aclaró que el ancho completo es de **todo el sitio**, no solo Home/Nosotros — así está en
+Figma. Pero **no es "quitar el `max-width` y ya"**: `src/components/layout/container.tsx` fija hoy
+`max-w-[1280px]` (1152 de contenido, la rejilla del Figma) y lo importan ~10 páginas. El contenido de
+lectura (formularios, texto largo) **debe conservar su columna**; solo van a sangre completa las bandas
+que el diseño marca full-bleed (heros, secciones con fondo/vídeo).
+**Tarea previa (bloquea la aplicación):** repaso del Figma **página por página** clasificando cada
+sección `full-bleed` vs `contenida`, y decidir si el cambio es (a) un modo del `Container`
+(`bleed`/`contained`) o (b) mover el `Container` hacia dentro de cada sección. Recién con esa matriz se
+aplica. Es del mismo tipo que el repaso nodo a nodo que ya hicimos (medir Figma vs DOM), pero de layout.
+
+### Decisiones cerradas — respuestas del cliente (24-jul)
+> Respondidas por Jose el 24-jul. **Supersede** las notas sueltas "⚠️ Para el cliente" de S1–S3 y de
+> los repasos nodo a nodo (teléfono opcional, motivo de cancelación, nombre en reseñas, revocación de
+> tutor, responsive, agenda pública). Se consumen como **configuración** (regla de oro 8).
+
+| # | Decisión | Respuesta | Acción / handle |
+| :-- | :-- | :-- | :-- |
+| 13 | Geolocalización de zona horaria | **SÍ, autodetección.** Zona horaria + país-teléfono automáticos al entrar (no bloqueados, editables). Y **convertir la hora de la sesión a la zona del que la ve**, incluso **sin sesión** | R24-12/R24-22. ⚠️ *Nota técnica abajo:* se logra con `Intl` del navegador + `country_from_timezone()`; geo-IP solo si se quiere más precisión de país |
+| 14 | Burbujas de categoría | **Colapsar a íconos** (como el home) + **hover** que expande + botón **"ver más"**, en toda vista de categorías | R24-03 |
+| 15 | Chat flotante | **Burbuja abrible SOLO con sesión**, tipo bandeja (LinkedIn): ver/abrir los chats con el tutor **sin entrar a la sesión** | R24-21 (alineado con `chat-fab-error-diseno`) |
+| 16 | Notificación "aprobado" | **Banner en el dashboard del tutor**: al aprobar, banner "has sido aprobado" que se mantiene **hasta que dicte 5 sesiones**, luego desaparece (como el banner de "carga documentos" en pendiente) | R24-18 · condición `approved ∧ sesiones_dictadas < 5` |
+| 17 | Foto estudiante/tutor | **Separadas y 100% independientes** (sin herencia): foto de alumno y foto de tutor por su lado; sin foto de tutor → **iniciales** | **R24-23 (nuevo)** · quitar el `coalesce` de DD-01 (`20260723120000`); el modelo ya tiene 2 columnas |
+| 18 | Nombre del alumno en reseñas | **"Nombre + inicial" con consentimiento**; anónimo hasta tener el flujo de consentimiento | Nuevo · reseñas firmadas (DD) con gate de consentimiento |
+| 19 | Agenda pública del tutor | **Se publica** la disponibilidad | ✅ ya cableado (P07) |
+| 20 | Teléfono en onboarding | **Obligatorio** (RN-44 manda sobre el "(opcional)" del Figma) | ✅ ya cableado (RN-44) |
+| 21 | Revocar tutor al re-subir/rechazar doc | **Manual** (el admin lo rechaza) | ✅ comportamiento actual; auto queda como opción futura |
+| 22 | Retención del chat | **30 días + descarga** (`.txt`/`.json`) antes de purgar | Reactiva US-1702 + US-1703 |
+| 23 | Motivo de cancelación (AL07) | **Persistir** en `bookings.cancel_reason` | Nuevo · EP-23 |
+| 24 | Responsive | **Esperar a Diana** (tablet/escritorio la próxima semana) | EP-16 |
+| 25 | Nivel e idioma del producto | **Añadir por mentoría** (distinto del nivel del tutor) | DD-03 |
+| 26 | Subcategorías / "Temas" | **Cruce de 2+ categorías** (las categorías siguen **planas**, S-13) | DD-05 (reducida) |
+| 27 | FAQ | **Por producto**: el tutor las define al crear la mentoría | R24-17 |
+| 28 | Cuenta de cobro del tutor (TU09) | **Pendiente** (depende del PSP/EP-20) | 🔒 espera EP-20 |
+| 29 | Incidencias / "marcar atendida" (AD14) | **Crear tabla de incidencias** | Nuevo · EP-23/AD14 |
+| 30 | "Tu objetivo principal" (AL01) | **Campo con lista de opciones (confirmada)** | EP-23 · lista confirmada (ver abajo) |
+
+**Ítems de trabajo nuevos que abren estas respuestas** (para Jira):
+- **R24-23** · fotos **100% independientes** alumno/tutor (EP-01/02) · quitar el `coalesce` de DD-01
+- Reseñas firmadas **nombre + inicial** + flujo de consentimiento (DD, EP-09)
+- `bookings.cancel_reason` — persistir motivo (EP-23)
+- Chat: retención **30 d + descarga** — reabre US-1702/US-1703
+- Nivel + idioma **por producto** (DD-03) · "Temas" = cruce N–M (DD-05)
+- **Tabla de incidencias** para "marcar atendida" (EP-23/AD14)
+- Campo **"objetivo principal"** + su lista (EP-23) — lista confirmada (6 opciones, ver abajo)
+
+> **⚠️ Nota técnica sobre 13 (geolocalizador):** todo lo que describes (zona horaria automática,
+> +código de teléfono automático, y convertir la hora de la sesión a la del espectador **sin sesión**)
+> se logra **sin permiso de ubicación ni API externa**: `Intl.DateTimeFormat().resolvedOptions().timeZone`
+> da la zona del navegador y `country_from_timezone()` (ya existe) deriva el país para el teléfono. El
+> **geo-IP real** solo añadiría precisión cuando una zona horaria mapea a varios países (p. ej. varias
+> zonas de EE. UU.). **Confirmado (Jose, 24-jul): vía navegador** (cero fricción, sin popup de permiso);
+> geo-IP queda como mejora futura opcional.
+
+> **Lista confirmada para "Tu objetivo principal" (30):** Reforzar o aprobar una materia ·
+> Prepararme para un examen o certificación · Aprender una habilidad nueva · Mejorar en mi trabajo o
+> carrera · Practicar un idioma · Interés o hobby personal.
+
+### Decisiones de pago pendientes (bloque 1–12)
+Siguen abiertas las del **cliente** (tracker `C-xx`): C-13 mercado/Venezuela + métodos, C-07 ventana de
+pago, C-02 retención, C-04 agrupación payout, C-05 no-show, C-06 checkout invitado, C-09 tiers, C-11
+email, C-12 opt-out, C-15 FX, C-10 referidos. C-01 ✅ (DLocal+Stripe) — falta solo **cuentas/API keys**.
+
+---
+
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-24 (añadido el **plan de acción de la reunión del 24-jul**: 22 ajustes `R24-01…22` mapeados a épicas y priorizados por el deadline del martes 2:30 — 🅐 pulido visual + estabilidad, 🅑 estructural, 🅒 bloqueados/ops; **full-width marcado como validación-primero** por ser de todo el sitio; migraciones `20260724130000`+`130100` del borrador de KYC (TU02) en dev. Previo: revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15** sobre `PanelShell`; 🐞 catálogo público vacío para `anon` corregido — **faltan tickets en Jira** — y semilla `p01-demo-images.sql` aplicada en dev).*
