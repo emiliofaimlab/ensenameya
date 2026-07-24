@@ -42,7 +42,11 @@ export type HeaderUser = {
   name: string | null;
   /** Panel del usuario según su rol (lo resuelve `toHeaderUser` con pickHome). */
   homeHref: string;
-  /** Todos los paneles a los que puede entrar (`panelsFor`). Uno solo = sin switch. */
+  /**
+   * Paneles del switch (`panelsFor`). Aprender/Enseñar salen siempre con
+   * sesión — "Enseñar" es la puerta al onboarding de tutor; /tutor resuelve
+   * la cascada (sin perfil → onboarding, pendiente → "en revisión").
+   */
   panels: { href: string; label: string }[];
 };
 
@@ -66,6 +70,14 @@ function PanelSwitch({
 }) {
   if (panels.length < 2) return null;
 
+  // Fuera de un panel (explorar, /account…) se marca "Aprender" (el primero):
+  // navegar lo público ES el modo aprender, y un switch sin selección parece
+  // roto (24-jul).
+  const activeHref =
+    panels.find(
+      (p) => pathname === p.href || pathname.startsWith(`${p.href}/`),
+    )?.href ?? panels[0].href;
+
   return (
     <div
       role="group"
@@ -74,9 +86,7 @@ function PanelSwitch({
       style={{ gridTemplateColumns: `repeat(${panels.length}, minmax(0, 1fr))` }}
     >
       {panels.map((p) => {
-        // Prefijo exacto: fuera de un panel (p. ej. /account) no se marca
-        // ninguno, que es más honesto que iluminar el de alumno por descarte.
-        const active = pathname === p.href || pathname.startsWith(`${p.href}/`);
+        const active = p.href === activeHref;
         return (
           <Link
             key={p.href}
@@ -191,14 +201,10 @@ export function SiteHeader({
           </span>
         ) : null}
 
+        {/* Sin enlace "Panel" suelto: la vuelta a casa vive en el menú del
+            avatar ("Mi panel") y en el switch de rol — pedirlo dos veces en la
+            barra era ruido (24-jul). */}
         <nav className="hidden items-center gap-1 md:flex">
-          {/* Con sesión, "Panel" es la vuelta a casa: sin él solo se llegaba
-              por URL o rebuscando en el menú del avatar. */}
-          {user && !onboarding && !admin ? (
-            <Button asChild variant="ghost" size="sm">
-              <Link href={user.homeHref}>Panel</Link>
-            </Button>
-          ) : null}
           {admin
             ? null
             : navGroups.map((group) => (
@@ -312,15 +318,7 @@ export function SiteHeader({
             </SheetHeader>
             <SearchBox className="px-4" />
             <nav className="flex flex-col gap-1 px-4">
-              {user ? (
-                <Link
-                  href={user.homeHref}
-                  onClick={closeMenu}
-                  className="rounded-md px-2 py-2 text-sm font-medium hover:bg-muted"
-                >
-                  Panel
-                </Link>
-              ) : null}
+              {/* Sin "Panel" duplicado: abajo ya van el switch y "Mi panel". */}
               {navGroups.flatMap((group) => group.links).map((link) => (
                 <Link
                   key={link.href}
