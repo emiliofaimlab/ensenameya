@@ -1,11 +1,10 @@
 import Image from "next/image";
-import Link from "next/link";
 import { SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { TRUST_POINTS } from "@/components/home/trust";
-import { categoryIcon } from "@/components/catalog/category-icons";
+import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import type { CategoryTag } from "@/lib/catalog/queries";
 
 export function HomeHero({ categories }: { categories: CategoryTag[] }) {
@@ -52,30 +51,14 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
             </Button>
           </form>
 
-          <ul className="flex flex-wrap justify-center gap-2">
-            {categories.map((c) => {
-              const Icon = categoryIcon(c.slug);
-              return (
-                <li key={c.slug}>
-                  <Link
-                    href={`/categories/${c.slug}`}
-                    className="group flex items-center rounded-full p-1 text-sm font-semibold text-foreground transition-colors hover:bg-background focus-visible:bg-background"
-                  >
-                    {/* Figma: círculo naranja suelto; al desplegarse, píldora blanca con el círculo en azul. */}
-                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-colors group-hover:bg-brand group-focus-visible:bg-brand">
-                      <Icon className="size-4.5" />
-                    </span>
-                    {/* El nombre solo aparece al pasar el ratón (o al enfocar con teclado). */}
-                    <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 group-hover:grid-cols-[1fr] group-focus-visible:grid-cols-[1fr]">
-                      <span className="min-w-0 overflow-hidden whitespace-nowrap">
-                        <span className="px-2.5">{c.name}</span>
-                      </span>
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          {/* Burbujas de categoría: círculo naranja que despliega el nombre al
+              hover (mismo componente que el resto del sitio, R24-03). */}
+          <CategoryIconChips
+            className="justify-center"
+            categories={categories}
+            hrefFor={(slug) => `/categories/${slug}`}
+            limit={0}
+          />
         </Container>
       </div>
 

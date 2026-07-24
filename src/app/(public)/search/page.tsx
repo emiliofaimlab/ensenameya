@@ -5,6 +5,7 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
 import { categoryIcon } from "@/components/catalog/category-icons";
+import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import { ProductCard } from "@/components/catalog/product-card";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import {
@@ -190,17 +191,11 @@ export default async function SearchPage({
                     Sin resultados para &quot;{query}&quot;. Prueba con otra
                     palabra o explora por categoría:
                   </p>
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map((c) => (
-                      <Link
-                        key={c.slug}
-                        href={`/categories/${c.slug}`}
-                        className="rounded-full border px-3 py-1 text-[13px] transition-colors hover:border-brand hover:text-brand"
-                      >
-                        {c.name}
-                      </Link>
-                    ))}
-                  </div>
+                  <CategoryIconChips
+                    categories={categories}
+                    hrefFor={(slug) => `/categories/${slug}`}
+                    tone="light"
+                  />
                 </div>
               ) : null}
 

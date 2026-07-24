@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Pager } from "@/components/catalog/pager";
+import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import { TutorFilters } from "@/components/catalog/tutor-filters";
 import {
@@ -115,25 +116,14 @@ export default async function TutorsPage({
             </Button>
           </form>
 
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {categories.map((c) => (
-              <li key={c.slug}>
-                <Link
-                  href={buildHref({
-                    ...current,
-                    cat: c.slug === cat ? undefined : c.slug,
-                  })}
-                  className={`inline-flex h-9 items-center rounded-full border px-4 text-[13px] transition-colors ${
-                    c.slug === cat
-                      ? "border-brand bg-brand text-white"
-                      : "border-[#d9d9d9] bg-card text-[#5c5c5c] hover:bg-muted"
-                  }`}
-                >
-                  {c.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <CategoryIconChips
+            className="mt-4"
+            categories={categories}
+            activeSlug={cat}
+            hrefFor={(slug) =>
+              buildHref({ ...current, cat: slug === cat ? undefined : slug })
+            }
+          />
         </Container>
       </div>
 

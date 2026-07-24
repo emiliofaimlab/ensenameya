@@ -6,7 +6,7 @@ import { ChevronDownIcon, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
-import { categoryIcon } from "@/components/catalog/category-icons";
+import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import { Pager } from "@/components/catalog/pager";
 import { ProductCard } from "@/components/catalog/product-card";
 import { TutorCard } from "@/components/catalog/tutor-card";
@@ -291,48 +291,16 @@ export async function CategoryExplorer({
             </Button>
           </form>
 
-          {/* Selector de categoría: la activa desplegada y el resto en círculo.
-              En el índice no hay ninguna activa, así que van todas con nombre. */}
-          <ul className="mt-5 flex flex-wrap items-center gap-3.5">
-            {categories.map((c) => {
-              const Icon = categoryIcon(c.slug);
-              const isActive = c.slug === slug;
-              const expanded = isActive || !slug;
-              return (
-                <li key={c.slug}>
-                  <Link
-                    href={`/categories/${c.slug}`}
-                    aria-current={isActive ? "page" : undefined}
-                    title={c.name}
-                    className={`flex items-center rounded-full bg-card transition-colors hover:bg-white ${
-                      expanded
-                        ? "gap-2.5 p-1.5 pr-4"
-                        : "size-[52px] justify-center"
-                    } ${isActive ? "shadow-[0_6px_16px_rgb(0_0_0/0.25)]" : ""}`}
-                  >
-                    <span
-                      className={
-                        expanded
-                          ? `grid size-10 place-items-center rounded-full ${
-                              isActive ? "bg-brand text-white" : "bg-brand-muted text-brand"
-                            }`
-                          : "text-brand"
-                      }
-                    >
-                      <Icon
-                        className={expanded ? "size-[18px]" : "size-[22px]"}
-                      />
-                    </span>
-                    {expanded ? (
-                      <span className="text-sm font-semibold text-[#19191f]">
-                        {c.name}
-                      </span>
-                    ) : null}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          {/* Categorías colapsadas a ícono; se despliegan al hover y la activa
+              va fija (patrón del home, acuerdo 24-jul). Sin corte "ver más":
+              esta pantalla ES el índice de todas. */}
+          <CategoryIconChips
+            className="mt-5 gap-3.5"
+            categories={categories}
+            activeSlug={slug}
+            hrefFor={(s) => `/categories/${s}`}
+            limit={0}
+          />
         </Container>
       </section>
 
