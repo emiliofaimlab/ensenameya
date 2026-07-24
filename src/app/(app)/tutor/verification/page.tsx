@@ -2,32 +2,44 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { PageHeader } from "@/components/layout/page-header";
-import { VerificationForm, type DocState } from "./verification-form";
+import {
+  PanelCard,
+  StatusPill,
+  type PillTone,
+} from "@/components/layout/panel-shell";
+import { TutorShell } from "@/components/layout/tutor-shell";
+import { VerificationForm, SocialLinkCard, type DocState } from "./verification-form";
 
 export const metadata = { title: "Verificación de identidad · Enséñame Ya" };
 
-const IDENTITY_NOTE: Record<string, { text: string; cls: string }> = {
+/** Estado global de la verificación → píldora del Figma (190:10). */
+const IDENTITY_PILL: Record<string, { label: string; tone: PillTone; note: string }> = {
   pending: {
-    text: "Tus documentos están en revisión — te avisaremos cuando terminemos.",
-    cls: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    label: "En revisión",
+    tone: "blue",
+    note: "Tus documentos están siendo revisados. Te avisaremos cuando terminemos.",
   },
   approved: {
-    text: "Tu identidad está verificada. ✓",
-    cls: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    label: "Verificada",
+    tone: "green",
+    note: "Tu identidad está verificada.",
   },
   rejected: {
-    text: "Algún documento fue rechazado. Vuelve a subirlo para continuar.",
-    cls: "border-destructive/40 bg-destructive/10 text-destructive",
+    label: "Rechazada",
+    tone: "red",
+    note: "Algún documento fue rechazado. Vuelve a subirlo para continuar.",
+  },
+  not_submitted: {
+    label: "Sin enviar",
+    tone: "neutral",
+    note: "Aún no has subido documentos.",
   },
 };
 
 /**
- * US-203 (SCR-TU02) — Verificación de identidad del tutor. Sube documentos a un
- * bucket privado → `identity_verification_status='pending'` (por trigger). La
- * revisión del admin (aprobar/rechazar) llega en US-1101 (S3). NTF-06 = stub.
+ * US-203 (SCR-TU02) — Verificación de identidad del tutor, dentro del panel
+ * (el Figma la cuelga del menú con "Cuenta" activo). Sube documentos a un
+ * bucket privado → `identity_verification_status='pending'` (por trigger).
  */
 export default async function VerificationPage() {
   const { user } = await requireUser();
@@ -50,22 +62,51 @@ export default async function VerificationPage() {
     (docs ?? []).map((d) => [d.doc_type, { status: d.status, linkUrl: d.link_url }]),
   );
 
-  const note = IDENTITY_NOTE[tp.identity_verification_status];
+  const pill = IDENTITY_PILL[tp.identity_verification_status];
 
   return (
-    <Container>
-      <Section className="mx-auto flex w-full max-w-lg flex-col gap-6">
-        <PageHeader
-          title="Verifica tu identidad"
-          description="Sube tus documentos. Un admin los revisa antes de aprobarte como tutor."
-        />
-        {note ? (
-          <p className={`rounded-lg border px-3 py-2 text-sm ${note.cls}`}>
-            {note.text}
-          </p>
-        ) : null}
-        <VerificationForm userId={user.id} docsByType={docsByType} />
-      </Section>
-    </Container>
+    <TutorShell
+      title="Verifica tu identidad"
+      description="Sube los documentos requeridos. El onboarding forma parte de tu entrevista de ingreso."
+    >
+      {pill ? (
+        <PanelCard className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-[#19191f]">
+              Estado de tu verificación
+            </p>
+            <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">{pill.note}</p>
+          </div>
+          <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
+        </PanelCard>
+      ) : null}
+
+      <PanelCard>
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Documentos obligatorios
+        </h2>
+        <div className="mt-4">
+          <VerificationForm userId={user.id} docsByType={docsByType} />
+        </div>
+      </PanelCard>
+
+      {/* 190:98 — las redes van en tarjeta aparte, como enlace, no archivo. */}
+      <PanelCard>
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Redes sociales (enlace)
+        </h2>
+        <div className="mt-4">
+          <SocialLinkCard docsByType={docsByType} />
+        </div>
+      </PanelCard>
+
+      {/* El Figma cierra con "Enviar a revisión / Guardar borrador": aquí no
+          hay envío en bloque — cada documento queda en revisión al subirse. */}
+      <p className="text-xs text-[#6b6b6b]">
+        Formatos: PNG, JPG, WebP o PDF · máx. 10 MB. Tus documentos son privados;
+        solo el equipo de revisión los ve. Cada documento queda en revisión al
+        subirlo, no hace falta un paso extra.
+      </p>
+    </TutorShell>
   );
 }

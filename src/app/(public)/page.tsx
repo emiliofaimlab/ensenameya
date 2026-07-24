@@ -13,19 +13,26 @@ import { FeaturedTutors } from "@/components/home/featured-tutors";
 import { ThreeSteps } from "@/components/home/three-steps";
 import { FeaturedProducts } from "@/components/home/featured-products";
 import { HomeFaq } from "@/components/home/home-faq";
+import { HomeStats } from "@/components/home/home-stats";
+import { Testimonials } from "@/components/home/testimonials";
 import { FinalCta } from "@/components/home/final-cta";
 import {
+  getHomeStats,
   listActiveCategories,
   listActiveProducts,
   listFeaturedTutors,
+  listTestimonials,
 } from "@/lib/catalog/queries";
 
 export default async function HomePage() {
-  const [categories, featuredTutors, { products }] = await Promise.all([
-    listActiveCategories(),
-    listFeaturedTutors(),
-    listActiveProducts({ page: 1 }),
-  ]);
+  const [categories, featuredTutors, { products }, stats, testimonials] =
+    await Promise.all([
+      listActiveCategories(),
+      listFeaturedTutors(),
+      listActiveProducts({ page: 1 }),
+      getHomeStats(),
+      listTestimonials(),
+    ]);
 
   return (
     <>
@@ -49,11 +56,12 @@ export default async function HomePage() {
       <FeaturedTutors tutors={featuredTutors} />
       <ThreeSteps />
       <FeaturedProducts products={products.slice(0, 4)} />
+      <HomeStats stats={stats} overlap={products.length > 0} />
 
       <FeatureSplit
         reverse
         title="¿Eres un crack en lo que haces? Monetiza tu talento YA"
-        text="Crea tu perfil de tutor, comparte tu formación, certificaciones y pasiones, y define tus tarifas con total libertad. Nosotros impulsamos tu crecimiento, aseguramos tus cobros y te conectamos con alumnos listos para aprender de ti."
+        text="Crea tu perfil de tutor, comparte tu formación, certificaciones y pasiones, finalmente define tus tarifas con total libertad. Nosotros impulsamos tu crecimiento, aseguramos tus cobros y te conectamos con alumnos listos para aprender de ti."
         points={[
           { icon: TagIcon, text: "Tú decides tu valor y tus horarios" },
           { icon: ShieldCheckIcon, text: "Ingresos garantizados y respaldados" },
@@ -66,9 +74,7 @@ export default async function HomePage() {
         }}
       />
 
-      {/* TODO IV-03: faltan las cifras y los testimonios de P01 — contenido
-          inventado en el diseño, pendiente de decisión del cliente. */}
-
+      <Testimonials items={testimonials} />
       <HomeFaq />
       <FinalCta />
     </>

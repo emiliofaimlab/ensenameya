@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3Icon,
+  BellIcon,
   BookOpenIcon,
   CalendarPlusIcon,
   FolderTreeIcon,
@@ -22,7 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 
-type Item = {
+export type SidebarItem = {
   href: string;
   label: string;
   icon: LucideIcon;
@@ -31,6 +32,8 @@ type Item = {
   /** Prefijo extra que también lo marca activo (detalles que cuelgan de otra ruta). */
   alsoMatch?: string;
 };
+
+type Item = SidebarItem;
 
 /**
  * Menú lateral del área autenticada (AL02 y siguientes).
@@ -58,29 +61,23 @@ export const TUTOR_ITEMS: Item[] = [
 ];
 
 /**
- * Menú del panel admin (AD02…AD15). "Dashboard" apunta a las estadísticas
- * globales, que son las métricas que el Figma pinta en su pantalla de inicio;
- * `/admin` en el código es la cola de tutores, así que va como "Tutores".
+ * Menú del panel admin, en el orden del Figma (218:1739): Dashboard, Tutores,
+ * Pagos, Reservas, Categorías, Tiers, Estadísticas, Alertas, Payouts.
+ * `/admin` es el dashboard (AD02) y la cola de tutores vive en /admin/tutores.
  *
  * Vive aquí y no en `admin-shell` a propósito: los iconos son componentes, y
  * un Server Component no puede pasar funciones a uno de cliente.
- * ponytail: fuera "Alertas" (AD14) — no existe esa pantalla.
  */
 export const ADMIN_ITEMS: Item[] = [
-  { href: "/admin/stats", label: "Dashboard", icon: BarChart3Icon },
-  // El detalle vive en /admin/tutores/[id], fuera del prefijo de esta ruta.
-  {
-    href: "/admin",
-    label: "Tutores",
-    icon: UsersIcon,
-    exact: true,
-    alsoMatch: "/admin/tutores",
-  },
-  { href: "/admin/bookings", label: "Reservas", icon: TicketIcon },
+  { href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon, exact: true },
+  { href: "/admin/tutores", label: "Tutores", icon: UsersIcon },
   { href: "/admin/payments", label: "Pagos", icon: ReceiptIcon },
-  { href: "/admin/payouts", label: "Payouts", icon: WalletIcon },
+  { href: "/admin/bookings", label: "Reservas", icon: TicketIcon },
   { href: "/admin/categorias", label: "Categorías", icon: FolderTreeIcon },
-  { href: "/admin/tiers", label: "Comisión y tiers", icon: PercentIcon },
+  { href: "/admin/tiers", label: "Tiers", icon: PercentIcon },
+  { href: "/admin/stats", label: "Estadísticas", icon: BarChart3Icon },
+  { href: "/admin/alertas", label: "Alertas", icon: BellIcon },
+  { href: "/admin/payouts", label: "Payouts", icon: WalletIcon },
 ];
 
 export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
@@ -97,7 +94,7 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
   return (
     <nav
       aria-label="Menú del panel"
-      className="h-fit rounded-2xl bg-card p-3 lg:sticky lg:top-24"
+      className="h-fit rounded-[16px] border border-[#e0e0e0] bg-card p-3 lg:sticky lg:top-24"
     >
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
@@ -111,10 +108,10 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors",
+                  "flex h-[41px] items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
                   active
                     ? "bg-brand font-semibold text-white"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    : "text-[#666666] hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Icon className="size-4 shrink-0" />
@@ -123,11 +120,11 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
             </li>
           );
         })}
-        <li className="mt-1 border-t pt-1">
+        <li className="mt-2 pt-1">
           <button
             type="button"
             onClick={signOut}
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="flex h-[41px] w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-[#bf3333] transition-colors hover:bg-[#bf3333]/5"
           >
             <LogOutIcon className="size-4 shrink-0" />
             Salir

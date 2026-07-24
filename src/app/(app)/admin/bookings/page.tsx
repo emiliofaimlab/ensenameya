@@ -3,8 +3,13 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/server";
 import { listBookings } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/catalog/format";
+import {
+  PanelCard,
+  StatusPill,
+  type PillTone,
+} from "@/components/layout/panel-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Pager } from "@/components/catalog/pager";
 import { BOOKING_BADGE } from "../badges";
 import { AdminFilters } from "../payments/filters";
@@ -20,6 +25,16 @@ const STATUS_OPTIONS = [
   { value: "cancelled", label: "Cancelada" },
   { value: "refunded", label: "Reembolsada" },
 ];
+
+const BOOKING_PILL: Record<string, PillTone> = {
+  confirmed: "green",
+  in_progress: "green",
+  completed: "neutral",
+  pending_acceptance: "blue",
+  pending_payment: "neutral",
+  cancelled: "red",
+  refunded: "red",
+};
 
 /** US-1104 · SCR-AD09 — reservas con filtros. Solo lectura (soporte). */
 export default async function AdminBookingsPage({
@@ -43,54 +58,79 @@ export default async function AdminBookingsPage({
 
   return (
     <AdminShell
-          title="Reservas"
-          description={`${count} ${count === 1 ? "reserva" : "reservas"} con los filtros actuales.`}
+      title="Reservas"
+      description={`Todas las reservas de la plataforma · ${count} con los filtros actuales.`}
     >
+      <AdminFilters
+        basePath="/admin/bookings"
+        fields={[
+          { name: "status", label: "Estado", type: "select", options: STATUS_OPTIONS },
+          { name: "from", label: "Desde", type: "date" },
+          { name: "to", label: "Hasta", type: "date" },
+        ]}
+      />
 
-        <AdminFilters
-          basePath="/admin/bookings"
-          fields={[
-            { name: "status", label: "Estado", type: "select", options: STATUS_OPTIONS },
-            { name: "from", label: "Desde", type: "date" },
-            { name: "to", label: "Hasta", type: "date" },
-          ]}
-        />
-
-        {bookings.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+      {bookings.length === 0 ? (
+        <PanelCard>
+          <p className="text-[13px] text-[#6b6b6b]">
             No hay reservas con estos filtros.
           </p>
-        ) : (
-          <ul className="flex flex-col gap-3">
+        </PanelCard>
+      ) : (
+        <PanelCard className="py-2">
+          <ul className="divide-y divide-[#e0e0e0]">
             {bookings.map((b) => {
               const badge = BOOKING_BADGE[b.status];
               return (
-                <li key={b.id} className="rounded-lg border p-4">
-                  <Link
-                    href={`/admin/bookings/${b.id}`}
-                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{b.productTitle}</p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {b.studentName} → {b.tutorName} ·{" "}
-                        {formatMoney(b.totalAmount, b.currency)}
-                      </p>
-                      <Badge variant={badge.variant} className="mt-2">
-                        {badge.label}
-                      </Badge>
-                    </div>
-                    <time className="shrink-0 text-sm text-muted-foreground" dateTime={b.createdAt}>
-                      {new Date(b.createdAt).toLocaleString("es")}
-                    </time>
-                  </Link>
+                <li
+                  key={b.id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-4"
+                >
+                  <div className="min-w-0 sm:w-96">
+                    <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
+                      #{b.id.slice(0, 8)} · {b.studentName} → {b.tutorName}
+                    </p>
+                    <p className="truncate text-xs text-[#6b6b6b]">
+                      {b.productTitle} · {formatMoney(b.totalAmount, b.currency)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11.5px] text-[#6b6b6b]">Fecha</p>
+                    <p className="text-[13px] font-medium text-[#404040]">
+                      {new Date(b.createdAt).toLocaleDateString("es", {
+                        day: "numeric",
+                        month: "short",
+                      })}{" "}
+                      ·{" "}
+                      {new Date(b.createdAt).toLocaleTimeString("es", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <StatusPill
+                      tone={BOOKING_PILL[b.status] ?? "neutral"}
+                      className="h-7"
+                    >
+                      {badge.label}
+                    </StatusPill>
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+                    >
+                      <Link href={`/admin/bookings/${b.id}`}>Ver</Link>
+                    </Button>
+                  </div>
                 </li>
               );
             })}
           </ul>
-        )}
+        </PanelCard>
+      )}
 
-        <Pager page={page} hasMore={hasMore} hrefFor={pageHref} />
+      <Pager page={page} hasMore={hasMore} hrefFor={pageHref} />
     </AdminShell>
   );
 }

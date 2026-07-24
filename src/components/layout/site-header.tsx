@@ -133,14 +133,33 @@ function SearchBox({ className }: { className?: string }) {
           name="q"
           placeholder="Buscar tutores, mentorías o categorías"
           aria-label="Buscar tutores, mentorías o categorías"
-          className="h-11 w-full rounded-lg bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          className="h-11 w-full rounded-lg border border-border bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
         />
       </div>
     </form>
   );
 }
 
-export function SiteHeader({ user }: { user?: HeaderUser | null }) {
+export function SiteHeader({
+  user,
+  onboarding = false,
+  admin = false,
+}: {
+  user?: HeaderUser | null;
+  /**
+   * Modo onboarding (AL01 180:1282 / TU01): sin "Panel" ni menú de cuenta, con
+   * "Guardar y salir" a la derecha. Durante el asistente el resto del área
+   * autenticada está cerrada (`requireUser` rebota), así que enseñar el panel
+   * sería un enlace a ninguna parte.
+   */
+  onboarding?: boolean;
+  /**
+   * Modo admin (AD02 218:1725): logo + píldora negra "Admin", sin la
+   * navegación pública. El "Buscar en el panel…" del Figma no se pinta: no
+   * hay búsqueda global del panel a la que conectarlo.
+   */
+  admin?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   // El sheet no se cierra solo al navegar (Next navega en cliente, el diálogo
@@ -166,18 +185,26 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
           Enséñame ya
         </Link>
 
+        {admin ? (
+          <span className="inline-flex h-[25px] shrink-0 items-center rounded-full bg-[#19191f] px-2.5 text-[11px] font-semibold text-white">
+            Admin
+          </span>
+        ) : null}
+
         <nav className="hidden items-center gap-1 md:flex">
           {/* Con sesión, "Panel" es la vuelta a casa: sin él solo se llegaba
               por URL o rebuscando en el menú del avatar. */}
-          {user ? (
+          {user && !onboarding && !admin ? (
             <Button asChild variant="ghost" size="sm">
               <Link href={user.homeHref}>Panel</Link>
             </Button>
           ) : null}
-          {navGroups.map((group) => (
+          {admin
+            ? null
+            : navGroups.map((group) => (
             <DropdownMenu key={group.label}>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="font-medium">
+                <Button variant="ghost" size="sm" className="h-9 text-sm font-medium">
                   {group.label}
                   <ChevronDownIcon className="size-3.5" />
                 </Button>
@@ -193,8 +220,24 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
           ))}
         </nav>
 
-        <SearchBox className="hidden max-w-xl flex-1 md:block" />
+        {admin ? (
+          <span className="flex-1" />
+        ) : (
+          <SearchBox className="hidden max-w-[558px] flex-1 md:block" />
+        )}
 
+        {onboarding ? (
+          /* El borrador se guarda al avanzar de paso, así que "salir" es solo
+             salir. Lleva a la home pública: el área autenticada sigue cerrada
+             hasta terminar el asistente. */
+          <Link
+            href="/"
+            className="ml-auto shrink-0 text-[12.5px] text-[#6b6b6b] transition-colors hover:text-foreground"
+          >
+            Guardar y salir
+          </Link>
+        ) : (
+          <>
         <div className="ml-auto hidden items-center gap-2 md:flex">
           {user ? (
             <DropdownMenu>
@@ -242,10 +285,10 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
             </DropdownMenu>
           ) : (
             <>
-              <Button asChild variant="ghost" size="sm">
+              <Button asChild variant="ghost" size="sm" className="h-9 text-sm">
                 <Link href="/login">Iniciar sesión</Link>
               </Button>
-              <Button asChild>
+              <Button asChild className="h-10 px-4 text-sm">
                 <Link href="/signup">Crear cuenta</Link>
               </Button>
             </>
@@ -324,6 +367,8 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
             </div>
           </SheetContent>
         </Sheet>
+          </>
+        )}
       </Container>
     </header>
   );

@@ -9,7 +9,6 @@ import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 
 type ExcType = Database["public"]["Enums"]["availability_exception_type"];
 
@@ -93,8 +92,51 @@ export function ExceptionsManager({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <form onSubmit={addException} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-2">
+    <div className="flex flex-col gap-4">
+      {exceptions.length === 0 ? (
+        <p className="text-xs text-[#6b6b6b]">
+          Sin excepciones. Bloquea un día libre o abre un horario extra puntual.
+        </p>
+      ) : (
+        <ul className="divide-y divide-[#e0e0e0]">
+          {exceptions.map((x) => (
+            <li
+              key={x.id}
+              className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0"
+            >
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-[#404040]">
+                  {formatDate(x.date)}
+                </span>
+                <span className="block text-xs text-[#6b6b6b]">
+                  {x.type === "block" ? "Bloqueado" : "Abierto extra"} ·{" "}
+                  {x.start_time && x.end_time
+                    ? `${hhmm(x.start_time)}–${hhmm(x.end_time)}`
+                    : "todo el día"}
+                  {x.reason ? ` · ${x.reason}` : ""}
+                </span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={busy}
+                onClick={() => removeException(x.id)}
+                className="h-[34px] rounded-[8px] px-3 text-[13px] text-[#595959]"
+              >
+                Quitar
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* "+ Añadir excepción" (194:218): el alta, plegada en un details nativo. */}
+      <details className="group">
+        <summary className="inline-flex h-[34px] cursor-pointer list-none items-center rounded-[8px] border border-[#e0e0e0] px-3 text-[13px] text-[#595959] transition-colors group-open:hidden hover:border-brand hover:text-brand marker:hidden">
+          + Añadir excepción
+        </summary>
+        <form onSubmit={addException} className="grid gap-3 rounded-[12px] border border-[#e0e0e0] p-4 sm:grid-cols-2">
         <div className="grid gap-1.5">
           <Label htmlFor="exc-date">Fecha</Label>
           <Input id="exc-date" type="date" min={today()} value={date} onChange={(e) => setDate(e.target.value)} required />
@@ -119,35 +161,8 @@ export function ExceptionsManager({
           <Input id="exc-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder="Ej. Vacaciones" />
         </div>
         <Button type="submit" disabled={busy} className="sm:col-span-2">Agregar excepción</Button>
-      </form>
-
-      {exceptions.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Sin excepciones. Bloquea un día libre o abre un horario extra puntual.
-        </p>
-      ) : (
-        <ul className="flex flex-col divide-y rounded-lg border">
-          {exceptions.map((x) => (
-            <li key={x.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <span className="flex flex-wrap items-center gap-2 text-sm">
-                <Badge variant={x.type === "block" ? "secondary" : "default"}>
-                  {x.type === "block" ? "Bloqueo" : "Extra"}
-                </Badge>
-                <span className="font-medium">{formatDate(x.date)}</span>
-                <span className="text-muted-foreground">
-                  {x.start_time && x.end_time
-                    ? `${hhmm(x.start_time)}–${hhmm(x.end_time)}`
-                    : "todo el día"}
-                  {x.reason ? ` · ${x.reason}` : ""}
-                </span>
-              </span>
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => removeException(x.id)}>
-                Eliminar
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
+        </form>
+      </details>
     </div>
   );
 }

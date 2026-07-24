@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -159,47 +158,58 @@ export function TierManager({ tiers }: { tiers: TierRow[] }) {
         </div>
       </div>
 
-      <ul className="flex flex-col gap-3">
-        {tiers.map((t) => (
-          <li
-            key={t.id}
-            className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
-          >
-            <div className="min-w-0">
-              <p className="truncate font-medium">
-                {t.name} — {t.splitPct}%
-              </p>
-              <p className="truncate text-sm text-muted-foreground">{ejemplo(t.splitPct)}</p>
-              {t.description ? (
-                <p className="truncate text-sm text-muted-foreground">{t.description}</p>
-              ) : null}
-              <div className="mt-2 flex flex-wrap gap-2">
-                {t.isDefault ? <Badge>Por defecto</Badge> : null}
-                <Badge variant="secondary">
-                  {t.tutorCount} {t.tutorCount === 1 ? "tutor" : "tutores"}
-                </Badge>
-              </div>
-            </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                setDraft({
-                  id: t.id,
-                  name: t.name,
-                  splitPct: String(t.splitPct),
-                  description: t.description ?? "",
-                  isDefault: t.isDefault,
-                })
-              }
+      {/* Filas del Figma (226:59): nombre + comisión, split 20/700, tutores. */}
+      <div className="rounded-[16px] border border-[#e0e0e0] bg-card px-5 py-2">
+        <ul className="divide-y divide-[#e0e0e0]">
+          {tiers.map((t) => (
+            <li
+              key={t.id}
+              className="flex flex-wrap items-center justify-between gap-3 py-4"
             >
-              Editar
-            </Button>
-          </li>
-        ))}
-      </ul>
+              <div className="min-w-0 sm:w-64">
+                <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
+                  {t.name}
+                </p>
+                <p className="truncate text-xs text-[#6b6b6b]">
+                  Comisión plataforma: {Math.round((100 - t.splitPct) * 100) / 100}%
+                  {t.description ? ` · ${t.description}` : ""}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-[#6b6b6b]">Split tutor</p>
+                <p className="text-xl font-bold text-[#19191f]">{t.splitPct}%</p>
+              </div>
+              <div>
+                <p className="text-xs text-[#6b6b6b]">Tutores</p>
+                <p className="text-xl font-bold text-[#19191f]">{t.tutorCount}</p>
+              </div>
+              <div className="flex items-center gap-2.5">
+                {t.isDefault ? (
+                  <span className="inline-flex h-7 items-center rounded-full bg-[#dbedff] px-2.5 text-xs font-semibold text-brand">
+                    Por defecto
+                  </span>
+                ) : null}
+                <Button
+                  variant="outline"
+                  disabled={busy}
+                  className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+                  onClick={() =>
+                    setDraft({
+                      id: t.id,
+                      name: t.name,
+                      splitPct: String(t.splitPct),
+                      description: t.description ?? "",
+                      isDefault: t.isDefault,
+                    })
+                  }
+                >
+                  Editar
+                </Button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

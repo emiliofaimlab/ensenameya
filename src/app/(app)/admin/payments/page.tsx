@@ -3,8 +3,14 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/server";
 import { listPayments, listPaymentProviders } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/catalog/format";
+import { cn } from "@/lib/utils";
+import {
+  PanelCard,
+  StatusPill,
+  type PillTone,
+} from "@/components/layout/panel-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Pager } from "@/components/catalog/pager";
 import { PAYMENT_BADGE } from "../badges";
 import { AdminFilters } from "./filters";
@@ -20,11 +26,20 @@ const STATUS_OPTIONS = [
   { value: "refunded", label: "Reembolsado" },
 ];
 
+/** Píldoras del Figma (219:90/103/116/129). */
+const PAYMENT_PILL: Record<string, PillTone> = {
+  pending: "amber",
+  authorized: "blue",
+  paid: "green",
+  failed: "red",
+  partially_refunded: "red",
+  refunded: "red",
+};
+
 /**
- * US-1104 · SCR-AD06 (pendientes) + SCR-AD07 (historial) — una sola pantalla:
- * "pendientes" es este listado con el filtro de estado puesto, que es como el
- * propio Doc 5 los agrupa (misma ruta `/admin/payments`).
- * Solo lectura: el reembolso manual es US-704.
+ * US-1104 · SCR-AD06 (en proceso) + SCR-AD07 (histórico) — una sola pantalla
+ * con chips, como el propio Figma la dibuja (219:51). Solo lectura: el
+ * reembolso manual es US-704 y vive en el detalle.
  */
 export default async function AdminPaymentsPage({
   searchParams,
@@ -55,113 +70,157 @@ export default async function AdminPaymentsPage({
     return q ? `/admin/payments?${q}` : "/admin/payments";
   };
 
-  // Sumar monedas distintas daría un número sin sentido (RN-13). Con una sola
-  // se muestran los totales; con varias se avisa en vez de mentir.
+  // Sumar monedas distintas daría un número sin sentido (RN-13).
   const single = totals.currencies.length === 1 ? totals.currencies[0] : null;
+  const inProcess = sp.status === "pending" || sp.status === "authorized";
 
   return (
     <AdminShell
-          title="Pagos"
-          description="Cobros, comisiones y reembolsos. Filtra por estado, proveedor, corredor o fecha."
+      title="Pagos"
+      description="En proceso e histórico (misma vista, AD06/AD07)."
     >
+      {/* Chips (219:51): "En proceso" filtra pendientes; "Histórico", todo. */}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href="/admin/payments?status=pending"
+          className={cn(
+            "inline-flex h-9 items-center rounded-full border px-4 text-[13px] transition-colors",
+            inProcess
+              ? "border-brand bg-brand font-semibold text-white"
+              : "border-[#e0e0e0] bg-card text-[#6b6b6b] hover:border-brand hover:text-brand",
+          )}
+        >
+          En proceso
+        </Link>
+        <Link
+          href="/admin/payments"
+          className={cn(
+            "inline-flex h-9 items-center rounded-full border px-4 text-[13px] transition-colors",
+            !inProcess && !sp.status
+              ? "border-brand bg-brand font-semibold text-white"
+              : "border-[#e0e0e0] bg-card text-[#6b6b6b] hover:border-brand hover:text-brand",
+          )}
+        >
+          Histórico
+        </Link>
+      </div>
 
-        <AdminFilters
-          basePath="/admin/payments"
-          fields={[
-            { name: "status", label: "Estado", type: "select", options: STATUS_OPTIONS },
-            {
-              name: "provider",
-              label: "Proveedor",
-              type: "select",
-              options: providers.map((p) => ({ value: p, label: p })),
-            },
-            {
-              name: "country",
-              label: "Corredor (país de cobro)",
-              type: "select",
-              options: [{ value: "VE", label: "VE" }],
-            },
-            { name: "from", label: "Desde", type: "date" },
-            { name: "to", label: "Hasta", type: "date" },
-          ]}
-        />
+      <AdminFilters
+        basePath="/admin/payments"
+        fields={[
+          { name: "status", label: "Estado", type: "select", options: STATUS_OPTIONS },
+          {
+            name: "provider",
+            label: "Proveedor",
+            type: "select",
+            options: providers.map((p) => ({ value: p, label: p })),
+          },
+          {
+            name: "country",
+            label: "Corredor (país de cobro)",
+            type: "select",
+            options: [{ value: "VE", label: "VE" }],
+          },
+          { name: "from", label: "Desde", type: "date" },
+          { name: "to", label: "Hasta", type: "date" },
+        ]}
+      />
 
-        {/* Totales del conjunto filtrado, no solo de esta página. */}
-        <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-4">
-          <Total label="Pagos" value={String(totals.count)} />
-          {single ? (
-            <>
-              <Total label="Bruto" value={formatMoney(totals.gross, single)} />
-              <Total label="Comisión" value={formatMoney(totals.fee, single)} />
-              <Total label="Neto tutores" value={formatMoney(totals.net, single)} />
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground sm:col-span-3">
+      {/* Totales del conjunto filtrado (219:71), no solo de esta página. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Stat label="Pagos" value={String(totals.count)} />
+        {single ? (
+          <>
+            <Stat label="Bruto" value={formatMoney(totals.gross, single)} />
+            <Stat label="Comisión" value={formatMoney(totals.fee, single)} />
+            <Stat
+              label={totals.refunded > 0 ? "Reembolsado" : "Neto tutores"}
+              value={
+                totals.refunded > 0
+                  ? formatMoney(totals.refunded, single)
+                  : formatMoney(totals.net, single)
+              }
+            />
+          </>
+        ) : (
+          <PanelCard className="p-5 sm:col-span-3">
+            <p className="text-[13px] text-[#6b6b6b]">
               {totals.currencies.length === 0
                 ? "Sin pagos que sumar."
                 : `Hay ${totals.currencies.length} monedas (${totals.currencies.join(", ")}): filtra por una para ver totales.`}
             </p>
-          )}
-          {single && totals.refunded > 0 ? (
-            <Total label="Reembolsado" value={formatMoney(totals.refunded, single)} />
-          ) : null}
-        </div>
+          </PanelCard>
+        )}
+      </div>
 
-        {payments.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+      {payments.length === 0 ? (
+        <PanelCard>
+          <p className="text-[13px] text-[#6b6b6b]">
             No hay pagos con estos filtros.
           </p>
-        ) : (
-          <ul className="flex flex-col gap-3">
+        </PanelCard>
+      ) : (
+        <PanelCard className="py-2">
+          <ul className="divide-y divide-[#e0e0e0]">
             {payments.map((p) => {
               const b = PAYMENT_BADGE[p.status];
               return (
-                <li key={p.id} className="rounded-lg border p-4">
-                  <Link
-                    href={`/admin/payments/${p.id}`}
-                    className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{p.productTitle}</p>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {formatMoney(p.grossAmount, p.currency)} · comisión{" "}
-                        {formatMoney(p.platformFeeAmount, p.currency)} · tutor{" "}
-                        {formatMoney(p.tutorNetAmount, p.currency)}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant={b.variant}>{b.label}</Badge>
-                        {p.provider ? <Badge variant="secondary">{p.provider}</Badge> : null}
-                        {p.payeeCountry ? <Badge variant="outline">{p.payeeCountry}</Badge> : null}
-                        {p.refundedAmount > 0 ? (
-                          <Badge variant="outline">
-                            −{formatMoney(p.refundedAmount, p.currency)}
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </div>
-                    <time
-                      className="shrink-0 text-sm text-muted-foreground"
-                      dateTime={p.createdAt}
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-3 py-4"
+                >
+                  <div className="min-w-0 sm:w-80">
+                    <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
+                      #{p.id.slice(0, 8)} · {formatMoney(p.grossAmount, p.currency)}
+                    </p>
+                    <p className="truncate text-xs text-[#6b6b6b]">
+                      {p.productTitle}
+                      {p.refundedAmount > 0
+                        ? ` · reembolsado ${formatMoney(p.refundedAmount, p.currency)}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[11.5px] text-[#6b6b6b]">Proveedor</p>
+                    <p className="text-[13px] font-medium text-[#404040]">
+                      {p.provider ?? "—"}
+                      {p.payeeCountry ? ` · ${p.payeeCountry}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <StatusPill
+                      tone={PAYMENT_PILL[p.status] ?? "neutral"}
+                      className="h-7"
                     >
-                      {new Date(p.createdAt).toLocaleString("es")}
-                    </time>
-                  </Link>
+                      {b.label}
+                    </StatusPill>
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+                    >
+                      <Link href={`/admin/payments/${p.id}`}>Ver</Link>
+                    </Button>
+                  </div>
                 </li>
               );
             })}
           </ul>
-        )}
+        </PanelCard>
+      )}
 
-        <Pager page={page} hasMore={hasMore} hrefFor={pageHref} />
+      <Pager page={page} hasMore={hasMore} hrefFor={pageHref} />
     </AdminShell>
   );
 }
 
-function Total({ label, value }: { label: string; value: string }) {
+function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-lg font-semibold tabular-nums">{value}</p>
-    </div>
+    <PanelCard className="p-5">
+      <p className="text-xs text-[#6b6b6b]">{label}</p>
+      <p className="mt-1.5 truncate text-2xl font-bold text-[#19191f] tabular-nums">
+        {value}
+      </p>
+    </PanelCard>
   );
 }

@@ -1,11 +1,14 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import {
   formatMoney,
+  initialsFrom,
   modelLabel,
   sessionsLabel,
+  storageUrl,
 } from "@/lib/catalog/format";
 import type { ProductCardData } from "@/lib/catalog/queries";
 
@@ -19,9 +22,12 @@ export function FeaturedProducts({
   return (
     <div className="bg-muted">
       <Container>
-        <Section>
+        {/* El hueco de abajo es donde cabalga la tarjeta de cifras (ver HomeStats).
+            Con `sm:` porque si no gana el `sm:py-16` de Section y las tarjetas
+            quedan tapadas. */}
+        <Section className="pb-[124px] sm:pb-[164px]">
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold tracking-tight">
+            <h2 className="text-2xl font-semibold">
               Tutorías destacadas listas para reservar
             </h2>
             <Link
@@ -35,40 +41,82 @@ export function FeaturedProducts({
           <ul className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {products.map((p) => {
               const sessions = sessionsLabel(p);
+              const thumb = storageUrl("product-images", p.imagePath);
               return (
                 <li
                   key={p.id}
-                  className="flex flex-col gap-3 rounded-[20px] bg-card p-5"
+                  className="flex flex-col overflow-hidden rounded-[20px] bg-card shadow-card"
                 >
-                  {/* Sin miniatura: products no tiene columna de imagen. */}
-                  <h3 className="text-[15px] font-semibold">{p.title}</h3>
-                  {p.outcome ? (
-                    <p className="line-clamp-2 text-[13px] text-muted-foreground">
-                      {p.outcome}
-                    </p>
-                  ) : null}
+                  {/* Miniatura 276×124 del Figma (DD-02). Sin imagen se pinta la
+                      banda vacía igual: si no, las tarjetas quedan desalineadas. */}
+                  {thumb ? (
+                    <Image
+                      src={thumb}
+                      alt=""
+                      width={276}
+                      height={124}
+                      className="h-[124px] w-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="h-[124px] w-full bg-muted" />
+                  )}
 
-                  <span className="w-fit rounded-full bg-primary-muted px-3 py-1 text-xs font-semibold text-primary-muted-foreground">
-                    {modelLabel(p)}
-                  </span>
+                  <div className="flex flex-1 flex-col gap-3 p-5">
+                    <h3 className="text-[15px] font-semibold">{p.title}</h3>
 
-                  <div className="mt-auto flex items-baseline justify-between gap-2">
-                    <span className="text-lg font-semibold">
-                      {formatMoney(p.priceAmount, p.currency)}
-                    </span>
-                    {sessions ? (
-                      <span className="text-xs text-muted-foreground">
-                        {sessions}
-                      </span>
+                    {/* Tutor de la tutoría (DD-01): foto + nombre, como el Figma. */}
+                    {p.tutor ? (
+                      <div className="flex items-center gap-2">
+                        <span className="grid size-[18px] shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-[8px] font-semibold">
+                          {storageUrl("avatars", p.tutor.avatarPath) ? (
+                            <Image
+                              src={storageUrl("avatars", p.tutor.avatarPath)!}
+                              alt=""
+                              width={18}
+                              height={18}
+                              className="size-[18px] object-cover"
+                              unoptimized
+                            />
+                          ) : (
+                            initialsFrom(
+                              p.tutor.displayName ?? p.tutor.headline,
+                            )
+                          )}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          {p.tutor.displayName ?? p.tutor.headline ?? "Tutor"}
+                        </span>
+                      </div>
                     ) : null}
-                  </div>
+                    {p.outcome ? (
+                      <p className="line-clamp-2 text-[13px] text-muted-foreground">
+                        {p.outcome}
+                      </p>
+                    ) : null}
 
-                  <Link
-                    href={`/products/${p.id}`}
-                    className="text-[13px] font-semibold text-brand hover:underline"
-                  >
-                    Ver detalle →
-                  </Link>
+                    <span className="w-fit rounded-full bg-primary-muted px-3 py-1 text-xs font-semibold text-primary-muted-foreground">
+                      {modelLabel(p)}
+                    </span>
+
+                    <div className="mt-auto flex items-baseline justify-between gap-2">
+                      <span className="text-lg font-semibold">
+                        {formatMoney(p.priceAmount, p.currency)}
+                      </span>
+                      {sessions ? (
+                        <span className="text-xs text-muted-foreground">
+                          {sessions}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <Link
+                      href={`/products/${p.id}`}
+                      className="text-[13px] font-semibold text-brand hover:underline"
+                    >
+                      Ver detalle →
+                    </Link>
+                  </div>
                 </li>
               );
             })}

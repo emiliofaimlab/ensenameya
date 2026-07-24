@@ -6,19 +6,25 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { PhoneInput } from "@/components/form/phone-input";
 import { TimezoneSelect } from "@/components/form/timezone-select";
-import { WizardShell, ChipGroup } from "@/components/onboarding/wizard";
+import {
+  WizardShell,
+  ChipGroup,
+  Field,
+  FIELD_CLASS,
+} from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 import { MaterialsUpload } from "@/components/onboarding/materials-upload";
 import type { Database } from "@/lib/database.types";
 
 type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
 
-const LEVELS: { id: string; label: string }[] = [
+const LEVELS: { id: TeachingLevel; label: string }[] = [
   { id: "basico", label: "Básico" },
   { id: "intermedio", label: "Intermedio" },
   { id: "avanzado", label: "Avanzado" },
@@ -38,6 +44,7 @@ export function TutorOnboardingForm({
   bio: bio0,
   instagram: ig0,
   linkedin: li0,
+  fullName,
   avatarPath,
   avatarUrl,
   timezone: tz0,
@@ -53,6 +60,7 @@ export function TutorOnboardingForm({
   bio: string;
   instagram: string;
   linkedin: string;
+  fullName: string;
   avatarPath: string | null;
   avatarUrl: string | null;
   timezone: string;
@@ -92,6 +100,10 @@ export function TutorOnboardingForm({
       bio: bio.trim() || null,
       socials,
       teaching_level: level,
+      // Copia pública del nombre y la foto (DD-01): `profiles` no es visible
+      // para anon, así que la tarjeta del catálogo lee estas dos columnas.
+      display_name: fullName.trim() || null,
+      avatar_path: avatar,
     };
 
     const { error } = hasProfile
@@ -170,33 +182,34 @@ export function TutorOnboardingForm({
         onNext={next}
         busy={busy}
       >
-        <div className="flex flex-col gap-6">
-          <div>
-            <Label className="text-[13px]">Foto de perfil (obligatoria)</Label>
-            <div className="mt-2">
-              <AvatarUpload userId={userId} initialUrl={avatarUrl} onUploaded={setAvatar} />
-            </div>
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="headline" className="text-[13px]">Headline (obligatorio)</Label>
-            <Input
-              id="headline"
-              value={headline}
-              onChange={(e) => setHeadline(e.target.value)}
-              placeholder="Ej: Profesora de inglés para entrevistas tech"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="bio" className="text-[13px]">Bio (obligatoria)</Label>
-            <Textarea
-              id="bio"
-              rows={5}
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="Resume tu experiencia y el resultado que ayudas a lograr…"
-            />
-          </div>
-        </div>
+        <Field label="Foto de perfil (obligatoria)">
+          <AvatarUpload
+            userId={userId}
+            initialUrl={avatarUrl}
+            onUploaded={setAvatar}
+            name={fullName}
+            large
+          />
+        </Field>
+        <Field label="Headline (obligatorio)" htmlFor="headline">
+          <Input
+            id="headline"
+            value={headline}
+            onChange={(e) => setHeadline(e.target.value)}
+            placeholder="Ej: Profesora de inglés para entrevistas tech"
+            className={FIELD_CLASS}
+          />
+        </Field>
+        <Field label="Bio (obligatoria)" htmlFor="bio">
+          <Textarea
+            id="bio"
+            rows={4}
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            placeholder="Resume tu experiencia y el resultado que ayudas a lograr…"
+            className="rounded-[8px] px-3.5 placeholder:text-[#8c8c8c]"
+          />
+        </Field>
       </WizardShell>
     );
   }
@@ -212,32 +225,35 @@ export function TutorOnboardingForm({
         onNext={next}
         busy={busy}
       >
-        <div className="flex flex-col gap-6">
-          <div>
-            <Label className="text-[13px]">Categorías</Label>
-            <div className="mt-2">
-              <ChipGroup
-                ariaLabel="Categorías que enseñas"
-                options={categories}
-                selected={cats}
-                onToggle={(id) => setCats((p) => toggle(p, id))}
-              />
-            </div>
-          </div>
-          <div>
-            <Label className="text-[13px]">Nivel principal</Label>
-            <div className="mt-2">
-              <ChipGroup
-                ariaLabel="Nivel principal"
-                options={LEVELS}
-                selected={new Set(level ? [level] : [])}
-                onToggle={(id) =>
-                  setLevel((p) => (p === id ? null : (id as TeachingLevel)))
-                }
-              />
-            </div>
-          </div>
-        </div>
+        <Field label="Categorías">
+          <ChipGroup
+            ariaLabel="Categorías que enseñas"
+            options={categories}
+            selected={cats}
+            onToggle={(id) => setCats((p) => toggle(p, id))}
+          />
+        </Field>
+        {/* El Figma lo pinta como select (186:44), no como chips. */}
+        <Field label="Nivel principal" htmlFor="teaching_level">
+          <select
+            id="teaching_level"
+            value={level ?? ""}
+            onChange={(e) =>
+              setLevel((e.target.value || null) as TeachingLevel | null)
+            }
+            className={cn(
+              FIELD_CLASS,
+              "w-full border border-input bg-transparent outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+            )}
+          >
+            <option value="">Sin especificar</option>
+            {LEVELS.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+        </Field>
       </WizardShell>
     );
   }
@@ -253,39 +269,34 @@ export function TutorOnboardingForm({
         onNext={next}
         busy={busy}
       >
-        <div className="flex flex-col gap-5">
-          <div className="grid gap-2">
-            <Label className="text-[13px]">Zona horaria</Label>
-            <TimezoneSelect value={timezone} onChange={setTimezone} />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="phone" className="text-[13px]">Teléfono (E.164)</Label>
-            <Input
-              id="phone"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+51 999 888 777"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="linkedin" className="text-[13px]">LinkedIn</Label>
-            <Input
-              id="linkedin"
-              value={linkedin}
-              onChange={(e) => setLinkedin(e.target.value)}
-              placeholder="https://linkedin.com/in/…"
-            />
-          </div>
-          <div className="grid gap-2">
-            <Label htmlFor="instagram" className="text-[13px]">Instagram</Label>
-            <Input
-              id="instagram"
-              value={instagram}
-              onChange={(e) => setInstagram(e.target.value)}
-              placeholder="https://instagram.com/…"
-            />
-          </div>
-        </div>
+        <Field label="Zona horaria" htmlFor="timezone">
+          <TimezoneSelect
+            value={timezone}
+            onChange={setTimezone}
+            className={FIELD_CLASS}
+          />
+        </Field>
+        <Field label="Teléfono" htmlFor="phone">
+          <PhoneInput id="phone" value={phone} onChange={setPhone} />
+        </Field>
+        <Field label="LinkedIn" htmlFor="linkedin">
+          <Input
+            id="linkedin"
+            value={linkedin}
+            onChange={(e) => setLinkedin(e.target.value)}
+            placeholder="https://linkedin.com/in/…"
+            className={FIELD_CLASS}
+          />
+        </Field>
+        <Field label="Instagram / otra red (opcional)" htmlFor="instagram">
+          <Input
+            id="instagram"
+            value={instagram}
+            onChange={(e) => setInstagram(e.target.value)}
+            placeholder="https://instagram.com/…"
+            className={FIELD_CLASS}
+          />
+        </Field>
       </WizardShell>
     );
   }
@@ -320,13 +331,17 @@ export function TutorOnboardingForm({
       nextLabel="Finalizar"
       busy={busy}
     >
-      <div className="rounded-xl border border-dashed p-6">
-        <p className="text-sm">Crea una oferta con su resultado, precio y disponibilidad.</p>
-        <Button asChild variant="outline" className="mt-4">
-          <Link href="/tutor/products/new">Crear oferta ahora</Link>
-        </Button>
-      </div>
-      <p className="mt-4 text-xs text-muted-foreground">
+      {/* 186:119 — texto, CTA azul a lo ancho y la nota de revisión. */}
+      <p className="text-[13px] text-[#4d4d4d]">
+        Crea una oferta con su resultado, precio y disponibilidad.
+      </p>
+      <Button
+        asChild
+        className="h-[45px] w-full rounded-[8px] bg-brand text-sm font-semibold hover:bg-brand/90"
+      >
+        <Link href="/tutor/products/new">Crear oferta ahora</Link>
+      </Button>
+      <p className="text-xs text-[#6b6b6b]">
         Al finalizar, tu perfil pasa a revisión.
       </p>
     </WizardShell>

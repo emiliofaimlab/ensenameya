@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { XIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,9 @@ export const WEEKDAYS = [
   "Sábado",
 ]; // 0=domingo (Doc 1 §1.4.8)
 
+/** Orden de lectura del Figma (194:48): Lunes…Domingo. */
+const DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
 export type Rule = {
   id: string;
   weekday: number;
@@ -28,10 +32,15 @@ export type Rule = {
 };
 
 const selectClasses =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+  "h-[45px] w-full rounded-[8px] border border-input bg-transparent px-3.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
 const hhmm = (t: string) => t.slice(0, 5); // 'HH:MM:SS' → 'HH:MM'
 
+/**
+ * US-501 (SCR-TU05) — reglas semanales agrupadas por día, como el Figma
+ * (194:48): una fila por día con sus franjas como chips. El chip lleva su ✕
+ * (el "Editar" del Figma en nuestro CRUD es quitar y volver a añadir).
+ */
 export function AvailabilityManager({
   userId,
   rules,
@@ -59,7 +68,7 @@ export function AvailabilityManager({
     });
     setBusy(false);
     if (error) return toast.error(error.message || "No se pudo guardar el horario.");
-    toast.success("Horario agregado.");
+    toast.success("Franja agregada.");
     router.refresh();
   }
 
@@ -72,66 +81,111 @@ export function AvailabilityManager({
     router.refresh();
   }
 
-  async function toggleRule(id: string, next: boolean) {
-    setBusy(true);
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("availability_rules")
-      .update({ is_active: next })
-      .eq("id", id);
-    setBusy(false);
-    if (error) return toast.error("No se pudo actualizar.");
-    router.refresh();
+  const byDay = new Map<number, Rule[]>();
+  for (const r of rules) {
+    const list = byDay.get(r.weekday);
+    if (list) list.push(r);
+    else byDay.set(r.weekday, [r]);
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Alta */}
-      <form onSubmit={addRule} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
-        <div className="grid gap-1.5">
-          <Label htmlFor="weekday">Día</Label>
-          <select id="weekday" className={selectClasses} value={weekday} onChange={(e) => setWeekday(e.target.value)}>
-            {WEEKDAYS.map((d, i) => (
-              <option key={i} value={i}>{d}</option>
-            ))}
-          </select>
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="start">Desde</Label>
-          <Input id="start" type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="end">Hasta</Label>
-          <Input id="end" type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
-        </div>
-        <Button type="submit" disabled={busy}>Agregar</Button>
-      </form>
-
-      {/* Lista agrupada por día */}
-      {rules.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Aún no defines horarios. Agrega tu primer bloque arriba.
-        </p>
-      ) : (
-        <ul className="flex flex-col divide-y rounded-lg border">
-          {rules.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-              <span className={r.is_active ? "" : "text-muted-foreground line-through"}>
-                <span className="font-medium">{WEEKDAYS[r.weekday]}</span>{" "}
-                {hhmm(r.start_time)}–{hhmm(r.end_time)}
+    <div className="flex flex-col">
+      <div className="divide-y divide-[#e0e0e0]">
+        {DISPLAY_ORDER.map((day) => {
+          const list = byDay.get(day) ?? [];
+          return (
+            <div
+              key={day}
+              className="flex flex-wrap items-center gap-2.5 py-2.5 first:pt-0"
+            >
+              <span className="w-20 text-sm font-medium text-[#404040]">
+                {WEEKDAYS[day]}
               </span>
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => toggleRule(r.id, !r.is_active)}>
-                  {r.is_active ? "Pausar" : "Activar"}
-                </Button>
-                <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => removeRule(r.id)}>
-                  Eliminar
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+              {list.length === 0 ? (
+                <span className="text-xs text-[#6b6b6b]">Sin disponibilidad</span>
+              ) : (
+                list.map((r) => (
+                  <span
+                    key={r.id}
+                    className={`inline-flex h-7 items-center gap-1.5 rounded-[6px] bg-muted px-2.5 text-xs font-medium ${
+                      r.is_active ? "text-[#4d4d4d]" : "text-[#9c9c9c] line-through"
+                    }`}
+                  >
+                    {hhmm(r.start_time)}–{hhmm(r.end_time)}
+                    <button
+                      type="button"
+                      aria-label={`Quitar ${WEEKDAYS[r.weekday]} ${hhmm(r.start_time)}`}
+                      disabled={busy}
+                      onClick={() => removeRule(r.id)}
+                      className="text-[#8c8c8c] transition-colors hover:text-destructive"
+                    >
+                      <XIcon className="size-3" />
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* "+ Añadir franja" (194:105): el alta, plegada en un details nativo. */}
+      <details className="group mt-3">
+        <summary className="inline-flex h-[34px] cursor-pointer list-none items-center rounded-[8px] border border-[#e0e0e0] px-3 text-[13px] text-[#595959] transition-colors group-open:hidden hover:border-brand hover:text-brand marker:hidden">
+          + Añadir franja
+        </summary>
+        <form
+          onSubmit={addRule}
+          className="grid gap-3 rounded-[12px] border border-[#e0e0e0] p-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end"
+        >
+          <div className="grid gap-1.5">
+            <Label htmlFor="weekday" className="text-xs font-normal text-[#6b6b6b]">
+              Día
+            </Label>
+            <select
+              id="weekday"
+              className={selectClasses}
+              value={weekday}
+              onChange={(e) => setWeekday(e.target.value)}
+            >
+              {DISPLAY_ORDER.map((i) => (
+                <option key={i} value={i}>
+                  {WEEKDAYS[i]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="start" className="text-xs font-normal text-[#6b6b6b]">
+              Desde
+            </Label>
+            <Input
+              id="start"
+              type="time"
+              value={start}
+              onChange={(e) => setStart(e.target.value)}
+              required
+              className="h-[45px] rounded-[8px]"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="end" className="text-xs font-normal text-[#6b6b6b]">
+              Hasta
+            </Label>
+            <Input
+              id="end"
+              type="time"
+              value={end}
+              onChange={(e) => setEnd(e.target.value)}
+              required
+              className="h-[45px] rounded-[8px]"
+            />
+          </div>
+          <Button type="submit" disabled={busy} className="h-[45px] rounded-[8px]">
+            Agregar
+          </Button>
+        </form>
+      </details>
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/catalog/format";
+import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
 
 export type Slot = { slot_start: string; slot_end: string };
@@ -51,12 +53,23 @@ const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
  */
 export function SlotPicker({
   productId,
+  productTitle,
+  tutorName,
   slots,
   required,
+  total,
+  currency,
+  durationMin,
 }: {
   productId: string;
+  productTitle: string;
+  tutorName?: string;
   slots: Slot[];
   required: number;
+  /** Total de la reserva (fijo): paquete completo o sesión suelta. */
+  total: number;
+  currency: string;
+  durationMin: number | null;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -119,154 +132,199 @@ export function SlotPicker({
 
   if (slots.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        Este tutor no tiene horarios disponibles por ahora. Vuelve a intentarlo
-        más tarde.
-      </p>
+      <PanelCard>
+        <p className="text-[13px] text-[#6b6b6b]">
+          Este tutor no tiene horarios disponibles por ahora. Vuelve a intentarlo
+          más tarde.
+        </p>
+      </PanelCard>
     );
   }
 
   const openSlots = openDay ? (byDay.get(openDay) ?? []) : [];
 
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
-      <section className="rounded-2xl bg-card p-6">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-lg font-bold first-letter:uppercase">
-            {month.toLocaleDateString("es", { month: "long", year: "numeric" })}
-          </h2>
-          <div className="flex gap-1">
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="Mes anterior"
-              onClick={() =>
-                setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))
-              }
-            >
-              <ChevronLeftIcon className="size-4" />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              aria-label="Mes siguiente"
-              onClick={() =>
-                setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))
-              }
-            >
-              <ChevronRightIcon className="size-4" />
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-5 grid grid-cols-7 gap-1 text-center text-[13px] text-muted-foreground">
-          {WEEKDAYS.map((d) => (
-            <div key={d} className="py-1 font-medium">
-              {d}
-            </div>
-          ))}
-          {grid.map((d, i) => {
-            if (!d) return <div key={`x${i}`} />;
-            const key = dayKey(d);
-            const has = byDay.has(key);
-            const isOpen = key === openDay;
-            const chosen = (byDay.get(key) ?? []).some((iso) =>
-              selected.has(iso),
-            );
-            return (
-              <button
-                key={key}
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="flex flex-col gap-5">
+        <PanelCard>
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-[17px] font-bold text-[#19191f] first-letter:uppercase">
+              {month.toLocaleDateString("es", { month: "long", year: "numeric" })}
+            </h2>
+            <div className="flex gap-1">
+              <Button
                 type="button"
-                disabled={!has}
-                onClick={() => setOpenDay(key)}
-                aria-pressed={isOpen}
-                className={cn(
-                  "aspect-square rounded-lg text-sm transition-colors",
-                  !has && "text-muted-foreground/40",
-                  has && !isOpen && "font-medium hover:bg-muted",
-                  chosen && !isOpen && "bg-brand-muted text-brand",
-                  isOpen && "bg-brand font-semibold text-white",
-                )}
+                size="icon"
+                variant="ghost"
+                aria-label="Mes anterior"
+                onClick={() =>
+                  setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))
+                }
               >
-                {d.getDate()}
-              </button>
-            );
-          })}
-        </div>
+                <ChevronLeftIcon className="size-4 text-[#6b6b6b]" />
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                aria-label="Mes siguiente"
+                onClick={() =>
+                  setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))
+                }
+              >
+                <ChevronRightIcon className="size-4 text-[#6b6b6b]" />
+              </Button>
+            </div>
+          </div>
+
+          {/* El Figma pone la zona horaria aquí, no en el panel lateral. */}
+          <p className="mt-2 text-xs text-[#6b6b6b]">Hora local: {tzLabel()}</p>
+
+          <div className="mt-3.5 grid grid-cols-7 gap-2 text-center">
+            {WEEKDAYS.map((d) => (
+              <div
+                key={d}
+                className="flex h-10 items-center justify-center text-[13px] font-medium text-[#6b6b6b]"
+              >
+                {d}
+              </div>
+            ))}
+            {grid.map((d, i) => {
+              if (!d) return <div key={`x${i}`} className="h-10" />;
+              const key = dayKey(d);
+              const has = byDay.has(key);
+              const isOpen = key === openDay;
+              const chosen = (byDay.get(key) ?? []).some((iso) =>
+                selected.has(iso),
+              );
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={!has}
+                  onClick={() => setOpenDay(key)}
+                  aria-pressed={isOpen}
+                  className={cn(
+                    "h-10 rounded-[10px] text-sm font-medium transition-colors",
+                    // Sin huecos: número apagado y sin caja, como el Figma.
+                    !has && "text-[#c4c4c4]",
+                    has && "border-[1.5px] border-[#e0e0e0] text-[#19191f]",
+                    has && !isOpen && !chosen && "hover:border-brand",
+                    // Azul sólido = día con sesión elegida (168:8) o día abierto.
+                    (chosen || isOpen) &&
+                      "border-brand bg-brand text-white hover:border-brand",
+                  )}
+                >
+                  {d.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </PanelCard>
 
         {openSlots.length > 0 ? (
-          <div className="mt-6 border-t pt-5">
-            <h3 className="text-sm font-semibold first-letter:uppercase">
+          <PanelCard>
+            <PanelCardTitle className="text-[17px] first-letter:uppercase">
+              Horarios ·{" "}
               {new Date(openSlots[0]!).toLocaleDateString("es", {
                 weekday: "long",
                 day: "numeric",
-                month: "long",
+                month: "short",
               })}
-            </h3>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {openSlots.map((iso) => (
-                <Button
-                  key={iso}
-                  type="button"
-                  size="sm"
-                  variant={selected.has(iso) ? "default" : "outline"}
-                  onClick={() => toggle(iso)}
-                >
-                  {timeLabel(iso)}
-                </Button>
-              ))}
+              {durationMin ? ` · ${durationMin} min` : ""}
+            </PanelCardTitle>
+            <div className="mt-3.5 flex flex-wrap gap-2">
+              {openSlots.map((iso) => {
+                const on = selected.has(iso);
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => toggle(iso)}
+                    aria-pressed={on}
+                    className={cn(
+                      "inline-flex h-9 items-center rounded-full border-[1.5px] px-3.5 text-[13px] font-medium transition-colors",
+                      on
+                        ? "border-brand bg-brand text-white"
+                        : "border-[#e0e0e0] bg-card text-[#19191f] hover:border-brand",
+                    )}
+                  >
+                    {timeLabel(iso)}
+                  </button>
+                );
+              })}
             </div>
-          </div>
+            {/* El Figma pinta además los horarios OCUPADOS en gris.
+                `get_available_slots` solo devuelve los libres —los ocupados no
+                salen de la BD—, así que aquí solo hay huecos reservables. */}
+          </PanelCard>
         ) : null}
-      </section>
+      </div>
 
-      <aside className="rounded-2xl bg-card p-6 lg:sticky lg:top-24">
-        <h2 className="text-lg font-bold">Tu selección</h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Hora local: {tzLabel()}
+      <PanelCard className="lg:sticky lg:top-24">
+        <PanelCardTitle className="text-[17px]">Tu selección</PanelCardTitle>
+        <p className="mt-2.5 text-[13px] text-[#6b6b6b]">
+          {productTitle}
+          {tutorName ? ` · con ${tutorName}` : ""}
         </p>
 
-        <p className="mt-4 text-sm font-semibold">
+        <p className="mt-2.5 text-sm font-medium text-[#19191f]">
           {selected.size} de {required}{" "}
           {required === 1 ? "sesión seleccionada" : "sesiones seleccionadas"}
         </p>
 
+        <hr className="my-3 border-[#e0e0e0]" />
+
         {selected.size === 0 ? (
-          <p className="mt-3 text-[13px] text-muted-foreground">
+          <p className="text-[13px] text-[#6b6b6b]">
             Elige un día en el calendario y luego su horario.
           </p>
         ) : (
-          <ul className="mt-3 flex flex-col gap-2">
+          <ul className="flex flex-col gap-2.5">
             {[...selected].sort().map((iso) => (
               <li
                 key={iso}
-                className="flex items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-[13px]"
+                className="flex items-center justify-between gap-2 text-[13px] text-[#19191f]"
               >
                 <span className="first-letter:uppercase">{chipLabel(iso)}</span>
                 <button
                   type="button"
                   onClick={() => toggle(iso)}
                   aria-label={`Quitar ${chipLabel(iso)}`}
-                  className="text-muted-foreground hover:text-destructive"
+                  className="text-[#6b6b6b] transition-colors hover:text-destructive"
                 >
-                  <XIcon className="size-4" />
+                  <XIcon className="size-3.5" />
                 </button>
               </li>
             ))}
           </ul>
         )}
 
+        <hr className="my-3 border-[#e0e0e0]" />
+
+        <div className="flex items-baseline justify-between gap-4">
+          <span className="text-sm text-[#6b6b6b]">Total</span>
+          <span className="text-base font-bold text-[#19191f]">
+            {formatMoney(total, currency)}
+          </span>
+        </div>
+
+        {/* El Figma promete "reserva tentativa: tienes 20 min para pagar"; en
+            nuestro flujo `create_booking` no corre hasta confirmar el pago, así
+            que el horario no se bloquea antes. Se cuenta lo que pasa de verdad. */}
+        <p className="mt-3 text-xs text-[#6b6b6b]">
+          El horario queda reservado al confirmar el pago.
+        </p>
+
         <Button
           type="button"
-          className="mt-5 h-11 w-full"
+          className="mt-4 h-[45px] w-full rounded-[10px] text-sm font-semibold"
           disabled={selected.size !== required}
           onClick={onContinue}
         >
-          Continuar
+          Continuar al pago
         </Button>
-      </aside>
+      </PanelCard>
     </div>
   );
 }

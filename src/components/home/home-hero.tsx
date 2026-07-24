@@ -1,39 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
-import {
-  AwardIcon,
-  BriefcaseIcon,
-  CodeIcon,
-  FlaskConicalIcon,
-  GraduationCapIcon,
-  HeartIcon,
-  LanguagesIcon,
-  MusicIcon,
-  PaletteIcon,
-  SearchIcon,
-  SigmaIcon,
-  SparklesIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { TRUST_POINTS } from "@/components/home/trust";
+import { categoryIcon } from "@/components/catalog/category-icons";
 import type { CategoryTag } from "@/lib/catalog/queries";
-
-/** Icono por categoría del seed; `SparklesIcon` cubre las que se añadan luego. */
-const CATEGORY_ICONS: Record<string, LucideIcon> = {
-  idiomas: LanguagesIcon,
-  matematicas: SigmaIcon,
-  programacion: CodeIcon,
-  ciencias: FlaskConicalIcon,
-  musica: MusicIcon,
-  "arte-y-diseno": PaletteIcon,
-  negocios: BriefcaseIcon,
-  "preparacion-examenes": GraduationCapIcon,
-  "vida-y-creatividad": HeartIcon,
-  "habilidades-profesionales": AwardIcon,
-};
 
 export function HomeHero({ categories }: { categories: CategoryTag[] }) {
   return (
@@ -51,7 +24,8 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
         <div className="absolute inset-0 -z-10 bg-black/60" />
 
         <Container className="flex flex-col items-center gap-6 py-20 text-center text-white sm:py-28">
-          <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
+          {/* 910px es el ancho del titular en el Figma: entra en dos líneas. */}
+          <h1 className="max-w-[910px] text-3xl font-semibold text-balance sm:text-5xl">
             Aprende a tu ritmo y conviértete en un PRO impulsando tu{" "}
             <em className="text-primary">talento</em>
           </h1>
@@ -80,17 +54,23 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
 
           <ul className="flex flex-wrap justify-center gap-2">
             {categories.map((c) => {
-              const Icon = CATEGORY_ICONS[c.slug] ?? SparklesIcon;
+              const Icon = categoryIcon(c.slug);
               return (
                 <li key={c.slug}>
                   <Link
                     href={`/categories/${c.slug}`}
-                    className="flex items-center gap-2 rounded-full bg-background/95 py-1.5 pr-4 pl-1.5 text-sm font-semibold text-foreground transition-colors hover:bg-background"
+                    className="group flex items-center rounded-full p-1 text-sm font-semibold text-foreground transition-colors hover:bg-background focus-visible:bg-background"
                   >
-                    <span className="grid size-9 place-items-center rounded-full bg-primary text-primary-foreground">
+                    {/* Figma: círculo naranja suelto; al desplegarse, píldora blanca con el círculo en azul. */}
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-colors group-hover:bg-brand group-focus-visible:bg-brand">
                       <Icon className="size-4.5" />
                     </span>
-                    {c.name}
+                    {/* El nombre solo aparece al pasar el ratón (o al enfocar con teclado). */}
+                    <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 group-hover:grid-cols-[1fr] group-focus-visible:grid-cols-[1fr]">
+                      <span className="min-w-0 overflow-hidden whitespace-nowrap">
+                        <span className="px-2.5">{c.name}</span>
+                      </span>
+                    </span>
                   </Link>
                 </li>
               );
@@ -101,10 +81,12 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
 
       {/* Banda de garantías: en el Figma cabalga el borde inferior del hero. */}
       <Container className="relative z-10 -mt-10 sm:-mt-12">
-        <ul className="grid gap-6 rounded-[22px] bg-brand px-6 py-6 text-white sm:grid-cols-2 sm:px-10 lg:grid-cols-4 lg:divide-x lg:divide-white/25">
+        {/* Degradado del Figma (fondo de la banda, muestreado del asset): #0072ff → #49a9ff. */}
+        <ul className="grid gap-6 rounded-[22px] bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% px-6 py-10 text-white sm:grid-cols-2 sm:px-9 lg:grid-cols-4 lg:divide-x lg:divide-white/25">
           {TRUST_POINTS.map(({ icon: Icon, title, text }) => (
             <li key={title} className="flex items-center gap-3 lg:px-5">
-              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-white/95 text-brand">
+              {/* Icono naranja, no azul: en el Figma el trazo es #fe6a00. */}
+              <span className="grid size-11 shrink-0 place-items-center rounded-full bg-white/95 text-primary">
                 <Icon className="size-5" />
               </span>
               <div>

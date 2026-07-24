@@ -32,7 +32,11 @@ export const MODELS = [
 /**
  * Filtros de P05. Todo va por URL (sin JS) y todo se filtra en la BD: precio y
  * sesiones son columnas de `products`.
- * ponytail: faltan "Nivel" e "Idioma" del Figma — no existen esas columnas.
+ *
+ * Faltan "Nivel" e "Idioma" del Figma: son **DD-03 (`EY-113`)**, que sigue
+ * abierta. Ojo con confundirlos con `tutor_profiles.teaching_level` (IV-02):
+ * ese es el nivel que enseña el TUTOR, no el del producto. Se montan cuando
+ * existan las columnas; un filtro que no filtra es peor que ninguno.
  */
 export function ProductFilters({
   categories,
@@ -57,7 +61,7 @@ export function ProductFilters({
   const anyActive = Object.values(active).some(Boolean);
 
   return (
-    <aside className="h-fit rounded-2xl border bg-card p-5 lg:sticky lg:top-24">
+    <aside className="h-fit rounded-[16px] border border-[#dbdbdb] bg-card p-[22px] lg:sticky lg:top-24">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-lg font-bold">Filtros</h2>
         {anyActive ? (
@@ -72,7 +76,7 @@ export function ProductFilters({
 
       {groups.map((g) => (
         <div key={g.key}>
-          <p className="mt-5 text-sm font-bold">{g.title}</p>
+          <p className="mt-5 text-sm font-bold text-[#242424]">{g.title}</p>
           <ul className="mt-2 space-y-1.5">
             {g.options.map((o) => {
               const on = active[g.key] === o.id;

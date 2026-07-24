@@ -1,46 +1,39 @@
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { AppSidebar, TUTOR_ITEMS } from "@/components/layout/app-sidebar";
+import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
+import { PanelShell } from "@/components/layout/panel-shell";
 
 /**
- * Shell de las pantallas del tutor (TU03…TU09): fondo gris + menú lateral.
- * Sin él, el sidebar solo salía en el dashboard y las demás quedaban sin
- * navegación entre sí.
+ * Shell de las pantallas del tutor (TU02…TU09): el armazón del panel del
+ * Figma (menú 232, contenido 1200, fondo `#f9fafc`) con el menú del tutor y
+ * la cabecera título 24/700 + subtítulo + acción a la derecha (191:39).
  */
 export function TutorShell({
   title,
   description,
   actions,
+  back,
   children,
 }: {
   title: string;
   description?: string;
   actions?: React.ReactNode;
+  back?: { href: string; label: string };
   children: React.ReactNode;
 }) {
   return (
-    <div className="bg-muted">
-      <Container>
-        <Section className="grid gap-6 lg:grid-cols-[232px_1fr]">
-          <AppSidebar items={TUTOR_ITEMS} />
+    <PanelShell items={TUTOR_ITEMS} back={back}>
+      <div className="flex flex-wrap items-start gap-3">
+        <div>
+          <h1 className="text-[24px] font-bold tracking-tight text-[#19191f]">
+            {title}
+          </h1>
+          {description ? (
+            <p className="mt-1 text-[13px] text-[#6b6b6b]">{description}</p>
+          ) : null}
+        </div>
+        {actions ? <div className="ml-auto">{actions}</div> : null}
+      </div>
 
-          <div className="flex flex-col gap-6">
-            <div className="flex flex-wrap items-start gap-3">
-              <div>
-                <h1 className="text-[26px] font-bold tracking-tight">{title}</h1>
-                {description ? (
-                  <p className="mt-1 text-[13px] text-muted-foreground">
-                    {description}
-                  </p>
-                ) : null}
-              </div>
-              {actions ? <div className="ml-auto">{actions}</div> : null}
-            </div>
-
-            {children}
-          </div>
-        </Section>
-      </Container>
-    </div>
+      {children}
+    </PanelShell>
   );
 }

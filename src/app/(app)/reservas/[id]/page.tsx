@@ -1,18 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
 
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { BOOKING_STATUS_LABEL, formatSessionTime } from "@/lib/booking";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { AppSidebar } from "@/components/layout/app-sidebar";
-import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
-import { Badge } from "@/components/ui/badge";
+import {
+  BOOKING_STATUS_LABEL,
+  formatSessionTime,
+  tutorNames,
+} from "@/lib/booking";
+import { CANCELLATION_POLICY as P } from "@/lib/policy";
+import {
+  PanelCard,
+  PanelCardTitle,
+  PanelRow,
+  PanelShell,
+  StatusPill,
+} from "@/components/layout/panel-shell";
+import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { Button } from "@/components/ui/button";
-import { CancelBookingButton } from "./cancel-booking-button";
 import type { Database } from "@/lib/database.types";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
@@ -40,9 +46,10 @@ const CANCELLABLE = new Set<BookingStatus>([
 export const metadata = { title: "Detalle de reserva · Enséñame Ya" };
 
 /**
- * SCR-AL03 — detalle de una reserva del alumno: sus sesiones, el pago y la
- * política. RLS hace de guardia: `bookings_select_own` filtra por
- * `student_id`, así que la reserva de otro devuelve 404, no 403.
+ * SCR-AL03 — detalle de una reserva del alumno: sus sesiones, el pago, la
+ * política y el chat con el tutor (columna derecha, como el Figma). RLS hace de
+ * guardia: `bookings_select_own` filtra por `student_id`, así que la reserva de
+ * otro devuelve 404, no 403.
  */
 export default async function BookingDetailPage({
   params,
@@ -50,13 +57,13 @@ export default async function BookingDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireUser();
+  const { user } = await requireUser();
   const supabase = await createClient();
 
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title), sessions(id, start_at, status), payments(status, gross_amount, currency, paid_at, refunded_amount)",
+      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id), sessions(id, start_at, status), payments(status, gross_amount, currency, paid_at, refunded_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -68,143 +75,194 @@ export default async function BookingDetailPage({
   );
   const done = sessions.filter((s) => s.status === "completed").length;
   const payment = booking.payments;
+  const chatOpen = CHAT_BOOKING.has(booking.status);
+
+  const names = await tutorNames(supabase, [booking.products?.tutor_id]);
+  const tutor = names.get(booking.products?.tutor_id ?? "");
+
+  // El hilo solo se carga si el chat aplica: para una reserva cancelada sería
+  // una consulta a cambio de nada.
+  const { data: msgs } = chatOpen
+    ? await supabase
+        .from("messages")
+        .select(
+          "id, sender_id, body, created_at, attachment_path, attachment_name, attachment_size",
+        )
+        .eq("booking_id", id)
+        .order("created_at")
+    : { data: null };
+
+  const initial: ChatMessage[] = (msgs ?? []).map((m) => ({
+    id: m.id,
+    senderId: m.sender_id,
+    body: m.body,
+    createdAt: m.created_at,
+    attachment: m.attachment_path
+      ? {
+          path: m.attachment_path,
+          name: m.attachment_name ?? "documento",
+          size: m.attachment_size ?? 0,
+        }
+      : null,
+  }));
 
   return (
-    <div className="bg-muted">
-      <Container>
-        <Section className="grid gap-6 lg:grid-cols-[232px_1fr]">
-          <AppSidebar />
+    <PanelShell back={{ href: "/app", label: "Volver al panel" }}>
+      <div className="flex flex-col gap-1.5">
+        {tutor ? <p className="text-[13px] text-[#6b6b6b]">con {tutor}</p> : null}
+        <h1 className="text-[26px] font-bold tracking-tight text-[#19191f]">
+          {booking.products?.title ?? "Clase"}
+        </h1>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <StatusPill>{BOOKING_STATUS_LABEL[booking.status]}</StatusPill>
+          <p className="text-[13px] text-[#6b6b6b]">
+            {booking.num_sessions === 1
+              ? "Sesión suelta"
+              : `Paquete de ${booking.num_sessions} sesiones`}
+            {booking.session_duration_min
+              ? ` · ${booking.session_duration_min} min`
+              : ""}
+            {done > 0 ? ` · ${done} completada${done === 1 ? "" : "s"}` : ""}
+          </p>
+        </div>
+      </div>
 
-          <div className="flex flex-col gap-6">
-            <Link
-              href="/app"
-              className="flex w-fit items-center gap-1.5 text-sm font-medium text-brand hover:underline"
-            >
-              <ArrowLeftIcon className="size-4" />
-              Volver al panel
-            </Link>
-
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-[26px] font-bold tracking-tight">
-                  {booking.products?.title ?? "Clase"}
-                </h1>
-                <Badge variant="outline">
-                  {BOOKING_STATUS_LABEL[booking.status]}
-                </Badge>
-              </div>
-              <p className="mt-1 text-[13px] text-muted-foreground">
-                {booking.num_sessions === 1
-                  ? "Sesión suelta"
-                  : `Paquete de ${booking.num_sessions} sesiones`}
-                {booking.session_duration_min
-                  ? ` · ${booking.session_duration_min} min`
-                  : ""}
-                {done > 0 ? ` · ${done} completada${done === 1 ? "" : "s"}` : ""}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex flex-col gap-5">
+          <PanelCard>
+            <PanelCardTitle>Sesiones</PanelCardTitle>
+            {sessions.length === 0 ? (
+              <p className="mt-4 text-[13px] text-[#6b6b6b]">
+                Las sesiones se agendan cuando el tutor acepta la reserva.
               </p>
-            </div>
-
-            <div className="grid items-start gap-6 lg:grid-cols-[1fr_320px]">
-              <section className="rounded-2xl bg-card p-6">
-                <h2 className="text-lg font-bold">Sesiones</h2>
-                {sessions.length === 0 ? (
-                  <p className="mt-4 text-sm text-muted-foreground">
-                    Las sesiones se agendan cuando el tutor acepta la reserva.
-                  </p>
-                ) : (
-                  <ul className="mt-4 divide-y">
-                    {sessions.map((s, i) => (
-                      <li
-                        key={s.id}
-                        className="flex flex-wrap items-center justify-between gap-3 py-4 first:pt-0 last:pb-0"
-                      >
-                        <div className="min-w-0">
-                          <p className="font-semibold">Sesión {i + 1}</p>
-                          <p className="text-[13px] text-muted-foreground first-letter:uppercase">
-                            {formatSessionTime(s.start_at)} · tu hora local
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline">
-                            {SESSION_LABEL[s.status] ?? s.status}
-                          </Badge>
-                          {/* El gate real de la ventana (RN-18) lo pone el
-                              server; la sala muestra la cuenta regresiva. */}
-                          {ROOM_BOOKING.has(booking.status) &&
-                          (s.status === "scheduled" ||
-                            s.status === "in_progress") ? (
-                            <Button asChild size="sm" variant="outline">
-                              <Link href={`/room/${s.id}`}>Entrar a sala</Link>
-                            </Button>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-
-                {CHAT_BOOKING.has(booking.status) ? (
-                  <Button asChild variant="outline" className="mt-5">
-                    <Link href={`/chat/${booking.id}`}>
-                      Chat con el tutor
-                    </Link>
-                  </Button>
-                ) : null}
-              </section>
-
-              <aside className="flex flex-col gap-6">
-                <section className="rounded-2xl bg-card p-6">
-                  <h2 className="text-lg font-bold">Pago</h2>
-                  <dl className="mt-4 flex flex-col gap-3 text-sm">
-                    <div className="flex justify-between gap-3">
-                      <dt className="text-muted-foreground">Total</dt>
-                      <dd className="font-semibold">
-                        {formatMoney(booking.total_amount, booking.currency)}
-                      </dd>
+            ) : (
+              <ul className="mt-3.5 divide-y divide-[#e0e0e0]">
+                {sessions.map((s, i) => (
+                  <li
+                    key={s.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-[#19191f]">
+                        Sesión {i + 1}
+                      </p>
+                      <p className="text-[13px] text-[#6b6b6b] first-letter:uppercase">
+                        {formatSessionTime(s.start_at)} · tu hora local
+                      </p>
                     </div>
-                    {payment?.paid_at ? (
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">Pagado el</dt>
-                        <dd>
-                          {new Date(payment.paid_at).toLocaleDateString("es", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </dd>
-                      </div>
-                    ) : null}
-                    {payment && payment.refunded_amount > 0 ? (
-                      <div className="flex justify-between gap-3">
-                        <dt className="text-muted-foreground">Reembolsado</dt>
-                        <dd className="font-semibold text-success">
-                          {formatMoney(
-                            payment.refunded_amount,
-                            payment.currency,
-                          )}
-                        </dd>
-                      </div>
-                    ) : null}
-                  </dl>
-                  {/* El Figma muestra "Visa ···· 4242" y "Ver recibo": la
-                      tarjeta usada no se guarda en `payments` (card-on-file es
-                      opcional, US-607) y no hay recibo que enlazar hasta que
-                      EP-20 conecte un PSP real. */}
-                </section>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <StatusPill>
+                        {SESSION_LABEL[s.status] ?? s.status}
+                      </StatusPill>
+                      {/* El gate real de la ventana (RN-18) lo pone el server;
+                          la sala muestra la cuenta regresiva. */}
+                      {ROOM_BOOKING.has(booking.status) &&
+                      (s.status === "scheduled" ||
+                        s.status === "in_progress") ? (
+                        <Button
+                          asChild
+                          className="h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
+                        >
+                          <Link href={`/room/${s.id}`}>Entrar a sala</Link>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </PanelCard>
 
-                {/* `CancellationPolicy` ya trae su propio encabezado: envolverla
-                    en otra sección titulada lo duplicaba en pantalla. */}
-                <div className="flex flex-col gap-4">
-                  <CancellationPolicy className="bg-card p-6" />
-                  {CANCELLABLE.has(booking.status) ? (
-                    <CancelBookingButton bookingId={booking.id} />
-                  ) : null}
-                </div>
-              </aside>
-            </div>
-          </div>
-        </Section>
-      </Container>
-    </div>
+          <PanelCard>
+            <PanelCardTitle>Pago</PanelCardTitle>
+            <dl className="mt-3.5 flex flex-col gap-3">
+              <PanelRow
+                label="Total"
+                value={formatMoney(booking.total_amount, booking.currency)}
+              />
+              {payment?.paid_at ? (
+                <PanelRow
+                  label="Pagado el"
+                  value={new Date(payment.paid_at).toLocaleDateString("es", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                />
+              ) : null}
+              {payment && payment.refunded_amount > 0 ? (
+                <PanelRow
+                  label="Reembolsado"
+                  value={formatMoney(payment.refunded_amount, payment.currency)}
+                />
+              ) : null}
+            </dl>
+            {/* El Figma muestra "Visa ···· 4242" y "Ver recibo": la tarjeta
+                usada no se guarda en `payments` (card-on-file es opcional,
+                US-607) y no hay recibo que enlazar hasta que EP-20 conecte un
+                PSP real. */}
+          </PanelCard>
+
+          <PanelCard>
+            <PanelCardTitle>Política de cancelación</PanelCardTitle>
+            <p className="mt-3.5 text-sm text-[#6b6b6b]">
+              Cancela con {P.cutoffHours} h o más de anticipación y recibe{" "}
+              {P.refundPct.studentEarly} % de reembolso. Con menos de{" "}
+              {P.cutoffHours} h, el reembolso es del {P.refundPct.studentLate} %.
+              Si cancela el tutor, {P.refundPct.tutorCancels} %.
+            </p>
+            {CANCELLABLE.has(booking.status) ? (
+              <Button
+                asChild
+                variant="outline"
+                className="mt-3.5 h-10 rounded-[8px] px-4 text-[13.5px] text-[#262626]"
+              >
+                <Link href={`/reservas/${booking.id}/cancelar`}>
+                  Cancelar reserva
+                </Link>
+              </Button>
+            ) : null}
+          </PanelCard>
+
+          {booking.status === "completed" ? (
+            <PanelCard>
+              <PanelCardTitle>Tu reseña</PanelCardTitle>
+              <p className="mt-3.5 text-sm text-[#6b6b6b]">
+                Cuenta cómo te fue: ayuda a otros alumnos a elegir.
+              </p>
+              <Button
+                asChild
+                className="mt-3.5 h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
+              >
+                <Link href={`/reservas/${booking.id}/resena`}>Dejar reseña</Link>
+              </Button>
+            </PanelCard>
+          ) : null}
+        </div>
+
+        <PanelCard className="flex flex-col gap-3">
+          <PanelCardTitle className="text-base">
+            {tutor ? `Chat con ${tutor}` : "Chat con el tutor"}
+          </PanelCardTitle>
+          <p className="text-xs text-[#6b6b6b]">
+            Disponible desde 2 días antes de tu 1ª sesión.
+          </p>
+          {chatOpen ? (
+            <ChatThread
+              bookingId={booking.id}
+              currentUserId={user.id}
+              firstSessionAt={sessions[0]?.start_at ?? null}
+              initialMessages={initial}
+            />
+          ) : (
+            <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+              El chat se habilita cuando la reserva esté confirmada.
+            </p>
+          )}
+          {/* "Descargar conversación" del Figma depende de US-1703 (`EY-76`),
+              reabierta el 17-jul: la retención del chat sigue sin decidirse. */}
+        </PanelCard>
+      </div>
+    </PanelShell>
   );
 }

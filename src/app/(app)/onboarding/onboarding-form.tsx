@@ -7,9 +7,14 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { safeNext } from "@/lib/auth/roles";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/form/phone-input";
 import { TimezoneSelect } from "@/components/form/timezone-select";
-import { WizardShell, ChipGroup } from "@/components/onboarding/wizard";
+import {
+  WizardShell,
+  ChipGroup,
+  Field,
+  FIELD_CLASS,
+} from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 
 // E.164: '+' + 7–15 dígitos, el primero no cero (RN-44).
@@ -98,7 +103,7 @@ export function OnboardingForm({
 
     if (step === 3) {
       if (!E164.test(phone.trim())) {
-        return fail("Teléfono en formato internacional, p. ej. +584121234567.");
+        return fail("Escribe tu teléfono completo, sin el código de país.");
       }
       const { error } = await supabase
         .from("profiles")
@@ -133,32 +138,30 @@ export function OnboardingForm({
       <WizardShell
         step={1}
         total={3}
-        title="Bienvenido a Enséñame Ya"
+        title="Te damos la bienvenida a Enséñame Ya"
         description="Completa tu perfil para reservar tu primera clase."
         onNext={next_}
         busy={busy}
       >
-        <div className="flex flex-col gap-6">
-          <div className="grid gap-2">
-            <Label htmlFor="full_name" className="text-[13px]">
-              ¿Cómo te llamas?
-            </Label>
-            <Input
-              id="full_name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              autoComplete="name"
-              placeholder="Ej: María Fernández"
-            />
-          </div>
+        <Field label="¿Cómo te llamas?" htmlFor="full_name">
+          <Input
+            id="full_name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            autoComplete="name"
+            placeholder="Ej: María Fernández"
+            className={FIELD_CLASS}
+          />
+        </Field>
 
-          <div>
-            <Label className="text-[13px]">Foto (opcional)</Label>
-            <div className="mt-2">
-              <AvatarUpload userId={userId} initialUrl={avatarUrl} onUploaded={setAvatar} />
-            </div>
-          </div>
-        </div>
+        <Field label="Foto (opcional)">
+          <AvatarUpload
+            userId={userId}
+            initialUrl={avatarUrl}
+            onUploaded={setAvatar}
+            name={fullName}
+          />
+        </Field>
       </WizardShell>
     );
   }
@@ -174,24 +177,24 @@ export function OnboardingForm({
         onNext={next_}
         busy={busy}
       >
-        <div>
-          <Label className="text-[13px]">Intereses</Label>
-          <div className="mt-2">
-            <ChipGroup
-              ariaLabel="Tus intereses"
-              options={categories}
-              selected={interests}
-              onToggle={(id) =>
-                setInterests((prev) => {
-                  const n = new Set(prev);
-                  if (n.has(id)) n.delete(id);
-                  else n.add(id);
-                  return n;
-                })
-              }
-            />
-          </div>
-        </div>
+        <Field label="Intereses">
+          <ChipGroup
+            ariaLabel="Tus intereses"
+            options={categories}
+            selected={interests}
+            onToggle={(id) =>
+              setInterests((prev) => {
+                const n = new Set(prev);
+                if (n.has(id)) n.delete(id);
+                else n.add(id);
+                return n;
+              })
+            }
+          />
+        </Field>
+        {/* El Figma añade aquí "Tu objetivo principal" (149:36): el modelo no
+            tiene ese campo y el diseño no da la lista de opciones. Queda como
+            hueco de datos (EP-23), sin inventarse el enum. */}
       </WizardShell>
     );
   }
@@ -207,32 +210,23 @@ export function OnboardingForm({
       nextLabel="Empezar a explorar"
       busy={busy}
     >
-      <div className="flex flex-col gap-5">
-        <div className="grid gap-2">
-          <Label className="text-[13px]">Zona horaria</Label>
-          <TimezoneSelect value={timezone} onChange={setTimezone} />
-          <p className="text-xs text-muted-foreground">
-            Tus clases se muestran en esta hora local.
-          </p>
-        </div>
+      <Field
+        label="Zona horaria"
+        htmlFor="timezone"
+        hint="Tus clases se muestran en esta hora local."
+      >
+        <TimezoneSelect
+          value={timezone}
+          onChange={setTimezone}
+          className={FIELD_CLASS}
+        />
+      </Field>
 
-        <div className="grid gap-2">
-          <Label htmlFor="phone" className="text-[13px]">
-            Teléfono
-          </Label>
-          <Input
-            id="phone"
-            type="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            autoComplete="tel"
-            placeholder="+584121234567"
-          />
-          <p className="text-xs text-muted-foreground">
-            Formato internacional (E.164), con código de país.
-          </p>
-        </div>
-      </div>
+      {/* El Figma lo marca "(opcional)", pero RN-44 lo exige en E.164: manda la
+          regla de negocio. Anotado para el cliente. */}
+      <Field label="Teléfono" htmlFor="phone">
+        <PhoneInput id="phone" value={phone} onChange={setPhone} />
+      </Field>
     </WizardShell>
   );
 }

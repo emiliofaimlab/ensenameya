@@ -94,3 +94,26 @@ export function initialsFrom(text: string | null): string {
     .join("")
     .toUpperCase();
 }
+
+/** URL pública de un objeto de Storage (buckets `avatars` / `product-images`). */
+export function storageUrl(bucket: string, path: string | null): string | null {
+  if (!path) return null;
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+}
+
+/** 25.000 → "25k+" (cifras de vitrina de P01/P02); por debajo de mil, tal cual. */
+export function compactCount(n: number): string {
+  return n >= 1000 ? `${Math.floor(n / 1000)}k+` : String(n);
+}
+
+/** "paquete" / "sesión" / "hora" — el sufijo del precio en P05 ("$96 · paquete"). */
+export function priceUnitLabel(p: { pricingModel: PricingModel }): string {
+  switch (p.pricingModel) {
+    case "per_session":
+      return "sesión";
+    case "per_hour":
+      return "hora";
+    case "per_package":
+      return "paquete";
+  }
+}

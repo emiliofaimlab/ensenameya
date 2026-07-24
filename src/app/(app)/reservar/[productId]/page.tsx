@@ -1,13 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
 
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
-import { priceLabel } from "@/lib/catalog/format";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
+import { bookingTotal, tutorNames } from "@/lib/booking";
+import { PanelShell } from "@/components/layout/panel-shell";
 import { SlotPicker } from "./slot-picker";
 
 export const metadata = { title: "Elegir horario · Enséñame Ya" };
@@ -30,53 +27,43 @@ export default async function ReservarPage({
   if (!product) notFound();
 
   const supabase = await createClient();
-  const { data: slots } = await supabase.rpc("get_available_slots", {
-    p_product_id: productId,
-  });
+  const [{ data: slots }, names] = await Promise.all([
+    supabase.rpc("get_available_slots", { p_product_id: productId }),
+    tutorNames(supabase, [product.tutor.id]),
+  ]);
 
+  const tutorName = names.get(product.tutor.id) ?? product.tutor.headline ?? undefined;
   const required =
     product.pricingModel === "per_package" ? (product.packageNumSessions ?? 1) : 1;
 
   return (
-    <div className="bg-muted">
-      <Container>
-        <Section className="flex flex-col gap-6">
-          <Link
-            href={`/products/${productId}`}
-            className="flex w-fit items-center gap-1.5 text-sm font-medium text-brand hover:underline"
-          >
-            <ArrowLeftIcon className="size-4" />
-            Volver a la mentoría
-          </Link>
+    <PanelShell back={{ href: `/products/${productId}`, label: "Volver a la mentoría" }}>
+      <div className="flex flex-col gap-1.5">
+        {tutorName ? (
+          <p className="text-[13px] text-[#6b6b6b]">con {tutorName}</p>
+        ) : null}
+        <h1 className="text-2xl font-bold tracking-tight text-balance text-[#19191f] sm:text-[24px]">
+          {required > 1
+            ? `Agenda tu paquete: ${product.title}`
+            : `Agenda tu sesión: ${product.title}`}
+        </h1>
+        <p className="text-sm text-[#6b6b6b]">
+          {required > 1 ? `Elige ${required} sesiones` : "Elige tu horario"}
+          {product.sessionDurationMin ? ` de ${product.sessionDurationMin} min` : ""}
+          . Todos los horarios están en tu hora local.
+        </p>
+      </div>
 
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-balance sm:text-[26px]">
-              {required > 1
-                ? `Agenda tu paquete: ${product.title}`
-                : `Agenda tu sesión: ${product.title}`}
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {required > 1
-                ? `Elige ${required} sesiones`
-                : "Elige tu horario"}
-              {product.sessionDurationMin
-                ? ` de ${product.sessionDurationMin} min`
-                : ""}
-              . Todos los horarios están en tu hora local.
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {priceLabel(product)} · con{" "}
-              {product.tutor.headline ?? "tu tutor"}
-            </p>
-          </div>
-
-          <SlotPicker
-            productId={productId}
-            slots={slots ?? []}
-            required={required}
-          />
-        </Section>
-      </Container>
-    </div>
+      <SlotPicker
+        productId={productId}
+        productTitle={product.title}
+        tutorName={tutorName}
+        slots={slots ?? []}
+        required={required}
+        total={bookingTotal(product)}
+        currency={product.currency}
+        durationMin={product.sessionDurationMin}
+      />
+    </PanelShell>
   );
 }

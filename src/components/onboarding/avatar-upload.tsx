@@ -5,7 +5,9 @@ import Image from "next/image";
 import { toast } from "sonner";
 import { UserRoundIcon } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { initialsFrom } from "@/lib/catalog/format";
 import { Button } from "@/components/ui/button";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB, como dice el Figma
@@ -20,10 +22,16 @@ export function AvatarUpload({
   userId,
   initialUrl,
   onUploaded,
+  name,
+  large = false,
 }: {
   userId: string;
   initialUrl: string | null;
   onUploaded: (path: string) => void;
+  /** Sin foto se pintan las iniciales, como en el resto del sitio. */
+  name?: string;
+  /** TU01 (185:28) pinta la foto a 72 px; AL01 (180:1302) a 64. */
+  large?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState<string | null>(initialUrl);
@@ -63,18 +71,25 @@ export function AvatarUpload({
 
   return (
     <div className="flex items-center gap-4">
-      <span className="grid size-20 shrink-0 place-items-center overflow-hidden rounded-full bg-muted">
+      <span
+        className={cn(
+          "grid shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-lg font-semibold text-[#6b6b6b]",
+          large ? "size-[72px]" : "size-16",
+        )}
+      >
         {url ? (
           <Image
             src={url}
             alt="Tu foto de perfil"
-            width={80}
-            height={80}
-            className="size-20 object-cover"
+            width={large ? 72 : 64}
+            height={large ? 72 : 64}
+            className={cn("object-cover", large ? "size-[72px]" : "size-16")}
             unoptimized
           />
+        ) : name?.trim() ? (
+          initialsFrom(name)
         ) : (
-          <UserRoundIcon className="size-8 text-muted-foreground" />
+          <UserRoundIcon className="size-7 text-muted-foreground" />
         )}
       </span>
 
@@ -94,12 +109,11 @@ export function AvatarUpload({
           variant="outline"
           disabled={busy}
           onClick={() => inputRef.current?.click()}
+          className="h-[42px] rounded-[8px] px-5 text-[13.5px] text-[#404040]"
         >
           {busy ? "Subiendo…" : url ? "Cambiar foto" : "Subir foto"}
         </Button>
-        <p className="mt-1 text-xs text-muted-foreground">
-          JPG o PNG · máx 5 MB
-        </p>
+        <p className="mt-1.5 text-xs text-[#6b6b6b]">JPG o PNG · máx 5 MB</p>
       </div>
     </div>
   );

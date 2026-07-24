@@ -1,16 +1,20 @@
-
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
+import { cn } from "@/lib/utils";
+import { PanelCard } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { AvailabilityManager } from "./availability-manager";
 import { ExceptionsManager } from "./exceptions-manager";
 
 export const metadata = { title: "Mi disponibilidad · Enséñame Ya" };
 
+const WEEKDAY_HEAD = ["L", "M", "M", "J", "V", "S", "D"];
+
 /**
- * US-501 (SCR-TU05) — Disponibilidad recurrente del tutor. CRUD de reglas
- * semanales (día/hora, `end_time > start_time`) en el timezone del tutor. Las
- * excepciones puntuales (block/open) llegan en US-502.
+ * US-501/502 (SCR-TU05) — disponibilidad del tutor con el layout del Figma:
+ * reglas semanales agrupadas por día (izquierda) y, a la derecha, un
+ * calendario del mes que pinta en azul los días con regla activa y en ámbar
+ * los que tienen excepción (194:107), más las excepciones puntuales.
  */
 export default async function TutorAvailabilityPage() {
   const { userId, approvalStatus } = await requireTutorProfile();
@@ -31,34 +35,112 @@ export default async function TutorAvailabilityPage() {
       .order("date"),
   ]);
 
+  // Calendario del mes ACTUAL: azul = weekday con regla activa; ámbar = fecha
+  // con excepción. Server-render puro: pinta el estado, no navega meses.
+  const activeWeekdays = new Set(
+    (rules ?? []).filter((r) => r.is_active).map((r) => r.weekday),
+  );
+  const exceptionDates = new Set((exceptions ?? []).map((x) => x.date));
+
+  const now = new Date();
+  const monthLabel = now.toLocaleDateString("es", {
+    month: "long",
+    year: "numeric",
+  });
+  const first = new Date(now.getFullYear(), now.getMonth(), 1);
+  const offset = (first.getDay() + 6) % 7; // rejilla que empieza en lunes
+  const total = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const cells: (Date | null)[] = [
+    ...Array.from({ length: offset }, () => null),
+    ...Array.from(
+      { length: total },
+      (_, i) => new Date(now.getFullYear(), now.getMonth(), i + 1),
+    ),
+  ];
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
   return (
     <TutorShell
-          title="Mi disponibilidad"
-          description="Define los bloques semanales en los que puedes dar clases (tu hora local)."
+      title="Disponibilidad"
+      description="Tus horarios se muestran en tu zona horaria. Los cambios se guardan al momento."
     >
-
-        {approvalStatus !== "approved" ? (
-          <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
-            Tus horarios serán visibles para los alumnos cuando tu perfil de tutor
-            esté aprobado.
+      {approvalStatus !== "approved" ? (
+        <PanelCard>
+          <p className="text-[13px] text-[#6b6b6b]">
+            Tus horarios serán visibles para los alumnos cuando tu perfil de
+            tutor esté aprobado.
           </p>
-        ) : null}
+        </PanelCard>
+      ) : null}
 
-        <div className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold">Horario semanal</h2>
-          <AvailabilityManager userId={userId} rules={rules ?? []} />
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-semibold">Excepciones puntuales</h2>
-            <p className="text-sm text-muted-foreground">
-              Sobrescriben tu horario semanal en una fecha concreta: bloquea un día
-              o abre un horario extra.
-            </p>
+      <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_364px]">
+        <PanelCard>
+          <h2 className="text-base font-semibold text-[#19191f]">
+            Reglas recurrentes
+          </h2>
+          <div className="mt-4">
+            <AvailabilityManager userId={userId} rules={rules ?? []} />
           </div>
-          <ExceptionsManager userId={userId} exceptions={exceptions ?? []} />
+        </PanelCard>
+
+        <div className="flex flex-col gap-5">
+          <PanelCard>
+            <h2 className="text-base font-semibold text-[#19191f] first-letter:uppercase">
+              Calendario · {monthLabel}
+            </h2>
+            <div className="mt-4 grid grid-cols-7 gap-1.5 text-center">
+              {WEEKDAY_HEAD.map((d, i) => (
+                <span key={i} className="text-xs text-[#6b6b6b]">
+                  {d}
+                </span>
+              ))}
+              {cells.map((d, i) => {
+                if (!d) return <span key={`x${i}`} />;
+                const hasRule = activeWeekdays.has(d.getDay());
+                const hasExc = exceptionDates.has(iso(d));
+                return (
+                  <span
+                    key={iso(d)}
+                    className={cn(
+                      "grid h-9 place-items-center rounded-[8px] border border-[#e0e0e0] text-xs font-medium",
+                      hasExc
+                        ? "bg-[#faedcc] text-[#a67314]"
+                        : hasRule
+                          ? "bg-[#dbedff] text-brand"
+                          : "bg-card text-[#595959]",
+                    )}
+                  >
+                    {d.getDate()}
+                  </span>
+                );
+              })}
+            </div>
+            <div className="mt-4 flex gap-4 text-xs text-[#6b6b6b]">
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-brand" />
+                Disponible
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-[#a67314]" />
+                Excepción
+              </span>
+            </div>
+          </PanelCard>
+
+          <PanelCard>
+            <h2 className="text-base font-semibold text-[#19191f]">
+              Excepciones puntuales
+            </h2>
+            <p className="mt-1 text-xs text-[#6b6b6b]">
+              Sobrescriben tu horario semanal en una fecha concreta.
+            </p>
+            <div className="mt-4">
+              <ExceptionsManager userId={userId} exceptions={exceptions ?? []} />
+            </div>
+          </PanelCard>
         </div>
+      </div>
     </TutorShell>
   );
 }

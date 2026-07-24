@@ -1,19 +1,28 @@
 "use client";
 
-import Link from "next/link";
-
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 
 /**
- * Armazón del asistente de onboarding (AL01 / TU01). Estructura compartida:
- * cabecera con "Paso N de M" + "Guardar y salir", título, cuerpo y pie con
- * Atrás/Continuar.
+ * Armazón del asistente de onboarding (AL01 / TU01). El Figma reparte la
+ * columna de 600 px en cuatro bloques separados por 24 px: progreso, título,
+ * tarjeta (SOLO los campos) y botonera. La tarjeta no envuelve la pantalla.
+ *
+ * "Guardar y salir" vive en el header (`SiteHeader onboarding`), no aquí.
  *
  * ponytail: el paso vive en el componente de cada asistente, no en la URL. El
  * borrador se guarda al avanzar, así que recargar no pierde datos y no hacía
  * falta cablear historial ni query params.
  */
+
+/** Alto y forma de los controles del asistente: 45 px, r8 (AL01 180:1297). */
+export const FIELD_CLASS =
+  "h-[45px] rounded-[8px] px-3.5 text-sm placeholder:text-[#8c8c8c]";
+
+/** Botonera: 45 px de alto y 22 de padding → 116×45 "Continuar", 82×45 "Atrás". */
+const BUTTON_CLASS = "h-[45px] rounded-[8px] px-[22px] text-sm";
+
 export function WizardShell({
   step,
   total,
@@ -38,61 +47,93 @@ export function WizardShell({
   busy?: boolean;
 }) {
   return (
-    <div className="mx-auto w-full max-w-2xl">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-xs font-medium text-muted-foreground">
+    <div className="mx-auto flex w-full max-w-[600px] flex-col gap-6">
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-[#6b6b6b]">
           Paso {step} de {total}
         </p>
-        <Button asChild variant="ghost" size="sm">
-          <Link href="/app">Guardar y salir</Link>
-        </Button>
+
+        {/* Progreso: `progressbar` para que un lector de pantalla lo anuncie. */}
+        <div
+          role="progressbar"
+          aria-valuenow={step}
+          aria-valuemin={1}
+          aria-valuemax={total}
+          aria-label={`Paso ${step} de ${total}`}
+          className="flex gap-1.5"
+        >
+          {Array.from({ length: total }, (_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1.5 flex-1 rounded-full",
+                i < step ? "bg-brand" : "bg-border",
+              )}
+            />
+          ))}
+        </div>
       </div>
 
-      {/* Progreso: `progressbar` para que un lector de pantalla lo anuncie. */}
-      <div
-        role="progressbar"
-        aria-valuenow={step}
-        aria-valuemin={1}
-        aria-valuemax={total}
-        aria-label={`Paso ${step} de ${total}`}
-        className="mt-3 flex gap-1.5"
-      >
-        {Array.from({ length: total }, (_, i) => (
-          <span
-            key={i}
-            className={cn(
-              "h-1.5 flex-1 rounded-full",
-              i < step ? "bg-brand" : "bg-border",
-            )}
-          />
-        ))}
-      </div>
-
-      <div className="mt-8 rounded-2xl bg-card p-8">
-        <h1 className="text-[26px] font-bold tracking-tight text-balance">
+      <div className="flex flex-col gap-1.5">
+        <h1 className="text-[26px] leading-[1.5] font-bold tracking-tight text-balance">
           {title}
         </h1>
         {description ? (
-          <p className="mt-2 text-[13px] text-muted-foreground">
-            {description}
-          </p>
+          <p className="text-[13px] text-[#6b6b6b]">{description}</p>
         ) : null}
-
-        <div className="mt-6">{children}</div>
-
-        <div className="mt-8 flex items-center justify-between gap-3">
-          {onBack ? (
-            <Button variant="outline" onClick={onBack} disabled={busy}>
-              Atrás
-            </Button>
-          ) : (
-            <span />
-          )}
-          <Button onClick={onNext} disabled={nextDisabled || busy}>
-            {busy ? "Guardando…" : nextLabel}
-          </Button>
-        </div>
       </div>
+
+      <div className="rounded-[16px] border border-[#e6e6e6] bg-card p-7">
+        <div className="flex flex-col gap-5">{children}</div>
+      </div>
+
+      <div className="flex items-center justify-between gap-3">
+        {onBack ? (
+          <Button
+            variant="outline"
+            onClick={onBack}
+            disabled={busy}
+            className={cn(BUTTON_CLASS, "text-[#4d4d4d]")}
+          >
+            Atrás
+          </Button>
+        ) : (
+          <span />
+        )}
+        <Button
+          onClick={onNext}
+          disabled={nextDisabled || busy}
+          className={cn(BUTTON_CLASS, "font-semibold")}
+        >
+          {busy ? "Guardando…" : nextLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Campo del asistente: etiqueta 12.5/400 gris + control, con 6 px de aire. */
+export function Field({
+  label,
+  htmlFor,
+  hint,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label
+        htmlFor={htmlFor}
+        className="text-[12.5px] font-normal text-[#6b6b6b]"
+      >
+        {label}
+      </Label>
+      {children}
+      {hint ? <p className="text-xs text-[#6b6b6b]">{hint}</p> : null}
     </div>
   );
 }
@@ -120,10 +161,10 @@ export function ChipGroup({
             aria-pressed={on}
             onClick={() => onToggle(o.id)}
             className={cn(
-              "rounded-full border px-4 py-2 text-sm transition-colors",
+              "inline-flex h-[38px] items-center rounded-full border px-4 text-[13px] transition-colors",
               on
-                ? "border-brand bg-brand font-medium text-white"
-                : "hover:border-brand hover:text-brand",
+                ? "border-brand bg-brand font-semibold text-white"
+                : "bg-card text-[#6b6b6b] hover:border-brand hover:text-brand",
             )}
           >
             {o.label}

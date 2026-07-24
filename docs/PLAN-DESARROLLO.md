@@ -225,8 +225,150 @@ No consumen SP del sprint. Se filtran en Jira por label.
   - ⚠️ **No hay diseño móvil** (todo a 1280px). Afecta a **US-1601** (S4): decidir si se pide diseño responsive o US-1601 corre con criterio de dev. **Preguntar al cliente / a diseño.**
   - ⚠️ **IV-05 (tutor) e IV-06 (admin) no tienen DS-xx que las respalde.** IV-06 dejó además **trabajo funcional pendiente** de la reunión (panel de alertas con badges, detalle de tier, categoría desplegable, redirección de slug, log del tutor, subida por lotes).
   - ⚠️ **Pendiente de verificar en preview:** el alta con Google (provider no configurado en local) y el intercambio PKCE en cliente de AU04.
+  - 🔁 **Revisión nodo a nodo de P01 (2026-07-23).** IV-03 se maqueteó "a ojo de frame"; comparando el JSON de P01 (`386:3`, 387 nodos, REST) contra el DOM salieron **~25 desviaciones**, todas corregidas. Lo estructural: contenedor a **1152px** (daba 1088 — afectaba a *toda* la app), cuerpo a `#4d4d4d`, títulos sin `tracking-tight`, banda de garantías con **degradado** `#0072ff→#49a9ff` e iconos naranjas, **chips solo-icono con etiqueta al hover** (el diseño no llevaba etiquetas fijas), tarjeta de tutor alineada a la izquierda, **imágenes de los 3 pasos**, FAQ abierta con chevron azul, tarjeta de cifras **cabalgando el borde** (99 de 199px) y testimonios como **carrusel de dos filas que se sale del bloque** (CSS puro, `prefers-reduced-motion` respetado). Detalle en `docs/BACKLOG.md` §4.2.
+  - ✅ **Cerrado el `TODO` de contenido inventado de P01:** la banda de cifras sale de `home_stats()` y los testimonios de `home_testimonials()` — **datos reales**, con el nombre del alumno enmascarado en la propia RPC. Los **países** se derivan de la zona horaria (`country_from_timezone()`) porque el país de cobro sigue pendiente de **C-13** (`create_booking` lo tiene hardcodeado a `'VE'`). ⚠️ Publicar nombre + inicial de un alumno **es decisión del cliente**.
 
-- **EP-23 · Datos que el diseño necesita y no existen** (`EY-110`) — DD-01…08 (`EY-111`…`EY-118`), `To Do`. **`EY-109` (buscar sin tildes) ✅ corregido y en prod.** IV-02 añadió **infra de avatar** (adelanta parte de DD-01) pero DD-01 sigue abierta por el NOMBRE público; `tutor_categories`/`student_interests`/`tutor_materials` son tablas nuevas que **no cierran ninguna DD** (cubren el onboarding, no el catálogo público). **No bloquean el despliegue; bloquean la fidelidad al diseño.** Tabla completa en `docs/BACKLOG.md` §4.3.
+
+- **🎨 Repaso nodo a nodo del Figma (2026-07-23)** — pasada sobre **las 9 páginas públicas** (P01…P09)
+  y el índice `/categories`. Método: JSON del nodo por REST (`FIGMA_API_KEY`) contra el DOM real
+  medido en el navegador, no "a ojo de frame" como IV-03. Detalle por página en `docs/BACKLOG.md` §4.2.
+  - [x] **P01 home** — ~25 desviaciones: rejilla a 1152 (afectaba a *toda* la app), `--muted-foreground`
+    a `#4d4d4d`, degradado de la banda, chips que se despliegan al pasar el ratón, tarjeta de tutor,
+    imágenes de los 3 pasos, FAQ abierta, tarjeta de cifras cabalgando el borde, carrusel de
+    testimonios y logotipo del footer.
+  - [x] **P02 about** — hero completo (degradado + ola + recorte), 2 badges flotantes, "En qué creemos"
+    con fotos, testimonios y **FAQ propio** (salía el del home).
+  - [x] **P03 cómo funciona** — hero con adornos, pasos como lista numerada **azul/naranja por rol**,
+    frase de marca sobre negro, trust melocotón, FAQ a dos columnas.
+  - [x] **P04 tutores** — tarjeta centrada con foto, paginación numerada, orden y filtro de
+    disponibilidad (reglas de EP-05).
+  - [x] **P05 clases** — tarjeta con miniatura + tutor, chips azules, orden por precio.
+  - [x] **P06 categorías** — **una plantilla para `/categories` y `/categories/[slug]`**; filtros en
+    fila; "Temas" cruza segunda categoría.
+  - [x] **P07 perfil tutor** — **panel de reserva con calendario y horarios reales**, resumen de
+    reseñas con histograma.
+  - [x] **P08 detalle de producto** — imagen, "Cómo funciona", FAQ, resumen de reseñas y panel de
+    compra con fecha/hora.
+  - [x] **P09 búsqueda** — hero centrado, *segmented control*, tarjetas compactas, bloque "Explorar por
+    categoría" con recuentos reales.
+  - **Migraciones (4, aplicadas a dev):** `20260723120000` (DD-01/DD-02 + `home_stats` +
+    `home_testimonials`), `20260723130000` (🐞 fix RLS), `20260723140000` (países desde la zona
+    horaria), `20260723150000` (`get_available_slots` a `anon` para el calendario público).
+  - ⚠️ **Decisiones para el cliente:** nombre + inicial del alumno en los testimonios (privacidad);
+    publicar la **agenda del tutor** en la ficha pública; y que `/categories` use el diseño de P06 al
+    no existir frame propio.
+
+- **🎨 Repaso nodo a nodo de AL01 (2026-07-23)** — primera pantalla del **área con sesión**:
+  `/onboarding` (US-201) contra `180:1275` / `149:2` / `150:2`.
+  - [x] **Armazón del asistente** — el Figma parte la columna de **600 px** en cuatro bloques de 24:
+    progreso, **título fuera de la tarjeta**, tarjeta blanca **solo con los campos** (r16, borde
+    `#e6e6e6`, padding 28) y **botonera debajo**. Teníamos todo dentro de una tarjeta de 672 sin
+    borde. Controles y botones a **45 px** (medían 32).
+  - [x] **Header de onboarding** — sin "Panel" ni menú de cuenta, con **"Guardar y salir"** a la
+    derecha. No era solo estético: `requireUser` rebota al asistente hasta terminarlo, así que el
+    enlace al panel **no llevaba a ninguna parte**. `SiteHeader onboarding`, activado desde el layout
+    de `(app)` leyendo `x-pathname`. Aplica también a **TU01**.
+  - [x] **Zona horaria legible** — `(GMT-05:00) Lima` en vez de `America/Lima`, ordenada por offset y
+    calculada con `Intl` (correcta con horario de verano, sin librería). Mejora también `/account`.
+  - [x] **Teléfono con bandera y máscara** — `react-phone-number-input`, **única dependencia nueva**
+    de todo el repaso: su `onChange` devuelve **E.164 puro**, que es lo que pide RN-44, mientras el
+    campo muestra el formato de cada país. `<select>` nativo, 246 países en español, VE por defecto
+    hasta cerrar **C-13**.
+  - [x] **Detalle** — etiquetas 12.5/400, avatar de 64 con **iniciales** sin foto, "Subir foto"
+    106×42, chips de intereses 38 px con azul sólido, y título neutro **"Te damos la bienvenida"**
+    (el Figma dice "Bienvenida", en femenino).
+  - ⚠️ **Para el cliente:** el Figma marca el teléfono **"(opcional)"** y **RN-44 lo exige** — se
+    mantuvo la regla. Y "Tu objetivo principal" no existe en el modelo ni trae lista de opciones →
+    hueco de EP-23. Sin ticket todavía.
+  - **TU01 hereda el armazón** (`WizardShell` es compartido) pero sus pasos siguen con el maquetado
+    viejo hasta su propia pasada.
+
+- **🎨 Repaso nodo a nodo de AL02–AL08 (2026-07-24)** — las 7 pantallas del **panel del alumno**
+  contra `155:2`/`159:2`/`165:2`/`169:2`/`173:2`/`174:2`/`177:2`. `PanelShell` compartido (menú
+  lateral en las 7, tarjetas r16 con borde `#e0e0e0`, píldoras de estado, "Salir" rojo).
+  - [x] **AL02 · 🐞 dos bugs de datos** — la reserva salía **duplicada** (lista armada desde
+    `sessions`, no `bookings`) y una `pending_acceptance` mostraba **botón _Entrar a sala_**; y la
+    fecha de las pendientes era `created_at` rotulada como hora de clase. Corregidos: una fila = una
+    reserva, sala solo en `confirmed`/`in_progress`, fecha de la sesión.
+  - [x] **AL03** — chat embebido en la columna derecha (antes enlace a `/chat/[id]`), tutor en
+    cabecera, "Cancelar reserva" enlaza a la página AL07.
+  - [x] **`/reservas` · 🐞 sin enlaces** — la lista no tenía **ni un `<a>`**; ahora cada fila enlaza a
+    AL03. Hereda armazón y fila de AL02.
+  - [x] **AL04** — calendario de **67×40** por celda (medía 103×103), tarjeta de horarios aparte con
+    chips píldora, panel "Tu selección" con producto/tutor/total y "Continuar al pago".
+  - [x] **AL05** — **tarjeta de crédito ilustrada** (degradado), columnas del Figma (360 | resto). Se
+    mantiene **sin campos de tarjeta** (PCI-DSS: PAN nuestro = SAQ D; PAC-01/02 ya aprobadas).
+  - [x] **AL06 confirmación** (`/reservas/[id]/confirmacion`) — **página nueva**, antes era un estado
+    inline bajo el h1 "Confirmar pago". Redacción honesta: pendiente de aceptación, no "confirmada".
+  - [x] **AL07 cancelación** (`/reservas/[id]/cancelar`) — **página nueva** con estimación de reembolso
+    (RN-37) y motivo, sustituye al `window.confirm()`.
+  - [x] **AL08 reseña** (`/reservas/[id]/resena`) — **página nueva** que sustituye al `ReviewDialog`.
+  - ⚠️ **AL08 sin verificación viva**: el navegador integrado no completa el `signInWithPassword`
+    cliente contra Supabase, así que no se pudo cambiar a una cuenta con reserva completada. Compila y
+    el guard funciona; AL02–AL07 sí verificadas con DOM real a 1280.
+  - ⚠️ **Para el cliente / EP-23:** el **motivo de cancelación** (AL07) no tiene columna en `bookings`
+    → se captura pero no se persiste. Sin ticket todavía.
+  - 🧹 **Huérfano:** `reservas/[id]/cancel-booking-button.tsx` ya no se usa (el sandbox bloqueó el
+    `rm`; pendiente de borrar a mano).
+
+- **🎨 Repaso nodo a nodo de TU01–TU09 (2026-07-24, nocturna autónoma)** — las 14 pantallas del
+  área del tutor (TU01×5 pasos, TU02…TU09 + TU07b) contra sus frames. Todo el panel migró a
+  `PanelShell`/`PanelCard`; `StatusPill` ganó los tonos de color del Figma. Verificado con la
+  sesión real del tutor de prueba (TU01 p1 clava el Figma al píxel: columna y=178, tarjeta y=321,
+  avatar 72). Detalle completo en `docs/BACKLOG.md` §4.2.
+  - [x] **TU01** — 5 pasos con campos de 45 px, teléfono con bandera, nivel como select, CTA azul
+    del paso 5.
+  - [x] **TU02** — de página suelta a **dentro del panel**: filas de documento con píldoras de
+    color y botones Subir/Reemplazar/Volver a subir; redes como tarjeta-enlace aparte.
+  - [x] **TU03/TU04** — lista con miniatura + resultado + "Publicar" azul; form del panel con
+    chips de modelo, nota azul de política única (RN-37) y doble acción Publicar/Guardar borrador.
+  - [x] **TU05** — reglas agrupadas por día + **calendario del mes coloreado** (azul regla, ámbar
+    excepción) server-rendered.
+  - [x] **TU06** — 4 cifras en tarjeta con iconos, dos columnas, accesos rápidos como filas con
+    flecha azul.
+  - [x] **TU07+TU07b** — chips de filtro por URL y tarjetas con **cuenta atrás de 24 h** (RN-38)
+    para las por-aceptar. Flujo Aceptar probado en vivo.
+  - [x] **TU08 · ruta NUEVA** `/tutor/reservas/[id]` — datos, sala, **"Marcar completada"**
+    (`complete_session`, US-802), cancelar y el chat con el alumno (RN-41).
+  - [x] **TU09** — cifras, retiro, próximos payouts separados del historial, píldoras de color.
+  - 🐞 **`/tutor/payouts` rebotaba a `/app`** para un tutor sin el ROL concedido: usaba
+    `requireRole("tutor")` mientras el resto del panel usa `requireTutorProfile`. Alineado.
+    (El fixture `tutor.us401` se aprobó a mano por SQL y nunca recibió el rol — así salió a la luz.)
+  - ⚠️ **Huecos EP-23 nuevos** (tabla en BACKLOG §4.3): calendario de la clase y material por
+    producto (TU04), cuenta de cobro (TU09), total bruto (TU06).
+
+- **🎨 Repaso nodo a nodo de AD01–AD15 (2026-07-24, autónoma)** — el panel de administración
+  completo. Detalle en `docs/BACKLOG.md` §4.2.
+  - [x] **Chrome del admin** — píldora negra "Admin" en el header (modo por ruta) + `AdminFooter`
+    claro "Panel interno". Menú reordenado al Figma.
+  - [x] **AD02 · pantalla NUEVA** — `/admin` es ahora el dashboard (cifras del mes, colas de
+    trabajo, reservas recientes); la cola de tutores se movió a **`/admin/tutores`** (AD03-04, con
+    chips y conteos reales).
+  - [x] **AD05/AD08/AD10** — detalles a dos columnas con logs derivados de timestamps reales.
+  - [x] **AD13** — chips de período + **migración nueva de solo lectura**
+    (`20260724120000_ad13_admin_charts`: `admin_gmv_weekly` + `admin_bookings_by_category`) para
+    los dos gráficos del Figma, con barras CSS server-rendered. Aplicada a dev.
+  - [x] **AD14 · pantalla NUEVA** — `/admin/alertas` **derivada de datos reales** (pagos fallidos,
+    payouts en problema, cancelaciones). Sin "Marcar atendida" (no hay tabla de incidencias —
+    hueco EP-23).
+  - [x] **AD06-07/AD09/AD11/AD12/AD15** — reestiladas al patrón del panel (chips, cifras en
+    tarjeta, filas con píldoras de color).
+  - Decisiones documentadas: **AD01 no se construye** (el `/login` compartido ya enruta por rol,
+    RN-31 se cumple) y **"Cancelar reserva" de AD10 tampoco** (no hay RPC de cancelación por
+    admin; el camino de soporte es el reembolso US-704).
+  - Verificado en vivo como admin fixture: AD02/AD05/AD13/AD14 con captura; el resto responde 200.
+
+- 🐞 **`searchProducts` no traía el tutor** (EP-03, **sin ticket**). La tarjeta de P09 firma con
+  "Tutor · ★ rating" y habría salido vacía en toda la búsqueda. ✅ Corregido extrayendo la hidratación
+  a un helper compartido con el listado.
+
+- **EP-23 · Datos que el diseño necesita y no existen** (`EY-110`) — DD-01…08 (`EY-111`…`EY-118`). **`EY-109` (buscar sin tildes) ✅ corregido y en prod.** `tutor_categories`/`student_interests`/`tutor_materials` (IV-02) son tablas nuevas que **no cierran ninguna DD**. **No bloquean el despliegue; bloquean la fidelidad al diseño.** Tabla completa en `docs/BACKLOG.md` §4.3.
+  - [x] **DD-01** (`EY-111`) · nombre y foto públicos del tutor — migración `20260723120000`: `tutor_profiles.display_name` + `avatar_path`, copias **públicas** en la tabla que ya solo expone tutores `approved`. **`profiles` sigue privado**; el onboarding del tutor las vuelca y la migración siembra lo que ya había.
+  - [x] **DD-02** (`EY-112`) · imagen del producto — misma migración: `products.image_path` + bucket público `product-images` con RLS por carpeta del tutor + campo de subida en el formulario.
+  - [ ] DD-03…DD-08 siguen `To Do`.
+  - ⚠️ **Semilla de dev sin aplicar:** `supabase/seed/p01-demo-images.sql` (miniaturas y fotos demo). Los ficheros ya están en los buckets; hay que **ejecutarlo a mano en el SQL Editor de dev** — los tutores demo no pueden iniciar sesión y la RLS impide que ni un admin escriba en el catálogo ajeno.
+
+- 🐞 **Sin ticket todavía (EP-03) — el catálogo público de productos devolvía CERO sin sesión.** ✅ Corregido el 2026-07-23 (migración `20260723130000`); **falta abrirlo en Jira**. `products_select_booked` (migración del 22-jul) se creó **sin `to authenticated`**, así que también se evaluaba para `anon`, que no tiene grant sobre `bookings` → todo `select` anónimo sobre `products` moría con `permission denied for table bookings`. Home, `/classes`, `/search`, `/categories/[slug]` y el detalle salían vacíos **para quien no había iniciado sesión**; con sesión funcionaba, y por eso no se vio en IV-03. Verificado: `anon` pasa de 0 a 5 productos. **Llega a prod al mergear a `main`.**
 
 - 🐞 **`EY-109` (en EP-03) — buscar sin tildes devolvía cero resultados.** ✅ **Corregido y en prod** (`In Review`, migraciones `20260721120000` + `20260721130000`). El primer intento indexó sobre texto ya sin tildes y rompió el stemmer español; la corrección indexa **las dos ramas** (con y sin tilde). `matematicas`/`Matemáticas`, `programacion`/`Programación`, `calculo`/`cálculo`, `ingles`/`inglés` devuelven ya el mismo conjunto.
 
@@ -250,4 +392,4 @@ No consumen SP del sprint. Se filtran en Jira por label.
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-22 (cierre de Sprint 3 recuperado de `chore/sync-jira-s3-done`; IV-01…IV-06 aplicadas; alta de EP-23 y del bug EY-109; acuerdos de la reunión del 17-jul).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-24 (revisión nodo a nodo COMPLETA del Figma: **P01–P09, AL01–AL08, TU01–TU09 y AD01–AD15** — todo el producto sobre `PanelShell` compartido; 🐞 corregidos: reserva duplicada + botón de sala en pendiente + fecha `created_at` (AL02), `/reservas` sin enlaces, `/tutor/payouts` rebotando a `/app` por `requireRole`; rutas nuevas AL06/AL07/AL08, TU08, AD02 y AD14; migración `20260724120000_ad13_admin_charts` en dev; **DD-01 y DD-02 cerradas**; 🐞 catálogo público vacío para `anon` corregido — **faltan tickets en Jira** — y semilla `p01-demo-images.sql` pendiente de aplicar en dev).*

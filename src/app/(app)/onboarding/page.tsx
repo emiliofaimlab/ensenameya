@@ -4,7 +4,6 @@ import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/roles";
 import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
 import { OnboardingForm } from "./onboarding-form";
 
 export const metadata = { title: "Completa tu perfil · Enséñame Ya" };
@@ -41,9 +40,11 @@ export default async function OnboardingPage({
     : null;
 
   return (
-    <div className="bg-muted">
+    // AL01: el cuerpo va sobre #f9fafc con ~148 px de aire arriba y ~108 abajo
+    // (149:7 / 150:7), no los 64 px de una sección normal.
+    <div className="bg-muted pt-14 pb-10 sm:pt-[148px] sm:pb-[108px]">
       <Container>
-        <Section>
+        <div>
           <OnboardingForm
             userId={user.id}
             next={next ?? null}
@@ -58,7 +59,7 @@ export default async function OnboardingPage({
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
             selectedInterests={(mine ?? []).map((r) => r.category_id)}
           />
-        </Section>
+        </div>
       </Container>
     </div>
   );

@@ -33,10 +33,19 @@ export default async function AdminTiersPage() {
 
   return (
     <AdminShell
-          title="Comisión y tiers"
-          description="El split es el % que se lleva el tutor; el resto es comisión de la plataforma."
+      title="Comisión / Tiers"
+      description="Split del tutor por tier. Los cambios aplican solo a reservas nuevas (S-08)."
     >
-        <TierManager tiers={tiers} />
+      {/* Nota del seed (226:54): los tiers reales y su criterio de ascenso. */}
+      <div className="flex gap-3 rounded-[16px] border border-[#b2d9ff] bg-[#e5f2ff] p-5">
+        <p className="text-[12.5px] text-[#405980]">
+          Seed v3 (C-09): 3 tiers con split de tutor 75 / 85 / 90 % (comisión
+          25 / 15 / 10 %). Los tutores nuevos entran al tier por defecto.
+          Nombres y criterios de ascenso: DP-09.
+        </p>
+      </div>
+
+      <TierManager tiers={tiers} />
     </AdminShell>
   );
 }

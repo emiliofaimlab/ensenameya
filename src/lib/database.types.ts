@@ -658,6 +658,7 @@ export type Database = {
           currency: string
           description: string | null
           id: string
+          image_path: string | null
           outcome: string | null
           package_num_sessions: number | null
           price_amount: number
@@ -676,6 +677,7 @@ export type Database = {
           currency: string
           description?: string | null
           id?: string
+          image_path?: string | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount: number
@@ -694,6 +696,7 @@ export type Database = {
           currency?: string
           description?: string | null
           id?: string
+          image_path?: string | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount?: number
@@ -999,8 +1002,10 @@ export type Database = {
           approval_notes: string | null
           approval_status: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at: string | null
+          avatar_path: string | null
           bio: string | null
           created_at: string
+          display_name: string | null
           headline: string | null
           identity_verification_status: Database["public"]["Enums"]["identity_verification_status"]
           profile_id: string
@@ -1016,8 +1021,10 @@ export type Database = {
           approval_notes?: string | null
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
+          avatar_path?: string | null
           bio?: string | null
           created_at?: string
+          display_name?: string | null
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
           profile_id: string
@@ -1033,8 +1040,10 @@ export type Database = {
           approval_notes?: string | null
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
+          avatar_path?: string | null
           bio?: string | null
           created_at?: string
+          display_name?: string | null
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
           profile_id?: string
@@ -1173,6 +1182,11 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_bookings_by_category: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: Json
+      }
+      admin_gmv_weekly: { Args: { p_weeks?: number }; Returns: Json }
       admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       assign_tutor_tier: {
         Args: { p_tier_id: string; p_tutor_id: string }
@@ -1193,6 +1207,7 @@ export type Database = {
         Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }
         Returns: string
       }
+      country_from_timezone: { Args: { p_tz: string }; Returns: string }
       create_booking: {
         Args: { p_product_id: string; p_slots: string[] }
         Returns: string
@@ -1223,6 +1238,17 @@ export type Database = {
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
+      }
+      home_stats: { Args: never; Returns: Json }
+      home_testimonials: {
+        Args: { p_limit?: number }
+        Returns: {
+          author: string
+          comment: string
+          context: string
+          id: string
+          rating: number
+        }[]
       }
       join_session: { Args: { p_session_id: string }; Returns: Json }
       manage_payout: {

@@ -3,8 +3,12 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { PAYOUT_BADGE } from "@/lib/payouts";
 import type { Database } from "@/lib/database.types";
+import {
+  PanelCard,
+  StatusPill,
+  type PillTone,
+} from "@/components/layout/panel-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
-import { Badge } from "@/components/ui/badge";
 import { AdminFilters } from "../payments/filters";
 import { PayoutActions } from "./payout-actions";
 
@@ -22,8 +26,25 @@ const STATUSES: PayoutStatus[] = [
 ];
 const STATUS_OPTIONS = STATUSES.map((s) => ({ value: s, label: PAYOUT_BADGE[s].label }));
 
+const PAYOUT_PILL: Record<string, PillTone> = {
+  paid: "green",
+  processing: "blue",
+  scheduled: "blue",
+  pending: "amber",
+  failed: "red",
+  on_hold: "red",
+};
+
 function asStatus(v?: string): PayoutStatus | undefined {
   return STATUSES.find((s) => s === v);
+}
+
+/** Suma por moneda de un subconjunto; "—" si no hay nada. */
+function sumLine(rows: { amount: number; currency: string }[]): string {
+  if (rows.length === 0) return "—";
+  const by = new Map<string, number>();
+  for (const r of rows) by.set(r.currency, (by.get(r.currency) ?? 0) + r.amount);
+  return [...by.entries()].map(([c, a]) => formatMoney(a, c)).join(" · ");
 }
 
 /**
@@ -53,47 +74,94 @@ export default async function AdminPayoutsPage({
 
   return (
     <AdminShell
-          title="Payouts"
-          description="Liquidaciones a tutores. Retén, libera o reintenta según su estado (M7)."
+      title="Payouts a tutores"
+      description="Lote semanal, en la moneda del tutor (RN-15). Retén, libera o reintenta según su estado (M7)."
     >
-
-        <AdminFilters
-          basePath="/admin/payouts"
-          fields={[{ name: "status", label: "Estado", type: "select", options: STATUS_OPTIONS }]}
+      {/* Cifras (232:65) sobre el conjunto visible. */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat
+          label="Programados"
+          value={sumLine(
+            payouts.filter(
+              (p) => p.status === "scheduled" || p.status === "processing",
+            ),
+          )}
         />
+        <Stat
+          label="En retención"
+          value={sumLine(payouts.filter((p) => p.status === "pending"))}
+        />
+        <Stat
+          label="Fallidos / retenidos"
+          value={sumLine(
+            payouts.filter((p) => p.status === "failed" || p.status === "on_hold"),
+          )}
+        />
+      </div>
 
-        {payouts.length === 0 ? (
-          <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+      <AdminFilters
+        basePath="/admin/payouts"
+        fields={[
+          { name: "status", label: "Estado", type: "select", options: STATUS_OPTIONS },
+        ]}
+      />
+
+      {payouts.length === 0 ? (
+        <PanelCard>
+          <p className="text-[13px] text-[#6b6b6b]">
             No hay payouts con estos filtros.
           </p>
-        ) : (
-          <ul className="flex flex-col gap-3">
+        </PanelCard>
+      ) : (
+        <PanelCard className="py-2">
+          <ul className="divide-y divide-[#e0e0e0]">
             {payouts.map((p) => {
               const b = PAYOUT_BADGE[p.status];
               return (
                 <li
                   key={p.id}
-                  className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-wrap items-center justify-between gap-3 py-4"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">
-                      {p.profiles?.full_name ?? "Tutor"} ·{" "}
-                      <span className="tabular-nums">{formatMoney(p.amount, p.currency)}</span>
+                  <div className="min-w-0 sm:w-72">
+                    <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
+                      #{p.id.slice(0, 8)} ·{" "}
+                      <span className="tabular-nums">
+                        {formatMoney(p.amount, p.currency)}
+                      </span>
                     </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge variant={b.variant}>{b.label}</Badge>
-                      {p.provider ? <Badge variant="secondary">{p.provider}</Badge> : null}
-                      {p.failure_reason ? (
-                        <span className="text-xs text-destructive">{p.failure_reason}</span>
-                      ) : null}
-                    </div>
+                    <p className="truncate text-xs text-[#6b6b6b]">
+                      {p.profiles?.full_name ?? "Tutor"}
+                      {p.provider ? ` · ${p.provider}` : ""}
+                      {p.failure_reason ? ` · ${p.failure_reason}` : ""}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#6b6b6b]">Estado (M7)</p>
+                    <StatusPill
+                      tone={PAYOUT_PILL[p.status] ?? "neutral"}
+                      className="mt-1 h-7"
+                    >
+                      {b.label}
+                    </StatusPill>
                   </div>
                   <PayoutActions payoutId={p.id} status={p.status} />
                 </li>
               );
             })}
           </ul>
-        )}
+        </PanelCard>
+      )}
     </AdminShell>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <PanelCard className="p-5">
+      <p className="text-xs text-[#6b6b6b]">{label}</p>
+      <p className="mt-1.5 truncate text-[22px] font-bold text-[#19191f] tabular-nums">
+        {value}
+      </p>
+    </PanelCard>
   );
 }

@@ -17,6 +17,8 @@ export function FeatureSplit({
   points,
   cta,
   image,
+  badge,
+  tone = "plain",
   reverse = false,
 }: {
   title: string;
@@ -25,16 +27,27 @@ export function FeatureSplit({
   points: { icon: LucideIcon; text: string; desc?: string }[];
   cta: { href: string; label: string; variant?: "solid" | "outline" };
   image: { src: string; alt: string };
+  /** Tarjetita flotante montada sobre el borde de la imagen (P02). */
+  badge?: {
+    value: string;
+    label: string;
+    icon?: LucideIcon;
+    position: "bottom-left" | "top-right";
+  };
+  /** `soft` = el bloque azul claro con esquinas redondeadas de P02. */
+  tone?: "plain" | "soft";
   reverse?: boolean;
 }) {
-  return (
+  const body = (
     <Container>
       <Section className="grid items-center gap-10 lg:grid-cols-2">
         <div className={reverse ? "lg:order-2" : undefined}>
-          <h2 className="text-2xl font-semibold tracking-tight text-balance sm:text-[32px]">
+          <h2 className="text-2xl font-semibold text-balance sm:text-[32px]">
             {title}
           </h2>
-          <p className="mt-4 text-pretty text-muted-foreground">{text}</p>
+          <p className="mt-4 text-[15px] text-pretty text-muted-foreground">
+            {text}
+          </p>
 
           <ul className="mt-6 space-y-2">
             {points.map(({ icon: Icon, text: point, desc }, i) =>
@@ -52,7 +65,7 @@ export function FeatureSplit({
                 <li
                   key={point}
                   // La primera fila va resaltada en el Figma; el resto, sobre el fondo.
-                  className={`flex items-center gap-3 rounded-lg px-4 py-2.5 ${
+                  className={`flex items-center gap-3 rounded-lg px-4 py-2.5 text-[17px] ${
                     i === 0 ? "bg-secondary" : ""
                   }`}
                 >
@@ -77,20 +90,56 @@ export function FeatureSplit({
           </Button>
         </div>
 
-        <div
-          className={`relative aspect-[592/420] overflow-hidden rounded-3xl ${
-            reverse ? "lg:order-1" : ""
-          }`}
-        >
-          <Image
-            src={image.src}
-            alt={image.alt}
-            fill
-            sizes="(min-width: 1024px) 592px, 100vw"
-            className="object-cover"
-          />
+        {/* El badge se sale de la imagen, así que el recorte vive en el hijo. */}
+        <div className={`relative ${reverse ? "lg:order-1" : ""}`}>
+          <div
+            // r24 + sombra suave: en el Figma son dos fotos superpuestas, pero la
+            // de delante tapa a la de detrás — el resultado visible es este.
+            className="relative aspect-[592/420] overflow-hidden rounded-[24px] shadow-[0_2px_4px_rgb(0_0_0/0.31)]"
+          >
+            <Image
+              src={image.src}
+              alt={image.alt}
+              fill
+              sizes="(min-width: 1024px) 592px, 100vw"
+              className="object-cover"
+            />
+          </div>
+
+          {badge ? (
+            <div
+              className={`absolute flex items-center gap-3 rounded-[14px] bg-card px-5 py-4 shadow-[0_6px_20px_rgb(0_0_0/0.16)] ${
+                badge.position === "bottom-left"
+                  ? "bottom-4 -left-4 sm:-left-7"
+                  : "-top-6 right-8"
+              }`}
+            >
+              {badge.icon ? (
+                <badge.icon className="size-5 shrink-0 fill-primary text-primary" />
+              ) : null}
+              <div>
+                <p
+                  className={`font-bold ${
+                    badge.icon
+                      ? "text-[15px] text-foreground"
+                      : "text-[22px] text-brand"
+                  }`}
+                >
+                  {badge.value}
+                </p>
+                <p className="text-[11px] text-[#666666]">{badge.label}</p>
+              </div>
+            </div>
+          ) : null}
         </div>
       </Section>
     </Container>
+  );
+
+  // El bloque azul de P02 va a sangre completa, solo con las esquinas redondeadas.
+  return tone === "soft" ? (
+    <div className="rounded-[17px] bg-[#f5f9ff]">{body}</div>
+  ) : (
+    body
   );
 }

@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
 
 import { requireUser } from "@/lib/auth/server";
+import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
+import { bookingTotal, tutorNames } from "@/lib/booking";
+import { PanelShell } from "@/components/layout/panel-shell";
 import { CheckoutForm } from "./checkout-form";
 
 export const metadata = { title: "Pagar reserva · Enséñame Ya" };
@@ -34,43 +33,34 @@ export default async function CheckoutPage({
   // Selección inválida → de vuelta al picker (evita un checkout inconsistente).
   if (slots.length !== required) redirect(`/reservar/${productId}`);
 
-  const total =
-    product.pricingModel === "per_hour"
-      ? Math.round((product.priceAmount * (product.sessionDurationMin ?? 60)) / 60)
-      : product.priceAmount;
+  const supabase = await createClient();
+  const names = await tutorNames(supabase, [product.tutor.id]);
+  const tutorName =
+    names.get(product.tutor.id) ?? product.tutor.headline ?? "tu tutor";
 
   return (
-    <div className="bg-muted">
-      <Container>
-        <Section className="flex flex-col gap-6">
-          <Link
-            href={`/reservar/${productId}`}
-            className="flex w-fit items-center gap-1.5 text-sm font-medium text-brand hover:underline"
-          >
-            <ArrowLeftIcon className="size-4" />
-            Cambiar horario
-          </Link>
+    <PanelShell back={{ href: `/reservar/${productId}`, label: "Cambiar horario" }}>
+      <div>
+        <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">
+          Confirmar pago
+        </h1>
+        <p className="mt-1 text-[13px] text-[#6b6b6b]">
+          Revisa y completa el pago de tu reserva. El cobro lo procesa nuestro
+          proveedor de pagos.
+        </p>
+      </div>
 
-          <div>
-            <h1 className="text-[28px] font-bold tracking-tight">
-              Confirmar pago
-            </h1>
-            <p className="mt-1 text-[13px] text-muted-foreground">
-              Revisa y completa el pago de tu reserva. El cobro lo procesa
-              nuestro proveedor de pagos.
-            </p>
-          </div>
-
-          <CheckoutForm
-            productId={productId}
-            slots={slots}
-            total={total}
-            currency={product.currency}
-            productTitle={product.title}
-            tutorName={product.tutor.headline ?? "tu tutor"}
-          />
-        </Section>
-      </Container>
-    </div>
+      <CheckoutForm
+        productId={productId}
+        slots={slots}
+        total={bookingTotal(product)}
+        currency={product.currency}
+        productTitle={product.title}
+        tutorName={tutorName}
+        packageLabel={
+          required > 1 ? `Paquete ${required} sesiones` : "Sesión suelta"
+        }
+      />
+    </PanelShell>
   );
 }

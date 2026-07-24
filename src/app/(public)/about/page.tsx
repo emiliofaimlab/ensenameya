@@ -1,10 +1,9 @@
 import Image from "next/image";
 import {
-  BadgeCheckIcon,
+  ArrowUpRightIcon,
   ClockIcon,
-  GlobeIcon,
   ShieldCheckIcon,
-  SparklesIcon,
+  StarIcon,
   TargetIcon,
   UserIcon,
   WalletIcon,
@@ -14,8 +13,11 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { FeatureSplit } from "@/components/home/feature-split";
 import { TrustCards } from "@/components/home/trust";
-import { HomeFaq } from "@/components/home/home-faq";
+import { FAQ_SOBRE_NOSOTROS, HomeFaq } from "@/components/home/home-faq";
+import { Testimonials } from "@/components/home/testimonials";
 import { FinalCta } from "@/components/home/final-cta";
+import { compactCount } from "@/lib/catalog/format";
+import { getHomeStats, listTestimonials } from "@/lib/catalog/queries";
 
 export const metadata = {
   title: "Sobre nosotros · Enséñame Ya",
@@ -23,52 +25,70 @@ export const metadata = {
     "Conectamos a quien quiere aprender con quien sabe enseñar: tutorías 1:1 en vivo, con tutores verificados y enfoque en el resultado.",
 };
 
+/** Las 4 tarjetas de "En qué creemos". Las fotos salen del propio Figma; el
+ *  badge circular alterna naranja y azul, como en el diseño. */
 const VALUES = [
   {
-    icon: TargetIcon,
+    img: "/img/valor-resultados.jpg",
     title: "Resultados validados",
     text: "Evaluamos el éxito por tus metas cumplidas y por las nuevas habilidades que logras dominar.",
   },
   {
-    icon: BadgeCheckIcon,
+    img: "/img/valor-talento.jpg",
     title: "Talento garantizado",
     text: "Validamos manualmente a cada tutor para asegurar su experiencia y energía propia antes de su primera sesión.",
   },
   {
-    icon: SparklesIcon,
+    img: "/img/valor-transparencia.jpg",
     title: "Transparencia total",
     text: "Cuentas claras y honestidad absoluta. Pagas exactamente por el resultado que decides aprender.",
   },
   {
-    icon: GlobeIcon,
+    img: "/img/home-teach.jpg",
     title: "Conocimiento sin fronteras",
     text: "Acercamos el aprendizaje de primer nivel a cada rincón de la comunidad hispanohablante.",
   },
 ];
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const [stats, testimonials] = await Promise.all([
+    getHomeStats(),
+    listTestimonials(),
+  ]);
+
   return (
     <>
-      <section className="relative isolate overflow-hidden bg-brand text-white">
-        <Image
-          src="/img/about-hero.jpg"
-          alt=""
-          fill
-          priority
-          sizes="100vw"
-          className="-z-10 object-cover opacity-25"
+      {/* Hero de P02: degradado azul (el mismo asset que la banda de P01), ola
+          clara al pie y la alumna recortada encima. */}
+      <section className="relative isolate overflow-hidden bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% text-white sm:h-[846px]">
+        <div
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 -z-10 h-[58%] bg-[url('/img/about-wave.svg')] bg-cover bg-bottom bg-no-repeat"
         />
-        <Container className="py-20 sm:py-28">
-          <h1 className="max-w-3xl text-3xl font-semibold tracking-tight text-balance sm:text-5xl">
-            Conectamos a quien quiere aprender con quien sabe enseñar
+        <Container className="flex flex-col items-center pt-16 text-center sm:pt-20">
+          <h1 className="max-w-[842px] text-3xl font-semibold text-balance sm:text-[64px] sm:leading-[1.05]">
+            {/* "Conectamos" va en Poppins Light Italic, como "talento" en P01. */}
+            <em className="font-light">Conectamos</em> a quien quiere aprender
+            con quien sabe enseñar
           </h1>
-          <p className="mt-6 max-w-2xl text-pretty text-white/90 sm:text-lg">
+          <p className="mt-6 max-w-[700px] text-pretty text-[17px] font-medium text-white/90">
             Enséñame Ya nació para garantizar que dominar un nuevo idioma,
             materia o habilidad sea una experiencia emocionante y efectiva.
             Consigue resultados reales de la mano de expertos que potencian tu
             talento.
           </p>
         </Container>
+
+        {/* En el Figma la foto empieza a 268px del techo del hero y el borde
+            inferior la recorta: por eso el hero tiene alto fijo. */}
+        <Image
+          src="/img/about-hero-alumna.png"
+          alt=""
+          width={651}
+          height={816}
+          priority
+          className="mx-auto mt-2 h-auto w-[420px] max-w-full sm:absolute sm:top-[268px] sm:left-1/2 sm:mt-0 sm:w-[560px] sm:-translate-x-1/2"
+        />
       </section>
 
       <TrustCards title="Reserva con tranquilidad garantizada" />
@@ -98,6 +118,15 @@ export default function AboutPage() {
           src: "/img/about-mission.jpg",
           alt: "Alumna tomando una clase en vivo",
         }}
+        badge={
+          stats
+            ? {
+                value: compactCount(stats.sessions),
+                label: "clases impartidas",
+                position: "bottom-left",
+              }
+            : undefined
+        }
       />
 
       <FeatureSplit
@@ -126,33 +155,60 @@ export default function AboutPage() {
           src: "/img/about-outcome.jpg",
           alt: "Tutor explicando durante una sesión 1 a 1",
         }}
+        badge={
+          stats?.ratingAvg
+            ? {
+                value: `${stats.ratingAvg} / 5`,
+                label: "valoración media",
+                icon: StarIcon,
+                position: "top-right",
+              }
+            : undefined
+        }
+        tone="soft"
       />
 
       <Container>
         <Section>
-          <h2 className="text-center text-[28px] font-bold tracking-tight">
-            En qué creemos
-          </h2>
+          <h2 className="text-center text-[28px] font-bold">En qué creemos</h2>
           <ul className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {VALUES.map(({ icon: Icon, title, text }) => (
-              <li key={title} className="rounded-2xl bg-muted p-6">
-                <span className="grid size-10 place-items-center rounded-full bg-brand-muted text-brand">
-                  <Icon className="size-5" />
-                </span>
-                <h3 className="mt-4 font-semibold">{title}</h3>
-                <p className="mt-2 text-[13px] text-muted-foreground">{text}</p>
+            {VALUES.map(({ img, title, text }, i) => (
+              <li
+                key={title}
+                className="overflow-hidden rounded-[22px] border border-[#e6e6e6] bg-muted"
+              >
+                <Image
+                  src={img}
+                  alt=""
+                  width={546}
+                  height={380}
+                  className="aspect-[273/190] w-full object-cover"
+                />
+                <div className="p-6 pt-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-[15px] font-bold">{title}</h3>
+                    {/* Badge de flecha: alterna naranja y azul (386:531/542/553/564). */}
+                    <span
+                      className={`grid size-[38px] shrink-0 place-items-center rounded-full text-white ${
+                        i % 2 === 0 ? "bg-primary" : "bg-brand"
+                      }`}
+                    >
+                      <ArrowUpRightIcon className="size-4" />
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[13px] text-muted-foreground">
+                    {text}
+                  </p>
+                </div>
               </li>
             ))}
           </ul>
         </Section>
       </Container>
 
-      {/* TODO IV-03: aquí va "Resultados reales de nuestros alumnos" — 7
-          testimonios inventados en el Figma (cuatro firmados "Marina G."),
-          pendientes de contenido real. */}
-
-      <HomeFaq />
-      <FinalCta />
+      <Testimonials items={testimonials} />
+      <HomeFaq items={FAQ_SOBRE_NOSOTROS} />
+      <FinalCta text="Crea tu cuenta gratis en segundos y asegura tu primera meta, o conviértete en tutor y empieza a facturar con orgullo por lo que sabes." />
     </>
   );
 }

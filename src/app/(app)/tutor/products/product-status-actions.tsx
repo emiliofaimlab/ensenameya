@@ -72,18 +72,24 @@ export function ProductStatusActions({
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-2.5">
       {actions.map((a) => {
         const blocked = a.needsApproval && !isApproved;
+        // Publicar/Reanudar van en azul sólido (191:84); el resto, outline.
+        const solid = a.to === "active";
         return (
           <Button
             key={a.label}
             type="button"
-            size="sm"
-            variant="outline"
+            variant={solid ? "default" : "outline"}
             disabled={busy || blocked}
             title={blocked ? "Requiere que tu perfil de tutor esté aprobado" : undefined}
             onClick={() => run(a)}
+            className={
+              solid
+                ? "h-9 rounded-[8px] bg-brand px-3.5 text-[13px] font-semibold hover:bg-brand/90"
+                : "h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+            }
           >
             {a.label}
           </Button>

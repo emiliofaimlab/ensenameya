@@ -16,6 +16,12 @@ export type CategoryTag = { slug: string; name: string };
 
 export type TutorCardData = {
   id: string;
+  /** Nivel que enseña (IV-02). Es del TUTOR, no por materia. */
+  teachingLevel?: string | null;
+  /** Nombre público que el tutor decide mostrar (DD-01); null = sin publicar. */
+  displayName: string | null;
+  /** Ruta en el bucket público `avatars` (DD-01). */
+  avatarPath: string | null;
   headline: string | null;
   bio: string | null;
   ratingAvg: number | null;
@@ -24,6 +30,8 @@ export type TutorCardData = {
 
 export type ProductTutor = {
   id: string;
+  displayName: string | null;
+  avatarPath: string | null;
   headline: string | null;
   ratingAvg: number | null;
   ratingCount: number;
@@ -38,6 +46,8 @@ export type ProductCardData = {
   currency: string;
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
+  /** Ruta en el bucket público `product-images` (DD-02). */
+  imagePath: string | null;
   categories: CategoryTag[];
   /** Solo lo rellena el listado de P05; `null` donde no se consultó. */
   tutor?: ProductTutor | null;
@@ -45,12 +55,7 @@ export type ProductCardData = {
 
 export type ProductDetail = ProductCardData & {
   description: string | null;
-  tutor: {
-    id: string;
-    headline: string | null;
-    ratingAvg: number | null;
-    ratingCount: number;
-  };
+  tutor: ProductTutor & { bio: string | null };
 };
 
 const PAGE_SIZE = 12;
@@ -75,6 +80,7 @@ function mapProductCard(r: {
   currency: string;
   session_duration_min: number | null;
   package_num_sessions: number | null;
+  image_path: string | null;
   product_categories: { categories: CategoryTag | null }[] | null;
 }): ProductCardData {
   return {
@@ -86,8 +92,39 @@ function mapProductCard(r: {
     currency: r.currency,
     sessionDurationMin: r.session_duration_min,
     packageNumSessions: r.package_num_sessions,
+    imagePath: r.image_path,
     categories: toCategoryTags(r.product_categories),
   };
+}
+
+/** Añade a cada producto su tutor (nombre público, foto y rating). `products`
+ *  apunta a `profiles`, no a `tutor_profiles`, así que PostgREST no lo embebe:
+ *  va en una segunda consulta. Lo usan el listado (P05) y la búsqueda (P09). */
+async function withTutors<T extends ProductCardData & { tutorId: string }>(
+  rows: T[],
+): Promise<ProductCardData[]> {
+  if (rows.length === 0) return [];
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tutor_profiles")
+    .select("profile_id, display_name, avatar_path, headline, rating_avg, rating_count")
+    .in("profile_id", [...new Set(rows.map((r) => r.tutorId))]);
+
+  const tutors = new Map<string, ProductTutor>();
+  for (const t of data ?? []) {
+    tutors.set(t.profile_id, {
+      id: t.profile_id,
+      displayName: t.display_name,
+      avatarPath: t.avatar_path,
+      headline: t.headline,
+      ratingAvg: t.rating_avg,
+      ratingCount: t.rating_count,
+    });
+  }
+  return rows.map(({ tutorId, ...p }) => ({
+    ...p,
+    tutor: tutors.get(tutorId) ?? null,
+  }));
 }
 
 /** Categorías activas (para filtros); RLS ya limita a `is_active`. */
@@ -110,6 +147,8 @@ export type FeaturedTutor = TutorCardData & {
 
 type TutorRow = {
   profile_id: string;
+  display_name: string | null;
+  avatar_path: string | null;
   headline: string | null;
   bio: string | null;
   rating_avg: number | null;
@@ -150,6 +189,8 @@ async function withProductFacts(rows: TutorRow[]): Promise<FeaturedTutor[]> {
 
   return rows.map((r) => ({
     id: r.profile_id,
+    displayName: r.display_name,
+    avatarPath: r.avatar_path,
     headline: r.headline,
     bio: r.bio,
     ratingAvg: r.rating_avg,
@@ -162,10 +203,19 @@ async function withProductFacts(rows: TutorRow[]): Promise<FeaturedTutor[]> {
   }));
 }
 
+/** Filtro de disponibilidad de P04. Las reglas son semanales (weekday + rango),
+ *  así que "esta semana" = tiene cualquier regla activa. */
+export type AvailabilityFilter = "today" | "week" | "weekend";
+/** Orden de P04. El precio no entra: sale de los productos, no de la fila del
+ *  tutor, y ordenar por él rompería la paginación (pide DD-04 / `EY-114`). */
+export type TutorSort = "rating" | "reviews";
+
 /** US-301 — tutores aprobados, filtrables por categoría y rating, paginados. */
 export async function listApprovedTutors(opts: {
   categorySlug?: string;
   minRating?: number;
+  availability?: AvailabilityFilter;
+  sort?: TutorSort;
   page: number;
 }): Promise<{ tutors: FeaturedTutor[]; hasMore: boolean; total: number }> {
   const supabase = await createClient();
@@ -183,17 +233,39 @@ export async function listApprovedTutors(opts: {
     if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
   }
 
+  // Disponibilidad: se mira la REGLA semanal, no los huecos libres reales.
+  // ponytail: no descuenta excepciones ni sesiones ya reservadas — para un
+  // filtro de listado basta; el hueco de verdad se comprueba al reservar.
+  if (opts.availability) {
+    let rules = supabase
+      .from("availability_rules")
+      .select("tutor_id")
+      .eq("is_active", true);
+    if (opts.availability === "today") {
+      rules = rules.eq("weekday", new Date().getUTCDay());
+    } else if (opts.availability === "weekend") {
+      rules = rules.in("weekday", [0, 6]);
+    }
+    const { data } = await rules;
+    const withSlots = [...new Set((data ?? []).map((r) => r.tutor_id))];
+    tutorIds = tutorIds
+      ? tutorIds.filter((id) => withSlots.includes(id))
+      : withSlots;
+    if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
+  }
+
   let base = supabase
     .from("tutor_profiles")
-    .select("profile_id, headline, bio, rating_avg, rating_count", {
+    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count", {
       count: "exact",
     })
     .eq("approval_status", "approved");
   if (tutorIds) base = base.in("profile_id", tutorIds);
   if (opts.minRating) base = base.gte("rating_avg", opts.minRating);
 
+  const orderBy = opts.sort === "reviews" ? "rating_count" : "rating_avg";
   const { data, count } = await base
-    .order("rating_avg", { ascending: false, nullsFirst: false })
+    .order(orderBy, { ascending: false, nullsFirst: false })
     .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 
   const rows = data ?? [];
@@ -207,14 +279,14 @@ export async function listApprovedTutors(opts: {
 
 /**
  * P01 — "Tutores destacados": los mejor valorados, con su precio de entrada.
- * El nombre real y la foto **no son públicos** (profiles solo lo lee su dueño),
- * así que la tarjeta se apoya en `headline`, como el resto del catálogo.
+ * Nombre y foto salen de `tutor_profiles.display_name/avatar_path` (DD-01):
+ * copias públicas que el tutor publica, no lecturas de `profiles`.
  */
 export async function listFeaturedTutors(limit = 4): Promise<FeaturedTutor[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("tutor_profiles")
-    .select("profile_id, headline, bio, rating_avg, rating_count")
+    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
     .eq("approval_status", "approved")
     .order("rating_avg", { ascending: false, nullsFirst: false })
     .limit(limit);
@@ -230,7 +302,9 @@ export async function getTutorDetail(
 
   const { data: t } = await supabase
     .from("tutor_profiles")
-    .select("profile_id, headline, bio, rating_avg, rating_count")
+    .select(
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, teaching_level",
+    )
     .eq("profile_id", id)
     .eq("approval_status", "approved")
     .maybeSingle();
@@ -239,7 +313,7 @@ export async function getTutorDetail(
   const { data: prods } = await supabase
     .from("products")
     .select(
-      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, product_categories(categories(slug, name))",
+      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))",
     )
     .eq("tutor_id", id)
     .eq("status", "active")
@@ -250,6 +324,9 @@ export async function getTutorDetail(
   return {
     tutor: {
       id: t.profile_id,
+      displayName: t.display_name,
+      avatarPath: t.avatar_path,
+      teachingLevel: t.teaching_level,
       headline: t.headline,
       bio: t.bio,
       ratingAvg: t.rating_avg,
@@ -298,7 +375,7 @@ export async function getProductDetail(
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, tutor_id, product_categories(categories(slug, name))",
+      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, tutor_id, product_categories(categories(slug, name))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -308,7 +385,7 @@ export async function getProductDetail(
   // El tutor debe estar aprobado (RLS ya lo exige para que el producto salga).
   const { data: tutor } = await supabase
     .from("tutor_profiles")
-    .select("profile_id, headline, rating_avg, rating_count")
+    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
     .eq("profile_id", p.tutor_id)
     .eq("approval_status", "approved")
     .maybeSingle();
@@ -324,10 +401,14 @@ export async function getProductDetail(
     currency: p.currency,
     sessionDurationMin: p.session_duration_min,
     packageNumSessions: p.package_num_sessions,
+    imagePath: p.image_path,
     categories: toCategoryTags(p.product_categories),
     tutor: {
       id: tutor.profile_id,
+      displayName: tutor.display_name,
+      avatarPath: tutor.avatar_path,
       headline: tutor.headline,
+      bio: tutor.bio,
       ratingAvg: tutor.rating_avg,
       ratingCount: tutor.rating_count,
     },
@@ -337,11 +418,11 @@ export async function getProductDetail(
 /** Nombre de una categoría activa (o null si no existe / inactiva por RLS). */
 export async function getCategoryBySlug(
   slug: string,
-): Promise<{ name: string } | null> {
+): Promise<{ name: string; description: string | null } | null> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("categories")
-    .select("name")
+    .select("name, description")
     .eq("slug", slug)
     .maybeSingle();
   return data ?? null;
@@ -354,13 +435,20 @@ export async function getCategoryBySlug(
  * ponytail: sin filtros de nivel ni idioma — el Figma los pide pero `products`
  * no tiene esas columnas; requieren migración.
  */
+/** Orden de P05. Todo se resuelve en columnas de `products`, así que la
+ *  paginación sigue siendo consistente. */
+export type ProductSort = "recent" | "price_asc" | "price_desc";
+
 export async function listActiveProducts(opts: {
   categorySlug?: string;
+  /** P06 · "Temas": cruza con otra categoría del mismo producto (N–M). */
+  secondCategorySlug?: string;
   model?: PricingModel;
   minPriceMinor?: number;
   maxPriceMinor?: number;
   minSessions?: number;
   maxSessions?: number;
+  sort?: ProductSort;
   page: number;
 }): Promise<{
   products: ProductCardData[];
@@ -373,20 +461,23 @@ export async function listActiveProducts(opts: {
   // Filtro por categoría: ids de productos activos en esa categoría (2 pasos para
   // conservar TODAS las categorías del producto en la tarjeta, no solo la filtrada).
   let ids: string[] | null = null;
-  if (opts.categorySlug) {
+  for (const slug of [opts.categorySlug, opts.secondCategorySlug]) {
+    if (!slug) continue;
     const { data } = await supabase
       .from("product_categories")
       .select("product_id, categories!inner(slug), products!inner(status)")
-      .eq("categories.slug", opts.categorySlug)
+      .eq("categories.slug", slug)
       .eq("products.status", "active");
-    ids = [...new Set((data ?? []).map((r) => r.product_id))];
+    const found = [...new Set((data ?? []).map((r) => r.product_id))];
+    // Con las dos, intersección: el producto tiene que estar en ambas.
+    ids = ids ? ids.filter((id) => found.includes(id)) : found;
     if (ids.length === 0) return { products: [], hasMore: false, total: 0 };
   }
 
   let base = supabase
     .from("products")
     .select(
-      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, product_categories(categories(slug, name))",
+      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))",
       { count: "exact" },
     )
     .eq("status", "active");
@@ -401,9 +492,14 @@ export async function listActiveProducts(opts: {
     base = base.lte("package_num_sessions", opts.maxSessions);
   }
 
-  const { data, count } = await base
-    .order("created_at", { ascending: false })
-    .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
+  const { data, count } =
+    opts.sort === "price_asc" || opts.sort === "price_desc"
+      ? await base
+          .order("price_amount", { ascending: opts.sort === "price_asc" })
+          .range(from, from + PAGE_SIZE)
+      : await base
+          .order("created_at", { ascending: false })
+          .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 
   const rows = (data ?? []).slice(0, PAGE_SIZE);
   const hasMore = (data ?? []).length > PAGE_SIZE;
@@ -414,11 +510,13 @@ export async function listActiveProducts(opts: {
   if (rows.length > 0) {
     const { data: tp } = await supabase
       .from("tutor_profiles")
-      .select("profile_id, headline, rating_avg, rating_count")
+      .select("profile_id, display_name, avatar_path, headline, rating_avg, rating_count")
       .in("profile_id", [...new Set(rows.map((r) => r.tutor_id))]);
     for (const t of tp ?? []) {
       tutors.set(t.profile_id, {
         id: t.profile_id,
+        displayName: t.display_name,
+        avatarPath: t.avatar_path,
         headline: t.headline,
         ratingAvg: t.rating_avg,
         ratingCount: t.rating_count,
@@ -464,7 +562,7 @@ export async function searchTutors(q: string): Promise<FeaturedTutor[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("tutor_profiles")
-    .select("profile_id, headline, bio, rating_avg, rating_count")
+    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
     .eq("approval_status", "approved")
     .ilike("search_text", `%${term}%`)
     .order("rating_avg", { ascending: false, nullsFirst: false })
@@ -487,7 +585,7 @@ export async function searchCategories(q: string): Promise<CategoryTag[]> {
 }
 
 const PRODUCT_CARD_SELECT =
-  "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, product_categories(categories(slug, name))";
+  "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))";
 
 /**
  * US-303 — búsqueda por texto en productos (título+descripción, `search_vector`
@@ -520,11 +618,106 @@ export async function searchProducts(q: string): Promise<ProductCardData[]> {
   );
 
   // Unir por id conservando el orden de la primera rama.
-  const seen = new Map<string, ProductCardData>();
+  const seen = new Map<string, ProductCardData & { tutorId: string }>();
   for (const { data } of results) {
     for (const row of data ?? []) {
-      if (!seen.has(row.id)) seen.set(row.id, mapProductCard(row));
+      if (!seen.has(row.id)) {
+        seen.set(row.id, { ...mapProductCard(row), tutorId: row.tutor_id });
+      }
     }
   }
-  return [...seen.values()].slice(0, PAGE_SIZE);
+  // La tarjeta de P09 firma con el tutor: hay que traerlo.
+  return withTutors([...seen.values()].slice(0, PAGE_SIZE));
+}
+
+/** Cifras de la home (P01). La RPC agrega en vivo; los países se derivan de la
+ *  zona horaria del tutor hasta que C-13 cierre el país de cobro (RN-15). */
+export type HomeStats = {
+  tutors: number;
+  sessions: number;
+  ratingAvg: number | null;
+  countries: number;
+};
+
+export async function getHomeStats(): Promise<HomeStats | null> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("home_stats");
+  if (!data || typeof data !== "object") return null;
+  const s = data as Record<string, number | null>;
+  return {
+    tutors: Number(s.tutors ?? 0),
+    sessions: Number(s.sessions ?? 0),
+    ratingAvg: s.rating_avg == null ? null : Number(s.rating_avg),
+    countries: Number(s.countries ?? 0),
+  };
+}
+
+/** Testimonios de la home (P01): reseñas reales de ≥4★ con comentario. El autor
+ *  llega ya enmascarado desde la RPC ("Marina G."), sin abrir `profiles`. */
+export type Testimonial = {
+  id: string;
+  comment: string;
+  rating: number;
+  author: string;
+  context: string;
+};
+
+export async function listTestimonials(limit = 7): Promise<Testimonial[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("home_testimonials", { p_limit: limit });
+  return (data ?? []).map((r) => ({
+    id: r.id,
+    comment: r.comment ?? "",
+    rating: r.rating,
+    author: r.author ?? "Alumno",
+    context: r.context ?? "",
+  }));
+}
+
+/** Índice de categorías: cada una con cuántas tutorías activas tiene.
+ *  Una sola consulta al puente + recuento en memoria; con ~10 categorías y el
+ *  volumen del MVP no hace falta agregación en BD. */
+export async function listCategoriesWithCounts(): Promise<
+  (CategoryTag & { products: number; tutors: number })[]
+> {
+  const supabase = await createClient();
+  const [categories, { data }] = await Promise.all([
+    listActiveCategories(),
+    supabase
+      .from("product_categories")
+      .select("categories!inner(slug), products!inner(status, tutor_id)")
+      .eq("products.status", "active"),
+  ]);
+
+  const counts = new Map<string, number>();
+  const tutors = new Map<string, Set<string>>();
+  for (const row of data ?? []) {
+    const slug = (row.categories as unknown as { slug: string }).slug;
+    const tutorId = (row.products as unknown as { tutor_id: string }).tutor_id;
+    counts.set(slug, (counts.get(slug) ?? 0) + 1);
+    tutors.set(slug, (tutors.get(slug) ?? new Set()).add(tutorId));
+  }
+  return categories.map((c) => ({
+    ...c,
+    products: counts.get(c.slug) ?? 0,
+    tutors: tutors.get(c.slug)?.size ?? 0,
+  }));
+}
+
+/** P07 · huecos libres de un producto para pintar el calendario público.
+ *  `get_available_slots` ya descuenta reglas, excepciones y sesiones ocupadas. */
+export async function listProductSlots(
+  productId: string,
+  days = 60,
+): Promise<{ start: string; end: string }[]> {
+  const supabase = await createClient();
+  const today = new Date();
+  const to = new Date(today.getTime() + days * 86400000);
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const { data } = await supabase.rpc("get_available_slots", {
+    p_product_id: productId,
+    p_from: iso(today),
+    p_to: iso(to),
+  });
+  return (data ?? []).map((s) => ({ start: s.slot_start, end: s.slot_end }));
 }

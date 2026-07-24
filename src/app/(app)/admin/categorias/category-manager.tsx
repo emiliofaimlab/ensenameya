@@ -6,7 +6,6 @@ import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -223,75 +222,90 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
         </div>
       </div>
 
-      {/* Listado */}
+      {/* Listado — filas del Figma (225:55): nombre + /slug, orden, píldora. */}
       {categories.length === 0 ? (
-        <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+        <p className="rounded-[16px] border border-dashed border-[#e0e0e0] p-8 text-center text-[13px] text-[#6b6b6b]">
           Todavía no hay categorías.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {categories.map((c) => (
-            <li
-              key={c.id}
-              className="flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="min-w-0">
-                <p className="truncate font-medium">{c.name}</p>
-                <p className="truncate text-sm text-muted-foreground">
-                  /{c.slug} · orden {c.sortOrder}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Badge variant={c.isActive ? "default" : "outline"}>
-                    {c.isActive ? "Activa" : "Inactiva"}
-                  </Badge>
-                  <Badge variant="secondary">
-                    {c.productCount} {c.productCount === 1 ? "producto" : "productos"}
-                  </Badge>
+        <div className="rounded-[16px] border border-[#e0e0e0] bg-card px-5 py-2">
+          <ul className="divide-y divide-[#e0e0e0]">
+            {categories.map((c) => (
+              <li
+                key={c.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-3.5"
+              >
+                <div className="min-w-0 sm:w-64">
+                  <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
+                    {c.name}
+                  </p>
+                  <p className="truncate text-xs text-[#6b6b6b]">
+                    /{c.slug} · {c.productCount}{" "}
+                    {c.productCount === 1 ? "producto" : "productos"}
+                  </p>
                 </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() =>
-                    setDraft({
-                      id: c.id,
-                      name: c.name,
-                      slug: c.slug,
-                      description: c.description ?? "",
-                      sortOrder: String(c.sortOrder),
-                      slugTouched: true,
-                    })
-                  }
-                >
-                  Editar
-                </Button>
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => toggleActive(c)}>
-                  {c.isActive ? "Desactivar" : "Activar"}
-                </Button>
-                {/* Baja lógica (AC): con productos asociados no se borra, se
-                    desactiva — borrarla arrastraría sus enlaces por el cascade
-                    y dejaría productos sin categoría. Lo fuerza la BD igual. */}
-                {c.productCount === 0 ? (
-                  <Button variant="destructive" size="sm" disabled={busy} onClick={() => remove(c)}>
-                    Borrar
+                <div>
+                  <p className="text-[11.5px] text-[#6b6b6b]">Orden</p>
+                  <p className="text-[13px] font-medium text-[#404040]">
+                    {c.sortOrder}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span
+                    className={`inline-flex h-7 items-center rounded-full px-2.5 text-xs font-semibold ${
+                      c.isActive
+                        ? "bg-[#d9f0de] text-[#298c52]"
+                        : "bg-[#ebebeb] text-[#6b6b6b]"
+                    }`}
+                  >
+                    {c.isActive ? "Activa" : "Inactiva"}
+                  </span>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+                    onClick={() =>
+                      setDraft({
+                        id: c.id,
+                        name: c.name,
+                        slug: c.slug,
+                        description: c.description ?? "",
+                        sortOrder: String(c.sortOrder),
+                        slugTouched: true,
+                      })
+                    }
+                  >
+                    Editar
                   </Button>
-                ) : (
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+                    onClick={() => toggleActive(c)}
+                  >
+                    {c.isActive ? "Desactivar" : "Activar"}
+                  </Button>
+                  {/* Baja lógica (AC): con productos asociados no se borra, se
+                      desactiva — borrarla arrastraría sus enlaces por el cascade
+                      y dejaría productos sin categoría. Lo fuerza la BD igual. */}
                   <Button
                     variant="destructive"
-                    size="sm"
-                    disabled
-                    title="Tiene productos asociados: desactívala en vez de borrarla"
+                    disabled={busy || c.productCount > 0}
+                    title={
+                      c.productCount > 0
+                        ? "Tiene productos asociados: desactívala en vez de borrarla"
+                        : undefined
+                    }
+                    className="h-9 rounded-[8px] px-3.5 text-[13px]"
+                    onClick={() => remove(c)}
                   >
                     Borrar
                   </Button>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

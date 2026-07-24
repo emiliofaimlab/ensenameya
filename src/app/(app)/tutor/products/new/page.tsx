@@ -1,15 +1,13 @@
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
-import { Container } from "@/components/layout/container";
-import { Section } from "@/components/layout/section";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TutorShell } from "@/components/layout/tutor-shell";
 import { ProductForm } from "../product-form";
 
-export const metadata = { title: "Nuevo producto · Enséñame Ya" };
+export const metadata = { title: "Nueva mentoría · Enséñame Ya" };
 
-/** US-401 — alta de producto (guarda como borrador). */
+/** US-401 (SCR-TU04) — alta de mentoría, dentro del panel del tutor. */
 export default async function NewProductPage() {
-  const { userId } = await requireTutorProfile();
+  const { userId, approvalStatus } = await requireTutorProfile();
 
   const supabase = await createClient();
   const { data: categories } = await supabase
@@ -19,17 +17,16 @@ export default async function NewProductPage() {
     .order("sort_order");
 
   return (
-    <Container>
-      <Section className="mx-auto flex w-full max-w-lg flex-col">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xl">Nuevo producto</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ProductForm userId={userId} categories={categories ?? []} />
-          </CardContent>
-        </Card>
-      </Section>
-    </Container>
+    <TutorShell
+      title="Nueva mentoría"
+      description="Describe el resultado que ayudas a lograr y define el formato."
+      back={{ href: "/tutor/products", label: "Volver a mis mentorías" }}
+    >
+      <ProductForm
+        userId={userId}
+        categories={categories ?? []}
+        isApproved={approvalStatus === "approved"}
+      />
+    </TutorShell>
   );
 }

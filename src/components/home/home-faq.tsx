@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { ChevronDownIcon } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
@@ -56,27 +59,100 @@ export const FAQ_COMO_FUNCIONA = [
   },
 ];
 
-export function HomeFaq({ items = FAQ }: { items?: typeof FAQ }) {
+/** P02 trae su propio set de 5 (no el del home). Verificadas contra el código:
+ *  KYC manual (US-203/RN-24), producto = resultado (Doc 00), sala privada Daily
+ *  (US-801) y retención del pago hasta impartir (RN-26). */
+export const FAQ_SOBRE_NOSOTROS = [
+  {
+    q: "¿Cuál es la misión de Enséñame Ya?",
+    a: "Queremos que cada persona en la comunidad hispanohablante domine las habilidades esenciales para su vida y su carrera. Logramos esto conectando a alumnos motivados con tutores que guían hacia resultados prácticos y transformaciones reales.",
+  },
+  {
+    q: "¿Cómo aseguran que los tutores realmente sepan enseñar?",
+    a: "Validamos manualmente la identidad, títulos, certificaciones y trayectoria de cada tutor. Contamos con profesionales verificados que superan con éxito nuestros filtros de calidad y comparten la vibra de la plataforma.",
+  },
+  {
+    q: '¿Qué significa que se vende "el resultado"?',
+    a: "Significa que adquieres una transformación tangible. En lugar de acumular horas de videos estáticos, en Enséñame Ya compras un objetivo concreto, como conseguir un inglés conversacional fluido en 6 sesiones, asegurando que tu tiempo valga oro.",
+  },
+  {
+    q: "¿Cómo garantizan que las clases en vivo sean seguras?",
+    a: "Contamos con salas de video privadas 1 a 1 integradas de forma nativa en la plataforma para tu comodidad. Además, tu inversión se resguarda de manera segura hasta que la sesión se imparte con total éxito.",
+  },
+  {
+    q: "¿Puedo emprender y ganar dinero enseñando?",
+    a: "Por supuesto. Si eres un pro en tu área, Enséñame Ya es el espacio ideal para consolidar tu negocio independiente como tutor. Nosotros nos encargamos de la tecnología y los cobros para que tú te enfoques en inspirar a tus alumnos.",
+  },
+];
+
+export function HomeFaq({
+  items = FAQ,
+  aside,
+}: {
+  items?: typeof FAQ;
+  /** P03 lo monta a dos columnas, con un panel de contacto a la izquierda. */
+  aside?: {
+    title: string;
+    text: string;
+    /** El Figma pinta aquí "Contactar a soporte", pero no hay canal al que
+     *  enlazar todavía (es DD-07, la bandeja de mensajería). Sin `cta` el panel
+     *  se queda solo con el texto en vez de colar un botón muerto. */
+    cta?: { href: string; label: string };
+  };
+}) {
+  /* ponytail: <details> nativo — acordeón accesible sin JS ni librería.
+     Abiertos de salida, que es como los pinta el Figma. */
+  const list = (
+    <div
+      className={
+        aside
+          ? "divide-y divide-border"
+          : "mx-auto mt-8 max-w-[1016px] divide-y divide-border"
+      }
+    >
+      {items.map(({ q, a }) => (
+        <details key={q} open className="group py-4">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[17px] font-semibold marker:hidden">
+            {q}
+            <ChevronDownIcon className="size-4 shrink-0 text-brand transition-transform group-open:rotate-180" />
+          </summary>
+          <p className="mt-2 pr-8 text-sm text-muted-foreground">{a}</p>
+        </details>
+      ))}
+    </div>
+  );
+
+  if (aside) {
+    return (
+      <Container>
+        <Section className="grid gap-12 lg:grid-cols-[340px_1fr] lg:gap-20">
+          <div>
+            <h2 className="text-[27px] font-bold">{aside.title}</h2>
+            <p className="mt-4 text-sm text-muted-foreground">{aside.text}</p>
+            {aside.cta ? (
+              <Button
+                asChild
+                variant="outline"
+                className="mt-6 h-11 border-brand px-5 text-brand hover:bg-brand-muted hover:text-brand"
+              >
+                <Link href={aside.cta.href}>{aside.cta.label}</Link>
+              </Button>
+            ) : null}
+          </div>
+          {list}
+        </Section>
+      </Container>
+    );
+  }
+
   return (
     <div className="bg-muted">
       <Container>
         <Section>
-          <h2 className="text-center text-2xl font-semibold tracking-tight text-primary">
+          <h2 className="text-center text-[26px] font-semibold text-primary">
             Preguntas frecuentes
           </h2>
-
-          {/* ponytail: <details> nativo — acordeón accesible sin JS ni librería. */}
-          <div className="mx-auto mt-8 max-w-4xl divide-y divide-border">
-            {items.map(({ q, a }) => (
-              <details key={q} className="group py-4">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold marker:hidden">
-                  {q}
-                  <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-                </summary>
-                <p className="mt-2 pr-8 text-sm text-muted-foreground">{a}</p>
-              </details>
-            ))}
-          </div>
+          {list}
         </Section>
       </Container>
     </div>

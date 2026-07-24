@@ -34,7 +34,7 @@ export default async function TutorOnboardingPage() {
         .maybeSingle(),
       supabase
         .from("profiles")
-        .select("timezone, phone, avatar_path")
+        .select("full_name, timezone, phone, avatar_path")
         .eq("id", user.id)
         .maybeSingle(),
       supabase.from("categories").select("id, name").order("sort_order"),
@@ -77,9 +77,10 @@ export default async function TutorOnboardingPage() {
   const str = (v: unknown) => (typeof v === "string" ? v : "");
 
   return (
-    <div className="bg-muted">
+    // TU01: cuerpo sobre #f9fafc con ~105 px de aire arriba (185:13 y=178).
+    <div className="bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
       <Container>
-        <Section>
+        <div>
           <TutorOnboardingForm
             userId={user.id}
             exists={!!tp}
@@ -87,6 +88,7 @@ export default async function TutorOnboardingPage() {
             bio={tp?.bio ?? ""}
             instagram={str(s.instagram)}
             linkedin={str(s.linkedin)}
+            fullName={prof?.full_name ?? ""}
             avatarPath={prof?.avatar_path ?? null}
             avatarUrl={avatarUrl}
             timezone={prof?.timezone ?? "UTC"}
@@ -96,7 +98,7 @@ export default async function TutorOnboardingPage() {
             selectedCategories={(myCats ?? []).map((r) => r.category_id)}
             materials={mats ?? []}
           />
-        </Section>
+        </div>
       </Container>
     </div>
   );
