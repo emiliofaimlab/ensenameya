@@ -57,9 +57,10 @@ export const TRUST_POINTS_COMO_FUNCIONA = [
 ];
 
 /**
- * Variante en tarjetas (P02/P03). La primera va en naranja, como el Figma.
+ * Variante en tarjetas (P02/P03). El realce naranja es un **hover**, no fijo en
+ * la primera (acuerdo 24-jul): pasas el ratón y la tarjeta se pinta de naranja.
  * `tone="peach"` es P03: las cuatro dentro de una caja #ffe5cc con el título
- * centrado, y el check de la primera en azul en vez de verde.
+ * centrado, y el check en azul en vez de verde al hacer hover.
  */
 export function TrustCards({
   title,
@@ -85,29 +86,22 @@ export function TrustCards({
             </h2>
           ) : null}
           <ul className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {points.map(({ icon: Icon, title: t, text }, i) => (
+            {points.map(({ icon: Icon, title: t, text }) => (
               <li
                 key={t}
-                className={`flex flex-col gap-4 rounded-[19px] p-5 ${
-                  i === 0 ? "bg-primary" : "border border-[#bfbfbf] bg-card"
-                }`}
+                className="group flex flex-col gap-4 rounded-[19px] border border-[#bfbfbf] bg-card p-5 transition-colors hover:border-primary hover:bg-primary"
               >
-                {/* La primera lleva check verde sobre blanco (el diseño usa el
-                    mismo #298c52 del token de éxito); el resto, naranja. */}
+                {/* Al hacer hover la tarjeta se pinta de naranja y el check pasa
+                    a blanco con el ícono en verde (azul en P03) — el realce
+                    destacado del Figma, pero al pasar el ratón, no fijo. */}
                 <span
-                  className={`grid size-10 place-items-center rounded-full ${
-                    i === 0
-                      ? `bg-card ${peach ? "text-brand" : "text-success"}`
-                      : "bg-[#ffeddb] text-[#db5400]"
+                  className={`grid size-10 place-items-center rounded-full bg-[#ffeddb] text-[#db5400] transition-colors group-hover:bg-card ${
+                    peach ? "group-hover:text-brand" : "group-hover:text-success"
                   }`}
                 >
                   <Icon className="size-5" />
                 </span>
-                <div
-                  className={`rounded-[14px] p-4 ${
-                    i === 0 ? "bg-card" : "bg-[#f5f5f2]"
-                  }`}
-                >
+                <div className="rounded-[14px] bg-[#f5f5f2] p-4 transition-colors group-hover:bg-card">
                   <p className="text-[15px] font-semibold">{t}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{text}</p>
                 </div>
