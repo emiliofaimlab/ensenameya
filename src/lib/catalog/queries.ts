@@ -552,9 +552,10 @@ function likeSafe(q: string): string {
 }
 
 /**
- * US-303 — tutores cuyo headline o bio menciona el término. Busca contra
- * `search_text`, la columna generada sin acentos (EY-109). Al ser una sola
- * columna se acabó el `or(...)`: ya no hay gramática de PostgREST que romper.
+ * US-303 — tutores cuyo **nombre**, headline o bio menciona el término. Busca
+ * contra `search_text`, la columna generada sin acentos (EY-109 + R24-04:
+ * incluye `display_name`). Al ser una sola columna se acabó el `or(...)`: ya no
+ * hay gramática de PostgREST que romper.
  */
 export async function searchTutors(q: string): Promise<FeaturedTutor[]> {
   const term = likeSafe(q);
