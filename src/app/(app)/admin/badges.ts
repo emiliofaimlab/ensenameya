@@ -33,6 +33,9 @@ export const DOC_BADGE: Record<DocStatus, BadgeSpec> = {
   approved: { label: "Aprobado", variant: "default" },
   pending: { label: "Sin revisar", variant: "secondary" },
   rejected: { label: "Rechazado", variant: "destructive" },
+  // El admin no debería ver borradores (la pantalla los filtra); la etiqueta
+  // existe solo para que el mapa sea exhaustivo sobre el enum.
+  draft: { label: "Borrador", variant: "outline" },
 };
 
 /** M6 — estados del pago (US-1104). */

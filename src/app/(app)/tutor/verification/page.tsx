@@ -8,7 +8,7 @@ import {
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
-import { VerificationForm, SocialLinkCard, type DocState } from "./verification-form";
+import { VerificationForm, type DocState } from "./verification-form";
 
 export const metadata = { title: "Verificación de identidad · Enséñame Ya" };
 
@@ -32,7 +32,7 @@ const IDENTITY_PILL: Record<string, { label: string; tone: PillTone; note: strin
   not_submitted: {
     label: "Sin enviar",
     tone: "neutral",
-    note: "Aún no has subido documentos.",
+    note: "Aún no has enviado documentos a revisión.",
   },
 };
 
@@ -62,7 +62,14 @@ export default async function VerificationPage() {
     (docs ?? []).map((d) => [d.doc_type, { status: d.status, linkUrl: d.link_url }]),
   );
 
+  // Con puros borradores la identidad es 'not_submitted' pero el tutor SÍ tiene
+  // trabajo guardado: se lo decimos para que no parezca que empieza de cero.
+  const hasDrafts = (docs ?? []).some((d) => d.status === "draft");
   const pill = IDENTITY_PILL[tp.identity_verification_status];
+  const note =
+    tp.identity_verification_status === "not_submitted" && hasDrafts
+      ? "Tienes borradores guardados. Envíalos a revisión cuando estén listos."
+      : pill?.note;
 
   return (
     <TutorShell
@@ -75,38 +82,13 @@ export default async function VerificationPage() {
             <p className="text-sm font-semibold text-[#19191f]">
               Estado de tu verificación
             </p>
-            <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">{pill.note}</p>
+            <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">{note}</p>
           </div>
           <StatusPill tone={pill.tone}>{pill.label}</StatusPill>
         </PanelCard>
       ) : null}
 
-      <PanelCard>
-        <h2 className="text-base font-semibold text-[#19191f]">
-          Documentos obligatorios
-        </h2>
-        <div className="mt-4">
-          <VerificationForm userId={user.id} docsByType={docsByType} />
-        </div>
-      </PanelCard>
-
-      {/* 190:98 — las redes van en tarjeta aparte, como enlace, no archivo. */}
-      <PanelCard>
-        <h2 className="text-base font-semibold text-[#19191f]">
-          Redes sociales (enlace)
-        </h2>
-        <div className="mt-4">
-          <SocialLinkCard docsByType={docsByType} />
-        </div>
-      </PanelCard>
-
-      {/* El Figma cierra con "Enviar a revisión / Guardar borrador": aquí no
-          hay envío en bloque — cada documento queda en revisión al subirse. */}
-      <p className="text-xs text-[#6b6b6b]">
-        Formatos: PNG, JPG, WebP o PDF · máx. 10 MB. Tus documentos son privados;
-        solo el equipo de revisión los ve. Cada documento queda en revisión al
-        subirlo, no hace falta un paso extra.
-      </p>
+      <VerificationForm userId={user.id} docsByType={docsByType} />
     </TutorShell>
   );
 }

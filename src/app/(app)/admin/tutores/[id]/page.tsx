@@ -68,6 +68,9 @@ export default async function AdminTutorPage({
     .from("verification_documents")
     .select("id, doc_type, storage_path, link_url, status, review_notes, created_at")
     .eq("tutor_id", id)
+    // Los borradores del tutor no son cosa del admin: solo lo ENVIADO a
+    // revisión entra en la cola (TU02).
+    .neq("status", "draft")
     .order("doc_type");
 
   // Un enlace firmado por documento-archivo, en lote. `social_media` es un

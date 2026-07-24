@@ -1296,11 +1296,13 @@ export type Database = {
       submit_document: {
         Args: {
           p_doc_type: string
+          p_draft?: boolean
           p_link_url?: string
           p_storage_path?: string
         }
         Returns: string
       }
+      submit_documents_for_review: { Args: never; Returns: string }
       submit_review: {
         Args: { p_booking_id: string; p_comment?: string; p_rating: number }
         Returns: string
@@ -1318,7 +1320,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "refunded"
-      document_status: "pending" | "approved" | "rejected"
+      document_status: "pending" | "approved" | "rejected" | "draft"
       identity_verification_status:
         | "not_submitted"
         | "pending"
@@ -1490,7 +1492,7 @@ export const Constants = {
         "cancelled",
         "refunded",
       ],
-      document_status: ["pending", "approved", "rejected"],
+      document_status: ["pending", "approved", "rejected", "draft"],
       identity_verification_status: [
         "not_submitted",
         "pending",
