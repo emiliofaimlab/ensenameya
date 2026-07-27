@@ -453,7 +453,28 @@ No consumen SP del sprint. Se filtran en Jira por label.
 | **R24-11** | **Pantalla cero** "Todavía no tienes cuenta de tutor, conviértete en tutor YA" antes del onboarding | EP-21 | S | Cierra el flujo del switch |
 | **R24-12** | 🐞 **Bug zona horaria**: las clases muestran la hora del servidor, no la del usuario (México vs Venezuela) | EP-05/16 | M | RN-01/02 · RISK-12. Estabilidad, no cosmético (`01:03:30`) |
 
-### 🅑 Post-demo — estructural (Sprints 5–6)
+### 🅑 Post-demo — estructural (Sprints 5–6) · ✅ **COMPLETA (27-jul)**
+
+> **11/11 hechas y verificadas en dev.** Migraciones nuevas aplicadas a dev y a
+> prod por CI: `20260724150000` (materiales por producto), `20260724160000`
+> (auto-aceptar), `20260724170000` (fotos independientes), `20260724180000`
+> (FAQ por producto).
+
+| Handle | Estado | Commit | Nota de ejecución |
+| :-- | :-- | :-- | :-- |
+| **R24-13** | ✅ | `af02c7c` | Calendario global del tutor → día → **clase** (solo las que tienen hueco ese día) → horarios. CTA off hasta elegir clase |
+| **R24-14** | ✅ | `af02c7c` | Sin precio fijo: "Reserva con este tutor"; el importe sale al elegir clase (verificado 22,00 vs 18,00 US$) |
+| **R24-15** | ✅ | `39b40d5` | Verificación de identidad como **penúltimo paso** del onboarding, reusando TU02 + su borrador |
+| **R24-16** | ✅ | `3f6181d` | Materiales por **producto** (fuera del onboarding); wizard de 6 → 5 pasos |
+| **R24-17** | ✅ | `facf5a7` | `products.faqs`: FAQ por mentoría con editor en TU04; fallback a las genéricas |
+| **R24-18** | ✅ | `013e6e7` | Banner "perfil aprobado" hasta 5 sesiones dictadas |
+| **R24-19** | ✅ | `8fb18e4` | `auto_accept_bookings` + `confirm_payment` v3 (pagado → `confirmed`); toggle en TU07 |
+| **R24-20** | ✅ | `40b5e8a` | Módulo `/pagos` propio + entrada en el menú; fuera de "Mi cuenta" |
+| **R24-21** | ✅ | `b09e518` | Bandeja flotante de chat **solo con sesión** (RN-41); reconcilia el FAB con la nota de diseño |
+| **R24-22** | ✅ | `f15df19` | Horarios públicos en la tz del visitante (cookie `ey-tz` + `getViewerTimezone`). 🐞 `TZ_COOKIE` en `"use client"` → todo salía en UTC |
+| **R24-23** | ✅ | `20554c1` | Fotos alumno/tutor independientes (fichero propio + se deshace la herencia DD-01) |
+
+#### Backlog original (referencia)
 
 | Handle | Ítem | Épica | Esf. | Nota |
 | :-- | :-- | :-- | :-- | :-- |
@@ -546,4 +567,4 @@ email, C-12 opt-out, C-15 FX, C-10 referidos. C-01 ✅ (DLocal+Stripe) — falta
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-26 (**fila 🅐 del plan del 24-jul COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario; pendientes menores R24-02 "año/ñ cortado" y tz de disponibilidad pública sin sesión. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente y el sub-ítem R24-02 "año/ñ cortado" sin pinpoint. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario; pendientes menores R24-02 "año/ñ cortado" y tz de disponibilidad pública sin sesión. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
