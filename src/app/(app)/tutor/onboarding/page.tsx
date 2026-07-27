@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { TutorOnboardingForm } from "./tutor-onboarding-form";
+import type { DocState } from "../verification/verification-form";
 
 export const metadata = { title: "Enseñar en Enséñame Ya · Onboarding tutor" };
 
@@ -42,26 +43,41 @@ export default async function TutorOnboardingPage({
   const { start } = await searchParams;
 
   const supabase = await createClient();
-  const [{ data: tp }, { data: prof }, { data: cats }, { data: myCats }, { data: mats }] =
-    await Promise.all([
-      supabase
-        .from("tutor_profiles")
-        .select("headline, bio, socials, approval_status, teaching_level")
-        .eq("profile_id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("profiles")
-        .select("full_name, timezone, phone, avatar_path")
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase.from("categories").select("id, name").order("sort_order"),
-      supabase.from("tutor_categories").select("category_id").eq("tutor_id", user.id),
-      supabase
-        .from("tutor_materials")
-        .select("id, file_name, size_bytes")
-        .eq("tutor_id", user.id)
-        .order("created_at"),
-    ]);
+  const [
+    { data: tp },
+    { data: prof },
+    { data: cats },
+    { data: myCats },
+    { data: mats },
+    { data: docs },
+  ] = await Promise.all([
+    supabase
+      .from("tutor_profiles")
+      .select("headline, bio, socials, approval_status, teaching_level")
+      .eq("profile_id", user.id)
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("full_name, timezone, phone, avatar_path")
+      .eq("id", user.id)
+      .maybeSingle(),
+    supabase.from("categories").select("id, name").order("sort_order"),
+    supabase.from("tutor_categories").select("category_id").eq("tutor_id", user.id),
+    supabase
+      .from("tutor_materials")
+      .select("id, file_name, size_bytes")
+      .eq("tutor_id", user.id)
+      .order("created_at"),
+    supabase
+      .from("verification_documents")
+      .select("doc_type, status, link_url")
+      .eq("tutor_id", user.id),
+  ]);
+
+  // Estado de los documentos KYC → el paso de verificación reusa el módulo TU02.
+  const docsByType: Record<string, DocState> = Object.fromEntries(
+    (docs ?? []).map((d) => [d.doc_type, { status: d.status, linkUrl: d.link_url }]),
+  );
 
   const avatarUrl = prof?.avatar_path
     ? supabase.storage.from("avatars").getPublicUrl(prof.avatar_path).data.publicUrl
@@ -163,6 +179,7 @@ export default async function TutorOnboardingPage({
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
             selectedCategories={(myCats ?? []).map((r) => r.category_id)}
             materials={mats ?? []}
+            docsByType={docsByType}
           />
         </div>
       </Container>

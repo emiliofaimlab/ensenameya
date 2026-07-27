@@ -34,6 +34,8 @@ export function WizardShell({
   nextLabel = "Continuar",
   nextDisabled,
   busy,
+  bare = false,
+  maxWidth = 600,
 }: {
   step: number;
   total: number;
@@ -45,9 +47,17 @@ export function WizardShell({
   nextLabel?: string;
   nextDisabled?: boolean;
   busy?: boolean;
+  /** El contenido trae sus propias tarjetas (p. ej. el módulo de verificación):
+   *  sin la tarjeta blanca del asistente para no anidar. */
+  bare?: boolean;
+  /** Ancho de la columna; algunos pasos (verificación) piden más aire. */
+  maxWidth?: number;
 }) {
   return (
-    <div className="mx-auto flex w-full max-w-[600px] flex-col gap-6">
+    <div
+      className="mx-auto flex w-full flex-col gap-6"
+      style={{ maxWidth }}
+    >
       <div className="flex flex-col gap-2">
         <p className="text-xs text-[#6b6b6b]">
           Paso {step} de {total}
@@ -83,9 +93,13 @@ export function WizardShell({
         ) : null}
       </div>
 
-      <div className="rounded-[16px] border border-[#e6e6e6] bg-card p-7">
+      {bare ? (
         <div className="flex flex-col gap-5">{children}</div>
-      </div>
+      ) : (
+        <div className="rounded-[16px] border border-[#e6e6e6] bg-card p-7">
+          <div className="flex flex-col gap-5">{children}</div>
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-3">
         {onBack ? (
