@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ClockIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
+import { getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, BOOKING_STATUS_LABEL } from "@/lib/booking";
@@ -62,6 +63,7 @@ export default async function TutorReservasPage({
   searchParams: Promise<{ f?: string }>;
 }) {
   const { userId } = await requireTutorProfile();
+  const tz = await getUserTimezone();
   const { f } = await searchParams;
   const filter = FILTERS.find((x) => x.id === f) ?? FILTERS[0];
 
@@ -166,7 +168,7 @@ export default async function TutorReservasPage({
               <div>
                 <p className="text-xs text-[#6b6b6b]">Fecha y hora</p>
                 <p className="mt-0.5 text-[13px] font-medium text-[#404040] first-letter:uppercase">
-                  {s ? formatSessionTime(s) : "Por agendar"}
+                  {s ? formatSessionTime(s, tz) : "Por agendar"}
                 </p>
               </div>
               <div>
@@ -212,7 +214,7 @@ export default async function TutorReservasPage({
                   <div>
                     <p className="text-[11.5px] text-[#6b6b6b]">Fecha</p>
                     <p className="text-[13px] font-medium text-[#404040] first-letter:uppercase">
-                      {s ? formatSessionTime(s) : "—"}
+                      {s ? formatSessionTime(s, tz) : "—"}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">

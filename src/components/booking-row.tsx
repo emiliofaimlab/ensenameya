@@ -16,6 +16,7 @@ export function BookingRow({
   status,
   note,
   action,
+  timeZone,
 }: {
   href: string;
   tutor?: string;
@@ -24,6 +25,8 @@ export function BookingRow({
   status: string;
   note?: string;
   action?: React.ReactNode;
+  /** tz IANA del usuario: es server component, sin ella saldría la hora del servidor (R24-12). */
+  timeZone: string;
 }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
@@ -41,7 +44,7 @@ export function BookingRow({
           </Link>
           <p className="text-xs text-[#6b6b6b] first-letter:uppercase">
             {when
-              ? `${formatSessionTime(when)} · tu hora local`
+              ? `${formatSessionTime(when, timeZone)} · tu hora local`
               : "Sin horario aún"}
           </p>
           <StatusPill className="mt-1.5">{status}</StatusPill>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRightIcon, CheckIcon, TicketIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
+import { getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import {
@@ -56,6 +57,7 @@ function moneyLine(list: { currency: string; amount: number }[]): string {
  */
 export default async function TutorHomePage() {
   const { userId, approvalStatus } = await requireTutorProfile();
+  const tz = await getUserTimezone();
   const supabase = await createClient();
 
   const [
@@ -215,7 +217,7 @@ export default async function TutorHomePage() {
                       {s.bookings?.products?.title ?? "Clase"}
                     </p>
                     <p className="text-xs text-[#6b6b6b] first-letter:uppercase">
-                      {formatSessionTime(s.start_at)} · tu hora local
+                      {formatSessionTime(s.start_at, tz)} · tu hora local
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -263,7 +265,7 @@ export default async function TutorHomePage() {
                       </p>
                       <p className="text-xs text-[#6b6b6b]">
                         {formatMoney(b.total_amount, b.currency)} ·{" "}
-                        {formatShortDate(b.created_at)}
+                        {formatShortDate(b.created_at, tz)}
                       </p>
                     </div>
                     <StatusPill

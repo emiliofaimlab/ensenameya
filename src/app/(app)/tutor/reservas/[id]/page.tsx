@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, BOOKING_STATUS_LABEL } from "@/lib/booking";
@@ -65,6 +65,7 @@ export default async function TutorBookingDetailPage({
 }) {
   const { id } = await params;
   const { user } = await requireUser();
+  const tz = await getUserTimezone();
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -174,7 +175,7 @@ export default async function TutorBookingDetailPage({
                         <p className="text-[13px] font-medium text-[#404040]">
                           Sesión {i + 1} ·{" "}
                           <span className="first-letter:uppercase">
-                            {formatSessionTime(s.start_at)}
+                            {formatSessionTime(s.start_at, tz)}
                           </span>
                         </p>
                       </div>

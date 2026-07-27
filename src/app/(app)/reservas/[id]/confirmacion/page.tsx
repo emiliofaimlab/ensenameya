@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckIcon, MailIcon, MessageSquareIcon, VideoIcon } from "lucide-react";
 
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
@@ -38,6 +38,7 @@ export default async function ConfirmationPage({
 }) {
   const { id } = await params;
   await requireUser();
+  const tz = await getUserTimezone();
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -57,9 +58,9 @@ export default async function ConfirmationPage({
   );
 
   const range = (s: { start_at: string; end_at: string }) =>
-    `${formatSessionTime(s.start_at)} – ${new Date(s.end_at).toLocaleTimeString(
+    `${formatSessionTime(s.start_at, tz)} – ${new Date(s.end_at).toLocaleTimeString(
       "es",
-      { hour: "2-digit", minute: "2-digit" },
+      { hour: "2-digit", minute: "2-digit", timeZone: tz },
     )}`;
 
   return (

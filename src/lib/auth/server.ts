@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
@@ -50,6 +51,27 @@ export async function getSessionContext(): Promise<SessionContext> {
 export async function getUser(): Promise<User | null> {
   return (await getSessionContext()).user;
 }
+
+/**
+ * Zona horaria IANA del usuario (`profiles.timezone`, la que fijó en el
+ * onboarding). Para formatear horas en componentes **server**: sin ella el SSR
+ * usa la tz del servidor —UTC— y no la del usuario (bug R24-12 / RN-01/02).
+ * `cache()` la memoiza por request: aunque varios sitios la pidan, una consulta.
+ * Sin sesión → "UTC" (el llamador puede preferir la del navegador en cliente).
+ */
+export const getUserTimezone = cache(async (): Promise<string> => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return "UTC";
+  const { data } = await supabase
+    .from("profiles")
+    .select("timezone")
+    .eq("id", user.id)
+    .maybeSingle();
+  return data?.timezone ?? "UTC";
+});
 
 /** Roles del usuario actual (vacío si anónimo). */
 export async function getUserRoles(): Promise<AppRole[]> {

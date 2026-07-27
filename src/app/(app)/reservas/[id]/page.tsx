@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import {
@@ -58,6 +58,7 @@ export default async function BookingDetailPage({
 }) {
   const { id } = await params;
   const { user } = await requireUser();
+  const tz = await getUserTimezone();
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -147,7 +148,7 @@ export default async function BookingDetailPage({
                         Sesión {i + 1}
                       </p>
                       <p className="text-[13px] text-[#6b6b6b] first-letter:uppercase">
-                        {formatSessionTime(s.start_at)} · tu hora local
+                        {formatSessionTime(s.start_at, tz)} · tu hora local
                       </p>
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
@@ -187,6 +188,7 @@ export default async function BookingDetailPage({
                     day: "numeric",
                     month: "short",
                     year: "numeric",
+                    timeZone: tz,
                   })}
                 />
               ) : null}

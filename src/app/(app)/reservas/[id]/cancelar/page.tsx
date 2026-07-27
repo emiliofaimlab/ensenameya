@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { TriangleAlertIcon } from "lucide-react";
 
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
@@ -42,6 +42,7 @@ export default async function CancelBookingPage({
 }) {
   const { id } = await params;
   await requireUser();
+  const tz = await getUserTimezone();
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -128,7 +129,7 @@ export default async function CancelBookingPage({
             <div className="flex justify-between gap-4">
               <dt className="text-[#6b6b6b]">Próxima sesión</dt>
               <dd className="font-medium text-[#333333] first-letter:uppercase">
-                {formatSessionTime(next.start_at)}
+                {formatSessionTime(next.start_at, tz)}
               </dd>
             </div>
           ) : null}

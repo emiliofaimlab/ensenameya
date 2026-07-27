@@ -14,20 +14,33 @@ export const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
   refunded: "Reembolsada",
 };
 
-/** Instante UTC → fecha y hora local del usuario (RN-01/02). */
-export function formatSessionTime(iso: string): string {
+/**
+ * Instante UTC → fecha y hora local del usuario (RN-01/02).
+ *
+ * `timeZone` fuerza la zona horaria del render. Es OBLIGATORIO pasarlo en
+ * componentes **server** (SSR corre en la tz del servidor —UTC en Vercel—, no
+ * la del usuario: ese era el bug de "hora del servidor", R24-12). En componentes
+ * cliente puede omitirse: `undefined` = tz del navegador, que ya es la correcta.
+ */
+export function formatSessionTime(iso: string, timeZone?: string): string {
   return new Date(iso).toLocaleString("es", {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone,
   });
 }
 
-/** Solo la fecha: para listas donde la hora no aporta (RN-01/02). */
-export function formatShortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("es", { day: "numeric", month: "short" });
+/** Solo la fecha: para listas donde la hora no aporta (RN-01/02). Ver la nota
+ *  de `formatSessionTime` sobre `timeZone` en server vs cliente. */
+export function formatShortDate(iso: string, timeZone?: string): string {
+  return new Date(iso).toLocaleDateString("es", {
+    day: "numeric",
+    month: "short",
+    timeZone,
+  });
 }
 
 /**

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { CompassIcon } from "lucide-react";
 
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
 import { BookingRow } from "@/components/booking-row";
@@ -50,6 +50,7 @@ function summary(upcoming: number, awaiting: number): string {
  */
 export default async function AppHome() {
   const { user } = await requireUser();
+  const tz = await getUserTimezone();
   const supabase = await createClient();
 
   const [{ data: profile }, { data: openRows }, { data: pastRows }] =
@@ -147,6 +148,7 @@ export default async function AppHome() {
                       tutor={names.get(b.products?.tutor_id ?? "")}
                       title={b.products?.title ?? "Clase"}
                       when={s?.start_at ?? null}
+                      timeZone={tz}
                       status={BOOKING_STATUS_LABEL[b.status]}
                       note={
                         ready
@@ -195,6 +197,7 @@ export default async function AppHome() {
                       tutor={names.get(b.products?.tutor_id ?? "")}
                       title={b.products?.title ?? "Clase"}
                       when={last?.start_at ?? null}
+                      timeZone={tz}
                       status={BOOKING_STATUS_LABEL[b.status]}
                       // "Ver grabación · 30 días" del Figma es US-1602 (S4).
                       action={

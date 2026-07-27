@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
@@ -31,6 +31,7 @@ const OPEN = new Set<BookingStatus>([
  */
 export default async function ReservasPage() {
   const { user } = await requireUser();
+  const tz = await getUserTimezone();
 
   const supabase = await createClient();
   const { data } = await supabase
@@ -70,6 +71,7 @@ export default async function ReservasPage() {
       tutor={names.get(b.products?.tutor_id ?? "")}
       title={b.products?.title ?? "Clase"}
       when={when(b)}
+      timeZone={tz}
       status={BOOKING_STATUS_LABEL[b.status]}
       note={formatMoney(b.total_amount, b.currency)}
       action={
