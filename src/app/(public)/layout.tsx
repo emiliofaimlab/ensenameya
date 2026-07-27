@@ -3,6 +3,7 @@ import { toHeaderUser } from "@/lib/auth/header-user";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { TimezoneSync } from "@/components/layout/timezone-sync";
+import { ChatLauncher } from "@/components/chat/chat-launcher";
 
 export default async function PublicLayout({
   children,
@@ -18,6 +19,8 @@ export default async function PublicLayout({
       <TimezoneSync />
       <SiteHeader user={toHeaderUser(user, roles)} />
       <main className="flex-1">{children}</main>
+      {/* Solo se pinta con sesión (lo decide el propio launcher). */}
+      <ChatLauncher />
       <SiteFooter />
     </div>
   );

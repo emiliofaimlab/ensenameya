@@ -5,6 +5,7 @@ import { toHeaderUser } from "@/lib/auth/header-user";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { AdminFooter } from "@/components/layout/admin-footer";
+import { ChatLauncher } from "@/components/chat/chat-launcher";
 
 export default async function AppLayout({
   children,
@@ -30,6 +31,9 @@ export default async function AppLayout({
         admin={admin}
       />
       <main className="flex-1">{children}</main>
+      {/* Bandeja de chat flotante (R24-21). En admin no: no participa en los
+          hilos (RLS por participantes) y no tendría conversaciones. */}
+      {admin ? null : <ChatLauncher />}
       {admin ? <AdminFooter /> : <SiteFooter />}
     </div>
   );
