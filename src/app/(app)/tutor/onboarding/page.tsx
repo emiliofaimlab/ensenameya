@@ -49,6 +49,7 @@ export default async function TutorOnboardingPage({
     { data: cats },
     { data: myCats },
     { data: docs },
+    { count: productCount },
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
@@ -65,6 +66,11 @@ export default async function TutorOnboardingPage({
     supabase
       .from("verification_documents")
       .select("doc_type, status, link_url")
+      .eq("tutor_id", user.id),
+    // UX-204: el asistente no se cierra sin al menos una oferta creada.
+    supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
       .eq("tutor_id", user.id),
   ]);
 
@@ -175,6 +181,7 @@ export default async function TutorOnboardingPage({
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
             selectedCategories={(myCats ?? []).map((r) => r.category_id)}
             docsByType={docsByType}
+            hasProduct={(productCount ?? 0) > 0}
           />
         </div>
       </Container>

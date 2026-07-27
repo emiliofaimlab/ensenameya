@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { CheckIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -55,6 +56,7 @@ export function TutorOnboardingForm({
   categories,
   selectedCategories,
   docsByType,
+  hasProduct,
 }: {
   userId: string;
   exists: boolean;
@@ -71,6 +73,8 @@ export function TutorOnboardingForm({
   categories: { id: string; label: string }[];
   selectedCategories: string[];
   docsByType: Record<string, DocState>;
+  /** UX-204: sin al menos una oferta creada, el asistente no se puede cerrar. */
+  hasProduct: boolean;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -323,27 +327,60 @@ export function TutorOnboardingForm({
     );
   }
 
+  // UX-204: no se cierra el asistente sin una oferta. El CTA deja de ser
+  // opcional y "Finalizar" queda bloqueado hasta que exista al menos una.
   return (
     <WizardShell
       step={5}
       total={5}
       title="Tu primera oferta"
-      description="Puedes crear tu primera mentoría ahora o hacerlo más tarde desde tu panel."
+      description={
+        hasProduct
+          ? "Ya tienes tu primera mentoría creada. Puedes finalizar tu registro."
+          : "Necesitas al menos una mentoría publicable para enviar tu perfil a revisión."
+      }
       onBack={back}
       onNext={next}
       nextLabel="Finalizar"
+      nextDisabled={!hasProduct}
       busy={busy}
     >
       {/* 186:119 — texto, CTA azul a lo ancho y la nota de revisión. */}
-      <p className="text-[13px] text-[#4d4d4d]">
-        Crea una oferta con su resultado, precio y disponibilidad.
-      </p>
-      <Button
-        asChild
-        className="h-[45px] w-full rounded-[8px] bg-brand text-sm font-semibold hover:bg-brand/90"
-      >
-        <Link href="/tutor/products/new">Crear oferta ahora</Link>
-      </Button>
+      {hasProduct ? (
+        <>
+          <p className="flex items-center gap-2 text-[13px] font-medium text-success">
+            <CheckIcon className="size-4" />
+            Tienes una oferta creada.
+          </p>
+          <Button
+            asChild
+            variant="outline"
+            className="h-[45px] w-full rounded-[8px] text-sm"
+          >
+            <Link href="/tutor/products/new">Crear otra oferta</Link>
+          </Button>
+        </>
+      ) : (
+        <>
+          <p className="text-[13px] text-[#4d4d4d]">
+            Crea una oferta con su resultado, precio y disponibilidad. Sin ella
+            tu perfil no puede pasar a revisión.
+          </p>
+          <Button
+            asChild
+            className="h-[45px] w-full rounded-[8px] bg-brand text-sm font-semibold hover:bg-brand/90"
+          >
+            <Link href="/tutor/products/new">
+              Crear mi primera oferta
+            </Link>
+          </Button>
+          {/* Al volver de crearla, el asistente arranca de nuevo: los datos ya
+              están guardados, así que es avanzar hasta aquí. */}
+          <p className="text-xs text-[#6b6b6b]">
+            Cuando la guardes, vuelve a este asistente para finalizar.
+          </p>
+        </>
+      )}
       <p className="text-xs text-[#6b6b6b]">
         Al finalizar, tu perfil pasa a revisión.
       </p>
