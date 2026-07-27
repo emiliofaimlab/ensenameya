@@ -306,7 +306,8 @@ export function SiteHeader({
               <Button asChild variant="ghost" size="sm" className="h-9 text-sm">
                 <Link href="/login">Iniciar sesión</Link>
               </Button>
-              <Button asChild className="h-10 px-4 text-sm">
+              {/* El Figma pinta este botón en 600, no en el 500 del resto. */}
+              <Button asChild className="h-10 px-4 text-sm font-semibold">
                 <Link href="/signup">Crear cuenta</Link>
               </Button>
             </>

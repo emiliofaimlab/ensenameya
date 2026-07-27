@@ -137,7 +137,9 @@ export function SearchAutocomplete({
           aria-label={placeholder}
           autoComplete="off"
           className={cn(
-            "h-11 w-full rounded-lg border border-border bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            // Placeholder en #595959, que es el del Figma para esta barra (el
+            // token `muted-foreground` es #4d4d4d, un punto más oscuro).
+            "h-11 w-full rounded-lg border border-border bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-[#595959] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
             inputClassName,
           )}
         />
