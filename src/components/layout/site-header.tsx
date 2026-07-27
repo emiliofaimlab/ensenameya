@@ -34,6 +34,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Container } from "@/components/layout/container";
+import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
 import { cn } from "@/lib/utils";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
@@ -229,7 +230,7 @@ export function SiteHeader({
         {admin ? (
           <span className="flex-1" />
         ) : (
-          <SearchBox className="hidden max-w-[558px] flex-1 md:block" />
+          <SearchAutocomplete className="hidden max-w-[558px] flex-1 md:block" />
         )}
 
         {onboarding ? (

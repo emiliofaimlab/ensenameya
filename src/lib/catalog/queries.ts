@@ -585,6 +585,32 @@ export async function searchCategories(q: string): Promise<CategoryTag[]> {
   return all.filter((c) => stripAccents(c.name).toLowerCase().includes(term));
 }
 
+/** Sugerencias del buscador global (R24-05): tutores/clases/categorías, pocas de
+ *  cada una, para el desplegable typeahead del header. Reusa las 3 búsquedas. */
+export type SearchSuggestions = {
+  tutors: { id: string; name: string; headline: string | null }[];
+  products: { id: string; title: string }[];
+  categories: CategoryTag[];
+};
+
+export async function suggestSearch(q: string): Promise<SearchSuggestions> {
+  if (!q.trim()) return { tutors: [], products: [], categories: [] };
+  const [tutors, products, categories] = await Promise.all([
+    searchTutors(q),
+    searchProducts(q),
+    searchCategories(q),
+  ]);
+  return {
+    tutors: tutors.slice(0, 4).map((t) => ({
+      id: t.id,
+      name: t.displayName ?? "Tutor",
+      headline: t.headline,
+    })),
+    products: products.slice(0, 4).map((p) => ({ id: p.id, title: p.title })),
+    categories: categories.slice(0, 4),
+  };
+}
+
 const PRODUCT_CARD_SELECT =
   "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))";
 
