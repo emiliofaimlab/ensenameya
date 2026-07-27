@@ -189,63 +189,74 @@ export function SiteHeader({
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/60">
       <Container className="flex h-18 items-center gap-4">
-        <Link
-          href="/"
-          className="shrink-0 text-lg font-bold tracking-tight text-brand"
-        >
-          Enséñame ya
-        </Link>
+        {/* Izquierda y derecha comparten `flex-1`, así el buscador queda
+            EXACTAMENTE centrado en la barra —como en el Figma (v3-header: el
+            buscador cae sobre el centro)— en vez de pegarse a la navegación y
+            dejar un hueco enorme a su derecha al ensanchar el sitio (R24-01). */}
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <Link
+            href="/"
+            className="shrink-0 text-lg font-bold tracking-tight text-brand"
+          >
+            Enséñame ya
+          </Link>
 
-        {admin ? (
-          <span className="inline-flex h-[25px] shrink-0 items-center rounded-full bg-[#19191f] px-2.5 text-[11px] font-semibold text-white">
-            Admin
-          </span>
-        ) : null}
+          {admin ? (
+            <span className="inline-flex h-[25px] shrink-0 items-center rounded-full bg-[#19191f] px-2.5 text-[11px] font-semibold text-white">
+              Admin
+            </span>
+          ) : null}
 
         {/* Sin enlace "Panel" suelto: la vuelta a casa vive en el menú del
             avatar ("Mi panel") y en el switch de rol — pedirlo dos veces en la
             barra era ruido (24-jul). */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {admin
-            ? null
-            : navGroups.map((group) => (
-            <DropdownMenu key={group.label}>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-9 text-sm font-medium">
-                  {group.label}
-                  <ChevronDownIcon className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-52">
-                {group.links.map((link) => (
-                  <DropdownMenuItem key={link.href} asChild>
-                    <Link href={link.href}>{link.label}</Link>
-                  </DropdownMenuItem>
+          <nav className="hidden items-center gap-1 md:flex">
+            {admin
+              ? null
+              : navGroups.map((group) => (
+                  <DropdownMenu key={group.label}>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 text-sm font-medium"
+                      >
+                        {group.label}
+                        <ChevronDownIcon className="size-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-52">
+                      {group.links.map((link) => (
+                        <DropdownMenuItem key={link.href} asChild>
+                          <Link href={link.href}>{link.label}</Link>
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ))}
-        </nav>
+          </nav>
+        </div>
 
-        {admin ? (
-          <span className="flex-1" />
-        ) : (
-          <SearchAutocomplete className="hidden max-w-[558px] flex-1 md:block" />
+        {/* Columna central: ancho fijo del Figma (558) y centrada por los dos
+            `flex-1` de los lados. En admin no hay buscador. */}
+        {admin ? null : (
+          <SearchAutocomplete className="hidden w-full max-w-[558px] shrink-0 md:block" />
         )}
 
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
         {onboarding ? (
           /* El borrador se guarda al avanzar de paso, así que "salir" es solo
              salir. Lleva a la home pública: el área autenticada sigue cerrada
              hasta terminar el asistente. */
           <Link
             href="/"
-            className="ml-auto shrink-0 text-[12.5px] text-[#6b6b6b] transition-colors hover:text-foreground"
+            className="shrink-0 text-[12.5px] text-[#6b6b6b] transition-colors hover:text-foreground"
           >
             Guardar y salir
           </Link>
         ) : (
           <>
-        <div className="ml-auto hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-2 md:flex">
           {user ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -307,7 +318,7 @@ export function SiteHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="ml-auto md:hidden"
+              className="md:hidden"
               aria-label="Abrir menú"
             >
               <MenuIcon />
@@ -368,6 +379,7 @@ export function SiteHeader({
         </Sheet>
           </>
         )}
+        </div>
       </Container>
     </header>
   );
