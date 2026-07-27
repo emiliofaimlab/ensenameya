@@ -122,12 +122,9 @@ export function TutorOnboardingForm({
       if (!headline.trim()) return fail("Escribe un titular para tu perfil.");
       if (!avatar) return fail("La foto de perfil es obligatoria.");
       if (!bio.trim()) return fail("Escribe tu biografía.");
+      // La foto va SOLO a tutor_profiles (dentro de saveProfile): la foto de
+      // tutor es independiente de la personal de `profiles` (R24-23).
       if (await saveProfile()) return fail("No se pudo guardar tu perfil.");
-      const { error } = await supabase
-        .from("profiles")
-        .update({ avatar_path: avatar })
-        .eq("id", userId);
-      if (error) return fail("No se pudo guardar la foto.");
     }
 
     if (step === 2) {
@@ -191,6 +188,7 @@ export function TutorOnboardingForm({
             onUploaded={setAvatar}
             name={fullName}
             large
+            fileBase="tutor-avatar"
           />
         </Field>
         <Field label="Headline (obligatorio)" htmlFor="headline">

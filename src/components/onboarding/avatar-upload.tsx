@@ -24,6 +24,7 @@ export function AvatarUpload({
   onUploaded,
   name,
   large = false,
+  fileBase = "avatar",
 }: {
   userId: string;
   initialUrl: string | null;
@@ -32,6 +33,9 @@ export function AvatarUpload({
   name?: string;
   /** TU01 (185:28) pinta la foto a 72 px; AL01 (180:1302) a 64. */
   large?: boolean;
+  /** Nombre base del fichero. La foto de tutor usa uno propio ("tutor-avatar")
+   *  para NO pisar la personal: son 100% independientes (R24-23). */
+  fileBase?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState<string | null>(initialUrl);
@@ -50,7 +54,7 @@ export function AvatarUpload({
     setBusy(true);
     const supabase = createClient();
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-    const path = `${userId}/avatar.${ext}`;
+    const path = `${userId}/${fileBase}.${ext}`;
 
     const { error } = await supabase.storage
       .from("avatars")

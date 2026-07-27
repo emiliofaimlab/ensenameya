@@ -52,12 +52,12 @@ export default async function TutorOnboardingPage({
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
-      .select("headline, bio, socials, approval_status, teaching_level")
+      .select("headline, bio, socials, approval_status, teaching_level, avatar_path")
       .eq("profile_id", user.id)
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("full_name, timezone, phone, avatar_path")
+      .select("full_name, timezone, phone")
       .eq("id", user.id)
       .maybeSingle(),
     supabase.from("categories").select("id, name").order("sort_order"),
@@ -73,8 +73,10 @@ export default async function TutorOnboardingPage({
     (docs ?? []).map((d) => [d.doc_type, { status: d.status, linkUrl: d.link_url }]),
   );
 
-  const avatarUrl = prof?.avatar_path
-    ? supabase.storage.from("avatars").getPublicUrl(prof.avatar_path).data.publicUrl
+  // La foto del asistente es la PÚBLICA del tutor (tutor_profiles), no la
+  // personal de `profiles`: son independientes (R24-23).
+  const avatarUrl = tp?.avatar_path
+    ? supabase.storage.from("avatars").getPublicUrl(tp.avatar_path).data.publicUrl
     : null;
 
   if (tp?.approval_status === "approved") {
@@ -165,7 +167,7 @@ export default async function TutorOnboardingPage({
             instagram={str(s.instagram)}
             linkedin={str(s.linkedin)}
             fullName={prof?.full_name ?? ""}
-            avatarPath={prof?.avatar_path ?? null}
+            avatarPath={tp?.avatar_path ?? null}
             avatarUrl={avatarUrl}
             timezone={prof?.timezone ?? "UTC"}
             phone={prof?.phone ?? ""}
