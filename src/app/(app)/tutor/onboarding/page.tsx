@@ -48,7 +48,6 @@ export default async function TutorOnboardingPage({
     { data: prof },
     { data: cats },
     { data: myCats },
-    { data: mats },
     { data: docs },
   ] = await Promise.all([
     supabase
@@ -63,11 +62,6 @@ export default async function TutorOnboardingPage({
       .maybeSingle(),
     supabase.from("categories").select("id, name").order("sort_order"),
     supabase.from("tutor_categories").select("category_id").eq("tutor_id", user.id),
-    supabase
-      .from("tutor_materials")
-      .select("id, file_name, size_bytes")
-      .eq("tutor_id", user.id)
-      .order("created_at"),
     supabase
       .from("verification_documents")
       .select("doc_type, status, link_url")
@@ -178,7 +172,6 @@ export default async function TutorOnboardingPage({
             level={tp?.teaching_level ?? null}
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
             selectedCategories={(myCats ?? []).map((r) => r.category_id)}
-            materials={mats ?? []}
             docsByType={docsByType}
           />
         </div>

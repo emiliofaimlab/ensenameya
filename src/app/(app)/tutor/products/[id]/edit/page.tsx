@@ -17,21 +17,28 @@ export default async function EditProductPage({
   const { userId, approvalStatus } = await requireTutorProfile();
 
   const supabase = await createClient();
-  const [{ data: product }, { data: categories }] = await Promise.all([
-    supabase
-      .from("products")
-      .select(
-        "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, product_categories(category_id)",
-      )
-      .eq("id", id)
-      .eq("tutor_id", userId)
-      .maybeSingle(),
-    supabase
-      .from("categories")
-      .select("id, name")
-      .eq("is_active", true)
-      .order("sort_order"),
-  ]);
+  const [{ data: product }, { data: categories }, { data: materials }] =
+    await Promise.all([
+      supabase
+        .from("products")
+        .select(
+          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, product_categories(category_id)",
+        )
+        .eq("id", id)
+        .eq("tutor_id", userId)
+        .maybeSingle(),
+      supabase
+        .from("categories")
+        .select("id, name")
+        .eq("is_active", true)
+        .order("sort_order"),
+      // Materiales de ESTA oferta (R24-16).
+      supabase
+        .from("tutor_materials")
+        .select("id, file_name, size_bytes")
+        .eq("product_id", id)
+        .order("created_at"),
+    ]);
 
   if (!product) notFound();
 
@@ -44,6 +51,7 @@ export default async function EditProductPage({
       <ProductForm
         userId={userId}
         categories={categories ?? []}
+        materials={materials ?? []}
         isApproved={approvalStatus === "approved"}
         product={{
           id: product.id,

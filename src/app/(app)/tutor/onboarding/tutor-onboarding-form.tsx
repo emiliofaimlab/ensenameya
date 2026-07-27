@@ -19,7 +19,6 @@ import {
   FIELD_CLASS,
 } from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
-import { MaterialsUpload } from "@/components/onboarding/materials-upload";
 import { VerificationForm, type DocState } from "../verification/verification-form";
 import type { Database } from "@/lib/database.types";
 
@@ -32,9 +31,9 @@ const LEVELS: { id: TeachingLevel; label: string }[] = [
 ];
 
 /**
- * US-202 / UX-202 (SCR-TU01) — asistente de 6 pasos: perfil, categorías,
- * contacto, materiales, **verificación de identidad** (penúltimo, 24-jul) y
- * primera oferta.
+ * US-202 / UX-202 (SCR-TU01) — asistente de 5 pasos: perfil, categorías,
+ * contacto, **verificación de identidad** (penúltimo, 24-jul) y primera oferta.
+ * Los materiales de clase salieron a la creación de la oferta (R24-16).
  *
  * Cada paso persiste al avanzar, así que "Guardar y salir" no necesita lógica
  * propia: lo escrito ya está guardado. `approval_status` NO se toca aquí (fuera
@@ -55,7 +54,6 @@ export function TutorOnboardingForm({
   level: level0,
   categories,
   selectedCategories,
-  materials,
   docsByType,
 }: {
   userId: string;
@@ -72,7 +70,6 @@ export function TutorOnboardingForm({
   level: TeachingLevel | null;
   categories: { id: string; label: string }[];
   selectedCategories: string[];
-  materials: { id: string; file_name: string; size_bytes: number }[];
   docsByType: Record<string, DocState>;
 }) {
   const router = useRouter();
@@ -155,7 +152,7 @@ export function TutorOnboardingForm({
 
     setBusy(false);
 
-    if (step === 6) {
+    if (step === 5) {
       toast.success("¡Listo! Tu perfil pasó a revisión.");
       router.push("/tutor");
       router.refresh();
@@ -181,7 +178,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={1}
-        total={6}
+        total={5}
         title="Crea tu perfil de tutor"
         description="Empecemos por lo básico. Esta info es parte de tu entrevista de ingreso."
         onNext={next}
@@ -223,7 +220,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={2}
-        total={6}
+        total={5}
         title="¿Qué enseñas?"
         description="Elige al menos una categoría. Podrás ajustarlas luego."
         onBack={back}
@@ -267,7 +264,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={3}
-        total={6}
+        total={5}
         title="Zona horaria y contacto"
         description="Usamos tu zona horaria para mostrar tus horarios correctamente (RN-44)."
         onBack={back}
@@ -306,33 +303,15 @@ export function TutorOnboardingForm({
     );
   }
 
+  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02
+  // (con su borrador / "enviar a revisión"). El asistente solo lleva a la
+  // siguiente pantalla; los documentos los guarda el propio módulo. Los
+  // materiales de clase salieron del onboarding a la oferta (R24-16).
   if (step === 4) {
     return (
       <WizardShell
         step={4}
-        total={6}
-        title="Sube tus materiales de clase"
-        description="Comparte los archivos que usarás en tus sesiones. Podrás agregar más después."
-        onBack={back}
-        onNext={next}
-        busy={busy}
-      >
-        <MaterialsUpload userId={userId} initial={materials} />
-        <p className="mt-4 text-xs text-muted-foreground">
-          Puedes agregar más materiales desde tu panel cuando quieras.
-        </p>
-      </WizardShell>
-    );
-  }
-
-  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02
-  // (con su borrador / "enviar a revisión"). El asistente solo lleva a la
-  // siguiente pantalla; los documentos los guarda el propio módulo.
-  if (step === 5) {
-    return (
-      <WizardShell
-        step={5}
-        total={6}
+        total={5}
         title="Verifica tu identidad"
         description="Sube tus documentos con el mismo módulo de tu panel. Guárdalos como borrador y continúa; puedes terminar cuando quieras."
         onBack={back}
@@ -348,8 +327,8 @@ export function TutorOnboardingForm({
 
   return (
     <WizardShell
-      step={6}
-      total={6}
+      step={5}
+      total={5}
       title="Tu primera oferta"
       description="Puedes crear tu primera mentoría ahora o hacerlo más tarde desde tu panel."
       onBack={back}

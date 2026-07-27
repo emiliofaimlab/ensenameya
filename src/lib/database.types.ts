@@ -964,6 +964,7 @@ export type Database = {
           created_at: string
           file_name: string
           id: string
+          product_id: string | null
           size_bytes: number
           storage_path: string
           tutor_id: string
@@ -973,6 +974,7 @@ export type Database = {
           created_at?: string
           file_name: string
           id?: string
+          product_id?: string | null
           size_bytes: number
           storage_path: string
           tutor_id: string
@@ -982,12 +984,20 @@ export type Database = {
           created_at?: string
           file_name?: string
           id?: string
+          product_id?: string | null
           size_bytes?: number
           storage_path?: string
           tutor_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tutor_materials_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tutor_materials_tutor_id_fkey"
             columns: ["tutor_id"]

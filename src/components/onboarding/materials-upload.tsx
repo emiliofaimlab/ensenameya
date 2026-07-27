@@ -30,9 +30,12 @@ const humanSize = (b: number) =>
 export function MaterialsUpload({
   userId,
   initial,
+  productId,
 }: {
   userId: string;
   initial: Material[];
+  /** Producto al que cuelgan (R24-16). Sin él, materiales sueltos del tutor. */
+  productId?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [items, setItems] = useState<Material[]>(initial);
@@ -66,6 +69,7 @@ export function MaterialsUpload({
         .from("tutor_materials")
         .insert({
           tutor_id: userId,
+          product_id: productId ?? null,
           storage_path: path,
           file_name: file.name,
           size_bytes: file.size,

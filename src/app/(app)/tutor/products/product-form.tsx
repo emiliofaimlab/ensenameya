@@ -10,6 +10,7 @@ import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 import { PanelCard } from "@/components/layout/panel-shell";
+import { MaterialsUpload } from "@/components/onboarding/materials-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,11 +59,14 @@ export function ProductForm({
   userId,
   categories,
   product,
+  materials = [],
   isApproved = false,
 }: {
   userId: string;
   categories: { id: string; name: string }[];
   product?: ProductFormValues;
+  /** Materiales de ESTA oferta (R24-16); solo se adjuntan al editar. */
+  materials?: { id: string; file_name: string; size_bytes: number }[];
   /** Habilita "Publicar" al guardar (RN-23: solo tutor aprobado). */
   isApproved?: boolean;
 }) {
@@ -399,6 +403,25 @@ export function ProductForm({
             </div>
           ) : null}
         </div>
+      </PanelCard>
+
+      {/* Materiales de clase de ESTA oferta (R24-16): se movieron aquí desde el
+          onboarding. Solo al editar (el producto ya existe y tiene id). */}
+      <PanelCard className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Materiales de clase
+        </h2>
+        {isEdit && product ? (
+          <MaterialsUpload
+            userId={userId}
+            productId={product.id}
+            initial={materials}
+          />
+        ) : (
+          <p className="text-[13px] text-[#6b6b6b]">
+            Guarda la oferta primero y podrás adjuntar sus materiales al editarla.
+          </p>
+        )}
       </PanelCard>
 
       {/* 193:30 — la política es única de plataforma, no se configura aquí. */}
