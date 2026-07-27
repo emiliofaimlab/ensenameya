@@ -128,13 +128,21 @@ export function ProductCard({
         <div
           className={`mt-auto border-t border-[#ebebeb] ${compact ? "pt-2.5" : "pt-3"}`}
         >
-          <div className="flex items-center justify-between gap-3">
-            <span
-              className={`font-bold text-[#242424] ${compact ? "text-[13.5px]" : "text-[15px]"}`}
-            >
-              {formatMoney(product.priceAmount, product.currency)} ·{" "}
-              {priceUnitLabel(product)}
-            </span>
+          <div className="flex items-end justify-between gap-3">
+            {/* Precio destacado (24-jul): el monto grande arriba y la unidad
+                pequeña debajo, para que sea el ancla visual de la tarjeta. */}
+            <div className="min-w-0">
+              <p
+                className={`font-bold text-[#19191f] ${compact ? "text-base" : "text-[19px]"} leading-tight`}
+              >
+                {formatMoney(product.priceAmount, product.currency)}
+              </p>
+              <p
+                className={`text-[#666666] ${compact ? "text-[11px]" : "text-xs"}`}
+              >
+                {priceUnitLabel(product)}
+              </p>
+            </div>
             {action === "ver" ? (
               <Link
                 href={`/products/${product.id}`}
