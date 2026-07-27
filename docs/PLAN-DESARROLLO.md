@@ -413,7 +413,30 @@ No consumen SP del sprint. Se filtran en Jira por label.
   (`00:31:39`, "sale siempre" → "Buenísimo"). Solo se le antepone la **pantalla cero** (R24-11).
 - **Materiales de clase** salen del onboarding y se mueven a la **creación de la oferta** (TU04) → R24-16.
 
-### 🅐 Antes del martes — pulido visual + estabilidad (Sprint 4)
+### 🅐 Antes del martes — pulido visual + estabilidad (Sprint 4) · ✅ **COMPLETA (26-jul)**
+
+> **12/12 hechas, verificadas en dev y en `main`/`dev`.** Commits abajo. Quedan
+> dos sub-ítems menores (no bloqueantes): R24-02 "año/ñ cortado" (falta el sitio
+> exacto que vio el cliente) y la disponibilidad **pública sin sesión** →
+> tz del navegador (follow-up de decisión-13, ligado a la lógica de día de
+> `BookingPanel`).
+
+| Handle | Estado | Commit | Nota de ejecución |
+| :-- | :-- | :-- | :-- |
+| **R24-01** | ✅ | `4bd2e51` | `Container` cap 1280→1664 (contenido fluido a 1536); fondos ya sangraban. Verificado 1920/1280. **Paneles quedan a 1280** (decisión B) |
+| **R24-02** | ✅ hover | `e9813a4` | Realce naranja de `TrustCards` como hover, no fijo. ❓ "año/ñ cortado": headings no se recortan a 1920 (falta pinpoint) |
+| **R24-03** | ✅ | `48f5b7c` | Componente `CategoryIconChips` (icono+hover+"Ver todas") en /tutors, /categories, /search y home (DRY) |
+| **R24-04** | ✅ | `9adf34d` | 🐞 `search_text` del tutor incluye `display_name` (migración `20260724140000`, en prod) |
+| **R24-05** | ✅ | `eb62987` | `suggestSearch` + `/api/search/suggest` + `SearchAutocomplete` en el header, orden por sección actual |
+| **R24-06** | ✅ | `f47286f` | Precio grande + unidad debajo en `ProductCard` |
+| **R24-07** | ✅ | `bd3801c` | "Mi cuenta" en `PanelShell` (sidebar por rol) + módulos foto/nombre/correo/contraseña. Pagos → R24-20 |
+| **R24-08** | ✅ | `e0a459a` | Historial del tutor en orden inverso (AD05) |
+| **R24-09** | ✅ | `e0a459a` | Crear/editar tiers en `Dialog` (AD12) |
+| **R24-10** | ✅ | `0ec2aba` | "+ Añadir" por día en disponibilidad; fuera el form global |
+| **R24-11** | ✅ | `05c2b47` | Pantalla cero "Conviértete en tutor YA" (`?start=1` → wizard) |
+| **R24-12** | ✅ | `4acdbcf` | 🐞 Horas en la tz del usuario (`getUserTimezone` + `timeZone` en los pages server). Verificado México vs Caracas |
+
+#### Backlog original (referencia)
 
 | Handle | Ítem | Épica | Esf. | Nota |
 | :-- | :-- | :-- | :-- | :-- |
@@ -523,4 +546,4 @@ email, C-12 opt-out, C-15 FX, C-10 referidos. C-01 ✅ (DLocal+Stripe) — falta
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-24 (añadido el **plan de acción de la reunión del 24-jul**: 22 ajustes `R24-01…22` mapeados a épicas y priorizados por el deadline del martes 2:30 — 🅐 pulido visual + estabilidad, 🅑 estructural, 🅒 bloqueados/ops; **full-width marcado como validación-primero** por ser de todo el sitio; migraciones `20260724130000`+`130100` del borrador de KYC (TU02) en dev. Previo: revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15** sobre `PanelShell`; 🐞 catálogo público vacío para `anon` corregido — **faltan tickets en Jira** — y semilla `p01-demo-images.sql` aplicada en dev).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-26 (**fila 🅐 del plan del 24-jul COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario; pendientes menores R24-02 "año/ñ cortado" y tz de disponibilidad pública sin sesión. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
