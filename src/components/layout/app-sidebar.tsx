@@ -7,6 +7,7 @@ import {
   BellIcon,
   BookOpenIcon,
   CalendarPlusIcon,
+  CreditCardIcon,
   FolderTreeIcon,
   HomeIcon,
   LayoutDashboardIcon,
@@ -47,6 +48,7 @@ const STUDENT_ITEMS: Item[] = [
   { href: "/app", label: "Inicio", icon: HomeIcon, exact: true },
   { href: "/reservas", label: "Mis reservas", icon: TicketIcon },
   { href: "/tutors", label: "Agendar", icon: CalendarPlusIcon },
+  { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
 ];
 
@@ -57,6 +59,7 @@ export const TUTOR_ITEMS: Item[] = [
   { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
   { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
   { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },
+  { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
 ];
 
