@@ -66,6 +66,7 @@ export default async function TutorHomePage() {
     { data: nextSessions },
     { count: pendingCount },
     { data: bookings },
+    { count: deliveredCount },
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
@@ -101,6 +102,12 @@ export default async function TutorHomePage() {
       .eq("tutor_id", userId)
       .order("created_at", { ascending: false })
       .limit(3),
+    // Sesiones ya dictadas (completadas): el banner de bienvenida vive hasta 5.
+    supabase
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("tutor_id", userId)
+      .eq("status", "completed"),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -165,6 +172,23 @@ export default async function TutorHomePage() {
           </div>
           <StatusPill tone={approval.tone} className="h-7">
             {approval.label}
+          </StatusPill>
+        </PanelCard>
+      ) : approvalStatus === "approved" && (deliveredCount ?? 0) < 5 ? (
+        /* Bienvenida al recién aprobado (24-jul): se mantiene hasta que dicte
+           sus primeras 5 sesiones, luego desaparece sola. */
+        <PanelCard className="flex flex-wrap items-center justify-between gap-3 border-[#b7e0c4] bg-[#eaf7ef]">
+          <div>
+            <p className="text-sm font-semibold text-[#19191f]">
+              ¡Bienvenido! Tu perfil ha sido aprobado
+            </p>
+            <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
+              Ya puedes publicar tus mentorías y recibir reservas. Este aviso
+              desaparece cuando dictes tus primeras 5 sesiones.
+            </p>
+          </div>
+          <StatusPill tone="green" className="h-7">
+            Aprobado
           </StatusPill>
         </PanelCard>
       ) : null}
