@@ -664,6 +664,7 @@ export type Database = {
           package_num_sessions: number | null
           price_amount: number
           pricing_model: Database["public"]["Enums"]["pricing_model"]
+          search_text: string | null
           search_vector: unknown
           session_duration_min: number | null
           slug: string | null
@@ -684,6 +685,7 @@ export type Database = {
           package_num_sessions?: number | null
           price_amount: number
           pricing_model: Database["public"]["Enums"]["pricing_model"]
+          search_text?: string | null
           search_vector?: unknown
           session_duration_min?: number | null
           slug?: string | null
@@ -704,6 +706,7 @@ export type Database = {
           package_num_sessions?: number | null
           price_amount?: number
           pricing_model?: Database["public"]["Enums"]["pricing_model"]
+          search_text?: string | null
           search_vector?: unknown
           session_duration_min?: number | null
           slug?: string | null
@@ -1295,6 +1298,12 @@ export type Database = {
         Returns: string
       }
       run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
+      search_product_ids_fuzzy: {
+        Args: { p_limit?: number; p_q: string }
+        Returns: {
+          id: string
+        }[]
+      }
       send_message: {
         Args: {
           p_attachment_name?: string
@@ -1309,6 +1318,8 @@ export type Database = {
         Args: { p_end: string; p_start: string }
         Returns: unknown
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       submit_document: {
         Args: {
           p_doc_type: string

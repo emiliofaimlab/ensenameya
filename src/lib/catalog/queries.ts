@@ -623,13 +623,22 @@ const PRODUCT_CARD_SELECT =
   "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))";
 
 /**
- * US-303 — búsqueda por texto en productos (título+descripción, `search_vector`
- * tsvector `spanish`, RN-20).
+ * US-303 — búsqueda por texto en productos (título+descripción, RN-20).
  *
- * Se consulta con el término **tal cual** y, si lleva tildes, también sin
- * ellas. El vector guarda las dos ramas (migración `20260721130000`), así que
- * cada variante casa con la suya: la acentuada conserva el stemmer español
- * (programación → program) y la otra permite teclear sin tildes (EY-109).
+ * Dos caminos que se complementan (EY-109):
+ *  1. `search_vector` (tsvector español) con el término tal cual y, si lleva
+ *     tildes, también sin ellas → relevancia lingüística: "programación"
+ *     encuentra "programar" porque ambos stemean a `program`.
+ *  2. `search_text` (texto sin acentos) con `ilike` → red de seguridad para el
+ *     tecleo **sin tildes**. Hace falta porque el stemmer español es sensible
+ *     al acento: "programacion" no stemea a `program`, así que por el camino 1
+ *     no casaría nunca aunque el vector guarde las dos ramas.
+ *  3. `search_product_ids_fuzzy` (word_similarity de pg_trgm) → el último
+ *     hueco: sin tilde y sin ser subcadena, "programacion" ~ "programar" solo
+ *     se alcanza por similitud de raíz.
+ *
+ * Las tres se unen por id conservando el orden: manda la relevancia del
+ * tsvector y las otras dos solo añaden lo que aquélla no alcanzó.
  */
 export async function searchProducts(q: string): Promise<ProductCardData[]> {
   const raw = q.trim();
@@ -638,8 +647,22 @@ export async function searchProducts(q: string): Promise<ProductCardData[]> {
   const terms = plain === raw ? [raw] : [raw, plain];
 
   const supabase = await createClient();
-  const results = await Promise.all(
-    terms.map((term) =>
+  // `likeSafe` puede dejar el término vacío (p. ej. si era solo comodines):
+  // sin este guard, `ilike '%%'` devolvería el catálogo entero.
+  const likeTerm = likeSafe(raw);
+
+  // Rama 3 (EY-109): similitud por palabra. Rescata el caso que ni el stemmer
+  // ni la subcadena alcanzan — teclear sin tilde una palabra que solo casa por
+  // su raíz ("programacion" ~ "programar"). Devuelve ids; la fila la lee el
+  // `select` de abajo, con la RLS de siempre.
+  const { data: fuzzy } = await supabase.rpc("search_product_ids_fuzzy", {
+    p_q: raw,
+    p_limit: PAGE_SIZE,
+  });
+  const fuzzyIds = (fuzzy ?? []).map((r) => r.id);
+
+  const results = await Promise.all([
+    ...terms.map((term) =>
       supabase
         .from("products")
         .select(PRODUCT_CARD_SELECT)
@@ -650,7 +673,27 @@ export async function searchProducts(q: string): Promise<ProductCardData[]> {
         })
         .limit(PAGE_SIZE),
     ),
-  );
+    // Rama sin acentos. Va la última a propósito: primero manda la relevancia
+    // del tsvector y esto solo añade lo que aquélla no alcanzó.
+    ...(likeTerm
+      ? [
+          supabase
+            .from("products")
+            .select(PRODUCT_CARD_SELECT)
+            .eq("status", "active")
+            .ilike("search_text", `%${likeTerm}%`)
+            .limit(PAGE_SIZE),
+        ]
+      : []),
+    ...(fuzzyIds.length
+      ? [
+          supabase
+            .from("products")
+            .select(PRODUCT_CARD_SELECT)
+            .in("id", fuzzyIds),
+        ]
+      : []),
+  ]);
 
   // Unir por id conservando el orden de la primera rama.
   const seen = new Map<string, ProductCardData & { tutorId: string }>();
