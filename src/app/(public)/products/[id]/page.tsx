@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 
+import { getViewerTimezone } from "@/lib/auth/server";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
@@ -269,6 +270,7 @@ export default async function ProductPage({
             <BookingPanel
               products={[product]}
               selectedDay={sp.d}
+              timeZone={await getViewerTimezone()}
               details
               ctaLabel={
                 product.pricingModel === "per_package"

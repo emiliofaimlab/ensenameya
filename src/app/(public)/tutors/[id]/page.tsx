@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BadgeCheckIcon } from "lucide-react";
 
+import { getViewerTimezone } from "@/lib/auth/server";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { BookingPanel } from "@/components/catalog/booking-panel";
@@ -244,6 +245,7 @@ export default async function TutorProfilePage({
               products={products}
               selectedId={sp.p}
               selectedDay={sp.d}
+              timeZone={await getViewerTimezone()}
               hrefFor={hrefFor}
             />
           </div>

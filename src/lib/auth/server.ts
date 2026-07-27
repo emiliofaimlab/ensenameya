@@ -1,11 +1,12 @@
 import "server-only";
 
 import { cache } from "react";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import { TZ_COOKIE } from "@/lib/tz";
 import { pickHome, type AppRole } from "./roles";
 
 /**
@@ -71,6 +72,33 @@ export const getUserTimezone = cache(async (): Promise<string> => {
     .eq("id", user.id)
     .maybeSingle();
   return data?.timezone ?? "UTC";
+});
+
+/**
+ * Zona horaria del **visitante**, tenga sesión o no (R24-22): la del perfil si
+ * está identificado; si no, la que dejó el navegador en la cookie `ey-tz`
+ * (`TimezoneSync`). "UTC" solo en el primer render de un anónimo, antes de que
+ * la cookie exista.
+ *
+ * Es la que deben usar las pantallas **públicas** con horarios: un visitante en
+ * Venezuela tiene que ver la clase de un tutor de México en su propia hora.
+ */
+export const getViewerTimezone = cache(async (): Promise<string> => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("timezone")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (data?.timezone) return data.timezone;
+  }
+  const jar = await cookies();
+  const fromBrowser = jar.get(TZ_COOKIE)?.value;
+  return fromBrowser ? decodeURIComponent(fromBrowser) : "UTC";
 });
 
 /** Roles del usuario actual (vacío si anónimo). */

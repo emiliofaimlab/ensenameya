@@ -12,11 +12,29 @@ import type { ProductCardData } from "@/lib/catalog/queries";
 
 const WEEKDAYS = ["D", "L", "M", "M", "J", "V", "S"];
 
-/** Clave de día LOCAL (no UTC): dos huecos del mismo día caen en la misma. */
-const dayKey = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
+const pad = (n: number) => String(n).padStart(2, "0");
+
+/**
+ * Clave de día "YYYY-MM-DD" **en la zona del visitante** (R24-22): un hueco de
+ * las 23:00 en México es del día siguiente en Madrid, y el calendario tiene que
+ * agruparlo donde el visitante lo vive — no donde está el servidor.
+ * `en-CA` da exactamente ese formato.
+ */
+const slotDay = (iso: string, timeZone: string) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+
+/** Hora del hueco en la zona del visitante. */
+const slotTime = (iso: string, timeZone: string) =>
+  new Date(iso).toLocaleTimeString("es", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone,
+  });
 
 /**
  * Panel de reserva de P07/P08 — flujo **día → clase → horario** (R24-13).
@@ -44,10 +62,14 @@ export async function BookingPanel({
   note = "Pago protegido · Cancela con 24h y recibe el 100%.",
   details = false,
   footer,
+  timeZone,
 }: {
   products: ProductCardData[];
   selectedId?: string;
   selectedDay?: string;
+  /** Zona del visitante (`getViewerTimezone`): con sesión, la suya; sin sesión,
+   *  la del navegador. Sin ella el SSR pintaría la hora del servidor (R24-22). */
+  timeZone: string;
   hrefFor: (next: { p?: string; d?: string }) => string;
   ctaLabel?: string;
   note?: string;
@@ -76,11 +98,11 @@ export async function BookingPanel({
     ),
   );
 
-  /** día → ids de las clases que tienen hueco ese día. */
+  /** día → ids de las clases que tienen hueco ese día (en la zona del visitante). */
   const productsByDay = new Map<string, Set<string>>();
   for (const [pid, starts] of slotsByProduct) {
     for (const iso of starts) {
-      const key = dayKey(new Date(iso));
+      const key = slotDay(iso, timeZone);
       const set = productsByDay.get(key) ?? new Set<string>();
       set.add(pid);
       productsByDay.set(key, set);
@@ -96,27 +118,31 @@ export async function BookingPanel({
   const day =
     selectedDay && productsByDay.has(selectedDay)
       ? selectedDay
-      : (allDays[0] ?? dayKey(new Date()));
+      : (allDays[0] ?? slotDay(new Date().toISOString(), timeZone));
 
   /** Clases con hueco el día elegido (las que ofrece el selector). */
   const dayProducts = products.filter((p) => productsByDay.get(day)?.has(p.id));
   /** Horarios de la clase elegida ESE día. */
   const times = chosen
     ? (slotsByProduct.get(chosen.id) ?? []).filter(
-        (iso) => dayKey(new Date(iso)) === day,
+        (iso) => slotDay(iso, timeZone) === day,
       )
     : [];
 
-  // Rejilla del mes del día elegido, empezando en domingo como el Figma.
-  const cursor = new Date(`${day}T12:00:00`);
-  const year = cursor.getFullYear();
-  const month = cursor.getMonth();
-  const offset = new Date(year, month, 1).getDay();
-  const total = new Date(year, month + 1, 0).getDate();
-  const cells: (Date | null)[] = [
+  // Rejilla del mes del día elegido. Se construye con NÚMEROS de calendario y
+  // claves de texto, sin objetos Date locales: así la rejilla no se desplaza
+  // por la zona del servidor (R24-22).
+  const [year, month] = day.split("-").map(Number) as [number, number, number];
+  const offset = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
+  const total = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const cells: (number | null)[] = [
     ...Array.from({ length: offset }, () => null),
-    ...Array.from({ length: total }, (_, i) => new Date(year, month, i + 1)),
+    ...Array.from({ length: total }, (_, i) => i + 1),
   ];
+  const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(
+    "es",
+    { month: "long", year: "numeric", timeZone: "UTC" },
+  );
 
   return (
     <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
@@ -164,9 +190,7 @@ export async function BookingPanel({
       <hr className="my-5 border-[#e0e0e0]" />
 
       <div className="flex items-baseline justify-between gap-4">
-        <p className="text-[15px] font-semibold text-[#212121]">
-          {cursor.toLocaleDateString("es", { month: "long", year: "numeric" })}
-        </p>
+        <p className="text-[15px] font-semibold text-[#212121]">{monthLabel}</p>
         <p className="text-xs text-[#808080]">Días disponibles</p>
       </div>
 
@@ -184,7 +208,7 @@ export async function BookingPanel({
           <div className="mt-1 grid grid-cols-7 gap-y-1 text-center">
             {cells.map((d, i) => {
               if (!d) return <span key={i} />;
-              const key = dayKey(d);
+              const key = `${year}-${pad(month)}-${pad(d)}`;
               const free = productsByDay.has(key);
               const isSelected = key === day;
               if (!free) {
@@ -193,7 +217,7 @@ export async function BookingPanel({
                     key={i}
                     className="grid h-[38px] place-items-center text-[13px] text-[#bfbfbf]"
                   >
-                    {d.getDate()}
+                    {d}
                   </span>
                 );
               }
@@ -216,7 +240,7 @@ export async function BookingPanel({
                       : "text-[#212121] hover:bg-muted"
                   }`}
                 >
-                  {d.getDate()}
+                  {d}
                 </Link>
               );
             })}
@@ -262,7 +286,10 @@ export async function BookingPanel({
           {chosen ? (
             <>
               <p className="mt-5 text-[13px] font-medium">
-                Horarios disponibles
+                Horarios disponibles{" "}
+                <span className="font-normal text-[#6b6b6b]">
+                  · en tu hora local
+                </span>
               </p>
               {times.length === 0 ? (
                 <p className="mt-2 text-[13px] text-muted-foreground">
@@ -280,10 +307,7 @@ export async function BookingPanel({
                           : "border border-[#cccccc] text-[#333333] hover:bg-muted"
                       }`}
                     >
-                      {new Date(iso).toLocaleTimeString("es", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {slotTime(iso, timeZone)}
                     </Link>
                   ))}
                 </div>
