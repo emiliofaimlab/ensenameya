@@ -22,7 +22,7 @@ export default async function EditProductPage({
       supabase
         .from("products")
         .select(
-          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, product_categories(category_id)",
+          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, faqs, product_categories(category_id)",
         )
         .eq("id", id)
         .eq("tutor_id", userId)
@@ -66,6 +66,12 @@ export default async function EditProductPage({
             (pc) => pc.category_id,
           ),
           imagePath: product.image_path,
+          // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
+          faqs: Array.isArray(product.faqs)
+            ? (product.faqs as { q?: unknown; a?: unknown }[])
+                .filter((f) => typeof f?.q === "string" && typeof f?.a === "string")
+                .map((f) => ({ q: f.q as string, a: f.a as string }))
+            : [],
         }}
       />
     </TutorShell>

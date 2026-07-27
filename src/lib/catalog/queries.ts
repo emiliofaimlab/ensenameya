@@ -56,6 +56,8 @@ export type ProductCardData = {
 export type ProductDetail = ProductCardData & {
   description: string | null;
   tutor: ProductTutor & { bio: string | null };
+  /** FAQ propias de la mentoría (R24-17); vacío = se muestran las genéricas. */
+  faqs: { q: string; a: string }[];
 };
 
 const PAGE_SIZE = 12;
@@ -375,7 +377,7 @@ export async function getProductDetail(
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, tutor_id, product_categories(categories(slug, name))",
+      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, tutor_id, product_categories(categories(slug, name))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -403,6 +405,12 @@ export async function getProductDetail(
     packageNumSessions: p.package_num_sessions,
     imagePath: p.image_path,
     categories: toCategoryTags(p.product_categories),
+    // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
+    faqs: Array.isArray(p.faqs)
+      ? (p.faqs as { q?: unknown; a?: unknown }[])
+          .filter((f) => typeof f?.q === "string" && typeof f?.a === "string")
+          .map((f) => ({ q: f.q as string, a: f.a as string }))
+      : [],
     tutor: {
       id: tutor.profile_id,
       displayName: tutor.display_name,

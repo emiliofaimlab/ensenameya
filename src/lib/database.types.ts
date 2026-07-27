@@ -657,6 +657,7 @@ export type Database = {
           created_at: string
           currency: string
           description: string | null
+          faqs: Json
           id: string
           image_path: string | null
           outcome: string | null
@@ -676,6 +677,7 @@ export type Database = {
           created_at?: string
           currency: string
           description?: string | null
+          faqs?: Json
           id?: string
           image_path?: string | null
           outcome?: string | null
@@ -695,6 +697,7 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
+          faqs?: Json
           id?: string
           image_path?: string | null
           outcome?: string | null

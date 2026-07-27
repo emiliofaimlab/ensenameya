@@ -20,8 +20,9 @@ import { initialsFrom, sessionsLabel, storageUrl } from "@/lib/catalog/format";
 const HOW_IT_WORKS =
   "Reservas tu mentoría y eliges el horario que mejor te venga. El tutor confirma en menos de 24 horas y, a la hora acordada, entras desde tu panel a una sala de video privada 1 a 1. Al terminar dejas tu reseña y agendas el siguiente paso.";
 
-/** FAQ de producto (386:2231). Genérico de plataforma, no por producto.
- *  Respuestas verificadas: RN-37 (reembolsos), RN-38 (24h), US-801 (sala). */
+/** FAQ **por defecto** (386:2231): se muestran cuando el tutor no definió las
+ *  suyas para esta mentoría (R24-17). Respuestas verificadas: RN-37
+ *  (reembolsos), RN-38 (24h), US-801 (sala). */
 const PRODUCT_FAQ = [
   {
     q: "¿Qué pasa si necesito reprogramar una sesión?",
@@ -251,7 +252,7 @@ export default async function ProductPage({
               </h2>
               {/* ponytail: `<details>` nativo, abiertos como en el resto del sitio. */}
               <div className="mt-2 divide-y divide-[#e6e6e6]">
-                {PRODUCT_FAQ.map(({ q, a }) => (
+                {(product.faqs.length > 0 ? product.faqs : PRODUCT_FAQ).map(({ q, a }) => (
                   <details key={q} open className="group py-4">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-semibold text-[#292929] marker:hidden">
                       {q}

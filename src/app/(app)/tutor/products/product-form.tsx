@@ -43,6 +43,8 @@ export type ProductFormValues = {
   packageNumSessions: number | null;
   categoryIds: string[];
   imagePath: string | null;
+  /** FAQ propias de la mentoría (R24-17). */
+  faqs: { q: string; a: string }[];
 };
 
 /**
@@ -81,6 +83,10 @@ export function ProductForm({
   );
   // El submit del form guarda; este flag decide si además publica (US-402).
   const [publishAfter, setPublishAfter] = useState(false);
+  // FAQ de la mentoría (R24-17): lista editable, se guarda con el producto.
+  const [faqs, setFaqs] = useState<{ q: string; a: string }[]>(
+    product?.faqs ?? [],
+  );
 
   function toggleCategory(id: string) {
     setSelected((prev) => {
@@ -149,6 +155,10 @@ export function ProductForm({
       currency: CURRENCY,
       session_duration_min: duration,
       package_num_sessions: packageNum,
+      // FAQ de ESTA mentoría (R24-17). Se descartan las filas a medio escribir.
+      faqs: faqs
+        .map((f) => ({ q: f.q.trim(), a: f.a.trim() }))
+        .filter((f) => f.q && f.a),
       // `status` NO se toca en el insert: alta → 'draft' (default). Publicar es
       // un UPDATE aparte tras guardar; el guard RN-23 de BD sigue mandando.
     };
@@ -422,6 +432,66 @@ export function ProductForm({
             Guarda la oferta primero y podrás adjuntar sus materiales al editarla.
           </p>
         )}
+      </PanelCard>
+
+      {/* FAQ de ESTA mentoría (R24-17). Si no pone ninguna, el detalle muestra
+          las genéricas de plataforma. */}
+      <PanelCard className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Preguntas frecuentes
+        </h2>
+        <p className="text-[13px] text-[#6b6b6b]">
+          Responde lo que suelen preguntarte sobre esta mentoría (nivel previo,
+          materiales, formato…). Si las dejas vacías se muestran las generales.
+        </p>
+
+        {faqs.map((f, i) => (
+          <div
+            key={i}
+            className="grid gap-2 rounded-[12px] border border-[#e0e0e0] p-3.5"
+          >
+            <Input
+              value={f.q}
+              onChange={(e) =>
+                setFaqs((p) =>
+                  p.map((x, j) => (j === i ? { ...x, q: e.target.value } : x)),
+                )
+              }
+              placeholder="¿Necesito conocimientos previos?"
+              aria-label={`Pregunta ${i + 1}`}
+              className={FIELD}
+            />
+            <Textarea
+              value={f.a}
+              onChange={(e) =>
+                setFaqs((p) =>
+                  p.map((x, j) => (j === i ? { ...x, a: e.target.value } : x)),
+                )
+              }
+              rows={2}
+              placeholder="Tu respuesta…"
+              aria-label={`Respuesta ${i + 1}`}
+              className="rounded-[8px] px-3.5 placeholder:text-[#8c8c8c]"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setFaqs((p) => p.filter((_, j) => j !== i))}
+              className="h-9 self-start rounded-[8px] px-3 text-[13px] text-[#bf3333]"
+            >
+              Quitar
+            </Button>
+          </div>
+        ))}
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setFaqs((p) => [...p, { q: "", a: "" }])}
+          className="h-10 self-start rounded-[8px] px-4 text-[13px]"
+        >
+          + Añadir pregunta
+        </Button>
       </PanelCard>
 
       {/* 193:30 — la política es única de plataforma, no se configura aquí. */}
