@@ -15,6 +15,7 @@ import {
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { Button } from "@/components/ui/button";
 import { AcceptRejectButtons } from "./booking-actions";
+import { AutoAcceptToggle } from "./auto-accept-toggle";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Reservas · Enséñame Ya" };
@@ -68,6 +69,12 @@ export default async function TutorReservasPage({
   const filter = FILTERS.find((x) => x.id === f) ?? FILTERS[0];
 
   const supabase = await createClient();
+  const { data: tp } = await supabase
+    .from("tutor_profiles")
+    .select("auto_accept_bookings")
+    .eq("profile_id", userId)
+    .maybeSingle();
+
   let query = supabase
     .from("bookings")
     .select(
@@ -99,6 +106,11 @@ export default async function TutorReservasPage({
       title="Reservas"
       description="Todas las reservas de tus mentorías. Tienes 24 h para aceptar cada reserva pagada; si vence el plazo, se cancela y se reembolsa automáticamente (RN-38)."
     >
+      <AutoAcceptToggle
+        userId={userId}
+        initial={tp?.auto_accept_bookings ?? false}
+      />
+
       {/* Chips de filtro (197:43). Estado en la URL: server-render puro. */}
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((x) => {

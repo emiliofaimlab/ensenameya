@@ -1012,6 +1012,7 @@ export type Database = {
           approval_notes: string | null
           approval_status: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at: string | null
+          auto_accept_bookings: boolean
           avatar_path: string | null
           bio: string | null
           created_at: string
@@ -1031,6 +1032,7 @@ export type Database = {
           approval_notes?: string | null
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
+          auto_accept_bookings?: boolean
           avatar_path?: string | null
           bio?: string | null
           created_at?: string
@@ -1050,6 +1052,7 @@ export type Database = {
           approval_notes?: string | null
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
+          auto_accept_bookings?: boolean
           avatar_path?: string | null
           bio?: string | null
           created_at?: string
