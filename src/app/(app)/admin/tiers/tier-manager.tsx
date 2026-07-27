@@ -3,12 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { PlusIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export type TierRow = {
   id: string;
@@ -39,8 +47,26 @@ export function TierManager({ tiers }: { tiers: TierRow[] }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState(false);
+  // Crear/editar viven en un modal (24-jul): el botón "Nuevo tier" y cada
+  // "Editar" lo abren; el formulario ya no ocupa sitio fijo en la pantalla.
+  const [open, setOpen] = useState(false);
 
   const editing = draft.id !== null;
+
+  function openNew() {
+    setDraft(EMPTY);
+    setOpen(true);
+  }
+  function openEdit(t: TierRow) {
+    setDraft({
+      id: t.id,
+      name: t.name,
+      splitPct: String(t.splitPct),
+      description: t.description ?? "",
+      isDefault: t.isDefault,
+    });
+    setOpen(true);
+  }
 
   async function save() {
     const name = draft.name.trim();
@@ -78,6 +104,7 @@ export function TierManager({ tiers }: { tiers: TierRow[] }) {
       return;
     }
     toast.success(editing ? "Tier actualizado." : "Tier creado.");
+    setOpen(false);
     setDraft(EMPTY);
     router.refresh();
   }
@@ -90,72 +117,14 @@ export function TierManager({ tiers }: { tiers: TierRow[] }) {
         conservan el split que tenían al reservarse.
       </p>
 
-      <div className="flex flex-col gap-3 rounded-lg border p-4">
-        <h2 className="text-sm font-medium">
-          {editing ? `Editar "${draft.name || "tier"}"` : "Nuevo tier"}
-        </h2>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="tier-name">Nombre</Label>
-            <Input
-              id="tier-name"
-              value={draft.name}
-              placeholder="Tier 4"
-              onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="tier-split">Split del tutor (%)</Label>
-            <Input
-              id="tier-split"
-              type="number"
-              min={0}
-              max={100}
-              step="0.01"
-              value={draft.splitPct}
-              placeholder="75"
-              onChange={(e) => setDraft((d) => ({ ...d, splitPct: e.target.value }))}
-            />
-            <p className="text-xs text-muted-foreground">
-              {Number.isFinite(Number(draft.splitPct)) && draft.splitPct !== ""
-                ? ejemplo(Number(draft.splitPct))
-                : "Lo que se lleva el tutor; el resto es comisión."}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="tier-desc">Descripción (opcional)</Label>
-          <Textarea
-            id="tier-desc"
-            rows={2}
-            value={draft.description}
-            onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-          />
-        </div>
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-4 accent-foreground"
-            checked={draft.isDefault}
-            onChange={(e) => setDraft((d) => ({ ...d, isDefault: e.target.checked }))}
-          />
-          Asignar este tier a los tutores al aprobarlos
-        </label>
-
-        <div className="flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={save}>
-            {editing ? "Guardar cambios" : "Crear tier"}
-          </Button>
-          {editing ? (
-            <Button variant="outline" disabled={busy} onClick={() => setDraft(EMPTY)}>
-              Cancelar
-            </Button>
-          ) : null}
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-[#6b6b6b]">
+          {tiers.length} {tiers.length === 1 ? "tier configurado" : "tiers configurados"}
+        </p>
+        <Button onClick={openNew} className="gap-1.5">
+          <PlusIcon className="size-4" />
+          Nuevo tier
+        </Button>
       </div>
 
       {/* Filas del Figma (226:59): nombre + comisión, split 20/700, tutores. */}
@@ -193,15 +162,7 @@ export function TierManager({ tiers }: { tiers: TierRow[] }) {
                   variant="outline"
                   disabled={busy}
                   className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
-                  onClick={() =>
-                    setDraft({
-                      id: t.id,
-                      name: t.name,
-                      splitPct: String(t.splitPct),
-                      description: t.description ?? "",
-                      isDefault: t.isDefault,
-                    })
-                  }
+                  onClick={() => openEdit(t)}
                 >
                   Editar
                 </Button>
@@ -210,6 +171,83 @@ export function TierManager({ tiers }: { tiers: TierRow[] }) {
           ))}
         </ul>
       </div>
+
+      {/* Modal de crear / editar. */}
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setDraft(EMPTY);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? `Editar "${draft.name || "tier"}"` : "Nuevo tier"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tier-name">Nombre</Label>
+              <Input
+                id="tier-name"
+                value={draft.name}
+                placeholder="Tier 4"
+                onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="tier-split">Split del tutor (%)</Label>
+              <Input
+                id="tier-split"
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={draft.splitPct}
+                placeholder="75"
+                onChange={(e) => setDraft((d) => ({ ...d, splitPct: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                {Number.isFinite(Number(draft.splitPct)) && draft.splitPct !== ""
+                  ? ejemplo(Number(draft.splitPct))
+                  : "Lo que se lleva el tutor; el resto es comisión."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="tier-desc">Descripción (opcional)</Label>
+            <Textarea
+              id="tier-desc"
+              rows={2}
+              value={draft.description}
+              onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-foreground"
+              checked={draft.isDefault}
+              onChange={(e) => setDraft((d) => ({ ...d, isDefault: e.target.checked }))}
+            />
+            Asignar este tier a los tutores al aprobarlos
+          </label>
+
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button disabled={busy} onClick={save}>
+              {editing ? "Guardar cambios" : "Crear tier"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

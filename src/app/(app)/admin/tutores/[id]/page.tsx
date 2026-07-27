@@ -231,13 +231,17 @@ export default async function AdminTutorPage({
           {/* Historial (215:70): derivado de los timestamps reales. */}
           <PanelCard>
             <h2 className="text-base font-semibold text-[#19191f]">Historial</h2>
+            {/* Orden inverso (24-jul): lo más reciente arriba —
+                decisión → documentos → solicitud. */}
             <dl className="mt-2 divide-y divide-[#e0e0e0]">
-              <div className="py-2.5">
+              <div className="py-2.5 first:pt-0">
                 <dt className="text-[13px] font-medium text-[#404040]">
-                  Solicitud enviada
+                  {tutor.approval_status === "pending"
+                    ? "Sin decisiones aún"
+                    : `Decisión: ${APPROVAL_PILL[tutor.approval_status].label}`}
                 </dt>
                 <dd className="text-xs text-[#6b6b6b]">
-                  {fmtDate(tutor.created_at)}
+                  {tutor.approval_status === "pending" ? "—" : ""}
                 </dd>
               </div>
               <div className="py-2.5">
@@ -257,12 +261,10 @@ export default async function AdminTutorPage({
               </div>
               <div className="py-2.5 last:pb-0">
                 <dt className="text-[13px] font-medium text-[#404040]">
-                  {tutor.approval_status === "pending"
-                    ? "Sin decisiones aún"
-                    : `Decisión: ${APPROVAL_PILL[tutor.approval_status].label}`}
+                  Solicitud enviada
                 </dt>
                 <dd className="text-xs text-[#6b6b6b]">
-                  {tutor.approval_status === "pending" ? "—" : ""}
+                  {fmtDate(tutor.created_at)}
                 </dd>
               </div>
             </dl>
