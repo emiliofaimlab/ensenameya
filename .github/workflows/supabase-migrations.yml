@@ -21,9 +21,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Versión FIJA, no `latest`: resolver "latest" consulta la API de GitHub
+      # sin autenticar y un día cualquiera devuelve "rate limit exceeded" — nos
+      # tumbó el job del 27-jul (run 30305230981) sin que hubiera nada roto en
+      # el repo. Fijarla lo hace además reproducible: el CI aplica migraciones
+      # con la misma CLI con la que se probaron en local.
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.110.0
+        env:
+          # Autenticar la descarga sube muchísimo el límite de peticiones.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push migrations
         run: |
