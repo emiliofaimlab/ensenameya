@@ -1,4 +1,10 @@
 import Link from "next/link";
+import {
+  BadgeCheckIcon,
+  GraduationCapIcon,
+  ShieldCheckIcon,
+  TagIcon,
+} from "lucide-react";
 
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
@@ -21,8 +27,19 @@ export const metadata = { title: "Enseñar en Enséñame Ya · Onboarding tutor"
  * (headline, bio, redes) → `approval_status='pending'` hasta que el admin lo
  * apruebe (US-1101). Foto (Storage) y categorías (al crear productos) → diferidas.
  */
-export default async function TutorOnboardingPage() {
+const WELCOME_POINTS = [
+  { icon: TagIcon, text: "Tú decides tus tarifas y tus horarios" },
+  { icon: ShieldCheckIcon, text: "Cobros garantizados y respaldados" },
+  { icon: BadgeCheckIcon, text: "Perfil y credenciales verificados" },
+];
+
+export default async function TutorOnboardingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ start?: string }>;
+}) {
   const { user } = await requireUser();
+  const { start } = await searchParams;
 
   const supabase = await createClient();
   const [{ data: tp }, { data: prof }, { data: cats }, { data: myCats }, { data: mats }] =
@@ -70,6 +87,55 @@ export default async function TutorOnboardingPage() {
           </Card>
         </Section>
       </Container>
+    );
+  }
+
+  // Pantalla cero (24-jul): la primera vez —sin perfil aún y sin venir de pulsar
+  // "Comenzar"— una bienvenida que invita a crear la cuenta de tutor, antes del
+  // asistente. `?start=1` entra ya al formulario.
+  if (!tp && !start) {
+    return (
+      <div className="bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
+        <Container>
+          <div className="mx-auto flex max-w-xl flex-col items-center text-center">
+            <span className="grid size-14 place-items-center rounded-full bg-brand/10 text-brand">
+              <GraduationCapIcon className="size-7" />
+            </span>
+            <h1 className="mt-5 text-2xl font-bold text-[#19191f] sm:text-3xl">
+              Conviértete en tutor <span className="text-primary">YA</span>
+            </h1>
+            <p className="mt-3 text-pretty text-[15px] text-[#5c5c5c]">
+              Todavía no tienes una cuenta de tutor. Crea tu perfil, define tus
+              tarifas y empieza a enseñar en vivo a alumnos de toda Latinoamérica.
+            </p>
+            <ul className="mt-7 flex w-full flex-col gap-3 text-left">
+              {WELCOME_POINTS.map(({ icon: Icon, text }) => (
+                <li
+                  key={text}
+                  className="flex items-center gap-3 rounded-[12px] border border-[#e6e6e6] bg-card px-4 py-3"
+                >
+                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#ffeddb] text-[#db5400]">
+                    <Icon className="size-4.5" />
+                  </span>
+                  <span className="text-sm font-medium text-[#333333]">{text}</span>
+                </li>
+              ))}
+            </ul>
+            <Button
+              asChild
+              className="mt-8 h-[45px] w-full max-w-xs bg-brand text-white hover:bg-brand/90"
+            >
+              <Link href="/tutor/onboarding?start=1">Comenzar registro</Link>
+            </Button>
+            <Link
+              href="/app"
+              className="mt-3 text-[13px] text-[#6b6b6b] transition-colors hover:text-foreground"
+            >
+              Ahora no
+            </Link>
+          </div>
+        </Container>
+      </div>
     );
   }
 
