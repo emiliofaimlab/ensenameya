@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { ChevronDownIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,15 +19,21 @@ const dayKey = (d: Date) =>
   ).padStart(2, "0")}`;
 
 /**
- * Panel de reserva de P07: precio, calendario con los días que tienen hueco,
- * horarios del día elegido y selector de tipo de clase.
+ * Panel de reserva de P07/P08 — flujo **día → clase → horario** (R24-13).
+ *
+ * El calendario es GLOBAL del tutor: pinta los días con hueco de cualquiera de
+ * sus mentorías. Al elegir día aparece el selector de clase (solo las que
+ * tienen hueco ese día) y, al elegir clase, sus horarios. Así una reserva
+ * siempre deja claro QUÉ clase se está pagando, que era el problema cuando el
+ * tutor dicta varias.
+ *
+ * El **precio es dinámico** (R24-14): no se muestra un importe fijo por
+ * adelantado; aparece cuando ya hay clase elegida (en P08 la clase viene dada,
+ * así que se ve desde el principio).
  *
  * ponytail: todo por URL y renderizado en servidor — sin estado de cliente ni
  * calendario de librería. Los huecos salen de `get_available_slots`, la misma
  * función que usa el flujo de reserva, así que no hay dos verdades.
- *
- * Reservar sigue llevando a `/reservar/[productId]`, que exige sesión: aquí se
- * mira, allí se compra.
  */
 export async function BookingPanel({
   products,
@@ -61,21 +66,46 @@ export async function BookingPanel({
     );
   }
 
-  const product =
-    products.find((p) => p.id === selectedId) ??
-    products.reduce((min, p) => (p.priceAmount < min.priceAmount ? p : min));
-  const slots = await listProductSlots(product.id);
+  // Huecos de TODAS las mentorías: el calendario es del tutor, no de una clase.
+  const slotsByProduct = new Map<string, string[]>(
+    await Promise.all(
+      products.map(
+        async (p) =>
+          [p.id, (await listProductSlots(p.id)).map((s) => s.start)] as const,
+      ),
+    ),
+  );
 
-  // Días con hueco y horarios del día elegido, en la hora local del servidor.
-  const byDay = new Map<string, string[]>();
-  for (const s of slots) {
-    const key = dayKey(new Date(s.start));
-    byDay.set(key, [...(byDay.get(key) ?? []), s.start]);
+  /** día → ids de las clases que tienen hueco ese día. */
+  const productsByDay = new Map<string, Set<string>>();
+  for (const [pid, starts] of slotsByProduct) {
+    for (const iso of starts) {
+      const key = dayKey(new Date(iso));
+      const set = productsByDay.get(key) ?? new Set<string>();
+      set.add(pid);
+      productsByDay.set(key, set);
+    }
   }
-  const firstDay = slots.length ? new Date(slots[0]!.start) : new Date();
+
+  // Con una sola mentoría (P08) la clase viene dada; con varias hay que elegir.
+  const single = products.length === 1 ? products[0] : undefined;
+  const chosen =
+    single ?? products.find((p) => p.id === selectedId) ?? undefined;
+
+  const allDays = [...productsByDay.keys()].sort();
   const day =
-    selectedDay && byDay.has(selectedDay) ? selectedDay : dayKey(firstDay);
-  const times = byDay.get(day) ?? [];
+    selectedDay && productsByDay.has(selectedDay)
+      ? selectedDay
+      : (allDays[0] ?? dayKey(new Date()));
+
+  /** Clases con hueco el día elegido (las que ofrece el selector). */
+  const dayProducts = products.filter((p) => productsByDay.get(day)?.has(p.id));
+  /** Horarios de la clase elegida ESE día. */
+  const times = chosen
+    ? (slotsByProduct.get(chosen.id) ?? []).filter(
+        (iso) => dayKey(new Date(iso)) === day,
+      )
+    : [];
 
   // Rejilla del mes del día elegido, empezando en domingo como el Figma.
   const cursor = new Date(`${day}T12:00:00`);
@@ -90,31 +120,45 @@ export async function BookingPanel({
 
   return (
     <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
-      <p className="flex items-baseline gap-1.5">
-        <span className="text-[30px] font-bold text-[#19191f]">
-          {formatMoney(product.priceAmount, product.currency)}
-        </span>
-        <span className="text-[15px] text-[#6b6b6b]">
-          / {priceUnitLabel(product)}
-        </span>
-      </p>
-      {details ? (
+      {/* R24-14: sin precio fijo por delante. Con clase elegida se muestra su
+          importe real; sin ella, el título de reserva. */}
+      {chosen ? (
         <>
-          {perSessionLabel(product) ? (
-            <p className="mt-3 text-[13px] text-[#6b6b6b]">
-              {perSessionLabel(product)}
-            </p>
-          ) : null}
-          {product.sessionDurationMin ? (
-            <p className="mt-3 text-sm text-[#595959]">
-              En vivo 1 a 1 · {product.sessionDurationMin} min por sesión
-            </p>
-          ) : null}
+          <p className="flex items-baseline gap-1.5">
+            <span className="text-[30px] font-bold text-[#19191f]">
+              {formatMoney(chosen.priceAmount, chosen.currency)}
+            </span>
+            <span className="text-[15px] text-[#6b6b6b]">
+              / {priceUnitLabel(chosen)}
+            </span>
+          </p>
+          {details ? (
+            <>
+              {perSessionLabel(chosen) ? (
+                <p className="mt-3 text-[13px] text-[#6b6b6b]">
+                  {perSessionLabel(chosen)}
+                </p>
+              ) : null}
+              {chosen.sessionDurationMin ? (
+                <p className="mt-3 text-sm text-[#595959]">
+                  En vivo 1 a 1 · {chosen.sessionDurationMin} min por sesión
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p className="mt-1.5 text-[13px] text-[#6b6b6b]">{chosen.title}</p>
+          )}
         </>
       ) : (
-        <p className="mt-3 text-[13px] text-[#6b6b6b]">
-          Asegura tu sesión individual o elige un paquete enfocado en tu meta.
-        </p>
+        <>
+          <p className="text-[22px] font-bold text-[#19191f]">
+            Reserva con este tutor
+          </p>
+          <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
+            Elige el día y la clase; el precio depende de la mentoría que
+            escojas.
+          </p>
+        </>
       )}
 
       <hr className="my-5 border-[#e0e0e0]" />
@@ -126,7 +170,7 @@ export async function BookingPanel({
         <p className="text-xs text-[#808080]">Días disponibles</p>
       </div>
 
-      {slots.length === 0 ? (
+      {allDays.length === 0 ? (
         <p className="mt-4 text-[13px] text-muted-foreground">
           Sin horarios publicados para las próximas semanas.
         </p>
@@ -141,7 +185,7 @@ export async function BookingPanel({
             {cells.map((d, i) => {
               if (!d) return <span key={i} />;
               const key = dayKey(d);
-              const free = byDay.has(key);
+              const free = productsByDay.has(key);
               const isSelected = key === day;
               if (!free) {
                 return (
@@ -156,7 +200,15 @@ export async function BookingPanel({
               return (
                 <Link
                   key={i}
-                  href={hrefFor({ p: product.id, d: key })}
+                  // Cambiar de día conserva la clase solo si sigue teniendo
+                  // hueco; si no, se vuelve a elegir (evita un combo imposible).
+                  href={hrefFor({
+                    p:
+                      chosen && productsByDay.get(key)?.has(chosen.id)
+                        ? chosen.id
+                        : undefined,
+                    d: key,
+                  })}
                   aria-current={isSelected ? "date" : undefined}
                   className={`grid h-[38px] place-items-center rounded-full text-[13px] transition-colors ${
                     isSelected
@@ -170,57 +222,94 @@ export async function BookingPanel({
             })}
           </div>
 
-          <p className="mt-5 text-[13px] font-medium">Horarios disponibles</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {times.map((iso, i) => (
-              <Link
-                key={iso}
-                href={`/reservar/${product.id}?slot=${encodeURIComponent(iso)}`}
-                className={`rounded-[8px] px-3 py-2 text-[13px] transition-colors ${
-                  i === 0
-                    ? "bg-brand text-white hover:bg-brand-foreground"
-                    : "border border-[#cccccc] text-[#333333] hover:bg-muted"
-                }`}
-              >
-                {new Date(iso).toLocaleTimeString("es", {
-                  hour: "2-digit",
-                  minute: "2-digit",
+          {/* Paso 2 (R24-13): elegir la clase de ESE día. Con una sola mentoría
+              (P08) no hay nada que elegir y se salta. */}
+          {single ? null : (
+            <div className="mt-5">
+              <p className="text-[13px] font-medium">Elige la clase</p>
+              <ul className="mt-2 flex flex-col gap-2">
+                {dayProducts.map((p) => {
+                  const on = p.id === chosen?.id;
+                  return (
+                    <li key={p.id}>
+                      <Link
+                        href={hrefFor({ p: p.id, d: day })}
+                        aria-current={on ? "true" : undefined}
+                        className={`flex items-center justify-between gap-3 rounded-[10px] border px-3.5 py-2.5 text-left transition-colors ${
+                          on
+                            ? "border-brand bg-brand-muted"
+                            : "border-[#e0e0e0] hover:border-brand"
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-[13.5px] font-medium text-[#212121]">
+                            {p.title}
+                          </span>
+                          <span className="block text-xs text-[#6b6b6b]">
+                            {formatMoney(p.priceAmount, p.currency)} ·{" "}
+                            {priceUnitLabel(p)}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  );
                 })}
-              </Link>
-            ))}
-          </div>
+              </ul>
+            </div>
+          )}
+
+          {/* Paso 3: horarios de la clase elegida ese día. */}
+          {chosen ? (
+            <>
+              <p className="mt-5 text-[13px] font-medium">
+                Horarios disponibles
+              </p>
+              {times.length === 0 ? (
+                <p className="mt-2 text-[13px] text-muted-foreground">
+                  Esta clase no tiene horarios ese día. Prueba con otro día.
+                </p>
+              ) : (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {times.map((iso, i) => (
+                    <Link
+                      key={iso}
+                      href={`/reservar/${chosen.id}?slot=${encodeURIComponent(iso)}`}
+                      className={`rounded-[8px] px-3 py-2 text-[13px] transition-colors ${
+                        i === 0
+                          ? "bg-brand text-white hover:bg-brand-foreground"
+                          : "border border-[#cccccc] text-[#333333] hover:bg-muted"
+                      }`}
+                    >
+                      {new Date(iso).toLocaleTimeString("es", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="mt-4 text-[13px] text-muted-foreground">
+              Elige una clase para ver sus horarios y su precio.
+            </p>
+          )}
         </>
       )}
 
-      {products.length > 1 ? (
-        <div className="mt-5">
-          <p className="text-[13px] font-medium text-[#6b6b6b]">
-            Tipo de clase
-          </p>
-          <details className="group relative mt-1.5">
-            <summary className="flex h-[43px] cursor-pointer list-none items-center justify-between gap-2 rounded-[8px] border border-[#d1d1d1] px-3.5 text-sm text-[#595959] marker:hidden">
-              <span className="truncate">{product.title}</span>
-              <ChevronDownIcon className="size-3.5 shrink-0 transition-transform group-open:rotate-180" />
-            </summary>
-            <ul className="absolute right-0 left-0 z-10 mt-1 rounded-[8px] border bg-card p-1 shadow-md">
-              {products.map((p) => (
-                <li key={p.id}>
-                  <Link
-                    href={hrefFor({ p: p.id })}
-                    className="block truncate rounded-[6px] px-3 py-2 text-[13.5px] hover:bg-muted"
-                  >
-                    {p.title}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </details>
-        </div>
-      ) : null}
-
-      <Button asChild className="mt-5 h-[51px] w-full text-[15px]">
-        <Link href={`/reservar/${product.id}`}>{ctaLabel}</Link>
-      </Button>
+      {chosen ? (
+        <Button asChild className="mt-5 h-[51px] w-full text-[15px]">
+          <Link href={`/reservar/${chosen.id}`}>{ctaLabel}</Link>
+        </Button>
+      ) : (
+        <Button
+          disabled
+          className="mt-5 h-[51px] w-full text-[15px]"
+          title="Elige primero una clase"
+        >
+          {ctaLabel}
+        </Button>
+      )}
 
       {footer}
 
