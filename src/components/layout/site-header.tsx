@@ -36,6 +36,7 @@ import {
 import { Container } from "@/components/layout/container";
 import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
 import { cn } from "@/lib/utils";
+import { isAdminRoute, isOnboardingRoute } from "@/lib/routes";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
 export type HeaderUser = {
@@ -153,28 +154,25 @@ function SearchBox({ className }: { className?: string }) {
   );
 }
 
-export function SiteHeader({
-  user,
-  onboarding = false,
-  admin = false,
-}: {
-  user?: HeaderUser | null;
+export function SiteHeader({ user }: { user?: HeaderUser | null }) {
+  const router = useRouter();
+  const pathname = usePathname();
   /**
    * Modo onboarding (AL01 180:1282 / TU01): sin "Panel" ni menú de cuenta, con
    * "Guardar y salir" a la derecha. Durante el asistente el resto del área
    * autenticada está cerrada (`requireUser` rebota), así que enseñar el panel
    * sería un enlace a ninguna parte.
-   */
-  onboarding?: boolean;
-  /**
+   *
    * Modo admin (AD02 218:1725): logo + píldora negra "Admin", sin la
    * navegación pública. El "Buscar en el panel…" del Figma no se pinta: no
    * hay búsqueda global del panel a la que conectarlo.
+   *
+   * Ambos salen de la ruta del cliente y no de una prop del layout: el layout
+   * de `(app)` no vuelve a renderizarse al navegar y dejaba el header del
+   * asistente pegado al entrar al panel.
    */
-  admin?: boolean;
-}) {
-  const router = useRouter();
-  const pathname = usePathname();
+  const onboarding = isOnboardingRoute(pathname);
+  const admin = isAdminRoute(pathname);
   // El sheet no se cierra solo al navegar (Next navega en cliente, el diálogo
   // no se entera). Se nota sobre todo en el switch de panel: cambias de panel y
   // el menú te tapa el resultado.
