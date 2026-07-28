@@ -265,10 +265,14 @@ export async function CategoryExplorer({
             ))}
           </dl>
 
+          {/* Acotada a lo que estás viendo: si el explorador muestra mentorías
+              buscas mentorías, y si muestra tutores, tutores (24-jul). Nada de
+              caer en la vista global mezclada. */}
           <form
             action="/search"
             className="mt-6 flex max-w-[720px] gap-1.5 rounded-[10px] bg-card p-[5px]"
           >
+            <input type="hidden" name="tab" value={tab} />
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#6b6b6b]" />
               <input
