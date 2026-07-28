@@ -50,7 +50,7 @@ export function FeatureSplit({
           </p>
 
           <ul className="mt-6 space-y-2">
-            {points.map(({ icon: Icon, text: point, desc }, i) =>
+            {points.map(({ icon: Icon, text: point, desc }) =>
               desc ? (
                 <li key={point} className="flex items-start gap-3 py-2">
                   <span className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-brand-muted text-brand">
@@ -64,10 +64,10 @@ export function FeatureSplit({
               ) : (
                 <li
                   key={point}
-                  // La primera fila va resaltada en el Figma; el resto, sobre el fondo.
-                  className={`flex items-center gap-3 rounded-lg px-4 py-2.5 text-[17px] ${
-                    i === 0 ? "bg-secondary" : ""
-                  }`}
+                  // El realce gris es un HOVER, no un estado fijo de la primera
+                  // fila (24-jul): en el Figma marca la fila sobre la que está
+                  // el ratón, igual que las tarjetas de garantía (R24-02).
+                  className="flex items-center gap-3 rounded-lg px-4 py-2.5 text-[17px] transition-colors hover:bg-secondary"
                 >
                   <Icon className="size-5 shrink-0 text-primary" />
                   {point}

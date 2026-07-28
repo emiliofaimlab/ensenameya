@@ -95,7 +95,9 @@ function PanelSwitch({
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "rounded-lg px-2 py-1.5 text-center text-[13px] transition-colors",
+              // `truncate` + min-w-0: una etiqueta larga se recorta dentro de
+              // su celda en vez de desbordar el menú.
+              "min-w-0 truncate rounded-lg px-1.5 py-1.5 text-center text-[13px] transition-colors",
               active
                 ? "bg-card font-semibold text-foreground shadow-sm"
                 : "font-medium text-muted-foreground hover:text-foreground",
@@ -271,7 +273,9 @@ export function SiteHeader({
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              {/* w-72: con tres paneles (admin) ni w-56 ni w-64 daban — en w-64
+                  "Aprender" se recortaba dentro de su celda. */}
+              <DropdownMenuContent align="end" className="w-72">
                 <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
                   {user.email}
                 </DropdownMenuLabel>

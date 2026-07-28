@@ -1,8 +1,7 @@
 import Image from "next/image";
-import { SearchIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
+import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
 import { TRUST_POINTS } from "@/components/home/trust";
 import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import type { CategoryTag } from "@/lib/catalog/queries";
@@ -33,23 +32,16 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
             con el talento ideal para asegurar resultados desde el primer día.
           </p>
 
-          {/* Form GET nativo: mismo destino que el buscador del header. */}
-          <form
-            action="/search"
-            className="flex w-full max-w-[700px] items-center gap-2 rounded-lg bg-background p-2"
-          >
-            <SearchIcon className="ml-2 size-4 shrink-0 text-muted-foreground" />
-            <input
-              type="search"
-              name="q"
-              placeholder="¿Qué meta vas a conquistar hoy? (ej. hablar inglés fluido, dominar cálculo…)"
-              aria-label="¿Qué meta vas a conquistar hoy?"
-              className="min-w-0 flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none"
-            />
-            <Button type="submit" className="h-10 shrink-0 px-6">
-              Buscar
-            </Button>
-          </form>
+          {/* Mismo buscador con sugerencias que el header (R24-05), con el
+              look del hero: caja blanca y "Buscar" dentro. Sigue siendo un form
+              GET a /search, así que funciona igual sin JS. */}
+          <SearchAutocomplete
+            className="w-full max-w-[700px] text-left"
+            formClassName="gap-2 rounded-lg bg-background p-2"
+            inputClassName="h-10 min-w-0 flex-1 border-0 bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
+            placeholder="¿Qué meta vas a conquistar hoy? (ej. hablar inglés fluido, dominar cálculo…)"
+            submitLabel="Buscar"
+          />
 
           {/* Burbujas de categoría: círculo naranja que despliega el nombre al
               hover (mismo componente que el resto del sitio, R24-03). */}

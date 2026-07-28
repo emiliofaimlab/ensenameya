@@ -38,7 +38,10 @@ export function panelsFor(roles: AppRole[]): { href: string; label: string }[] {
     { href: ROLE_HOME.alumno, label: "Aprender" },
     { href: ROLE_HOME.tutor, label: "Enseñar" },
     ...(roles.includes("admin")
-      ? [{ href: ROLE_HOME.admin, label: "Administrar" }]
+      // "Admin", no "Administrar": con tres paneles el switch se queda sin
+      // ancho en el menú de cuenta, y es la misma palabra que la píldora del
+      // header (24-jul).
+      ? [{ href: ROLE_HOME.admin, label: "Admin" }]
       : []),
   ];
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -10,6 +11,7 @@ import {
   TagIcon,
 } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type Suggestions = {
@@ -41,10 +43,18 @@ export function SearchAutocomplete({
   placeholder = "Buscar tutores, mentorías o categorías",
   className,
   inputClassName,
+  formClassName,
+  submitLabel,
+  autoFocusOnMount = false,
 }: {
   placeholder?: string;
   className?: string;
   inputClassName?: string;
+  /** Estilos de la caja (el hero de P01 la pinta blanca con padding). */
+  formClassName?: string;
+  /** Si se pasa, se dibuja el botón de enviar dentro de la caja (hero). */
+  submitLabel?: string;
+  autoFocusOnMount?: boolean;
 }) {
   const pathname = usePathname();
   const [q, setQ] = useState("");
@@ -54,8 +64,22 @@ export function SearchAutocomplete({
   });
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  // Posición del panel en coordenadas de viewport: se dibuja en un PORTAL sobre
+  // el body, no dentro del formulario. Si no, el hero de P01 lo mata — tiene
+  // `isolate` (crea contexto de apilamiento, así que ningún z-index interno
+  // supera a la banda azul de garantías) y `overflow-hidden` (lo recortaría).
+  const [rect, setRect] = useState<{ left: number; top: number; width: number } | null>(
+    null,
+  );
 
   const term = q.trim();
+
+  function measure() {
+    const r = formRef.current?.getBoundingClientRect();
+    if (r) setRect({ left: r.left, top: r.bottom + 6, width: r.width });
+  }
 
   // Pide sugerencias con debounce; aborta la petición anterior si sigues tecleando.
   useEffect(() => {
@@ -80,10 +104,13 @@ export function SearchAutocomplete({
   // Solo mostramos las sugerencias del término vigente (sin parpadeo de resultados viejos).
   const sug = result.term === term ? result.sug : EMPTY;
 
-  // Cerrar al clicar fuera o con Escape.
+  // Cerrar al clicar fuera o con Escape. El panel vive en un portal, así que
+  // "fuera" tiene que contemplarlo aparte del formulario.
   useEffect(() => {
     function onDoc(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (boxRef.current?.contains(t) || panelRef.current?.contains(t)) return;
+      setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -95,6 +122,20 @@ export function SearchAutocomplete({
       document.removeEventListener("keydown", onKey);
     };
   }, []);
+
+  // Al hacer scroll o cambiar el tamaño, el panel sigue a su caja. Solo se
+  // registran listeners: medir aquí de forma síncrona rompería la regla de
+  // pureza de react-hooks (se mide desde los handlers).
+  useEffect(() => {
+    if (!open) return;
+    const onMove = () => measure();
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  }, [open]);
 
   const groups: Record<
     GroupKey,
@@ -122,7 +163,11 @@ export function SearchAutocomplete({
 
   return (
     <div ref={boxRef} className={cn("relative", className)}>
-      <form action="/search" className="relative">
+      <form
+        ref={formRef}
+        action="/search"
+        className={cn("relative flex items-center", formClassName)}
+      >
         <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="search"
@@ -131,11 +176,16 @@ export function SearchAutocomplete({
           onChange={(e) => {
             setQ(e.target.value);
             setOpen(true);
+            measure();
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setOpen(true);
+            measure();
+          }}
           placeholder={placeholder}
           aria-label={placeholder}
           autoComplete="off"
+          autoFocus={autoFocusOnMount}
           className={cn(
             // Placeholder en #595959, que es el del Figma para esta barra (el
             // token `muted-foreground` es #4d4d4d, un punto más oscuro).
@@ -143,10 +193,20 @@ export function SearchAutocomplete({
             inputClassName,
           )}
         />
+        {submitLabel ? (
+          <Button type="submit" className="h-10 shrink-0 px-6">
+            {submitLabel}
+          </Button>
+        ) : null}
       </form>
 
-      {open && term.length >= 2 ? (
-        <div className="absolute z-50 mt-1.5 w-full overflow-hidden rounded-lg border border-border bg-card text-left shadow-lg">
+      {open && term.length >= 2 && rect && typeof document !== "undefined"
+        ? createPortal(
+        <div
+          ref={panelRef}
+          style={{ left: rect.left, top: rect.top, width: rect.width }}
+          className="fixed z-[60] overflow-hidden rounded-lg border border-border bg-card text-left shadow-lg"
+        >
           {hasResults ? (
             <ul className="max-h-[65vh] overflow-auto py-1.5">
               {groupOrder(pathname).map((key) => {
@@ -200,8 +260,10 @@ export function SearchAutocomplete({
             <SearchIcon className="size-3.5" />
             Ver todos los resultados de «{term}»
           </Link>
-        </div>
-      ) : null}
+        </div>,
+        document.body,
+          )
+        : null}
     </div>
   );
 }
