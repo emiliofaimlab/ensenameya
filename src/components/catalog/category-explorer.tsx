@@ -265,15 +265,14 @@ export async function CategoryExplorer({
             ))}
           </dl>
 
-          {/* Acotada a lo que estás viendo: si el explorador muestra mentorías
-              buscas mentorías, y si muestra tutores, tutores (24-jul). Nada de
-              caer en la vista global mezclada. */}
+          {/* Acotada al módulo (24-jul), y el módulo depende de dónde estés:
+              en el índice buscas CATEGORÍAS; dentro de una, lo que el
+              explorador muestre (mentorías o tutores) de esa categoría. */}
           <form
             action="/search"
             className="mt-6 flex max-w-[720px] gap-1.5 rounded-[10px] bg-card p-[5px]"
           >
-            <input type="hidden" name="tab" value={tab} />
-            {/* Dentro de una categoría, la búsqueda también se queda en ella. */}
+            <input type="hidden" name="tab" value={slug ? tab : "categorias"} />
             {slug ? <input type="hidden" name="cat" value={slug} /> : null}
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#6b6b6b]" />
