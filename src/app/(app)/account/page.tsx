@@ -1,7 +1,7 @@
 import { requireUser } from "@/lib/auth/server";
+import { panelItems } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
 import { PanelShell } from "@/components/layout/panel-shell";
-import { ADMIN_ITEMS, TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import { AccountForm } from "./account-form";
 
 export const metadata = { title: "Mi cuenta · Enséñame Ya" };
@@ -27,11 +27,8 @@ export default async function AccountPage() {
     : null;
 
   // El menú lateral es el del panel del rol (undefined = alumno por defecto).
-  const items = roles.includes("admin")
-    ? ADMIN_ITEMS
-    : roles.includes("tutor")
-      ? TUTOR_ITEMS
-      : undefined;
+  // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
+  const items = await panelItems(user.id, roles);
 
   return (
     <PanelShell items={items}>

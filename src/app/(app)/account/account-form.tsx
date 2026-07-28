@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
+import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -104,12 +105,7 @@ export function AccountForm({
     setSavingPassword(false);
   }
 
-  async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
-  }
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   return (
     <>
@@ -245,12 +241,13 @@ export function AccountForm({
         <div className="mt-4">
           <Button
             variant="outline"
-            onClick={signOut}
+            onClick={() => setSignOutOpen(true)}
             className="h-[45px] rounded-[8px] px-5 text-[#bf3333]"
           >
             Cerrar sesión
           </Button>
         </div>
+        <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} />
       </PanelCard>
     </>
   );

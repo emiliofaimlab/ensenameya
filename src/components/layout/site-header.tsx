@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   ChevronDownIcon,
   LogOutIcon,
@@ -12,7 +12,6 @@ import {
   UserIcon,
 } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Avatar,
@@ -36,6 +35,7 @@ import {
 } from "@/components/ui/sheet";
 import { Container } from "@/components/layout/container";
 import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
+import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 import { cn } from "@/lib/utils";
 import { isAdminRoute, isOnboardingRoute } from "@/lib/routes";
 
@@ -185,7 +185,6 @@ function SearchBox({ className }: { className?: string }) {
 }
 
 export function SiteHeader({ user }: { user?: HeaderUser | null }) {
-  const router = useRouter();
   const pathname = usePathname();
   /**
    * Modo onboarding (AL01 180:1282 / TU01): sin "Panel" ni menú de cuenta, con
@@ -209,12 +208,17 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const closeMenu = () => setMenuOpen(false);
 
-  async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
-  }
+  // Cerrar sesión pide confirmación (SignOutDialog). El diálogo se abre desde
+  // aquí y no desde el item del menú: al elegir la opción el menú se desmonta y
+  // se llevaría el diálogo. Por eso el menú de cuenta va controlado: hay que
+  // cerrarlo a mano, o se queda abierto detrás del diálogo.
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const confirmSignOut = () => {
+    setAccountOpen(false);
+    setMenuOpen(false);
+    setSignOutOpen(true);
+  };
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/60">
@@ -288,7 +292,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
           <>
         <div className="hidden items-center gap-2 md:flex">
           {user ? (
-            <DropdownMenu>
+            <DropdownMenu open={accountOpen} onOpenChange={setAccountOpen}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
@@ -330,7 +334,12 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                     Mi cuenta
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onSelect={signOut}>
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    confirmSignOut();
+                  }}
+                >
                   <LogOutIcon />
                   Cerrar sesión
                 </DropdownMenuItem>
@@ -396,7 +405,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                       Mi cuenta
                     </Link>
                   </Button>
-                  <Button variant="ghost" onClick={signOut}>
+                  <Button variant="ghost" onClick={confirmSignOut}>
                     Cerrar sesión
                   </Button>
                 </>
@@ -417,6 +426,7 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
         )}
         </div>
       </Container>
+      <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} />
     </header>
   );
 }

@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
+import { PANEL_COOKIE, panelFromPath } from "@/lib/panel";
 
 /**
  * Refresca la sesión de Supabase en cada request y la propaga a las cookies de
@@ -36,6 +37,18 @@ export async function updateSession(request: NextRequest) {
   // IMPORTANTE: no insertar lógica entre createServerClient y getUser().
   // getUser() valida el token contra el servidor de Auth y renueva la sesión.
   await supabase.auth.getUser();
+
+  // Último panel visitado: lo leen las pantallas compartidas (/pagos, /account)
+  // para enseñar el menú del panel del que vienes. Solo decide el menú, así que
+  // no necesita ser httpOnly ni de sesión larga.
+  const panel = panelFromPath(request.nextUrl.pathname);
+  if (panel) {
+    supabaseResponse.cookies.set(PANEL_COOKIE, panel, {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  }
 
   return supabaseResponse;
 }

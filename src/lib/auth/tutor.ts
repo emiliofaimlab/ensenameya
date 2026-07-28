@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
@@ -29,3 +30,17 @@ export async function requireTutorProfile(): Promise<{
   if (!data) redirect("/tutor/onboarding");
   return { userId: user.id, approvalStatus: data.approval_status };
 }
+
+/**
+ * ¿Tiene perfil de tutor? Sin redirigir, para decidir cosas de UI (qué menú
+ * pintar). `cache()` la memoiza por request.
+ */
+export const hasTutorProfile = cache(async (userId: string) => {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tutor_profiles")
+    .select("profile_id")
+    .eq("profile_id", userId)
+    .maybeSingle();
+  return Boolean(data);
+});

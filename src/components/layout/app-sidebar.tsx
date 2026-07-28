@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   BarChart3Icon,
   BellIcon,
@@ -23,7 +24,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 
 export type SidebarItem = {
   href: string;
@@ -90,14 +91,8 @@ export const ADMIN_ITEMS: Item[] = [
 
 export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
   const pathname = usePathname();
-  const router = useRouter();
 
-  async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/");
-    router.refresh();
-  }
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   return (
     <nav
@@ -131,7 +126,7 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
         <li className="mt-2 pt-1">
           <button
             type="button"
-            onClick={signOut}
+            onClick={() => setSignOutOpen(true)}
             className="flex h-[41px] w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-[#bf3333] transition-colors hover:bg-[#bf3333]/5"
           >
             <LogOutIcon className="size-4 shrink-0" />
@@ -139,6 +134,7 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
           </button>
         </li>
       </ul>
+      <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} />
     </nav>
   );
 }

@@ -1,11 +1,11 @@
 import { requireUser } from "@/lib/auth/server";
+import { panelItems } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
 import {
   PanelShell,
   PanelCard,
   PanelCardTitle,
 } from "@/components/layout/panel-shell";
-import { ADMIN_ITEMS, TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import { PaymentMethods } from "./payment-methods";
 
 export const metadata = { title: "Métodos de pago · Enséñame Ya" };
@@ -25,11 +25,8 @@ export default async function PagosPage() {
     .eq("profile_id", user.id)
     .order("created_at", { ascending: false });
 
-  const items = roles.includes("admin")
-    ? ADMIN_ITEMS
-    : roles.includes("tutor")
-      ? TUTOR_ITEMS
-      : undefined;
+  // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
+  const items = await panelItems(user.id, roles);
 
   return (
     <PanelShell items={items}>
