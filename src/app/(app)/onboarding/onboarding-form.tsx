@@ -7,7 +7,10 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { safeNext } from "@/lib/auth/roles";
 import { Input } from "@/components/ui/input";
-import { PhoneInput } from "@/components/form/phone-input";
+import {
+  PhoneInput,
+  countryFromTimezone,
+} from "@/components/form/phone-input";
 import { TimezoneSelect } from "@/components/form/timezone-select";
 import {
   WizardShell,
@@ -68,6 +71,15 @@ export function OnboardingForm({
   );
   const [timezone, setTimezone] = useState(defaultTz);
   const [phone, setPhone] = useState(phone0);
+  // El prefijo sigue a la zona horaria mientras no haya número escrito; si ya
+  // lo escribiste manda tu número. La librería no admite país controlado, así
+  // que el cambio se aplica remontando el campo (`key`), que estando vacío no
+  // pierde nada.
+  const [country, setCountry] = useState(() => countryFromTimezone(defaultTz));
+  function pickTimezone(tz: string) {
+    setTimezone(tz);
+    if (!phone.trim()) setCountry(countryFromTimezone(tz) ?? country);
+  }
 
   const supabase = createClient();
 
@@ -217,7 +229,7 @@ export function OnboardingForm({
       >
         <TimezoneSelect
           value={timezone}
-          onChange={setTimezone}
+          onChange={pickTimezone}
           className={FIELD_CLASS}
         />
       </Field>
@@ -225,7 +237,13 @@ export function OnboardingForm({
       {/* El Figma lo marca "(opcional)", pero RN-44 lo exige en E.164: manda la
           regla de negocio. Anotado para el cliente. */}
       <Field label="Teléfono" htmlFor="phone">
-        <PhoneInput id="phone" value={phone} onChange={setPhone} />
+        <PhoneInput
+    key={country}
+    id="phone"
+    value={phone}
+    onChange={setPhone}
+    defaultCountry={country}
+  />
       </Field>
     </WizardShell>
   );

@@ -11,7 +11,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { PhoneInput } from "@/components/form/phone-input";
+import {
+  PhoneInput,
+  countryFromTimezone,
+} from "@/components/form/phone-input";
 import { TimezoneSelect } from "@/components/form/timezone-select";
 import {
   WizardShell,
@@ -90,6 +93,15 @@ export function TutorOnboardingForm({
   const [level, setLevel] = useState<TeachingLevel | null>(level0);
   const [timezone, setTimezone] = useState(tz0);
   const [phone, setPhone] = useState(phone0);
+  // El prefijo sigue a la zona horaria mientras no haya número escrito; si ya
+  // lo escribiste manda tu número. La librería no admite país controlado, así
+  // que el cambio se aplica remontando el campo (`key`), que estando vacío no
+  // pierde nada.
+  const [country, setCountry] = useState(() => countryFromTimezone(tz0));
+  function pickTimezone(tz: string) {
+    setTimezone(tz);
+    if (!phone.trim()) setCountry(countryFromTimezone(tz) ?? country);
+  }
   const [instagram, setInstagram] = useState(ig0);
   const [linkedin, setLinkedin] = useState(li0);
 
@@ -276,12 +288,18 @@ export function TutorOnboardingForm({
         <Field label="Zona horaria" htmlFor="timezone">
           <TimezoneSelect
             value={timezone}
-            onChange={setTimezone}
+            onChange={pickTimezone}
             className={FIELD_CLASS}
           />
         </Field>
         <Field label="Teléfono" htmlFor="phone">
-          <PhoneInput id="phone" value={phone} onChange={setPhone} />
+          <PhoneInput
+      key={country}
+      id="phone"
+      value={phone}
+      onChange={setPhone}
+      defaultCountry={country}
+    />
         </Field>
         <Field label="LinkedIn" htmlFor="linkedin">
           <Input
