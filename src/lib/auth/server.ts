@@ -19,6 +19,14 @@ type SessionContext = {
   user: User | null;
   roles: AppRole[];
   onboardingComplete: boolean;
+  /**
+   * Nombre y foto de `profiles`, para el menú de cuenta. Salen de la consulta
+   * que ya se hacía. El metadata de Auth NO sirve: viaja dentro del JWT, así
+   * que se queda con lo que hubiera al emitirlo (y hay altas que nunca lo
+   * escriben) — por eso a algunas cuentas les salía el correo.
+   */
+  fullName: string | null;
+  avatarPath: string | null;
 };
 
 /** Lee el usuario validado (auth server), sus roles y el flag de onboarding. */
@@ -28,7 +36,9 @@ export async function getSessionContext(): Promise<SessionContext> {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return { user: null, roles: [], onboardingComplete: false };
+  const empty = { fullName: null, avatarPath: null };
+  if (!user)
+    return { user: null, roles: [], onboardingComplete: false, ...empty };
 
   // RLS ya limita a las filas propias; los filtros son explícitos para leer la
   // intención. Roles + flag de onboarding en paralelo.
@@ -36,7 +46,7 @@ export async function getSessionContext(): Promise<SessionContext> {
     supabase.from("user_roles").select("role").eq("user_id", user.id),
     supabase
       .from("profiles")
-      .select("onboarding_complete")
+      .select("onboarding_complete, full_name, avatar_path")
       .eq("id", user.id)
       .maybeSingle(),
   ]);
@@ -45,6 +55,8 @@ export async function getSessionContext(): Promise<SessionContext> {
     user,
     roles: (roleRows ?? []).map((r) => r.role),
     onboardingComplete: profile?.onboarding_complete ?? false,
+    fullName: profile?.full_name ?? null,
+    avatarPath: profile?.avatar_path ?? null,
   };
 }
 
@@ -110,7 +122,9 @@ export async function getUserRoles(): Promise<AppRole[]> {
  * Exige sesión. Si no hay, redirige a /login conservando el destino previo
  * (`?next=`, SCR-AU01). Devuelve el contexto con `user` no nulo.
  */
-export async function requireUser(): Promise<{ user: User; roles: AppRole[] }> {
+export async function requireUser(): Promise<
+  { user: User } & Omit<SessionContext, "user">
+> {
   const ctx = await getSessionContext();
   if (!ctx.user) {
     const next = await currentPath();
@@ -121,7 +135,7 @@ export async function requireUser(): Promise<{ user: User; roles: AppRole[] }> {
   if (!ctx.onboardingComplete && path !== "/onboarding") {
     redirect(`/onboarding?next=${encodeURIComponent(path)}`);
   }
-  return { user: ctx.user, roles: ctx.roles };
+  return { ...ctx, user: ctx.user };
 }
 
 /**

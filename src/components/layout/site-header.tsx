@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import {
   Avatar,
   AvatarFallback,
+  AvatarImage,
 } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -42,6 +43,8 @@ import { isAdminRoute, isOnboardingRoute } from "@/lib/routes";
 export type HeaderUser = {
   email: string;
   name: string | null;
+  /** Foto de `profiles` ya resuelta a URL pública, o `null` (van iniciales). */
+  avatarUrl: string | null;
   /** Panel del usuario según su rol (lo resuelve `toHeaderUser` con pickHome). */
   homeHref: string;
   /**
@@ -131,9 +134,36 @@ const navGroups = [
   },
 ];
 
+/** Cómo llamar al usuario: su nombre; el correo solo si no hay nombre. */
+function displayName(user: HeaderUser): string {
+  return user.name?.trim() || user.email;
+}
+
+/** Iniciales de las DOS primeras palabras del nombre ("Jose Mora" → JM). */
 function initials(user: HeaderUser): string {
-  const base = user.name?.trim() || user.email;
-  return base.slice(0, 2).toUpperCase();
+  const words = displayName(user).split(/[\s@._-]+/).filter(Boolean);
+  const letters = words.slice(0, 2).map((w) => w[0]);
+  return (letters.join("") || "?").toUpperCase();
+}
+
+/** Avatar del usuario: su foto si la subió, si no sus iniciales. */
+function UserAvatar({
+  user,
+  className,
+}: {
+  user: HeaderUser;
+  className?: string;
+}) {
+  return (
+    <Avatar className={cn("size-8", className)}>
+      {user.avatarUrl ? (
+        <AvatarImage src={user.avatarUrl} alt="" />
+      ) : null}
+      <AvatarFallback className="bg-brand-muted text-[11px] font-semibold text-brand">
+        {initials(user)}
+      </AvatarFallback>
+    </Avatar>
+  );
 }
 
 /** Form GET nativo: navega a /search?q=… sin JS, igual que la página de búsqueda. */
@@ -266,16 +296,19 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
                   className="rounded-full"
                   aria-label="Abrir menú de cuenta"
                 >
-                  <Avatar className="size-8">
-                    <AvatarFallback>{initials(user)}</AvatarFallback>
-                  </Avatar>
+                  <UserAvatar user={user} />
                 </Button>
               </DropdownMenuTrigger>
               {/* w-72: con tres paneles (admin) ni w-56 ni w-64 daban — en w-64
                   "Aprender" se recortaba dentro de su celda. */}
               <DropdownMenuContent align="end" className="w-72">
-                <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
-                  {user.email}
+                {/* Quién eres, no con qué correo entraste: nombre y foto. El
+                    correo solo aparece si la cuenta aún no tiene nombre. */}
+                <DropdownMenuLabel className="flex items-center gap-2.5 py-2.5 font-normal">
+                  <UserAvatar user={user} className="size-9" />
+                  <span className="min-w-0 truncate text-[13.5px] font-semibold text-foreground">
+                    {displayName(user)}
+                  </span>
                 </DropdownMenuLabel>
 
                 {user.panels.length > 1 ? (

@@ -10,7 +10,7 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   // Área autenticada: sin sesión → /login?next=… (SCR-AU01).
-  const { user, roles } = await requireUser();
+  const { user, roles, fullName, avatarPath } = await requireUser();
 
   // El modo de la ruta (asistente AL01/TU01 con "Guardar y salir", admin con su
   // píldora y su pie) NO se decide aquí: este layout se renderiza una vez y se
@@ -19,7 +19,7 @@ export default async function AppLayout({
   // la ruta actual.
   return (
     <div className="flex min-h-svh flex-col">
-      <SiteHeader user={toHeaderUser(user, roles)} />
+      <SiteHeader user={toHeaderUser(user, roles, { fullName, avatarPath })} />
       <main className="flex-1">{children}</main>
       {/* Bandeja de chat flotante (R24-21). */}
       <AppChrome chat={<ChatLauncher />} />
