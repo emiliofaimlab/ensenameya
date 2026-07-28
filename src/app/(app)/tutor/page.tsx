@@ -315,6 +315,7 @@ export default async function TutorHomePage() {
                 { href: "/tutor/availability", label: "Disponibilidad" },
                 { href: "/tutor/reservas", label: "Reservas" },
                 { href: "/tutor/payouts", label: "Payouts" },
+                { href: "/tutor/verification", label: "Mis documentos" },
               ].map(({ href, label }) => (
                 <li key={href}>
                   <Link

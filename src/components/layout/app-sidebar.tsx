@@ -14,6 +14,7 @@ import {
   LogOutIcon,
   PercentIcon,
   ReceiptIcon,
+  ShieldCheckIcon,
   TicketIcon,
   UserIcon,
   UsersIcon,
@@ -60,6 +61,10 @@ export const TUTOR_ITEMS: Item[] = [
   { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
   { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },
   { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
+  // TU02: los documentos se suben, se reemplazan y se consultan aquí. En el
+  // Figma cuelgan de "Cuenta", pero sin entrada propia no había forma de
+  // llegar a ellos desde el panel.
+  { href: "/tutor/verification", label: "Verificación", icon: ShieldCheckIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
 ];
 
