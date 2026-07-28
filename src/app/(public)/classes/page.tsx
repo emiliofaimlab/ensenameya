@@ -106,7 +106,10 @@ export default async function ClassesPage({
             diseñada para tu éxito.
           </p>
 
+          {/* Acotada a MENTORÍAS: buscando desde este módulo no se quieren
+              tutores ni categorías mezclados (24-jul). Sin desplegable. */}
           <form action="/search" className="mt-6 flex gap-2.5">
+            <input type="hidden" name="tab" value="productos" />
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
               <input

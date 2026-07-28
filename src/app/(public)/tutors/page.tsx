@@ -99,8 +99,11 @@ export default async function TutorsPage({
             transformar tu forma de aprender en vivo.
           </p>
 
-          {/* La búsqueda por texto vive en /search (US-303). */}
+          {/* La búsqueda por texto vive en /search (US-303), pero acotada a
+              TUTORES: si buscas desde este módulo no quieres ver clases ni
+              categorías mezcladas (24-jul). Sin desplegable a propósito. */}
           <form action="/search" className="mt-6 flex gap-2.5">
+            <input type="hidden" name="tab" value="tutores" />
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
