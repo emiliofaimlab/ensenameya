@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronDownIcon, SearchIcon } from "lucide-react";
+import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react";
 
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
@@ -28,7 +28,12 @@ const SORTS: { value: Sort; label: string }[] = [
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; tab?: string; sort?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    tab?: string;
+    sort?: string;
+    cat?: string;
+  }>;
 }) {
   const sp = await searchParams;
   const query = (sp.q ?? "").trim();
@@ -38,14 +43,19 @@ export default async function SearchPage({
     ? (sp.tab as Tab)
     : "todo";
   const sort: Sort = sp.sort === "rating" ? "rating" : "relevancia";
+  // Filtro por categoría: llega al entrar a buscar desde una categoría concreta
+  // (`/categories/[slug]`). Acota tutores y mentorías; las categorías que casan
+  // por texto dejan de tener sentido cuando ya estás dentro de una.
+  const cat = sp.cat?.trim() || undefined;
 
   const [productsRaw, tutorsRaw, matchedCategories, categories] =
     await Promise.all([
-      query ? searchProducts(query) : Promise.resolve([]),
-      query ? searchTutors(query) : Promise.resolve([]),
-      query ? searchCategories(query) : Promise.resolve([]),
+      query ? searchProducts(query, cat) : Promise.resolve([]),
+      query ? searchTutors(query, cat) : Promise.resolve([]),
+      query && !cat ? searchCategories(query) : Promise.resolve([]),
       listCategoriesWithCounts(),
     ]);
+  const catName = categories.find((c) => c.slug === cat)?.name ?? cat;
 
   // "Mejor valorados" reordena en memoria: son ≤12 filas ya traídas, no merece
   // otra consulta. "Relevancia" es el orden que devuelve cada búsqueda.
@@ -61,10 +71,13 @@ export default async function SearchPage({
       : tutorsRaw;
 
   const total = products.length + tutors.length + matchedCategories.length;
-  const hrefFor = (next: { tab?: Tab; sort?: Sort }) => {
+  const hrefFor = (next: { tab?: Tab; sort?: Sort; cat?: string | null }) => {
     const p = new URLSearchParams({ q: query });
     if (next.tab && next.tab !== "todo") p.set("tab", next.tab);
     if (next.sort && next.sort !== "relevancia") p.set("sort", next.sort);
+    // `null` = quitar el filtro; `undefined` = conservar el vigente.
+    const nextCat = next.cat === undefined ? cat : (next.cat ?? undefined);
+    if (nextCat) p.set("cat", nextCat);
     return `/search?${p.toString()}`;
   };
 
@@ -84,6 +97,11 @@ export default async function SearchPage({
             action="/search"
             className="mt-4 flex w-full max-w-[720px] gap-2.5"
           >
+            {/* Al refinar la búsqueda se conserva el ámbito con el que llegaste. */}
+            {cat ? <input type="hidden" name="cat" value={cat} /> : null}
+            {tab !== "todo" ? (
+              <input type="hidden" name="tab" value={tab} />
+            ) : null}
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-[#737373]" />
               <input
@@ -128,10 +146,24 @@ export default async function SearchPage({
             </p>
           ) : (
             <>
-              <p className="text-base font-semibold text-[#292929]">
-                Mostrando {total} {total === 1 ? "resultado" : "resultados"}{" "}
-                para &quot;{query}&quot;
-              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-base font-semibold text-[#292929]">
+                  Mostrando {total} {total === 1 ? "resultado" : "resultados"}{" "}
+                  para &quot;{query}&quot;
+                </p>
+                {cat ? (
+                  <span className="inline-flex items-center gap-2 rounded-full bg-brand-muted py-1 pr-1 pl-3 text-[13px] font-medium text-brand">
+                    En {catName}
+                    <Link
+                      href={hrefFor({ tab, sort, cat: null })}
+                      aria-label={`Quitar el filtro de categoría ${catName}`}
+                      className="grid size-5 place-items-center rounded-full transition-colors hover:bg-brand hover:text-white"
+                    >
+                      <XIcon className="size-3" />
+                    </Link>
+                  </span>
+                ) : null}
+              </div>
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 {/* Segmented control del Figma, igual que en P06. */}
@@ -185,7 +217,20 @@ export default async function SearchPage({
                 </details>
               </div>
 
-              {total === 0 ? (
+              {total === 0 && cat ? (
+                <p className="mt-6 text-sm text-muted-foreground">
+                  Sin resultados para &quot;{query}&quot; dentro de {catName}.{" "}
+                  <Link
+                    href={hrefFor({ tab, sort, cat: null })}
+                    className="font-medium text-brand hover:underline"
+                  >
+                    Buscar en todas las categorías
+                  </Link>
+                  .
+                </p>
+              ) : null}
+
+              {total === 0 && !cat ? (
                 <div className="mt-6 flex flex-col gap-3">
                   <p className="text-sm text-muted-foreground">
                     Sin resultados para &quot;{query}&quot;. Prueba con otra

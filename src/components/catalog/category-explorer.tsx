@@ -273,6 +273,8 @@ export async function CategoryExplorer({
             className="mt-6 flex max-w-[720px] gap-1.5 rounded-[10px] bg-card p-[5px]"
           >
             <input type="hidden" name="tab" value={tab} />
+            {/* Dentro de una categoría, la búsqueda también se queda en ella. */}
+            {slug ? <input type="hidden" name="cat" value={slug} /> : null}
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#6b6b6b]" />
               <input

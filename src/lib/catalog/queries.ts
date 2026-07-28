@@ -565,15 +565,35 @@ function likeSafe(q: string): string {
  * incluye `display_name`). Al ser una sola columna se acabó el `or(...)`: ya no
  * hay gramática de PostgREST que romper.
  */
-export async function searchTutors(q: string): Promise<FeaturedTutor[]> {
+export async function searchTutors(
+  q: string,
+  categorySlug?: string,
+): Promise<FeaturedTutor[]> {
   const term = likeSafe(q);
   if (!term) return [];
   const supabase = await createClient();
-  const { data } = await supabase
+
+  // Acotar a una categoría = quedarse con los tutores que tienen ≥1 producto
+  // activo en ella (mismo criterio que `listApprovedTutors`).
+  let tutorIds: string[] | null = null;
+  if (categorySlug) {
+    const { data } = await supabase
+      .from("products")
+      .select("tutor_id, product_categories!inner(categories!inner(slug))")
+      .eq("status", "active")
+      .eq("product_categories.categories.slug", categorySlug);
+    tutorIds = [...new Set((data ?? []).map((r) => r.tutor_id))];
+    if (tutorIds.length === 0) return [];
+  }
+
+  let query = supabase
     .from("tutor_profiles")
     .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
     .eq("approval_status", "approved")
-    .ilike("search_text", `%${term}%`)
+    .ilike("search_text", `%${term}%`);
+  if (tutorIds) query = query.in("profile_id", tutorIds);
+
+  const { data } = await query
     .order("rating_avg", { ascending: false, nullsFirst: false })
     .limit(PAGE_SIZE);
 
@@ -640,7 +660,10 @@ const PRODUCT_CARD_SELECT =
  * Las tres se unen por id conservando el orden: manda la relevancia del
  * tsvector y las otras dos solo añaden lo que aquélla no alcanzó.
  */
-export async function searchProducts(q: string): Promise<ProductCardData[]> {
+export async function searchProducts(
+  q: string,
+  categorySlug?: string,
+): Promise<ProductCardData[]> {
   const raw = q.trim();
   if (!raw) return [];
   const plain = stripAccents(raw);
@@ -651,6 +674,22 @@ export async function searchProducts(q: string): Promise<ProductCardData[]> {
   // sin este guard, `ilike '%%'` devolvería el catálogo entero.
   const likeTerm = likeSafe(raw);
 
+  // Acotar a una categoría: ids de productos activos en ella (N–M, RN-09). El
+  // filtro se aplica DENTRO de cada rama, no sobre el resultado final: si no,
+  // el `limit` se gastaría en productos de otras categorías y se perderían
+  // coincidencias válidas.
+  let allowed: Set<string> | null = null;
+  if (categorySlug) {
+    const { data } = await supabase
+      .from("product_categories")
+      .select("product_id, categories!inner(slug), products!inner(status)")
+      .eq("categories.slug", categorySlug)
+      .eq("products.status", "active");
+    allowed = new Set((data ?? []).map((r) => r.product_id));
+    if (allowed.size === 0) return [];
+  }
+  const allowedIds = allowed ? [...allowed] : null;
+
   // Rama 3 (EY-109): similitud por palabra. Rescata el caso que ni el stemmer
   // ni la subcadena alcanzan — teclear sin tilde una palabra que solo casa por
   // su raíz ("programacion" ~ "programar"). Devuelve ids; la fila la lee el
@@ -659,41 +698,41 @@ export async function searchProducts(q: string): Promise<ProductCardData[]> {
     p_q: raw,
     p_limit: PAGE_SIZE,
   });
-  const fuzzyIds = (fuzzy ?? []).map((r) => r.id);
+  const fuzzyIds = (fuzzy ?? [])
+    .map((r) => r.id)
+    .filter((id) => !allowed || allowed.has(id));
 
-  const results = await Promise.all([
-    ...terms.map((term) =>
-      supabase
-        .from("products")
-        .select(PRODUCT_CARD_SELECT)
-        .eq("status", "active")
-        .textSearch("search_vector", term, {
-          type: "websearch",
-          config: "spanish",
-        })
-        .limit(PAGE_SIZE),
-    ),
-    // Rama sin acentos. Va la última a propósito: primero manda la relevancia
-    // del tsvector y esto solo añade lo que aquélla no alcanzó.
-    ...(likeTerm
-      ? [
-          supabase
-            .from("products")
-            .select(PRODUCT_CARD_SELECT)
-            .eq("status", "active")
-            .ilike("search_text", `%${likeTerm}%`)
-            .limit(PAGE_SIZE),
-        ]
-      : []),
-    ...(fuzzyIds.length
-      ? [
-          supabase
-            .from("products")
-            .select(PRODUCT_CARD_SELECT)
-            .in("id", fuzzyIds),
-        ]
-      : []),
-  ]);
+  const branches = [];
+  for (const term of terms) {
+    let b = supabase
+      .from("products")
+      .select(PRODUCT_CARD_SELECT)
+      .eq("status", "active")
+      .textSearch("search_vector", term, {
+        type: "websearch",
+        config: "spanish",
+      });
+    if (allowedIds) b = b.in("id", allowedIds);
+    branches.push(b.limit(PAGE_SIZE));
+  }
+  // Rama sin acentos. Va después a propósito: primero manda la relevancia del
+  // tsvector y esto solo añade lo que aquélla no alcanzó.
+  if (likeTerm) {
+    let b = supabase
+      .from("products")
+      .select(PRODUCT_CARD_SELECT)
+      .eq("status", "active")
+      .ilike("search_text", `%${likeTerm}%`);
+    if (allowedIds) b = b.in("id", allowedIds);
+    branches.push(b.limit(PAGE_SIZE));
+  }
+  if (fuzzyIds.length) {
+    branches.push(
+      supabase.from("products").select(PRODUCT_CARD_SELECT).in("id", fuzzyIds),
+    );
+  }
+
+  const results = await Promise.all(branches);
 
   // Unir por id conservando el orden de la primera rama.
   const seen = new Map<string, ProductCardData & { tutorId: string }>();
