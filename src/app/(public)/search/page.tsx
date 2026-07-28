@@ -197,7 +197,7 @@ export default async function SearchPage({
                 </div>
 
                 {/* ponytail: `<details>` nativo, igual que en el resto del sitio. */}
-                <details className="group relative">
+                <details name="orden" className="group relative">
                   <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-[#595959] marker:hidden">
                     Ordenar por: {SORTS.find((s) => s.value === sort)!.label}
                     <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />

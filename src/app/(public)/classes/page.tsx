@@ -172,8 +172,9 @@ export default async function ClassesPage({
                 {total === 1 ? "mentoría disponible" : "mentorías disponibles"}
               </p>
 
-              {/* ponytail: `<details>` nativo, igual que en P04. */}
-              <details className="group relative">
+              {/* ponytail: `<details>` nativo, igual que en P04. `name` lo marca
+                  como desplegable: se cierra fuera/Escape/al elegir. */}
+              <details name="orden" className="group relative">
                 <summary className="flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border border-[#d1d1d1] px-3.5 text-[13.5px] font-medium text-[#474747] marker:hidden">
                   Ordenar:{" "}
                   {SORTS.find((s) => s.value === (sort ?? "recent"))!.label}

@@ -339,7 +339,9 @@ export async function CategoryExplorer({
             </div>
 
             {tab === "productos" ? (
-              <details className="group relative">
+              // `name` = acordeón exclusivo nativo: abrir uno cierra los demás
+              // del grupo, así los paneles no se pisan entre sí.
+              <details name="explorador" className="group relative">
                 <summary className="flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border border-[#d1d1d1] px-3.5 text-[13.5px] font-medium text-[#474747] marker:hidden">
                   Ordenar:{" "}
                   {SORTS.find((s) => s.value === (sort ?? "recent"))!.label}
@@ -367,7 +369,7 @@ export async function CategoryExplorer({
           {tab === "productos" ? (
             <div className="mt-5 flex flex-wrap items-center gap-2.5">
               {dropdowns.map((d) => (
-                <details key={d.label} className="group relative">
+                <details key={d.label} name="explorador" className="group relative">
                   <summary
                     className={`flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border px-3.5 text-[13.5px] font-medium marker:hidden ${
                       d.current
