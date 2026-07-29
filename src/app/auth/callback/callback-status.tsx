@@ -74,7 +74,7 @@ export function CallbackStatus({
     }
 
     void run();
-  }, [code, next, intent, router]);
+  }, [code, next, intent, referralCode, router]);
 
   return (
     <div className="rounded-[20px] border bg-card p-9 text-center shadow-sm">
