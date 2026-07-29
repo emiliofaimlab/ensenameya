@@ -656,19 +656,20 @@ paso queda cubierto por tipos + el módulo verificado en su otro punto de montaj
 
 ### 🔎 Lo que el inventario destapó
 
-**1) Cuatro compromisos del 24-jul sin ticket y sin código.** Las respuestas del cliente (tabla
-"Decisiones cerradas", decisiones 18/23/29/30) abrieron ítems que se anotaron "para Jira" y **nunca
-se crearon**. Verificado en el esquema el 29-jul: no existe ninguno.
+**1) Cuatro compromisos del 24-jul sin ticket y sin código** → ✅ **HECHOS (29-jul, `0b710b1`)**.
+Las respuestas del cliente (decisiones 18/23/29/30) se anotaron "para Jira" y nunca se crearon.
+**No se abrieron tickets: se resolvieron en código** (decisión de Jose, 29-jul).
 
-| Compromiso | Decisión | Dónde | Esf. |
-| :-- | :-- | :-- | :-- |
-| `bookings.cancel_reason` — persistir el motivo (hoy se captura en AL07 y **se tira**) | 23 | EP-23 | S |
-| Tabla de **incidencias** para el "marcar atendida" de AD14 | 29 | EP-23 | M |
-| **"Tu objetivo principal"** del alumno (AL01) + su lista de 6 opciones ya confirmada | 30 | EP-23 | S |
-| **Reseñas firmadas** nombre + inicial con gate de consentimiento | 18 | EP-09 | M |
+| Compromiso | Dec. | Cómo quedó |
+| :-- | :-- | :-- |
+| Motivo de cancelación | 23 | `bookings.cancel_reason` (migración `20260729140000`), lo escribe `cancel_booking` con un parámetro opcional, y sale en el log de AD10. Sin enum: la lista es de producto |
+| "Marcar atendida" en AD14 | 29 | `alert_acks` (`20260729170000`) — **el acuse, no una copia de la incidencia**: las alertas se derivan de pagos/payouts/reservas y duplicarlas daría dos versiones del mismo hecho. Se apartan de la lista, se revisan y se reabren |
+| "Tu objetivo principal" | 30 | `profiles.primary_goal` con check de las seis opciones confirmadas (`20260729160000`) + select en AL01 p2 |
+| Reseñas firmadas | 18 | `reviews.author_display` (`20260729150000`): copia enmascarada escrita por `submit_review` **solo con consentimiento**; `profiles` sigue cerrado y la consulta pública deja de tocarlo. Regla de enmascarado compartida en `mask_person_name()` |
 
-→ **Acción:** abrirlos en Jira bajo EP-23/EP-09 y meterlos en Sprint 7 (tanda 3). Son ~1,5 días entre
-los cuatro y son alcance ya aceptado por el cliente, no ideas nuevas.
+⚠️ **Cambio visible en la home:** los testimonios firmaban con el nombre de cualquier alumno **sin
+habérselo preguntado**. Ahora salen como "Alumno" hasta que alguien marque la casilla al reseñar —
+que es justo lo que pedía la decisión 18, pero conviene saber que la home se ve distinta.
 
 **2) `US-1302` ya está hecho.** `?ref=` se captura en `signup/page.tsx:25` y se persiste en
 `signup-form.tsx:82-88`. Falta solo verificar la rama OAuth y la de confirmación por correo. El
