@@ -8,6 +8,7 @@ import { Pager } from "@/components/catalog/pager";
 import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import { TutorFilters } from "@/components/catalog/tutor-filters";
+import { LANGUAGES } from "@/components/catalog/product-filters";
 import {
   listApprovedTutors,
   listActiveCategories,
@@ -34,6 +35,7 @@ export default async function TutorsPage({
     rating?: string;
     avail?: string;
     price?: string;
+    lang?: string;
     sort?: string;
   }>;
 }) {
@@ -43,6 +45,7 @@ export default async function TutorsPage({
     rating: ratingParam,
     avail: availParam,
     price: priceParam,
+    lang: langParam,
     sort: sortParam,
   } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
@@ -55,6 +58,7 @@ export default async function TutorsPage({
   const price = (["lt15", "15to25", "25to40", "gt40"] as const).find(
     (v) => v === priceParam,
   );
+  const language = LANGUAGES.find((l) => l.id === langParam)?.id;
   const sort = (["rating", "reviews"] as const).find((v) => v === sortParam);
 
   const [{ tutors, hasMore, total }, categories] = await Promise.all([
@@ -63,6 +67,7 @@ export default async function TutorsPage({
       minRating,
       availability,
       price,
+      language,
       sort,
       page,
     }),
@@ -75,6 +80,7 @@ export default async function TutorsPage({
     rating?: number;
     avail?: AvailabilityFilter;
     price?: PriceBucket;
+    lang?: string;
     sort?: TutorSort;
     page?: number;
   }) => {
@@ -83,13 +89,14 @@ export default async function TutorsPage({
     if (next.rating) p.set("rating", String(next.rating));
     if (next.avail) p.set("avail", next.avail);
     if (next.price) p.set("price", next.price);
+    if (next.lang) p.set("lang", next.lang);
     if (next.sort) p.set("sort", next.sort);
     if (next.page && next.page > 1) p.set("page", String(next.page));
     const q = p.toString();
     return q ? `/tutors?${q}` : "/tutors";
   };
 
-  const current = { cat, rating: minRating, avail: availability, price, sort };
+  const current = { cat, rating: minRating, avail: availability, price, lang: language, sort };
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -149,6 +156,7 @@ export default async function TutorsPage({
             minRating={minRating}
             availability={availability}
             price={price}
+            language={language}
             hrefFor={(next) => buildHref({ sort, ...next })}
           />
 

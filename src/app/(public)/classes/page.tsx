@@ -10,6 +10,8 @@ import {
   MODELS,
   PRICE_RANGES,
   SESSION_RANGES,
+  LEVELS,
+  LANGUAGES,
   ProductFilters,
   type ProductFilterState,
 } from "@/components/catalog/product-filters";
@@ -17,6 +19,7 @@ import {
   listActiveProducts,
   listActiveCategories,
   type ProductSort,
+  type TeachingLevel,
 } from "@/lib/catalog/queries";
 import type { Database } from "@/lib/database.types";
 
@@ -40,6 +43,8 @@ export default async function ClassesPage({
     model?: string;
     price?: string;
     sessions?: string;
+    level?: string;
+    lang?: string;
     sort?: string;
     page?: string;
   }>;
@@ -52,6 +57,9 @@ export default async function ClassesPage({
     model: MODELS.some((m) => m.id === sp.model) ? sp.model : undefined,
     price: sp.price,
     sessions: sp.sessions,
+    // DD-03: valor que no está en la lista = filtro ignorado (query libre).
+    level: LEVELS.some((l) => l.id === sp.level) ? sp.level : undefined,
+    lang: LANGUAGES.some((l) => l.id === sp.lang) ? sp.lang : undefined,
   };
 
   const price = PRICE_RANGES.find((r) => r.id === active.price);
@@ -65,6 +73,8 @@ export default async function ClassesPage({
       maxPriceMinor: price?.max,
       minSessions: sessions?.min,
       maxSessions: sessions?.max,
+      level: active.level as TeachingLevel | undefined,
+      language: active.lang,
       sort,
       page,
     }),
@@ -76,7 +86,7 @@ export default async function ClassesPage({
     next: ProductFilterState & { sort?: ProductSort; page?: number },
   ) => {
     const p = new URLSearchParams();
-    for (const key of ["cat", "model", "price", "sessions"] as const) {
+    for (const key of ["cat", "model", "price", "sessions", "level", "lang"] as const) {
       if (next[key]) p.set(key, next[key]!);
     }
     if (next.sort) p.set("sort", next.sort);

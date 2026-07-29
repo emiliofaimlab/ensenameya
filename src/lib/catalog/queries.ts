@@ -11,6 +11,8 @@ import type { Database } from "@/lib/database.types";
  */
 
 type PricingModel = Database["public"]["Enums"]["pricing_model"];
+/** DD-03 · el nivel de la mentoría reusa el enum del nivel del tutor. */
+export type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
 
 export type CategoryTag = { slug: string; name: string };
 
@@ -49,6 +51,9 @@ export type ProductCardData = {
   /** Ruta en el bucket público `product-images` (DD-02). */
   imagePath: string | null;
   categories: CategoryTag[];
+  /** DD-03 — de la mentoría; `null` en las que se publicaron antes del campo. */
+  level: string | null;
+  language: string | null;
   /** Solo lo rellena el listado de P05; `null` donde no se consultó. */
   tutor?: ProductTutor | null;
 };
@@ -83,6 +88,8 @@ function mapProductCard(r: {
   session_duration_min: number | null;
   package_num_sessions: number | null;
   image_path: string | null;
+  level?: string | null;
+  language?: string | null;
   product_categories: { categories: CategoryTag | null }[] | null;
 }): ProductCardData {
   return {
@@ -95,6 +102,8 @@ function mapProductCard(r: {
     sessionDurationMin: r.session_duration_min,
     packageNumSessions: r.package_num_sessions,
     imagePath: r.image_path,
+    level: r.level ?? null,
+    language: r.language ?? null,
     categories: toCategoryTags(r.product_categories),
   };
 }
@@ -236,6 +245,8 @@ export async function listApprovedTutors(opts: {
   minRating?: number;
   availability?: AvailabilityFilter;
   price?: PriceBucket;
+  /** DD-03 · "Idioma del tutor" (386:1006): el de las clases que publica. */
+  language?: string;
   sort?: TutorSort;
   page: number;
 }): Promise<{ tutors: FeaturedTutor[]; hasMore: boolean; total: number }> {
@@ -272,6 +283,20 @@ export async function listApprovedTutors(opts: {
     tutorIds = tutorIds
       ? tutorIds.filter((id) => withSlots.includes(id))
       : withSlots;
+    if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
+  }
+
+  // DD-03 · "Idioma del tutor" del Figma. No hay columna de idioma en el
+  // tutor: se deriva de las clases que publica, que es lo que el alumno
+  // pregunta de verdad ("¿da clases en inglés?").
+  if (opts.language) {
+    const { data } = await supabase
+      .from("products")
+      .select("tutor_id")
+      .eq("status", "active")
+      .eq("language", opts.language);
+    const speak = [...new Set((data ?? []).map((r) => r.tutor_id))];
+    tutorIds = tutorIds ? tutorIds.filter((id) => speak.includes(id)) : speak;
     if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
   }
 
@@ -428,7 +453,7 @@ export async function getProductDetail(
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, tutor_id, product_categories(categories(slug, name))",
+      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, level, language, tutor_id, product_categories(categories(slug, name))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -455,6 +480,8 @@ export async function getProductDetail(
     sessionDurationMin: p.session_duration_min,
     packageNumSessions: p.package_num_sessions,
     imagePath: p.image_path,
+    level: p.level,
+    language: p.language,
     categories: toCategoryTags(p.product_categories),
     // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
     faqs: Array.isArray(p.faqs)
@@ -507,6 +534,9 @@ export async function listActiveProducts(opts: {
   maxPriceMinor?: number;
   minSessions?: number;
   maxSessions?: number;
+  /** DD-03 · nivel e idioma DE LA MENTORÍA (filtros de P05/P06). */
+  level?: TeachingLevel;
+  language?: string;
   sort?: ProductSort;
   page: number;
 }): Promise<{
@@ -536,7 +566,7 @@ export async function listActiveProducts(opts: {
   let base = supabase
     .from("products")
     .select(
-      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))",
+      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, level, language, product_categories(categories(slug, name))",
       { count: "exact" },
     )
     .eq("status", "active");
@@ -550,6 +580,10 @@ export async function listActiveProducts(opts: {
   if (opts.maxSessions) {
     base = base.lte("package_num_sessions", opts.maxSessions);
   }
+  // DD-03: quien no lo rellenó no aparece bajo ningún nivel ni idioma. Es lo
+  // correcto — un filtro no debe colar lo que no sabe si encaja.
+  if (opts.level) base = base.eq("level", opts.level);
+  if (opts.language) base = base.eq("language", opts.language);
 
   const { data, count } =
     opts.sort === "price_asc" || opts.sort === "price_desc"

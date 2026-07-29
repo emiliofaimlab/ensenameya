@@ -695,6 +695,8 @@ export type Database = {
           faqs: Json
           id: string
           image_path: string | null
+          language: string | null
+          level: Database["public"]["Enums"]["teaching_level"] | null
           outcome: string | null
           package_num_sessions: number | null
           price_amount: number
@@ -716,6 +718,8 @@ export type Database = {
           faqs?: Json
           id?: string
           image_path?: string | null
+          language?: string | null
+          level?: Database["public"]["Enums"]["teaching_level"] | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount: number
@@ -737,6 +741,8 @@ export type Database = {
           faqs?: Json
           id?: string
           image_path?: string | null
+          language?: string | null
+          level?: Database["public"]["Enums"]["teaching_level"] | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount?: number

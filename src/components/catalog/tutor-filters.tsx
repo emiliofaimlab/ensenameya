@@ -5,6 +5,7 @@ import type {
   CategoryTag,
   PriceBucket,
 } from "@/lib/catalog/queries";
+import { LANGUAGES } from "@/components/catalog/product-filters";
 
 const AVAILABILITY: { value: AvailabilityFilter; label: string }[] = [
   { value: "today", label: "Hoy" },
@@ -24,9 +25,9 @@ const PRICES: { value: PriceBucket; label: string }[] = [
  * Panel de filtros de P04. Cada opción es un enlace: el estado vive en la URL,
  * así que funciona sin JS y es compartible.
  *
- * Falta un grupo del Figma y no es descuido: **Idioma del tutor** necesita el
- * campo idioma (DD-03 / `EY-113`), que no existe todavía. Se monta cuando exista
- * el dato; un filtro que no filtra es peor que ninguno.
+ * "Idioma del tutor" se deriva de las clases que publica (DD-03): no hay
+ * columna de idioma en el tutor, y lo que el alumno pregunta de verdad es si
+ * DA CLASES en ese idioma.
  */
 export function TutorFilters({
   categories,
@@ -34,6 +35,7 @@ export function TutorFilters({
   minRating,
   availability,
   price,
+  language,
   hrefFor,
 }: {
   categories: CategoryTag[];
@@ -41,11 +43,13 @@ export function TutorFilters({
   minRating?: number;
   availability?: AvailabilityFilter;
   price?: PriceBucket;
+  language?: string;
   hrefFor: (next: {
     cat?: string;
     rating?: number;
     avail?: AvailabilityFilter;
     price?: PriceBucket;
+    lang?: string;
   }) => string;
 }) {
   /** Una opción del panel: casilla + etiqueta, con el estado en la URL. */
@@ -80,7 +84,7 @@ export function TutorFilters({
     <aside className="h-fit rounded-[16px] border border-[#dbdbdb] bg-card p-[22px] lg:sticky lg:top-24">
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-lg font-bold">Filtros</h2>
-        {activeSlug || minRating || availability || price ? (
+        {activeSlug || minRating || availability || price || language ? (
           <Link
             href={hrefFor({})}
             className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
@@ -103,6 +107,7 @@ export function TutorFilters({
                 rating: minRating,
                 avail: availability,
                 price,
+                lang: language,
               })}
             >
               {c.name}
@@ -125,6 +130,7 @@ export function TutorFilters({
                 rating: minRating,
                 avail: availability,
                 price: active ? undefined : value,
+                lang: language,
               })}
             >
               {label}
@@ -147,6 +153,7 @@ export function TutorFilters({
                 rating: r === 0 || active ? undefined : r,
                 avail: availability,
                 price,
+                lang: language,
               })}
             >
               {r === 0 ? "Cualquiera" : `${r} o más`}
@@ -168,6 +175,30 @@ export function TutorFilters({
                 rating: minRating,
                 avail: active ? undefined : value,
                 price,
+                lang: language,
+              })}
+            >
+              {label}
+            </Option>
+          );
+        })}
+      </ul>
+
+      {/* DD-03 · sale de las clases que publica, no de una columna del tutor. */}
+      <p className="mt-5 text-sm font-bold text-[#242424]">Idioma del tutor</p>
+      <ul className="mt-2 space-y-1.5">
+        {LANGUAGES.map(({ id, label }) => {
+          const active = language === id;
+          return (
+            <Option
+              key={id}
+              active={active}
+              href={hrefFor({
+                cat: activeSlug,
+                rating: minRating,
+                avail: availability,
+                price,
+                lang: active ? undefined : id,
               })}
             >
               {label}
