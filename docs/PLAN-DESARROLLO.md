@@ -789,10 +789,20 @@ descarga**) sacó a las dos del limbo en que las dejó el 17-jul.
   arriba está cableado y verificado hasta donde llega la cuenta: cuando se active en el panel de Daily,
   la grabación empieza a existir sin tocar código. **Falta el go de coste.**
 
-**Tanda 5 · referidos** (~0,5 día) — `EY-78` US-1301. Widget de Referral Factory embebido en AL02 y
-`/account`, **cero lógica interna** (RN-21). De la cuenta que acabas de crear hacen falta: el
-**código de embebido** de la campaña y **con qué nombre de parámetro** manda el referido en la URL
-(hay que casarlo con el `?ref=` que ya capturamos).
+**Tanda 5 · referidos** · ✅ **COMPLETA (29-jul)** — `EY-78` US-1301, en AL02 y `/account`.
+
+**Cero lógica interna (RN-21):** el programa entero vive en Referral Factory y el bloque no calcula ni
+enseña saldo — eso lo dice el panel de ellos. **La URL de la campaña es el interruptor**
+(`NEXT_PUBLIC_REFERRAL_URL`): sin ella el bloque no se pinta, porque un "Invita y gana" que no lleva a
+ninguna parte es peor que no tenerlo.
+
+Se **abre en pestaña nueva** en vez de embeberse: si la cabecera de la campaña prohíbe el iframe nos
+quedaría un recuadro en blanco dentro del panel. Pasar a embebido después es sustituir el botón.
+**No se le pasa el correo por la URL** — datos personales en query string hacia un tercero; si la
+campaña necesita identificar al alumno, se configura de su lado.
+
+Con US-1302 (captura del `?ref=`) ya cerrado, **los referidos quedan completos de nuestro lado**.
+→ **Falta solo pegar la URL** de la campaña en Vercel (Preview y Production) y en `.env.local`.
 
 **Tanda 6 · cierre** — `EY-82` US-1601 responsive (360/768/1024/1280) y `EY-83` US-1602 QA + UAT.
 Van al final por definición: QA sobre lo anterior ya cerrado. **US-1601 sigue esperando los diseños de
@@ -808,7 +818,7 @@ de los cuatro se queda `To Do` hasta que haya contrato.
 | Necesito | Para | De quién |
 | :-- | :-- | :-- |
 | ~~¿Cuenta Stripe en **test mode**?~~ → ✅ **SÍ (Jose, 29-jul)**: la abre él y pasa las claves de test | Sprint 6 AC entero | Jose |
-| Código de embebido + parámetro de URL de Referral Factory | `EY-78` | Jose (cuenta ya creada ✅) |
+| **URL de la campaña** de Referral Factory → `NEXT_PUBLIC_REFERRAL_URL` (el código ya está, solo falta el valor) | encender `EY-78` | Jose (cuenta ya creada ✅) |
 | **DSN de Sentry** (cuenta gratuita) → `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` en Vercel | encender `EY-80` | Jose |
 | ~~Token de Figma nuevo~~ → **no hace falta**: el 403 fue pasajero, el token responde | fidelidad al diseño | — |
 | Go de coste de grabación en Daily + dónde se guardan | `EY-85/86` | Cliente / Emilio |
