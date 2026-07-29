@@ -642,4 +642,113 @@ paso queda cubierto por tipos + el módulo verificado en su otro punto de montaj
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
+## Sprints 6 AC · 7 · 8 — plan de ataque (29-jul)
+
+> **Qué es esto.** Los tres sprints que quedan abiertos en Jira. Verificado contra Jira el 29-jul:
+> **20 tickets abiertos en todo el proyecto**, y los 20 están en estos tres sprints. No hay nada
+> suelto fuera de sprint — cerrar estos 20 es cerrar el MVP.
+
+| Sprint | Tickets | Estado real |
+| :-- | :-- | :-- |
+| **6 AC** · Activación comercial | 5 (`EY-93…96`, `EY-147`) | 🔒 bloqueado por cuentas/API keys — **con un matiz, ver abajo** |
+| **7** · Datos + observabilidad + chat + grabación | 11 (`EY-76,77,80,81,84,85,86,113…116`) | Todo ejecutable hoy; la grabación pide un go de coste |
+| **8** · Referidos + responsive + QA | 4 (`EY-78,79,82,83`) | Referidos ✅ **desbloqueados** (cuenta RF creada); responsive espera diseños |
+
+### 🔎 Lo que el inventario destapó
+
+**1) Cuatro compromisos del 24-jul sin ticket y sin código.** Las respuestas del cliente (tabla
+"Decisiones cerradas", decisiones 18/23/29/30) abrieron ítems que se anotaron "para Jira" y **nunca
+se crearon**. Verificado en el esquema el 29-jul: no existe ninguno.
+
+| Compromiso | Decisión | Dónde | Esf. |
+| :-- | :-- | :-- | :-- |
+| `bookings.cancel_reason` — persistir el motivo (hoy se captura en AL07 y **se tira**) | 23 | EP-23 | S |
+| Tabla de **incidencias** para el "marcar atendida" de AD14 | 29 | EP-23 | M |
+| **"Tu objetivo principal"** del alumno (AL01) + su lista de 6 opciones ya confirmada | 30 | EP-23 | S |
+| **Reseñas firmadas** nombre + inicial con gate de consentimiento | 18 | EP-09 | M |
+
+→ **Acción:** abrirlos en Jira bajo EP-23/EP-09 y meterlos en Sprint 7 (tanda 3). Son ~1,5 días entre
+los cuatro y son alcance ya aceptado por el cliente, no ideas nuevas.
+
+**2) `US-1302` ya está hecho.** `?ref=` se captura en `signup/page.tsx:25` y se persiste en
+`signup-form.tsx:82-88`. Falta solo verificar la rama OAuth y la de confirmación por correo. El
+ticket es de verificar y cerrar, no de construir.
+
+**3) `DD-05` está resuelta por la decisión 26.** Las categorías siguen planas (S-13) y "Temas" ya
+cruza una segunda categoría en `CategoryExplorer`. Verificar y cerrar.
+
+**4) Sprint 6 AC no está 100% bloqueado.** Los cuatro PAC tienen **una pata Stripe y otra DLocal**:
+- **Stripe:** las claves de *test mode* son self-serve y gratuitas — no hace falta la cuenta comercial
+  del cliente para construir y verificar checkout alojado, tokenización, firma de webhook y adaptador.
+  Pasar a la cuenta real del cliente después es **cambiar variables de entorno**, no código.
+- **DLocal:** su sandbox va detrás de contrato comercial. Esa pata sigue dura.
+→ **Decisión para Jose:** si se abre una cuenta Stripe en test mode, Sprint 6 AC pasa de 0 a ~50%
+ejecutable en paralelo. Si no, los 5 tickets se quedan quietos y no se toca nada (nada de adaptadores
+especulativos "para cuando lleguen las claves": eso es la regla de oro 8).
+
+### 📋 Orden de ejecución
+
+**Tanda 1 · barrer lo barato** (~2 días, todo verificable en dev)
+
+| Ticket | Qué | Cómo (la vía corta) |
+| :-- | :-- | :-- |
+| `EY-115` DD-05 | Subcategorías/"Temas" | **Verificar y cerrar** — decisión 26 ya cumplida |
+| `EY-79` US-1302 | Captura `?ref=` | **Verificar** OAuth + confirmación por correo, y cerrar |
+| `EY-116` DD-06 | `/terms`, `/privacy`, `/cookies` | 3 rutas estáticas. El **404 desde el footer** es el bug; el texto legal lo pone el cliente (placeholder marcado hasta entonces) |
+| `EY-114` DD-04 | Filtro de precio en P04 | **Sin materializar ni migración**: el filtro sale de un `exists` sobre `products` del tutor. Materializar obliga a trigger de frescura para un filtro de una pantalla |
+| `EY-80` US-1501 | Sentry | `@sentry/nextjs` (frontend + Edge Functions). Sin capa propia de logging encima |
+| `EY-147` R29-03b | Info de pago del tutor | La mitad no bloqueada: bloque "Información de pago" en `/tutor/payouts` con el estado real, **sin migración**. La cuenta de cobro real llega con EP-20 |
+
+**Tanda 2 · cerrar el chat** (~1 día) — la decisión 22 ya está tomada (**30 días + descarga**), así que
+esto sale del limbo en que lo dejó el 17-jul.
+
+- `EY-84` **US-1702 · descarga** — route handler que serializa el hilo a `.txt`/`.json` bajo la RLS de
+  participantes. Sin librería.
+- `EY-76` **US-1703 · purga** — devolver a `purge_expired_messages()` su función destructiva a 30 días
+  (hoy solo informa, ver `20260722200000`). **Va después de 1702**: no se borra lo que aún no se puede
+  descargar.
+
+**Tanda 3 · datos y avisos** (~3 días)
+
+- `EY-113` **DD-03 · nivel + idioma por producto** (decisión 25) — migración + campos en TU04 + chips y
+  filtros en P05/P06/P08. Ojo: es distinto de `tutor_profiles.teaching_level`.
+- **Los 4 huérfanos de arriba** (`cancel_reason`, incidencias/AD14, objetivo principal, reseñas firmadas).
+- `EY-77` **US-1203 · avisos in-app** — `notifications.read_at` + campanita en el header con la lista.
+  La tabla y sus triggers ya existen desde EP-12; esto es UI + una columna.
+- `EY-81` **US-1502 · métricas** — tres cifras (fallo de cobro, payouts `failed`, latencia de webhook)
+  **dentro de `admin_stats`/AD13**, no una tabla de métricas nueva.
+
+**Tanda 4 · grabación** (~3 días) — `EY-85` US-1801 + `EY-86` US-1802. La cuenta de Daily ya tiene
+método de pago (28-jul), pero **la grabación en la nube es add-on de pago** y `recordings_bucket` /
+`enable_auto_recording` siguen en `null`. Necesita: go de coste + dónde viven los ficheros (bucket de
+Daily vs. el nuestro). Consentimiento de **ambos** antes de entrar a la sala (RN-42), disponibilidad
+30 días desde `completed_at` y NTF-19.
+
+**Tanda 5 · referidos** (~0,5 día) — `EY-78` US-1301. Widget de Referral Factory embebido en AL02 y
+`/account`, **cero lógica interna** (RN-21). De la cuenta que acabas de crear hacen falta: el
+**código de embebido** de la campaña y **con qué nombre de parámetro** manda el referido en la URL
+(hay que casarlo con el `?ref=` que ya capturamos).
+
+**Tanda 6 · cierre** — `EY-82` US-1601 responsive (360/768/1024/1280) y `EY-83` US-1602 QA + UAT.
+Van al final por definición: QA sobre lo anterior ya cerrado. **US-1601 sigue esperando los diseños de
+tablet/escritorio de Diana** (decisión 24, prometidos "la próxima semana" el 24-jul). Si no llegan, la
+alternativa es correrlo con criterio de dev sobre los breakpoints — pero eso se decide, no se asume.
+
+**En paralelo · Sprint 6 AC** — solo si se abre la cuenta Stripe de test: PAC-01 checkout alojado →
+PAC-02 tokenización → PAC-03 firma de webhook → PAC-04 adaptador en el `PaymentRouter`. La pata DLocal
+de los cuatro se queda `To Do` hasta que haya contrato.
+
+### ⏳ Lo que hace falta de fuera (no lo desbloquea el código)
+
+| Necesito | Para | De quién |
+| :-- | :-- | :-- |
+| ~~¿Cuenta Stripe en **test mode**?~~ → ✅ **SÍ (Jose, 29-jul)**: la abre él y pasa las claves de test | Sprint 6 AC entero | Jose |
+| Código de embebido + parámetro de URL de Referral Factory | `EY-78` | Jose (cuenta ya creada ✅) |
+| Go de coste de grabación en Daily + dónde se guardan | `EY-85/86` | Cliente / Emilio |
+| Diseños responsive tablet/escritorio | `EY-82` | Diana |
+| Texto legal de términos, privacidad y cookies | `EY-116` | Cliente |
+| Cuentas + API keys reales DLocal y Stripe | Cerrar Sprint 6 AC | Cliente (Veronica lo pide) |
+
+---
+
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-29 (**plan de los sprints 6 AC / 7 / 8**: inventario contra Jira — 20 tickets abiertos y todos en estos tres sprints; 4 compromisos del 24-jul sin ticket; `US-1302` y `DD-05` ya cumplidos a falta de verificar; Sprint 6 AC ejecutable a medias vía Stripe test mode). Previo: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*

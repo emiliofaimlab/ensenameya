@@ -15,7 +15,7 @@
 | Puntos estimados | 259 SP (backlog dev original EP-01…EP-18) |
 | Historias Must | 40 |
 | Sprints | 4 de dev (+ EP-00 pre-desarrollo, + 3 tracks paralelos) |
-| **Sprint activo** | **Sprint 4** (próximo) — S1, S2 y **S3 ✅ cerrados** (S3 en `Done`, mergeado a prod 2026-07-17) |
+| **Sprint activo** | **6 AC · 7 · 8 abiertos a la vez** (sync Jira 29-jul) — S1–S5 cerrados; quedan **20 tickets** y todos viven en estos tres. Plan de ataque en `docs/PLAN-DESARROLLO.md` |
 
 > **Jira es la fuente operativa** (proyecto `EY` en `faimlab.atlassian.net`). Jira añadió **EP-00 —
 > Diseño UX/UI y Contenido** (pre-desarrollo), que el docx original no traía. Este `.md` lo refleja.

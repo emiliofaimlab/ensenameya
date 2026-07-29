@@ -11,10 +11,12 @@ export function CallbackStatus({
   code,
   next,
   intent,
+  referralCode,
 }: {
   code: string | null;
   next: string | null;
   intent: "alumno" | "tutor" | null;
+  referralCode: string | null;
 }) {
   const router = useRouter();
   // Destino provisional por si el usuario pulsa el enlace antes de resolver.
@@ -41,12 +43,22 @@ export function CallbackStatus({
 
       // Alta por Google: la intención elegida en AU02 llega por query y solo se
       // graba si el usuario aún no tiene una (nunca pisa la del registro normal).
-      if (intent) {
+      if (intent || referralCode) {
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        if (user && !user.user_metadata?.intended_role) {
+        if (intent && user && !user.user_metadata?.intended_role) {
           await supabase.auth.updateUser({ data: { intended_role: intent } });
+        }
+        // US-1302: el metadata de Google no trae el código, así que el perfil
+        // lo crea sin él. `is("referral_code", null)` deja intacta cualquier
+        // atribución previa: se referencia una vez, no en cada login.
+        if (referralCode && user) {
+          await supabase
+            .from("profiles")
+            .update({ referral_code: referralCode })
+            .eq("id", user.id)
+            .is("referral_code", null);
         }
       }
 

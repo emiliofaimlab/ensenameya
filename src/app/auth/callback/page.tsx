@@ -14,9 +14,14 @@ export const metadata = { title: "Verificando… · Enséñame Ya" };
 export default async function AuthCallbackPage({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string; next?: string; intent?: string }>;
+  searchParams: Promise<{
+    code?: string;
+    next?: string;
+    intent?: string;
+    ref?: string;
+  }>;
 }) {
-  const { code, next, intent } = await searchParams;
+  const { code, next, intent, ref } = await searchParams;
 
   return (
     <AuthShell className="max-w-[420px]">
@@ -24,6 +29,7 @@ export default async function AuthCallbackPage({
         code={code ?? null}
         next={next ?? null}
         intent={intent === "alumno" || intent === "tutor" ? intent : null}
+        referralCode={ref?.trim() || null}
       />
     </AuthShell>
   );

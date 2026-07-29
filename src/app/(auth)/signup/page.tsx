@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 
+import { REFERRAL_COOKIE } from "@/lib/referral";
 import { SignupForm } from "./signup-form";
 
 export const metadata = { title: "Crear cuenta · Enséñame Ya" };
@@ -10,6 +12,11 @@ export default async function SignupPage({
   searchParams: Promise<{ next?: string; ref?: string }>;
 }) {
   const { next, ref } = await searchParams;
+
+  // El `?ref=` de la URL manda; si no viene, el que dejó el proxy al entrar por
+  // el enlace del referidor (que rara vez apunta directo a /signup).
+  const referralCode =
+    ref?.trim() || (await cookies()).get(REFERRAL_COOKIE)?.value || null;
 
   // AU02: misma card suelta que AU01 (radio 20, padding 40, sin separador).
   return (
@@ -22,7 +29,7 @@ export default async function SignupPage({
       </p>
 
       <div className="mt-6">
-        <SignupForm next={next ?? null} referralCode={ref ?? null} />
+        <SignupForm next={next ?? null} referralCode={referralCode} />
       </div>
 
       <p className="mt-6 text-center text-sm text-muted-foreground">

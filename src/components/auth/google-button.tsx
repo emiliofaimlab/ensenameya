@@ -40,6 +40,7 @@ export function GoogleButton({
   label,
   className,
   intent,
+  referralCode,
 }: {
   next: string | null;
   label: string;
@@ -47,6 +48,9 @@ export function GoogleButton({
   /** AU02: el selector "quiero aprender/enseñar" está encima de este botón, así
    *  que la intención tiene que viajar también por OAuth (la lee AU04). */
   intent?: "alumno" | "tutor";
+  /** US-1302: el `?ref=` no sobrevive al viaje a Google; se lo pasamos al
+   *  callback por la URL de vuelta, igual que la intención. */
+  referralCode?: string | null;
 }) {
   const [loading, setLoading] = useState(false);
 
@@ -56,6 +60,7 @@ export function GoogleButton({
     const params = new URLSearchParams();
     if (next) params.set("next", next);
     if (intent) params.set("intent", intent);
+    if (referralCode) params.set("ref", referralCode);
     const query = params.toString();
     const redirectTo = `${window.location.origin}/auth/callback${
       query ? `?${query}` : ""
