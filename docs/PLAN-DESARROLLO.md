@@ -804,10 +804,41 @@ campaña necesita identificar al alumno, se configura de su lado.
 Con US-1302 (captura del `?ref=`) ya cerrado, **los referidos quedan completos de nuestro lado**.
 → **Falta solo pegar la URL** de la campaña en Vercel (Preview y Production) y en `.env.local`.
 
-**Tanda 6 · cierre** — `EY-82` US-1601 responsive (360/768/1024/1280) y `EY-83` US-1602 QA + UAT.
-Van al final por definición: QA sobre lo anterior ya cerrado. **US-1601 sigue esperando los diseños de
-tablet/escritorio de Diana** (decisión 24, prometidos "la próxima semana" el 24-jul). Si no llegan, la
-alternativa es correrlo con criterio de dev sobre los breakpoints — pero eso se decide, no se asume.
+**Tanda 6 · cierre** · ✅ **COMPLETA (29-jul)** — `EY-82` US-1601 y `EY-83` US-1602.
+Resultados completos en **`docs/QA-LANZAMIENTO.md`**.
+
+- **Responsive** — barrido automático de scroll horizontal (el síntoma que delata un layout roto) en
+  **17 rutas** a 360 y 768. Dos fallos reales, corregidos: el *segmented control* de `/search` (411 px
+  a 360) y **el footer a 768**, donde el párrafo se quedaba sus 592 px y dejaba las tres columnas de
+  enlaces a ~18 px — "Privacidad" se salía de la pantalla **en todas las páginas**, porque el footer es
+  global. Después: 17/17 limpias.
+  ⚠️ **Esto no es "el responsive del diseño"**, es que nada se rompa. El diseño de tablet/escritorio
+  sigue pendiente de Diana (decisión 24) y el **admin es desktop-first** por AC, así que no entró.
+- **QA/UAT** — matriz de RLS por rol **ejecutada** (12 tablas × 4 roles + 6 escrituras que deben
+  fallar): todas las escrituras dan 42501 **incluido el admin**, y `messages` devuelve 0 filas al admin
+  — ni él lee el chat (RN-41). Idempotencia de webhook verificada por partida doble (mismo `event_id` →
+  no-op; id distinto sobre reserva pagada → no-op por estado). Y el checklist de lanzamiento con los
+  **6 jobs de `pg_cron`** y qué se rompe si alguno no corre.
+
+---
+
+## 🏁 Estado tras las 6 tandas (29-jul)
+
+**Los 20 tickets que quedaban abiertos están en código.** Las tandas 1–6 cerraron Sprint 7 y Sprint 8
+enteros, más los 4 compromisos del 24-jul que no tenían ni ticket. **Sprint 6 AC (5 tickets) sigue
+esperando credenciales** — y se puede adelantar a medias en cuanto llegue la cuenta Stripe de test.
+
+**Lo que falta es de fuera, no de código:**
+
+| Para encender | Falta |
+| :-- | :-- |
+| Referidos (`EY-78`) | pegar la URL de la campaña en `NEXT_PUBLIC_REFERRAL_URL` |
+| Sentry (`EY-80`) | crear la cuenta y pegar el DSN |
+| Grabación (`EY-85/86`) | activar el add-on en Daily (go de coste) |
+| Correos (EP-12) | proveedor real (C-11) |
+| Cobros y payouts reales | cuentas y API keys de Stripe/DLocal (EP-20) |
+| Responsive "de diseño" (`EY-82`) | los frames de tablet/escritorio de Diana |
+| Páginas legales (`EY-116`) | el texto del cliente |
 
 **En paralelo · Sprint 6 AC** — solo si se abre la cuenta Stripe de test: PAC-01 checkout alojado →
 PAC-02 tokenización → PAC-03 firma de webhook → PAC-04 adaptador en el `PaymentRouter`. La pata DLocal
@@ -828,4 +859,4 @@ de los cuatro se queda `To Do` hasta que haya contrato.
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-29 (**plan de los sprints 6 AC / 7 / 8**: inventario contra Jira — 20 tickets abiertos y todos en estos tres sprints; 4 compromisos del 24-jul sin ticket; `US-1302` y `DD-05` ya cumplidos a falta de verificar; Sprint 6 AC ejecutable a medias vía Stripe test mode). Previo: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-29 (**las 6 tandas del plan, COMPLETAS**: los 20 tickets abiertos de los sprints 7 y 8 en código, más los 4 compromisos del 24-jul que no tenían ticket; 12 migraciones nuevas; QA con matriz de RLS ejecutada en `docs/QA-LANZAMIENTO.md`. Sprint 6 AC sigue esperando credenciales. Previo: **plan de los sprints 6 AC / 7 / 8**: inventario contra Jira — 20 tickets abiertos y todos en estos tres sprints; 4 compromisos del 24-jul sin ticket; `US-1302` y `DD-05` ya cumplidos a falta de verificar; Sprint 6 AC ejecutable a medias vía Stripe test mode). Previo: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
