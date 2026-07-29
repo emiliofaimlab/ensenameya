@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
+import { parseSocials, socialLabel } from "@/lib/socials";
 import {
   PanelCard,
   PanelShell,
@@ -96,8 +97,9 @@ export default async function AdminTutorPage({
   }));
 
   const pill = APPROVAL_PILL[tutor.approval_status];
-  const socials = (tutor.socials ?? {}) as Record<string, string>;
-  const socialLinks = Object.entries(socials).filter(([, v]) => Boolean(v));
+  // R29-02: la lista viene como `[{platform, url}]`; `parseSocials` sigue
+  // entendiendo los perfiles viejos con forma `{instagram, linkedin}`.
+  const socialLinks = parseSocials(tutor.socials);
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString("es", { day: "numeric", month: "short" });
 
@@ -161,10 +163,33 @@ export default async function AdminTutorPage({
               ) : null}
               {socialLinks.length ? (
                 <div className="min-w-0">
-                  <p className="text-xs text-[#6b6b6b]">Redes</p>
-                  <p className="mt-0.5 text-[13px] font-medium break-all text-[#404040]">
-                    {socialLinks.map(([, v]) => v).join(" · ")}
-                  </p>
+                  <p className="text-xs text-[#6b6b6b]">Redes y portafolio</p>
+                  <ul className="mt-0.5 flex flex-col gap-0.5">
+                    {socialLinks.map((s) => (
+                      <li key={s.url} className="text-[13px] break-all">
+                        <span className="text-[#6b6b6b]">
+                          {socialLabel(s.platform)}:{" "}
+                        </span>
+                        {/* El campo viejo del asistente no validaba nada, así
+                            que hay perfiles con handles ("@fulano") en vez de
+                            URL: eso se muestra, pero no se enlaza. */}
+                        {s.url.startsWith("http") ? (
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="font-medium text-brand hover:underline"
+                          >
+                            {s.url}
+                          </a>
+                        ) : (
+                          <span className="font-medium text-[#404040]">
+                            {s.url}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : null}
             </div>

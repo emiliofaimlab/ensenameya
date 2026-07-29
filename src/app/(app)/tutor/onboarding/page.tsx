@@ -8,6 +8,7 @@ import {
 
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
+import { parseSocials } from "@/lib/socials";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
@@ -157,9 +158,6 @@ export default async function TutorOnboardingPage({
     );
   }
 
-  const s = (tp?.socials ?? {}) as Record<string, unknown>;
-  const str = (v: unknown) => (typeof v === "string" ? v : "");
-
   return (
     // TU01: cuerpo sobre #f9fafc con ~105 px de aire arriba (185:13 y=178).
     <div className="bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
@@ -170,8 +168,6 @@ export default async function TutorOnboardingPage({
             exists={!!tp}
             headline={tp?.headline ?? ""}
             bio={tp?.bio ?? ""}
-            instagram={str(s.instagram)}
-            linkedin={str(s.linkedin)}
             fullName={prof?.full_name ?? ""}
             avatarPath={tp?.avatar_path ?? null}
             avatarUrl={avatarUrl}
@@ -181,6 +177,7 @@ export default async function TutorOnboardingPage({
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
             selectedCategories={(myCats ?? []).map((r) => r.category_id)}
             docsByType={docsByType}
+            socials={parseSocials(tp?.socials)}
             hasProduct={(productCount ?? 0) > 0}
           />
         </div>
