@@ -23,6 +23,17 @@ import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 // E.164: '+' + 7–15 dígitos, el primero no cero (RN-44).
 const E164 = /^\+[1-9]\d{6,14}$/;
 
+/** Objetivo del alumno (AL01 p2). Las seis las confirmó el cliente el 24-jul;
+ *  las claves son las del check de `profiles.primary_goal`. */
+const PRIMARY_GOALS = [
+  { value: "reforzar_materia", label: "Reforzar o aprobar una materia" },
+  { value: "examen_certificacion", label: "Prepararme para un examen o certificación" },
+  { value: "habilidad_nueva", label: "Aprender una habilidad nueva" },
+  { value: "trabajo_carrera", label: "Mejorar en mi trabajo o carrera" },
+  { value: "practicar_idioma", label: "Practicar un idioma" },
+  { value: "hobby_personal", label: "Interés o hobby personal" },
+];
+
 /**
  * US-201 / AL01 — asistente de 3 pasos del Figma. Nombre y teléfono siguen
  * siendo obligatorios (RN-44); la foto y los intereses son opcionales, como
@@ -40,6 +51,7 @@ export function OnboardingForm({
   avatarUrl,
   categories,
   selectedInterests,
+  primaryGoal,
 }: {
   userId: string;
   next: string | null;
@@ -51,6 +63,7 @@ export function OnboardingForm({
   avatarUrl: string | null;
   categories: { id: string; label: string }[];
   selectedInterests: string[];
+  primaryGoal: string | null;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
@@ -61,6 +74,7 @@ export function OnboardingForm({
   const [interests, setInterests] = useState<Set<string>>(
     new Set(selectedInterests),
   );
+  const [goal, setGoal] = useState(primaryGoal ?? "");
   // 'UTC' es el default de la BD → si no lo tocaron, proponemos la del navegador.
   const defaultTz = useMemo(
     () =>
@@ -101,6 +115,14 @@ export function OnboardingForm({
     }
 
     if (step === 2) {
+      // El objetivo va en `profiles` (decisión 30); vacío = "prefiero no
+      // decirlo" y se guarda como nulo, que es lo que espera el check.
+      const { error: goalError } = await supabase
+        .from("profiles")
+        .update({ primary_goal: goal || null })
+        .eq("id", userId);
+      if (goalError) return fail("No se pudo guardar tu objetivo.");
+
       // Reemplaza el conjunto entero: más simple que calcular el diff.
       await supabase.from("student_interests").delete().eq("student_id", userId);
       const rows = [...interests].map((category_id) => ({
@@ -204,9 +226,23 @@ export function OnboardingForm({
             }
           />
         </Field>
-        {/* El Figma añade aquí "Tu objetivo principal" (149:36): el modelo no
-            tiene ese campo y el diseño no da la lista de opciones. Queda como
-            hueco de datos (EP-23), sin inventarse el enum. */}
+        {/* "Tu objetivo principal" (149:36). La lista la confirmó el cliente el
+            24-jul (decisión 30); el valor guardado es la clave, no la etiqueta. */}
+        <Field label="Tu objetivo principal (opcional)" htmlFor="primary_goal">
+          <select
+            id="primary_goal"
+            value={goal}
+            onChange={(e) => setGoal(e.target.value)}
+            className={FIELD_CLASS}
+          >
+            <option value="">Prefiero no decirlo</option>
+            {PRIMARY_GOALS.map((g) => (
+              <option key={g.value} value={g.value}>
+                {g.label}
+              </option>
+            ))}
+          </select>
+        </Field>
       </WizardShell>
     );
   }

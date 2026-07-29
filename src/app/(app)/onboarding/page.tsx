@@ -24,7 +24,7 @@ export default async function OnboardingPage({
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, timezone, phone, avatar_path, onboarding_complete")
+    .select("full_name, timezone, phone, avatar_path, onboarding_complete, primary_goal")
     .eq("id", user.id)
     .single();
 
@@ -58,6 +58,7 @@ export default async function OnboardingPage({
             avatarUrl={avatarUrl}
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
             selectedInterests={(mine ?? []).map((r) => r.category_id)}
+            primaryGoal={profile?.primary_goal ?? null}
           />
         </div>
       </Container>

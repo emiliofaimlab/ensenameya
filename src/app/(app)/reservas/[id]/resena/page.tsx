@@ -23,16 +23,21 @@ export default async function ReviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireUser();
+  const { user } = await requireUser();
   const supabase = await createClient();
 
-  const { data: booking } = await supabase
-    .from("bookings")
-    .select(
-      "id, status, products(title, tutor_id), sessions(start_at, status), reviews(rating, comment)",
-    )
-    .eq("id", id)
-    .maybeSingle();
+  const [{ data: booking }, { data: me }] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select(
+        "id, status, products(title, tutor_id), sessions(start_at, status), reviews(rating, comment, author_display)",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    // Cómo quedaría su firma. Lo enmascara la misma función que usa la RPC, así
+    // que lo que ve aquí es exactamente lo que se publicaría.
+    supabase.rpc("mask_person_name", { p_name: user.user_metadata?.full_name ?? null }),
+  ]);
 
   if (!booking) notFound();
   if (booking.status !== "completed") redirect(`/reservas/${id}`);
@@ -75,7 +80,19 @@ export default async function ReviewPage({
 
         <hr className="my-5 border-[#e0e0e0]" />
 
-        <ReviewForm bookingId={booking.id} existing={booking.reviews} />
+        <ReviewForm
+          bookingId={booking.id}
+          existing={
+            booking.reviews
+              ? {
+                  rating: booking.reviews.rating,
+                  comment: booking.reviews.comment,
+                  authorDisplay: booking.reviews.author_display,
+                }
+              : null
+          }
+          suggestedName={me ?? null}
+        />
       </PanelCard>
     </PanelShell>
   );

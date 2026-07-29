@@ -70,7 +70,18 @@ export default async function AdminBookingPage({
       ? [{ at: b.createdAt, label: "Pago capturado" }]
       : []),
     ...(b.completedAt ? [{ at: b.completedAt, label: "Completada" }] : []),
-    ...(b.cancelledAt ? [{ at: b.cancelledAt, label: "Cancelada" }] : []),
+    ...(b.cancelledAt
+      ? [
+          {
+            at: b.cancelledAt,
+            // El motivo (decisión 23) es lo primero que pregunta soporte, así
+            // que va en la propia línea del log, no escondido en otra tarjeta.
+            label: b.cancelReason
+              ? `Cancelada — ${b.cancelReason}`
+              : "Cancelada",
+          },
+        ]
+      : []),
   ].sort((a, z) => a.at.localeCompare(z.at));
 
   return (

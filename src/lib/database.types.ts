@@ -39,6 +39,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_acks: {
+        Row: {
+          acked_at: string
+          acked_by: string
+          entity_id: string
+          kind: string
+          note: string | null
+        }
+        Insert: {
+          acked_at?: string
+          acked_by: string
+          entity_id: string
+          kind: string
+          note?: string | null
+        }
+        Update: {
+          acked_at?: string
+          acked_by?: string
+          entity_id?: string
+          kind?: string
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_acks_acked_by_fkey"
+            columns: ["acked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       availability_exceptions: {
         Row: {
           created_at: string
@@ -123,6 +155,7 @@ export type Database = {
       }
       bookings: {
         Row: {
+          cancel_reason: string | null
           cancellation_policy: Json | null
           cancelled_at: string | null
           completed_at: string | null
@@ -144,6 +177,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cancel_reason?: string | null
           cancellation_policy?: Json | null
           cancelled_at?: string | null
           completed_at?: string | null
@@ -165,6 +199,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cancel_reason?: string | null
           cancellation_policy?: Json | null
           cancelled_at?: string | null
           completed_at?: string | null
@@ -733,6 +768,7 @@ export type Database = {
           id: string
           onboarding_complete: boolean
           phone: string | null
+          primary_goal: string | null
           referral_code: string | null
           timezone: string
           updated_at: string
@@ -744,6 +780,7 @@ export type Database = {
           id: string
           onboarding_complete?: boolean
           phone?: string | null
+          primary_goal?: string | null
           referral_code?: string | null
           timezone?: string
           updated_at?: string
@@ -755,6 +792,7 @@ export type Database = {
           id?: string
           onboarding_complete?: boolean
           phone?: string | null
+          primary_goal?: string | null
           referral_code?: string | null
           timezone?: string
           updated_at?: string
@@ -763,6 +801,7 @@ export type Database = {
       }
       reviews: {
         Row: {
+          author_display: string | null
           booking_id: string
           comment: string | null
           created_at: string
@@ -774,6 +813,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          author_display?: string | null
           booking_id: string
           comment?: string | null
           created_at?: string
@@ -785,6 +825,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          author_display?: string | null
           booking_id?: string
           comment?: string | null
           created_at?: string
@@ -1219,7 +1260,10 @@ export type Database = {
         }
         Returns: string
       }
-      cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
+      cancel_booking: {
+        Args: { p_booking_id: string; p_reason?: string }
+        Returns: Json
+      }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
       confirm_payment: {
@@ -1274,6 +1318,7 @@ export type Database = {
         Args: { p_action: string; p_payout_id: string }
         Returns: string
       }
+      mask_person_name: { Args: { p_name: string }; Returns: string }
       process_notifications: { Args: never; Returns: Json }
       process_scheduled_payouts: { Args: never; Returns: Json }
       purge_expired_messages: { Args: never; Returns: Json }
@@ -1331,7 +1376,12 @@ export type Database = {
       }
       submit_documents_for_review: { Args: never; Returns: string }
       submit_review: {
-        Args: { p_booking_id: string; p_comment?: string; p_rating: number }
+        Args: {
+          p_booking_id: string
+          p_comment?: string
+          p_rating: number
+          p_sign?: boolean
+        }
         Returns: string
       }
       tutor_balance: { Args: { p_retention_days?: number }; Returns: Json }

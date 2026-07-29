@@ -391,19 +391,21 @@ export type TutorReview = {
   rating: number;
   comment: string | null;
   createdAt: string;
+  /** Firma del alumno si consintió publicarla (decisión 18); si no, null. */
+  author: string | null;
 };
 
 /**
- * US-902 — reseñas públicas del tutor. Se muestran sin nombre del alumno: el
- * perfil es público (cliente anon) y `profiles.full_name` está protegido por
- * RLS, así que atribuirlas a un nombre no es posible sin romper esa barrera.
- * Anónimas es, además, una elección razonable de privacidad para el MVP.
+ * US-902 — reseñas públicas del tutor. Van **anónimas salvo consentimiento**:
+ * el perfil es público (cliente anon) y `profiles` está cerrado por RLS, así
+ * que el nombre no se lee de ahí — es la copia enmascarada que `submit_review`
+ * guarda en la propia reseña cuando el alumno acepta firmarla (decisión 18).
  */
 export async function listTutorReviews(tutorId: string): Promise<TutorReview[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("reviews")
-    .select("id, rating, comment, created_at")
+    .select("id, rating, comment, created_at, author_display")
     .eq("tutor_id", tutorId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -413,6 +415,7 @@ export async function listTutorReviews(tutorId: string): Promise<TutorReview[]> 
     rating: r.rating,
     comment: r.comment,
     createdAt: r.created_at,
+    author: r.author_display,
   }));
 }
 
