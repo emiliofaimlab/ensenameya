@@ -61,7 +61,10 @@ export const TUTOR_ITEMS: Item[] = [
   { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
   { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
   { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },
-  { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
+  // R29-03a: "Métodos de pago" (/pagos) es card-on-file del ALUMNO (RN-43): como
+  // tutor no pago, cobro. Sigue a un clic desde el panel de alumno (el switch de
+  // `panelItems` le devuelve ese menú). La cuenta de cobro del tutor es R29-03b,
+  // aplazada a EP-20 mientras el PSP no tenga cuentas.
   // TU02: los documentos se suben, se reemplazan y se consultan aquí. En el
   // Figma cuelgan de "Cuenta", pero sin entrada propia no había forma de
   // llegar a ellos desde el panel.

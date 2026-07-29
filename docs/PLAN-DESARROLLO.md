@@ -164,7 +164,7 @@ mano en la BD. Cierra además el *boundary* que S2 dejó abierto.
     - _Robustez de filtros_: estado y fecha vienen de la query string, o sea texto libre. Se **validan e ignoran** si no encajan: un `?status=basura` llegaba al enum (`invalid input value`) y `?from=basura` dejaba la lista en cero fingiendo que no había datos.
     - ⚠️ _Ceiling_: los totales se suman en el servidor sobre todas las filas filtradas (PostgREST no agrega sin vista/función). Sirve al volumen del MVP; si crece → RPC de agregación. Monedas distintas no se suman: se avisa.
   - [x] **US-1105 · Estadísticas globales** `EY-72` (migración `20260715190000`): `/admin/stats` (SCR-AD13) con KPIs filtrables por período — reservas creadas/pagadas, **conversión**, tutores activos, y por moneda GMV/comisión/neto/reembolsado. Los agrega la RPC `admin_stats(from, to)` — **una consulta**, no miles de filas a JS (al revés que US-1104: aquí agregar es SQL), y verifica `has_role('admin')` dentro. **S-44 (vistas materializadas) se pospuso a propósito**: es un supuesto de rendimiento, la matview obliga a `pg_cron` de refresco (más piezas, datos con retraso) para un problema que aún no existe; el día que el histórico pese, se cambia la función por un `select` sobre matview sin tocar el frontend. Filtra por `created_at` (consistente con US-1104); el dinero se agrupa por moneda (RN-13, no se suman distintas). **Verificado**: histórico completo (21 reservas, 15 pagadas, 71,4% conversión, 5 tutores, GMV 253/comisión 63,25/neto 189,75/reembolsado −193); período vacío → ceros + "sin ingresos"; presets 7/30/90d; no-admin y anon → 42501.
-- [x] **EP-08 · Sala en vivo (Daily)** ✅ — Daily **cableado de verdad** (US-801, migración `20260717120000` + `src/lib/daily.ts` + `/api/room/[sessionId]`), con la **credencial como interruptor**: sin `DAILY_API_KEY` la sala va **simulada** (como el PSP); con la clave, Daily real, sin tocar código. En prod hoy corre simulada (la cuenta de Daily espera método de pago — ver PR #4). Migración base `20260716120000`.
+- [x] **EP-08 · Sala en vivo (Daily)** ✅ — Daily **cableado de verdad** (US-801, migración `20260717120000` + `src/lib/daily.ts` + `/api/room/[sessionId]`), con la **credencial como interruptor**: sin `DAILY_API_KEY` la sala va **simulada** (como el PSP); con la clave, Daily real, sin tocar código. **Cuenta de Daily con método de pago desde el 28-jul** (dominio `ensenameya.daily.co`, `allow_plan_free:false`); `DAILY_API_KEY` puesta en local, Preview y Production — **prod pasa a Daily real en el próximo deploy**. Validado contra la API real: crear sala privada con `exp`/`enable_chat:false`, firmar meeting-token owner y borrar sala. Pendiente el E2E por navegador con sala real. Para la grabación (US-1802) falta configurarla en el dashboard: `recordings_bucket` y `enable_auto_recording` siguen en `null`. Migración base `20260716120000`.
   - [x] **US-801 · Entrar a la sala** `EY-59`: RPC `join_session` (SECURITY DEFINER) — exige participante + reserva activa + `now()` dentro de la ventana **RN-18/S-45 (10 min antes / 10 después)**; nombre de sala determinista `ey-<sessionId>`. El **token de Daily lo firma el server** en `/api/room/[sessionId]` con `DAILY_API_KEY` (server-only), tras autorizar con la RPC — efímero, no almacenado (Doc 1 §1.4.11); el tutor entra como `owner`. Sin la clave, el endpoint devuelve sala simulada (**sin fallback silencioso**: un Daily configurado que falla se ve, no se disfraza de simulado). Pantalla `/room/[sessionId]` (SCR-LV01). **C-08 resuelto**: el propio AC fija 10/10, constante nombrada. **Verificado E2E**: por API (dentro de ventana → autoriza; no-participante → rechazado; anón → 28000; a-destiempo → "fuera de la ventana"; reserva no confirmada → "no está activa") y por navegador esta sesión (`POST /api/room → 200`, sala renderizada).
   - [x] **US-802 · Ciclo de vida** `EY-60`: primer join → sesión `in_progress` (y reserva `in_progress` si era la 1ª); el tutor cierra con `complete_session` → `completed` + reserva `completed` cuando no quedan sesiones abiertas; **cierre automático al vencer la ventana** por `close_expired_sessions()` en `pg_cron` cada 5 min (S-26), `no_show` si nadie entró. Grant revocado de PUBLIC → solo `service_role` (lección de US-605). **Verificado E2E**: join→in_progress→complete→completed; re-entrar tras cerrada → rechazado.
   - [x] **US-803 · Responsive/móvil** `EY-61`: sala mobile-first con controles táctiles grandes (mute/cámara/salir/completar); **verificado a 375px** + cuenta regresiva. La **reconexión automática ante caída de red** la aporta el SDK de Daily, ya cableado (US-801); en modo simulado se mantienen los controles locales para ejercitar los toques.
@@ -564,6 +564,57 @@ aplica. Es del mismo tipo que el repaso nodo a nodo que ya hicimos (medir Figma 
 Siguen abiertas las del **cliente** (tracker `C-xx`): C-13 mercado/Venezuela + métodos, C-07 ventana de
 pago, C-02 retención, C-04 agrupación payout, C-05 no-show, C-06 checkout invitado, C-09 tiers, C-11
 email, C-12 opt-out, C-15 FX, C-10 referidos. C-01 ✅ (DLocal+Stripe) — falta solo **cuentas/API keys**.
+
+## Comentarios de desarrollo 29-jul → Plan de acción (`R29-xx`)
+
+> Cuatro observaciones sobre lo ya entregado. Analizadas contra el código el **29-jul**; las dos
+> lecturas ambiguas quedaron resueltas por Jose en la misma sesión (ver 🔸 abajo).
+
+| Handle | Ítem | Dónde toca | Esf. | Estado |
+| :-- | :-- | :-- | :-- | :-- |
+| **R29-01** | Precio **fuera del calendario** → abajo, junto al CTA; arriba el **título de la clase** | `components/catalog/booking-panel.tsx` (P07/P08 a la vez) | S | ⏳ |
+| **R29-02** | Redes + portafolio en **un solo módulo**: 1ª obligatoria con selector, hasta 5, links externos libres | `tutor/verification/verification-form.tsx` + quitar del paso 3 de `tutor-onboarding-form.tsx` | M | ⏳ |
+| **R29-03a** | "Métodos de pago" **fuera del menú del tutor** (es de alumno: yo cobro, no pago) | `components/layout/app-sidebar.tsx:64` | XS | ✅ |
+| **R29-03b** | "Información de pago" del tutor = **cuenta de cobro** | `tutor/payouts` | S | 🔸 **Aplazado** |
+| **R29-04** | Crear/editar categorías en **modal**, como tiers (R24-09) | `admin/categorias/category-manager.tsx` | S | ✅ |
+
+**Detalle de ejecución**
+
+- **R29-01** — hoy el importe es lo primero *dentro* de la tarjeta del calendario (`booking-panel.tsx:148-188`).
+  Arriba pasa a ir `chosen.title`; el precio (+ `perSessionLabel` en paquetes) baja pegado al CTA
+  (`:324-336`). No necesita estado: el panel se re-renderiza por URL (`?p=&d=`), así que el precio ya
+  sigue a la clase elegida. Un solo componente ⇒ arregla `/products/[id]` y `/tutors/[id]` de una.
+  🔸 **Decidido (Jose, 29-jul):** abajo del **panel**, junto al CTA — no una banda full-width al pie
+  de la página, que duplicaría el botón.
+- **R29-02** — los links se piden **en dos sitios**: paso 3 del asistente (LinkedIn + Instagram →
+  `tutor_profiles.socials`) y el módulo de verificación (un enlace suelto → doc `social_media`).
+  Se unifica en el módulo de verificación, que ya vive **en la carga de documentos y en el paso 4**
+  del asistente: una implementación, dos sitios. Filas `plataforma + enlace`, la primera obligatoria,
+  "Añadir otra" hasta 5, con opción **Sitio web / Portafolio** para links externos de cualquier tipo.
+  **Sin migración:** `socials` ya es `jsonb` con sus grants; pasa de `{instagram, linkedin}` a
+  `[{platform, url}]` con parser tolerante a la forma vieja. El admin ya pinta `socials`
+  (`admin/tutores/[id]:99`), así que el doc `social_media` deja de usarse.
+  ⚠️ **Pendiente de decidir:** que la 1ª red bloquee solo *"enviar a revisión"* (propuesto) o también
+  avanzar el paso 4 — hoy ese paso es no bloqueante a propósito (borrador + continuar, R24-15).
+- **R29-03** — `/pagos` es card-on-file del alumno (RN-43) y su copy lo dice; no tiene sentido en el
+  panel del tutor. Quitándolo de `TUTOR_ITEMS` el tutor lo sigue viendo **desde el panel de alumno**
+  gracias al switch (`lib/auth/panel-items.ts`), que es la semántica correcta.
+  🔸 **Decidido (Jose, 29-jul): 3b se aplaza.** La cuenta de cobro no existe en el esquema y su forma
+  la define el PSP (C-01 ✅ DLocal+Stripe, pero **sin cuentas/API keys**). Se añade en `/tutor/payouts`
+  el bloque "Información de pago" con el estado real, sin migración ni datos bancarios que el
+  onboarding del PSP acabaría reemplazando. Se retoma con EP-20.
+- **R29-04** — `category-manager.tsx` mantiene el formulario inline fijo que tiers ya jubiló en
+  R24-09. Se copia el patrón de `tier-manager.tsx:52-69,176-250` (estado `open`, `openNew`/`openEdit`,
+  cabecera con contador + "Nueva categoría", campos dentro del `DialogContent`). Sin dependencias nuevas.
+
+**Orden:** R29-04 + R29-03a (un commit) → R29-01 → R29-02 (commit propio, toca datos) → R29-03b con EP-20.
+
+**Verificado en dev (29-jul)** — R29-04: modal de alta con el borrador limpio, "Editar" precarga
+(`Editar "Matemáticas"`, slug y orden), el slug sigue al nombre sin tildes ni ñ
+(`Prueba Ñandú R29` → `prueba-nandu-r29`), alta real + toast + contador 10→11, y la fila de prueba
+borrada después. R29-03a: el menú del tutor queda Dashboard · Mis mentorías · Disponibilidad ·
+Reservas · Payouts · Verificación · Cuenta, y el **mismo** usuario sigue abriendo `/pagos` con el menú
+de alumno. Sin errores de consola.
 
 ---
 
