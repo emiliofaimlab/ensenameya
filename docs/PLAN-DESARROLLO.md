@@ -573,7 +573,7 @@ email, C-12 opt-out, C-15 FX, C-10 referidos. C-01 ✅ (DLocal+Stripe) — falta
 | Handle | Ítem | Dónde toca | Esf. | Estado |
 | :-- | :-- | :-- | :-- | :-- |
 | **R29-01** | Precio **fuera del calendario** → abajo, junto al CTA; arriba el **título de la clase** | `components/catalog/booking-panel.tsx` (P07/P08 a la vez) | S | ✅ |
-| **R29-02** | Redes + portafolio en **un solo módulo**: 1ª obligatoria con selector, hasta 5, links externos libres | `tutor/verification/verification-form.tsx` + quitar del paso 3 de `tutor-onboarding-form.tsx` | M | ⏳ |
+| **R29-02** | Redes + portafolio en **un solo módulo**: 1ª obligatoria con selector, hasta 5, links externos libres | `tutor/verification/verification-form.tsx` + quitar del paso 3 de `tutor-onboarding-form.tsx` | M | ✅ |
 | **R29-03a** | "Métodos de pago" **fuera del menú del tutor** (es de alumno: yo cobro, no pago) | `components/layout/app-sidebar.tsx:64` | XS | ✅ |
 | **R29-03b** | "Información de pago" del tutor = **cuenta de cobro** | `tutor/payouts` | S | 🔸 **Aplazado** |
 | **R29-04** | Crear/editar categorías en **modal**, como tiers (R24-09) | `admin/categorias/category-manager.tsx` | S | ✅ |
@@ -594,8 +594,14 @@ email, C-12 opt-out, C-15 FX, C-10 referidos. C-01 ✅ (DLocal+Stripe) — falta
   **Sin migración:** `socials` ya es `jsonb` con sus grants; pasa de `{instagram, linkedin}` a
   `[{platform, url}]` con parser tolerante a la forma vieja. El admin ya pinta `socials`
   (`admin/tutores/[id]:99`), así que el doc `social_media` deja de usarse.
-  ⚠️ **Pendiente de decidir:** que la 1ª red bloquee solo *"enviar a revisión"* (propuesto) o también
-  avanzar el paso 4 — hoy ese paso es no bloqueante a propósito (borrador + continuar, R24-15).
+  ⚠️ **Pendiente de confirmar con el cliente:** se implementó bloqueando solo *"enviar a revisión"*;
+  el paso 4 del asistente sigue siendo no bloqueante a propósito (borrador + continuar, R24-15).
+  Cambiarlo al otro criterio es una condición en `next()`.
+  **Sí hizo falta migración** (`20260729120000`), aunque no de esquema: `socials` pasa de objeto a
+  lista, el enlace que vivía como documento `social_media` se copia dentro, y **se borran esas filas**.
+  El borrado no es cosmético: `refresh_identity_status` agrega TODOS los documentos del tutor, así que
+  un `social_media` en `rejected` dejaría su identidad clavada sin formulario donde re-enviarlo —
+  el mismo motivo (y el mismo precedente) que la limpieza de C-14 en `20260715130000`.
 - **R29-03** — `/pagos` es card-on-file del alumno (RN-43) y su copy lo dice; no tiene sentido en el
   panel del tutor. Quitándolo de `TUTOR_ITEMS` el tutor lo sigue viendo **desde el panel de alumno**
   gracias al switch (`lib/auth/panel-items.ts`), que es la semántica correcta.
@@ -622,6 +628,16 @@ precio cambian juntos al cambiar de clase, sin estado de cliente. Sin clase eleg
 precio en ninguna posición (R24-14 intacto): "Reserva con este tutor" + la nota. En P08 el pie muestra
 `120,00 US$ / paquete` + `Equivale a 15,00 US$ por sesión · 8 sesiones`; el desglose por sesión solo se
 pinta en P08. Comprobado a 375 px. Sin errores de consola.
+
+**Verificado en dev (29-jul) — R29-02:** migración aplicada a dev. Guardar con URL y sin plataforma
+avisa «Elige la plataforma de cada enlace» (el selector es obligatorio de verdad); con LinkedIn +
+«Sitio web / Portafolio» guarda, y los dos enlaces siguen ahí tras recargar. El tope de 5 aguanta
+8 clicks seguidos en «Añadir otra» (el guard vive en el updater, no en el render). En el admin
+conviven las dos procedencias: `Instagram: @fixture_us1101` (forma vieja) y
+`Otro: https://instagram.com/tutor_demo` (el que era documento), y `social_media` ya no aparece entre
+los documentos. Los handles legados sin `http` se muestran sin enlazar. El paso 3 del asistente ya no
+pide enlaces; el paso 4 monta el mismo módulo (ambas cuentas tutor de dev están aprobadas, así que ese
+paso queda cubierto por tipos + el módulo verificado en su otro punto de montaje, no en vivo).
 
 ---
 

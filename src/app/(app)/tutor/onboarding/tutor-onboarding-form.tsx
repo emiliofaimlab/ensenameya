@@ -24,6 +24,7 @@ import {
 } from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 import { VerificationForm, type DocState } from "../verification/verification-form";
+import type { SocialLink } from "@/lib/socials";
 import type { Database } from "@/lib/database.types";
 
 type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
@@ -48,8 +49,6 @@ export function TutorOnboardingForm({
   exists,
   headline: headline0,
   bio: bio0,
-  instagram: ig0,
-  linkedin: li0,
   fullName,
   avatarPath,
   avatarUrl,
@@ -59,14 +58,13 @@ export function TutorOnboardingForm({
   categories,
   selectedCategories,
   docsByType,
+  socials,
   hasProduct,
 }: {
   userId: string;
   exists: boolean;
   headline: string;
   bio: string;
-  instagram: string;
-  linkedin: string;
   fullName: string;
   avatarPath: string | null;
   avatarUrl: string | null;
@@ -76,6 +74,8 @@ export function TutorOnboardingForm({
   categories: { id: string; label: string }[];
   selectedCategories: string[];
   docsByType: Record<string, DocState>;
+  /** R29-02: redes/portafolio ya guardados; los edita el módulo del paso 4. */
+  socials: SocialLink[];
   /** UX-204: sin al menos una oferta creada, el asistente no se puede cerrar. */
   hasProduct: boolean;
 }) {
@@ -102,21 +102,18 @@ export function TutorOnboardingForm({
     setTimezone(tz);
     if (!phone.trim()) setCountry(countryFromTimezone(tz) ?? country);
   }
-  const [instagram, setInstagram] = useState(ig0);
-  const [linkedin, setLinkedin] = useState(li0);
 
   const supabase = createClient();
 
-  /** Perfil de vitrina: se reescribe entero en cada paso que lo toca. */
+  /**
+   * Perfil de vitrina: se reescribe entero en cada paso que lo toca.
+   * `socials` NO se toca aquí (R29-02): lo escribe el módulo de verificación
+   * del paso 4, y pisarlo con `{}` desde el paso 1 borraría lo ya guardado.
+   */
   async function saveProfile() {
-    const socials: Record<string, string> = {};
-    if (instagram.trim()) socials.instagram = instagram.trim();
-    if (linkedin.trim()) socials.linkedin = linkedin.trim();
-
     const payload = {
       headline: headline.trim(),
       bio: bio.trim() || null,
-      socials,
       teaching_level: level,
       // Copia pública del nombre y la foto (DD-01): `profiles` no es visible
       // para anon, así que la tarjeta del catálogo lee estas dos columnas.
@@ -294,31 +291,15 @@ export function TutorOnboardingForm({
         </Field>
         <Field label="Teléfono" htmlFor="phone">
           <PhoneInput
-      key={country}
-      id="phone"
-      value={phone}
-      onChange={setPhone}
-      defaultCountry={country}
-    />
-        </Field>
-        <Field label="LinkedIn" htmlFor="linkedin">
-          <Input
-            id="linkedin"
-            value={linkedin}
-            onChange={(e) => setLinkedin(e.target.value)}
-            placeholder="https://linkedin.com/in/…"
-            className={FIELD_CLASS}
+            key={country}
+            id="phone"
+            value={phone}
+            onChange={setPhone}
+            defaultCountry={country}
           />
         </Field>
-        <Field label="Instagram / otra red (opcional)" htmlFor="instagram">
-          <Input
-            id="instagram"
-            value={instagram}
-            onChange={(e) => setInstagram(e.target.value)}
-            placeholder="https://instagram.com/…"
-            className={FIELD_CLASS}
-          />
-        </Field>
+        {/* R29-02: los enlaces se piden una sola vez, en el paso siguiente
+            (junto a los documentos). Aquí solo va el contacto. */}
       </WizardShell>
     );
   }
@@ -340,7 +321,11 @@ export function TutorOnboardingForm({
         bare
         maxWidth={760}
       >
-        <VerificationForm userId={userId} docsByType={docsByType} />
+        <VerificationForm
+          userId={userId}
+          docsByType={docsByType}
+          socials={socials}
+        />
       </WizardShell>
     );
   }
