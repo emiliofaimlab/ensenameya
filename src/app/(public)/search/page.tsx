@@ -170,7 +170,10 @@ export default async function SearchPage({
                 <div
                   role="tablist"
                   aria-label="Tipo de resultado"
-                  className="flex gap-0.5 rounded-[10px] bg-[#ededed] p-1"
+                  // US-1601: a 360 px las cuatro pestañas suman más que la
+                  // pantalla y sacaban scroll horizontal a TODA la página.
+                  // Se deja que envuelvan; en desktop cabe en una fila igual.
+                  className="flex flex-wrap gap-0.5 rounded-[10px] bg-[#ededed] p-1"
                 >
                   {(
                     [
@@ -185,7 +188,7 @@ export default async function SearchPage({
                       role="tab"
                       aria-selected={tab === id}
                       href={hrefFor({ tab: id, sort })}
-                      className={`rounded-[8px] px-4.5 py-2 text-sm font-medium transition-colors ${
+                      className={`rounded-[8px] px-3 py-2 text-sm font-medium transition-colors sm:px-4.5 ${
                         tab === id
                           ? "bg-card text-[#19191f] shadow-[0_1px_3px_rgb(0_0_0/0.1)]"
                           : "text-[#5c5c5c] hover:text-foreground"
