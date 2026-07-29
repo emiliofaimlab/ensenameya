@@ -12,6 +12,7 @@ import {
   listApprovedTutors,
   listActiveCategories,
   type AvailabilityFilter,
+  type PriceBucket,
   type TutorSort,
 } from "@/lib/catalog/queries";
 
@@ -32,6 +33,7 @@ export default async function TutorsPage({
     page?: string;
     rating?: string;
     avail?: string;
+    price?: string;
     sort?: string;
   }>;
 }) {
@@ -40,12 +42,18 @@ export default async function TutorsPage({
     page: pageParam,
     rating: ratingParam,
     avail: availParam,
+    price: priceParam,
     sort: sortParam,
   } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
   const minRating = Number(ratingParam) || undefined;
   const availability = (["today", "week", "weekend"] as const).find(
     (v) => v === availParam,
+  );
+  // La query string es texto libre: un tramo que no existe se ignora, no se
+  // pasa al filtro (mismo criterio que los estados de US-1104).
+  const price = (["lt15", "15to25", "25to40", "gt40"] as const).find(
+    (v) => v === priceParam,
   );
   const sort = (["rating", "reviews"] as const).find((v) => v === sortParam);
 
@@ -54,6 +62,7 @@ export default async function TutorsPage({
       categorySlug: cat,
       minRating,
       availability,
+      price,
       sort,
       page,
     }),
@@ -65,6 +74,7 @@ export default async function TutorsPage({
     cat?: string;
     rating?: number;
     avail?: AvailabilityFilter;
+    price?: PriceBucket;
     sort?: TutorSort;
     page?: number;
   }) => {
@@ -72,13 +82,14 @@ export default async function TutorsPage({
     if (next.cat) p.set("cat", next.cat);
     if (next.rating) p.set("rating", String(next.rating));
     if (next.avail) p.set("avail", next.avail);
+    if (next.price) p.set("price", next.price);
     if (next.sort) p.set("sort", next.sort);
     if (next.page && next.page > 1) p.set("page", String(next.page));
     const q = p.toString();
     return q ? `/tutors?${q}` : "/tutors";
   };
 
-  const current = { cat, rating: minRating, avail: availability, sort };
+  const current = { cat, rating: minRating, avail: availability, price, sort };
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -137,6 +148,7 @@ export default async function TutorsPage({
             activeSlug={cat}
             minRating={minRating}
             availability={availability}
+            price={price}
             hrefFor={(next) => buildHref({ sort, ...next })}
           />
 

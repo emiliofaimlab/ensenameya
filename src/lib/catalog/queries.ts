@@ -212,11 +212,30 @@ export type AvailabilityFilter = "today" | "week" | "weekend";
  *  tutor, y ordenar por él rompería la paginación (pide DD-04 / `EY-114`). */
 export type TutorSort = "rating" | "reviews";
 
+/**
+ * DD-04 · "Inversión por clase" de P04. Los cuatro tramos son los del Figma
+ * (386:968): menos de $15 · $15–$25 · $25–$40 · más de $40, en unidades
+ * menores y contiguos para que ningún tutor caiga entre dos.
+ *
+ * Filtra por el **precio de entrada** — el mismo "Desde $18" que enseña la
+ * tarjeta—, no por "tiene alguna clase en el tramo": si no, un tutor con una
+ * clase de $10 y otra de $50 saldría en "Más de $40" mostrando "Desde $10".
+ */
+export type PriceBucket = "lt15" | "15to25" | "25to40" | "gt40";
+
+const PRICE_BUCKETS: Record<PriceBucket, { min: number; max: number }> = {
+  lt15: { min: 0, max: 1500 },
+  "15to25": { min: 1500, max: 2500 },
+  "25to40": { min: 2500, max: 4000 },
+  gt40: { min: 4000, max: Number.POSITIVE_INFINITY },
+};
+
 /** US-301 — tutores aprobados, filtrables por categoría y rating, paginados. */
 export async function listApprovedTutors(opts: {
   categorySlug?: string;
   minRating?: number;
   availability?: AvailabilityFilter;
+  price?: PriceBucket;
   sort?: TutorSort;
   page: number;
 }): Promise<{ tutors: FeaturedTutor[]; hasMore: boolean; total: number }> {
@@ -253,6 +272,35 @@ export async function listApprovedTutors(opts: {
     tutorIds = tutorIds
       ? tutorIds.filter((id) => withSlots.includes(id))
       : withSlots;
+    if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
+  }
+
+  // DD-04 · precio de entrada. No hay columna materializada y no hace falta:
+  // se resuelve como categoría y disponibilidad, acotando la lista de tutores
+  // antes de paginar. Una columna obligaría a un trigger que la mantenga fresca
+  // en cada alta, edición o pausa de producto — para un filtro de una pantalla.
+  // ponytail: cuelga de `in(ids)`, igual que los otros dos filtros; con miles de
+  // tutores esto pasa a ser una RPC que agregue en SQL.
+  if (opts.price) {
+    const { min, max } = PRICE_BUCKETS[opts.price];
+    const { data } = await supabase
+      .from("products")
+      .select("tutor_id, price_amount")
+      .eq("status", "active");
+
+    // Mínimo por tutor: sin comparar monedas, que hoy es USD única (C-13).
+    const cheapest = new Map<string, number>();
+    for (const p of data ?? []) {
+      const current = cheapest.get(p.tutor_id);
+      if (current === undefined || p.price_amount < current) {
+        cheapest.set(p.tutor_id, p.price_amount);
+      }
+    }
+    const inRange = [...cheapest]
+      .filter(([, amount]) => amount >= min && amount < max)
+      .map(([id]) => id);
+
+    tutorIds = tutorIds ? tutorIds.filter((id) => inRange.includes(id)) : inRange;
     if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
   }
 
