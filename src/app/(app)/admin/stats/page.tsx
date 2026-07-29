@@ -21,6 +21,16 @@ type Stats = {
     tutor_net: number;
     refunded: number;
   }[];
+  /** US-1502 · salud de cobros, payouts y webhooks en el mismo período. */
+  ops: {
+    payments_total: number;
+    payments_failed: number;
+    payment_failure_pct: number;
+    payouts_failed: number;
+    payouts_on_hold: number;
+    webhook_median_secs: number;
+    webhook_missing: number;
+  };
 };
 
 type WeekRow = { week_start: string; currency: string; gmv: number };
@@ -183,6 +193,51 @@ export default async function AdminStatsPage({
             })}
           </div>
         )}
+      </PanelCard>
+
+      {/* US-1502 · las tres cifras de operación. Van con los KPIs y no en una
+          pantalla aparte: se leen con el mismo período que todo lo demás. */}
+      <PanelCard>
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Salud de cobros y pagos
+        </h2>
+        <dl className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div>
+            <dt className="text-xs text-[#6b6b6b]">Fallo de cobro</dt>
+            <dd className="mt-1 text-[22px] font-bold text-[#19191f] tabular-nums">
+              {stats.ops.payment_failure_pct}%
+            </dd>
+            <p className="text-xs text-[#6b6b6b]">
+              {stats.ops.payments_failed} de {stats.ops.payments_total} intentos
+            </p>
+          </div>
+          <div>
+            <dt className="text-xs text-[#6b6b6b]">Payouts en problema</dt>
+            <dd className="mt-1 text-[22px] font-bold text-[#19191f] tabular-nums">
+              {stats.ops.payouts_failed + stats.ops.payouts_on_hold}
+            </dd>
+            <p className="text-xs text-[#6b6b6b]">
+              {stats.ops.payouts_failed} fallidos · {stats.ops.payouts_on_hold} en
+              espera
+            </p>
+          </div>
+          <div>
+            <dt className="text-xs text-[#6b6b6b]">Confirmación por webhook</dt>
+            <dd className="mt-1 text-[22px] font-bold text-[#19191f] tabular-nums">
+              {stats.ops.webhook_median_secs}s
+            </dd>
+            <p className="text-xs text-[#6b6b6b]">
+              mediana ·{" "}
+              {stats.ops.webhook_missing > 0 ? (
+                <Link href="/admin/payments?status=paid" className="text-brand hover:underline">
+                  {stats.ops.webhook_missing} cobros sin evento
+                </Link>
+              ) : (
+                "todos con evento"
+              )}
+            </p>
+          </div>
+        </dl>
       </PanelCard>
 
       {/* Reservas por categoría (228:115): barras de progreso. */}

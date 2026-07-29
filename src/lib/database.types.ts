@@ -335,6 +335,7 @@ export type Database = {
           id: string
           idempotency_key: string
           payload: Json
+          read_at: string | null
           recipient_id: string
           sent_at: string | null
           status: Database["public"]["Enums"]["notification_status"]
@@ -347,6 +348,7 @@ export type Database = {
           id?: string
           idempotency_key: string
           payload?: Json
+          read_at?: string | null
           recipient_id: string
           sent_at?: string | null
           status?: Database["public"]["Enums"]["notification_status"]
@@ -359,6 +361,7 @@ export type Database = {
           id?: string
           idempotency_key?: string
           payload?: Json
+          read_at?: string | null
           recipient_id?: string
           sent_at?: string | null
           status?: Database["public"]["Enums"]["notification_status"]
