@@ -572,7 +572,7 @@ email, C-12 opt-out, C-15 FX, C-10 referidos. C-01 ✅ (DLocal+Stripe) — falta
 
 | Handle | Ítem | Dónde toca | Esf. | Estado |
 | :-- | :-- | :-- | :-- | :-- |
-| **R29-01** | Precio **fuera del calendario** → abajo, junto al CTA; arriba el **título de la clase** | `components/catalog/booking-panel.tsx` (P07/P08 a la vez) | S | ⏳ |
+| **R29-01** | Precio **fuera del calendario** → abajo, junto al CTA; arriba el **título de la clase** | `components/catalog/booking-panel.tsx` (P07/P08 a la vez) | S | ✅ |
 | **R29-02** | Redes + portafolio en **un solo módulo**: 1ª obligatoria con selector, hasta 5, links externos libres | `tutor/verification/verification-form.tsx` + quitar del paso 3 de `tutor-onboarding-form.tsx` | M | ⏳ |
 | **R29-03a** | "Métodos de pago" **fuera del menú del tutor** (es de alumno: yo cobro, no pago) | `components/layout/app-sidebar.tsx:64` | XS | ✅ |
 | **R29-03b** | "Información de pago" del tutor = **cuenta de cobro** | `tutor/payouts` | S | 🔸 **Aplazado** |
@@ -615,6 +615,13 @@ email, C-12 opt-out, C-15 FX, C-10 referidos. C-01 ✅ (DLocal+Stripe) — falta
 borrada después. R29-03a: el menú del tutor queda Dashboard · Mis mentorías · Disponibilidad ·
 Reservas · Payouts · Verificación · Cuenta, y el **mismo** usuario sigue abriendo `/pagos` con el menú
 de alumno. Sin errores de consola.
+
+**Verificado en dev (29-jul) — R29-01:** el panel queda `título → calendario → clase → horarios →
+Precio → CTA`. En P07 con dos clases (`portugues` 22 US$/hora ↔ `ingles` 18 US$/hora) el título y el
+precio cambian juntos al cambiar de clase, sin estado de cliente. Sin clase elegida sigue sin haber
+precio en ninguna posición (R24-14 intacto): "Reserva con este tutor" + la nota. En P08 el pie muestra
+`120,00 US$ / paquete` + `Equivale a 15,00 US$ por sesión · 8 sesiones`; el desglose por sesión solo se
+pinta en P08. Comprobado a 375 px. Sin errores de consola.
 
 ---
 
