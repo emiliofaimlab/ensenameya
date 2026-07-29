@@ -415,16 +415,17 @@ No consumen SP del sprint. Se filtran en Jira por label.
 
 ### 🅐 Antes del martes — pulido visual + estabilidad (Sprint 4) · ✅ **COMPLETA (26-jul)**
 
-> **12/12 hechas, verificadas en dev y en `main`/`dev`.** Commits abajo. Quedan
-> dos sub-ítems menores (no bloqueantes): R24-02 "año/ñ cortado" (falta el sitio
-> exacto que vio el cliente) y la disponibilidad **pública sin sesión** →
-> tz del navegador (follow-up de decisión-13, ligado a la lógica de día de
-> `BookingPanel`).
+> **12/12 hechas, verificadas en dev y en `main`/`dev`.** Commits abajo. Los dos
+> sub-ítems que quedaban ya están cerrados: la disponibilidad **pública sin sesión**
+> se resolvió con R24-22 (tz del visitante), y el "año/ñ cortado" de R24-02 se
+> **descartó el 29-jul** — no se reprodujo en ninguna pantalla y Jose no lo
+> reconoce: fue un apunte erróneo de la reunión. Su tarjeta (`EY-121`) se borró
+> de Jira; el hover, que sí era real, quedó hecho en `e9813a4`.
 
 | Handle | Estado | Commit | Nota de ejecución |
 | :-- | :-- | :-- | :-- |
 | **R24-01** | ✅ | `4bd2e51` | `Container` cap 1280→1664 (contenido fluido a 1536); fondos ya sangraban. Verificado 1920/1280. **Paneles quedan a 1280** (decisión B) |
-| **R24-02** | ✅ hover | `e9813a4` | Realce naranja de `TrustCards` como hover, no fijo. ❓ "año/ñ cortado": headings no se recortan a 1920 (falta pinpoint) |
+| **R24-02** | ✅ | `e9813a4` | Realce naranja de `TrustCards` como hover, no fijo |
 | **R24-03** | ✅ | `48f5b7c` | Componente `CategoryIconChips` (icono+hover+"Ver todas") en /tutors, /categories, /search y home (DRY) |
 | **R24-04** | ✅ | `9adf34d` | 🐞 `search_text` del tutor incluye `display_name` (migración `20260724140000`, en prod) |
 | **R24-05** | ✅ | `eb62987` | `suggestSearch` + `/api/search/suggest` + `SearchAutocomplete` en el header, orden por sección actual |
@@ -441,7 +442,7 @@ No consumen SP del sprint. Se filtran en Jira por label.
 | Handle | Ítem | Épica | Esf. | Nota |
 | :-- | :-- | :-- | :-- | :-- |
 | **R24-01** | **Full-width en TODO el sitio** (no solo Home/Nosotros) + video de fondo Home/Nosotros | EP-22/16 | **L** | ⚠️ **Validar antes de aplicar** — ver nota abajo. Hoy el `Container` (1152) encajona todo |
-| **R24-02** | Hover roto en Nosotros ("tranquilidad garantizada") + márgenes + **bug ñ / caracteres especiales** | EP-22 | S | El acento naranja debe ser hover, no estático (`00:24:35`) |
+| **R24-02** | Hover roto en Nosotros ("tranquilidad garantizada") + márgenes | EP-22 | S | El acento naranja debe ser hover, no estático (`00:24:35`) |
 | **R24-03** | Burbujas de categoría: colapsar a **solo íconos hasta hover/selección** (como el home) + límite / "ver más" / scroll | EP-03/22 | S/M | Evita 50 burbujas al crecer el catálogo (`00:10:14`) |
 | **R24-04** | 🐞 **Buscar por nombre de tutor** (hoy solo por habilidad; "Emilio" no salía) | EP-03 | S/M | Medio bug medio mejora (`00:06:53`) |
 | **R24-05** | **Buscador global con sugerencias** desplegables subdivididas (Tutores/Clases/Categorías), ~4, empezando por la sección actual | EP-03 | M | Estilo "Emilio \| Clases de Emilio" |
@@ -641,4 +642,4 @@ paso queda cubierto por tipos + el módulo verificado en su otro punto de montaj
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente y el sub-ítem R24-02 "año/ñ cortado" sin pinpoint. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario; pendientes menores R24-02 "año/ñ cortado" y tz de disponibilidad pública sin sesión. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
