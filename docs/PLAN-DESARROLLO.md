@@ -724,14 +724,22 @@ corte pasajero, no una rotación.** Los dos caminos están abiertos: REST con `F
 de Figma —por el que salieron los tramos de precio de DD-04 mientras el REST fallaba—. Si el REST
 vuelve a dar 403, reintentar antes de pedirle un token nuevo a Diana.
 
-**Tanda 2 · cerrar el chat** (~1 día) — la decisión 22 ya está tomada (**30 días + descarga**), así que
-esto sale del limbo en que lo dejó el 17-jul.
+**Tanda 2 · cerrar el chat** · ✅ **COMPLETA (29-jul, `c53a949`)** — la decisión 22 (**30 días +
+descarga**) sacó a las dos del limbo en que las dejó el 17-jul.
 
-- `EY-84` **US-1702 · descarga** — route handler que serializa el hilo a `.txt`/`.json` bajo la RLS de
-  participantes. Sin librería.
-- `EY-76` **US-1703 · purga** — devolver a `purge_expired_messages()` su función destructiva a 30 días
-  (hoy solo informa, ver `20260722200000`). **Va después de 1702**: no se borra lo que aún no se puede
-  descargar.
+- `EY-84` **US-1702 · descarga** — `GET /api/chat/[bookingId]/download?format=txt|json`. La
+  autorización **es la RLS**: `messages_select_participant` solo devuelve el hilo a quien es parte de
+  la reserva, así que el handler no comprueba nada a mano. Los mensajes se firman **por rol**
+  ("Alumno"/"Tutor", con "(tú)" para quien descarga) porque `profiles` es privado y el tutor no puede
+  leer el nombre del alumno. Fechas en la hora local del que descarga (RN-02). Sin librería y sin JS:
+  son `<a download>`, y el enlace vive en `ChatThread`, así que sale en AL03, TU08 y la sala de una.
+  **Los adjuntos no van dentro** (bucket privado; meterlos pediría un zip): se listan con nombre y peso.
+- `EY-76` **US-1703 · purga** — restaurada la versión destructiva **con adjuntos** (`20260729180000`):
+  borrar solo las filas dejaría el objeto huérfano en Storage, que es el dato personal que RN-41 quiere
+  caducar. El cron de las 04:00 nunca se desprogramó, así que reemplazar la función basta.
+  ⚠️ **El borrado en sí no se pudo ejecutar aquí** — `purge_expired_messages` es solo de `service_role`
+  (lección de US-605) y no tengo esa clave. Corre en el próximo tick del cron; para comprobarlo antes,
+  en el SQL Editor de dev: `select public.purge_expired_messages();`
 
 **Tanda 3 · datos y avisos** (~3 días)
 
