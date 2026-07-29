@@ -5,6 +5,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
 import { BookingRow } from "@/components/booking-row";
+import { ReferralCard } from "@/components/referral/referral-card";
 import {
   PanelCard,
   PanelCardTitle,
@@ -224,8 +225,10 @@ export default async function AppHome() {
         </>
       )}
 
-      {/* El Figma pone aquí dos tarjetas; "Invita y gana" es US-1301
-          (referidos, S4, bloqueada por C-10) y no existe todavía. */}
+      {/* Las dos tarjetas del Figma. "Invita y gana" (US-1301) solo aparece con
+          campaña configurada: el programa vive entero en Referral Factory. */}
+      <ReferralCard />
+
       <PanelCard>
         <span className="grid size-10 place-items-center rounded-full bg-brand-muted text-brand">
           <CompassIcon className="size-5" />

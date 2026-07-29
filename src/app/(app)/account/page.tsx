@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth/server";
 import { panelItems } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
 import { PanelShell } from "@/components/layout/panel-shell";
+import { ReferralCard } from "@/components/referral/referral-card";
 import { AccountForm } from "./account-form";
 
 export const metadata = { title: "Mi cuenta · Enséñame Ya" };
@@ -50,6 +51,9 @@ export default async function AccountPage() {
         avatarUrl={avatarUrl}
         isTutor={roles.includes("tutor")}
       />
+
+      {/* G03 · el otro punto de integración de referidos (Doc 4 §4.x). */}
+      <ReferralCard />
     </PanelShell>
   );
 }

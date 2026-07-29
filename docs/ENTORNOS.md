@@ -33,6 +33,15 @@ dev / PRs  ───▶  Preview             ───▶  ensenameya-dev   (lbt
 > Claves `secret`/`service_role`, DB passwords y connection strings **solo** como secrets de
 > Vercel/GitHub o en `.env.local` (gitignored). Nunca en el repo ni en `NEXT_PUBLIC_*`. Regla de oro 3.
 
+**Interruptores por variable.** Varias integraciones se encienden poniendo su variable, sin tocar
+código; ausentes, la función se apaga sola en vez de romper:
+
+| Variable | Enciende | Si falta |
+| :-- | :-- | :-- |
+| `DAILY_API_KEY` | Sala de video real (EP-08) | Sala simulada |
+| `NEXT_PUBLIC_REFERRAL_URL` | Bloque "Invita y gana" (US-1301) | El bloque **no se pinta** |
+| `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | Monitoreo de errores (US-1501) | El SDK ni se inicializa |
+
 ---
 
 ## 2. Flujo de trabajo (sin local)
