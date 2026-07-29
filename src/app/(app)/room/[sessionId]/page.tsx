@@ -34,7 +34,7 @@ export default async function RoomPage({
 
   // El panel de chat de LV01 es el hilo de EP-17, no una copia: se precarga el
   // mismo histórico que `/chat/<reserva>` y Realtime sigue desde ahí.
-  const [{ data: msgs }, { data: firstSession }] = await Promise.all([
+  const [{ data: msgs }, { data: firstSession }, { data: consents }] = await Promise.all([
     supabase
       .from("messages")
       .select("id, sender_id, body, created_at, attachment_path, attachment_name, attachment_size")
@@ -47,6 +47,12 @@ export default async function RoomPage({
       .order("start_at")
       .limit(1)
       .maybeSingle(),
+    // US-1801 · quién aceptó que se grabe. La RLS deja a los dos participantes
+    // ver las dos filas: hay que poder decir "falta que el otro acepte".
+    supabase
+      .from("session_recording_consents")
+      .select("user_id")
+      .eq("session_id", sessionId),
   ]);
 
   const initialMessages: ChatMessage[] = (msgs ?? []).map((m) => ({
@@ -76,6 +82,10 @@ export default async function RoomPage({
       currentUserId={user.id}
       firstSessionAt={firstSession?.start_at ?? null}
       initialMessages={initialMessages}
+      consent={{
+        mine: (consents ?? []).some((c) => c.user_id === user.id),
+        other: (consents ?? []).some((c) => c.user_id !== user.id),
+      }}
     />
   );
 }

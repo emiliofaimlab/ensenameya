@@ -13,6 +13,7 @@ import {
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { RecordingLink } from "@/components/room/recording-link";
 import { Button } from "@/components/ui/button";
 import {
   CompleteSessionButton,
@@ -194,6 +195,10 @@ export default async function TutorBookingDetailPage({
                             </Button>
                             <CompleteSessionButton sessionId={s.id} />
                           </>
+                        ) : null}
+                        {/* US-1802 · disponible 30 días desde la clase. */}
+                        {s.status === "completed" ? (
+                          <RecordingLink sessionId={s.id} />
                         ) : null}
                       </div>
                     </li>

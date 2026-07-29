@@ -876,6 +876,39 @@ export type Database = {
           },
         ]
       }
+      session_recording_consents: {
+        Row: {
+          created_at: string
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_recording_consents_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_recording_consents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sessions: {
         Row: {
           access_closes_at: string | null
@@ -1331,6 +1364,7 @@ export type Database = {
       process_notifications: { Args: never; Returns: Json }
       process_scheduled_payouts: { Args: never; Returns: Json }
       purge_expired_messages: { Args: never; Returns: Json }
+      recording_allowed: { Args: { p_session_id: string }; Returns: boolean }
       refund_payment: {
         Args: { p_amount?: number; p_payment_id: string }
         Returns: Json

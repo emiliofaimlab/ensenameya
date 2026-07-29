@@ -18,6 +18,7 @@ import {
   StatusPill,
 } from "@/components/layout/panel-shell";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { RecordingLink } from "@/components/room/recording-link";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/lib/database.types";
 
@@ -166,6 +167,10 @@ export default async function BookingDetailPage({
                         >
                           <Link href={`/room/${s.id}`}>Entrar a sala</Link>
                         </Button>
+                      ) : null}
+                      {/* US-1802 · la grabación vive 30 días desde la clase. */}
+                      {s.status === "completed" ? (
+                        <RecordingLink sessionId={s.id} />
                       ) : null}
                     </div>
                   </li>
