@@ -688,16 +688,38 @@ especulativos "para cuando lleguen las claves": eso es la regla de oro 8).
 
 ### 📋 Orden de ejecución
 
-**Tanda 1 · barrer lo barato** (~2 días, todo verificable en dev)
+**Tanda 1 · barrer lo barato** · ✅ **COMPLETA (29-jul)** — rama `feat/tanda1-cierres`,
+6 commits, `lint` + `typecheck` + build de producción en verde.
 
-| Ticket | Qué | Cómo (la vía corta) |
-| :-- | :-- | :-- |
-| `EY-115` DD-05 | Subcategorías/"Temas" | **Verificar y cerrar** — decisión 26 ya cumplida |
-| `EY-79` US-1302 | Captura `?ref=` | **Verificar** OAuth + confirmación por correo, y cerrar |
-| `EY-116` DD-06 | `/terms`, `/privacy`, `/cookies` | 3 rutas estáticas. El **404 desde el footer** es el bug; el texto legal lo pone el cliente (placeholder marcado hasta entonces) |
-| `EY-114` DD-04 | Filtro de precio en P04 | **Sin materializar ni migración**: el filtro sale de un `exists` sobre `products` del tutor. Materializar obliga a trigger de frescura para un filtro de una pantalla |
-| `EY-80` US-1501 | Sentry | `@sentry/nextjs` (frontend + Edge Functions). Sin capa propia de logging encima |
-| `EY-147` R29-03b | Info de pago del tutor | La mitad no bloqueada: bloque "Información de pago" en `/tutor/payouts` con el estado real, **sin migración**. La cuenta de cobro real llega con EP-20 |
+| Ticket | Estado | Commit | Nota de ejecución |
+| :-- | :-- | :-- | :-- |
+| `EY-115` DD-05 | ✅ verificada | — | El cruce con segunda categoría vive en `category-explorer.tsx:83-90` (decisión 26). Nada que construir: **cerrar en Jira** |
+| `EY-79` US-1302 | ✅ | `cefb805` | **Tenía dos agujeros de verdad**, no era solo verificar. Ver abajo |
+| `EY-116` DD-06 | ✅ | `8d8ddb2` | Las 3 rutas responden 200 con el armazón público. Texto legal pendiente del cliente, dicho en pantalla |
+| `EY-114` DD-04 | ✅ | `302ba82` | **Sin migración.** Tramos del Figma (386:968) y filtro por el precio de entrada, no por "tiene alguna clase en el tramo" |
+| `EY-147` R29-03b | ✅ (la mitad no bloqueada) | `d03dd86` | "Información de pago" con estado real; la cuenta de cobro vuelve con EP-20 |
+| `EY-80` US-1501 | ✅ | `eed746d` | Sentry cableado y **apagado hasta que haya DSN** (credencial-interruptor, como Daily) |
+
+**`US-1302` no estaba hecho, estaba a medias — y fallaba en silencio.**
+
+- Con **confirmación de correo activa** (que es como está la nube) el alta no devuelve sesión, así que
+  el `update` del formulario **nunca corría**: el código se quedaba en el metadata del usuario y no
+  llegaba al perfil. Ahora lo copia `handle_new_user` (migración `20260729130000`), que es donde se
+  copian `full_name` y `timezone`.
+- El alta **por Google** perdía el código: no viajaba en la URL de vuelta. Ahora va como `?ref=` y AU04
+  lo graba sólo si el perfil no tiene uno (una atribución no se pisa en cada login).
+- Y el enlace del referidor **rara vez apunta a `/signup`**: el proxy guarda el `?ref=` de cualquier
+  página en la cookie `ey-ref` y el registro la lee de respaldo.
+
+Verificado en dev por API (metadata con espacios → perfil recortado) y por navegador (entrar por
+`/?ref=RF-COOKIE1`, registrarse desde `/signup` **sin query** → `referral_code=RF-COOKIE1`).
+
+⚠️ **Dos cuentas de usar y tirar** quedaron en dev de la verificación (`ref.test.…` y
+`ref.cookie.b@ensenameya.dev`): borrarlas pide `service_role`, que no tengo.
+
+🔑 **El token REST de Figma está muerto** (403 `Invalid token`) — era el personal de Diana, como
+avisaba §4.2 del backlog. **El MCP de Figma sí responde**, y por ahí salieron los tramos de precio de
+DD-04. Para lo que queda de fidelidad al diseño, ese es el camino.
 
 **Tanda 2 · cerrar el chat** (~1 día) — la decisión 22 ya está tomada (**30 días + descarga**), así que
 esto sale del limbo en que lo dejó el 17-jul.
@@ -744,6 +766,8 @@ de los cuatro se queda `To Do` hasta que haya contrato.
 | :-- | :-- | :-- |
 | ~~¿Cuenta Stripe en **test mode**?~~ → ✅ **SÍ (Jose, 29-jul)**: la abre él y pasa las claves de test | Sprint 6 AC entero | Jose |
 | Código de embebido + parámetro de URL de Referral Factory | `EY-78` | Jose (cuenta ya creada ✅) |
+| **DSN de Sentry** (cuenta gratuita) → `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` en Vercel | encender `EY-80` | Jose |
+| **Token de Figma nuevo** (el REST devuelve 403) o seguir por el MCP | fidelidad al diseño | Diana / Jose |
 | Go de coste de grabación en Daily + dónde se guardan | `EY-85/86` | Cliente / Emilio |
 | Diseños responsive tablet/escritorio | `EY-82` | Diana |
 | Texto legal de términos, privacidad y cookies | `EY-116` | Cliente |
