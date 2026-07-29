@@ -717,9 +717,11 @@ Verificado en dev por API (metadata con espacios → perfil recortado) y por nav
 ⚠️ **Dos cuentas de usar y tirar** quedaron en dev de la verificación (`ref.test.…` y
 `ref.cookie.b@ensenameya.dev`): borrarlas pide `service_role`, que no tengo.
 
-🔑 **El token REST de Figma está muerto** (403 `Invalid token`) — era el personal de Diana, como
-avisaba §4.2 del backlog. **El MCP de Figma sí responde**, y por ahí salieron los tramos de precio de
-DD-04. Para lo que queda de fidelidad al diseño, ese es el camino.
+🔑 **El token REST de Figma sigue vivo.** Durante la pasada devolvió un `403 Invalid token` y se dio
+por muerto; al reintentarlo responde 200 (`/v1/me` → Diana Rivera, y los nodos del archivo). **Fue un
+corte pasajero, no una rotación.** Los dos caminos están abiertos: REST con `FIGMA_API_KEY` y el MCP
+de Figma —por el que salieron los tramos de precio de DD-04 mientras el REST fallaba—. Si el REST
+vuelve a dar 403, reintentar antes de pedirle un token nuevo a Diana.
 
 **Tanda 2 · cerrar el chat** (~1 día) — la decisión 22 ya está tomada (**30 días + descarga**), así que
 esto sale del limbo en que lo dejó el 17-jul.
@@ -767,7 +769,7 @@ de los cuatro se queda `To Do` hasta que haya contrato.
 | ~~¿Cuenta Stripe en **test mode**?~~ → ✅ **SÍ (Jose, 29-jul)**: la abre él y pasa las claves de test | Sprint 6 AC entero | Jose |
 | Código de embebido + parámetro de URL de Referral Factory | `EY-78` | Jose (cuenta ya creada ✅) |
 | **DSN de Sentry** (cuenta gratuita) → `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` en Vercel | encender `EY-80` | Jose |
-| **Token de Figma nuevo** (el REST devuelve 403) o seguir por el MCP | fidelidad al diseño | Diana / Jose |
+| ~~Token de Figma nuevo~~ → **no hace falta**: el 403 fue pasajero, el token responde | fidelidad al diseño | — |
 | Go de coste de grabación en Daily + dónde se guardan | `EY-85/86` | Cliente / Emilio |
 | Diseños responsive tablet/escritorio | `EY-82` | Diana |
 | Texto legal de términos, privacidad y cookies | `EY-116` | Cliente |
