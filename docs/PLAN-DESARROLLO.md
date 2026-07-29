@@ -741,15 +741,27 @@ descarga**) sacó a las dos del limbo en que las dejó el 17-jul.
   (lección de US-605) y no tengo esa clave. Corre en el próximo tick del cron; para comprobarlo antes,
   en el SQL Editor de dev: `select public.purge_expired_messages();`
 
-**Tanda 3 · datos y avisos** (~3 días)
+**Tanda 3 · datos y avisos** · ✅ **COMPLETA (29-jul)**
 
-- `EY-113` **DD-03 · nivel + idioma por producto** (decisión 25) — migración + campos en TU04 + chips y
-  filtros en P05/P06/P08. Ojo: es distinto de `tutor_profiles.teaching_level`.
-- **Los 4 huérfanos de arriba** (`cancel_reason`, incidencias/AD14, objetivo principal, reseñas firmadas).
-- `EY-77` **US-1203 · avisos in-app** — `notifications.read_at` + campanita en el header con la lista.
-  La tabla y sus triggers ya existen desde EP-12; esto es UI + una columna.
-- `EY-81` **US-1502 · métricas** — tres cifras (fallo de cobro, payouts `failed`, latencia de webhook)
-  **dentro de `admin_stats`/AD13**, no una tabla de métricas nueva.
+- `EY-113` **DD-03 · nivel + idioma por mentoría** (decisión 25) — migración `20260729190000`. El nivel
+  **reutiliza el enum `teaching_level`** (mismo vocabulario que el filtro del Figma, un tipo menos); el
+  idioma es texto con check porque la lista la mueve producto. Dos selects en TU04, grupos "Nivel" e
+  "Idioma" en P05, desplegables en la fila de P06 y chips en P08. **Y el "Idioma del tutor" de P04**
+  (386:1006), que no necesita columna: se deriva de las clases que publica.
+- ✅ **Los 4 huérfanos** (`cancel_reason`, `alert_acks`, `primary_goal`, reseñas firmadas) — ver arriba.
+- `EY-77` **US-1203 · avisos in-app** (`20260729200000`) — una columna (`read_at`) y su índice; la tabla
+  y los triggers ya existían de EP-12. Marcar leído por **RLS + grant de una columna**, no por RPC: sin
+  dinero ni roles de por medio, y así el cliente no puede tocar `status` ni `payload`. La campana se
+  sirve **desde el layout** (contador pintado en el primer render, sin ida y vuelta por página) y **sin
+  Realtime**: los avisos los encolan triggers, no llegan al segundo.
+  - 🐞 *Lección:* `listNotices` tuvo que salir a `notifications-server.ts`. Dentro del módulo que
+    importa el componente de cliente, el bundler lo arrastraba al navegador y `next/headers` tumbaba la
+    app entera — ni el `import()` dinámico lo evita.
+- `EY-81` **US-1502 · métricas** (`20260729210000`) — las tres cifras dentro de `admin_stats`, que AD13
+  ya llama con el mismo período. **"Latencia de webhook" con lo que hay**: `payment_webhook_events` solo
+  guarda `processed_at`, así que se mide la mediana entre crear el pago y procesar su evento — y sobre
+  todo los **cobros sin evento**, que es el webhook que nunca llegó. En dev: 16,7 % de fallo de cobro
+  (8 de 48), 0 payouts en problema y **39 cobros sin evento** (esperable con el PSP simulado).
 
 **Tanda 4 · grabación** (~3 días) — `EY-85` US-1801 + `EY-86` US-1802. La cuenta de Daily ya tiene
 método de pago (28-jul), pero **la grabación en la nube es add-on de pago** y `recordings_bucket` /
