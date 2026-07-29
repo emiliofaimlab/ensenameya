@@ -146,34 +146,19 @@ export async function BookingPanel({
 
   return (
     <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
-      {/* R24-14: sin precio fijo por delante. Con clase elegida se muestra su
-          importe real; sin ella, el título de reserva. */}
+      {/* R29-01: arriba del calendario va el TÍTULO de la clase; el precio baja
+          junto al CTA. Sigue valiendo R24-14 (nada de importe fijo por delante):
+          sin clase elegida no hay precio en ninguna de las dos posiciones. */}
       {chosen ? (
         <>
-          <p className="flex items-baseline gap-1.5">
-            <span className="text-[30px] font-bold text-[#19191f]">
-              {formatMoney(chosen.priceAmount, chosen.currency)}
-            </span>
-            <span className="text-[15px] text-[#6b6b6b]">
-              / {priceUnitLabel(chosen)}
-            </span>
+          <p className="text-[22px] font-bold text-balance text-[#19191f]">
+            {chosen.title}
           </p>
-          {details ? (
-            <>
-              {perSessionLabel(chosen) ? (
-                <p className="mt-3 text-[13px] text-[#6b6b6b]">
-                  {perSessionLabel(chosen)}
-                </p>
-              ) : null}
-              {chosen.sessionDurationMin ? (
-                <p className="mt-3 text-sm text-[#595959]">
-                  En vivo 1 a 1 · {chosen.sessionDurationMin} min por sesión
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="mt-1.5 text-[13px] text-[#6b6b6b]">{chosen.title}</p>
-          )}
+          {details && chosen.sessionDurationMin ? (
+            <p className="mt-1.5 text-sm text-[#595959]">
+              En vivo 1 a 1 · {chosen.sessionDurationMin} min por sesión
+            </p>
+          ) : null}
         </>
       ) : (
         <>
@@ -321,8 +306,34 @@ export async function BookingPanel({
         </>
       )}
 
+      {/* R29-01 — el precio, al final: lo último antes de decidir, no lo primero
+          que tapa el calendario. Sale del `chosen` de la URL, así que cambiar de
+          clase lo cambia sin estado de cliente. */}
       {chosen ? (
-        <Button asChild className="mt-5 h-[51px] w-full text-[15px]">
+        <>
+          <hr className="mt-5 border-[#e0e0e0]" />
+          <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="text-[15px] text-[#6b6b6b]">Precio</span>
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-[30px] font-bold text-[#19191f]">
+                {formatMoney(chosen.priceAmount, chosen.currency)}
+              </span>
+              <span className="text-[15px] text-[#6b6b6b]">
+                / {priceUnitLabel(chosen)}
+              </span>
+            </span>
+          </div>
+          {/* El desglose por sesión solo en P08, donde hay sitio para detalle. */}
+          {details && perSessionLabel(chosen) ? (
+            <p className="mt-1 text-[13px] text-[#6b6b6b]">
+              {perSessionLabel(chosen)}
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
+      {chosen ? (
+        <Button asChild className="mt-4 h-[51px] w-full text-[15px]">
           <Link href={`/reservar/${chosen.id}`}>{ctaLabel}</Link>
         </Button>
       ) : (

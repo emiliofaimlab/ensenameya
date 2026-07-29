@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
+import { parseSocials } from "@/lib/socials";
 import {
   PanelCard,
   StatusPill,
@@ -48,7 +49,7 @@ export default async function VerificationPage() {
   // Requiere haber hecho el onboarding de tutor (existe la fila tutor_profiles).
   const { data: tp } = await supabase
     .from("tutor_profiles")
-    .select("identity_verification_status")
+    .select("identity_verification_status, socials")
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!tp) redirect("/tutor/onboarding");
@@ -88,7 +89,11 @@ export default async function VerificationPage() {
         </PanelCard>
       ) : null}
 
-      <VerificationForm userId={user.id} docsByType={docsByType} />
+      <VerificationForm
+        userId={user.id}
+        docsByType={docsByType}
+        socials={parseSocials(tp.socials)}
+      />
     </TutorShell>
   );
 }

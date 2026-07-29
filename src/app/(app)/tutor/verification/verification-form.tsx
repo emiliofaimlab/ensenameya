@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { FileTextIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import {
+  MAX_SOCIALS,
+  SOCIAL_PLATFORMS,
+  type SocialLink,
+} from "@/lib/socials";
 import { PanelCard, StatusPill, type PillTone } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +19,8 @@ export type DocStatus = "pending" | "approved" | "rejected" | "draft";
 
 /**
  * C-14 — set final confirmado por el cliente (UX-203 / EY-100): 6 documentos
- * de archivo + redes como ENLACE (tarjeta aparte, 190:98). `social_media`
- * viaja por `link_url`, no por Storage.
+ * de archivo. Las redes ya NO son un documento: viven en `tutor_profiles.socials`
+ * como lista (R29-02), en la tarjeta de abajo.
  * Ampliar o reordenar el set = tocar esta lista. La BD (`doc_type` es texto) y
  * la pantalla de revisión del admin son genéricas y no se enteran.
  */
@@ -153,46 +158,70 @@ function FileRow({
 export function VerificationForm({
   userId,
   docsByType,
+  socials,
 }: {
   userId: string;
   docsByType: Record<string, DocState>;
+  /** R29-02: redes y portafolio ya guardados (`tutor_profiles.socials`). */
+  socials: SocialLink[];
 }) {
   const router = useRouter();
   const [staged, setStaged] = useState<Record<string, File>>({});
-  const savedLink = docsByType.social_media?.linkUrl ?? "";
-  const [link, setLink] = useState(savedLink);
   const [busy, setBusy] = useState<null | "draft" | "review">(null);
+  // Siempre hay una fila en pantalla: la primera es la obligatoria.
+  const [links, setLinks] = useState<SocialLink[]>(() =>
+    socials.length > 0 ? socials : [{ platform: "", url: "" }],
+  );
 
-  const linkTrimmed = link.trim();
-  const linkDirty = linkTrimmed !== "" && linkTrimmed !== savedLink;
+  const filled = links.filter((l) => l.platform || l.url.trim());
+  const linksDirty =
+    JSON.stringify(filled.map((l) => ({ ...l, url: l.url.trim() }))) !==
+    JSON.stringify(socials);
   const stagedTypes = Object.keys(staged);
-  const hasNew = stagedTypes.length > 0 || linkDirty;
+  const hasNew = stagedTypes.length > 0 || linksDirty;
   const hasDrafts = Object.values(docsByType).some((d) => d.status === "draft");
 
-  function validLink(): string | null {
-    // ponytail: validación de forma con el parser del navegador, sin regex ni
-    // dependencia. El contenido lo juzga el admin al revisar.
-    try {
-      const u = new URL(linkTrimmed);
-      if (u.protocol !== "https:" && u.protocol !== "http:") {
-        toast.error("El enlace debe empezar por https://");
+  /**
+   * Filas completas y con URL válida, o `null` si alguna está a medias (con su
+   * aviso ya mostrado). Una fila del todo vacía no estorba: se ignora.
+   */
+  function cleanLinks(): SocialLink[] | null {
+    const out: SocialLink[] = [];
+    for (const l of filled) {
+      if (!l.platform) {
+        toast.error("Elige la plataforma de cada enlace.");
         return null;
       }
-      return u.toString();
-    } catch {
-      toast.error("El enlace no es una URL válida (incluye https://).");
-      return null;
+      // ponytail: validación de forma con el parser del navegador, sin regex ni
+      // dependencia. El contenido lo juzga el admin al revisar.
+      let url: string;
+      try {
+        const u = new URL(l.url.trim());
+        if (u.protocol !== "https:" && u.protocol !== "http:") {
+          toast.error("Los enlaces deben empezar por https://");
+          return null;
+        }
+        url = u.toString();
+      } catch {
+        toast.error("Hay un enlace que no es una URL válida (incluye https://).");
+        return null;
+      }
+      out.push({ platform: l.platform, url });
     }
+    return out;
   }
 
   /** Sube y guarda lo pendiente. Devuelve false si algo falló (deja lo demás). */
   async function persist(draft: boolean): Promise<boolean> {
     const supabase = createClient();
 
-    let parsedLink: string | null = null;
-    if (linkDirty) {
-      parsedLink = validLink();
-      if (!parsedLink) return false;
+    const cleaned = cleanLinks();
+    if (!cleaned) return false;
+    // La primera red es obligatoria para ENVIAR a revisión; el borrador puede
+    // quedarse a medias (el módulo se completa poco a poco, R24-15).
+    if (!draft && cleaned.length === 0) {
+      toast.error("Añade al menos una red social o tu portafolio.");
+      return false;
     }
 
     const saved: string[] = [];
@@ -226,14 +255,15 @@ export function VerificationForm({
     }
     if (saved.length !== stagedTypes.length) return false;
 
-    if (parsedLink) {
-      const { error } = await supabase.rpc("submit_document", {
-        p_doc_type: "social_media",
-        p_link_url: parsedLink,
-        p_draft: draft,
-      });
+    if (linksDirty) {
+      // Perfil de vitrina, no documento: va a `tutor_profiles` (column-grant de
+      // `socials`), no por `submit_document`.
+      const { error } = await supabase
+        .from("tutor_profiles")
+        .update({ socials: cleaned })
+        .eq("profile_id", userId);
       if (error) {
-        toast.error("No se pudo guardar el enlace.");
+        toast.error("No se pudieron guardar tus enlaces.");
         return false;
       }
     }
@@ -270,7 +300,8 @@ export function VerificationForm({
     }
   }
 
-  const linkPill = linkDirty ? STAGED_PILL : DOC_PILL[docsByType.social_media?.status ?? "none"];
+  const setLink = (i: number, patch: Partial<SocialLink>) =>
+    setLinks((prev) => prev.map((l, j) => (i === j ? { ...l, ...patch } : l)));
 
   return (
     <>
@@ -300,29 +331,81 @@ export function VerificationForm({
         </div>
       </PanelCard>
 
-      {/* 190:98 — las redes van en tarjeta aparte, como enlace, no archivo. */}
+      {/* R29-02 — redes Y portafolio en UN módulo (190:98). Antes esto era un
+          enlace suelto aquí y dos campos más en el paso 3 del asistente. */}
       <PanelCard>
         <h2 className="text-base font-semibold text-[#19191f]">
-          Redes sociales (enlace)
+          Redes sociales y portafolio
         </h2>
+        <p className="mt-1 text-xs text-[#6b6b6b]">
+          La primera es obligatoria para enviar tu perfil a revisión. Puedes
+          añadir hasta {MAX_SOCIALS}; si tienes portafolio o web propia, elige
+          «Sitio web / Portafolio» y pega el enlace que quieras.
+        </p>
         <div className="mt-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-3">
+          {links.map((l, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
+              <select
+                aria-label={`Plataforma del enlace ${i + 1}`}
+                value={l.platform}
+                disabled={busy !== null}
+                onChange={(e) => setLink(i, { platform: e.target.value })}
+                className="h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[190px]"
+              >
+                <option value="">Plataforma…</option>
+                {SOCIAL_PLATFORMS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                type="url"
+                inputMode="url"
+                aria-label={`Enlace ${i + 1}`}
+                placeholder="https://…"
+                value={l.url}
+                disabled={busy !== null}
+                onChange={(e) => setLink(i, { url: e.target.value })}
+                className="h-[45px] min-w-0 flex-1 rounded-[8px] bg-muted px-3.5 text-sm placeholder:text-[#8c8c8c]"
+              />
+              {/* La fila 1 no se quita: siempre queda algo que rellenar. */}
+              {i > 0 ? (
+                <Button
+                  variant="ghost"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    setLinks((prev) => prev.filter((_, j) => j !== i))
+                  }
+                  className="h-10 rounded-[8px] px-3 text-[13.5px] text-[#6b6b6b]"
+                >
+                  Quitar
+                </Button>
+              ) : null}
+            </div>
+          ))}
+          {links.length < MAX_SOCIALS ? (
+            <Button
+              variant="outline"
+              disabled={busy !== null}
+              // El tope se comprueba sobre `prev`, no sobre el render: con el
+              // guard solo en el JSX, dos clicks seguidos metían la fila 6.
+              onClick={() =>
+                setLinks((prev) =>
+                  prev.length >= MAX_SOCIALS
+                    ? prev
+                    : [...prev, { platform: "", url: "" }],
+                )
+              }
+              className="h-10 w-fit rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
+            >
+              Añadir otra
+            </Button>
+          ) : (
             <p className="text-xs text-[#6b6b6b]">
-              LinkedIn, Instagram u otra red donde se vea tu experiencia.
+              Máximo {MAX_SOCIALS} enlaces.
             </p>
-            <StatusPill tone={linkPill.tone} className="h-7">
-              {linkPill.label}
-            </StatusPill>
-          </div>
-          <Input
-            type="url"
-            inputMode="url"
-            placeholder="https://linkedin.com/in/…"
-            value={link}
-            disabled={busy !== null}
-            onChange={(e) => setLink(e.target.value)}
-            className="h-[45px] rounded-[8px] bg-muted px-3.5 text-sm placeholder:text-[#8c8c8c]"
-          />
+          )}
         </div>
       </PanelCard>
 

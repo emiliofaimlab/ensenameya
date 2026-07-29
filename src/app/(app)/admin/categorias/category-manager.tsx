@@ -3,12 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { PlusIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export type CategoryRow = {
   id: string;
@@ -58,8 +66,28 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState(false);
+  // R29-04: crear/editar en modal, como los tiers (R24-09). El formulario deja
+  // de ocupar sitio fijo y "Nueva categoría" siempre está a mano en la cabecera.
+  const [open, setOpen] = useState(false);
 
   const editing = draft.id !== null;
+
+  function openNew() {
+    setDraft(EMPTY);
+    setOpen(true);
+  }
+  function openEdit(c: CategoryRow) {
+    setDraft({
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      description: c.description ?? "",
+      sortOrder: String(c.sortOrder),
+      // Al editar, el slug ya no sigue al nombre: cambiarlo rompe enlaces.
+      slugTouched: true,
+    });
+    setOpen(true);
+  }
 
   async function save() {
     const name = draft.name.trim();
@@ -102,6 +130,7 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
       return;
     }
     toast.success(editing ? "Categoría actualizada." : "Categoría creada.");
+    setOpen(false);
     setDraft(EMPTY);
     router.refresh();
   }
@@ -143,83 +172,15 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Alta / edición */}
-      <div className="flex flex-col gap-3 rounded-lg border p-4">
-        <h2 className="text-sm font-medium">
-          {editing ? `Editar "${draft.name || "categoría"}"` : "Nueva categoría"}
-        </h2>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cat-name">Nombre</Label>
-            <Input
-              id="cat-name"
-              value={draft.name}
-              placeholder="Programación"
-              onChange={(e) => {
-                const name = e.target.value;
-                setDraft((d) => ({
-                  ...d,
-                  name,
-                  // Al crear, el slug sigue al nombre hasta que lo editas.
-                  slug: d.slugTouched ? d.slug : slugify(name),
-                }));
-              }}
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="cat-slug">Slug</Label>
-            <Input
-              id="cat-slug"
-              value={draft.slug}
-              placeholder="programacion"
-              onChange={(e) =>
-                setDraft((d) => ({
-                  ...d,
-                  slug: slugify(e.target.value),
-                  slugTouched: true,
-                }))
-              }
-            />
-            <p className="text-xs text-muted-foreground">
-              {editing
-                ? "Cambiarlo rompe los enlaces existentes a /categories/…"
-                : "Se usa en la URL: /categories/…"}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="cat-desc">Descripción (opcional)</Label>
-          <Textarea
-            id="cat-desc"
-            rows={2}
-            value={draft.description}
-            onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5 sm:max-w-[10rem]">
-          <Label htmlFor="cat-order">Orden</Label>
-          <Input
-            id="cat-order"
-            type="number"
-            value={draft.sortOrder}
-            onChange={(e) => setDraft((d) => ({ ...d, sortOrder: e.target.value }))}
-          />
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <Button disabled={busy} onClick={save}>
-            {editing ? "Guardar cambios" : "Crear categoría"}
-          </Button>
-          {editing ? (
-            <Button variant="outline" disabled={busy} onClick={() => setDraft(EMPTY)}>
-              Cancelar
-            </Button>
-          ) : null}
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-[#6b6b6b]">
+          {categories.length}{" "}
+          {categories.length === 1 ? "categoría" : "categorías"}
+        </p>
+        <Button onClick={openNew} className="gap-1.5">
+          <PlusIcon className="size-4" />
+          Nueva categoría
+        </Button>
       </div>
 
       {/* Listado — filas del Figma (225:55): nombre + /slug, orden, píldora. */}
@@ -264,16 +225,7 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
                     variant="outline"
                     disabled={busy}
                     className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
-                    onClick={() =>
-                      setDraft({
-                        id: c.id,
-                        name: c.name,
-                        slug: c.slug,
-                        description: c.description ?? "",
-                        sortOrder: String(c.sortOrder),
-                        slugTouched: true,
-                      })
-                    }
+                    onClick={() => openEdit(c)}
                   >
                     Editar
                   </Button>
@@ -307,6 +259,99 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
           </ul>
         </div>
       )}
+
+      {/* Modal de crear / editar. */}
+      <Dialog
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) setDraft(EMPTY);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editing
+                ? `Editar "${draft.name || "categoría"}"`
+                : "Nueva categoría"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cat-name">Nombre</Label>
+              <Input
+                id="cat-name"
+                value={draft.name}
+                placeholder="Programación"
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setDraft((d) => ({
+                    ...d,
+                    name,
+                    // Al crear, el slug sigue al nombre hasta que lo editas.
+                    slug: d.slugTouched ? d.slug : slugify(name),
+                  }));
+                }}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="cat-slug">Slug</Label>
+              <Input
+                id="cat-slug"
+                value={draft.slug}
+                placeholder="programacion"
+                onChange={(e) =>
+                  setDraft((d) => ({
+                    ...d,
+                    slug: slugify(e.target.value),
+                    slugTouched: true,
+                  }))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                {editing
+                  ? "Cambiarlo rompe los enlaces existentes a /categories/…"
+                  : "Se usa en la URL: /categories/…"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="cat-desc">Descripción (opcional)</Label>
+            <Textarea
+              id="cat-desc"
+              rows={2}
+              value={draft.description}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, description: e.target.value }))
+              }
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:max-w-[10rem]">
+            <Label htmlFor="cat-order">Orden</Label>
+            <Input
+              id="cat-order"
+              type="number"
+              value={draft.sortOrder}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, sortOrder: e.target.value }))
+              }
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>
+              Cancelar
+            </Button>
+            <Button disabled={busy} onClick={save}>
+              {editing ? "Guardar cambios" : "Crear categoría"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
