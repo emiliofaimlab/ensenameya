@@ -763,11 +763,31 @@ descarga**) sacó a las dos del limbo en que las dejó el 17-jul.
   todo los **cobros sin evento**, que es el webhook que nunca llegó. En dev: 16,7 % de fallo de cobro
   (8 de 48), 0 payouts en problema y **39 cobros sin evento** (esperable con el PSP simulado).
 
-**Tanda 4 · grabación** (~3 días) — `EY-85` US-1801 + `EY-86` US-1802. La cuenta de Daily ya tiene
-método de pago (28-jul), pero **la grabación en la nube es add-on de pago** y `recordings_bucket` /
-`enable_auto_recording` siguen en `null`. Necesita: go de coste + dónde viven los ficheros (bucket de
-Daily vs. el nuestro). Consentimiento de **ambos** antes de entrar a la sala (RN-42), disponibilidad
-30 días desde `completed_at` y NTF-19.
+**Tanda 4 · grabación** · ✅ **COMPLETA (29-jul)** — `EY-85` US-1801 + `EY-86` US-1802.
+
+- **Consentimiento (RN-42)** — `session_recording_consents` (`20260729220000`): la fila **es** el
+  consentimiento; retirar es borrarla. Sin booleano que confunda "dijo que no" con "no ha contestado".
+  La RLS impide lo importante: **cada uno consiente por sí mismo** — si no, el tutor aceptaría por el
+  alumno y lo grabaría sin permiso, que es justo lo que la regla prohíbe. Los dos leen las dos filas
+  porque la pantalla dice "falta que el otro acepte".
+- **El permiso no se pide en la interfaz: se quita del proveedor.** La sala se crea con
+  `enable_recording` solo si `recording_allowed()` da true, así que sin los dos síes Daily ni ofrece el
+  botón. Si el consentimiento llega **después** de que el primero entrara, la sala se re-parchea — sin
+  eso la grabación se quedaba apagada toda la clase.
+- **Acceso (US-1802)** — `/api/recordings/[sessionId]`. Las grabaciones se preguntan a Daily en el
+  momento, **sin copiarlas a una tabla nuestra**: el fichero vive allí y un espejo de sus metadatos
+  sería otro sitio donde quedar desfasado. El enlace se firma al hacer clic (caduca). Botón "Ver
+  grabación" en AL03 y TU08, en las sesiones completadas.
+- **NTF-19** se encola al completar la sesión **si hubo consentimiento**: no existe evento de "el
+  fichero ya subió" al que engancharse, y anunciar una grabación que RN-42 prohibió sería peor que
+  callar.
+
+⚠️ **Dos límites reales, no descuidos:**
+- **Los 30 días se aplican al servir**, no en Daily. Borrar el fichero allí necesita la API key en un
+  job (Edge Function), igual que el `provider.payout()` de EP-10.
+- **El add-on de grabación de Daily sigue sin activar** (`enable_auto_recording` en `null`). Todo lo de
+  arriba está cableado y verificado hasta donde llega la cuenta: cuando se active en el panel de Daily,
+  la grabación empieza a existir sin tocar código. **Falta el go de coste.**
 
 **Tanda 5 · referidos** (~0,5 día) — `EY-78` US-1301. Widget de Referral Factory embebido en AL02 y
 `/account`, **cero lógica interna** (RN-21). De la cuenta que acabas de crear hacen falta: el
