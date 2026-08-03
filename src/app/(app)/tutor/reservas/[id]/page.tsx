@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime, BOOKING_STATUS_LABEL } from "@/lib/booking";
+import { formatSessionTime, BOOKING_STATUS_LABEL, SESSION_STATUS_LABEL } from "@/lib/booking";
 import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import {
   PanelCard,
@@ -22,14 +22,6 @@ import {
 import type { Database } from "@/lib/database.types";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
-
-const SESSION_LABEL: Record<string, string> = {
-  scheduled: "Programada",
-  in_progress: "En curso",
-  completed: "Completada",
-  cancelled: "Cancelada",
-  no_show: "No asistió",
-};
 
 const BOOKING_PILL: Record<string, PillTone> = {
   confirmed: "green",
@@ -113,14 +105,9 @@ export default async function TutorBookingDetailPage({
     <PanelShell
       items={TUTOR_ITEMS}
       back={{ href: "/tutor/reservas", label: "Volver a reservas" }}
+      eyebrow="Reservas / Detalle"
+      title="Detalle de la sesión"
     >
-      <div>
-        <p className="text-xs text-[#6b6b6b]">Reservas / Detalle</p>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight text-[#19191f]">
-          Detalle de la sesión
-        </h1>
-      </div>
-
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_364px]">
         <div className="flex flex-col gap-5">
           <PanelCard>
@@ -182,7 +169,7 @@ export default async function TutorBookingDetailPage({
                       </div>
                       <div className="flex items-center gap-2.5">
                         <StatusPill className="h-7">
-                          {SESSION_LABEL[s.status] ?? s.status}
+                          {SESSION_STATUS_LABEL[s.status] ?? s.status}
                         </StatusPill>
                         {LIVE.has(booking.status) &&
                         (s.status === "scheduled" || s.status === "in_progress") ? (

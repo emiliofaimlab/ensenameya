@@ -49,16 +49,11 @@ export default async function ReviewPage({
     .sort((a, b) => b.start_at.localeCompare(a.start_at))[0];
 
   return (
-    <PanelShell back={{ href: `/reservas/${id}`, label: "Volver al detalle" }}>
-      <div>
-        <h1 className="text-[24px] font-bold tracking-tight text-[#19191f]">
-          Deja tu reseña
-        </h1>
-        <p className="mt-1 text-sm text-[#6b6b6b]">
-          Tu opinión ayuda a otros estudiantes a elegir. Califica tu experiencia
-          con {tutor}.
-        </p>
-      </div>
+    <PanelShell
+      back={{ href: `/reservas/${id}`, label: "Volver al detalle" }}
+      title="Deja tu reseña"
+      description={`Tu opinión ayuda a otros estudiantes a elegir. Califica tu experiencia con ${tutor}.`}
+    >
 
       <PanelCard className="max-w-[944px]">
         <div className="flex items-center gap-3">

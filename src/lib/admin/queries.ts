@@ -366,7 +366,7 @@ export type BookingDetail = {
     sequenceNo: number | null;
     startAt: string;
     endAt: string;
-    status: string;
+    status: Database["public"]["Enums"]["session_status"];
   }[];
 };
 
@@ -418,7 +418,7 @@ export async function getBookingDetail(id: string): Promise<BookingDetail | null
         sequenceNo: s.sequence_no,
         startAt: s.start_at,
         endAt: s.end_at,
-        status: s.status as string,
+        status: s.status,
       }))
       .sort((a, z) => a.startAt.localeCompare(z.startAt)),
   };

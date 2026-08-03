@@ -3,6 +3,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/database.types";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
+type SessionStatus = Database["public"]["Enums"]["session_status"];
+
+/** Estados de una SESIÓN dentro de la reserva. Estaba copiado en las tres
+ *  pantallas de detalle (alumno, tutor, admin) y el admin discrepaba en
+ *  `no_show`; tipar con el enum evita que se vuelvan a separar. */
+export const SESSION_STATUS_LABEL: Record<SessionStatus, string> = {
+  scheduled: "Programada",
+  in_progress: "En curso",
+  completed: "Completada",
+  cancelled: "Cancelada",
+  no_show: "No asistió",
+};
 
 export const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
   pending_payment: "Pago pendiente",

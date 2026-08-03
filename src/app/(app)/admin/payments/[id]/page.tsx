@@ -66,14 +66,9 @@ export default async function AdminPaymentPage({
     <PanelShell
       items={ADMIN_ITEMS}
       back={{ href: "/admin/payments", label: "Volver a pagos" }}
+      eyebrow="Pagos / Detalle"
+      title={`Pago #${p.id.slice(0, 8)}`}
     >
-      <div>
-        <p className="text-xs text-[#6b6b6b]">Pagos / Detalle</p>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight text-[#19191f]">
-          Pago #{p.id.slice(0, 8)}
-        </h1>
-      </div>
-
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex flex-col gap-5">
           {/* Detalle del pago (220:53). */}

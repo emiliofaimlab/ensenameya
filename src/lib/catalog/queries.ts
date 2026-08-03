@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
+import { stripAccents } from "./format";
 
 /**
  * Consultas del catálogo público (EP-03). Todo pasa por el cliente ANON + RLS:
@@ -625,15 +626,6 @@ export async function listActiveProducts(opts: {
     hasMore,
     total: count ?? rows.length,
   };
-}
-
-/**
- * Quita tildes y diacríticos (EY-109). El lado almacenado ya viene sin ellos
- * (`f_unaccent` en la migración `20260721120000`), así que normalizar aquí el
- * término hace que "matematicas" y "Matemáticas" busquen lo mismo.
- */
-function stripAccents(q: string): string {
-  return q.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 /**

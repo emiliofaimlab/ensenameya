@@ -95,10 +95,20 @@ export function initialsFrom(text: string | null): string {
     .toUpperCase();
 }
 
-/** URL pública de un objeto de Storage (buckets `avatars` / `product-images`). */
-export function storageUrl(bucket: string, path: string | null): string | null {
+/**
+ * URL pública de un objeto de Storage (buckets `avatars` / `product-images`).
+ * Los buckets son públicos y la URL es determinista, así que no hace falta
+ * cliente de Supabase (ni `await`): es lo mismo que devuelve `getPublicUrl`.
+ *
+ * ponytail: `encodeURI` asume que `path` viene crudo de la BD — lo está en
+ * todos los usos. Si alguna vez llega ya codificado se doblaría el `%`.
+ */
+export function storageUrl(
+  bucket: string,
+  path: string | null | undefined,
+): string | null {
   if (!path) return null;
-  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/${bucket}/${encodeURI(path)}`;
 }
 
 /** 25.000 → "25k+" (cifras de vitrina de P01/P02); por debajo de mil, tal cual. */
@@ -116,4 +126,13 @@ export function priceUnitLabel(p: { pricingModel: PricingModel }): string {
     case "per_package":
       return "paquete";
   }
+}
+
+/**
+ * Quita tildes y diacríticos (EY-109). Lo usan la búsqueda —el lado almacenado
+ * ya viene sin ellos (`f_unaccent`, migración `20260721120000`), así que
+ * "matematicas" y "Matemáticas" buscan lo mismo— y el `slugify` del admin.
+ */
+export function stripAccents(text: string): string {
+  return text.normalize("NFD").replace(/[̀-ͯ]/g, "");
 }

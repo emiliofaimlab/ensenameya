@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PlusIcon } from "lucide-react";
 
+import { stripAccents } from "@/lib/catalog/format";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,15 +29,10 @@ export type CategoryRow = {
   productCount: number;
 };
 
-/**
- * Slug legible para URL: sin acentos, sin símbolos, separado por guiones.
- * `normalize("NFD")` + quitar diacríticos es el truco estándar del navegador —
- * "Programación" → "programacion". Sin dependencia.
- */
+/** Slug legible para URL: sin acentos, sin símbolos, separado por guiones.
+ *  "Programación" → "programacion". Sin dependencia. */
 function slugify(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+  return stripAccents(value)
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")

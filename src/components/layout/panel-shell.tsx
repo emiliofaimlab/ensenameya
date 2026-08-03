@@ -11,16 +11,29 @@ import { AppSidebar, type SidebarItem } from "@/components/layout/app-sidebar";
  *
  * `Container` no sirve aquí: las públicas usan 64 px de aire (contenido 1152).
  */
-export function PanelShell({
-  items,
-  back,
-  children,
-}: {
+export type PanelShellProps = {
   items?: SidebarItem[];
   /** "← Volver al panel" del Figma, encima de la rejilla (159:17). */
   back?: { href: string; label: string };
+  /** Cabecera de pantalla: antetítulo + título 24/700 + subtítulo + acción a
+   *  la derecha (191:39, 214:45). Sin `title` no se pinta nada. */
+  title?: React.ReactNode;
+  /** "Reservas / Detalle" (214:45): miga de pan sobre el título. */
+  eyebrow?: React.ReactNode;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
   children: React.ReactNode;
-}) {
+};
+
+export function PanelShell({
+  items,
+  back,
+  title,
+  eyebrow,
+  description,
+  actions,
+  children,
+}: PanelShellProps) {
   return (
     <div className="bg-muted py-8">
       <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-10">
@@ -36,7 +49,32 @@ export function PanelShell({
 
         <div className="grid items-start gap-6 lg:grid-cols-[232px_1fr]">
           <AppSidebar items={items} />
-          <div className="flex flex-col gap-5">{children}</div>
+          <div className="flex flex-col gap-5">
+            {title ? (
+              <div className="flex flex-wrap items-start gap-3">
+                <div>
+                  {eyebrow ? (
+                    <p className="text-xs text-[#6b6b6b]">{eyebrow}</p>
+                  ) : null}
+                  <h1
+                    className={cn(
+                      "text-[24px] font-bold tracking-tight text-[#19191f]",
+                      eyebrow && "mt-1",
+                    )}
+                  >
+                    {title}
+                  </h1>
+                  {description ? (
+                    <p className="mt-1 text-[13px] text-[#6b6b6b]">
+                      {description}
+                    </p>
+                  ) : null}
+                </div>
+                {actions ? <div className="ml-auto">{actions}</div> : null}
+              </div>
+            ) : null}
+            {children}
+          </div>
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { storageUrl } from "@/lib/catalog/format";
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/roles";
@@ -35,9 +36,7 @@ export default async function OnboardingPage({
     supabase.from("student_interests").select("category_id").eq("student_id", user.id),
   ]);
 
-  const avatarUrl = profile?.avatar_path
-    ? supabase.storage.from("avatars").getPublicUrl(profile.avatar_path).data.publicUrl
-    : null;
+  const avatarUrl = storageUrl("avatars", profile?.avatar_path);
 
   return (
     // AL01: el cuerpo va sobre #f9fafc con ~148 px de aire arriba y ~108 abajo

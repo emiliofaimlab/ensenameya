@@ -6,6 +6,7 @@ import {
   TagIcon,
 } from "lucide-react";
 
+import { storageUrl } from "@/lib/catalog/format";
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
@@ -82,9 +83,7 @@ export default async function TutorOnboardingPage({
 
   // La foto del asistente es la PÚBLICA del tutor (tutor_profiles), no la
   // personal de `profiles`: son independientes (R24-23).
-  const avatarUrl = tp?.avatar_path
-    ? supabase.storage.from("avatars").getPublicUrl(tp.avatar_path).data.publicUrl
-    : null;
+  const avatarUrl = storageUrl("avatars", tp?.avatar_path);
 
   if (tp?.approval_status === "approved") {
     return (

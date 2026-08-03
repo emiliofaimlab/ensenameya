@@ -39,7 +39,7 @@ import { Container } from "@/components/layout/container";
 import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
 import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 import { cn } from "@/lib/utils";
-import { isAdminRoute, isOnboardingRoute } from "@/lib/routes";
+import { isAdminRoute, isOnboardingRoute } from "@/lib/panel";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
 export type HeaderUser = {

@@ -1,3 +1,4 @@
+import { storageUrl } from "@/lib/catalog/format";
 import { requireUser } from "@/lib/auth/server";
 import { panelItems } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
@@ -23,26 +24,19 @@ export default async function AccountPage() {
     .eq("id", user.id)
     .single();
 
-  const avatarUrl = profile?.avatar_path
-    ? supabase.storage.from("avatars").getPublicUrl(profile.avatar_path).data.publicUrl
-    : null;
+  const avatarUrl = storageUrl("avatars", profile?.avatar_path);
 
   // El menú lateral es el del panel del rol (undefined = alumno por defecto).
   // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
   const items = await panelItems(user.id, roles);
 
   return (
-    <PanelShell items={items}>
-      <div>
-        <p className="text-xs text-[#6b6b6b]">Cuenta</p>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight text-[#19191f]">
-          Mi cuenta
-        </h1>
-        <p className="mt-1 text-[13px] text-[#6b6b6b]">
-          Gestiona tu información personal, tu contraseña y tu sesión.
-        </p>
-      </div>
-
+    <PanelShell
+      items={items}
+      eyebrow="Cuenta"
+      title="Mi cuenta"
+      description="Gestiona tu información personal, tu contraseña y tu sesión."
+    >
       <AccountForm
         userId={user.id}
         email={user.email ?? ""}

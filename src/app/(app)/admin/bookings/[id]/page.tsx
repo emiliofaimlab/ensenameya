@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/server";
 import { getBookingDetail } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/catalog/format";
+import { SESSION_STATUS_LABEL } from "@/lib/booking";
 import {
   PanelCard,
   PanelShell,
@@ -15,14 +16,6 @@ import { Button } from "@/components/ui/button";
 import { BOOKING_BADGE, PAYMENT_BADGE } from "../../badges";
 
 export const metadata = { title: "Detalle de reserva · Enséñame Ya" };
-
-const SESSION_LABEL: Record<string, string> = {
-  scheduled: "Programada",
-  in_progress: "En curso",
-  completed: "Completada",
-  cancelled: "Cancelada",
-  no_show: "No-show",
-};
 
 const BOOKING_PILL: Record<string, PillTone> = {
   confirmed: "green",
@@ -88,14 +81,9 @@ export default async function AdminBookingPage({
     <PanelShell
       items={ADMIN_ITEMS}
       back={{ href: "/admin/bookings", label: "Volver a reservas" }}
+      eyebrow="Reservas / Detalle"
+      title={`Reserva #${b.id.slice(0, 8)}`}
     >
-      <div>
-        <p className="text-xs text-[#6b6b6b]">Reservas / Detalle</p>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight text-[#19191f]">
-          Reserva #{b.id.slice(0, 8)}
-        </h1>
-      </div>
-
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex flex-col gap-5">
           {/* Detalle de la reserva (224:53). */}
@@ -140,7 +128,7 @@ export default async function AdminBookingPage({
                         {fmtTime(s.startAt)}
                       </p>
                       <StatusPill className="h-7">
-                        {SESSION_LABEL[s.status] ?? s.status}
+                        {SESSION_STATUS_LABEL[s.status] ?? s.status}
                       </StatusPill>
                     </li>
                   ))}
