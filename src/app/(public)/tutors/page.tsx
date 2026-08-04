@@ -62,8 +62,12 @@ export default async function TutorsPage({
     const n = Number(v);
     return Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined;
   };
-  const pmin = num(pminParam);
-  const pmax = num(pmaxParam);
+  // Un rango al revés (?pmin=50&pmax=10, escrito a mano) devolvía 0 resultados
+  // —correcto— pero dejaba los pomos cruzados. Se ordenan: es lo que quien lo
+  // escribió quiso decir, y el control no puede quedar en un estado imposible.
+  const [pmin, pmax] = [num(pminParam), num(pmaxParam)].sort((a, b) =>
+    a == null || b == null ? 0 : a - b,
+  );
   const language = LANGUAGES.find((l) => l.id === langParam)?.id;
   const sort = (["rating", "reviews"] as const).find((v) => v === sortParam);
 

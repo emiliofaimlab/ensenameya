@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Slider } from "radix-ui";
 
 import { formatMoney } from "@/lib/catalog/format";
+import { STEPS, posToPrice, priceToPos } from "@/lib/catalog/log-scale";
 
 /**
  * DD-04 · "Inversión por clase" de P04 como **rango continuo** (decisión de
@@ -12,6 +13,11 @@ import { formatMoney } from "@/lib/catalog/format";
  *
  * Los extremos salen de los datos (`tutorPriceBounds`), no de constantes: si
  * mañana entra un tutor de 300 US$ el deslizador llega hasta ahí solo.
+ *
+ * **Escala logarítmica** (`log-scale.ts`): el deslizador se mueve en posiciones
+ * y el precio se calcula al vuelo. Con un tutor a 120 US$ y el resto entre 10 y
+ * 25, la escala lineal amontonaba los dos pomos en el primer 12 % del
+ * recorrido. Los datos no cambian: la URL sigue llevando precios reales.
  *
  * El estado sigue viviendo en la URL, como el resto de filtros de la pantalla:
  * sólo se navega al SOLTAR (`onValueCommit`), no en cada pixel del arrastre —
@@ -52,15 +58,17 @@ export function PriceRange({
     return q ? `${ruta}?${q}` : ruta;
   };
   const actual = value ?? bounds;
-  const [rango, setRango] = useState<[number, number]>([actual.min, actual.max]);
+  // El estado del control son POSICIONES, no precios: es lo que el deslizador
+  // reparte de forma uniforme. El precio se deriva al pintar y al navegar.
+  const [pos, setPos] = useState<[number, number]>([
+    priceToPos(actual.min, bounds),
+    priceToPos(actual.max, bounds),
+  ]);
+  const precio = (p: number) => posToPrice(p, bounds);
 
   // Nota: la URL manda. Cuando cambia (limpiar filtros, atrás del navegador) el
   // padre remonta este componente con `key`, así que el estado se reinicia solo
   // — sin efecto que sincronice, que es la forma que React recomienda.
-
-  // Paso de 1 US$: el catálogo se mueve en dólares enteros y un paso más fino
-  // sólo daría rangos imposibles de clavar con el ratón.
-  const paso = 100;
 
   return (
     <div>
@@ -77,38 +85,45 @@ export function PriceRange({
       </div>
 
       <p className="mt-1 text-[13px] text-muted-foreground tabular-nums">
-        {formatMoney(rango[0], "USD")} – {formatMoney(rango[1], "USD")}
+        {formatMoney(precio(pos[0]), "USD")} – {formatMoney(precio(pos[1]), "USD")}
       </p>
 
       <Slider.Root
         className="relative mt-3 flex h-5 w-full touch-none items-center select-none"
-        value={rango}
-        min={bounds.min}
-        max={bounds.max}
-        step={paso}
+        value={pos}
+        min={0}
+        max={STEPS}
+        step={1}
         minStepsBetweenThumbs={1}
-        onValueChange={([a, b]) => setRango([a, b])}
-        onValueCommit={([a, b]) =>
+        onValueChange={([a, b]) => setPos([a, b])}
+        onValueCommit={([a, b]) => {
+          const min = precio(a);
+          const max = precio(b);
           router.push(
             // Un extremo que coincide con el del catálogo no acota nada: se
             // omite para que la URL no lleve ruido ni marque el filtro activo.
             hrefFor({
-              pmin: a > bounds.min ? a : undefined,
-              pmax: b < bounds.max ? b : undefined,
+              pmin: min > bounds.min ? min : undefined,
+              pmax: max < bounds.max ? max : undefined,
             }),
             { scroll: false },
-          )
-        }
+          );
+        }}
         aria-label="Rango de precio"
       >
         <Slider.Track className="relative h-1 grow rounded-full bg-[#e0e0e0]">
           <Slider.Range className="absolute h-full rounded-full bg-brand" />
         </Slider.Track>
-        {["mínimo", "máximo"].map((etiqueta) => (
+        {["mínimo", "máximo"].map((etiqueta, i) => (
           <Slider.Thumb
             key={etiqueta}
             aria-label={`Precio ${etiqueta}`}
-            className="block size-4 rounded-full border-2 border-brand bg-card shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            // Sin esto un lector de pantalla cantaría la POSICIÓN ("60"), que
+            // no significa nada para quien filtra: el valor real es el precio.
+            aria-valuetext={formatMoney(precio(pos[i]), "USD")}
+            // El punto mide 16 px, por debajo de los 24 que pide WCAG 2.5.8;
+            // el `before` agranda el área tocable sin engordar el dibujo.
+            className="relative block size-4 rounded-full border-2 border-brand bg-card shadow-sm before:absolute before:-inset-2 before:content-[''] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
           />
         ))}
       </Slider.Root>
