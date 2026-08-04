@@ -1281,7 +1281,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      tutors_public: {
+        Row: {
+          approval_status:
+            | Database["public"]["Enums"]["tutor_approval_status"]
+            | null
+          avatar_path: string | null
+          bio: string | null
+          display_name: string | null
+          headline: string | null
+          price_currency: string | null
+          price_from: number | null
+          profile_id: string | null
+          rating_avg: number | null
+          rating_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_profiles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       admin_bookings_by_category: {

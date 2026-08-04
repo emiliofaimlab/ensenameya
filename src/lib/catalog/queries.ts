@@ -223,29 +223,51 @@ export type AvailabilityFilter = "today" | "week" | "weekend";
 export type TutorSort = "rating" | "reviews";
 
 /**
- * DD-04 · "Inversión por clase" de P04. Los cuatro tramos son los del Figma
- * (386:968): menos de $15 · $15–$25 · $25–$40 · más de $40, en unidades
- * menores y contiguos para que ningún tutor caiga entre dos.
+ * DD-04 · "Inversión por clase" de P04: **rango continuo**, no tramos fijos
+ * (decisión de Jose en EY-114). Los extremos que ofrece el deslizador salen de
+ * los datos, no de una constante — ver `tutorPriceBounds`.
  *
- * Filtra por el **precio de entrada** — el mismo "Desde $18" que enseña la
- * tarjeta—, no por "tiene alguna clase en el tramo": si no, un tutor con una
- * clase de $10 y otra de $50 saldría en "Más de $40" mostrando "Desde $10".
+ * Filtra por el **precio de entrada**, que es el mismo "Desde $18" que enseña
+ * la tarjeta: la mentoría activa más barata del tutor. Lo calcula la vista
+ * `tutors_public` en Postgres, así que aquí es un `gte`/`lte` normal y el
+ * rango, la paginación y el `count` los resuelve el motor.
+ *
+ * Los tutores sin producto activo tienen `price_from` nulo y quedan fuera en
+ * cuanto se toca el filtro: no tienen precio de entrada que comparar.
  */
-export type PriceBucket = "lt15" | "15to25" | "25to40" | "gt40";
+export async function tutorPriceBounds(): Promise<{ min: number; max: number } | null> {
+  const supabase = await createClient();
+  // Dos consultas de UNA fila (order + limit 1); PostgREST no agrega sin RPC y
+  // montar una función para esto sería más pieza que problema.
+  const [{ data: barato }, { data: caro }] = await Promise.all([
+    supabase
+      .from("tutors_public")
+      .select("price_from")
+      .not("price_from", "is", null)
+      .order("price_from", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("tutors_public")
+      .select("price_from")
+      .not("price_from", "is", null)
+      .order("price_from", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-const PRICE_BUCKETS: Record<PriceBucket, { min: number; max: number }> = {
-  lt15: { min: 0, max: 1500 },
-  "15to25": { min: 1500, max: 2500 },
-  "25to40": { min: 2500, max: 4000 },
-  gt40: { min: 4000, max: Number.POSITIVE_INFINITY },
-};
+  if (barato?.price_from == null || caro?.price_from == null) return null;
+  return { min: barato.price_from, max: caro.price_from };
+}
 
 /** US-301 — tutores aprobados, filtrables por categoría y rating, paginados. */
 export async function listApprovedTutors(opts: {
   categorySlug?: string;
   minRating?: number;
   availability?: AvailabilityFilter;
-  price?: PriceBucket;
+  /** DD-04 · extremos del rango en unidades menores (inclusivos). */
+  minPrice?: number;
+  maxPrice?: number;
   /** DD-03 · "Idioma del tutor" (386:1006): el de las clases que publica. */
   language?: string;
   sort?: TutorSort;
@@ -301,50 +323,34 @@ export async function listApprovedTutors(opts: {
     if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
   }
 
-  // DD-04 · precio de entrada. No hay columna materializada y no hace falta:
-  // se resuelve como categoría y disponibilidad, acotando la lista de tutores
-  // antes de paginar. Una columna obligaría a un trigger que la mantenga fresca
-  // en cada alta, edición o pausa de producto — para un filtro de una pantalla.
-  // ponytail: cuelga de `in(ids)`, igual que los otros dos filtros; con miles de
-  // tutores esto pasa a ser una RPC que agregue en SQL.
-  if (opts.price) {
-    const { min, max } = PRICE_BUCKETS[opts.price];
-    const { data } = await supabase
-      .from("products")
-      .select("tutor_id, price_amount")
-      .eq("status", "active");
-
-    // Mínimo por tutor: sin comparar monedas, que hoy es USD única (C-13).
-    const cheapest = new Map<string, number>();
-    for (const p of data ?? []) {
-      const current = cheapest.get(p.tutor_id);
-      if (current === undefined || p.price_amount < current) {
-        cheapest.set(p.tutor_id, p.price_amount);
-      }
-    }
-    const inRange = [...cheapest]
-      .filter(([, amount]) => amount >= min && amount < max)
-      .map(([id]) => id);
-
-    tutorIds = tutorIds ? tutorIds.filter((id) => inRange.includes(id)) : inRange;
-    if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
-  }
-
+  // La vista trae el precio de entrada ya resuelto por Postgres (DD-04), así
+  // que el filtro de precio es un `gte`/`lte` más: nada que reducir en memoria,
+  // y el `count` sigue siendo el del conjunto filtrado.
   let base = supabase
-    .from("tutor_profiles")
+    .from("tutors_public")
     .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count", {
       count: "exact",
     })
     .eq("approval_status", "approved");
   if (tutorIds) base = base.in("profile_id", tutorIds);
   if (opts.minRating) base = base.gte("rating_avg", opts.minRating);
+  // Los extremos son inclusivos: el deslizador enseña el número que el usuario
+  // ve, y un tutor que cueste exactamente el tope tiene que entrar.
+  if (opts.minPrice != null) base = base.gte("price_from", opts.minPrice);
+  if (opts.maxPrice != null) base = base.lte("price_from", opts.maxPrice);
 
   const orderBy = opts.sort === "reviews" ? "rating_count" : "rating_avg";
   const { data, count } = await base
     .order(orderBy, { ascending: false, nullsFirst: false })
     .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 
-  const rows = data ?? [];
+  // Postgres no declara NOT NULL en las columnas de una vista, así que los
+  // tipos generados las dan todas nullable aunque vengan de columnas que no lo
+  // son. Se estrecha aquí, en el borde, en vez de esparcir el `| null` por toda
+  // la UI: `profile_id` es la PK de `tutor_profiles` y el `from` de la vista.
+  const rows = (data ?? [])
+    .filter((r): r is typeof r & { profile_id: string } => r.profile_id !== null)
+    .map((r) => ({ ...r, rating_count: r.rating_count ?? 0 }));
   const hasMore = rows.length > PAGE_SIZE;
   return {
     tutors: await withProductFacts(rows.slice(0, PAGE_SIZE)),

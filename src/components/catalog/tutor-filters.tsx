@@ -1,24 +1,13 @@
 import Link from "next/link";
 
-import type {
-  AvailabilityFilter,
-  CategoryTag,
-  PriceBucket,
-} from "@/lib/catalog/queries";
+import type { AvailabilityFilter, CategoryTag } from "@/lib/catalog/queries";
+import { PriceRange } from "@/components/catalog/price-range";
 import { LANGUAGES } from "@/components/catalog/product-filters";
 
 const AVAILABILITY: { value: AvailabilityFilter; label: string }[] = [
   { value: "today", label: "Hoy" },
   { value: "week", label: "Esta semana" },
   { value: "weekend", label: "Fines de semana" },
-];
-
-/** Tramos y etiquetas del Figma (386:968). */
-const PRICES: { value: PriceBucket; label: string }[] = [
-  { value: "lt15", label: "Menos de $15" },
-  { value: "15to25", label: "$15 – $25" },
-  { value: "25to40", label: "$25 – $40" },
-  { value: "gt40", label: "Más de $40" },
 ];
 
 /**
@@ -35,6 +24,8 @@ export function TutorFilters({
   minRating,
   availability,
   price,
+  priceBounds,
+  priceBaseHref,
   language,
   hrefFor,
 }: {
@@ -42,13 +33,19 @@ export function TutorFilters({
   activeSlug?: string;
   minRating?: number;
   availability?: AvailabilityFilter;
-  price?: PriceBucket;
+  /** DD-04 · rango elegido, o null si no se ha tocado. */
+  price: { min: number; max: number } | null;
+  /** Extremos reales del catálogo; sin ellos no hay deslizador que pintar. */
+  priceBounds: { min: number; max: number } | null;
+  /** URL con el resto de filtros, para el deslizador (ver PriceRange). */
+  priceBaseHref: string;
   language?: string;
   hrefFor: (next: {
     cat?: string;
     rating?: number;
     avail?: AvailabilityFilter;
-    price?: PriceBucket;
+    pmin?: number;
+    pmax?: number;
     lang?: string;
   }) => string;
 }) {
@@ -106,7 +103,8 @@ export function TutorFilters({
                 cat: active ? undefined : c.slug,
                 rating: minRating,
                 avail: availability,
-                price,
+                pmin: price?.min,
+                pmax: price?.max,
                 lang: language,
               })}
             >
@@ -116,28 +114,20 @@ export function TutorFilters({
         })}
       </ul>
 
-      {/* El orden del Figma pone la inversión justo después de la categoría. */}
-      <p className="mt-5 text-sm font-bold text-[#242424]">Inversión por clase</p>
-      <ul className="mt-2 space-y-1.5">
-        {PRICES.map(({ value, label }) => {
-          const active = price === value;
-          return (
-            <Option
-              key={value}
-              active={active}
-              href={hrefFor({
-                cat: activeSlug,
-                rating: minRating,
-                avail: availability,
-                price: active ? undefined : value,
-                lang: language,
-              })}
-            >
-              {label}
-            </Option>
-          );
-        })}
-      </ul>
+      {/* El orden del Figma pone la inversión justo después de la categoría.
+          Es un rango continuo, no tramos (decisión de EY-114). Sin catálogo con
+          precios no se pinta: un deslizador de 0 a 0 no filtra nada. */}
+      {priceBounds ? (
+        <div className="mt-5">
+          <PriceRange
+            // Reinicia el deslizador cuando la URL cambia (ver PriceRange).
+            key={`${price?.min ?? ""}-${price?.max ?? ""}`}
+            bounds={priceBounds}
+            value={price}
+            baseHref={priceBaseHref}
+          />
+        </div>
+      ) : null}
 
       <p className="mt-5 text-sm font-bold text-[#242424]">Valoración</p>
       <ul className="mt-2 space-y-1.5">
@@ -152,7 +142,8 @@ export function TutorFilters({
                 cat: activeSlug,
                 rating: r === 0 || active ? undefined : r,
                 avail: availability,
-                price,
+                pmin: price?.min,
+                pmax: price?.max,
                 lang: language,
               })}
             >
@@ -174,7 +165,8 @@ export function TutorFilters({
                 cat: activeSlug,
                 rating: minRating,
                 avail: active ? undefined : value,
-                price,
+                pmin: price?.min,
+                pmax: price?.max,
                 lang: language,
               })}
             >
@@ -197,7 +189,8 @@ export function TutorFilters({
                 cat: activeSlug,
                 rating: minRating,
                 avail: availability,
-                price,
+                pmin: price?.min,
+                pmax: price?.max,
                 lang: active ? undefined : id,
               })}
             >
