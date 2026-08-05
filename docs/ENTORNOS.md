@@ -52,7 +52,8 @@ código; ausentes, la función se apaga sola en vez de romper:
   npx supabase db push --db-url "postgresql://postgres.lbtpnszjjsxbeileqsja:<db-password>@aws-0-us-east-1.pooler.supabase.com:5432/postgres"
   ```
   (o haz push a la rama `dev` y deja que el CI la aplique). A prod llega al mergear a `main`.
-- **Regenerar tipos:** requiere **access token** (sin Docker se genera vía API):
+- **Regenerar tipos:** con el CLI ya enlazado, `npm run db:types`. Sin enlace, con **access token**
+  explícito (sin Docker se genera vía API):
   ```bash
   export SUPABASE_ACCESS_TOKEN=<pat>
   npx supabase gen types typescript --project-id lbtpnszjjsxbeileqsja > src/lib/database.types.ts
@@ -60,6 +61,9 @@ código; ausentes, la función se apaga sola en vez de romper:
 - **Convención de grants (auto-expose OFF):** toda tabla expuesta al cliente declara sus `grant`
   junto a sus políticas RLS (ver `20260703120000_data_api_grants.sql`). Públicas → `anon`; privadas →
   `authenticated`. RLS sigue siendo la barrera default-deny; el grant solo deja al rol llegar a la tabla.
+  Las **vistas** llevan además `with (security_invoker = true)`: por defecto una vista corre con los
+  privilegios de su dueño y se saltaría la RLS de las tablas que envuelve (ver la vista `tutors_public`
+  del filtro de precio, `20260804120000_dd04_vista_precio_tutor.sql`).
 - **Scripts (`package.json`):** ya son cloud — `db:push` (aplica al proyecto enlazado) y
   `db:types` (`--linked`). Requieren enlazar el CLI una vez: `npx supabase link --project-ref <ref>`
   (pide access token). Los antiguos `db:start`/`db:stop`/`db:reset` (Docker) se eliminaron.
@@ -72,24 +76,25 @@ código; ausentes, la función se apaga sola en vez de romper:
 - [x] Proyectos **`ensenameya-prod`** (`nrzsyysqanbrcgtslfte`) y **`ensenameya-dev`** (`lbtpnszjjsxbeileqsja`) creados (East US · automatic RLS on · auto-expose off).
 - [x] Esquema base + grants Data API aplicados a **dev y prod**.
 
-### B) Auth por proyecto (Supabase → Authentication) — pendiente
-- [ ] **Site URL / Redirect URLs:** añadir la URL de Vercel (prod → dominio de producción; dev → dominio de preview) **y** `http://localhost:3000` para `npm run dev`.
-- [ ] **Google OAuth:** Client ID/Secret en cada proyecto; en Google Cloud, redirect autorizado `https://<ref>.supabase.co/auth/v1/callback`.
-- [ ] **Dev:** desactivar **"Confirm email"** (Authentication → Providers → Email) para probar signup sin SMTP.
+### B) Auth por proyecto (Supabase → Authentication) — [x] hecho, salvo Google
+- [x] **Site URL / Redirect URLs:** la URL de Vercel (prod → dominio de producción; dev → dominio de preview) **y** `http://localhost:3000` para `npm run dev`.
+- [ ] **Google OAuth:** Client ID/Secret en cada proyecto; en Google Cloud, redirect autorizado `https://<ref>.supabase.co/auth/v1/callback`. **Sigue pendiente**: el proveedor está apagado en dev (`/auth/v1/settings` → `google:false`, comprobado el 5-ago). El botón ya existe en el código (`src/components/auth/google-button.tsx`); solo le falta la credencial.
+- [x] **Dev:** **"Confirm email"** desactivado (Authentication → Providers → Email) para probar signup sin SMTP.
 
-### C) Vercel (1 proyecto) — https://vercel.com — pendiente
-- [ ] **Import Project** desde `github.com/emiliofaimlab/ensenameya` (Next.js autodetecta). Production Branch = **`main`**.
-- [ ] Env vars (Settings → Environment Variables), dos juegos con las claves
+### C) Vercel (1 proyecto) — https://vercel.com — [x] hecho
+- [x] **Import Project** desde `github.com/emiliofaimlab/ensenameya` (Next.js autodetecta). Production Branch = **`main`**.
+- [x] Env vars (Settings → Environment Variables), dos juegos con las claves
   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`:
   - Scope **Production** → valores de **prod**.
   - Scope **Preview** → valores de **dev**.
 
-### D) GitHub — Environments (CI de migraciones) — pendiente
-- [ ] Repo → Settings → **Environments** → crear **`production`** y **`development`**; en cada uno el
+### D) GitHub — Environments (CI de migraciones) — [x] hecho, salvo branch protection
+- [x] Repo → Settings → **Environments** → **`production`** y **`development`** creados; en cada uno el
   *Environment secret* `SUPABASE_DB_URL` = connection string del **session pooler** (percent-encoded):
   `postgresql://postgres.<ref>:<pwd>@aws-0-us-east-1.pooler.supabase.com:5432/postgres`
-- [ ] Crear la rama **`dev`** desde `main` (`git switch -c dev && git push -u origin dev`).
-- [ ] (Recomendado) Branch protection en `main`: PR + checks verdes.
+- [x] Rama **`dev`** creada desde `main`.
+- [ ] (Recomendado) Branch protection en `main`: PR + checks verdes. **Sin configurar** (la API de
+  protección devuelve 404 el 5-ago): hoy nada impide un push directo a `main` → prod.
 
 ### E) Jira — [x] conectado (proyecto `EY`, `faimlab.atlassian.net`).
 
@@ -104,8 +109,21 @@ código; ausentes, la función se apaga sola en vez de romper:
 - [x] GitHub Environments (production/development) + secret `SUPABASE_DB_URL` + ramas `main`/`dev`.
 - [x] Vercel: proyecto importado, **prod desplegado** (`ensenameya.vercel.app`); env vars Production→prod, Preview→dev.
 - [x] Auth: Site URL + Redirect URLs en prod y dev; "Confirm email" **off** en dev.
+- [x] CLI enlazado a **dev** (`supabase/.temp/linked-project.json`): `db:push` y `db:types` corren
+  contra el proyecto enlazado — `db:types` usa `--linked` (package.json), sin Docker ni `--project-id`.
 - [ ] Google OAuth por proyecto (Client ID/Secret) — pendiente (email/password ya funciona).
-- [ ] Access token (PAT) para `gen types` sin Docker.
 - [ ] Rotar secret keys antes del primer usuario real.
+- [ ] Branch protection en `main` (ver §3D).
 
-*Última edición: 2026-07-03.*
+**Ramas y despliegue al 5-ago — nada nuevo ha llegado a prod desde el 29-jul.** `main` y `origin/dev`
+están en el **mismo commit** (`57edfa9`); todo lo cerrado después vive en `feat/tanda1-cierres` →
+**PR #11 hacia `dev`** (25 commits, 148 ficheros, lint/typecheck y preview de Vercel en verde,
+mergeable, **sin revisar**). Hacen falta **dos merges** —a `dev` y luego a `main`— para que llegue a
+producción, y cada uno dispara su job de migraciones.
+
+**Migraciones por ambiente.** **dev al día**: 66/66 aplicadas, la última
+`20260804120000_dd04_vista_precio_tutor.sql` (`npx supabase migration list --linked`, 5-ago).
+**prod va 12 por detrás**: le faltan las de `20260729130000` en adelante, porque el CI solo las aplica
+al mergear a `main`. Ojo con el orden al desplegar: la app nueva contra el esquema viejo revienta.
+
+*Última edición: 2026-08-05.*

@@ -4,7 +4,11 @@
 > pasada. No es una lista de buenas intenciones: cada tabla de abajo se **ejecutó** contra dev y se
 > pegó su salida real. Cuando algo no se pudo verificar, lo dice.
 >
-> Última pasada: **2026-07-29** (dev, `lbtpnszjjsxbeileqsja`).
+> Última pasada completa: **2026-07-29** (dev, `lbtpnszjjsxbeileqsja`).
+>
+> Repaso puntual del **2026-08-04**, por lo que se movió después: la vista `tutors_public` (DD-04,
+> migración `20260804120000`) y el filtro de precio de `/tutors`. Lo demás sigue siendo la salida
+> del 29-jul y así está marcado.
 
 ---
 
@@ -29,6 +33,20 @@ Ejecutado con las tres cuentas fixture + `anon`. Lo que importa no es que la app
 | `verification_documents` | **401** | 0 | 1 | 13 | KYC: el suyo y el admin |
 | `alert_acks` | **401** | 0 | 0 | 0 | solo admin (vacía tras la prueba) |
 | `payment_webhook_events` | **401** | 0 | 0 | 1 | solo admin |
+| `tutors_public` (vista, 4-ago) | 16 | n/v | n/v | n/v | catálogo público; hereda la RLS |
+
+`n/v` = no re-ejecutado el 4-ago. La pasada por rol es del 29-jul, anterior a la vista; lo que se
+comprobó ahora es la superficie que importa, `anon`.
+
+**`tutors_public` (migración `20260804120000`, DD-04).** Vista nueva y **pública**: envuelve
+`tutor_profiles` con el precio de la mentoría activa más barata, para que el rango de precio de P04
+lo resuelva Postgres y no el cliente. No tiene RLS propia —las vistas no la tienen—: la hereda con
+`security_invoker = true`, así que mandan `tutor_profiles_select_public` y `products_select_public`.
+Sin ese flag correría con los privilegios de su dueño y publicaría tutores no aprobados y productos
+en borrador; por eso entra en esta matriz y no de tapadillo. Como `anon`: **16 filas, las 16
+`approved`, idéntico a `tutor_profiles`** (que hoy también da 16 — el 29-jul eran 15 porque hay una
+cuenta fixture más, no un tutor sin aprobar colándose). Escribirla tampoco es opción: el grant es
+solo `select` y Postgres la rechaza antes (`55000`, vista no auto-actualizable).
 
 ### Escritura que debe fallar (código HTTP / código Postgres)
 
@@ -72,6 +90,11 @@ Dos fallos reales, los dos corregidos:
 
 Tras el arreglo: **17/17 rutas limpias a 360 y 768**, y `/`, `/tutors`, `/search` también a 1024 y 1280.
 
+**Repaso del 4-ago.** `/tutors` cambió después del barrido: el filtro de precio dejó de ser cuatro
+tramos fijos y es un deslizador de rango continuo (commits `cccb566` y `96f4e0b`). Re-medido a **360
+y 768 px**: sin scroll horizontal (`scrollWidth` = `clientWidth`) y el control se pinta entero
+("Inversión por clase", 10,00–120,00 US$). Las otras 16 rutas no se han tocado desde el 29-jul.
+
 ⚠️ **Esto no es "el responsive del diseño"**: es que nada se rompa. El diseño de tablet/escritorio
 sigue pendiente de Diana (decisión 24) y el panel de **admin es desktop-first** por AC, así que no
 entró en el barrido.
@@ -82,7 +105,10 @@ entró en el barrido.
 
 ### 4.1 Antes de abrir
 
-- [ ] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`).
+- [ ] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`). Hoy
+      faltan **12** por aplicar: de `20260729130000_us1302_referral_code` a
+      `20260804120000_dd04_vista_precio_tutor`. Y son **dos** merges hasta prod (`dev` y luego
+      `main`), no uno.
 - [ ] **`npm run db:types` regenerado** y sin cambios pendientes en el PR.
 - [ ] **`lint` + `typecheck` + `build`** en verde.
 - [ ] **Cuenta de admin sembrada** en prod (`supabase/seed/admin-bootstrap.sql`) — y **completar su
@@ -132,5 +158,6 @@ Ninguna bloquea el despliegue: todas tienen default operable (ver el tracker de
 
 ---
 
-*Se actualiza en cada pasada de QA. Creado el 2026-07-29 con la tanda 6 del plan de los sprints
-6 AC / 7 / 8.*
+*Se actualiza en cada pasada de QA. Última edición: **2026-08-04** (vista `tutors_public` en la
+matriz de RLS, `/tutors` re-medido a 360/768 tras el deslizador de precio, y 12 migraciones
+pendientes de prod). Creado el 2026-07-29 con la tanda 6 del plan de los sprints 6 AC / 7 / 8.*

@@ -48,8 +48,9 @@ export const metadata = { title: "Detalle de la sesión · Enséñame Ya" };
  * (sala, marcar completada, cancelar) y el chat con el alumno en la columna
  * derecha (202:87). RLS filtra por `tutor_id`: la reserva de otro da 404.
  *
- * La tarjeta "Grabación" del Figma (202:72) es US-1602 (S4): no se pinta un
- * botón muerto. El nombre del alumno tampoco: `profiles` es RLS own-only.
+ * La tarjeta "Grabación" del Figma (202:72) es US-1802 y ya existe: cada sesión
+ * completada lleva su "Ver grabación" (`RecordingLink`). El nombre del alumno
+ * sigue sin pintarse: `profiles` es RLS own-only.
  */
 export default async function TutorBookingDetailPage({
   params,
@@ -201,9 +202,6 @@ export default async function TutorBookingDetailPage({
               </>
             ) : null}
           </PanelCard>
-
-          {/* "Grabación" (202:72) llega con US-1602 (S4): consentimiento RN-42
-              y 30 días de retención. Sin backend aún, no se pinta. */}
         </div>
 
         <PanelCard className="flex flex-col gap-3">
