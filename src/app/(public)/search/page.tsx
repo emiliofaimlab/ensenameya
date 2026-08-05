@@ -315,7 +315,7 @@ export default async function SearchPage({
           <h2 className="text-[23px] font-semibold">Explorar por categoría</h2>
           <ul className="mt-8 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {categories.slice(0, 6).map((c) => {
-              const Icon = categoryIcon(c.slug);
+              const Icon = categoryIcon(c.icon);
               return (
                 <li key={c.slug}>
                   <Link

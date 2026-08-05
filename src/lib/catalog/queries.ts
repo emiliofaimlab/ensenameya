@@ -15,7 +15,12 @@ type PricingModel = Database["public"]["Enums"]["pricing_model"];
 /** DD-03 · el nivel de la mentoría reusa el enum del nivel del tutor. */
 export type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
 
-export type CategoryTag = { slug: string; name: string };
+export type CategoryTag = {
+  slug: string;
+  name: string;
+  /** Clave del icono en la paleta del frontend; nulo = genérico. */
+  icon?: string | null;
+};
 
 export type TutorCardData = {
   id: string;
@@ -144,7 +149,12 @@ export async function listActiveCategories(): Promise<CategoryTag[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("categories")
-    .select("slug, name")
+    .select("slug, name, icon")
+    // `is_active` explícito y no sólo por RLS: la política pública filtra por
+    // él, pero `categories_select_admin` deja al admin verlas TODAS — así que
+    // un admin navegando el catálogo público veía también las desactivadas,
+    // y el resto del mundo no. Lo que se enseña no puede depender de quién mira.
+    .eq("is_active", true)
     .order("sort_order");
   return data ?? [];
 }
