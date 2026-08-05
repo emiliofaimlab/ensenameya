@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronDownIcon, SearchIcon } from "lucide-react";
+import { ArrowRightIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
@@ -136,34 +136,59 @@ export default async function ClassesPage({
           </form>
 
           {/* Los chips del Figma ("Cursos", "Mentorías") no existen como dato:
-              aquí van los modelos de precio reales (RN-10) + categorías. */}
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {MODELS.map((m) => (
-              <li key={m.id}>
-                <Link
-                  href={buildHref({
-                    ...active,
-                    model: active.model === m.id ? undefined : m.id,
-                  })}
-                  className={`inline-flex h-9 items-center rounded-full border px-4 text-[13px] transition-colors ${
-                    active.model === m.id
-                      ? "border-brand bg-brand text-white"
-                      : "border-[#b2d9ff] bg-card text-brand hover:bg-brand-muted"
-                  }`}
-                >
-                  {m.label}
-                </Link>
-              </li>
-            ))}
-            <li>
-              <Link
-                href="/categories"
-                className="inline-flex h-9 items-center rounded-full border border-[#b2d9ff] bg-card px-4 text-[13px] text-brand transition-colors hover:bg-brand-muted"
+              aquí van los modelos de precio reales (RN-10).
+
+              "Categorías" NO es uno más de la fila: los tres primeros FILTRAN
+              esta pantalla y aquél NAVEGA a otra. Con la misma píldora, el mismo
+              borde y la misma lista, no había forma de saberlo. Ahora los
+              filtros van rotulados y agrupados, y la navegación queda al otro
+              lado de un separador y con cara de enlace. */}
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                id="tipo-mentoria"
+                className="text-[13px] font-medium text-white/85"
               >
-                Categorías
-              </Link>
-            </li>
-          </ul>
+                Tipo de mentoría:
+              </span>
+              <ul
+                aria-labelledby="tipo-mentoria"
+                className="flex flex-wrap gap-2"
+              >
+                {MODELS.map((m) => {
+                  const on = active.model === m.id;
+                  return (
+                    <li key={m.id}>
+                      <Link
+                        href={buildHref({
+                          ...active,
+                          model: on ? undefined : m.id,
+                        })}
+                        aria-pressed={on}
+                        className={`inline-flex h-9 items-center rounded-full border px-4 text-[13px] transition-colors ${
+                          on
+                            ? "border-white bg-white font-semibold text-brand"
+                            : "border-white/60 bg-transparent text-white hover:bg-white/15"
+                        }`}
+                      >
+                        {m.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            <span aria-hidden className="hidden h-6 w-px bg-white/35 sm:block" />
+
+            <Link
+              href="/categories"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white underline-offset-4 hover:underline"
+            >
+              Explorar por categoría
+              <ArrowRightIcon className="size-3.5" />
+            </Link>
+          </div>
         </Container>
       </div>
 
