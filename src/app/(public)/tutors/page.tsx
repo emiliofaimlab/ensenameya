@@ -63,11 +63,20 @@ export default async function TutorsPage({
     return Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined;
   };
   // Un rango al revés (?pmin=50&pmax=10, escrito a mano) devolvía 0 resultados
-  // —correcto— pero dejaba los pomos cruzados. Se ordenan: es lo que quien lo
-  // escribió quiso decir, y el control no puede quedar en un estado imposible.
-  const [pmin, pmax] = [num(pminParam), num(pmaxParam)].sort((a, b) =>
-    a == null || b == null ? 0 : a - b,
-  );
+  // —correcto— pero dejaba los pomos cruzados. Se intercambian: es lo que quien
+  // lo escribió quiso decir, y el control no puede quedar en un estado imposible.
+  //
+  // Se comparan a mano y NO con `.sort()`: `Array.prototype.sort` manda los
+  // `undefined` al final del array sin llamar al comparador (así lo manda la
+  // especificación), así que un `?pmax=7500` suelto se convertía en
+  // `[7500, undefined]` — el máximo pasaba a ser el mínimo y el filtro se daba
+  // la vuelta. Solo fallaba al mover el pomo derecho, que es el único caso que
+  // deja `pmin` vacío.
+  const desde = num(pminParam);
+  const hasta = num(pmaxParam);
+  const invertido = desde != null && hasta != null && desde > hasta;
+  const pmin = invertido ? hasta : desde;
+  const pmax = invertido ? desde : hasta;
   const language = LANGUAGES.find((l) => l.id === langParam)?.id;
   const sort = (["rating", "reviews"] as const).find((v) => v === sortParam);
 
