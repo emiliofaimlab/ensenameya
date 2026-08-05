@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -30,14 +30,27 @@ export function SignOutDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
 
   async function signOut() {
     setBusy(true);
-    await createClient().auth.signOut();
-    router.push("/");
-    router.refresh();
+    const { error } = await createClient().auth.signOut();
+
+    if (error) {
+      // Sin esto el diálogo se quedaba en "Cerrando…" para siempre ante
+      // cualquier fallo, sin decir qué pasó ni dejar reintentar.
+      toast.error("No se pudo cerrar la sesión. Inténtalo de nuevo.");
+      setBusy(false);
+      return;
+    }
+
+    // Recarga completa en vez de `router.push` + `refresh`: cerrar sesión es el
+    // momento de tirar TODO el estado de cliente —la cabecera, y las cachés de
+    // RSC de las rutas ya visitadas, que se quedaban con contenido de la sesión
+    // anterior—, no solo de navegar. Y de paso el diálogo se va con la página:
+    // antes la navegación era de cliente, la cabecera no se desmontaba y el
+    // modal se quedaba pegado con su "Cerrando…" hasta que clicabas fuera.
+    window.location.assign("/");
   }
 
   return (
