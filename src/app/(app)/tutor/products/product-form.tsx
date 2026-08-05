@@ -17,6 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 type PricingModel = Database["public"]["Enums"]["pricing_model"];
+type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
 
 // ponytail: MVP en una sola moneda (USD). Multi-moneda por geografía llega con
 // C-13 / EP-07 (routing de cobro); cuando exista, sale de aquí a config del tutor.
@@ -32,6 +33,19 @@ const PRICING: { id: PricingModel; label: string }[] = [
   { id: "per_package", label: "Paquete" },
 ];
 
+/** DD-03 — mismas etiquetas que el filtro del Figma (386:1196). */
+export const PRODUCT_LEVELS = [
+  { value: "basico", label: "Básico" },
+  { value: "intermedio", label: "Intermedio" },
+  { value: "avanzado", label: "Avanzado" },
+];
+
+export const PRODUCT_LANGUAGES = [
+  { value: "es", label: "Español" },
+  { value: "en", label: "Inglés" },
+  { value: "pt", label: "Portugués" },
+];
+
 export type ProductFormValues = {
   id: string;
   title: string;
@@ -41,6 +55,9 @@ export type ProductFormValues = {
   priceAmount: number; // unidades menores
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
+  /** DD-03 — nivel e idioma de ESTA mentoría, no del tutor. */
+  level: TeachingLevel | null;
+  language: string | null;
   categoryIds: string[];
   imagePath: string | null;
   /** FAQ propias de la mentoría (R24-17). */
@@ -155,6 +172,10 @@ export function ProductForm({
       currency: CURRENCY,
       session_duration_min: duration,
       package_num_sessions: packageNum,
+      // DD-03: opcionales — vacío se guarda como nulo, que es lo que espera el
+      // check, y las mentorías viejas siguen válidas sin el dato.
+      level: (String(form.get("level") ?? "") || null) as TeachingLevel | null,
+      language: String(form.get("language") ?? "") || null,
       // FAQ de ESTA mentoría (R24-17). Se descartan las filas a medio escribir.
       faqs: faqs
         .map((f) => ({ q: f.q.trim(), a: f.a.trim() }))
@@ -394,6 +415,44 @@ export function ProductForm({
               defaultValue={product?.sessionDurationMin ?? 60}
               className={FIELD}
             />
+          </div>
+          {/* DD-03 — de la mentoría, no del tutor: un tutor avanzado puede
+              publicar una clase básica. Alimentan los filtros de P05/P06. */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="level" className={LABEL}>
+              Nivel de la clase (opcional)
+            </Label>
+            <select
+              id="level"
+              name="level"
+              defaultValue={product?.level ?? ""}
+              className={`${FIELD} border bg-transparent`}
+            >
+              <option value="">Sin especificar</option>
+              {PRODUCT_LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="language" className={LABEL}>
+              Idioma en que la impartes (opcional)
+            </Label>
+            <select
+              id="language"
+              name="language"
+              defaultValue={product?.language ?? ""}
+              className={`${FIELD} border bg-transparent`}
+            >
+              <option value="">Sin especificar</option>
+              {PRODUCT_LANGUAGES.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
           </div>
           {pricingModel === "per_package" ? (
             <div className="grid gap-1.5">

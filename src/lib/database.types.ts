@@ -39,6 +39,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      alert_acks: {
+        Row: {
+          acked_at: string
+          acked_by: string
+          entity_id: string
+          kind: string
+          note: string | null
+        }
+        Insert: {
+          acked_at?: string
+          acked_by: string
+          entity_id: string
+          kind: string
+          note?: string | null
+        }
+        Update: {
+          acked_at?: string
+          acked_by?: string
+          entity_id?: string
+          kind?: string
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_acks_acked_by_fkey"
+            columns: ["acked_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       availability_exceptions: {
         Row: {
           created_at: string
@@ -123,6 +155,7 @@ export type Database = {
       }
       bookings: {
         Row: {
+          cancel_reason: string | null
           cancellation_policy: Json | null
           cancelled_at: string | null
           completed_at: string | null
@@ -144,6 +177,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cancel_reason?: string | null
           cancellation_policy?: Json | null
           cancelled_at?: string | null
           completed_at?: string | null
@@ -165,6 +199,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cancel_reason?: string | null
           cancellation_policy?: Json | null
           cancelled_at?: string | null
           completed_at?: string | null
@@ -300,6 +335,7 @@ export type Database = {
           id: string
           idempotency_key: string
           payload: Json
+          read_at: string | null
           recipient_id: string
           sent_at: string | null
           status: Database["public"]["Enums"]["notification_status"]
@@ -312,6 +348,7 @@ export type Database = {
           id?: string
           idempotency_key: string
           payload?: Json
+          read_at?: string | null
           recipient_id: string
           sent_at?: string | null
           status?: Database["public"]["Enums"]["notification_status"]
@@ -324,6 +361,7 @@ export type Database = {
           id?: string
           idempotency_key?: string
           payload?: Json
+          read_at?: string | null
           recipient_id?: string
           sent_at?: string | null
           status?: Database["public"]["Enums"]["notification_status"]
@@ -660,6 +698,8 @@ export type Database = {
           faqs: Json
           id: string
           image_path: string | null
+          language: string | null
+          level: Database["public"]["Enums"]["teaching_level"] | null
           outcome: string | null
           package_num_sessions: number | null
           price_amount: number
@@ -681,6 +721,8 @@ export type Database = {
           faqs?: Json
           id?: string
           image_path?: string | null
+          language?: string | null
+          level?: Database["public"]["Enums"]["teaching_level"] | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount: number
@@ -702,6 +744,8 @@ export type Database = {
           faqs?: Json
           id?: string
           image_path?: string | null
+          language?: string | null
+          level?: Database["public"]["Enums"]["teaching_level"] | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount?: number
@@ -733,6 +777,7 @@ export type Database = {
           id: string
           onboarding_complete: boolean
           phone: string | null
+          primary_goal: string | null
           referral_code: string | null
           timezone: string
           updated_at: string
@@ -744,6 +789,7 @@ export type Database = {
           id: string
           onboarding_complete?: boolean
           phone?: string | null
+          primary_goal?: string | null
           referral_code?: string | null
           timezone?: string
           updated_at?: string
@@ -755,6 +801,7 @@ export type Database = {
           id?: string
           onboarding_complete?: boolean
           phone?: string | null
+          primary_goal?: string | null
           referral_code?: string | null
           timezone?: string
           updated_at?: string
@@ -763,6 +810,7 @@ export type Database = {
       }
       reviews: {
         Row: {
+          author_display: string | null
           booking_id: string
           comment: string | null
           created_at: string
@@ -774,6 +822,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          author_display?: string | null
           booking_id: string
           comment?: string | null
           created_at?: string
@@ -785,6 +834,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          author_display?: string | null
           booking_id?: string
           comment?: string | null
           created_at?: string
@@ -820,6 +870,39 @@ export type Database = {
           {
             foreignKeyName: "reviews_tutor_id_fkey"
             columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_recording_consents: {
+        Row: {
+          created_at: string
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_recording_consents_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_recording_consents_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1198,7 +1281,31 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      tutors_public: {
+        Row: {
+          approval_status:
+            | Database["public"]["Enums"]["tutor_approval_status"]
+            | null
+          avatar_path: string | null
+          bio: string | null
+          display_name: string | null
+          headline: string | null
+          price_currency: string | null
+          price_from: number | null
+          profile_id: string | null
+          rating_avg: number | null
+          rating_count: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_profiles_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       admin_bookings_by_category: {
@@ -1219,7 +1326,10 @@ export type Database = {
         }
         Returns: string
       }
-      cancel_booking: { Args: { p_booking_id: string }; Returns: Json }
+      cancel_booking: {
+        Args: { p_booking_id: string; p_reason?: string }
+        Returns: Json
+      }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
       confirm_payment: {
@@ -1274,9 +1384,11 @@ export type Database = {
         Args: { p_action: string; p_payout_id: string }
         Returns: string
       }
+      mask_person_name: { Args: { p_name: string }; Returns: string }
       process_notifications: { Args: never; Returns: Json }
       process_scheduled_payouts: { Args: never; Returns: Json }
       purge_expired_messages: { Args: never; Returns: Json }
+      recording_allowed: { Args: { p_session_id: string }; Returns: boolean }
       refund_payment: {
         Args: { p_amount?: number; p_payment_id: string }
         Returns: Json
@@ -1331,7 +1443,12 @@ export type Database = {
       }
       submit_documents_for_review: { Args: never; Returns: string }
       submit_review: {
-        Args: { p_booking_id: string; p_comment?: string; p_rating: number }
+        Args: {
+          p_booking_id: string
+          p_comment?: string
+          p_rating: number
+          p_sign?: boolean
+        }
         Returns: string
       }
       tutor_balance: { Args: { p_retention_days?: number }; Returns: Json }

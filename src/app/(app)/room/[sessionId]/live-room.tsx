@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { RecordingConsent } from "@/components/room/recording-consent";
 import { ATTACHMENT_TYPES, uploadAttachment } from "@/lib/chat/attachments";
 
 type SessionStatus = Database["public"]["Enums"]["session_status"];
@@ -56,6 +57,7 @@ export function LiveRoom({
   currentUserId,
   firstSessionAt,
   initialMessages,
+  consent,
 }: {
   sessionId: string;
   bookingId: string;
@@ -68,6 +70,8 @@ export function LiveRoom({
   currentUserId: string;
   firstSessionAt: string | null;
   initialMessages: ChatMessage[];
+  /** US-1801 · quién ha aceptado ya que se grabe (RN-42). */
+  consent: { mine: boolean; other: boolean };
 }) {
   const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
@@ -366,6 +370,15 @@ export function LiveRoom({
           <p className="text-sm text-muted-foreground">
             {new Date(startAt).toLocaleString("es")}
           </p>
+          {/* El permiso se puede dar mientras esperas: RN-42 pide que esté
+              decidido ANTES de entrar, no que la sala ya esté abierta. */}
+          <RecordingConsent
+            sessionId={sessionId}
+            userId={currentUserId}
+            isTutor={isTutor}
+            mine={consent.mine}
+            other={consent.other}
+          />
         </>
       ) : afterWindow ? (
         <>
@@ -381,6 +394,14 @@ export function LiveRoom({
           <p className="text-sm text-muted-foreground" suppressHydrationWarning>
             La sala está abierta. Cierra en {human(closesAt - now)}.
           </p>
+          {/* RN-42: el permiso se pide ANTES de entrar, no a mitad de clase. */}
+          <RecordingConsent
+            sessionId={sessionId}
+            userId={currentUserId}
+            isTutor={isTutor}
+            mine={consent.mine}
+            other={consent.other}
+          />
           <Button size="lg" disabled={busy} onClick={join} className="min-w-40">
             {busy ? "Entrando…" : "Entrar a la sala"}
           </Button>

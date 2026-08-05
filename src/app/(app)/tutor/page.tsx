@@ -118,15 +118,11 @@ export default async function TutorHomePage() {
   const firstName = profile?.profiles?.full_name?.split(" ")[0];
 
   return (
-    <PanelShell items={TUTOR_ITEMS}>
-      <div>
-        <h1 className="text-[24px] font-bold tracking-tight text-[#19191f]">
-          {firstName ? `Hola, ${firstName}` : "Tu panel"}
-        </h1>
-        <p className="mt-1 text-[13px] text-[#6b6b6b]">
-          Resumen de tu actividad como tutor.
-        </p>
-      </div>
+    <PanelShell
+      items={TUTOR_ITEMS}
+      title={firstName ? `Hola, ${firstName}` : "Tu panel"}
+      description="Resumen de tu actividad como tutor."
+    >
 
       {/* Estado de aprobación (195:42): lo primero que necesita saber. */}
       {approvalStatus === "pending" ? (

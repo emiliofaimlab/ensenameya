@@ -347,6 +347,8 @@ export type BookingDetail = {
     createdAt: string;
     completedAt: string | null;
     cancelledAt: string | null;
+    /** Motivo declarado en AL07 (decisión 23). Nulo si canceló el cron o el tutor. */
+    cancelReason: string | null;
     updatedAt: string;
   };
   productTitle: string;
@@ -364,7 +366,7 @@ export type BookingDetail = {
     sequenceNo: number | null;
     startAt: string;
     endAt: string;
-    status: string;
+    status: Database["public"]["Enums"]["session_status"];
   }[];
 };
 
@@ -373,7 +375,7 @@ export async function getBookingDetail(id: string): Promise<BookingDetail | null
   const { data: b } = await supabase
     .from("bookings")
     .select(
-      "id, status, currency, total_amount, tier_split_pct, num_sessions, session_duration_min, created_at, completed_at, cancelled_at, updated_at, products(title), student:profiles!bookings_student_id_fkey(full_name), tutor:profiles!bookings_tutor_id_fkey(full_name), payments(id, status, gross_amount, refunded_amount, provider), sessions(id, sequence_no, start_at, end_at, status)",
+      "id, status, currency, total_amount, tier_split_pct, num_sessions, session_duration_min, created_at, completed_at, cancelled_at, cancel_reason, updated_at, products(title), student:profiles!bookings_student_id_fkey(full_name), tutor:profiles!bookings_tutor_id_fkey(full_name), payments(id, status, gross_amount, refunded_amount, provider), sessions(id, sequence_no, start_at, end_at, status)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -395,6 +397,7 @@ export async function getBookingDetail(id: string): Promise<BookingDetail | null
       createdAt: b.created_at,
       completedAt: b.completed_at,
       cancelledAt: b.cancelled_at,
+      cancelReason: b.cancel_reason,
       updatedAt: b.updated_at,
     },
     productTitle: b.products?.title ?? "—",
@@ -415,7 +418,7 @@ export async function getBookingDetail(id: string): Promise<BookingDetail | null
         sequenceNo: s.sequence_no,
         startAt: s.start_at,
         endAt: s.end_at,
-        status: s.status as string,
+        status: s.status,
       }))
       .sort((a, z) => a.startAt.localeCompare(z.startAt)),
   };

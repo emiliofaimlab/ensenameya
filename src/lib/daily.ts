@@ -45,24 +45,29 @@ async function daily(path: string, init?: RequestInit) {
  * `exp` cierra la sala sola pasada la ventana de acceso (RN-18): aunque alguien
  * guarde la URL, Daily deja de admitir a nadie.
  */
-export async function ensureRoom(name: string, expiresAt: Date): Promise<string> {
+export async function ensureRoom(
+  name: string,
+  expiresAt: Date,
+  /** US-1801 · solo con el sí de los DOS (RN-42). Es propiedad de SALA. */
+  recording = false,
+): Promise<string> {
   const exp = Math.floor(expiresAt.getTime() / 1000);
+  const properties = {
+    exp,
+    eject_at_room_exp: true,
+    // Acuerdo de la reunión del 17-jul (00:24:48): el chat de la sala es el
+    // NUESTRO (EP-17, panel lateral de LV01). El de Daily se apaga por dos
+    // razones: no queremos dos chats, y el suyo se cobra aparte como
+    // almacenamiento. Es propiedad de SALA, no del iframe.
+    enable_chat: false,
+    // Sin consentimiento la sala ni ofrece el botón de grabar: el permiso no
+    // se pide en la interfaz, se quita del proveedor (RN-42).
+    enable_recording: recording ? "cloud" : false,
+  };
 
   const created = await daily("/rooms", {
     method: "POST",
-    body: JSON.stringify({
-      name,
-      privacy: "private", // sin token no se entra
-      properties: {
-        exp,
-        eject_at_room_exp: true,
-        // Acuerdo de la reunión del 17-jul (00:24:48): el chat de la sala es el
-        // NUESTRO (EP-17, panel lateral de LV01). El de Daily se apaga por dos
-        // razones: no queremos dos chats, y el suyo se cobra aparte como
-        // almacenamiento. Es propiedad de SALA, no del iframe.
-        enable_chat: false,
-      },
-    }),
+    body: JSON.stringify({ name, privacy: "private", properties }),
   });
 
   if (created.ok) {
@@ -71,7 +76,13 @@ export async function ensureRoom(name: string, expiresAt: Date): Promise<string>
   }
 
   // 400 con "already exists" → la sala ya está; se recupera su URL.
-  const existing = await daily(`/rooms/${name}`);
+  // Se le reaplican las propiedades: el consentimiento puede haber llegado
+  // DESPUÉS de que el primero entrara y creara la sala, y sin este PATCH la
+  // grabación se quedaría apagada toda la clase.
+  const existing = await daily(`/rooms/${name}`, {
+    method: "POST",
+    body: JSON.stringify({ properties }),
+  });
   if (existing.ok) {
     const room = (await existing.json()) as { url: string };
     return room.url;
@@ -112,4 +123,39 @@ export async function mintToken(opts: {
   }
   const { token } = (await res.json()) as { token: string };
   return token;
+}
+
+/** Grabación de una sala, tal como la devuelve Daily. */
+export type DailyRecording = {
+  id: string;
+  duration: number;
+  start_ts: number;
+  status: string;
+};
+
+/**
+ * US-1802 · las grabaciones de una sala. Se consultan a Daily en el momento en
+ * vez de sincronizarlas a una tabla nuestra: el fichero vive en el proveedor y
+ * una copia de sus metadatos solo añadiría un sitio más donde quedar desfasado.
+ */
+export async function listRecordings(room: string): Promise<DailyRecording[]> {
+  const res = await daily(`/recordings?room_name=${encodeURIComponent(room)}`);
+  if (!res.ok) return [];
+  const { data } = (await res.json()) as { data?: DailyRecording[] };
+  return (data ?? []).filter((r) => r.status === "finished");
+}
+
+/**
+ * Enlace de descarga firmado por Daily. Es efímero (lo caduca el proveedor), y
+ * por eso se pide al hacer clic y no se guarda en ninguna parte — mismo criterio
+ * que los meeting-tokens y que las URLs firmadas de Storage.
+ */
+export async function recordingLink(id: string): Promise<string | null> {
+  const res = await daily(`/recordings/${id}/access-link`);
+  if (!res.ok) return null;
+  const { download_link, link } = (await res.json()) as {
+    download_link?: string;
+    link?: string;
+  };
+  return download_link ?? link ?? null;
 }

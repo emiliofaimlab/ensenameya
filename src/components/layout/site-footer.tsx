@@ -56,7 +56,12 @@ export function SiteFooter() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+          {/* US-1601: en tablet el bloque de texto se quedaba con sus 592 px y
+              dejaba las tres columnas a ~18 px, así que "Privacidad" se salía
+              de la pantalla y toda la página cogía scroll horizontal. Con
+              `shrink-0` los enlaces conservan su ancho y lo que cede es el
+              párrafo, que para eso es texto fluido. */}
+          <div className="grid shrink-0 grid-cols-2 gap-8 sm:grid-cols-3">
             {columns.map((column) => (
               <nav key={column.title} aria-label={column.title}>
                 <p className="text-[11px] font-semibold tracking-wide text-brand">

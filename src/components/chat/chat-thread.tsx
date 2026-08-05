@@ -248,6 +248,31 @@ export function ChatThread({
 
   return (
     <div className={cn("flex flex-col gap-3", fill && "h-full min-h-0")}>
+      {/* US-1702 · descarga del hilo. Enlaces normales con `download`: el
+          servidor arma el archivo y la RLS decide si hay algo que armar. Solo
+          con mensajes — un archivo vacío no le sirve a nadie. */}
+      {messages.length > 0 ? (
+        <p className="text-[11px] text-muted-foreground">
+          El chat se borra a los 30 días. Descárgalo en{" "}
+          <a
+            href={`/api/chat/${bookingId}/download?format=txt`}
+            download
+            className="font-semibold text-brand hover:underline"
+          >
+            .txt
+          </a>{" "}
+          o{" "}
+          <a
+            href={`/api/chat/${bookingId}/download?format=json`}
+            download
+            className="font-semibold text-brand hover:underline"
+          >
+            .json
+          </a>
+          .
+        </p>
+      ) : null}
+
       <div
         className={cn(
           "flex flex-col gap-2 overflow-y-auto rounded-lg border p-4",

@@ -14,6 +14,8 @@ import {
   MODELS,
   PRICE_RANGES,
   SESSION_RANGES,
+  LEVELS,
+  LANGUAGES,
   type ProductFilterState,
 } from "@/components/catalog/product-filters";
 import {
@@ -22,6 +24,7 @@ import {
   listActiveProducts,
   listApprovedTutors,
   type ProductSort,
+  type TeachingLevel,
 } from "@/lib/catalog/queries";
 import type { Database } from "@/lib/database.types";
 
@@ -47,6 +50,8 @@ export type CategorySearchParams = {
   model?: string;
   price?: string;
   sessions?: string;
+  level?: string;
+  lang?: string;
   tema?: string;
   sort?: string;
 };
@@ -75,6 +80,8 @@ export async function CategoryExplorer({
     model: MODELS.some((m) => m.id === sp.model) ? sp.model : undefined,
     price: sp.price,
     sessions: sp.sessions,
+    level: LEVELS.some((l) => l.id === sp.level) ? sp.level : undefined,
+    lang: LANGUAGES.some((l) => l.id === sp.lang) ? sp.lang : undefined,
     tema: sp.tema,
   };
   const price = PRICE_RANGES.find((r) => r.id === active.price);
@@ -95,6 +102,8 @@ export async function CategoryExplorer({
       maxPriceMinor: price?.max,
       minSessions: sessions?.min,
       maxSessions: sessions?.max,
+      level: active.level as TeachingLevel | undefined,
+      language: active.lang,
       sort,
       page: tab === "productos" ? page : 1,
     }),
@@ -116,7 +125,7 @@ export async function CategoryExplorer({
   ) => {
     const p = new URLSearchParams();
     if (next.tab && next.tab !== "productos") p.set("tab", next.tab);
-    for (const key of ["model", "price", "sessions", "tema"] as const) {
+    for (const key of ["model", "price", "sessions", "level", "lang", "tema"] as const) {
       if (next[key]) p.set(key, next[key]!);
     }
     if (next.sort) p.set("sort", next.sort);
@@ -193,6 +202,33 @@ export async function CategoryExplorer({
           tab,
           sort,
           model: active.model === m.id ? undefined : m.id,
+        }),
+      })),
+    },
+    // DD-03 · los mismos dos que P05, aquí como desplegables de la fila.
+    {
+      label: "Nivel",
+      current: LEVELS.find((l) => l.id === active.level)?.label,
+      options: LEVELS.map((l) => ({
+        label: l.label,
+        href: buildHref({
+          ...active,
+          tab,
+          sort,
+          level: active.level === l.id ? undefined : l.id,
+        }),
+      })),
+    },
+    {
+      label: "Idioma",
+      current: LANGUAGES.find((l) => l.id === active.lang)?.label,
+      options: LANGUAGES.map((l) => ({
+        label: l.label,
+        href: buildHref({
+          ...active,
+          tab,
+          sort,
+          lang: active.lang === l.id ? undefined : l.id,
         }),
       })),
     },

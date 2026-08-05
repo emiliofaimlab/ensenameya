@@ -20,14 +20,23 @@ const RATING_LABEL = ["", "Muy mala", "Mala", "Regular", "Muy buena", "Excelente
 export function ReviewForm({
   bookingId,
   existing,
+  suggestedName,
 }: {
   bookingId: string;
-  existing?: { rating: number; comment: string | null } | null;
+  existing?: {
+    rating: number;
+    comment: string | null;
+    authorDisplay?: string | null;
+  } | null;
+  /** Cómo se vería su firma ("Marina G."), para que sepa qué está aceptando. */
+  suggestedName: string | null;
 }) {
   const router = useRouter();
   const [rating, setRating] = useState(existing?.rating ?? 0);
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState(existing?.comment ?? "");
+  // Decisión 18: anónima salvo que consienta firmar. Por defecto, no.
+  const [sign, setSign] = useState(Boolean(existing?.authorDisplay));
   const [busy, setBusy] = useState(false);
 
   const shown = hover || rating;
@@ -43,6 +52,7 @@ export function ReviewForm({
       p_booking_id: bookingId,
       p_rating: rating,
       p_comment: comment.trim() || undefined,
+      p_sign: sign,
     });
     setBusy(false);
     if (error) {
@@ -102,6 +112,31 @@ export function ReviewForm({
           onChange={(e) => setComment(e.target.value)}
         />
       </div>
+
+      {/* Decisión 18: el nombre solo se publica si lo consiente, y se enseña
+          antes cómo va a quedar. Sin marcar, la reseña sale como "Alumno". */}
+      <label className="mt-4 flex items-start gap-2.5 text-[13px] text-[#4d4d4d]">
+        <input
+          type="checkbox"
+          checked={sign}
+          onChange={(e) => setSign(e.target.checked)}
+          disabled={!suggestedName}
+          className="mt-0.5 size-[18px] shrink-0 rounded-[5px] border-input accent-primary"
+        />
+        <span>
+          {suggestedName ? (
+            <>
+              Firmar como <strong className="font-semibold">{suggestedName}</strong>.
+              Si no la marcas, tu reseña se publica como <em>Alumno</em>.
+            </>
+          ) : (
+            <>
+              Añade tu nombre en tu cuenta si quieres firmar la reseña. Mientras
+              tanto se publica como <em>Alumno</em>.
+            </>
+          )}
+        </span>
+      </label>
 
       {/* El Figma dice "podrás editarla durante 24 h", pero `submit_review` hace
           upsert sin ventana: se puede editar siempre. Se cuenta lo que hace el

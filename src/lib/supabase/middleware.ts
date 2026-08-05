@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/database.types";
 import { PANEL_COOKIE, panelFromPath } from "@/lib/panel";
+import { REFERRAL_COOKIE } from "@/lib/referral";
 
 /**
  * Refresca la sesión de Supabase en cada request y la propaga a las cookies de
@@ -37,6 +38,19 @@ export async function updateSession(request: NextRequest) {
   // IMPORTANTE: no insertar lógica entre createServerClient y getUser().
   // getUser() valida el token contra el servidor de Auth y renueva la sesión.
   await supabase.auth.getUser();
+
+  // US-1302 · el `?ref=` de Referral Factory puede llegar a CUALQUIER página
+  // (el enlace que comparte el referidor suele apuntar al home, no a /signup).
+  // Se guarda al vuelo para que siga vivo cuando el visitante se registre; sin
+  // esto la atribución se pierde en silencio, que es la peor forma de perderla.
+  const ref = request.nextUrl.searchParams.get("ref")?.trim();
+  if (ref) {
+    supabaseResponse.cookies.set(REFERRAL_COOKIE, ref.slice(0, 64), {
+      path: "/",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  }
 
   // Último panel visitado: lo leen las pantallas compartidas (/pagos, /account)
   // para enseñar el menú del panel del que vienes. Solo decide el menú, así que

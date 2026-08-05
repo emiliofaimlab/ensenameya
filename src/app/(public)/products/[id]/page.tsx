@@ -9,6 +9,7 @@ import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
 import { BookingPanel } from "@/components/catalog/booking-panel";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
+import { LEVELS, LANGUAGES } from "@/components/catalog/product-filters";
 import {
   ReviewsSummary,
   TutorReviews,
@@ -95,8 +96,13 @@ export default async function ProductPage({
     product.sessionDurationMin
       ? `${product.sessionDurationMin} min por sesión`
       : null,
-    // El chip "Nivel Universitario" del Figma es del PRODUCTO: DD-03 (`EY-113`),
-    // que sigue abierta. `teaching_level` es del tutor, no de la mentoría.
+    // DD-03 · nivel e idioma DE LA MENTORÍA (el Figma pinta "Nivel
+    // Universitario"; el vocabulario que da su filtro es básico/intermedio/
+    // avanzado, y ese es el que se guarda). Solo si el tutor los rellenó.
+    LEVELS.find((l) => l.id === product.level)?.label
+      ? `Nivel ${LEVELS.find((l) => l.id === product.level)!.label}`
+      : null,
+    LANGUAGES.find((l) => l.id === product.language)?.label ?? null,
   ].filter(Boolean) as string[];
 
   return (

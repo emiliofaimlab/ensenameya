@@ -61,8 +61,18 @@ export async function POST(
   // aunque alguien guarde la URL, Daily no admite a nadie después.
   const windowClosesAt = new Date(new Date(auth.ends_at).getTime() + 10 * 60_000);
 
+  // US-1801 · la sala se crea con grabación SOLO si los dos consintieron
+  // (RN-42). La regla vive en `recording_allowed`, no aquí.
+  const { data: allowed } = await supabase.rpc("recording_allowed", {
+    p_session_id: sessionId,
+  });
+
   try {
-    const roomUrl = await ensureRoom(auth.room_name, windowClosesAt);
+    const roomUrl = await ensureRoom(
+      auth.room_name,
+      windowClosesAt,
+      allowed === true,
+    );
     const token = await mintToken({
       room: auth.room_name,
       userName: profile?.full_name ?? (auth.is_tutor ? "Tutor" : "Alumno"),
@@ -76,6 +86,7 @@ export async function POST(
       token,
       isTutor: auth.is_tutor,
       endsAt: auth.ends_at,
+      recording: allowed === true,
     });
   } catch (e) {
     // Fallo del proveedor: la sesión ya quedó `in_progress` (el join se

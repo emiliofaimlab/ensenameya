@@ -8,9 +8,11 @@ import { Pager } from "@/components/catalog/pager";
 import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import { TutorFilters } from "@/components/catalog/tutor-filters";
+import { LANGUAGES } from "@/components/catalog/product-filters";
 import {
   listApprovedTutors,
   listActiveCategories,
+  tutorPriceBounds,
   type AvailabilityFilter,
   type TutorSort,
 } from "@/lib/catalog/queries";
@@ -32,6 +34,9 @@ export default async function TutorsPage({
     page?: string;
     rating?: string;
     avail?: string;
+    pmin?: string;
+    pmax?: string;
+    lang?: string;
     sort?: string;
   }>;
 }) {
@@ -40,6 +45,9 @@ export default async function TutorsPage({
     page: pageParam,
     rating: ratingParam,
     avail: availParam,
+    pmin: pminParam,
+    pmax: pmaxParam,
+    lang: langParam,
     sort: sortParam,
   } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
@@ -47,17 +55,35 @@ export default async function TutorsPage({
   const availability = (["today", "week", "weekend"] as const).find(
     (v) => v === availParam,
   );
+  // La query string es texto libre: un número que no lo es se ignora, no se
+  // pasa al filtro (mismo criterio que los estados de US-1104). En unidades
+  // menores, que es como viaja el precio en toda la app.
+  const num = (v?: string) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.round(n) : undefined;
+  };
+  // Un rango al revés (?pmin=50&pmax=10, escrito a mano) devolvía 0 resultados
+  // —correcto— pero dejaba los pomos cruzados. Se ordenan: es lo que quien lo
+  // escribió quiso decir, y el control no puede quedar en un estado imposible.
+  const [pmin, pmax] = [num(pminParam), num(pmaxParam)].sort((a, b) =>
+    a == null || b == null ? 0 : a - b,
+  );
+  const language = LANGUAGES.find((l) => l.id === langParam)?.id;
   const sort = (["rating", "reviews"] as const).find((v) => v === sortParam);
 
-  const [{ tutors, hasMore, total }, categories] = await Promise.all([
+  const [{ tutors, hasMore, total }, categories, priceBounds] = await Promise.all([
     listApprovedTutors({
       categorySlug: cat,
       minRating,
       availability,
+      minPrice: pmin,
+      maxPrice: pmax,
+      language,
       sort,
       page,
     }),
     listActiveCategories(),
+    tutorPriceBounds(),
   ]);
 
   /** Todos los filtros viven en la URL; al cambiar uno se vuelve a la página 1. */
@@ -65,6 +91,9 @@ export default async function TutorsPage({
     cat?: string;
     rating?: number;
     avail?: AvailabilityFilter;
+    pmin?: number;
+    pmax?: number;
+    lang?: string;
     sort?: TutorSort;
     page?: number;
   }) => {
@@ -72,13 +101,21 @@ export default async function TutorsPage({
     if (next.cat) p.set("cat", next.cat);
     if (next.rating) p.set("rating", String(next.rating));
     if (next.avail) p.set("avail", next.avail);
+    if (next.pmin != null) p.set("pmin", String(next.pmin));
+    if (next.pmax != null) p.set("pmax", String(next.pmax));
+    if (next.lang) p.set("lang", next.lang);
     if (next.sort) p.set("sort", next.sort);
     if (next.page && next.page > 1) p.set("page", String(next.page));
     const q = p.toString();
     return q ? `/tutors?${q}` : "/tutors";
   };
 
-  const current = { cat, rating: minRating, avail: availability, sort };
+  const current = { cat, rating: minRating, avail: availability, pmin, pmax, lang: language, sort };
+  // Rango elegido: sólo cuenta si al menos un extremo acota de verdad.
+  const price =
+    priceBounds && (pmin != null || pmax != null)
+      ? { min: pmin ?? priceBounds.min, max: pmax ?? priceBounds.max }
+      : null;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
@@ -137,6 +174,10 @@ export default async function TutorsPage({
             activeSlug={cat}
             minRating={minRating}
             availability={availability}
+            price={price}
+            priceBounds={priceBounds}
+            priceBaseHref={buildHref({ ...current, pmin: undefined, pmax: undefined })}
+            language={language}
             hrefFor={(next) => buildHref({ sort, ...next })}
           />
 

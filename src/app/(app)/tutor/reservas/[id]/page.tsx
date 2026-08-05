@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime, BOOKING_STATUS_LABEL } from "@/lib/booking";
+import { formatSessionTime, BOOKING_STATUS_LABEL, SESSION_STATUS_LABEL } from "@/lib/booking";
 import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import {
   PanelCard,
@@ -13,6 +13,7 @@ import {
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { RecordingLink } from "@/components/room/recording-link";
 import { Button } from "@/components/ui/button";
 import {
   CompleteSessionButton,
@@ -21,14 +22,6 @@ import {
 import type { Database } from "@/lib/database.types";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
-
-const SESSION_LABEL: Record<string, string> = {
-  scheduled: "Programada",
-  in_progress: "En curso",
-  completed: "Completada",
-  cancelled: "Cancelada",
-  no_show: "No asistió",
-};
 
 const BOOKING_PILL: Record<string, PillTone> = {
   confirmed: "green",
@@ -55,8 +48,9 @@ export const metadata = { title: "Detalle de la sesión · Enséñame Ya" };
  * (sala, marcar completada, cancelar) y el chat con el alumno en la columna
  * derecha (202:87). RLS filtra por `tutor_id`: la reserva de otro da 404.
  *
- * La tarjeta "Grabación" del Figma (202:72) es US-1602 (S4): no se pinta un
- * botón muerto. El nombre del alumno tampoco: `profiles` es RLS own-only.
+ * La tarjeta "Grabación" del Figma (202:72) es US-1802 y ya existe: cada sesión
+ * completada lleva su "Ver grabación" (`RecordingLink`). El nombre del alumno
+ * sigue sin pintarse: `profiles` es RLS own-only.
  */
 export default async function TutorBookingDetailPage({
   params,
@@ -112,14 +106,9 @@ export default async function TutorBookingDetailPage({
     <PanelShell
       items={TUTOR_ITEMS}
       back={{ href: "/tutor/reservas", label: "Volver a reservas" }}
+      eyebrow="Reservas / Detalle"
+      title="Detalle de la sesión"
     >
-      <div>
-        <p className="text-xs text-[#6b6b6b]">Reservas / Detalle</p>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight text-[#19191f]">
-          Detalle de la sesión
-        </h1>
-      </div>
-
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_364px]">
         <div className="flex flex-col gap-5">
           <PanelCard>
@@ -181,7 +170,7 @@ export default async function TutorBookingDetailPage({
                       </div>
                       <div className="flex items-center gap-2.5">
                         <StatusPill className="h-7">
-                          {SESSION_LABEL[s.status] ?? s.status}
+                          {SESSION_STATUS_LABEL[s.status] ?? s.status}
                         </StatusPill>
                         {LIVE.has(booking.status) &&
                         (s.status === "scheduled" || s.status === "in_progress") ? (
@@ -194,6 +183,10 @@ export default async function TutorBookingDetailPage({
                             </Button>
                             <CompleteSessionButton sessionId={s.id} />
                           </>
+                        ) : null}
+                        {/* US-1802 · disponible 30 días desde la clase. */}
+                        {s.status === "completed" ? (
+                          <RecordingLink sessionId={s.id} />
                         ) : null}
                       </div>
                     </li>
@@ -209,9 +202,6 @@ export default async function TutorBookingDetailPage({
               </>
             ) : null}
           </PanelCard>
-
-          {/* "Grabación" (202:72) llega con US-1602 (S4): consentimiento RN-42
-              y 30 días de retención. Sin backend aún, no se pinta. */}
         </div>
 
         <PanelCard className="flex flex-col gap-3">

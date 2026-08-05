@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import { storageUrl } from "@/lib/catalog/format";
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/roles";
@@ -24,7 +25,7 @@ export default async function OnboardingPage({
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, timezone, phone, avatar_path, onboarding_complete")
+    .select("full_name, timezone, phone, avatar_path, onboarding_complete, primary_goal")
     .eq("id", user.id)
     .single();
 
@@ -35,9 +36,7 @@ export default async function OnboardingPage({
     supabase.from("student_interests").select("category_id").eq("student_id", user.id),
   ]);
 
-  const avatarUrl = profile?.avatar_path
-    ? supabase.storage.from("avatars").getPublicUrl(profile.avatar_path).data.publicUrl
-    : null;
+  const avatarUrl = storageUrl("avatars", profile?.avatar_path);
 
   return (
     // AL01: el cuerpo va sobre #f9fafc con ~148 px de aire arriba y ~108 abajo
@@ -58,6 +57,7 @@ export default async function OnboardingPage({
             avatarUrl={avatarUrl}
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
             selectedInterests={(mine ?? []).map((r) => r.category_id)}
+            primaryGoal={profile?.primary_goal ?? null}
           />
         </div>
       </Container>

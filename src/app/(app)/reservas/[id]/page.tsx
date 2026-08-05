@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import {
   BOOKING_STATUS_LABEL,
+  SESSION_STATUS_LABEL,
   formatSessionTime,
   tutorNames,
 } from "@/lib/booking";
@@ -18,18 +19,11 @@ import {
   StatusPill,
 } from "@/components/layout/panel-shell";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { RecordingLink } from "@/components/room/recording-link";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/lib/database.types";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
-
-const SESSION_LABEL: Record<string, string> = {
-  scheduled: "Programada",
-  in_progress: "En curso",
-  completed: "Completada",
-  cancelled: "Cancelada",
-  no_show: "No asistió",
-};
 
 const ROOM_BOOKING = new Set<BookingStatus>(["confirmed", "in_progress"]);
 const CHAT_BOOKING = new Set<BookingStatus>([
@@ -153,7 +147,7 @@ export default async function BookingDetailPage({
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <StatusPill>
-                        {SESSION_LABEL[s.status] ?? s.status}
+                        {SESSION_STATUS_LABEL[s.status] ?? s.status}
                       </StatusPill>
                       {/* El gate real de la ventana (RN-18) lo pone el server;
                           la sala muestra la cuenta regresiva. */}
@@ -166,6 +160,10 @@ export default async function BookingDetailPage({
                         >
                           <Link href={`/room/${s.id}`}>Entrar a sala</Link>
                         </Button>
+                      ) : null}
+                      {/* US-1802 · la grabación vive 30 días desde la clase. */}
+                      {s.status === "completed" ? (
+                        <RecordingLink sessionId={s.id} />
                       ) : null}
                     </div>
                   </li>

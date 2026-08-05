@@ -29,17 +29,12 @@ export default async function PagosPage() {
   const items = await panelItems(user.id, roles);
 
   return (
-    <PanelShell items={items}>
-      <div>
-        <p className="text-xs text-[#6b6b6b]">Pagos</p>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight text-[#19191f]">
-          Métodos de pago
-        </h1>
-        <p className="mt-1 text-[13px] text-[#6b6b6b]">
-          Gestiona la tarjeta con la que pagas tus reservas.
-        </p>
-      </div>
-
+    <PanelShell
+      items={items}
+      eyebrow="Pagos"
+      title="Métodos de pago"
+      description="Gestiona la tarjeta con la que pagas tus reservas."
+    >
       <PanelCard>
         <PanelCardTitle>Tus tarjetas</PanelCardTitle>
         <div className="mt-4">

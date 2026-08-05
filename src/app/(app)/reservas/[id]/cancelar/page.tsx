@@ -73,17 +73,11 @@ export default async function CancelBookingPage({
   ).length;
 
   return (
-    <PanelShell back={{ href: `/reservas/${id}`, label: "Volver al detalle" }}>
-      <div>
-        <h1 className="text-[24px] font-bold tracking-tight text-[#19191f]">
-          Cancelar reserva
-        </h1>
-        <p className="mt-1 text-sm text-[#6b6b6b]">
-          {tutor ? `${booking.products?.title} · con ${tutor}. ` : ""}
-          Revisa la política antes de confirmar. El reembolso depende de cuánto
-          falte para tu próxima sesión.
-        </p>
-      </div>
+    <PanelShell
+      back={{ href: `/reservas/${id}`, label: "Volver al detalle" }}
+      title="Cancelar reserva"
+      description={`${tutor ? `${booking.products?.title} · con ${tutor}. ` : ""}Revisa la política antes de confirmar. El reembolso depende de cuánto falte para tu próxima sesión.`}
+    >
 
       <section className="rounded-[16px] border border-[#e0e0e0] bg-card p-5">
         <h2 className="text-base font-semibold text-[#19191f]">

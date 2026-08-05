@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 
 import { AdminFooter } from "@/components/layout/admin-footer";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { isAdminRoute } from "@/lib/routes";
+import { isAdminRoute } from "@/lib/panel";
 
 /**
  * Pie y chat del área autenticada, elegidos por la ruta **en cliente**. El

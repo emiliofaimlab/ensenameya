@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
+import { stripAccents } from "./format";
 
 /**
  * Consultas del catálogo público (EP-03). Todo pasa por el cliente ANON + RLS:
@@ -11,6 +12,8 @@ import type { Database } from "@/lib/database.types";
  */
 
 type PricingModel = Database["public"]["Enums"]["pricing_model"];
+/** DD-03 · el nivel de la mentoría reusa el enum del nivel del tutor. */
+export type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
 
 export type CategoryTag = { slug: string; name: string };
 
@@ -49,6 +52,9 @@ export type ProductCardData = {
   /** Ruta en el bucket público `product-images` (DD-02). */
   imagePath: string | null;
   categories: CategoryTag[];
+  /** DD-03 — de la mentoría; `null` en las que se publicaron antes del campo. */
+  level: string | null;
+  language: string | null;
   /** Solo lo rellena el listado de P05; `null` donde no se consultó. */
   tutor?: ProductTutor | null;
 };
@@ -83,6 +89,8 @@ function mapProductCard(r: {
   session_duration_min: number | null;
   package_num_sessions: number | null;
   image_path: string | null;
+  level?: string | null;
+  language?: string | null;
   product_categories: { categories: CategoryTag | null }[] | null;
 }): ProductCardData {
   return {
@@ -95,6 +103,8 @@ function mapProductCard(r: {
     sessionDurationMin: r.session_duration_min,
     packageNumSessions: r.package_num_sessions,
     imagePath: r.image_path,
+    level: r.level ?? null,
+    language: r.language ?? null,
     categories: toCategoryTags(r.product_categories),
   };
 }
@@ -212,11 +222,54 @@ export type AvailabilityFilter = "today" | "week" | "weekend";
  *  tutor, y ordenar por él rompería la paginación (pide DD-04 / `EY-114`). */
 export type TutorSort = "rating" | "reviews";
 
+/**
+ * DD-04 · "Inversión por clase" de P04: **rango continuo**, no tramos fijos
+ * (decisión de Jose en EY-114). Los extremos que ofrece el deslizador salen de
+ * los datos, no de una constante — ver `tutorPriceBounds`.
+ *
+ * Filtra por el **precio de entrada**, que es el mismo "Desde $18" que enseña
+ * la tarjeta: la mentoría activa más barata del tutor. Lo calcula la vista
+ * `tutors_public` en Postgres, así que aquí es un `gte`/`lte` normal y el
+ * rango, la paginación y el `count` los resuelve el motor.
+ *
+ * Los tutores sin producto activo tienen `price_from` nulo y quedan fuera en
+ * cuanto se toca el filtro: no tienen precio de entrada que comparar.
+ */
+export async function tutorPriceBounds(): Promise<{ min: number; max: number } | null> {
+  const supabase = await createClient();
+  // Dos consultas de UNA fila (order + limit 1); PostgREST no agrega sin RPC y
+  // montar una función para esto sería más pieza que problema.
+  const [{ data: barato }, { data: caro }] = await Promise.all([
+    supabase
+      .from("tutors_public")
+      .select("price_from")
+      .not("price_from", "is", null)
+      .order("price_from", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("tutors_public")
+      .select("price_from")
+      .not("price_from", "is", null)
+      .order("price_from", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (barato?.price_from == null || caro?.price_from == null) return null;
+  return { min: barato.price_from, max: caro.price_from };
+}
+
 /** US-301 — tutores aprobados, filtrables por categoría y rating, paginados. */
 export async function listApprovedTutors(opts: {
   categorySlug?: string;
   minRating?: number;
   availability?: AvailabilityFilter;
+  /** DD-04 · extremos del rango en unidades menores (inclusivos). */
+  minPrice?: number;
+  maxPrice?: number;
+  /** DD-03 · "Idioma del tutor" (386:1006): el de las clases que publica. */
+  language?: string;
   sort?: TutorSort;
   page: number;
 }): Promise<{ tutors: FeaturedTutor[]; hasMore: boolean; total: number }> {
@@ -256,21 +309,48 @@ export async function listApprovedTutors(opts: {
     if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
   }
 
+  // DD-03 · "Idioma del tutor" del Figma. No hay columna de idioma en el
+  // tutor: se deriva de las clases que publica, que es lo que el alumno
+  // pregunta de verdad ("¿da clases en inglés?").
+  if (opts.language) {
+    const { data } = await supabase
+      .from("products")
+      .select("tutor_id")
+      .eq("status", "active")
+      .eq("language", opts.language);
+    const speak = [...new Set((data ?? []).map((r) => r.tutor_id))];
+    tutorIds = tutorIds ? tutorIds.filter((id) => speak.includes(id)) : speak;
+    if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
+  }
+
+  // La vista trae el precio de entrada ya resuelto por Postgres (DD-04), así
+  // que el filtro de precio es un `gte`/`lte` más: nada que reducir en memoria,
+  // y el `count` sigue siendo el del conjunto filtrado.
   let base = supabase
-    .from("tutor_profiles")
+    .from("tutors_public")
     .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count", {
       count: "exact",
     })
     .eq("approval_status", "approved");
   if (tutorIds) base = base.in("profile_id", tutorIds);
   if (opts.minRating) base = base.gte("rating_avg", opts.minRating);
+  // Los extremos son inclusivos: el deslizador enseña el número que el usuario
+  // ve, y un tutor que cueste exactamente el tope tiene que entrar.
+  if (opts.minPrice != null) base = base.gte("price_from", opts.minPrice);
+  if (opts.maxPrice != null) base = base.lte("price_from", opts.maxPrice);
 
   const orderBy = opts.sort === "reviews" ? "rating_count" : "rating_avg";
   const { data, count } = await base
     .order(orderBy, { ascending: false, nullsFirst: false })
     .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 
-  const rows = data ?? [];
+  // Postgres no declara NOT NULL en las columnas de una vista, así que los
+  // tipos generados las dan todas nullable aunque vengan de columnas que no lo
+  // son. Se estrecha aquí, en el borde, en vez de esparcir el `| null` por toda
+  // la UI: `profile_id` es la PK de `tutor_profiles` y el `from` de la vista.
+  const rows = (data ?? [])
+    .filter((r): r is typeof r & { profile_id: string } => r.profile_id !== null)
+    .map((r) => ({ ...r, rating_count: r.rating_count ?? 0 }));
   const hasMore = rows.length > PAGE_SIZE;
   return {
     tutors: await withProductFacts(rows.slice(0, PAGE_SIZE)),
@@ -343,19 +423,21 @@ export type TutorReview = {
   rating: number;
   comment: string | null;
   createdAt: string;
+  /** Firma del alumno si consintió publicarla (decisión 18); si no, null. */
+  author: string | null;
 };
 
 /**
- * US-902 — reseñas públicas del tutor. Se muestran sin nombre del alumno: el
- * perfil es público (cliente anon) y `profiles.full_name` está protegido por
- * RLS, así que atribuirlas a un nombre no es posible sin romper esa barrera.
- * Anónimas es, además, una elección razonable de privacidad para el MVP.
+ * US-902 — reseñas públicas del tutor. Van **anónimas salvo consentimiento**:
+ * el perfil es público (cliente anon) y `profiles` está cerrado por RLS, así
+ * que el nombre no se lee de ahí — es la copia enmascarada que `submit_review`
+ * guarda en la propia reseña cuando el alumno acepta firmarla (decisión 18).
  */
 export async function listTutorReviews(tutorId: string): Promise<TutorReview[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("reviews")
-    .select("id, rating, comment, created_at")
+    .select("id, rating, comment, created_at, author_display")
     .eq("tutor_id", tutorId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -365,6 +447,7 @@ export async function listTutorReviews(tutorId: string): Promise<TutorReview[]> 
     rating: r.rating,
     comment: r.comment,
     createdAt: r.created_at,
+    author: r.author_display,
   }));
 }
 
@@ -377,7 +460,7 @@ export async function getProductDetail(
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, tutor_id, product_categories(categories(slug, name))",
+      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, level, language, tutor_id, product_categories(categories(slug, name))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -404,6 +487,8 @@ export async function getProductDetail(
     sessionDurationMin: p.session_duration_min,
     packageNumSessions: p.package_num_sessions,
     imagePath: p.image_path,
+    level: p.level,
+    language: p.language,
     categories: toCategoryTags(p.product_categories),
     // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
     faqs: Array.isArray(p.faqs)
@@ -456,6 +541,9 @@ export async function listActiveProducts(opts: {
   maxPriceMinor?: number;
   minSessions?: number;
   maxSessions?: number;
+  /** DD-03 · nivel e idioma DE LA MENTORÍA (filtros de P05/P06). */
+  level?: TeachingLevel;
+  language?: string;
   sort?: ProductSort;
   page: number;
 }): Promise<{
@@ -485,7 +573,7 @@ export async function listActiveProducts(opts: {
   let base = supabase
     .from("products")
     .select(
-      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))",
+      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, level, language, product_categories(categories(slug, name))",
       { count: "exact" },
     )
     .eq("status", "active");
@@ -499,6 +587,10 @@ export async function listActiveProducts(opts: {
   if (opts.maxSessions) {
     base = base.lte("package_num_sessions", opts.maxSessions);
   }
+  // DD-03: quien no lo rellenó no aparece bajo ningún nivel ni idioma. Es lo
+  // correcto — un filtro no debe colar lo que no sabe si encaja.
+  if (opts.level) base = base.eq("level", opts.level);
+  if (opts.language) base = base.eq("language", opts.language);
 
   const { data, count } =
     opts.sort === "price_asc" || opts.sort === "price_desc"
@@ -540,15 +632,6 @@ export async function listActiveProducts(opts: {
     hasMore,
     total: count ?? rows.length,
   };
-}
-
-/**
- * Quita tildes y diacríticos (EY-109). El lado almacenado ya viene sin ellos
- * (`f_unaccent` en la migración `20260721120000`), así que normalizar aquí el
- * término hace que "matematicas" y "Matemáticas" busquen lo mismo.
- */
-function stripAccents(q: string): string {
-  return q.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
 /**

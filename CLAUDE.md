@@ -1,32 +1,53 @@
 # Enséñame Ya — Manual del proyecto
 
 > MVP web: marketplace de tutorías **1:1 en vivo** (alumno ↔ tutor) con reservas,
-> pagos (**capa agnóstica** por geografía; proveedor pendiente — C-01/DP-01, hoy se evalúa DLocal + Stripe de respaldo), videollamada (Daily) y panel admin.
+> pagos (**capa agnóstica** por geografía; proveedor **decidido: DLocal + Stripe** —
+> bloqueado por cuentas y claves, no por la decisión), videollamada (Daily) y panel admin.
 > **Monorepo:** frontend Next.js + backend Supabase en este mismo repo.
 
 ## Planificación — qué construir y en qué orden
 
-- **`docs/BACKLOG.md`** — backlog vigente (18 épicas / 60 historias / 4 sprints), **espejo de Jira**. Manda en *qué y cuándo*.
-- **`docs/PLAN-DESARROLLO.md`** — estado de ejecución (hecho / en curso / pendiente) por sprint.
+- **`docs/BACKLOG.md`** — backlog vigente (24 épicas / 87 historias), **espejo de Jira**. Manda en *qué y cuándo*.
+- **`docs/PLAN-DESARROLLO.md`** — estado de ejecución (hecho / en curso / pendiente). **El más fiel al día de hoy.**
+- **`docs/QA-LANZAMIENTO.md`** — matriz de RLS **ejecutada**, idempotencia de webhooks, barrido responsive y checklist de lanzamiento (US-1602).
 - **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
 - **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (sin local) en Supabase + Vercel, flujo de trabajo y checklist (US-1603).
 
-Próximo sprint: **Sprint 4** (observabilidad, responsive/QA, grabación, avisos in-app). **S1, S2 y S3 cerrados** — S3 con todas sus historias en `Done` y mergeado a prod (2026-07-17). Los **referidos (EP-13) bajaron a los dos últimos sprints** en la reunión del 17-jul, junto con el resto de integraciones.
+### Dónde estamos (2026-08-04)
 
-**EP-22 · Integración Visual** (track paralelo, `EY-102` / IV-01…06) — aplicar el Figma sobre el
-frontend ya construido. **Las 6 IV aplicadas y en producción** (2026-07-22, PR #6→dev, PR #7→main);
-todas en `In Review`. Detalle en `docs/BACKLOG.md` §4.2. Ojo: el Figma **no tiene design system ni
-diseño móvil**, y **ninguna IV pasa de `In Review` sin aprobación del cliente** — que aún no llegó,
-así que producción quedó con el rediseño sin go formal (decisión de negocio, reunión del 17-jul).
+**Sprints abiertos: 6 AC · 7 · 8** (los cuatro originales S1–S4 hace tiempo que se
+quedaron cortos; el marco actual salió de la reunión del 24-jul). En Jira: **110 Done ·
+15 In Review · 10 To Do** sin contar épicas.
 
-**Acuerdos de la reunión del 17-jul ya aplicados** (ver también la sala en vivo LV01, EY-106): chat de
-Daily apagado (`enable_chat:false`, su chat se cobra aparte), prefijo `chat_` en adjuntos del chat,
-**purga del chat PARADA** (`US-1703`/`EY-76` reabierta: retención sin decidir — 5 días activo vs 30 de
-retención + archivado descargable), y **switch de panel** alumno/tutor/admin en el menú de cuenta.
+- **Sprint 7 completo y Sprint 8 casi** — las 15 historias están **en código y en
+  `In Review`**, a la espera de mergear. Se hicieron en las 6 tandas del 29-jul; el
+  detalle, tanda a tanda y con SHA, está en `docs/PLAN-DESARROLLO.md`.
+- **Nada de eso está desplegado.** `main` y `dev` siguen en el commit del 29-jul: todo
+  vive en el **PR #11** hacia `dev`, con 12 migraciones sin aplicar en prod. Hacen falta
+  **dos merges** (a `dev` y luego a `main`) para que llegue a producción.
+- **Sprint 6 AC (5 historias) bloqueado** por las cuentas y claves de Stripe/DLocal.
+- Quedan 5 historias nuevas sin empezar: `EY-148` (RF-03) en Sprint 8, y sin sprint
+  `EY-149` (RF-04), `EY-150` (RF-05), `EY-151` (NTF-21) y `EY-153` (SUP-01).
 
-**EP-23 · Datos que el diseño necesita** (`EY-110` / DD-01…08) — huecos de modelo destapados por
-EP-22: nombre y foto del tutor, imagen de producto, nivel/idioma, subcategorías, páginas legales,
-mensajería. Ver §4.3. Aparte, `EY-109` (buscar sin tildes devolvía cero): ✅ **corregido y en prod**.
+**EP-22 · Integración Visual** (`EY-102` / IV-01…06) — el Figma aplicado sobre el frontend
+ya construido. **Las 6 en producción desde el 2026-07-22** (PR #6→dev, #7→main) y **en
+`Done` en Jira desde el 27-jul**. Detalle en `docs/BACKLOG.md` §4.2. Ojo: el Figma **no
+tiene design system ni diseño móvil**; el responsive de tablet/escritorio sigue esperando
+diseños de Diana (decisión 24).
+
+**Acuerdos del 17-jul aplicados**: chat de Daily apagado (`enable_chat:false`, su chat se
+cobra aparte), prefijo `chat_` en adjuntos y **switch de panel** alumno/tutor/admin.
+La **purga del chat volvió a estar activa** (decisión 22 del cliente: 30 días + descarga
+previa) — migración `20260729180000`, junto con `US-1702`, que es la descarga.
+
+**EP-23 · Datos que el diseño necesita** (`EY-110` / DD-01…08) — de los 8 huecos **queda
+uno**: DD-07 (bandeja de mensajería). DD-01/02 cerradas el 23-jul, DD-03 y DD-04 el
+29-jul (DD-04 rehecho el 4-ago como rango continuo sobre la vista `tutors_public`), DD-05
+resuelta por la decisión 26, DD-06 (legales) el 29-jul y DD-08 con su seed.
+
+⚠️ **`EY-109` (buscar sin tildes) se arregló DOS veces.** El intento del 21-jul no
+funcionó; el bueno es del **27-jul** (commit `b032cc5`, migraciones `20260727120000` y
+`20260727130000`). Si lees "corregido el 21-jul" en algún doc viejo, es esto.
 
 ## Stack
 
@@ -72,8 +93,9 @@ src/lib/database.types.ts     tipos generados (no editar a mano)
 supabase/migrations/          esquema versionado (fuente de verdad)
 supabase/config.toml          config del CLI de Supabase (link, migraciones)
 docs/BACKLOG.md               backlog vigente (sprints, espejo de Jira)
-docs/PLAN-DESARROLLO.md       estado de ejecución por sprint
-docs/ENTORNOS.md              ambientes dev + prod (Supabase + Vercel) + local
+docs/PLAN-DESARROLLO.md       estado de ejecución por sprint (el más fiel)
+docs/QA-LANZAMIENTO.md        matriz de RLS ejecutada + checklist de lanzamiento
+docs/ENTORNOS.md              ambientes dev + prod cloud (Supabase + Vercel), sin local
 docs/context/                 docs técnicos (Docs 0–9 + adenda + revisión + aprobación cliente)
 ```
 
@@ -83,6 +105,7 @@ docs/context/                 docs técnicos (Docs 0–9 + adenda + revisión + 
 - Rol admin: helper `public.has_role('admin')` (SECURITY DEFINER, evita recursión).
 - Alta de perfil + rol `alumno` automática al registrarse (trigger `handle_new_user`).
 - **Grants:** los proyectos tienen "auto-expose new tables" **OFF** → cada tabla expuesta al cliente declara sus `grant` (públicas→`anon`, privadas→`authenticated`) junto a sus políticas. RLS sigue siendo la barrera default-deny.
+- ⚠️ **Vistas: `with (security_invoker = true)` SIEMPRE.** Una vista corre por defecto con los privilegios de **su dueño**, así que sin eso se salta la RLS de las tablas que envuelve y publica lo que esas políticas tapaban. Con el invoker puesto, mandan las políticas de siempre. Precedente: `tutors_public` (`20260804120000`). Y columnas explícitas, no `tabla.*`: lo que se añada mañana a la tabla no debe colarse solo en una superficie pública.
 - **Docs vs código:** los Docs 0–9 son el **objetivo** (p. ej. nombran el enum `user_role` y `has_role(uid, role)` de dos args); el **código manda** en nombres concretos (enum real `app_role`, `has_role('admin')` de un arg). Ante divergencia, gana la migración.
 
 ## Contexto profundo (lee el doc relevante, no los 12)
@@ -101,9 +124,12 @@ Todos en `docs/context/`.
 **Visión comercial / aprobación del cliente:** `APROBACION-CLIENTE-FAIMLAB.md`
 (v1 · 2026-06-09) — resumen **completo y no técnico** para firma del cliente:
 perfiles, ~49 pantallas, flujos FL-01…05, procesos de pago por geografía y
-**15 decisiones a confirmar `C-01…C-15`** (bloqueantes restantes: C-01 proveedores ·
-C-13 mercado/Venezuela · C-14 requisitos para aprobar tutor). **C-03 reembolsos →
-RESUELTO por RN-37** (≥24h=100%, <24h alumno=50%, tutor=100%; ver adenda §6).
+**15 decisiones a confirmar `C-01…C-15`**. **Resueltas: C-01** (proveedor → DLocal +
+Stripe; lo que bloquea ahora son las cuentas y claves), **C-03** (reembolsos → RN-37:
+≥24h=100%, <24h alumno=50%, tutor=100%; ver adenda §6) y **C-14** (7 documentos de KYC,
+migración `20260715130000`). El bloqueante de negocio que queda es **C-13**
+(mercado/Venezuela y métodos de pago); el resto tienen default operable — ver el tracker
+de `docs/PLAN-DESARROLLO.md`.
 Los `C-xx` son la cara-cliente de las `DP-xx`/supuestos (C-01→DP-01, C-02→DP-02,
 C-03→DP-03, C-04→DP-06, C-05→DP-08, C-10→DP-04, C-11→DP-05, C-15→DP-07); cuando el
 cliente responda se consumen como **configuración** (regla de oro 8), no como código.

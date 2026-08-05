@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { NotificationsBell } from "@/components/layout/notifications-bell";
+import type { AppNotice } from "@/lib/notifications";
 import {
   Avatar,
   AvatarFallback,
@@ -37,7 +39,7 @@ import { Container } from "@/components/layout/container";
 import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
 import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 import { cn } from "@/lib/utils";
-import { isAdminRoute, isOnboardingRoute } from "@/lib/routes";
+import { isAdminRoute, isOnboardingRoute } from "@/lib/panel";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
 export type HeaderUser = {
@@ -184,7 +186,14 @@ function SearchBox({ className }: { className?: string }) {
   );
 }
 
-export function SiteHeader({ user }: { user?: HeaderUser | null }) {
+export function SiteHeader({
+  user,
+  notices = [],
+}: {
+  user?: HeaderUser | null;
+  /** US-1203 · avisos ya consultados por el layout (server). */
+  notices?: AppNotice[];
+}) {
   const pathname = usePathname();
   /**
    * Modo onboarding (AL01 180:1282 / TU01): sin "Panel" ni menú de cuenta, con
@@ -291,6 +300,8 @@ export function SiteHeader({ user }: { user?: HeaderUser | null }) {
         ) : (
           <>
         <div className="hidden items-center gap-2 md:flex">
+          {/* US-1203 · avisos in-app, solo con sesión (son los tuyos). */}
+          {user ? <NotificationsBell initial={notices} /> : null}
           {user ? (
             <DropdownMenu open={accountOpen} onOpenChange={setAccountOpen}>
               <DropdownMenuTrigger asChild>

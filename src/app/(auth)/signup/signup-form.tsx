@@ -63,7 +63,9 @@ export function SignupForm({
           // El rol real lo asigna el trigger (=alumno); la intención (S-37)
           // se guarda para el onboarding por rol (AL01 / TU01).
           intended_role: intent,
-          referral_code: referralCode, // S-18 (atribución; se persiste abajo)
+          // S-18: lo persiste `handle_new_user` al crear el perfil — también
+          // cuando el alta espera confirmación por correo y aquí no hay sesión.
+          referral_code: referralCode,
         },
       },
     });
@@ -79,13 +81,6 @@ export function SignupForm({
 
     if (data.session) {
       // Sesión inmediata (sin confirmación por correo).
-      if (referralCode && data.user) {
-        // RLS profiles_update_own permite escribir el propio perfil.
-        await supabase
-          .from("profiles")
-          .update({ referral_code: referralCode })
-          .eq("id", data.user.id);
-      }
       // US-201: onboarding obligatorio tras registrarse; conserva el destino previo.
       router.push(`/onboarding${next ? `?next=${encodeURIComponent(next)}` : ""}`);
       router.refresh();
@@ -122,6 +117,7 @@ export function SignupForm({
       <GoogleButton
         next={next}
         intent={intent}
+        referralCode={referralCode}
         label="Registrarme con Google"
         className={`${AUTH_FIELD} font-medium`}
       />
