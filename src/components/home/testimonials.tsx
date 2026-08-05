@@ -1,5 +1,6 @@
 import { StarIcon } from "lucide-react";
 
+import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import type { Testimonial } from "@/lib/catalog/queries";
 
@@ -24,7 +25,11 @@ export function Testimonials({ items }: { items: Testimonial[] }) {
   );
 
   return (
-    <div className="mx-auto w-full max-w-[1221px] px-4 sm:px-6">
+    // R24-01: el ancho lo manda `Container`, como el resto del sitio. Antes
+    // llevaba un `max-w-[1221px]` propio —la medida del bloque en el Figma de
+    // 1280— y en pantallas grandes se quedaba estrecho al lado de las bandas
+    // vecinas, que sí crecen.
+    <Container>
       <Section>
         <div className="relative overflow-hidden rounded-[17px] bg-black py-12">
           {/* Patrón de ondas del Figma. */}
@@ -92,6 +97,6 @@ export function Testimonials({ items }: { items: Testimonial[] }) {
           </div>
         </div>
       </Section>
-    </div>
+    </Container>
   );
 }

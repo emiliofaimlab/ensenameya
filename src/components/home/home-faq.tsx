@@ -107,7 +107,10 @@ export function HomeFaq({
       className={
         aside
           ? "divide-y divide-border"
-          : "mx-auto mt-8 max-w-[1016px] divide-y divide-border"
+          // R24-01: sin `max-w` propio — el `Container` de fuera ya pone el
+          // ancho, y el 1016 del Figma dejaba el acordeón encogido frente a las
+          // secciones de al lado.
+          : "mt-8 divide-y divide-border"
       }
     >
       {items.map(({ q, a }) => (
