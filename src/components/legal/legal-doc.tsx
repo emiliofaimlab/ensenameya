@@ -17,14 +17,25 @@ import { CANCELLATION_POLICY as P } from "@/lib/policy";
  * §5), purga real del chat y su descarga (§6), y la cookie `ey-ref` de
  * referidos — hoy ninguna de las tres existe en producción.
  *
+ * ⚠️ OJO — el cliente YA tiene términos y privacidad publicados en
+ * `ensenameya.com` (GoDaddy, «Última actualización: Marzo 23, 2026»). Estos
+ * textos son su versión ampliada y alineada con lo que la app hace de verdad,
+ * y divergen del suyo en dos puntos a propósito:
+ *   · el suyo nombra «Stripe o Mercado Pago» como procesador; aquí se dice
+ *     «el proveedor de pagos», porque C-01/DP-01 sigue sin decidir.
+ *   · el suyo deja los reembolsos vagos («puede variar según cada caso»); aquí
+ *     se declara RN-37, que es lo que `cancel_booking` aplica.
+ * Mientras los dos sitios estén publicados hay dos contratos distintos vivos.
+ * Eso lo tiene que resolver negocio, no el código.
+ *
  * ⚠️ Redactado desde el funcionamiento del sistema, **no por un abogado**: lo
  * que aquí se describe es exacto, pero un contrato de servicio suele necesitar
- * además jurisdicción, limitación de responsabilidad y resolución de disputas,
- * que no son datos que el código pueda contestar.
+ * además jurisdicción, identidad fiscal del responsable y resolución de
+ * disputas, que no son datos que el código pueda contestar.
  */
 
-/** ⚠️ Buzón de contacto — cámbialo por el real antes de publicar. */
-const CONTACTO = "hola@ensenameya.com";
+/** El buzón oficial del cliente, el mismo que publica en ensenameya.com. */
+const CONTACTO = "info@ensenameya.com";
 
 /** Fecha de la última revisión de estos textos. */
 const ACTUALIZADO = "6 de agosto de 2026";
@@ -104,7 +115,16 @@ const TERMS: Doc = {
       ],
     },
     {
-      titulo: "10. Cambios y contacto",
+      // El cliente ya publica esta limitación en ensenameya.com §8; se
+      // mantiene aquí para no perderla al unificar los dos textos.
+      titulo: "10. Limitación de responsabilidad",
+      parrafos: [
+        "Enséñame Ya no responde de la calidad, la exactitud ni el resultado de las clases, que son responsabilidad de cada tutor, ni de las disputas que surjan entre alumno y tutor más allá de la política de reembolsos descrita en el punto 4.",
+        "Tampoco respondemos de las interrupciones causadas por servicios externos de los que dependemos —proveedor de videollamada, proveedor de pagos, alojamiento— ni por fallos de la conexión o del equipo de los participantes. Si una clase no puede celebrarse por una caída de la plataforma, se cancela y se reembolsa el 100 %.",
+      ],
+    },
+    {
+      titulo: "11. Cambios y contacto",
       parrafos: [
         "Podemos actualizar estas condiciones; la fecha de la última revisión aparece al final de esta página. Si el cambio es sustancial, lo avisaremos por los medios de contacto que nos hayas facilitado.",
         `Para cualquier duda sobre estas condiciones, escríbenos a ${CONTACTO}.`,
