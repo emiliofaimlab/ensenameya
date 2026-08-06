@@ -12,10 +12,10 @@ import { CANCELLATION_POLICY as P } from "@/lib/policy";
  * porcentajes de reembolso se importan de `lib/policy.ts` para que no puedan
  * divergir de lo que aplica `cancel_booking`.
  *
- * ⚠️ Si cambia el comportamiento, cambia el texto. Al mergear lo pendiente de
- * los sprints 7–8 hay que revisar tres puntos: grabación de clases (términos
- * §5), purga real del chat y su descarga (§6), y la cookie `ey-ref` de
- * referidos — hoy ninguna de las tres existe en producción.
+ * ⚠️ Si cambia el comportamiento, cambia el texto. Puntos que ya han cambiado
+ * una vez y son los primeros que se quedan viejos: grabación (términos §5),
+ * retención del chat (§6), terceros y plazos (privacidad §3 y §5) y el
+ * inventario de cookies.
  *
  * ⚠️ OJO — el cliente YA tiene términos y privacidad publicados en
  * `ensenameya.com` (GoDaddy, «Última actualización: Marzo 23, 2026»). Estos
@@ -83,14 +83,15 @@ const TERMS: Doc = {
       titulo: "5. La clase en vivo",
       parrafos: [
         "La sala de videollamada se abre 10 minutos antes de la hora de inicio y se cierra 10 minutos después de la hora de fin. Fuera de esa ventana no se puede entrar, ni siquiera conservando el enlace: el permiso de entrada se firma para cada participante y caduca con la sesión.",
-        "La plataforma no graba las clases. Si en algún momento se habilita la grabación, requerirá el consentimiento expreso de alumno y tutor por separado, y se anunciará antes de activarla.",
+        "Una clase solo se graba si alumno y tutor lo aceptan por separado, y el consentimiento se da antes de entrar a la sala. Si falta el de cualquiera de los dos, la sala ni siquiera ofrece el botón de grabar: no hay forma de grabar sin el sí de ambos. Puedes retirar tu consentimiento, y a partir de ese momento deja de poder grabarse.",
+        "Cuando hay grabación, queda disponible para los dos participantes durante 30 días desde que termina la clase; pasado ese plazo dejamos de darte acceso a ella.",
       ],
     },
     {
       titulo: "6. Chat de la reserva",
       parrafos: [
         "Cada reserva tiene un chat privado entre alumno y tutor, disponible desde 2 días antes de la primera clase. Solo pueden leerlo esas dos personas.",
-        "Cada mensaje y cada archivo adjunto se guardan con una fecha de caducidad a 30 días de su envío. El borrado automático está en pausa mientras se define la política definitiva de retención y de archivado descargable; cuando se active, se avisará con antelación.",
+        "Los mensajes y los archivos adjuntos se borran a los 30 días de haberse enviado. El borrado es automático y definitivo: se elimina tanto el mensaje como el archivo. Antes de que eso ocurra puedes descargarte la conversación entera desde la propia reserva.",
       ],
     },
     {
@@ -144,6 +145,7 @@ const PRIVACY: Doc = {
         "Al registrarte: tu correo electrónico y tu nombre. Al completar el perfil: zona horaria, teléfono, y opcionalmente una foto, tus intereses y tu objetivo de aprendizaje.",
         "Si te registras como tutor, además: el nombre público que decidas mostrar, tu titular profesional, tu biografía, tus enlaces profesionales y la documentación de verificación (documento de identidad, titulación, certificados, diplomas, expediente académico y currículum).",
         "Del uso de la plataforma: tus reservas, los pagos asociados, los mensajes del chat de cada reserva y las reseñas que escribas. Si eres tutor, también tus liquidaciones.",
+        "Si tú y la otra parte aceptáis grabar una clase, la grabación de esa sesión —imagen y voz de ambos— pasa a ser un dato que tratamos. Sin las dos aceptaciones no existe grabación alguna.",
         "No almacenamos números de tarjeta. El pago se realiza en el entorno del proveedor de pagos; si eliges guardar un medio de pago para futuras compras, de él solo conservamos la marca (Visa, Mastercard…), los últimos cuatro dígitos y una referencia opaca del proveedor.",
       ],
     },
@@ -160,9 +162,11 @@ const PRIVACY: Doc = {
       titulo: "3. Quién más los trata",
       parrafos: [
         "Supabase, como proveedor de base de datos, autenticación y almacenamiento de archivos.",
-        "Daily, como proveedor de la videollamada. Los permisos de entrada a la sala se firman en nuestro servidor, van acotados a una sesión y una persona, y no se almacenan.",
+        "Daily, como proveedor de la videollamada. Los permisos de entrada a la sala se firman en nuestro servidor, van acotados a una sesión y una persona, y no se almacenan. Si la clase se graba con el consentimiento de ambos, el archivo se aloja también en Daily.",
         "Vercel, como proveedor de alojamiento de la aplicación.",
         "El proveedor de pagos, que trata los datos necesarios para cobrar y para liquidar a los tutores.",
+        "Sentry, para registrar errores técnicos de la aplicación y poder corregirlos. Está configurado expresamente para no enviar datos personales: recoge el fallo, no quién lo sufrió.",
+        "Referral Factory, solo si participas en el programa de invitaciones. El programa entero (códigos, recompensas, seguimiento) vive en su plataforma; nosotros únicamente guardamos el código con el que llegaste para atribuir la invitación. Si no usas un enlace de invitación, no interviene.",
         "Ninguno de ellos usa tus datos para fines propios: los tratan por encargo nuestro y solo para prestar el servicio que les corresponde.",
       ],
     },
@@ -171,13 +175,14 @@ const PRIVACY: Doc = {
       parrafos: [
         "El perfil de un tutor aprobado es público: su nombre público, foto, titular, biografía, valoración y mentorías. Un tutor que no ha sido aprobado no aparece en ninguna parte del catálogo, y su documentación de verificación no es pública en ningún caso.",
         "El perfil de los alumnos es privado. Las reseñas del perfil de un tutor se publican sin identificar a su autor; en la página de inicio se muestra una selección de reseñas firmada con el nombre y la inicial del apellido.",
-        "El chat de una reserva solo es accesible para sus dos participantes: ni siquiera el personal de administración puede leerlo.",
+        "El chat de una reserva solo es accesible para sus dos participantes: ni siquiera el personal de administración puede leerlo. La grabación de una clase, cuando existe, sigue exactamente el mismo criterio.",
       ],
     },
     {
       titulo: "5. Cuánto tiempo los conservamos",
       parrafos: [
-        "Los mensajes del chat y sus adjuntos llevan una fecha de caducidad a 30 días de su envío. El borrado automático está temporalmente en pausa mientras se define la política definitiva de retención.",
+        "Los mensajes del chat y sus adjuntos se borran automáticamente a los 30 días de haberse enviado, mensaje y archivo. Puedes descargarte la conversación antes de que caduque.",
+        "Las grabaciones de clase dejan de estar accesibles 30 días después de terminar la sesión. Con transparencia: hoy lo que hacemos al cumplirse el plazo es dejar de servir el acceso al archivo; su eliminación en los servidores del proveedor de videollamada todavía no está automatizada y está pendiente de implementarse.",
         "Los datos de tu cuenta, tus reservas y sus pagos se conservan mientras la cuenta esté activa, y después durante el plazo que exija la normativa fiscal y contable aplicable a las operaciones realizadas.",
       ],
     },
@@ -214,6 +219,7 @@ const COOKIES: Doc = {
       parrafos: [
         "«ey-tz» guarda la zona horaria que detecta tu navegador, para mostrarte los horarios de las clases en tu hora local incluso antes de que inicies sesión. Dura un año.",
         "«ey-panel» recuerda desde qué panel llegaste (alumno, tutor o administración), para enseñarte el menú correcto en las pantallas que comparten los tres perfiles. Dura 30 días.",
+        "«ey-ref» solo se escribe si llegas por el enlace de invitación de otra persona: guarda ese código para que la recomendación se le atribuya si acabas registrándote. Si no vienes de una invitación, no se crea.",
       ],
     },
     {
