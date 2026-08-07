@@ -161,7 +161,7 @@ export function CheckoutForm({
                 {!tarjeta
                   ? "SIN TARJETA GUARDADA"
                   : tarjetas.length > 1
-                    ? `TITULAR · +${tarjetas.length - 1} MÁS`
+                    ? `1 DE ${tarjetas.length} · ELIGES AL PAGAR`
                     : "TITULAR"}
               </span>
               <span className="font-semibold capitalize">
