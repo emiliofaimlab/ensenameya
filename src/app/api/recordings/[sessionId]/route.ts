@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
-import { isDailyConfigured, listRecordings, recordingLink } from "@/lib/daily";
-
-/** RN-42 / NTF-19: la grabación vive 30 días desde que la clase termina. */
-export const RECORDING_DAYS = 30;
+import {
+  RECORDING_DAYS,
+  isDailyConfigured,
+  listRecordings,
+  recordingLink,
+} from "@/lib/daily";
 
 /**
  * US-1802 · ver y descargar la grabación de una sesión.
@@ -16,9 +18,9 @@ export const RECORDING_DAYS = 30;
  * es el del chat, RN-41).
  *
  * La caducidad se aplica **al servir**: pasados los 30 días el enlace deja de
- * darse aunque el fichero siga en Daily. Borrarlo allí necesita la API key en
- * un job (Edge Function), igual que el `provider.payout()` de EP-10 — hasta
- * entonces la retención se cumple de cara al usuario, no en el proveedor.
+ * darse. Quien lo borra de verdad en el proveedor es el job diario
+ * `/api/cron/recordings-purge`; esta comprobación se queda igualmente porque
+ * cierra la ventana entre que la grabación vence y el job pasa.
  */
 export async function GET(
   _req: Request,

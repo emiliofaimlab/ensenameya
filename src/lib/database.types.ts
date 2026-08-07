@@ -924,6 +924,7 @@ export type Database = {
           daily_room_url: string | null
           end_at: string
           id: string
+          recordings_purged_at: string | null
           sequence_no: number | null
           start_at: string
           status: Database["public"]["Enums"]["session_status"]
@@ -942,6 +943,7 @@ export type Database = {
           daily_room_url?: string | null
           end_at: string
           id?: string
+          recordings_purged_at?: string | null
           sequence_no?: number | null
           start_at: string
           status?: Database["public"]["Enums"]["session_status"]
@@ -960,6 +962,7 @@ export type Database = {
           daily_room_url?: string | null
           end_at?: string
           id?: string
+          recordings_purged_at?: string | null
           sequence_no?: number | null
           start_at?: string
           status?: Database["public"]["Enums"]["session_status"]

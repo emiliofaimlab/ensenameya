@@ -125,6 +125,14 @@ export async function mintToken(opts: {
   return token;
 }
 
+/**
+ * RN-42 / NTF-19: una grabación vive 30 días desde que la clase termina. Vive
+ * aquí y no en la ruta que la sirve porque hay DOS consumidores —el endpoint
+ * que da el enlace y el job que borra— y si cada uno tuviera su número la
+ * retención publicada dejaría de significar una sola cosa.
+ */
+export const RECORDING_DAYS = 30;
+
 /** Grabación de una sala, tal como la devuelve Daily. */
 export type DailyRecording = {
   id: string;
@@ -158,4 +166,18 @@ export async function recordingLink(id: string): Promise<string | null> {
     link?: string;
   };
   return download_link ?? link ?? null;
+}
+
+/**
+ * Borra una grabación en el proveedor. Es lo que convierte la retención de
+ * 30 días en un borrado de verdad y no solo en un 410 al pedir el enlace
+ * (`/api/cron/recordings-purge`).
+ *
+ * Un 404 cuenta como éxito: significa que ya no está, que es exactamente el
+ * estado que buscábamos. Sin eso, un reintento tras una purga a medias se
+ * quedaría atascado para siempre en la misma sesión.
+ */
+export async function deleteRecording(id: string): Promise<boolean> {
+  const res = await daily(`/recordings/${id}`, { method: "DELETE" });
+  return res.ok || res.status === 404;
 }
