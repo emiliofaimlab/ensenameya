@@ -29,7 +29,7 @@ export async function GET(
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, status, end_at")
+    .select("id, status, end_at, daily_room_name")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -50,7 +50,16 @@ export async function GET(
     return NextResponse.json({ status: "unavailable", simulated: true });
   }
 
-  const recordings = await listRecordings(`ey-${sessionId}`);
+  // El nombre de sala lo escribe `join_session` en la propia fila. Se LEE, no
+  // se vuelve a derivar: derivarlo aquí ya falló una vez —la BD lo construye
+  // como `'ey-' || replace(id::text,'-','')` y aquí se montaba con los guiones,
+  // así que el nombre nunca coincidía y toda grabación salía como inexistente.
+  // Si es null, nadie llegó a entrar a la sala: no hay nada que grabar.
+  if (!session.daily_room_name) {
+    return NextResponse.json({ status: "none", expiresAt });
+  }
+
+  const recordings = await listRecordings(session.daily_room_name);
   if (recordings.length === 0) {
     return NextResponse.json({ status: "none", expiresAt });
   }
