@@ -29,8 +29,9 @@ import {
  * hoy funciona igual que siempre.
  */
 export async function POST(req: Request) {
-  const { bookingId } = (await req.json().catch(() => ({}))) as {
+  const { bookingId, guardarTarjeta } = (await req.json().catch(() => ({}))) as {
     bookingId?: string;
+    guardarTarjeta?: boolean;
   };
   if (!bookingId) {
     return NextResponse.json({ error: "falta bookingId" }, { status: 400 });
@@ -119,7 +120,15 @@ export async function POST(req: Request) {
       // reembolso y disputa solo traen el PaymentIntent. Sin esta segunda copia
       // no habría forma de mapear un reembolso a su reserva.
       metadata: { booking_id: bookingId },
-      payment_intent_data: { metadata: { booking_id: bookingId } },
+      payment_intent_data: {
+        metadata: { booking_id: bookingId },
+        // PAC-02 · solo si la persona marcó la casilla, que nace DESMARCADA.
+        // `on_session` y no `off_session` a propósito: el permiso que pedimos
+        // es reutilizar la tarjeta con ella delante, en su próxima reserva —
+        // no cobrarle cuando no está. Es el permiso menor de los dos y es el
+        // que corresponde a lo que dice la casilla.
+        ...(guardarTarjeta ? { setup_future_usage: "on_session" as const } : {}),
+      },
       success_url: `${base}/reservas/${bookingId}/confirmacion`,
       cancel_url: `${base}/reservar/${booking.product_id}/checkout?cancelado=1`,
     },
@@ -128,9 +137,13 @@ export async function POST(req: Request) {
     { idempotencyKey: claveIdem },
   );
 
+  // La casilla entra en la clave: reutilizar la misma con parámetros distintos
+  // es un error de la API, no la respuesta cacheada.
+  const clave = `booking-${bookingId}${guardarTarjeta ? "-save" : ""}`;
+
   let session;
   try {
-    session = await crearSesion(customer, `booking-${bookingId}`);
+    session = await crearSesion(customer, clave);
   } catch (e) {
     // El Customer que teníamos guardado ya no existe en Stripe (datos de prueba
     // borrados, cuenta cambiada, alguien lo eliminó). Sin esto, esa persona se
@@ -146,7 +159,7 @@ export async function POST(req: Request) {
     await guardarCustomer(customer);
     // Clave de idempotencia DISTINTA: reutilizar la misma con parámetros
     // distintos es un error de la API de Stripe, no la respuesta cacheada.
-    session = await crearSesion(customer, `booking-${bookingId}-r2`);
+    session = await crearSesion(customer, `${clave}-r2`);
   }
 
   if (!session.url) {

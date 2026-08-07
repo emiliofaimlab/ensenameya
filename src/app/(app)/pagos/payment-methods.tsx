@@ -1,95 +1,93 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { CreditCardIcon } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
-export type Card = { id: string; brand: string | null; last4: string | null };
-
-const selectClasses =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+export type Card = {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+};
 
 /**
- * US-607 (RN-43) — card-on-file con PSP simulado. Solo marca + últimos 4 (display);
- * el PAN nunca se toca. El token lo emitiría el PSP; aquí es un stub reutilizable.
+ * PAC-02 · las tarjetas guardadas, tal como las tiene el proveedor.
+ *
+ * NO HAY FORMULARIO PARA AÑADIR, y es deliberado. Una tarjeta se guarda en el
+ * único sitio donde se escribe: el checkout alojado, marcando la casilla. Un
+ * formulario aquí solo podría hacer una de dos cosas —pedir el PAN, que nos
+ * metería en PCI-DSS SAQ D, o fabricar una fila falsa, que es lo que hacía la
+ * versión simulada— y ninguna de las dos vale.
  */
-export function PaymentMethods({ userId, cards }: { userId: string; cards: Card[] }) {
+export function PaymentMethods({ cards }: { cards: Card[] }) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [brand, setBrand] = useState("Visa");
-  const [last4, setLast4] = useState("");
+  const [borrando, setBorrando] = useState<string | null>(null);
 
-  async function addCard(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!/^\d{4}$/.test(last4)) return toast.error("Ingresa los últimos 4 dígitos.");
-
-    setBusy(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("payment_methods").insert({
-      profile_id: userId,
-      provider: "simulated",
-      provider_token: `tok_sim_${crypto.randomUUID()}`, // el PSP real lo devuelve
-      brand,
-      last4,
+  async function quitar(id: string) {
+    setBorrando(id);
+    const res = await fetch("/api/pagos/metodos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethodId: id }),
     });
-    setBusy(false);
-    if (error) return toast.error("No se pudo guardar la tarjeta.");
-    toast.success("Tarjeta guardada.");
-    setLast4("");
+    setBorrando(null);
+    if (!res.ok) {
+      const { error } = (await res.json().catch(() => ({}))) as { error?: string };
+      return toast.error(error ?? "No se pudo quitar la tarjeta.");
+    }
+    toast.success("Tarjeta eliminada.");
     router.refresh();
   }
 
-  async function removeCard(id: string) {
-    setBusy(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("payment_methods").delete().eq("id", id);
-    setBusy(false);
-    if (error) return toast.error("No se pudo eliminar.");
-    router.refresh();
+  if (cards.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-[#d8d8d8] px-5 py-8 text-center">
+        <CreditCardIcon className="mx-auto size-6 text-[#9a9a9a]" />
+        <p className="mt-3 text-sm font-medium text-[#19191f]">
+          No tienes tarjetas guardadas
+        </p>
+        <p className="mx-auto mt-1 max-w-[380px] text-[13px] text-[#6b6b6b]">
+          Al pagar una reserva puedes marcar «Guardar esta tarjeta» y aparecerá
+          aquí para las siguientes. Nunca escribes los datos de tu tarjeta en
+          Enséñame Ya.
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {cards.length > 0 ? (
-        <ul className="flex flex-col divide-y rounded-lg border">
-          {cards.map((c) => (
-            <li key={c.id} className="flex items-center justify-between px-4 py-3 text-sm">
-              <span>
-                {c.brand ?? "Tarjeta"} •••• {c.last4}
+    <ul className="flex flex-col gap-2.5">
+      {cards.map((c) => (
+        <li
+          key={c.id}
+          className="flex items-center justify-between gap-4 rounded-xl border border-[#e0e0e0] px-4 py-3"
+        >
+          <span className="flex items-center gap-3">
+            <CreditCardIcon className="size-4 shrink-0 text-[#6b6b6b]" />
+            <span>
+              <span className="block text-sm font-medium text-[#19191f] capitalize">
+                {c.brand} •••• {c.last4}
               </span>
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => removeCard(c.id)}>
-                Eliminar
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-muted-foreground text-sm">No tienes tarjetas guardadas.</p>
-      )}
-
-      <form onSubmit={addCard} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <div className="grid gap-1.5">
-          <Label htmlFor="brand">Marca</Label>
-          <select id="brand" className={selectClasses} value={brand} onChange={(e) => setBrand(e.target.value)}>
-            <option>Visa</option>
-            <option>Mastercard</option>
-            <option>Amex</option>
-          </select>
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="last4">Últimos 4 dígitos</Label>
-          <Input id="last4" inputMode="numeric" maxLength={4} value={last4} onChange={(e) => setLast4(e.target.value.replace(/\D/g, ""))} placeholder="4242" />
-        </div>
-        <Button type="submit" disabled={busy}>Guardar tarjeta</Button>
-      </form>
-      <p className="text-muted-foreground text-xs">
-        Pago simulado — no ingreses datos reales de tarjeta.
-      </p>
-    </div>
+              <span className="block text-xs text-[#6b6b6b]">
+                Vence {String(c.expMonth).padStart(2, "0")}/{String(c.expYear).slice(-2)}
+              </span>
+            </span>
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={borrando === c.id}
+            onClick={() => quitar(c.id)}
+          >
+            {borrando === c.id ? "Quitando…" : "Quitar"}
+          </Button>
+        </li>
+      ))}
+    </ul>
   );
 }

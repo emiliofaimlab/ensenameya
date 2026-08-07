@@ -65,6 +65,8 @@ export function CheckoutForm({
 }) {
   const router = useRouter();
   const [state, setState] = useState<State>("idle");
+  // DESMARCADA a propósito: guardar un medio de pago se pide, no se presupone.
+  const [guardarTarjeta, setGuardarTarjeta] = useState(false);
 
   async function pay(success: boolean) {
     setState("processing");
@@ -86,7 +88,7 @@ export function CheckoutForm({
     const res = await fetch("/api/pagos/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bookingId }),
+      body: JSON.stringify({ bookingId, guardarTarjeta }),
     });
     const salida = (await res.json().catch(() => ({}))) as {
       url?: string;
@@ -221,6 +223,24 @@ export function CheckoutForm({
             Entorno de pruebas: el cobro está simulado, no se mueve dinero real.
           </p>
         ) : null}
+
+        {/* Consentimiento explícito para el card-on-file (PAC-02). Va aquí y no
+            en la pasarela para que se lea en nuestro idioma y ANTES de salir del
+            sitio. Se traduce en `setup_future_usage` solo si está marcada. */}
+        {simulado ? null : (
+          <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-[13px] text-[#4b4b4b]">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 shrink-0 accent-[color:var(--brand)]"
+              checked={guardarTarjeta}
+              onChange={(e) => setGuardarTarjeta(e.target.checked)}
+            />
+            <span>
+              Guardar esta tarjeta para mis próximas reservas. Puedes quitarla
+              cuando quieras desde <strong>Métodos de pago</strong>.
+            </span>
+          </label>
+        )}
 
         <div className="mt-6 flex flex-wrap gap-3">
           <Button

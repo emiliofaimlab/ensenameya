@@ -92,6 +92,47 @@ export async function ensureCustomer(opts: {
   return creado.id;
 }
 
+/** Una tarjeta guardada, con lo justo para enseñarla. Nunca el PAN. */
+export type SavedCard = {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+};
+
+/**
+ * PAC-02 · las tarjetas guardadas de una persona.
+ *
+ * Se leen de Stripe y NO de nuestra tabla: el PSP es quien sabe si una tarjeta
+ * sigue viva, si caducó o si el banco la reemplazó. Una copia local solo añade
+ * un sitio donde quedar desfasado y enseñarle al alumno una tarjeta que ya no
+ * existe.
+ */
+export async function listSavedCards(customerId: string): Promise<SavedCard[]> {
+  const res = await stripe().paymentMethods.list({
+    customer: customerId,
+    type: "card",
+  });
+  return res.data
+    .filter((pm) => pm.card)
+    .map((pm) => ({
+      id: pm.id,
+      brand: pm.card!.brand,
+      last4: pm.card!.last4,
+      expMonth: pm.card!.exp_month,
+      expYear: pm.card!.exp_year,
+    }));
+}
+
+/**
+ * Desvincula una tarjeta del Customer. `detach` no borra el histórico de cobros
+ * —los pagos ya hechos siguen ahí, como debe ser— solo deja de poder usarse.
+ */
+export async function detachCard(paymentMethodId: string): Promise<void> {
+  await stripe().paymentMethods.detach(paymentMethodId);
+}
+
 /**
  * ¿Stripe se está quejando de que el Customer que le pasamos no existe?
  *
