@@ -1394,7 +1394,22 @@ export type Database = {
         Args: { p_action: string; p_payout_id: string }
         Returns: string
       }
+      mark_notification: {
+        Args: { p_id: string; p_ok: boolean }
+        Returns: undefined
+      }
       mask_person_name: { Args: { p_name: string }; Returns: string }
+      pending_email_notifications: {
+        Args: { p_limit?: number }
+        Returns: {
+          email: string
+          id: string
+          nombre: string
+          payload: Json
+          template: string
+          type: string
+        }[]
+      }
       process_notifications: { Args: never; Returns: Json }
       process_scheduled_payouts: { Args: never; Returns: Json }
       purge_expired_messages: { Args: never; Returns: Json }

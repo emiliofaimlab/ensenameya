@@ -1,0 +1,53 @@
+# Vacía la cola de notificaciones por correo (US-1201).
+#
+# No va en Vercel Cron como la purga de grabaciones porque el plan Hobby limita
+# los crons a UNA VEZ AL DÍA, y un aviso de "tienes 24 h para aceptar esta
+# reserva" que llega mañana no sirve de nada. Actions da 5 minutos, logs y
+# reejecución manual.
+#
+# Dos limitaciones conocidas de los programados de GitHub, dichas aquí para que
+# nadie las descubra depurando:
+#   · se retrasan cuando la cola de Actions va cargada — 10-15 min es normal.
+#     Aceptable para un correo; NO lo sería para un cobro.
+#   · GitHub desactiva los workflows programados tras 60 días sin actividad en
+#     el repo. Si los correos dejan de salir sin más, mirar eso primero.
+#
+# Si algún día el proyecto pasa a Vercel Pro, esto se mueve a `vercel.json` y
+# el workflow se borra.
+name: Notificaciones por correo
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # para poder forzar una pasada sin esperar
+
+# Si una pasada se alarga, la siguiente no se le encima: la cola sigue ahí.
+concurrency:
+  group: notifications-cron
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vaciar la cola
+        env:
+          BASE_URL: ${{ vars.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Falta la variable APP_BASE_URL o el secret CRON_SECRET del repo."
+            echo "Sin eso no se puede llamar al endpoint. Ver docs/ENTORNOS.md."
+            exit 1
+          fi
+
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/notifications-send")
+
+          echo "HTTP $code"
+          cat /tmp/out.json; echo
+
+          # Un 503 es "no hay CRON_SECRET en Vercel" y un 401 es "no coincide":
+          # las dos son configuración a medias, y deben verse en rojo.
+          [ "$code" = "200" ]
