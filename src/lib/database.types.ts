@@ -782,6 +782,7 @@ export type Database = {
           phone: string | null
           primary_goal: string | null
           referral_code: string | null
+          stripe_customer_id: string | null
           timezone: string
           updated_at: string
         }
@@ -794,6 +795,7 @@ export type Database = {
           phone?: string | null
           primary_goal?: string | null
           referral_code?: string | null
+          stripe_customer_id?: string | null
           timezone?: string
           updated_at?: string
         }
@@ -806,6 +808,7 @@ export type Database = {
           phone?: string | null
           primary_goal?: string | null
           referral_code?: string | null
+          stripe_customer_id?: string | null
           timezone?: string
           updated_at?: string
         }

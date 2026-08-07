@@ -44,12 +44,18 @@ export default async function ConfirmationPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, total_amount, currency, products(title, tutor_id), sessions(start_at, end_at)",
+      "id, status, total_amount, currency, products(title, tutor_id), sessions(start_at, end_at)",
     )
     .eq("id", id)
     .maybeSingle();
 
   if (!booking) notFound();
+
+  // Con el checkout alojado se puede llegar aquí ANTES de que el webhook haya
+  // confirmado el cobro: Stripe redirige al alumno en cuanto paga, y su evento
+  // llega por otro camino y a su ritmo. Decir "reserva registrada" con el pago
+  // aún pendiente sería prometer algo que todavía no ha pasado.
+  const pagoPendiente = booking.status === "pending_payment";
 
   const names = await tutorNames(supabase, [booking.products?.tutor_id]);
   const tutor = names.get(booking.products?.tutor_id ?? "");
@@ -73,14 +79,26 @@ export default async function ConfirmationPage({
         </span>
 
         <h1 className="text-center text-[26px] font-bold text-[#19191f]">
-          ¡Reserva registrada!
+          {pagoPendiente ? "Estamos confirmando tu pago" : "¡Reserva registrada!"}
         </h1>
         <p className="text-center text-sm text-[#6b6b6b]">
-          {tutor
-            ? `Tu reserva con ${tutor} quedó agendada. `
-            : "Tu reserva quedó agendada. "}
-          Le avisamos al tutor: cuando la acepte (hasta 24 h) te confirmamos por
-          correo. Si no responde, se reembolsa el 100 %.
+          {pagoPendiente ? (
+            <>
+              Tu horario está reservado mientras el proveedor de pago nos
+              confirma el cobro; suele tardar unos segundos. Puedes cerrar esta
+              página: te avisamos por correo en cuanto esté, y desde{" "}
+              <span className="font-medium text-[#333333]">Mis reservas</span>{" "}
+              verás el estado actualizado.
+            </>
+          ) : (
+            <>
+              {tutor
+                ? `Tu reserva con ${tutor} quedó agendada. `
+                : "Tu reserva quedó agendada. "}
+              Le avisamos al tutor: cuando la acepte (hasta 24 h) te confirmamos
+              por correo. Si no responde, se reembolsa el 100 %.
+            </>
+          )}
         </p>
 
         <section className="mt-2 w-full rounded-[16px] border border-[#e0e0e0] bg-card p-5">

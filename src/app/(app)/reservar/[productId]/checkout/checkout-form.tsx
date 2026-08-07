@@ -76,6 +76,36 @@ export function CheckoutForm({
       return;
     }
 
+    // Quién cobra lo decide el servidor leyendo `payments.provider`, que es el
+    // snapshot que `create_booking` acaba de congelar desde
+    // `payment_routing_rules`. El navegador no elige proveedor: pregunta.
+    const res = await fetch("/api/pagos/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookingId }),
+    });
+    const salida = (await res.json().catch(() => ({}))) as {
+      url?: string;
+      simulated?: boolean;
+      error?: string;
+    };
+
+    if (!res.ok) {
+      toast.error(salida.error ?? "No se pudo abrir el pago.");
+      setState("idle");
+      return;
+    }
+
+    if (salida.url) {
+      // Checkout alojado: dominio de Stripe, no es navegación interna. Con
+      // `router.push` el App Router intentaría resolverlo como ruta propia.
+      // A partir de aquí el cobro lo confirma el webhook, no esta pantalla.
+      window.location.assign(salida.url);
+      return;
+    }
+
+    // Camino simulado (`payment_routing_rules` aún en 'simulated'): sigue
+    // funcionando igual que siempre, incluido el botón de simular fallo.
     const { error: payErr } = await supabase.rpc("confirm_simulated_payment", {
       p_booking_id: bookingId,
       p_success: success,
