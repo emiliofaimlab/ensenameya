@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { InfoIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { bookingTotal } from "@/lib/booking";
+import { formatMoney } from "@/lib/catalog/format";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
@@ -95,6 +97,13 @@ export function ProductForm({
   const [pricingModel, setPricingModel] = useState<PricingModel>(
     product?.pricingModel ?? "per_session",
   );
+  // Controlados solo para poder decir en vivo lo que acabará pagando el alumno.
+  const [precio, setPrecio] = useState(
+    product ? String(product.priceAmount / 100) : "",
+  );
+  const [duracion, setDuracion] = useState(
+    String(product?.sessionDurationMin ?? 60),
+  );
   const [selected, setSelected] = useState<Set<string>>(
     new Set(product?.categoryIds ?? []),
   );
@@ -104,6 +113,12 @@ export function ProductForm({
   const [faqs, setFaqs] = useState<{ q: string; a: string }[]>(
     product?.faqs ?? [],
   );
+
+  const cobroPorSesion = bookingTotal({
+    pricingModel,
+    priceAmount: Math.round((Number(precio) || 0) * 100),
+    sessionDurationMin: Number(duracion) || 60,
+  });
 
   function toggleCategory(id: string) {
     setSelected((prev) => {
@@ -388,7 +403,8 @@ export function ProductForm({
               min={0}
               step="0.01"
               required
-              defaultValue={product ? product.priceAmount / 100 : ""}
+              value={precio}
+              onChange={(e) => setPrecio(e.target.value)}
               placeholder="40"
               className={FIELD}
             />
@@ -412,9 +428,27 @@ export function ProductForm({
               min={30}
               step={5}
               required
-              defaultValue={product?.sessionDurationMin ?? 60}
+              value={duracion}
+              onChange={(e) => setDuracion(e.target.value)}
               className={FIELD}
             />
+            {/* Con «por hora» el precio NO es lo que paga el alumno: el servidor
+                multiplica por la duración (RN-10, `create_booking`). Sin decirlo
+                aquí, el tutor pone 40 y 90 min y descubre el cobro de 60 cuando
+                ya se ha hecho. Mismo cálculo que el servidor: `bookingTotal`. */}
+            {/* Con el campo a medio escribir (vacío, o un «9» suelto) la frase
+                se leería «cada sesión de min se cobra…». Callarse es mejor. */}
+            {pricingModel === "per_hour" &&
+            cobroPorSesion > 0 &&
+            Number(duracion) >= 30 ? (
+              <p className="text-xs text-[#6b6b6b]">
+                Cada sesión de {duracion} min se cobra{" "}
+                <strong className="font-semibold text-[#333333]">
+                  {formatMoney(cobroPorSesion, CURRENCY)}
+                </strong>
+                .
+              </p>
+            ) : null}
           </div>
           {/* DD-03 — de la mentoría, no del tutor: un tutor avanzado puede
               publicar una clase básica. Alimentan los filtros de P05/P06. */}
