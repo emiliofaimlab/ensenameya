@@ -120,6 +120,16 @@ export async function POST(req: Request) {
       // reembolso y disputa solo traen el PaymentIntent. Sin esta segunda copia
       // no habría forma de mapear un reembolso a su reserva.
       metadata: { booking_id: bookingId },
+      // Sin esto la pasarela NO ofrece las tarjetas ya guardadas: pide una
+      // nueva cada vez y la pantalla de "Métodos de pago" no sirve de nada.
+      // Comprobado abriendo cuatro sesiones y mirándolas: el filtro es lo único
+      // que hace falta —`payment_method_save` no, y añadirlo metería una
+      // segunda casilla de guardado, la de Stripe, encima de la nuestra—.
+      // `limited` es como `setup_future_usage` marca lo que guarda; `always`
+      // por si algún día se guarda desde otro sitio.
+      saved_payment_method_options: {
+        allow_redisplay_filters: ["always", "limited"],
+      },
       payment_intent_data: {
         metadata: { booking_id: bookingId },
         // PAC-02 · solo si la persona marcó la casilla, que nace DESMARCADA.
