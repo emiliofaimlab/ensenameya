@@ -131,8 +131,13 @@ export async function requireUser(): Promise<
     redirect(`/login?next=${encodeURIComponent(next)}`);
   }
   // US-201 / RN-44: onboarding obligatorio antes de usar el área autenticada.
+  // `/tutor/onboarding` también vale: recoge los mismos básicos (nombre, zona
+  // horaria, teléfono) y marca `onboarding_complete` al guardarlos, así que
+  // obligar a pasar antes por el de alumno sería pedir dos veces lo mismo.
   const path = await currentPath();
-  if (!ctx.onboardingComplete && path !== "/onboarding") {
+  const enAlgunOnboarding =
+    path === "/onboarding" || path === "/tutor/onboarding";
+  if (!ctx.onboardingComplete && !enAlgunOnboarding) {
     redirect(`/onboarding?next=${encodeURIComponent(path)}`);
   }
   return { ...ctx, user: ctx.user };

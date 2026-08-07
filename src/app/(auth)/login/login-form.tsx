@@ -50,10 +50,18 @@ export function LoginForm({
       return;
     }
 
-    // Enruta por rol (RLS deja leer los roles propios). En M0 = alumno → /app.
-    const { data } = await supabase.from("user_roles").select("role");
-    const roles = (data ?? []).map((r) => r.role as AppRole);
-    router.push(safeNext(next, pickHome(roles)));
+    // Enruta por rol (RLS deja leer lo propio). Se pregunta también por el
+    // perfil de tutor: el rol `tutor` solo llega con la aprobación, y quien
+    // está en revisión debe entrar igualmente por su panel, no por el de
+    // alumno. Las dos consultas van en paralelo, que son independientes.
+    const [{ data: rolesData }, { data: tutorProfile }] = await Promise.all([
+      supabase.from("user_roles").select("role"),
+      supabase.from("tutor_profiles").select("profile_id").maybeSingle(),
+    ]);
+    const roles = (rolesData ?? []).map((r) => r.role as AppRole);
+    router.push(
+      safeNext(next, pickHome(roles, { esTutor: Boolean(tutorProfile) })),
+    );
     router.refresh();
   }
 

@@ -19,9 +19,20 @@ export const ROLE_HOME: Record<AppRole, string> = {
  * acumulan). En M0 sólo existe `alumno` (→ /app); /admin y /tutor llegan en
  * M2/M3, pero la prioridad ya queda cableada.
  */
-export function pickHome(roles: AppRole[]): string {
+export function pickHome(
+  roles: AppRole[],
+  opts?: {
+    /**
+     * Tiene fila en `tutor_profiles`. Hace falta porque el ROL `tutor` solo se
+     * concede al APROBAR (`20260714120000`), así que quien está en revisión no
+     * lo tiene todavía y aterrizaba en el panel de alumno — justo el panel que
+     * no le sirve. Ser tutor, a efectos de a dónde entras, es haber empezado.
+     */
+    esTutor?: boolean;
+  },
+): string {
   if (roles.includes("admin")) return ROLE_HOME.admin;
-  if (roles.includes("tutor")) return ROLE_HOME.tutor;
+  if (roles.includes("tutor") || opts?.esTutor) return ROLE_HOME.tutor;
   return ROLE_HOME.alumno;
 }
 

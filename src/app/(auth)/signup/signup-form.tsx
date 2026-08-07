@@ -82,7 +82,12 @@ export function SignupForm({
     if (data.session) {
       // Sesión inmediata (sin confirmación por correo).
       // US-201: onboarding obligatorio tras registrarse; conserva el destino previo.
-      router.push(`/onboarding${next ? `?next=${encodeURIComponent(next)}` : ""}`);
+      // Quien se registra para ENSEÑAR va directo a su asistente: el de alumno
+      // le pediría nombre y foto y luego el de tutor volvería a pedirle nombre,
+      // zona horaria y teléfono. El de tutor recoge los básicos igual, así que
+      // pasar por los dos era pura repetición.
+      const destino = intent === "tutor" ? "/tutor/onboarding" : "/onboarding";
+      router.push(`${destino}${next ? `?next=${encodeURIComponent(next)}` : ""}`);
       router.refresh();
       return;
     }

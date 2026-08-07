@@ -154,7 +154,16 @@ export function TutorOnboardingForm({
       if (!phone.trim()) return fail("El teléfono es obligatorio (RN-44).");
       const { error } = await supabase
         .from("profiles")
-        .update({ timezone, phone: phone.trim() })
+        .update({
+          timezone,
+          phone: phone.trim(),
+          // Con esto el asistente de tutor cierra también el onboarding de
+          // CUENTA: son los mismos básicos que pedía el de alumno (RN-44), y
+          // sin marcarlo `requireUser` devolvería al tutor a /onboarding en
+          // cuanto saliera de aquí. La FOTO no se toca: la del alumno es
+          // independiente de la del tutor y se edita desde Mi cuenta.
+          onboarding_complete: true,
+        })
         .eq("id", userId);
       if (error) return fail("No se pudo guardar tu contacto.");
       if (await saveProfile()) return fail("No se pudo guardar.");
