@@ -6,6 +6,8 @@ import { getProductDetail } from "@/lib/catalog/queries";
 import { bookingTotal, tutorNames } from "@/lib/booking";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { activeChargeProvider } from "@/lib/payments";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { isStripeConfigured, listSavedCards } from "@/lib/stripe";
 import { CheckoutForm } from "./checkout-form";
 
 export const metadata = { title: "Pagar reserva · Enséñame Ya" };
@@ -23,7 +25,7 @@ export default async function CheckoutPage({
 }) {
   const { productId } = await params;
   const { slots: slotsParam } = await searchParams;
-  await requireUser();
+  const { user } = await requireUser();
 
   const product = await getProductDetail(productId);
   if (!product) notFound();
@@ -38,6 +40,20 @@ export default async function CheckoutPage({
   const names = await tutorNames(supabase, [product.tutor.id]);
   // La pantalla tiene que decir la verdad ANTES de que el alumno pulse.
   const simulado = (await activeChargeProvider()) === "simulated";
+
+  // La tarjeta ilustrada tiene que enseñar la de verdad o ninguna. Antes era un
+  // adorno del Figma con un `4821` escrito a mano, y parecía una tarjeta
+  // guardada que no existía —seguía ahí después de guardar una de verdad—.
+  const { data: perfilPago } = await createAdminClient()
+    .from("profiles")
+    .select("stripe_customer_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const tarjetas =
+    !simulado && isStripeConfigured() && perfilPago?.stripe_customer_id
+      ? await listSavedCards(perfilPago.stripe_customer_id)
+      : [];
   const tutorName =
     names.get(product.tutor.id) ?? product.tutor.headline ?? "tu tutor";
 
@@ -55,6 +71,7 @@ export default async function CheckoutPage({
 
       <CheckoutForm
         simulado={simulado}
+        tarjetas={tarjetas}
         productId={productId}
         slots={slots}
         total={bookingTotal(product)}

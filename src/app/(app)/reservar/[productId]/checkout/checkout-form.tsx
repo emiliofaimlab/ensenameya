@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { LockIcon, ShieldCheckIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import type { SavedCard } from "@/lib/stripe";
 import { formatMoney } from "@/lib/catalog/format";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
@@ -51,6 +52,7 @@ export function CheckoutForm({
   tutorName,
   packageLabel,
   simulado,
+  tarjetas,
 }: {
   productId: string;
   slots: string[];
@@ -62,7 +64,12 @@ export function CheckoutForm({
   /** Lo decide `payment_routing_rules`, no el código: con un proveedor real no
    *  hay aviso de pruebas ni botón de simular fallo. */
   simulado: boolean;
+  /** Las tarjetas guardadas de verdad. La ilustración refleja la primera y el
+   *  texto dice cuántas hay: enseñar una sola cuando hay varias es la misma
+   *  mentira que el `4821` inventado, solo que más difícil de ver. */
+  tarjetas: SavedCard[];
 }) {
+  const tarjeta = tarjetas[0] ?? null;
   const router = useRouter();
   const [state, setState] = useState<State>("idle");
   // DESMARCADA a propósito: guardar un medio de pago se pide, no se presupone.
@@ -142,21 +149,34 @@ export function CheckoutForm({
               ENSÉÑAME YA
             </span>
           </div>
+          {/* Antes había un `4821` escrito a mano: parecía una tarjeta guardada
+              que no existía, y seguía ahí después de guardar una de verdad. Ahora
+              enseña la del proveedor, y si no hay ninguna no finge que la hay. */}
           <p className="mt-9 text-xl font-medium tracking-[0.15em]">
-            •••• •••• •••• 4821
+            •••• •••• •••• {tarjeta ? tarjeta.last4 : "••••"}
           </p>
           <div className="mt-5 flex justify-between text-[13px]">
             <span>
               <span className="block text-[9px] tracking-wide opacity-70">
-                TITULAR
+                {!tarjeta
+                  ? "SIN TARJETA GUARDADA"
+                  : tarjetas.length > 1
+                    ? `TITULAR · +${tarjetas.length - 1} MÁS`
+                    : "TITULAR"}
               </span>
-              <span className="font-semibold">NOMBRE APELLIDO</span>
+              <span className="font-semibold capitalize">
+                {tarjeta ? (tarjeta.nombre ?? tarjeta.brand) : "—"}
+              </span>
             </span>
             <span>
               <span className="block text-[9px] tracking-wide opacity-70">
                 VENCE
               </span>
-              <span className="font-semibold">MM/AA</span>
+              <span className="font-semibold">
+                {tarjeta
+                  ? `${String(tarjeta.expMonth).padStart(2, "0")}/${String(tarjeta.expYear).slice(-2)}`
+                  : "––/––"}
+              </span>
             </span>
           </div>
         </div>
@@ -209,8 +229,11 @@ export function CheckoutForm({
               El pago se completa en la pasarela del proveedor
             </p>
             <p className="mt-1 text-[13px] text-[#6b6b6b]">
-              Nunca escribes los datos de tu tarjeta en Enséñame Ya: al confirmar
-              te llevamos al checkout seguro del proveedor de pagos.
+              {tarjetas.length === 0
+                ? "Nunca escribes los datos de tu tarjeta en Enséñame Ya: al confirmar te llevamos al checkout seguro del proveedor de pagos."
+                : tarjetas.length === 1
+                  ? `Podrás pagar con tu ${tarjeta!.brand} ••••${tarjeta!.last4} o con otra tarjeta. Nunca escribes esos datos en Enséñame Ya.`
+                  : `Podrás elegir entre tus ${tarjetas.length} tarjetas guardadas o usar otra. Nunca escribes esos datos en Enséñame Ya.`}
             </p>
           </div>
         </div>
@@ -236,8 +259,11 @@ export function CheckoutForm({
               onChange={(e) => setGuardarTarjeta(e.target.checked)}
             />
             <span>
-              Guardar esta tarjeta para mis próximas reservas. Puedes quitarla
-              cuando quieras desde <strong>Métodos de pago</strong>.
+              {tarjeta
+                ? "Guardar también la tarjeta que use ahora, si es distinta."
+                : "Guardar esta tarjeta para mis próximas reservas."}{" "}
+              Puedes quitarlas cuando quieras desde{" "}
+              <strong>Métodos de pago</strong>.
             </span>
           </label>
         )}

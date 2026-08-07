@@ -99,6 +99,8 @@ export type SavedCard = {
   last4: string;
   expMonth: number;
   expYear: number;
+  /** Titular tal como lo guardó el proveedor. Puede venir vacío. */
+  nombre: string | null;
 };
 
 /**
@@ -122,6 +124,7 @@ export async function listSavedCards(customerId: string): Promise<SavedCard[]> {
       last4: pm.card!.last4,
       expMonth: pm.card!.exp_month,
       expYear: pm.card!.exp_year,
+      nombre: pm.billing_details?.name ?? null,
     }));
 }
 
