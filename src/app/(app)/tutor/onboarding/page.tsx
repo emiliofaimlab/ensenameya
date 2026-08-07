@@ -113,7 +113,7 @@ export default async function TutorOnboardingPage({
   // asistente. `?start=1` entra ya al formulario.
   if (!tp && !start) {
     return (
-      <div className="bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
+      <div className="flex-1 bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
         <Container>
           <div className="mx-auto flex max-w-xl flex-col items-center text-center">
             <span className="grid size-14 place-items-center rounded-full bg-brand/10 text-brand">
@@ -159,7 +159,7 @@ export default async function TutorOnboardingPage({
 
   return (
     // TU01: cuerpo sobre #f9fafc con ~105 px de aire arriba (185:13 y=178).
-    <div className="bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
+    <div className="flex-1 bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
       <Container>
         <div>
           <TutorOnboardingForm

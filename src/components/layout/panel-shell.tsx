@@ -35,7 +35,7 @@ export function PanelShell({
   children,
 }: PanelShellProps) {
   return (
-    <div className="bg-muted py-8">
+    <div className="flex-1 bg-muted py-8">
       <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-10">
         {back ? (
           <Link

@@ -70,7 +70,7 @@ export default async function ConfirmationPage({
     )}`;
 
   return (
-    <div className="bg-muted py-14">
+    <div className="flex-1 bg-muted py-14">
       <div className="mx-auto flex w-full max-w-[600px] flex-col items-center gap-4 px-4">
         <span className="grid size-[120px] place-items-center rounded-full bg-brand/15">
           <span className="grid size-20 place-items-center rounded-full bg-brand text-white">

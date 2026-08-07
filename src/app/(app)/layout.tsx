@@ -26,7 +26,12 @@ export default async function AppLayout({
         user={toHeaderUser(user, roles, { fullName, avatarPath })}
         notices={notices}
       />
-      <main className="flex-1">{children}</main>
+      {/* Columna flexible: el fondo de cada pantalla lo pone ELLA, así que para
+          que llegue hasta abajo tiene que poder estirarse. Sin esto, `main`
+          crecía con `flex-1` pero el envoltorio de la pantalla se quedaba a la
+          altura de su contenido y dejaba una franja blanca (visible en /app
+          cuando el alumno aún no tiene reservas). */}
+      <main className="flex flex-1 flex-col">{children}</main>
       {/* Bandeja de chat flotante (R24-21). */}
       <AppChrome chat={<ChatLauncher />} />
     </div>
