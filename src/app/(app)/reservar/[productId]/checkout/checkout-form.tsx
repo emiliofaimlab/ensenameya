@@ -53,6 +53,7 @@ export function CheckoutForm({
   packageLabel,
   simulado,
   tarjetas,
+  hayUltimaUsada,
 }: {
   productId: string;
   slots: string[];
@@ -68,6 +69,9 @@ export function CheckoutForm({
    *  texto dice cuántas hay: enseñar una sola cuando hay varias es la misma
    *  mentira que el `4821` inventado, solo que más difícil de ver. */
   tarjetas: SavedCard[];
+  /** true si la primera de la lista es de verdad la última usada, no solo la
+   *  más reciente. Cambia la etiqueta: sin cobros previos no se puede afirmar. */
+  hayUltimaUsada: boolean;
 }) {
   const tarjeta = tarjetas[0] ?? null;
   const router = useRouter();
@@ -142,43 +146,85 @@ export function CheckoutForm({
     <div className="grid items-start gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
       {/* Columna izquierda del Figma: tarjeta ilustrada + resumen. */}
       <div className="flex flex-col gap-5">
-        <div className="rounded-[20px] bg-linear-to-br from-[#191925] to-[#054a94] p-6 text-white">
-          <div className="flex items-center justify-between">
-            <span className="h-7 w-9 rounded-[6px] bg-[#facc66]" />
-            <span className="text-xs font-semibold tracking-wide">
-              ENSÉÑAME YA
-            </span>
+        {/* Wallet: la de delante es la última usada; las demás asoman detrás y
+            se abren en abanico al pasar el ratón. Es INFORMATIVO, no un
+            selector — elegir se elige en la pasarela, y un selector aquí sería
+            prometer un control que el checkout alojado no nos da. */}
+        <div
+          className="group relative"
+          style={{ height: tarjetas.length > 2 ? 286 : tarjetas.length > 1 ? 232 : 178 }}
+        >
+          {/* Las de detrás, de la más lejana a la más cercana. */}
+          {tarjetas.slice(1, 3).map((t, i) => (
+            <div
+              key={t.id}
+              aria-hidden
+              // Transformaciones explícitas y no calculadas: Tailwind necesita la
+              // clase entera en el fuente para generarla, y como mucho hay dos.
+              className={[
+                "absolute inset-x-0 top-0 flex h-[178px] items-end rounded-[20px]",
+                "bg-linear-to-br from-[#243043] to-[#0b3a6d] px-6 pb-1.5",
+                "text-[11px] text-white/70 shadow-lg",
+                "transition-transform duration-500 ease-out",
+                // Sin animación para quien la haya desactivado en su sistema.
+                "motion-reduce:transition-none motion-reduce:group-hover:transform-none",
+                i === 0
+                  ? "z-10 translate-y-[26px] scale-[0.955] group-hover:translate-y-[46px] group-hover:-rotate-2"
+                  : "z-0 translate-y-[52px] scale-[0.91] group-hover:translate-y-[92px] group-hover:-rotate-4",
+              ].join(" ")}
+            >
+              <span className="capitalize">
+                {t.brand} •••• {t.last4}
+              </span>
+            </div>
+          ))}
+
+          {/* La de delante. */}
+          <div
+            className="absolute inset-x-0 top-0 z-20 h-[178px] rounded-[20px] bg-linear-to-br from-[#191925] to-[#054a94] p-6 text-white shadow-xl transition-transform duration-500 ease-out group-hover:-translate-y-1 motion-reduce:transition-none motion-reduce:group-hover:translate-y-0"
+          >
+            <div className="flex items-center justify-between">
+              <span className="h-7 w-9 rounded-[6px] bg-[#facc66]" />
+              <span className="text-xs font-semibold tracking-wide">
+                ENSÉÑAME YA
+              </span>
+            </div>
+            <p className="mt-9 text-xl font-medium tracking-[0.15em]">
+              •••• •••• •••• {tarjeta ? tarjeta.last4 : "••••"}
+            </p>
+            <div className="mt-5 flex justify-between text-[13px]">
+              <span>
+                <span className="block text-[9px] tracking-wide opacity-70">
+                  {!tarjeta
+                    ? "SIN TARJETA GUARDADA"
+                    : tarjetas.length > 1
+                      ? hayUltimaUsada
+                        ? "ÚLTIMA USADA · ELIGES AL PAGAR"
+                        : `1 DE ${tarjetas.length} · ELIGES AL PAGAR`
+                      : "TITULAR"}
+                </span>
+                <span className="font-semibold capitalize">
+                  {tarjeta ? (tarjeta.nombre ?? tarjeta.brand) : "—"}
+                </span>
+              </span>
+              <span>
+                <span className="block text-[9px] tracking-wide opacity-70">
+                  VENCE
+                </span>
+                <span className="font-semibold">
+                  {tarjeta
+                    ? `${String(tarjeta.expMonth).padStart(2, "0")}/${String(tarjeta.expYear).slice(-2)}`
+                    : "\u2013\u2013/\u2013\u2013"}
+                </span>
+              </span>
+            </div>
           </div>
-          {/* Antes había un `4821` escrito a mano: parecía una tarjeta guardada
-              que no existía, y seguía ahí después de guardar una de verdad. Ahora
-              enseña la del proveedor, y si no hay ninguna no finge que la hay. */}
-          <p className="mt-9 text-xl font-medium tracking-[0.15em]">
-            •••• •••• •••• {tarjeta ? tarjeta.last4 : "••••"}
-          </p>
-          <div className="mt-5 flex justify-between text-[13px]">
-            <span>
-              <span className="block text-[9px] tracking-wide opacity-70">
-                {!tarjeta
-                  ? "SIN TARJETA GUARDADA"
-                  : tarjetas.length > 1
-                    ? `1 DE ${tarjetas.length} · ELIGES AL PAGAR`
-                    : "TITULAR"}
-              </span>
-              <span className="font-semibold capitalize">
-                {tarjeta ? (tarjeta.nombre ?? tarjeta.brand) : "—"}
-              </span>
+
+          {tarjetas.length > 3 ? (
+            <span className="absolute inset-x-0 bottom-0 z-30 text-center text-[11px] text-[#6b6b6b]">
+              y {tarjetas.length - 3} más
             </span>
-            <span>
-              <span className="block text-[9px] tracking-wide opacity-70">
-                VENCE
-              </span>
-              <span className="font-semibold">
-                {tarjeta
-                  ? `${String(tarjeta.expMonth).padStart(2, "0")}/${String(tarjeta.expYear).slice(-2)}`
-                  : "––/––"}
-              </span>
-            </span>
-          </div>
+          ) : null}
         </div>
 
         <PanelCard>

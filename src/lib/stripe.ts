@@ -129,6 +129,26 @@ export async function listSavedCards(customerId: string): Promise<SavedCard[]> {
 }
 
 /**
+ * La tarjeta con la que se pagó por última vez.
+ *
+ * Stripe lista los medios de pago por fecha de CREACIÓN, no de uso, así que sin
+ * esto "la última que usaste" sería mentira en cuanto alguien pague con la
+ * segunda. Se saca del historial de cobros, que es donde consta de verdad.
+ *
+ * Devuelve null si no hay cobros aún o si la tarjeta con la que se pagó ya se
+ * quitó: el que llama se queda con el orden por defecto.
+ */
+export async function lastUsedCardId(customerId: string): Promise<string | null> {
+  const res = await stripe().paymentIntents.list({ customer: customerId, limit: 5 });
+  for (const pi of res.data) {
+    if (pi.status !== "succeeded") continue;
+    const pm = pi.payment_method;
+    if (typeof pm === "string") return pm;
+  }
+  return null;
+}
+
+/**
  * Desvincula una tarjeta del Customer. `detach` no borra el histórico de cobros
  * —los pagos ya hechos siguen ahí, como debe ser— solo deja de poder usarse.
  */

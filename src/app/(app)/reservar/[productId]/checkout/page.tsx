@@ -7,7 +7,7 @@ import { bookingTotal, tutorNames } from "@/lib/booking";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { activeChargeProvider } from "@/lib/payments";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isStripeConfigured, listSavedCards } from "@/lib/stripe";
+import { isStripeConfigured, lastUsedCardId, listSavedCards } from "@/lib/stripe";
 import { CheckoutForm } from "./checkout-form";
 
 export const metadata = { title: "Pagar reserva · Enséñame Ya" };
@@ -50,10 +50,19 @@ export default async function CheckoutPage({
     .eq("id", user.id)
     .maybeSingle();
 
-  const tarjetas =
-    !simulado && isStripeConfigured() && perfilPago?.stripe_customer_id
-      ? await listSavedCards(perfilPago.stripe_customer_id)
-      : [];
+  const cliente =
+    !simulado && isStripeConfigured() ? (perfilPago?.stripe_customer_id ?? null) : null;
+
+  // Las dos consultas van juntas: la segunda solo sirve para poner delante la
+  // que de verdad se usó la última vez, y esperarla en serie sería medio
+  // segundo de nada a cambio de nada.
+  const [guardadas, ultimaId] = cliente
+    ? await Promise.all([listSavedCards(cliente), lastUsedCardId(cliente)])
+    : [[], null];
+
+  const tarjetas = ultimaId
+    ? [...guardadas].sort((a, b) => Number(b.id === ultimaId) - Number(a.id === ultimaId))
+    : guardadas;
   const tutorName =
     names.get(product.tutor.id) ?? product.tutor.headline ?? "tu tutor";
 
@@ -72,6 +81,7 @@ export default async function CheckoutPage({
       <CheckoutForm
         simulado={simulado}
         tarjetas={tarjetas}
+        hayUltimaUsada={Boolean(ultimaId && tarjetas[0]?.id === ultimaId)}
         productId={productId}
         slots={slots}
         total={bookingTotal(product)}
