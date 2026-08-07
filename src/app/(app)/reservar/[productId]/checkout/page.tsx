@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { bookingTotal, tutorNames } from "@/lib/booking";
 import { PanelShell } from "@/components/layout/panel-shell";
+import { activeChargeProvider } from "@/lib/payments";
 import { CheckoutForm } from "./checkout-form";
 
 export const metadata = { title: "Pagar reserva · Enséñame Ya" };
@@ -35,6 +36,8 @@ export default async function CheckoutPage({
 
   const supabase = await createClient();
   const names = await tutorNames(supabase, [product.tutor.id]);
+  // La pantalla tiene que decir la verdad ANTES de que el alumno pulse.
+  const simulado = (await activeChargeProvider()) === "simulated";
   const tutorName =
     names.get(product.tutor.id) ?? product.tutor.headline ?? "tu tutor";
 
@@ -51,6 +54,7 @@ export default async function CheckoutPage({
       </div>
 
       <CheckoutForm
+        simulado={simulado}
         productId={productId}
         slots={slots}
         total={bookingTotal(product)}

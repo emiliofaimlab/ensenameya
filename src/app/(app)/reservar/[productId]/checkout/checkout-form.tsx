@@ -50,6 +50,7 @@ export function CheckoutForm({
   productTitle,
   tutorName,
   packageLabel,
+  simulado,
 }: {
   productId: string;
   slots: string[];
@@ -58,6 +59,9 @@ export function CheckoutForm({
   productTitle: string;
   tutorName: string;
   packageLabel: string;
+  /** Lo decide `payment_routing_rules`, no el código: con un proveedor real no
+   *  hay aviso de pruebas ni botón de simular fallo. */
+  simulado: boolean;
 }) {
   const router = useRouter();
   const [state, setState] = useState<State>("idle");
@@ -209,12 +213,14 @@ export function CheckoutForm({
           </div>
         </div>
 
-        {/* Motor simulado: EP-20 (PAC-01…04) sigue bloqueada esperando cuenta y
-            credenciales de DLocal/Stripe. Se avisa en pantalla para que nadie
-            confunda esto con un cobro real. */}
-        <p className="mt-4 rounded-lg bg-warning-muted px-4 py-3 text-[13px] text-warning">
-          Entorno de pruebas: el cobro está simulado, no se mueve dinero real.
-        </p>
+        {/* El aviso solo cuando el cobro ES simulado. Dejarlo fijo fue un bug
+            real: al encender Stripe, la pantalla seguía diciendo que no se movía
+            dinero mientras el botón llevaba a una pasarela de verdad. */}
+        {simulado ? (
+          <p className="mt-4 rounded-lg bg-warning-muted px-4 py-3 text-[13px] text-warning">
+            Entorno de pruebas: el cobro está simulado, no se mueve dinero real.
+          </p>
+        ) : null}
 
         <div className="mt-6 flex flex-wrap gap-3">
           <Button
@@ -224,16 +230,23 @@ export function CheckoutForm({
           >
             {state === "processing"
               ? "Procesando…"
-              : `Confirmar pago · ${formatMoney(total, currency)}`}
+              : simulado
+                ? `Confirmar pago · ${formatMoney(total, currency)}`
+                : `Ir a pagar · ${formatMoney(total, currency)}`}
           </Button>
-          <Button
-            variant="outline"
-            className="h-[49px] rounded-[10px] px-6"
-            disabled={state === "processing"}
-            onClick={() => pay(false)}
-          >
-            Simular fallo
-          </Button>
+          {/* Simular fallo solo tiene sentido con el proveedor simulado: con
+              Stripe el rechazo lo decide la pasarela, y este botón acabaría
+              llevando al mismo checkout real. */}
+          {simulado ? (
+            <Button
+              variant="outline"
+              className="h-[49px] rounded-[10px] px-6"
+              disabled={state === "processing"}
+              onClick={() => pay(false)}
+            >
+              Simular fallo
+            </Button>
+          ) : null}
         </div>
       </PanelCard>
     </div>
