@@ -1339,6 +1339,10 @@ export type Database = {
         Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }
         Returns: string
       }
+      confirm_simulated_payment: {
+        Args: { p_booking_id: string; p_success?: boolean }
+        Returns: string
+      }
       country_from_timezone: { Args: { p_tz: string }; Returns: string }
       create_booking: {
         Args: { p_product_id: string; p_slots: string[] }

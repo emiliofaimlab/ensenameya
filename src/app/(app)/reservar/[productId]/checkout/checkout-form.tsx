@@ -24,9 +24,14 @@ type State = "idle" | "processing";
 
 /**
  * US-602 (SCR-AL05) — checkout con PSP **simulado** (C-01). "Confirmar pago"
- * crea la reserva (create_booking) y dispara el pago simulado (confirm_payment)
- * → `pending_acceptance`, y redirige a la confirmación (AL06). Todo el dinero
- * lo mueven las RPC server-side.
+ * crea la reserva (create_booking) y dispara el pago simulado
+ * (confirm_simulated_payment) → `pending_acceptance`, y redirige a la
+ * confirmación (AL06). Todo el dinero lo mueven las RPC server-side.
+ *
+ * El nombre de la RPC no es cosmético: `confirm_payment` está revocada para el
+ * cliente y solo la alcanza el webhook (`20260806120000`). Esta variante exige
+ * que el cobro esté ruteado al proveedor simulado, así que el día que entre un
+ * PSP real este botón deja de funcionar solo — que es lo que debe pasar.
  *
  * ⚠️ SIN campos de tarjeta, a propósito. El Figma dibuja aquí número de
  * tarjeta, titular, vencimiento y CVC en campos propios; capturar el PAN en
@@ -71,7 +76,7 @@ export function CheckoutForm({
       return;
     }
 
-    const { error: payErr } = await supabase.rpc("confirm_payment", {
+    const { error: payErr } = await supabase.rpc("confirm_simulated_payment", {
       p_booking_id: bookingId,
       p_success: success,
     });
