@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ensureCustomer, isStripeConfigured, siteUrl, stripe } from "@/lib/stripe";
+import {
+  ensureCustomer,
+  esCustomerInexistente,
+  isStripeConfigured,
+  siteUrl,
+  stripe,
+} from "@/lib/stripe";
 
 /**
  * EP-20 / PAC-01 · abre el checkout alojado de Stripe para una reserva.
@@ -80,22 +86,24 @@ export async function POST(req: Request) {
     .eq("id", user.id)
     .maybeSingle();
 
-  const customer = await ensureCustomer({
+  const guardarCustomer = async (id: string) => {
+    await admin.from("profiles").update({ stripe_customer_id: id }).eq("id", user.id);
+  };
+
+  let customer = await ensureCustomer({
     email: user.email!,
     nombre: perfil?.full_name ?? null,
     profileId: user.id,
     guardado: perfil?.stripe_customer_id ?? null,
   });
-
-  if (customer !== perfil?.stripe_customer_id) {
-    await admin.from("profiles").update({ stripe_customer_id: customer }).eq("id", user.id);
-  }
+  if (customer !== perfil?.stripe_customer_id) await guardarCustomer(customer);
 
   const base = siteUrl();
-  const session = await stripe().checkout.sessions.create(
+  const crearSesion = (cliente: string, claveIdem: string) =>
+    stripe().checkout.sessions.create(
     {
       mode: "payment",
-      customer,
+      customer: cliente,
       client_reference_id: bookingId,
       line_items: [
         {
@@ -117,8 +125,29 @@ export async function POST(req: Request) {
     },
     // Un doble clic o un reintento de red no debe abrir dos cobros para la
     // misma reserva. La clave es la reserva porque es lo único estable aquí.
-    { idempotencyKey: `booking-${bookingId}` },
+    { idempotencyKey: claveIdem },
   );
+
+  let session;
+  try {
+    session = await crearSesion(customer, `booking-${bookingId}`);
+  } catch (e) {
+    // El Customer que teníamos guardado ya no existe en Stripe (datos de prueba
+    // borrados, cuenta cambiada, alguien lo eliminó). Sin esto, esa persona se
+    // queda con un 500 en cada intento de pago para siempre.
+    if (!esCustomerInexistente(e)) throw e;
+
+    customer = await ensureCustomer({
+      email: user.email!,
+      nombre: perfil?.full_name ?? null,
+      profileId: user.id,
+      guardado: null, // a propósito: el guardado es el que está roto
+    });
+    await guardarCustomer(customer);
+    // Clave de idempotencia DISTINTA: reutilizar la misma con parámetros
+    // distintos es un error de la API de Stripe, no la respuesta cacheada.
+    session = await crearSesion(customer, `booking-${bookingId}-r2`);
+  }
 
   if (!session.url) {
     return NextResponse.json({ error: "Stripe no devolvió URL" }, { status: 502 });

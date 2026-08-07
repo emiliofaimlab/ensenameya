@@ -3,13 +3,13 @@ import "server-only";
 import Stripe from "stripe";
 
 /**
- * Cliente de Stripe. **Solo servidor** — `STRIPE_SECRET_KEY` puede crear cobros
+ * Cliente de Stripe. **Solo servidor** — `STRIPE_API_KEY` puede crear cobros
  * y reembolsos en nombre del comercio. Misma regla que `service_role` y que
  * `DAILY_API_KEY`: el `server-only` de arriba rompe el build si alguien lo
  * importa desde un componente cliente, en vez de filtrar la clave en el bundle.
  *
  * LA CREDENCIAL ES EL INTERRUPTOR, como el resto del proyecto: sin
- * `STRIPE_SECRET_KEY` no se instancia nada y el checkout sigue por el camino
+ * `STRIPE_API_KEY` no se instancia nada y el checkout sigue por el camino
  * simulado. Activar Stripe es poner la variable y cambiar la fila de
  * `payment_routing_rules` — en ese orden.
  */
@@ -25,7 +25,7 @@ const API_VERSION = "2026-07-29.dahlia" as const;
 let cliente: Stripe | null = null;
 
 export function isStripeConfigured(): boolean {
-  return Boolean(process.env.STRIPE_SECRET_KEY);
+  return Boolean(process.env.STRIPE_API_KEY);
 }
 
 /**
@@ -34,8 +34,8 @@ export function isStripeConfigured(): boolean {
  * exactamente el estado del proyecto hasta que se configure en Vercel.
  */
 export function stripe(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) throw new Error("STRIPE_SECRET_KEY no configurada");
+  const key = process.env.STRIPE_API_KEY;
+  if (!key) throw new Error("STRIPE_API_KEY no configurada");
   cliente ??= new Stripe(key, { apiVersion: API_VERSION });
   return cliente;
 }
@@ -79,6 +79,8 @@ export async function ensureCustomer(opts: {
   if (opts.guardado) return opts.guardado;
 
   const s = stripe();
+  // ponytail: `list` por email es una llamada de más en el alta, pero es la que
+  // engancha con el Customer que Referral Factory pudo crear antes que nosotros.
   const existentes = await s.customers.list({ email: opts.email, limit: 1 });
   if (existentes.data[0]) return existentes.data[0].id;
 
@@ -88,4 +90,26 @@ export async function ensureCustomer(opts: {
     metadata: { profile_id: opts.profileId },
   });
   return creado.id;
+}
+
+/**
+ * ¿Stripe se está quejando de que el Customer que le pasamos no existe?
+ *
+ * Pasa más de lo que parece: se borran los datos de prueba del sandbox, se
+ * cambia de cuenta, alguien elimina el Customer a mano. El id que guardamos en
+ * `profiles` queda apuntando a la nada, y como lo reutilizamos a ciegas en cada
+ * compra, esa persona se queda **sin poder pagar nunca más** — un 500 en cada
+ * intento, para siempre, hasta que alguien mire la base de datos.
+ *
+ * Verificar el Customer antes de cada checkout costaría una llamada extra
+ * SIEMPRE para cubrir un caso raro. Sale más barato ser optimista y saber
+ * reconocer este error concreto para rehacerlo una vez.
+ */
+export function esCustomerInexistente(e: unknown): boolean {
+  const err = e as { type?: string; code?: string; param?: string };
+  return (
+    err?.type === "StripeInvalidRequestError" &&
+    err?.code === "resource_missing" &&
+    err?.param === "customer"
+  );
 }
