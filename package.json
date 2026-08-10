@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "db:push": "npx supabase db push",
     "db:types": "npx supabase gen types typescript --linked > src/lib/database.types.ts",
+    "db:seed": "bash -c 'set -a; . ./.env.local; set +a; PATH=\"/opt/homebrew/opt/libpq/bin:$PATH\" psql \"$SUPABASE_DB_URL\" -v ON_ERROR_STOP=1 -f supabase/seed/dev-poblar.sql'",
     "check:email": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/email-templates.check.ts"
   },
   "dependencies": {
