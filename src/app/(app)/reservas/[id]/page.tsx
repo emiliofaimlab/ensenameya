@@ -11,6 +11,7 @@ import {
   tutorNames,
 } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
+import { ResumePayment } from "@/components/checkout/resume-payment";
 import {
   PanelCard,
   PanelCardTitle,
@@ -202,6 +203,19 @@ export default async function BookingDetailPage({
                 US-607) y no hay recibo que enlazar hasta que EP-20 conecte un
                 PSP real. */}
           </PanelCard>
+
+          {/* La reserva existe pero nunca se cobró: sin esto el horario se
+              quedaba retenido y lo único ofrecido era cancelarla (12-ago). */}
+          {booking.status === "pending_payment" ? (
+            <PanelCard>
+              <PanelCardTitle>Termina tu pago</PanelCardTitle>
+              <p className="mt-3.5 text-sm text-[#6b6b6b]">
+                Tu horario está reservado, pero el pago quedó a medias. La
+                reserva se libera sola si no se completa.
+              </p>
+              <ResumePayment bookingId={booking.id} />
+            </PanelCard>
+          ) : null}
 
           <PanelCard>
             <PanelCardTitle>Política de cancelación</PanelCardTitle>

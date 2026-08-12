@@ -4,11 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { LockIcon, ShieldCheckIcon } from "lucide-react";
-import { loadStripe } from "@stripe/stripe-js";
-import {
-  EmbeddedCheckout,
-  EmbeddedCheckoutProvider,
-} from "@stripe/react-stripe-js";
+import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 
 import { createClient } from "@/lib/supabase/client";
 import type { SavedCard } from "@/lib/stripe";
@@ -27,9 +23,6 @@ const slotLabel = (iso: string) =>
   });
 
 type State = "idle" | "processing";
-
-/** Lo que devuelve el Route Handler para montar el embed. */
-type Embed = { clientSecret: string; publishableKey: string };
 
 /**
  * US-602 (SCR-AL05) — checkout con PSP **simulado** (C-01). "Confirmar pago"
@@ -90,9 +83,7 @@ export function CheckoutForm({
   // de "te llevamos a la pasarela". `loadStripe` devuelve una promesa que hay
   // que crear UNA vez: guardarla en el mismo estado la ata al secreto que le
   // corresponde y evita recrearla en cada render (remontaría el iframe).
-  const [embed, setEmbed] = useState<
-    (Embed & { stripe: ReturnType<typeof loadStripe> }) | null
-  >(null);
+  const [embed, setEmbed] = useState<Embed | null>(null);
 
   async function pay(success: boolean) {
     setState("processing");
@@ -136,7 +127,6 @@ export function CheckoutForm({
       setEmbed({
         clientSecret: salida.clientSecret,
         publishableKey: salida.publishableKey,
-        stripe: loadStripe(salida.publishableKey),
       });
       return;
     }
@@ -289,17 +279,8 @@ export function CheckoutForm({
         <PanelCardTitle className="text-[15px]">Método de pago</PanelCardTitle>
 
         {embed ? (
-          // El iframe de Stripe. `key` con el secreto: si alguna vez se abriera
-          // una Session nueva, React desmonta el anterior en vez de reusarlo con
-          // un secreto que ya no le corresponde.
           <div className="mt-3.5">
-            <EmbeddedCheckoutProvider
-              key={embed.clientSecret}
-              stripe={embed.stripe}
-              options={{ clientSecret: embed.clientSecret }}
-            >
-              <EmbeddedCheckout />
-            </EmbeddedCheckoutProvider>
+            <StripeEmbed {...embed} />
           </div>
         ) : (
           <div className="mt-3.5 flex gap-3 rounded-xl border border-dashed border-[#e0e0e0] p-5">
