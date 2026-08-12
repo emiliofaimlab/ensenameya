@@ -109,7 +109,7 @@ export default async function ConfirmationPage({
             <div className="flex justify-between gap-4">
               <dt className="text-[#6b6b6b]">Producto</dt>
               <dd className="text-right font-medium text-[#333333]">
-                {booking.products?.title ?? "Clase"}
+                {booking.products?.title ?? "Mentoría"}
               </dd>
             </div>
             {tutor ? (

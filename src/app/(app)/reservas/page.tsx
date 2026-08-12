@@ -69,7 +69,7 @@ export default async function ReservasPage() {
       key={b.id}
       href={`/reservas/${b.id}`}
       tutor={names.get(b.products?.tutor_id ?? "")}
-      title={b.products?.title ?? "Clase"}
+      title={b.products?.title ?? "Mentoría"}
       when={when(b)}
       timeZone={tz}
       status={BOOKING_STATUS_LABEL[b.status]}
@@ -93,14 +93,14 @@ export default async function ReservasPage() {
           Mis reservas
         </h1>
         <p className="mt-1 text-[13px] text-[#6b6b6b]">
-          El estado de tus clases y sus horarios.
+          El estado de tus mentorías y sus horarios.
         </p>
       </div>
 
       {bookings.length === 0 ? (
         <PanelCard>
           <p className="text-[13px] text-[#6b6b6b]">
-            Aún no tienes reservas. Explora tutores y reserva tu primera clase.
+            Aún no tienes reservas. Explora tutores y reserva tu primera mentoría.
           </p>
           <Button asChild className="mt-4 h-10">
             <Link href="/tutors">Explorar tutores</Link>

@@ -59,7 +59,7 @@ export default async function ChatPage({
       <Section className="flex flex-col gap-6">
         <PageHeader
           title="Chat de la reserva"
-          description={booking.products?.title ?? "Clase"}
+          description={booking.products?.title ?? "Mentoría"}
         />
         <ChatThread
           bookingId={bookingId}

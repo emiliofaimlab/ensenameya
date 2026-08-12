@@ -63,7 +63,7 @@ export default async function ReviewPage({
           <div>
             <p className="text-sm font-semibold text-[#19191f]">{tutor}</p>
             <p className="text-xs text-[#6b6b6b]">
-              {booking.products?.title ?? "Clase"}
+              {booking.products?.title ?? "Mentoría"}
               {lastSession
                 ? ` · Sesión completada ${new Date(
                     lastSession.start_at,

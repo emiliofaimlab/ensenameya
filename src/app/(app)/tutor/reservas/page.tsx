@@ -155,7 +155,7 @@ export default async function TutorReservasPage({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[#19191f]">
-                  {b.products?.title ?? "Clase"}
+                  {b.products?.title ?? "Mentoría"}
                 </p>
                 <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
                   Reserva pagada, esperando tu respuesta
@@ -217,7 +217,7 @@ export default async function TutorReservasPage({
                 >
                   <div className="min-w-0 sm:w-64">
                     <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
-                      {b.products?.title ?? "Clase"}
+                      {b.products?.title ?? "Mentoría"}
                     </p>
                     <p className="text-xs text-[#6b6b6b]">
                       {formatMoney(b.total_amount, b.currency)}

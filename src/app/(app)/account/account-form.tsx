@@ -157,7 +157,7 @@ export function AccountForm({
             <Label htmlFor="timezone">Zona horaria</Label>
             <TimezoneSelect name="timezone" defaultValue={timezone} />
             <p className="text-xs text-muted-foreground">
-              Tus clases se muestran en esta hora local.
+              Tus mentorías se muestran en esta hora local.
             </p>
           </div>
           <Button
@@ -217,7 +217,7 @@ export function AccountForm({
         <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
           {isTutor
             ? "Ya tienes el rol de tutor activo."
-            : "Conviértete en tutor para empezar a ofrecer tus clases."}
+            : "Conviértete en tutor para empezar a ofrecer tus mentorías."}
         </p>
         {isTutor ? null : (
           <div className="mt-4">

@@ -127,7 +127,7 @@ export default async function TutorPayoutsPage() {
           <div>
             <dt className="text-xs text-[#6b6b6b]">Retención</dt>
             <dd className="mt-1 text-sm text-[#19191f]">
-              7 días desde que la clase se completa
+              7 días desde que la mentoría se completa
             </dd>
           </div>
           <div>

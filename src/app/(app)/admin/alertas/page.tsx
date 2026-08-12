@@ -125,7 +125,7 @@ export default async function AdminAlertasPage({
         entityId: b.id,
         severity: "baja",
         title: `Cancelación #${b.id.slice(0, 8)}`,
-        detail: `${b.products?.title ?? "Clase"} · ${formatMoney(b.total_amount, b.currency)}`,
+        detail: `${b.products?.title ?? "Mentoría"} · ${formatMoney(b.total_amount, b.currency)}`,
         href: `/admin/bookings/${b.id}`,
         at: b.cancelled_at ?? "",
       }),

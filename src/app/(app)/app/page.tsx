@@ -30,7 +30,7 @@ function summary(upcoming: number, awaiting: number): string {
   const parts: string[] = [];
   if (upcoming > 0) {
     parts.push(
-      `${upcoming} ${upcoming === 1 ? "clase próxima" : "clases próximas"}`,
+      `${upcoming} ${upcoming === 1 ? "mentoría próxima" : "mentorías próximas"}`,
     );
   }
   if (awaiting > 0) {
@@ -38,7 +38,7 @@ function summary(upcoming: number, awaiting: number): string {
       `${awaiting} ${awaiting === 1 ? "esperando aceptación del tutor" : "esperando aceptación de los tutores"}`,
     );
   }
-  if (parts.length === 0) return "Aquí verás tus próximas clases y tus reservas.";
+  if (parts.length === 0) return "Aquí verás tus próximas mentorías y tus reservas.";
   return `Tienes ${parts.join(" y ")}.`;
 }
 
@@ -113,10 +113,10 @@ export default async function AppHome() {
       {!hasActivity ? (
         <PanelCard>
           <PanelCardTitle className="text-[22px]">
-            Aún no tienes clases reservadas
+            Aún no tienes mentorías reservadas
           </PanelCardTitle>
           <p className="mt-2 text-[13px] text-[#6b6b6b]">
-            Descubre tutores y reserva tu primera clase 1 a 1 en vivo.
+            Descubre tutores y reserva tu primera mentoría 1 a 1 en vivo.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Button asChild className="h-10">
@@ -135,7 +135,7 @@ export default async function AppHome() {
             </PanelCardTitle>
             {open.length === 0 ? (
               <p className="mt-4 text-[13px] text-[#6b6b6b]">
-                No tienes clases agendadas.
+                No tienes mentorías agendadas.
               </p>
             ) : (
               <ul className="mt-4 divide-y divide-[#e0e0e0]">
@@ -147,7 +147,7 @@ export default async function AppHome() {
                       key={b.id}
                       href={`/reservas/${b.id}`}
                       tutor={names.get(b.products?.tutor_id ?? "")}
-                      title={b.products?.title ?? "Clase"}
+                      title={b.products?.title ?? "Mentoría"}
                       when={s?.start_at ?? null}
                       timeZone={tz}
                       status={BOOKING_STATUS_LABEL[b.status]}
@@ -196,7 +196,7 @@ export default async function AppHome() {
                       key={b.id}
                       href={`/reservas/${b.id}`}
                       tutor={names.get(b.products?.tutor_id ?? "")}
-                      title={b.products?.title ?? "Clase"}
+                      title={b.products?.title ?? "Mentoría"}
                       when={last?.start_at ?? null}
                       timeZone={tz}
                       status={BOOKING_STATUS_LABEL[b.status]}

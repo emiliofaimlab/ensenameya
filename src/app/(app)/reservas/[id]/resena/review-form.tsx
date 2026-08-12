@@ -107,7 +107,7 @@ export function ReviewForm({
         </p>
         <Textarea
           className="mt-2 min-h-24 rounded-[12px] border-[#e0e0e0] bg-muted"
-          placeholder="Cuéntanos qué te ayudó más de la clase…"
+          placeholder="Cuéntanos qué te ayudó más de la mentoría…"
           value={comment}
           onChange={(e) => setComment(e.target.value)}
         />

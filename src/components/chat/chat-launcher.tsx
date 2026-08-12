@@ -58,7 +58,7 @@ export async function ChatLauncher() {
 
   const conversations: Conversation[] = open.map((b) => ({
     bookingId: b.id,
-    title: b.products?.title ?? "Clase",
+    title: b.products?.title ?? "Mentoría",
     subtitle:
       b.student_id === user.id
         ? `con ${names.get(b.tutor_id) ?? "tu tutor"}`

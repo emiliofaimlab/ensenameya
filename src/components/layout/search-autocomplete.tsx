@@ -147,7 +147,7 @@ export function SearchAutocomplete({
       items: sug.tutors.map((t) => ({ href: `/tutors/${t.id}`, primary: t.name, secondary: t.headline })),
     },
     products: {
-      label: "Clases",
+      label: "Mentorías",
       icon: BookOpenIcon,
       items: sug.products.map((p) => ({ href: `/products/${p.id}`, primary: p.title, secondary: null })),
     },

@@ -339,7 +339,7 @@ export function LiveRoom({
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
       <div>
-        <p className="text-sm text-muted-foreground">Clase</p>
+        <p className="text-sm text-muted-foreground">Mentoría</p>
         <h1 className="text-xl font-semibold">{productTitle}</h1>
       </div>
 

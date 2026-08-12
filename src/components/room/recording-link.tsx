@@ -40,9 +40,9 @@ export function RecordingLink({ sessionId }: { sessionId: string }) {
     w?.close();
     toast.info(
       data.status === "expired"
-        ? "La grabación ya caducó: se guarda 30 días desde la clase."
+        ? "La grabación ya caducó: se guarda 30 días desde la mentoría."
         : data.status === "none"
-          ? "Esta clase no se grabó."
+          ? "Esta mentoría no se grabó."
           : "La grabación no está disponible todavía.",
     );
   }

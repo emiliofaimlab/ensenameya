@@ -37,7 +37,7 @@ export const TRUST_POINTS_COMO_FUNCIONA = [
   {
     icon: ShieldCheckIcon,
     title: "Tutores verificados",
-    text: "Identidad y experiencia seleccionadas a mano antes de su primera clase.",
+    text: "Identidad y experiencia seleccionadas a mano antes de su primera mentoría.",
   },
   {
     icon: WalletIcon,

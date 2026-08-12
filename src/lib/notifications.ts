@@ -37,7 +37,7 @@ const TEXT: Record<string, string> = {
   refund_processed: "Se procesó un reembolso",
   review_request: "¿Cómo te fue? Deja tu reseña",
   payout_paid: "Se pagó tu liquidación",
-  recording_ready: "La grabación de tu clase ya está disponible",
+  recording_ready: "La grabación de tu mentoría ya está disponible",
   payout_issue: "Una liquidación necesita atención",
 };
 

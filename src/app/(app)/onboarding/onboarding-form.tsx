@@ -173,7 +173,7 @@ export function OnboardingForm({
         step={1}
         total={3}
         title="Te damos la bienvenida a Enséñame Ya"
-        description="Completa tu perfil para reservar tu primera clase."
+        description="Completa tu perfil para reservar tu primera mentoría."
         onNext={next_}
         busy={busy}
       >
@@ -261,7 +261,7 @@ export function OnboardingForm({
       <Field
         label="Zona horaria"
         htmlFor="timezone"
-        hint="Tus clases se muestran en esta hora local."
+        hint="Tus mentorías se muestran en esta hora local."
       >
         <TimezoneSelect
           value={timezone}

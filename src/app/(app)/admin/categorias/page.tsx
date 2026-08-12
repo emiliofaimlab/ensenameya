@@ -36,7 +36,7 @@ export default async function AdminCategoriasPage() {
   return (
     <AdminShell
           title="Categorías"
-          description="Las que ven alumnos y tutores al explorar y al clasificar sus clases."
+          description="Las que ven alumnos y tutores al explorar y al clasificar sus mentorías."
     >
         <CategoryManager categories={categories} />
     </AdminShell>

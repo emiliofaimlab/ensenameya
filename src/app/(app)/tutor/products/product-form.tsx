@@ -304,7 +304,7 @@ export function ProductForm({
             name="description"
             defaultValue={product?.description}
             rows={4}
-            placeholder="Explica la metodología y qué incluye la clase…"
+            placeholder="Explica la metodología y qué incluye la mentoría…"
             className="rounded-[8px] px-3.5 placeholder:text-[#8c8c8c]"
           />
         </div>
@@ -454,7 +454,7 @@ export function ProductForm({
               publicar una clase básica. Alimentan los filtros de P05/P06. */}
           <div className="grid gap-1.5">
             <Label htmlFor="level" className={LABEL}>
-              Nivel de la clase (opcional)
+              Nivel de la mentoría (opcional)
             </Label>
             <select
               id="level"
@@ -512,7 +512,7 @@ export function ProductForm({
           onboarding. Solo al editar (el producto ya existe y tiene id). */}
       <PanelCard className="flex flex-col gap-3">
         <h2 className="text-base font-semibold text-[#19191f]">
-          Materiales de clase
+          Materiales de la mentoría
         </h2>
         {isEdit && product ? (
           <MaterialsUpload

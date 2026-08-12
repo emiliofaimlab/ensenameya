@@ -77,7 +77,7 @@ export default async function RoomPage({
       endAt={s.end_at}
       sessionStatus={s.status}
       bookingStatus={s.bookings?.status ?? "cancelled"}
-      productTitle={s.bookings?.products?.title ?? "Clase"}
+      productTitle={s.bookings?.products?.title ?? "Mentoría"}
       isTutor={s.tutor_id === user.id}
       currentUserId={user.id}
       firstSessionAt={firstSession?.start_at ?? null}

@@ -240,7 +240,7 @@ export function ChatThread({
     return (
       <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
         {firstSessionAt
-          ? "El chat se abre 2 días antes de tu primera clase."
+          ? "El chat se abre 2 días antes de tu primera mentoría."
           : "El chat se habilita cuando la reserva esté confirmada."}
       </p>
     );

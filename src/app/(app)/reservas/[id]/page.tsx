@@ -106,7 +106,7 @@ export default async function BookingDetailPage({
       <div className="flex flex-col gap-1.5">
         {tutor ? <p className="text-[13px] text-[#6b6b6b]">con {tutor}</p> : null}
         <h1 className="text-[26px] font-bold tracking-tight text-[#19191f]">
-          {booking.products?.title ?? "Clase"}
+          {booking.products?.title ?? "Mentoría"}
         </h1>
         <div className="flex flex-wrap items-center gap-2.5">
           <StatusPill>{BOOKING_STATUS_LABEL[booking.status]}</StatusPill>

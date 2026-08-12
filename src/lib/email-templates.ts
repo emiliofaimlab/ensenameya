@@ -55,9 +55,9 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
     cta: "Ver el detalle",
   }),
   review_request: () => ({
-    asunto: "¿Cómo te fue la clase?",
+    asunto: "¿Cómo te fue la mentoría?",
     cuerpo:
-      "Tu clase terminó. Dejar una reseña ayuda a otros alumnos a elegir, y solo lleva un minuto.",
+      "Tu mentoría terminó. Dejar una reseña ayuda a otros alumnos a elegir, y solo lleva un minuto.",
     cta: "Dejar mi reseña",
   }),
   payment_receipt: (p) => ({
@@ -96,9 +96,9 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
     cta: "Ver mis cobros",
   }),
   recording_ready: () => ({
-    asunto: "La grabación de tu clase ya está disponible",
+    asunto: "La grabación de tu mentoría ya está disponible",
     cuerpo:
-      "Puedes verla y descargarla desde la reserva. Estará disponible durante 30 días desde que terminó la clase; después se borra.",
+      "Puedes verla y descargarla desde la reserva. Estará disponible durante 30 días desde que terminó la mentoría; después se borra.",
     cta: "Ver la grabación",
   }),
 };

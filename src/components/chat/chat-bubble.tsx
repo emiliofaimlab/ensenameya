@@ -62,7 +62,7 @@ export function ChatBubble({ conversations }: { conversations: Conversation[] })
           {conversations.length === 0 ? (
             <p className="px-4 py-5 text-[13px] text-[#6b6b6b]">
               Todavía no tienes conversaciones. El chat se abre 2 días antes de
-              tu primera clase.
+              tu primera mentoría.
             </p>
           ) : (
             <ul className="max-h-[60vh] divide-y divide-[#f0f0f0] overflow-auto">

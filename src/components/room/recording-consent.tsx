@@ -69,16 +69,16 @@ export function RecordingConsent({
         <span>
           <span className="flex items-center gap-1.5 font-medium">
             <VideoIcon className="size-4 text-muted-foreground" />
-            Acepto que esta clase se grabe
+            Acepto que esta mentoría se grabe
           </span>
           <span className="mt-1 block text-xs text-muted-foreground">
             {granted && other
-              ? "Los dos aceptaron: la clase se puede grabar y estará disponible 30 días."
+              ? "Los dos aceptaron: la mentoría se puede grabar y estará disponible 30 días."
               : granted
                 ? `Falta que ${otherLabel} acepte. Hasta entonces no se graba.`
                 : other
                   ? `${otherLabel === "el alumno" ? "El alumno" : "El tutor"} ya aceptó. Sin tu permiso no se graba.`
-                  : "Nadie ha aceptado todavía, así que la clase no se graba."}
+                  : "Nadie ha aceptado todavía, así que la mentoría no se graba."}
           </span>
         </span>
       </label>

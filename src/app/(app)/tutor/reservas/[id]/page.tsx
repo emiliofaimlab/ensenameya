@@ -114,7 +114,7 @@ export default async function TutorBookingDetailPage({
           <PanelCard>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <p className="text-base font-bold text-[#19191f]">
-                {booking.products?.title ?? "Clase"}
+                {booking.products?.title ?? "Mentoría"}
               </p>
               <StatusPill
                 tone={BOOKING_PILL[booking.status] ?? "neutral"}

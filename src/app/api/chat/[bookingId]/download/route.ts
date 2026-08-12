@@ -62,7 +62,7 @@ export async function GET(
   const label = (senderId: string) =>
     `${roleOf(senderId)}${senderId === user.id ? " (tú)" : ""}`;
 
-  const title = booking.products?.title ?? "Clase";
+  const title = booking.products?.title ?? "Mentoría";
   const stamp = new Date().toISOString().slice(0, 10);
   const filename = `chat-${bookingId.slice(0, 8)}-${stamp}.${format}`;
 
@@ -70,7 +70,7 @@ export async function GET(
     const body = JSON.stringify(
       {
         reserva: bookingId,
-        clase: title,
+        mentoria: title,
         exportado_en: new Date().toISOString(),
         // El hilo se purga a los 30 días de cada mensaje (RN-41): quien
         // descarga debe saber hasta cuándo existirá el original.
@@ -109,7 +109,7 @@ export async function GET(
 
   const lines = [
     `Conversación de la reserva ${bookingId}`,
-    `Clase: ${title}`,
+    `Mentoría: ${title}`,
     `Descargado: ${fmt(new Date().toISOString())} (${tz})`,
     rows.at(-1)?.expires_at
       ? `El hilo se borra el ${fmt(rows.at(-1)!.expires_at)} (retención de 30 días).`

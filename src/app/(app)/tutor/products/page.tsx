@@ -42,7 +42,7 @@ export default async function TutorProductsPage() {
   return (
     <TutorShell
       title="Mis mentorías"
-      description="Crea y gestiona las clases que ofreces."
+      description="Crea y gestiona las mentorías que ofreces."
       actions={
         <Button asChild className="h-[45px] rounded-[8px] px-5 font-semibold">
           <Link href="/tutor/products/new">Crear mentoría</Link>

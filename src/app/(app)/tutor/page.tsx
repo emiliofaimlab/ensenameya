@@ -223,7 +223,7 @@ export default async function TutorHomePage() {
           </div>
           {(nextSessions ?? []).length === 0 ? (
             <p className="mt-4 text-[13px] text-[#6b6b6b]">
-              No tienes clases agendadas.
+              No tienes mentorías agendadas.
             </p>
           ) : (
             <ul className="mt-2 divide-y divide-[#e0e0e0]">
@@ -234,7 +234,7 @@ export default async function TutorHomePage() {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
-                      {s.bookings?.products?.title ?? "Clase"}
+                      {s.bookings?.products?.title ?? "Mentoría"}
                     </p>
                     <p className="text-xs text-[#6b6b6b] first-letter:uppercase">
                       {formatSessionTime(s.start_at, tz)} · tu hora local
@@ -281,7 +281,7 @@ export default async function TutorHomePage() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
-                        {b.products?.title ?? "Clase"}
+                        {b.products?.title ?? "Mentoría"}
                       </p>
                       <p className="text-xs text-[#6b6b6b]">
                         {formatMoney(b.total_amount, b.currency)} ·{" "}
