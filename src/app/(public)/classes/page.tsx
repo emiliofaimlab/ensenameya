@@ -102,7 +102,7 @@ export default async function ClassesPage({
         <Container className="py-12">
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-2xl font-bold sm:text-3xl">
-              Explorar Mentorías
+              Explorar mentorías
             </h1>
             <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1.5 text-[12.5px] font-semibold">
               <span className="size-1.5 rounded-full bg-white" />
@@ -204,14 +204,16 @@ export default async function ClassesPage({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[15px] font-medium text-[#666666]">
                 {total}{" "}
-                {total === 1 ? "mentoría disponible" : "mentorías disponibles"}
+                {total === 1
+                  ? "tutoría lista para reservar"
+                  : "tutorías listas para reservar"}
               </p>
 
               {/* ponytail: `<details>` nativo, igual que en P04. `name` lo marca
                   como desplegable: se cierra fuera/Escape/al elegir. */}
               <details name="orden" className="group relative">
                 <summary className="flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border border-[#d1d1d1] px-3.5 text-[13.5px] font-medium text-[#474747] marker:hidden">
-                  Ordenar:{" "}
+                  Ordenar por:{" "}
                   {SORTS.find((s) => s.value === (sort ?? "recent"))!.label}
                   <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
                 </summary>

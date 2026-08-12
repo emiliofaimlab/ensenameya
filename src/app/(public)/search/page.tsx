@@ -148,7 +148,8 @@ export default async function SearchPage({
             <>
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-base font-semibold text-[#292929]">
-                  Mostrando {total} {total === 1 ? "resultado" : "resultados"}{" "}
+                  Encontramos {total}{" "}
+                  {total === 1 ? "resultado exitoso" : "resultados exitosos"}{" "}
                   para &quot;{query}&quot;
                 </p>
                 {cat ? (

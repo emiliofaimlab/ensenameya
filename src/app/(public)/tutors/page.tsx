@@ -133,7 +133,7 @@ export default async function TutorsPage({
       <div className="bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% text-white">
         <Container className="py-12">
           <div className="flex flex-wrap items-center gap-4">
-            <h1 className="text-2xl font-bold sm:text-3xl">Explorar Tutores</h1>
+            <h1 className="text-2xl font-bold sm:text-3xl">Explorar tutores</h1>
             <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1.5 text-[12.5px] font-semibold">
               <span className="size-1.5 rounded-full bg-white" />
               {total} {total === 1 ? "tutor verificado" : "tutores verificados"}
@@ -194,14 +194,16 @@ export default async function TutorsPage({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[15px] font-medium text-[#666666]">
                 {total}{" "}
-                {total === 1 ? "tutor disponible" : "tutores disponibles"}
+                {total === 1
+                  ? "experto listo para guiarte"
+                  : "expertos listos para guiarte"}
               </p>
 
               {/* ponytail: `<details>` nativo — el desplegable del Figma sin JS
                   ni componente de cliente; cada opción es un enlace. */}
               <details name="orden" className="group relative">
                 <summary className="flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border border-[#d1d1d1] px-3.5 text-[13.5px] font-medium text-[#474747] marker:hidden">
-                  Ordenar:{" "}
+                  Ordenar por:{" "}
                   {SORTS.find((s) => s.value === (sort ?? "rating"))!.label}
                   <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
                 </summary>
