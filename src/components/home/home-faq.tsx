@@ -17,19 +17,20 @@ const FAQ = [
     a: "El tutor cuenta con un tiempo límite de 24h para confirmar. Si no está disponible en ese horario, la reserva se cancela de forma automática y tu dinero regresa íntegro al 100% para que elijas otra opción.",
   },
   {
-    q: "¿Puedo cambiar o cancelar una clase?",
+    q: "¿Puedo cambiar o cancelar una mentoría?",
     a: "Por supuesto. Si lo haces con 24h o más de anticipación, recibes un reembolso completo del 100%. Para cancelaciones realizadas con menos de 24h de aviso, se te reembolsará el 50% para compensar el tiempo reservado por el tutor.",
   },
   {
-    q: "¿Las clases se graban?",
-    // ⚠️ El Figma añade aquí "y la tendrás disponible en tu perfil para
-    // repasar durante 30 días". Eso es US-1802 (EY-86), que está en To Do: la
-    // grabación no existe todavía. Se omite esa frase para no prometerla.
+    q: "¿Las mentorías se graban?",
+    // ⚠️ El Figma y el documento de contenido añaden aquí "y la tendrás
+    // disponible en tu perfil para repasar todo el contenido durante 30 días".
+    // Eso es US-1802 (EY-86), que sigue en To Do, y el add-on de grabación de
+    // Daily ni siquiera está contratado. Se omite para no prometerlo.
     a: "Son sesiones interactivas 100% privadas. Las grabaciones se realizan únicamente con el consentimiento de ambas partes.",
   },
   {
     q: "¿Cómo elegir al tutor correcto?",
-    a: "Puedes filtrar con total facilidad según el resultado específico que buscas, materia, precio y las valoraciones de la comunidad. Además, cada tutor cuenta con una verificación manual de identidad y experiencia para tu máxima seguridad.",
+    a: "Puedes filtrar con total facilidad según el resultado específico que buscas, materia, precio y las excelentes valoraciones de la comunidad. Además, cada tutor cuenta con una verificación manual de identidad y experiencia para tu máxima seguridad.",
   },
 ];
 
@@ -38,11 +39,11 @@ const FAQ = [
  *  lote semanal (US-1002). */
 export const FAQ_COMO_FUNCIONA = [
   {
-    q: "¿Cómo se coordinan los horarios de las tutorías?",
+    q: "¿Cómo se coordinan los horarios de las mentorías?",
     a: "La plataforma sincroniza las agendas de forma automática convirtiendo las horas a tu zona horaria local para que programar sea rápido y sencillo.",
   },
   {
-    q: "¿Qué pasa tras pagar mi clase?",
+    q: "¿Qué pasa tras pagar mi mentoría?",
     a: "Tu reserva queda confirmada y lista. El tutor cuenta con una ventana de hasta 24 horas para aceptarla. Al confirmar, todo queda agendado; si por algún motivo expira el tiempo, se cancela y tu dinero se reembolsa al 100% de inmediato.",
   },
   {
@@ -50,7 +51,7 @@ export const FAQ_COMO_FUNCIONA = [
     a: "Entras directamente de forma nativa en la web. A la hora de tu sesión, ingresas a tu panel de control y tendrás un botón directo para conectarte a nuestra sala privada de video.",
   },
   {
-    q: "¿Puedo reprogramar o cambiar mi clase si me surge un imprevisto?",
+    q: "¿Puedo reprogramar o cambiar mi mentoría si me surge un imprevisto?",
     a: "Por supuesto. Si avisas con 24 horas o más de anticipación, recuperas el 100% de tu inversión. Si es una modificación realizada con menos de 24 horas de aviso, la plataforma te reembolsa el 50% de la sesión.",
   },
   {
@@ -72,8 +73,8 @@ export const FAQ_SOBRE_NOSOTROS = [
     a: "Validamos manualmente la identidad, títulos, certificaciones y trayectoria de cada tutor. Contamos con profesionales verificados que superan con éxito nuestros filtros de calidad y comparten la vibra de la plataforma.",
   },
   {
-    q: '¿Qué significa que se vende "el resultado"?',
-    a: "Significa que adquieres una transformación tangible. En lugar de acumular horas de videos estáticos, en Enséñame Ya compras un objetivo concreto, como conseguir un inglés conversacional fluido en 6 sesiones, asegurando que tu tiempo valga oro.",
+    q: '¿A qué nos referimos con "aprender con un objetivo claro"?',
+    a: "Significa que te enfocas en metas concretas. En lugar de acumular horas de videos estáticos o clases teóricas interminables, en Enséñame Ya eliges un plan orientado a un logro específico —como preparar una entrevista en inglés o dominar un tema puntual— para que aproveches al máximo tu tiempo.",
   },
   {
     q: "¿Cómo garantizan que las clases en vivo sean seguras?",
