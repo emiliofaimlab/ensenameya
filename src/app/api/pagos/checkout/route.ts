@@ -120,6 +120,13 @@ export async function POST(req: Request) {
       mode: "payment",
       customer: cliente,
       client_reference_id: bookingId,
+      // Solo tarjeta. Por defecto Stripe ofrece los métodos activos de la
+      // cuenta y salían Cash App Pay, Amazon Pay y Klarna: irrelevantes para
+      // Latinoamérica y ruido en una pantalla que se quiere simple. Fijarlo
+      // aquí también apaga los métodos que se activen mañana en el panel sin
+      // que nadie lo revise. Los locales (C-13) entran por aquí cuando se
+      // decida el mercado.
+      payment_method_types: ["card"],
       line_items: [
         {
           price_data: {
