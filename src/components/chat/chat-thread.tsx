@@ -15,14 +15,13 @@ import {
   uploadAttachment,
   type Attachment,
 } from "@/lib/chat/attachments";
+import {
+  toChatMessage,
+  type ChatMessage,
+  type MessageRow,
+} from "@/lib/chat/messages";
 
-export type ChatMessage = {
-  id: string;
-  senderId: string;
-  body: string;
-  createdAt: string;
-  attachment: Attachment | null;
-};
+export type { ChatMessage } from "@/lib/chat/messages";
 
 // RN-41: el chat abre 2 días antes de la 1ª sesión. El server es la barrera
 // (send_message); aquí solo se pinta el estado.
@@ -140,36 +139,13 @@ export function ChatThread({
             filter: `booking_id=eq.${bookingId}`,
           },
           (payload) => {
-            const m = payload.new as {
-              id: string;
-              sender_id: string;
-              body: string;
-              created_at: string;
-              attachment_path: string | null;
-              attachment_name: string | null;
-              attachment_size: number | null;
-            };
+            const m = payload.new as MessageRow;
             // setMessages directo (y no `append`): el efecto no debe depender
             // de una función que se recrea en cada render.
             setMessages((prev) =>
               prev.some((x) => x.id === m.id)
                 ? prev
-                : [
-                    ...prev,
-                    {
-                      id: m.id,
-                      senderId: m.sender_id,
-                      body: m.body,
-                      createdAt: m.created_at,
-                      attachment: m.attachment_path
-                        ? {
-                            path: m.attachment_path,
-                            name: m.attachment_name ?? "documento",
-                            size: m.attachment_size ?? 0,
-                          }
-                        : null,
-                    },
-                  ],
+                : [...prev, toChatMessage(m)],
             );
           },
         )

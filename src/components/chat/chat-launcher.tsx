@@ -63,7 +63,11 @@ export async function ChatLauncher() {
       b.student_id === user.id
         ? `con ${names.get(b.tutor_id) ?? "tu tutor"}`
         : "con tu alumno",
+    // La 1ª sesión de la reserva: el hilo la necesita para saber si la ventana
+    // de RN-41 está abierta y dejar escribir o no.
+    firstSessionAt:
+      (b.sessions ?? []).map((s) => s.start_at).sort()[0] ?? null,
   }));
 
-  return <ChatBubble conversations={conversations} />;
+  return <ChatBubble conversations={conversations} currentUserId={user.id} />;
 }
