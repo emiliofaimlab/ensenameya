@@ -16,6 +16,8 @@
   "dependencies": {
     "@daily-co/daily-js": "^0.91.0",
     "@sentry/nextjs": "^10.69.0",
+    "@stripe/react-stripe-js": "^6.8.1",
+    "@stripe/stripe-js": "^9.13.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "class-variance-authority": "^0.7.1",

@@ -6,12 +6,16 @@ import {
   ensureCustomer,
   esCustomerInexistente,
   isStripeConfigured,
+  publishableKey,
   siteUrl,
   stripe,
 } from "@/lib/stripe";
 
 /**
- * EP-20 / PAC-01 · abre el checkout alojado de Stripe para una reserva.
+ * EP-20 / PAC-01 · abre el checkout de Stripe para una reserva y devuelve su
+ * `client_secret`, que es lo que el navegador necesita para montar el Embedded
+ * Checkout en nuestra propia pantalla. Antes devolvía la URL de
+ * checkout.stripe.com y se redirigía; el pago ya no sale del sitio.
  *
  * Recibe una reserva YA creada. `create_booking` sigue llamándose desde el
  * navegador y no se mueve aquí: esa RPC resuelve al alumno con
@@ -75,10 +79,20 @@ export async function POST(req: Request) {
   if (payment.provider !== "stripe") {
     return NextResponse.json({ simulated: true });
   }
-  if (!isStripeConfigured()) {
+  // El embed necesita LAS DOS claves: la secreta para crear la Session y la
+  // publicable para que el navegador monte el iframe. Sin la publicable el
+  // formulario no aparecería y el alumno se quedaría mirando un hueco, así que
+  // se falla aquí y se dice cuál falta.
+  const pk = publishableKey();
+  if (!isStripeConfigured() || !pk) {
     // Ruteado a Stripe pero sin clave: es un error de configuración y se dice.
-    // Caer al simulado aquí sería regalar clases (mismo criterio que Daily).
-    return NextResponse.json({ error: "Stripe no configurado" }, { status: 503 });
+    // Caer al simulado aquí sería regalar mentorías (mismo criterio que Daily).
+    return NextResponse.json(
+      {
+        error: `Stripe no configurado (falta ${!isStripeConfigured() ? "STRIPE_API_KEY" : "STRIPE_PUBLISHABLE_KEY"})`,
+      },
+      { status: 503 },
+    );
   }
 
   const { data: perfil } = await admin
@@ -139,8 +153,25 @@ export async function POST(req: Request) {
         // que corresponde a lo que dice la casilla.
         ...(guardarTarjeta ? { setup_future_usage: "on_session" as const } : {}),
       },
-      success_url: `${base}/reservas/${bookingId}/confirmacion`,
-      cancel_url: `${base}/reservar/${booking.product_id}/checkout?cancelado=1`,
+      // Embedded Checkout: el formulario de tarjeta se monta DENTRO de nuestra
+      // pantalla (reunión 7-ago) en vez de mandar a checkout.stripe.com. Sigue
+      // siendo un iframe de Stripe, así que el PAN no toca nuestro DOM y el
+      // proyecto se queda en PCI-DSS SAQ A — que era la razón de no dibujar
+      // campos propios.
+      // `embedded_page`, NO `embedded`: en la versión de API que tenemos fijada
+      // el valor se renombró y la vieja devuelve 400. El typecheck no lo pilla
+      // porque la unión del SDK acaba en `OtherString`, que traga cualquier
+      // cadena — esto solo se ve llamando a la API de verdad.
+      ui_mode: "embedded_page",
+      // Sin esto Stripe rotula el formulario según el navegador y en un sitio
+      // en español salía "Payment method" / "Save my information". Con el
+      // checkout alojado se notaba menos porque era otra página; embebido,
+      // media pantalla quedaba en otro idioma.
+      locale: "es",
+      // Con el checkout embebido NO existe `success_url` ni `cancel_url`: hay
+      // un único `return_url` al que Stripe lleva ya pagado. Cancelar es no
+      // rellenar el formulario, así que no hay a dónde volver.
+      return_url: `${base}/reservas/${bookingId}/confirmacion`,
     },
     // Un doble clic o un reintento de red no debe abrir dos cobros para la
     // misma reserva. La clave es la reserva porque es lo único estable aquí.
@@ -172,8 +203,18 @@ export async function POST(req: Request) {
     session = await crearSesion(customer, `${clave}-r2`);
   }
 
-  if (!session.url) {
-    return NextResponse.json({ error: "Stripe no devolvió URL" }, { status: 502 });
+  if (!session.client_secret) {
+    return NextResponse.json(
+      { error: "Stripe no devolvió client_secret" },
+      { status: 502 },
+    );
   }
-  return NextResponse.json({ url: session.url });
+  // La publicable viaja con la respuesta en vez de por `NEXT_PUBLIC_*`: así el
+  // interruptor de Stripe sigue siendo UNA sola cosa (las claves del servidor) y
+  // no hay que acordarse de una variante pública en Vercel. Es pública por
+  // diseño —solo permite crear tokens—, así que no roza la regla de oro 3.
+  return NextResponse.json({
+    clientSecret: session.client_secret,
+    publishableKey: pk,
+  });
 }

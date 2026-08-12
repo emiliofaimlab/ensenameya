@@ -29,6 +29,21 @@ export function isStripeConfigured(): boolean {
 }
 
 /**
+ * Clave publicable, la que necesita el navegador para montar el Embedded
+ * Checkout. Es pública por diseño: solo sirve para crear tokens contra la
+ * cuenta, nunca para leer ni mover dinero. Aun así NO lleva prefijo
+ * `NEXT_PUBLIC_` — se manda desde el Route Handler junto al `client_secret`,
+ * para que encender Stripe siga siendo poner las claves del servidor y nada más.
+ *
+ * Va aparte de `isStripeConfigured()` a propósito: listar y borrar tarjetas
+ * guardadas solo necesita la secreta, y acoplarlas dejaría esas pantallas sin
+ * funcionar por una clave que no usan.
+ */
+export function publishableKey(): string | null {
+  return process.env.STRIPE_PUBLISHABLE_KEY ?? null;
+}
+
+/**
  * Perezoso a propósito. Instanciar en el top-level del módulo revienta
  * `next build` cuando la clave no está en el entorno de build — que es
  * exactamente el estado del proyecto hasta que se configure en Vercel.

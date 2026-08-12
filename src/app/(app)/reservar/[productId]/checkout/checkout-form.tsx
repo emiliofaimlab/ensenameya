@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { LockIcon, ShieldCheckIcon } from "lucide-react";
+import { loadStripe } from "@stripe/stripe-js";
+import {
+  EmbeddedCheckout,
+  EmbeddedCheckoutProvider,
+} from "@stripe/react-stripe-js";
 
 import { createClient } from "@/lib/supabase/client";
 import type { SavedCard } from "@/lib/stripe";
@@ -23,6 +28,9 @@ const slotLabel = (iso: string) =>
 
 type State = "idle" | "processing";
 
+/** Lo que devuelve el Route Handler para montar el embed. */
+type Embed = { clientSecret: string; publishableKey: string };
+
 /**
  * US-602 (SCR-AL05) — checkout con PSP **simulado** (C-01). "Confirmar pago"
  * crea la reserva (create_booking) y dispara el pago simulado
@@ -34,14 +42,14 @@ type State = "idle" | "processing";
  * que el cobro esté ruteado al proveedor simulado, así que el día que entre un
  * PSP real este botón deja de funcionar solo — que es lo que debe pasar.
  *
- * ⚠️ SIN campos de tarjeta, a propósito. El Figma dibuja aquí número de
- * tarjeta, titular, vencimiento y CVC en campos propios; capturar el PAN en
- * nuestro formulario metería el proyecto en PCI-DSS SAQ D (alcance completo)
- * en vez del SAQ A que da un checkout alojado. Además contradice el plan ya
- * aprobado: PAC-01 (EY-93) es "checkout ALOJADO real" y PAC-02 (EY-94)
- * tokenización en el PSP. Cuando EP-20 se desbloquee, en el hueco de abajo va
- * el redirect al checkout del proveedor o su iframe/Elements — nunca inputs
- * nuestros. La tarjeta ilustrada de la izquierda es decorativa (no captura nada).
+ * ⚠️ SIN campos de tarjeta NUESTROS, a propósito. El Figma dibuja aquí número
+ * de tarjeta, titular, vencimiento y CVC en campos propios; capturar el PAN en
+ * nuestro formulario metería el proyecto en PCI-DSS SAQ D (alcance completo).
+ * Lo que hay en su lugar es el **Embedded Checkout** de Stripe (reunión 7-ago):
+ * el formulario se ve dentro de esta pantalla, pero vive en un iframe del
+ * proveedor, así que los datos de la tarjeta no tocan nuestro DOM y seguimos en
+ * SAQ A igual que con el checkout alojado. La tarjeta ilustrada de la izquierda
+ * es decorativa (no captura nada).
  */
 export function CheckoutForm({
   productId,
@@ -78,6 +86,13 @@ export function CheckoutForm({
   const [state, setState] = useState<State>("idle");
   // DESMARCADA a propósito: guardar un medio de pago se pide, no se presupone.
   const [guardarTarjeta, setGuardarTarjeta] = useState(false);
+  // Con el `client_secret` en mano, el formulario de Stripe sustituye al aviso
+  // de "te llevamos a la pasarela". `loadStripe` devuelve una promesa que hay
+  // que crear UNA vez: guardarla en el mismo estado la ata al secreto que le
+  // corresponde y evita recrearla en cada render (remontaría el iframe).
+  const [embed, setEmbed] = useState<
+    (Embed & { stripe: ReturnType<typeof loadStripe> }) | null
+  >(null);
 
   async function pay(success: boolean) {
     setState("processing");
@@ -101,8 +116,7 @@ export function CheckoutForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ bookingId, guardarTarjeta }),
     });
-    const salida = (await res.json().catch(() => ({}))) as {
-      url?: string;
+    const salida = (await res.json().catch(() => ({}))) as Partial<Embed> & {
       simulated?: boolean;
       error?: string;
     };
@@ -113,11 +127,17 @@ export function CheckoutForm({
       return;
     }
 
-    if (salida.url) {
-      // Checkout alojado: dominio de Stripe, no es navegación interna. Con
-      // `router.push` el App Router intentaría resolverlo como ruta propia.
-      // A partir de aquí el cobro lo confirma el webhook, no esta pantalla.
-      window.location.assign(salida.url);
+    if (salida.clientSecret && salida.publishableKey) {
+      // El pago ya no sale del sitio: se monta el iframe de Stripe aquí mismo.
+      // A partir de este punto manda el embed —él redirige al `return_url` al
+      // terminar— y el cobro lo confirma el webhook, no esta pantalla. El botón
+      // no vuelve a "idle" a propósito: reservar otra vez abriría un cobro
+      // duplicado sobre la misma reserva.
+      setEmbed({
+        clientSecret: salida.clientSecret,
+        publishableKey: salida.publishableKey,
+        stripe: loadStripe(salida.publishableKey),
+      });
       return;
     }
 
@@ -264,25 +284,40 @@ export function CheckoutForm({
         </PanelCard>
       </div>
 
-      {/* Columna derecha: pasarela alojada (sin PAN nuestro). */}
+      {/* Columna derecha: el formulario de Stripe, embebido (sin PAN nuestro). */}
       <PanelCard>
         <PanelCardTitle className="text-[15px]">Método de pago</PanelCardTitle>
 
-        <div className="mt-3.5 flex gap-3 rounded-xl border border-dashed border-[#e0e0e0] p-5">
-          <LockIcon className="mt-0.5 size-5 shrink-0 text-[#6b6b6b]" />
-          <div>
-            <p className="text-sm font-semibold text-[#19191f]">
-              El pago se completa en la pasarela del proveedor
-            </p>
-            <p className="mt-1 text-[13px] text-[#6b6b6b]">
-              {tarjetas.length === 0
-                ? "Nunca escribes los datos de tu tarjeta en Enséñame Ya: al confirmar te llevamos al checkout seguro del proveedor de pagos."
-                : tarjetas.length === 1
-                  ? `Podrás pagar con tu ${tarjeta!.brand} ••••${tarjeta!.last4} o con otra tarjeta. Nunca escribes esos datos en Enséñame Ya.`
-                  : `Podrás elegir entre tus ${tarjetas.length} tarjetas guardadas o usar otra. Nunca escribes esos datos en Enséñame Ya.`}
-            </p>
+        {embed ? (
+          // El iframe de Stripe. `key` con el secreto: si alguna vez se abriera
+          // una Session nueva, React desmonta el anterior en vez de reusarlo con
+          // un secreto que ya no le corresponde.
+          <div className="mt-3.5">
+            <EmbeddedCheckoutProvider
+              key={embed.clientSecret}
+              stripe={embed.stripe}
+              options={{ clientSecret: embed.clientSecret }}
+            >
+              <EmbeddedCheckout />
+            </EmbeddedCheckoutProvider>
           </div>
-        </div>
+        ) : (
+          <div className="mt-3.5 flex gap-3 rounded-xl border border-dashed border-[#e0e0e0] p-5">
+            <LockIcon className="mt-0.5 size-5 shrink-0 text-[#6b6b6b]" />
+            <div>
+              <p className="text-sm font-semibold text-[#19191f]">
+                Pagas aquí mismo, sin salir de Enséñame Ya
+              </p>
+              <p className="mt-1 text-[13px] text-[#6b6b6b]">
+                {tarjetas.length === 0
+                  ? "Al continuar aparece aquí el formulario seguro de nuestro proveedor de pagos. Los datos de tu tarjeta viajan a él directamente: nunca pasan por Enséñame Ya."
+                  : tarjetas.length === 1
+                    ? `Al continuar podrás pagar con tu ${tarjeta!.brand} ••••${tarjeta!.last4} o con otra tarjeta, aquí mismo. Esos datos nunca pasan por Enséñame Ya.`
+                    : `Al continuar podrás elegir entre tus ${tarjetas.length} tarjetas guardadas o usar otra, aquí mismo. Esos datos nunca pasan por Enséñame Ya.`}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* El aviso solo cuando el cobro ES simulado. Dejarlo fijo fue un bug
             real: al encender Stripe, la pantalla seguía diciendo que no se movía
@@ -296,7 +331,7 @@ export function CheckoutForm({
         {/* Consentimiento explícito para el card-on-file (PAC-02). Va aquí y no
             en la pasarela para que se lea en nuestro idioma y ANTES de salir del
             sitio. Se traduce en `setup_future_usage` solo si está marcada. */}
-        {simulado ? null : (
+        {simulado || embed ? null : (
           <label className="mt-4 flex cursor-pointer items-start gap-2.5 text-[13px] text-[#4b4b4b]">
             <input
               type="checkbox"
@@ -314,7 +349,9 @@ export function CheckoutForm({
           </label>
         )}
 
-        <div className="mt-6 flex flex-wrap gap-3">
+        {/* Montado el embed, el pago lo cierra Stripe: dejar aquí un botón que
+            vuelve a crear reserva y Session abriría un cobro duplicado. */}
+        <div className={embed ? "hidden" : "mt-6 flex flex-wrap gap-3"}>
           <Button
             className="h-[49px] rounded-[10px] px-6 font-semibold"
             disabled={state === "processing"}
@@ -324,7 +361,7 @@ export function CheckoutForm({
               ? "Procesando…"
               : simulado
                 ? `Confirmar pago · ${formatMoney(total, currency)}`
-                : `Ir a pagar · ${formatMoney(total, currency)}`}
+                : `Continuar al pago · ${formatMoney(total, currency)}`}
           </Button>
           {/* Simular fallo solo tiene sentido con el proveedor simulado: con
               Stripe el rechazo lo decide la pasarela, y este botón acabaría
