@@ -81,6 +81,10 @@ export function LiveRoom({
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // "Modo teatro" (reunión 7-ago): la sala ocupa toda la ventana y el vídeo
+  // crece, pero el chat sigue al lado. Es lo que el fullscreen de Daily no
+  // puede hacer, porque el suyo solo agranda su iframe.
+  const [teatro, setTeatro] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
   const callRef = useRef<DailyCall | null>(null);
   const docRef = useRef<HTMLInputElement>(null);
@@ -93,6 +97,18 @@ export function LiveRoom({
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Escape sale del modo teatro. Es lo que hace el fullscreen del navegador y
+  // lo que la gente va a intentar; sin esto la única salida sería el botón, que
+  // en pantalla completa cuesta encontrar.
+  useEffect(() => {
+    if (!teatro) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTeatro(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [teatro]);
 
   const bookingActive = bookingStatus === "confirmed" || bookingStatus === "in_progress";
   const sessionOver =
@@ -118,7 +134,11 @@ export function LiveRoom({
 
       const call = DailyIframe.createFrame(frameRef.current, {
         showLeaveButton: true,
-        showFullscreenButton: true,
+        // SIN el botón de pantalla completa de Daily (reunión 7-ago): pone el
+        // IFRAME a pantalla completa, y como nuestro chat vive fuera de él,
+        // desaparecía justo cuando más se usa. En su lugar está el "modo
+        // teatro" de aquí abajo, que agranda el vídeo conservando el hilo.
+        showFullscreenButton: false,
         iframeStyle: { width: "100%", height: "100%", border: "0" },
       });
       callRef.current = call;
@@ -207,7 +227,13 @@ export function LiveRoom({
     const elapsed = now - new Date(startAt).getTime();
 
     return (
-      <div className="mx-auto flex w-full max-w-7xl flex-col px-4 py-4">
+      <div
+        className={
+          teatro
+            ? "fixed inset-0 z-50 flex w-full flex-col bg-background px-4 py-4"
+            : "mx-auto flex w-full max-w-7xl flex-col px-4 py-4"
+        }
+      >
         {/* Barra de sesión (LV01): qué clase es y cuánto lleva. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b bg-background pb-3">
           <h1 className="font-bold">{productTitle}</h1>
@@ -224,13 +250,28 @@ export function LiveRoom({
           </div>
         </div>
 
-        {/* Dos columnas como en LV01: vídeo + hilo. En móvil el chat baja. */}
-        <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_340px]">
-          <div className="flex flex-col overflow-hidden rounded-xl border">
+        {/* Dos columnas como en LV01: vídeo + hilo. En móvil el chat baja. En
+            teatro la rejilla se come el alto que sobra y ambas columnas crecen
+            con ella — el chat NO se sacrifica, que es la diferencia con el
+            fullscreen de Daily. */}
+        <div
+          className={`mt-4 grid gap-4 lg:grid-cols-[1fr_340px] ${
+            teatro ? "min-h-0 flex-1" : ""
+          }`}
+        >
+          <div
+            className={`flex flex-col overflow-hidden rounded-xl border ${
+              teatro ? "min-h-0" : ""
+            }`}
+          >
             {joined.simulated ? (
               // Sin credenciales de Daily: la sala, el token y la ventana ya
               // funcionan; falta solo el transporte de video.
-              <div className="relative flex h-[clamp(20rem,55vh,34rem)] items-center justify-center bg-neutral-900 text-neutral-300">
+              <div
+                className={`relative flex items-center justify-center bg-neutral-900 text-neutral-300 ${
+                  teatro ? "min-h-0 flex-1" : "h-[clamp(20rem,55vh,34rem)]"
+                }`}
+              >
                 <div className="flex flex-col items-center gap-2 p-6 text-center">
                   <p className="text-sm uppercase tracking-wide text-neutral-500">Sala simulada</p>
                   <p className="max-w-sm text-sm">
@@ -246,7 +287,12 @@ export function LiveRoom({
               // El iframe prefabricado de Daily trae sus propios tiles y su barra
               // de controles: los del Figma (micro/cámara/compartir con iconos)
               // exigirían el modo call-object, que es reescribir EP-08.
-              <div ref={frameRef} className="relative h-[clamp(20rem,55vh,34rem)] bg-neutral-900" />
+              <div
+                ref={frameRef}
+                className={`relative bg-neutral-900 ${
+                  teatro ? "min-h-0 flex-1" : "h-[clamp(20rem,55vh,34rem)]"
+                }`}
+              />
             )}
 
             <div className="flex flex-wrap items-center gap-2 border-t bg-background p-3">
@@ -293,6 +339,21 @@ export function LiveRoom({
                 {uploading ? "Subiendo…" : "Subir documentos"}
               </Button>
 
+              {/* Sustituye al fullscreen de Daily: mismo objetivo (ver grande),
+                  pero sin perder el chat. Como el de teatro de YouTube.
+                  Solo en lg+: medido en móvil, el "teatro" deja el vídeo MÁS
+                  pequeño que el tamaño normal, porque la rejilla pasa a una
+                  columna y hay que repartir el alto con el chat. */}
+              <Button
+                variant="outline"
+                className="hidden lg:inline-flex"
+                aria-pressed={teatro}
+                onClick={() => setTeatro((t) => !t)}
+                title={teatro ? "Salir del modo teatro (Esc)" : "Ampliar el vídeo sin perder el chat"}
+              >
+                {teatro ? "Salir del modo teatro" : "Modo teatro"}
+              </Button>
+
               {isTutor ? (
                 <Button disabled={busy} onClick={complete}>
                   Marcar completada
@@ -309,7 +370,11 @@ export function LiveRoom({
 
           {/* El hilo es el MISMO de EP-17 (`/chat/<reserva>`), no una copia:
               mismos mensajes, misma RLS, mismo Realtime. */}
-          <aside className="flex h-[clamp(24rem,66vh,42rem)] flex-col rounded-xl border p-4">
+          <aside
+            className={`flex flex-col rounded-xl border p-4 ${
+              teatro ? "min-h-0 lg:h-auto" : "h-[clamp(24rem,66vh,42rem)]"
+            }`}
+          >
             <div className="mb-3 flex items-baseline justify-between gap-2">
               <h2 className="font-semibold">Chat</h2>
               <Link
