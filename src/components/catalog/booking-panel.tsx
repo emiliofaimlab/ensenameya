@@ -166,7 +166,7 @@ export async function BookingPanel({
             Reserva con este tutor
           </p>
           <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
-            Elige el día y la clase; el precio depende de la mentoría que
+            Elige el día y la sesión; el precio depende de la mentoría que
             escojas.
           </p>
         </>
@@ -235,7 +235,7 @@ export async function BookingPanel({
               (P08) no hay nada que elegir y se salta. */}
           {single ? null : (
             <div className="mt-5">
-              <p className="text-[13px] font-medium">Elige la clase</p>
+              <p className="text-[13px] font-medium">Elige la sesión</p>
               <ul className="mt-2 flex flex-col gap-2">
                 {dayProducts.map((p) => {
                   const on = p.id === chosen?.id;
@@ -278,7 +278,7 @@ export async function BookingPanel({
               </p>
               {times.length === 0 ? (
                 <p className="mt-2 text-[13px] text-muted-foreground">
-                  Esta clase no tiene horarios ese día. Prueba con otro día.
+                  Esta sesión no tiene horarios ese día. Prueba con otro día.
                 </p>
               ) : (
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -300,7 +300,7 @@ export async function BookingPanel({
             </>
           ) : (
             <p className="mt-4 text-[13px] text-muted-foreground">
-              Elige una clase para ver sus horarios y su precio.
+              Elige una sesión para ver sus horarios y su precio.
             </p>
           )}
         </>
@@ -340,7 +340,7 @@ export async function BookingPanel({
         <Button
           disabled
           className="mt-5 h-[51px] w-full text-[15px]"
-          title="Elige primero una clase"
+          title="Elige primero una sesión"
         >
           {ctaLabel}
         </Button>

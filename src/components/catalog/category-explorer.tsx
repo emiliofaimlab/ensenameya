@@ -142,7 +142,7 @@ export async function CategoryExplorer({
     ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
     : null;
 
-  const title = category ? `Explorar ${category.name}` : "Explorar Categorías";
+  const title = category ? `Explorar ${category.name}` : "Explorar categorías";
   const description =
     category?.description ??
     (category

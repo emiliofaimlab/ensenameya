@@ -77,7 +77,7 @@ export const FAQ_SOBRE_NOSOTROS = [
     a: "Significa que te enfocas en metas concretas. En lugar de acumular horas de videos estáticos o clases teóricas interminables, en Enséñame Ya eliges un plan orientado a un logro específico —como preparar una entrevista en inglés o dominar un tema puntual— para que aproveches al máximo tu tiempo.",
   },
   {
-    q: "¿Cómo garantizan que las clases en vivo sean seguras?",
+    q: "¿Cómo garantizan que las mentorías en vivo sean seguras?",
     a: "Contamos con salas de video privadas 1 a 1 integradas de forma nativa en la plataforma para tu comodidad. Además, tu inversión se resguarda de manera segura hasta que la sesión se imparte con total éxito.",
   },
   {

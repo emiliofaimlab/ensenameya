@@ -73,7 +73,7 @@ export function PriceRange({
   return (
     <div>
       <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-bold text-[#242424]">Inversión por clase</p>
+        <p className="text-sm font-bold text-[#242424]">Inversión por sesión</p>
         {value ? (
           <a
             href={hrefFor({})}

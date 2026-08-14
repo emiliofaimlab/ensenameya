@@ -5,7 +5,7 @@ import { Container } from "@/components/layout/container";
 
 /** El bloque es el mismo en P01, P02 y P03; solo cambian los textos. */
 export function FinalCta({
-  title = "Da el siguiente paso: Empieza a Aprender o a Enseñar",
+  title = "Da el siguiente paso: empieza a aprender o a enseñar",
   text = "Crea tu cuenta sin costo en segundos y asegura tu primera sesión, o conviértete en tutor y empieza a facturar con orgullo por lo que sabes.",
   primaryLabel = "Crear cuenta gratis",
   secondaryLabel = "Quiero enseñar",

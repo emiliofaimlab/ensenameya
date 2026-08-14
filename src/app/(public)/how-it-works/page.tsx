@@ -206,7 +206,7 @@ export default function HowItWorksPage() {
       />
 
       <TrustCards
-        title="Aprende y Enseña con la tranquilidad de siempre"
+        title="Aprende y enseña con la tranquilidad de siempre"
         points={TRUST_POINTS_COMO_FUNCIONA}
         tone="peach"
       />
