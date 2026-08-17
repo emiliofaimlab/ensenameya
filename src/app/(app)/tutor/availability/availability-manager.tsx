@@ -7,6 +7,14 @@ import { CopyIcon, PlusIcon, XIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const WEEKDAYS = [
   "Domingo",
@@ -63,19 +71,28 @@ function horasSemana(rules: Rule[]): string {
  * 3. Faltaba lo primero que quiere hacer cualquier tutor —«de lunes a viernes,
  *    lo mismo»— y había que repetir la franja cinco veces a mano. Un día con
  *    horario ya puesto ofrece copiarlo, saltándose los duplicados.
+ *
+ * N-04 · desde que la disponibilidad se elige por mentoría, una franja puede
+ * tener mentorías colgando. Borrarla ya no es una operación local: ver
+ * `pedirBorrado`.
  */
 export function AvailabilityManager({
   userId,
   rules,
+  usedBy = {},
 }: {
   userId: string;
   rules: Rule[];
+  /** N-04 · rule_id → títulos de las mentorías que usan esa franja. */
+  usedBy?: Record<string, string[]>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   // Un solo día abierto: es lo que impide que vuelvan los siete formularios.
   const [abierto, setAbierto] = useState<number | null>(null);
   const [copiando, setCopiando] = useState<number | null>(null);
+  // Franja pendiente de confirmar borrado (solo las que usa alguna mentoría).
+  const [borrando, setBorrando] = useState<Rule | null>(null);
 
   const byDay = new Map<number, Rule[]>();
   for (const r of rules) {
@@ -113,12 +130,29 @@ export function AvailabilityManager({
     router.refresh();
   }
 
+  /**
+   * N-04 · el aspa ya no borra siempre a la primera.
+   *
+   * Si de esta franja cuelga alguna mentoría, borrarla arrastra el enlace (FK
+   * `on delete cascade`) y, si era el único de esa mentoría, la mentoría pasa a
+   * ofrecerse en TODA la disponibilidad del tutor. Es decir: quitar un horario
+   * puede ABRIR una oferta en lugar de cerrarla, y no hay forma de deducirlo
+   * mirando esta pantalla. Sin mentorías detrás, el borrado sigue siendo
+   * inmediato como siempre — confirmar lo que no tiene consecuencias solo
+   * enseña a pulsar «sí» sin leer.
+   */
+  function pedirBorrado(rule: Rule) {
+    if ((usedBy[rule.id] ?? []).length > 0) setBorrando(rule);
+    else removeRule(rule.id);
+  }
+
   async function removeRule(id: string) {
     setBusy(true);
     const supabase = createClient();
     const { error } = await supabase.from("availability_rules").delete().eq("id", id);
     setBusy(false);
     if (error) return toast.error("No se pudo eliminar.");
+    setBorrando(null);
     router.refresh();
   }
 
@@ -201,27 +235,44 @@ export function AvailabilityManager({
                   <span className="text-[13px] text-[#9c9c9c]">Cerrado</span>
                 ) : (
                   <span className="flex flex-wrap items-center gap-1.5">
-                    {list.map((r) => (
-                      <span
-                        key={r.id}
-                        className={`group/chip inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium ${
-                          r.is_active
-                            ? "bg-brand/10 text-[#0b4f96]"
-                            : "bg-muted text-[#9c9c9c] line-through"
-                        }`}
-                      >
-                        {hhmm(r.start_time)}–{hhmm(r.end_time)}
-                        <button
-                          type="button"
-                          aria-label={`Quitar la franja de ${hhmm(r.start_time)} a ${hhmm(r.end_time)} del ${WEEKDAYS[r.weekday].toLowerCase()}`}
-                          disabled={busy}
-                          onClick={() => removeRule(r.id)}
-                          className="text-[#7aa8d6] transition-colors hover:text-destructive"
+                    {list.map((r) => {
+                      const usada = usedBy[r.id] ?? [];
+                      return (
+                        <span
+                          key={r.id}
+                          className={`group/chip inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium ${
+                            r.is_active
+                              ? "bg-brand/10 text-[#0b4f96]"
+                              : "bg-muted text-[#9c9c9c] line-through"
+                          }`}
                         >
-                          <XIcon className="size-3.5" />
-                        </button>
-                      </span>
-                    ))}
+                          {hhmm(r.start_time)}–{hhmm(r.end_time)}
+                          {/* N-04 · quién depende de esta franja. El detalle va
+                              en `title` para no llenar la línea de títulos de
+                              mentoría, pero el número se ve sin pasar el ratón:
+                              es lo que distingue una franja suelta de una que
+                              sostiene una oferta. */}
+                          {usada.length > 0 ? (
+                            <span
+                              className="text-[#4d7fb0]"
+                              title={`La usan: ${usada.join(", ")}`}
+                            >
+                              · {usada.length}{" "}
+                              {usada.length === 1 ? "mentoría" : "mentorías"}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            aria-label={`Quitar la franja de ${hhmm(r.start_time)} a ${hhmm(r.end_time)} del ${WEEKDAYS[r.weekday].toLowerCase()}`}
+                            disabled={busy}
+                            onClick={() => pedirBorrado(r)}
+                            className="text-[#7aa8d6] transition-colors hover:text-destructive"
+                          >
+                            <XIcon className="size-3.5" />
+                          </button>
+                        </span>
+                      );
+                    })}
                   </span>
                 )}
 
@@ -325,6 +376,50 @@ export function AvailabilityManager({
           );
         })}
       </div>
+
+      {/* N-04 · confirmación en un diálogo de la app y no en `window.confirm()`,
+          por lo mismo que se explica en `tutor/reservas/booking-actions.tsx`:
+          tras varios nativos seguidos el navegador ofrece bloquearlos y desde
+          ahí `confirm()` devuelve false sin preguntar. */}
+      <Dialog
+        open={!!borrando}
+        onOpenChange={busy ? undefined : (open) => !open && setBorrando(null)}
+      >
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle>¿Quitar esta franja?</DialogTitle>
+            <DialogDescription>
+              {borrando ? (
+                <>
+                  La usan{" "}
+                  <strong className="font-semibold">
+                    {(usedBy[borrando.id] ?? []).join(", ")}
+                  </strong>
+                  . Si es el único horario de alguna de ellas, esa mentoría
+                  volverá a ofrecerse en toda tu disponibilidad. Las clases ya
+                  reservadas no se tocan.
+                </>
+              ) : null}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={busy}
+              onClick={() => setBorrando(null)}
+            >
+              No, volver
+            </Button>
+            <Button
+              disabled={busy}
+              onClick={() => borrando && removeRule(borrando.id)}
+              className="bg-[#bf3333] font-semibold text-white hover:bg-[#a82c2c]"
+            >
+              {busy ? "Quitando…" : "Sí, quitar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

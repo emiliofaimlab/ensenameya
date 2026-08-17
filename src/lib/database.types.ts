@@ -339,6 +339,139 @@ export type Database = {
           },
         ]
       }
+      conversation_reads: {
+        Row: {
+          conversation_id: string
+          last_read_at: string
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          last_read_at?: string
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          last_read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_reads_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversation_reports: {
+        Row: {
+          conversation_id: string
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          reason: string
+          reporter_id: string
+        }
+        Insert: {
+          conversation_id: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          reason: string
+          reporter_id: string
+        }
+        Update: {
+          conversation_id?: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          reason?: string
+          reporter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_reports_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_reports_handled_by_fkey"
+            columns: ["handled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_reports_reporter_id_fkey"
+            columns: ["reporter_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          blocked_at: string | null
+          blocked_reason: string | null
+          created_at: string
+          id: string
+          last_message_at: string | null
+          student_id: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          blocked_at?: string | null
+          blocked_reason?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          student_id: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          blocked_at?: string | null
+          blocked_reason?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          student_id?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       late_payment_refunds: {
         Row: {
           amount: number
@@ -389,48 +522,16 @@ export type Database = {
           },
         ]
       }
-      message_reads: {
-        Row: {
-          booking_id: string
-          last_read_at: string
-          user_id: string
-        }
-        Insert: {
-          booking_id: string
-          last_read_at?: string
-          user_id: string
-        }
-        Update: {
-          booking_id?: string
-          last_read_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "message_reads_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "bookings"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "message_reads_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       messages: {
         Row: {
           attachment_name: string | null
           attachment_path: string | null
           attachment_size: number | null
           body: string
-          booking_id: string
+          booking_id: string | null
+          conversation_id: string
           created_at: string
-          expires_at: string
+          expires_at: string | null
           id: string
           sender_id: string
         }
@@ -439,9 +540,10 @@ export type Database = {
           attachment_path?: string | null
           attachment_size?: number | null
           body: string
-          booking_id: string
+          booking_id?: string | null
+          conversation_id: string
           created_at?: string
-          expires_at?: string
+          expires_at?: string | null
           id?: string
           sender_id: string
         }
@@ -450,9 +552,10 @@ export type Database = {
           attachment_path?: string | null
           attachment_size?: number | null
           body?: string
-          booking_id?: string
+          booking_id?: string | null
+          conversation_id?: string
           created_at?: string
-          expires_at?: string
+          expires_at?: string | null
           id?: string
           sender_id?: string
         }
@@ -462,6 +565,13 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
           {
@@ -800,6 +910,39 @@ export type Database = {
             columns: ["tutor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_availability_rules: {
+        Row: {
+          created_at: string
+          product_id: string
+          rule_id: string
+        }
+        Insert: {
+          created_at?: string
+          product_id: string
+          rule_id: string
+        }
+        Update: {
+          created_at?: string
+          product_id?: string
+          rule_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_availability_rules_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_availability_rules_rule_id_fkey"
+            columns: ["rule_id"]
+            isOneToOne: false
+            referencedRelation: "availability_rules"
             referencedColumns: ["id"]
           },
         ]
@@ -1598,6 +1741,10 @@ export type Database = {
         Args: { p_booking_id: string; p_success?: boolean }
         Returns: string
       }
+      conversation_of_booking: {
+        Args: { p_booking_id: string }
+        Returns: string
+      }
       country_from_timezone: { Args: { p_tz: string }; Returns: string }
       create_booking: {
         Args: { p_product_id: string; p_slots: string[] }
@@ -1656,12 +1803,35 @@ export type Database = {
         Args: { p_action: string; p_payout_id: string }
         Returns: string
       }
-      mark_messages_read: { Args: { p_booking_id: string }; Returns: string }
+      mark_conversation_read: {
+        Args: { p_conversation_id: string }
+        Returns: string
+      }
       mark_notification: {
         Args: { p_id: string; p_ok: boolean }
         Returns: undefined
       }
       mask_person_name: { Args: { p_name: string }; Returns: string }
+      my_conversations: {
+        Args: never
+        Returns: {
+          blocked_at: string
+          has_booking: boolean
+          id: string
+          last_booking_id: string
+          last_message_at: string
+          last_product_title: string
+          other_avatar_path: string
+          other_id: string
+          other_is_tutor: boolean
+          other_name: string
+        }[]
+      }
+      open_conversation: { Args: { p_tutor_id: string }; Returns: string }
+      pair_has_booking: {
+        Args: { p_student_id: string; p_tutor_id: string }
+        Returns: boolean
+      }
       pending_email_notifications: {
         Args: { p_limit?: number }
         Returns: {
@@ -1687,6 +1857,10 @@ export type Database = {
         Returns: Json
       }
       refunds_backlog: { Args: never; Returns: Json }
+      report_conversation: {
+        Args: { p_conversation_id: string; p_reason: string }
+        Returns: string
+      }
       request_withdrawal: {
         Args: { p_retention_days?: number }
         Returns: string
@@ -1710,6 +1884,10 @@ export type Database = {
           id: string
         }[]
       }
+      send_conversation_message: {
+        Args: { p_body: string; p_conversation_id: string }
+        Returns: string
+      }
       send_message: {
         Args: {
           p_attachment_name?: string
@@ -1723,6 +1901,14 @@ export type Database = {
       session_access_window: {
         Args: { p_end: string; p_start: string }
         Returns: unknown
+      }
+      set_conversation_blocked: {
+        Args: {
+          p_blocked: boolean
+          p_conversation_id: string
+          p_reason?: string
+        }
+        Returns: boolean
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
@@ -1746,6 +1932,7 @@ export type Database = {
         Returns: string
       }
       tutor_balance: { Args: { p_retention_days?: number }; Returns: Json }
+      tutor_response_time: { Args: { p_tutor_id: string }; Returns: number }
       tutor_students: {
         Args: { p_student_id?: string }
         Returns: {
@@ -1755,10 +1942,10 @@ export type Database = {
           timezone: string
         }[]
       }
-      unread_message_counts: {
+      unread_conversation_counts: {
         Args: never
         Returns: {
-          booking_id: string
+          conversation_id: string
           last_message_at: string
           unread: number
         }[]

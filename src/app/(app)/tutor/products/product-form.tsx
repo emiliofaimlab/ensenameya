@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { InfoIcon } from "lucide-react";
@@ -12,6 +13,11 @@ import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 import { PanelCard } from "@/components/layout/panel-shell";
+import {
+  AvailabilityBlocks,
+  type AvailabilityRule,
+  type AvailabilityScope,
+} from "./availability-blocks";
 import {
   CoverImagePicker,
   MaterialsPicker,
@@ -85,6 +91,12 @@ export type ProductFormValues = {
   imagePath: string | null;
   /** FAQ propias de la mentoría (R24-17). */
   faqs: { q: string; a: string }[];
+  /**
+   * N-04 · franjas de disponibilidad a las que pertenece ESTA mentoría.
+   * Lista vacía = «toda mi disponibilidad», que es literalmente lo que
+   * significa no tener filas en `product_availability_rules`.
+   */
+  availabilityRuleIds: string[];
 };
 
 /**
@@ -100,16 +112,24 @@ export type ProductFormValues = {
  * No es una preferencia de estilo: en el ALTA todavía no hay `product_id` al
  * que colgar los archivos, así que o se difiere la subida o se obliga a
  * guardar y volver a entrar (que es justo lo que se reportó).
+ *
+ * N-04 · el hueco del "Calendario de la clase" ya no está del todo vacío: la
+ * mentoría elige a QUÉ franjas de la disponibilidad del tutor pertenece. No son
+ * fechas propias del producto (eso sigue sin existir en el modelo), sino un
+ * subconjunto del horario semanal del tutor.
  */
 export function ProductForm({
   userId,
   categories,
+  availabilityRules = [],
   product,
   materials = [],
   isApproved = false,
 }: {
   userId: string;
   categories: { id: string; name: string }[];
+  /** N-04 · franjas semanales del tutor (US-501), para elegir entre ellas. */
+  availabilityRules?: AvailabilityRule[];
   product?: ProductFormValues;
   /** Materiales YA guardados de esta oferta (R24-16); solo existen al editar. */
   materials?: SavedMaterial[];
@@ -147,6 +167,16 @@ export function ProductForm({
   const [savedMaterials, setSavedMaterials] =
     useState<SavedMaterial[]>(materials);
   const [stagedMaterials, setStagedMaterials] = useState<StagedFile[]>([]);
+  // N-04 · el modo se DEDUCE de lo guardado porque en la BD no hay más que eso:
+  // con enlaces, «solo estas franjas»; sin enlaces, «toda mi disponibilidad».
+  // Así una mentoría anterior a N-04 abre en el modo que describe lo que hace
+  // hoy, en vez de estrenarse en un modo que nadie eligió.
+  const [scope, setScope] = useState<AvailabilityScope>(
+    product?.availabilityRuleIds.length ? "blocks" : "all",
+  );
+  const [selectedRules, setSelectedRules] = useState<Set<string>>(
+    new Set(product?.availabilityRuleIds ?? []),
+  );
 
   const coverUrl = storageUrl("product-images", product?.imagePath);
 
@@ -155,6 +185,15 @@ export function ProductForm({
     priceAmount: Math.round((Number(precio) || 0) * 100),
     sessionDurationMin: Number(duracion) || 60,
   });
+
+  function toggleRule(id: string) {
+    setSelectedRules((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function toggleCategory(id: string) {
     setSelected((prev) => {
@@ -193,6 +232,15 @@ export function ProductForm({
 
     if (selected.size === 0)
       return toast.error("Elige al menos una categoría.");
+
+    // N-04 · «solo estas franjas» con ninguna marcada no se puede guardar tal
+    // cual: sin filas, la BD lo lee como «toda mi disponibilidad» y el tutor se
+    // quedaría convencido de haber limitado la mentoría a nada. Se le pide que
+    // elija, o que diga «toda» a propósito.
+    if (scope === "blocks" && selectedRules.size === 0)
+      return toast.error(
+        "Marca al menos una franja, o elige «Toda mi disponibilidad».",
+      );
 
     setLoading(true);
     const supabase = createClient();
@@ -294,6 +342,14 @@ export function ProductForm({
         .from("product_categories")
         .delete()
         .eq("product_id", productId!);
+      // N-04 · mismo criterio con las franjas, y el borrado va SIEMPRE, también
+      // al volver a «toda mi disponibilidad»: en ese modo lo correcto es cero
+      // filas, así que el borrado no es la primera mitad de una reconciliación
+      // sino la operación entera.
+      await supabase
+        .from("product_availability_rules")
+        .delete()
+        .eq("product_id", productId!);
     } else {
       const { data, error } = await supabase
         .from("products")
@@ -317,6 +373,24 @@ export function ProductForm({
       .from("product_categories")
       .insert([...selected].map((category_id) => ({ product_id: productId!, category_id })));
     if (catErr) aMedias.push("las categorías");
+
+    // N-04 · las franjas elegidas. En modo «toda mi disponibilidad» no hay nada
+    // que insertar: la ausencia de filas ES el dato.
+    if (scope === "blocks" && selectedRules.size > 0) {
+      const { error: rulesErr } = await supabase
+        .from("product_availability_rules")
+        .insert(
+          [...selectedRules].map((rule_id) => ({
+            product_id: productId!,
+            rule_id,
+          })),
+        );
+      // Se nombra el efecto, no la tabla: si esto falla la mentoría queda «en
+      // toda tu disponibilidad», que es lo que el tutor va a ver y lo que tiene
+      // que poder corregir.
+      if (rulesErr)
+        aMedias.push("los horarios elegidos (queda en toda tu disponibilidad)");
+    }
 
     if (subidos.length > 0) {
       // Las N filas en UN insert: Postgres lo resuelve en una transacción, así
@@ -657,6 +731,33 @@ export function ProductForm({
             </div>
           ) : null}
         </div>
+      </PanelCard>
+
+      {/* N-04 · a qué franjas de tu disponibilidad pertenece esta mentoría.
+          Va después del formato porque depende de la duración: las franjas se
+          trocean en huecos del tamaño de la sesión. */}
+      <PanelCard className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Horarios de esta mentoría
+        </h2>
+        <p className="text-[13px] text-[#6b6b6b]">
+          Tus horarios se definen una vez en{" "}
+          <Link
+            href="/tutor/availability"
+            className="font-medium text-brand underline underline-offset-2"
+          >
+            Disponibilidad
+          </Link>
+          . Aquí eliges cuáles usa esta mentoría.
+        </p>
+        <AvailabilityBlocks
+          rules={availabilityRules}
+          scope={scope}
+          onScopeChange={setScope}
+          selected={selectedRules}
+          onToggle={toggleRule}
+          disabled={loading}
+        />
       </PanelCard>
 
       {/* Materiales de clase de ESTA oferta (R24-16): se movieron aquí desde el

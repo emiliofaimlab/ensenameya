@@ -10,11 +10,22 @@ export default async function NewProductPage() {
   const { userId, approvalStatus } = await requireTutorProfile();
 
   const supabase = await createClient();
-  const { data: categories } = await supabase
-    .from("categories")
-    .select("id, name")
-    .eq("is_active", true)
-    .order("sort_order");
+  // N-04 · las franjas del tutor viajan con el formulario para poder elegir
+  // cuáles usa la mentoría. Se piden aunque no haya ninguna: el propio selector
+  // convierte «no hay» en el aviso de que sin horarios nadie puede reservar.
+  const [{ data: categories }, { data: rules }] = await Promise.all([
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("sort_order"),
+    supabase
+      .from("availability_rules")
+      .select("id, weekday, start_time, end_time, is_active")
+      .eq("tutor_id", userId)
+      .order("weekday")
+      .order("start_time"),
+  ]);
 
   return (
     <TutorShell
@@ -25,6 +36,7 @@ export default async function NewProductPage() {
       <ProductForm
         userId={userId}
         categories={categories ?? []}
+        availabilityRules={rules ?? []}
         isApproved={approvalStatus === "approved"}
       />
     </TutorShell>
