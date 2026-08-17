@@ -127,6 +127,18 @@ export async function POST(req: Request) {
       // que nadie lo revise. Los locales (C-13) entran por aquí cuando se
       // decida el mercado.
       payment_method_types: ["card"],
+      // M-01 · La app presupuesta y confirma «45,00 US$» en tres pantallas y la
+      // pasarela cobraba «PAB 46,80», un 4 % más, con un tipo de 1,0400. El
+      // balboa está anclado 1:1 al dólar desde 1904: ese tipo no es una
+      // conversión, es el margen del *adaptive pricing* de Stripe, que convierte
+      // por geolocalización sin avisar. El alumno ve un precio durante toda la
+      // compra y otro justo donde pone la tarjeta.
+      //
+      // Se apaga AQUÍ y no en el panel a propósito: en el panel se pierde el día
+      // que se cree otra cuenta o se pase de sandbox a live, y el fallo vuelve
+      // sin que nadie lo note. El importe sale de `payments.gross_amount` y la
+      // moneda de `payment.currency`, así que una sola moneda de punta a punta.
+      adaptive_pricing: { enabled: false },
       line_items: [
         {
           price_data: {
