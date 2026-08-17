@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
+import { COMPANY } from "@/lib/company";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 
 /**
@@ -34,8 +35,11 @@ import { CANCELLATION_POLICY as P } from "@/lib/policy";
  * disputas, que no son datos que el código pueda contestar.
  */
 
-/** El buzón oficial del cliente, el mismo que publica en ensenameya.com. */
-const CONTACTO = "info@ensenameya.com";
+/**
+ * El buzón oficial. Desde el 17-ago sale de `lib/company.ts`, junto al resto de
+ * la identidad legal, para que el pie y los legales no puedan divergir.
+ */
+const CONTACTO = COMPANY.email;
 
 /** Fecha de la última revisión de estos textos. */
 const ACTUALIZADO = "6 de agosto de 2026";

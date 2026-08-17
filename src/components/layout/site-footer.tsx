@@ -2,8 +2,19 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
+import {
+  COMPANY,
+  COMPANY_ADDRESS_LINE,
+  COMPANY_SOCIALS,
+} from "@/lib/company";
 
-/** Columnas de v3-footer. Los enlaces sin página propia todavía dan 404 (ver docs/BACKLOG.md §4.2). */
+/**
+ * Columnas de v3-footer.
+ *
+ * ⚠️ Los tres enlaces de LEGAL existen en `dev` pero **todavía no en `main`**:
+ * hasta que se mergee, el pie de producción los enlaza y devuelven 404. Es lo
+ * primero que ve un revisor de dLocal.
+ */
 const columns = [
   {
     title: "PRODUCTO",
@@ -30,12 +41,6 @@ const columns = [
   },
 ];
 
-const social = [
-  { href: "https://instagram.com/ensenameya", label: "Instagram" },
-  { href: "https://linkedin.com/company/ensenameya", label: "LinkedIn" },
-  { href: "https://x.com/ensenameya", label: "X" },
-];
-
 export function SiteFooter() {
   return (
     <footer className="mt-auto bg-muted">
@@ -54,6 +59,22 @@ export function SiteFooter() {
               con expertos verificados. El espacio donde lo que YA sabes vale
               oro, y lo que quieres aprender se logra YA.
             </p>
+
+            {/* DL-02 y DL-03 · dLocal Go revisa el sitio a mano y busca dos
+                cosas en el pie: quién es el prestador y cómo se le escribe.
+                Hasta hoy el único dato de contacto del sitio entero vivía
+                dentro de los términos, en el §11, como texto sin enlazar: para
+                verlo había que entrar y bajar. Los datos salen del §39 del
+                contrato — ver `lib/company.ts`. */}
+            <address className="mt-5 text-[12.5px] leading-relaxed not-italic text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {COMPANY.legalName}
+              </span>
+              {" · "}
+              {COMPANY.taxIdLabel} {COMPANY.taxId}
+              <br />
+              {COMPANY_ADDRESS_LINE}
+            </address>
           </div>
 
           {/* US-1601: en tablet el bloque de texto se quedaba con sus 592 px y
@@ -87,20 +108,39 @@ export function SiteFooter() {
         <hr className="mt-8 border-t border-primary" />
 
         <div className="flex flex-col gap-2 pt-4 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} Enséñame Ya</p>
-          <nav className="flex gap-4" aria-label="Redes sociales">
-            {social.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                target="_blank"
-                rel="noreferrer"
-                className="transition-colors hover:text-brand"
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
+          <p>© {new Date().getFullYear()} {COMPANY.brand}</p>
+
+          <div className="flex flex-wrap items-center gap-4">
+            {/* `mailto:` y no texto plano: en móvil un correo que no se puede
+                pulsar es medio canal, y dLocal comprueba que el contacto sea
+                accesible de verdad. */}
+            <a
+              href={`mailto:${COMPANY.email}`}
+              className="font-medium text-foreground transition-colors hover:text-brand"
+            >
+              {COMPANY.email}
+            </a>
+
+            {/* Hoy `COMPANY_SOCIALS` está vacío a propósito: los tres enlaces
+                que había se dedujeron del nombre de la marca y no llevaban a
+                ningún perfil. Ver la nota en `lib/company.ts`. En cuanto el
+                cliente mande las URL reales, esto se pinta solo. */}
+            {COMPANY_SOCIALS.length > 0 && (
+              <nav className="flex gap-4" aria-label="Redes sociales">
+                {COMPANY_SOCIALS.map((item) => (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="transition-colors hover:text-brand"
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </nav>
+            )}
+          </div>
         </div>
       </Container>
     </footer>
