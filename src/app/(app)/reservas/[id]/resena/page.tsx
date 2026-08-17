@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { tutorNames } from "@/lib/booking";
+import { formatShortDate, tutorNames } from "@/lib/booking";
 import {
   PanelCard,
   PanelShell,
@@ -24,6 +24,7 @@ export default async function ReviewPage({
 }) {
   const { id } = await params;
   const { user } = await requireUser();
+  const tz = await getUserTimezone();
   const supabase = await createClient();
 
   const [{ data: booking }, { data: me }] = await Promise.all([
@@ -64,10 +65,13 @@ export default async function ReviewPage({
             <p className="text-sm font-semibold text-[#19191f]">{tutor}</p>
             <p className="text-xs text-[#6b6b6b]">
               {booking.products?.title ?? "Mentoría"}
+              {/* RN-01/02 · esto es un componente SERVER: sin `timeZone` el
+                  render corre en la zona del servidor (UTC en Vercel) y la
+                  clase de las 21:00 de un alumno en Caracas salía fechada al
+                  día siguiente. `formatShortDate` es el mismo formateador que
+                  usa el resto del panel. */}
               {lastSession
-                ? ` · Sesión completada ${new Date(
-                    lastSession.start_at,
-                  ).toLocaleDateString("es", { day: "numeric", month: "short" })}`
+                ? ` · Sesión completada ${formatShortDate(lastSession.start_at, tz)}`
                 : ""}
             </p>
           </div>

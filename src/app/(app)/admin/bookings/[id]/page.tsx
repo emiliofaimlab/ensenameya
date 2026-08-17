@@ -94,7 +94,6 @@ export default async function AdminBookingPage({
               </h2>
               <StatusPill
                 tone={BOOKING_PILL[b.status] ?? "neutral"}
-                className="h-7"
               >
                 {badge.label}
               </StatusPill>
@@ -127,7 +126,7 @@ export default async function AdminBookingPage({
                         {s.sequenceNo ? `#${s.sequenceNo} · ` : ""}
                         {fmtTime(s.startAt)}
                       </p>
-                      <StatusPill className="h-7">
+                      <StatusPill>
                         {SESSION_STATUS_LABEL[s.status] ?? s.status}
                       </StatusPill>
                     </li>

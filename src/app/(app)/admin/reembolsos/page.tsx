@@ -265,7 +265,7 @@ export default async function AdminReembolsosPage({
                     </div>
 
                     <div className="flex shrink-0 items-center gap-2">
-                      <StatusPill tone={badge.tone} className="h-7">
+                      <StatusPill tone={badge.tone}>
                         {badge.label}
                       </StatusPill>
                       <Button

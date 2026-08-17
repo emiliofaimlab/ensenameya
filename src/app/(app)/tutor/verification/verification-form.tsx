@@ -122,7 +122,7 @@ function FileRow({
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <StatusPill tone={pill.tone} className="h-7">
+        <StatusPill tone={pill.tone}>
           {pill.label}
         </StatusPill>
         <input
@@ -218,7 +218,7 @@ function ChecklistStep({
           </span>
           <span className="block text-[12.5px] text-[#6b6b6b]">{summary}</span>
         </span>
-        <StatusPill tone={state.tone} className="h-7">
+        <StatusPill tone={state.tone}>
           {state.label}
         </StatusPill>
         <ChevronDownIcon
@@ -672,7 +672,7 @@ export function VerificationForm({
       >
         <p className="text-[13px] text-[#4d4d4d]">
           {productCount > 0
-            ? "Ya tienes tu primera mentoría. Se publicará en cuanto aprobemos tu perfil (RN-23)."
+            ? "Ya tienes tu primera mentoría. Se publicará en cuanto aprobemos tu perfil."
             : "Define qué enseñas, a qué precio y en cuánto tiempo. Se guarda como borrador: una mentoría solo se publica con el perfil aprobado."}
         </p>
         {inWizard ? (

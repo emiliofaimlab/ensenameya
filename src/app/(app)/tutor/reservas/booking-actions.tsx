@@ -132,7 +132,7 @@ export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
         open={confirming}
         onOpenChange={setConfirming}
         title="¿Rechazar esta reserva?"
-        description="El alumno recibe el 100 % de lo que pagó (RN-38) y las sesiones agendadas se liberan. No podrás volver a aceptarla: tendría que reservarla otra vez."
+        description="El alumno recibe el 100 % de lo que pagó y las sesiones agendadas se liberan. No podrás volver a aceptarla: tendría que reservarla otra vez."
         confirmLabel="Sí, rechazar"
         busyLabel="Rechazando…"
         destructive

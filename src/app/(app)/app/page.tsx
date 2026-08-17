@@ -13,6 +13,8 @@ import {
   StatusPill,
 } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
+import { suggestedForStudent } from "./sugerencias";
+import { SugerenciasCard } from "./sugerencias-card";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Mi panel · Enséñame Ya" };
@@ -54,7 +56,7 @@ export default async function AppHome() {
   const tz = await getUserTimezone();
   const supabase = await createClient();
 
-  const [{ data: profile }, { data: openRows }, { data: pastRows }] =
+  const [{ data: profile }, { data: openRows }, { data: pastRows }, sugerencias] =
     await Promise.all([
       // El nombre sale del PERFIL, no de `user_metadata`: el metadata es un
       // espejo que se queda viejo si el perfil cambia después.
@@ -77,6 +79,10 @@ export default async function AppHome() {
         .eq("status", "completed")
         .order("created_at", { ascending: false })
         .limit(3),
+      // N-30 · va DENTRO del mismo `Promise.all` a propósito: resuelve sus
+      // propias consultas (intereses, oferta y catálogo) y encadenarla después
+      // de las reservas sumaría su latencia a la de la pantalla para nada.
+      suggestedForStudent(user.id),
     ]);
 
   const open = openRows ?? [];
@@ -134,8 +140,18 @@ export default async function AppHome() {
               Próximas sesiones
             </PanelCardTitle>
             {open.length === 0 ? (
+              // RV-11 · aquí solo se llega con reservas ya terminadas: sin una
+              // salida, el alumno que acabó su mentoría se queda mirando una
+              // frase gris en la pantalla que debería reengancharlo.
               <p className="mt-4 text-[13px] text-[#6b6b6b]">
-                No tienes mentorías agendadas.
+                No tienes mentorías agendadas.{" "}
+                <Link
+                  href="/classes"
+                  className="font-medium text-brand hover:underline"
+                >
+                  Reserva la siguiente
+                </Link>
+                .
               </p>
             ) : (
               <ul className="mt-4 divide-y divide-[#e0e0e0]">
@@ -224,6 +240,13 @@ export default async function AppHome() {
           ) : null}
         </>
       )}
+
+      {/* N-30 · mentorías sugeridas por sus categorías de interés. Va justo
+          debajo de las reservas —lo que el alumno vino a mirar— y encima de las
+          tarjetas fijas del Figma. `null` = no hay nada honesto que sugerir
+          (catálogo vacío), y entonces no se monta: un carrusel vacío es peor
+          que no ponerlo. */}
+      {sugerencias ? <SugerenciasCard data={sugerencias} /> : null}
 
       {/* Las dos tarjetas del Figma. "Invita y gana" (US-1301) solo aparece con
           campaña configurada: el programa vive entero en Referral Factory. */}

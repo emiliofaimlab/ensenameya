@@ -123,7 +123,7 @@ export default async function AdminTutorPage({
                   </p>
                 ) : null}
               </div>
-              <StatusPill tone={pill.tone} className="h-7">
+              <StatusPill tone={pill.tone}>
                 {pill.label}
               </StatusPill>
             </div>

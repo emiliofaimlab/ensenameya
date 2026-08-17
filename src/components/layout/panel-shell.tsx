@@ -114,6 +114,17 @@ export function PanelCardTitle({
  * Píldora de estado del Figma. La gris (157:11) es la del panel del alumno;
  * el panel del tutor colorea por estado (190:23, 191:60, 196:34…): verde
  * aprobado/activo, azul en revisión, ámbar pausado, rojo rechazado.
+ *
+ * ⚠️ N-15 · LA ALTURA LA DECIDE ESTE COMPONENTE, no quien lo llama.
+ *
+ * Hasta el 17-ago dieciocho llamadas la pisaban con `h-7` (28 px) mientras el
+ * componente declaraba 26, así que las mismas etiquetas salían de dos tamaños
+ * según la pantalla — y en una tarjeta con varias juntas se notaba. Como `cn()`
+ * fusiona con tailwind-merge, la clase del llamador GANA siempre: el descuadre
+ * no se veía en el componente, se veía en producción.
+ *
+ * Si hace falta otro tamaño, se añade una variante aquí. Pasarle una clase de
+ * altura por `className` vuelve a romper la consistencia en silencio.
  */
 const PILL_TONE = {
   gray: "bg-[#f0f0f0] text-[#595959]",

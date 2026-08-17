@@ -22,7 +22,7 @@ export function CancellationPolicy({
   if (compact) {
     return (
       <p className={cn("text-muted-foreground text-xs", className)}>
-        Política de cancelación única de la plataforma (RN-37): ≥{P.cutoffHours} h{" "}
+        Política de cancelación única de la plataforma: ≥{P.cutoffHours} h{" "}
         {P.refundPct.studentEarly} %, &lt;{P.cutoffHours} h {P.refundPct.studentLate} %,
         cancela el tutor {P.refundPct.tutorCancels} %.
       </p>

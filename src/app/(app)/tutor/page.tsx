@@ -165,7 +165,7 @@ export default async function TutorHomePage() {
               ) : null}
             </p>
           </div>
-          <StatusPill tone="blue" className="h-7">
+          <StatusPill tone="blue">
             En revisión
           </StatusPill>
         </PanelCard>
@@ -182,7 +182,7 @@ export default async function TutorHomePage() {
               Puedes actualizar tus datos y volver a enviarlo.
             </p>
           </div>
-          <StatusPill tone={approval.tone} className="h-7">
+          <StatusPill tone={approval.tone}>
             {approval.label}
           </StatusPill>
         </PanelCard>
@@ -199,7 +199,7 @@ export default async function TutorHomePage() {
               desaparece cuando dictes tus primeras 5 sesiones.
             </p>
           </div>
-          <StatusPill tone="green" className="h-7">
+          <StatusPill tone="green">
             Aprobado
           </StatusPill>
         </PanelCard>
@@ -213,7 +213,7 @@ export default async function TutorHomePage() {
           `TutorCard` a propósito, publicar el tramo filtra margen. */}
       {tier ? (
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-          <StatusPill tone="blue" className="h-7">
+          <StatusPill tone="blue">
             {tier.name}
           </StatusPill>
           <p className="text-[12.5px] text-[#6b6b6b]">
@@ -356,7 +356,6 @@ export default async function TutorHomePage() {
                     </div>
                     <StatusPill
                       tone={BOOKING_PILL[b.status] ?? "neutral"}
-                      className="h-7"
                     >
                       {BOOKING_STATUS_LABEL[b.status as BookingStatus]}
                     </StatusPill>

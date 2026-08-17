@@ -151,7 +151,7 @@ export default async function AdminDashboardPage() {
                 </p>
               </div>
               {q.value ? (
-                <StatusPill tone="amber" className="h-7">
+                <StatusPill tone="amber">
                   Cola
                 </StatusPill>
               ) : null}
@@ -208,7 +208,6 @@ export default async function AdminDashboardPage() {
                 <div className="flex items-center gap-3.5">
                   <StatusPill
                     tone={BOOKING_PILL[b.status] ?? "neutral"}
-                    className="h-7"
                   >
                     {BOOKING_BADGE[b.status].label}
                   </StatusPill>

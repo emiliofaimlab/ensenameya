@@ -144,7 +144,7 @@ export default async function AdminTutoresPage({
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <StatusPill tone={pill.tone} className="h-7">
+                    <StatusPill tone={pill.tone}>
                       {pill.label}
                     </StatusPill>
                     <Button

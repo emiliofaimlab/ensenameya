@@ -135,7 +135,6 @@ export default async function TutorBookingDetailPage({
               </p>
               <StatusPill
                 tone={BOOKING_PILL[booking.status] ?? "neutral"}
-                className="h-7"
               >
                 {BOOKING_STATUS_LABEL[booking.status]}
               </StatusPill>
@@ -190,7 +189,7 @@ export default async function TutorBookingDetailPage({
                         <SessionRef nro={s.session_ref} className="mt-0.5" />
                       </div>
                       <div className="flex items-center gap-2.5">
-                        <StatusPill className="h-7">
+                        <StatusPill>
                           {SESSION_STATUS_LABEL[s.status] ?? s.status}
                         </StatusPill>
                         {LIVE.has(booking.status) &&
@@ -277,7 +276,12 @@ export default async function TutorBookingDetailPage({
                 ? `Chat con ${student.fullName}`
                 : "Chat con el alumno"}
             </h2>
-            <span className="text-[11px] text-[#6b6b6b]">RN-41</span>
+            {/* M-06 · aquí ponía "RN-41" pelado. Ese es un código de NUESTRA
+                documentación interna: al tutor no le dice nada y parece un
+                error de la aplicación. Lo que necesita saber es la regla. */}
+            <span className="text-[11px] text-[#6b6b6b]">
+              Se abre 2 días antes de la clase
+            </span>
           </div>
           {chatOpen ? (
             <ChatThread

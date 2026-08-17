@@ -209,7 +209,7 @@ export default async function AdminAlertasPage({
                   className="flex flex-wrap items-center justify-between gap-3 py-4"
                 >
                   <div className="flex min-w-0 items-center gap-3.5">
-                    <StatusPill tone={pill.tone} className="h-7 shrink-0">
+                    <StatusPill tone={pill.tone} className="shrink-0">
                       {pill.label}
                     </StatusPill>
                     <div className="min-w-0">

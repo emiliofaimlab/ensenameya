@@ -447,7 +447,7 @@ export function TutorOnboardingForm({
         step={3}
         total={totalSteps}
         title="Zona horaria y contacto"
-        description="Usamos tu zona horaria para mostrar tus horarios correctamente (RN-44)."
+        description="Usamos tu zona horaria para mostrar tus horarios correctamente."
         onBack={back}
         onNext={next}
         busy={busy}

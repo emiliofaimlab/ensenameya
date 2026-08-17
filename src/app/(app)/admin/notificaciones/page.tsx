@@ -271,7 +271,7 @@ export default async function AdminNotificacionesPage({
                     </p>
                   </div>
 
-                  <StatusPill tone={badge.tone} className="h-7">
+                  <StatusPill tone={badge.tone}>
                     {badge.label}
                   </StatusPill>
                 </li>
