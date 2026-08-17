@@ -49,6 +49,13 @@ export async function sendEmail(opts: {
   subject: string;
   html: string;
   text: string;
+  /**
+   * A dónde va la respuesta si alguien pulsa "Responder". Lo usa el formulario
+   * de contacto (DL-01): el correo lo manda el remitente de la plataforma, pero
+   * quien escribió es otra persona, y sin esto habría que copiar su dirección a
+   * mano del cuerpo del mensaje para contestarle.
+   */
+  replyTo?: string;
 }): Promise<EmailResult> {
   const key = process.env.RESEND_API_KEY;
   if (!key) return { ok: false, retriable: true, error: "RESEND_API_KEY no configurada" };
@@ -64,6 +71,9 @@ export async function sendEmail(opts: {
         subject: opts.subject,
         html: opts.html,
         text: opts.text,
+        // Resend lo llama `reply_to`. Solo se manda si viene: enviar la clave
+        // con `undefined` haría que el JSON llevara el campo vacío.
+        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
       }),
     });
   } catch (e) {

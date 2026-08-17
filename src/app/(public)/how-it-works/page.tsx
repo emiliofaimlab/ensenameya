@@ -216,6 +216,7 @@ export default function HowItWorksPage() {
         aside={{
           title: "Preguntas frecuentes",
           text: "¿Buscas una respuesta específica? Nuestro equipo te responderá en menos de 24 horas para que sigas avanzando.",
+          cta: { href: "/contacto", label: "Contactar a soporte" },
         }}
       />
 

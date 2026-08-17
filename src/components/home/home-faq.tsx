@@ -95,9 +95,11 @@ export function HomeFaq({
   aside?: {
     title: string;
     text: string;
-    /** El Figma pinta aquí "Contactar a soporte", pero no hay canal al que
-     *  enlazar todavía (es DD-07, la bandeja de mensajería). Sin `cta` el panel
-     *  se queda solo con el texto en vez de colar un botón muerto. */
+    /** El Figma pinta aquí "Contactar a soporte". Estuvo sin enlazar hasta el
+     *  17-ago porque no existía ningún canal —el panel prometía respuesta en
+     *  24 h y no ofrecía dónde escribir—; ahora apunta a `/contacto` (DL-01).
+     *  Sin `cta` el panel sigue quedándose solo con el texto, que es lo
+     *  correcto donde no haya destino. */
     cta?: { href: string; label: string };
   };
 }) {
