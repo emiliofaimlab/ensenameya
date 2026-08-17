@@ -4,6 +4,7 @@ import { ArrowUpRightIcon, StarIcon } from "lucide-react";
 
 import {
   initialsFrom,
+  perSessionLabel,
   priceDisplay,
   sessionsLabel,
   storageUrl,
@@ -30,6 +31,28 @@ export function ProductCard({
   const sessions = sessionsLabel(product);
   // RV-08 · manda el total de la reserva, no la tarifa (ver `priceDisplay`).
   const precio = priceDisplay(product);
+  /**
+   * RV-09 · el paquete sale más barato por sesión y la tarjeta no lo decía.
+   *
+   * La nota del precio en un paquete es "paquete · 6 sesiones": repite lo que ya
+   * dice la línea de arriba ("6 × 60 min") y calla lo único que sirve para
+   * comparar con una clase suelta — cuánto cuesta CADA sesión. `perSessionLabel`
+   * lo dice y trae también el recuento, así que SUSTITUYE a la nota en lugar de
+   * apilarse encima. Es el mismo criterio que ya sigue el panel de reserva de
+   * P08, y aquí importa más: el catálogo es donde se comparan mentorías.
+   *
+   * Devuelve `null` fuera de `per_package` y en paquetes de una sola sesión, así
+   * que el resto de tarjetas no cambian.
+   *
+   * ⚠️ LO QUE **NO** SE PINTA, y no por olvido: ni "ahorras un 20 %" ni un precio
+   * tachado. Un producto `per_package` no conoce hoy el precio de la sesión
+   * suelta del mismo tutor —no hay columna de referencia—, así que cualquier
+   * ahorro saldría de compararlo con otro producto por casualidad o de un
+   * importe tecleado sin control. Eso ya no sería una promoción, sería
+   * publicidad engañosa, y los Términos publicados describen el flujo real de
+   * compra. Con dato de verdad detrás se puede añadir; sin él, no.
+   */
+  const porSesion = perSessionLabel(product);
   const thumb = storageUrl("product-images", product.imagePath);
   const tutorAvatar = storageUrl("avatars", product.tutor?.avatarPath ?? null);
   const tutorName =
@@ -144,10 +167,16 @@ export function ProductCard({
               >
                 {precio.amount}
               </p>
+              {/* RV-09 · la equivalencia por sesión puede no caber en una línea
+                  a 276px, así que en ese caso se deja envolver en vez de
+                  recortarse: un "Equivale a 16,00 US…" cortado no informa de
+                  nada. La nota corriente sigue con `truncate`. */}
               <p
-                className={`truncate text-[#666666] ${compact ? "text-[11px]" : "text-xs"}`}
+                className={`text-[#666666] ${compact ? "text-[11px]" : "text-xs"} ${
+                  porSesion ? "text-pretty" : "truncate"
+                }`}
               >
-                {precio.note}
+                {porSesion ?? precio.note}
               </p>
             </div>
             {action === "ver" ? (

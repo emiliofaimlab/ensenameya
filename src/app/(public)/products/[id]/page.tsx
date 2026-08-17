@@ -15,7 +15,12 @@ import {
   TutorReviews,
 } from "@/components/catalog/tutor-reviews";
 import { getProductDetail, listTutorReviews } from "@/lib/catalog/queries";
-import { initialsFrom, sessionsLabel, storageUrl } from "@/lib/catalog/format";
+import {
+  initialsFrom,
+  perSessionLabel,
+  sessionsLabel,
+  storageUrl,
+} from "@/lib/catalog/format";
 
 /** Explicación del servicio, igual para toda mentoría: no es dato del producto.
  *  Verificada contra el flujo real (US-601 reserva, US-801 sala Daily, RN-38). */
@@ -92,6 +97,13 @@ export default async function ProductPage({
         }`
       : null,
     sessions,
+    // RV-09 · en un paquete, lo que sale cada sesión. Ya se enseñaba, pero solo
+    // en el panel de reserva: en lg vive en la columna derecha y por debajo del
+    // calendario, y en móvil queda al FINAL de la página, detrás de la
+    // descripción, las reseñas y las FAQ. Quien está decidiendo si el paquete
+    // le compensa lo necesita antes de eso. `perSessionLabel` devuelve null
+    // salvo en paquetes de dos o más sesiones, así que no aparece en el resto.
+    perSessionLabel(product),
     "En vivo 1 a 1",
     product.sessionDurationMin
       ? `${product.sessionDurationMin} min por sesión`
