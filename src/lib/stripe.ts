@@ -243,3 +243,32 @@ export function esCargoYaReembolsado(e: unknown): boolean {
     err?.code === "charge_already_refunded"
   );
 }
+
+/**
+ * ¿El fallo fue del momento o del contenido de la petición?
+ *
+ * X-01 lo necesita para decidir algo que no tiene vuelta atrás: si una fila de
+ * la cola de reembolsos se queda `pending` (y se reintenta en la pasada
+ * siguiente) o se marca `failed` (y se queda ahí hasta que una persona la
+ * mire). Marcar `failed` un 429 de Stripe sería quedarse con el dinero del
+ * alumno por un mal minuto del proveedor; dejar `pending` un
+ * `charge_already_refunded` sería reintentar cada cinco minutos para siempre.
+ *
+ * Los tres de aquí son los que Stripe documenta como reintentables y ninguno
+ * dice nada de lo que pedimos: la red se cayó, su API tuvo un problema, o
+ * fuimos demasiado rápido. Todo lo demás —`StripeInvalidRequestError` sobre
+ * todo— es la petición, y repetirla dará el mismo error mañana.
+ *
+ * ⚠️ `StripeIdempotencyError` NO entra: significa que reusamos una clave de
+ * idempotencia con parámetros distintos, o sea que algo cambió el importe de
+ * una fila ya intentada. Reintentar eso a ciegas es justo lo que no se debe
+ * hacer con dinero — que salte a `failed` y lo mire alguien.
+ */
+export function esFalloTransitorio(e: unknown): boolean {
+  const tipo = (e as { type?: string })?.type;
+  return (
+    tipo === "StripeConnectionError" ||
+    tipo === "StripeAPIError" ||
+    tipo === "StripeRateLimitError"
+  );
+}

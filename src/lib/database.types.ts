@@ -803,6 +803,7 @@ export type Database = {
       }
       products: {
         Row: {
+          auto_accept_bookings: boolean
           cancellation_policy: Json | null
           created_at: string
           currency: string
@@ -826,6 +827,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          auto_accept_bookings?: boolean
           cancellation_policy?: Json | null
           created_at?: string
           currency: string
@@ -849,6 +851,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          auto_accept_bookings?: boolean
           cancellation_policy?: Json | null
           created_at?: string
           currency?: string
@@ -922,6 +925,75 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      refund_requests: {
+        Row: {
+          amount: number
+          booking_id: string
+          created_at: string
+          currency: string
+          id: string
+          idempotency_key: string
+          last_attempt_at: string | null
+          last_error: string | null
+          payment_id: string
+          processed_at: string | null
+          provider: string
+          provider_payment_id: string | null
+          provider_refund_id: string | null
+          reason: string
+          status: Database["public"]["Enums"]["refund_request_status"]
+        }
+        Insert: {
+          amount: number
+          booking_id: string
+          created_at?: string
+          currency: string
+          id?: string
+          idempotency_key: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          payment_id: string
+          processed_at?: string | null
+          provider: string
+          provider_payment_id?: string | null
+          provider_refund_id?: string | null
+          reason: string
+          status?: Database["public"]["Enums"]["refund_request_status"]
+        }
+        Update: {
+          amount?: number
+          booking_id?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          idempotency_key?: string
+          last_attempt_at?: string | null
+          last_error?: string | null
+          payment_id?: string
+          processed_at?: string | null
+          provider?: string
+          provider_payment_id?: string | null
+          provider_refund_id?: string | null
+          reason?: string
+          status?: Database["public"]["Enums"]["refund_request_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refund_requests_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_requests_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reviews: {
         Row: {
@@ -1509,6 +1581,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      enqueue_refund: {
+        Args: {
+          p_amount: number
+          p_key: string
+          p_payment_id: string
+          p_reason: string
+        }
+        Returns: undefined
+      }
       expire_stale_bookings: {
         Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
         Returns: Json
@@ -1571,6 +1652,7 @@ export type Database = {
         Args: { p_amount?: number; p_payment_id: string }
         Returns: Json
       }
+      refunds_backlog: { Args: never; Returns: Json }
       request_withdrawal: {
         Args: { p_retention_days?: number }
         Returns: string
@@ -1675,6 +1757,7 @@ export type Database = {
         | "on_hold"
       pricing_model: "per_session" | "per_hour" | "per_package"
       product_status: "draft" | "active" | "paused" | "archived"
+      refund_request_status: "pending" | "refunded" | "skipped" | "failed"
       session_status:
         | "scheduled"
         | "in_progress"
@@ -1851,6 +1934,7 @@ export const Constants = {
       ],
       pricing_model: ["per_session", "per_hour", "per_package"],
       product_status: ["draft", "active", "paused", "archived"],
+      refund_request_status: ["pending", "refunded", "skipped", "failed"],
       session_status: [
         "scheduled",
         "in_progress",
