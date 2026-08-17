@@ -3,7 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BadgeCheckIcon } from "lucide-react";
 
-import { getViewerTimezone } from "@/lib/auth/server";
+import { getSessionContext, getViewerTimezone } from "@/lib/auth/server";
+import { ContactTutor } from "@/components/chat/contact-tutor";
+import { tutorResponseTime } from "@/components/chat/conversations";
+import { responseTimeLabel } from "@/components/chat/types";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { BookingPanel } from "@/components/catalog/booking-panel";
@@ -45,12 +48,23 @@ export default async function TutorProfilePage({
   searchParams: Promise<{ p?: string; d?: string }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const [data, reviews] = await Promise.all([
+  // M-12 · el tiempo de respuesta y la sesión se piden en paralelo con lo
+  // demás: los dos alimentan el mismo bloque del hero y ninguno depende del
+  // otro. `tutorResponseTime` devuelve `null` mucho más a menudo de lo que
+  // parece (tutor nuevo, o que no contesta), y `null` significa NO PINTAR NADA.
+  const [data, reviews, respuestaMin, { user }] = await Promise.all([
     getTutorDetail(id),
     listTutorReviews(id),
+    tutorResponseTime(id),
+    getSessionContext(),
   ]);
   if (!data) notFound();
   const { tutor, products } = data;
+
+  const respuesta = responseTimeLabel(respuestaMin);
+  // Escribirse a uno mismo no es una conversación (la RPC lo rechaza igual;
+  // esto es para no enseñar un botón que solo puede fallar).
+  const esMiFicha = user?.id === tutor.id;
 
   const name = tutor.displayName ?? tutor.headline ?? "Tutor";
   const avatar = storageUrl("avatars", tutor.avatarPath);
@@ -119,9 +133,12 @@ export default async function TutorProfilePage({
                 </p>
               ) : null}
 
-              {/* El Figma añade aquí años de experiencia, tiempo de respuesta e
-                  idiomas: ninguno existe en el modelo (idioma es DD-03; los
-                  otros dos no están en ninguna tabla). Se muestra lo que hay. */}
+              {/* El Figma pedía aquí años de experiencia, tiempo de respuesta e
+                  idiomas. El tiempo de respuesta YA EXISTE desde M-12: se
+                  calcula (mediana de lo que tarda en contestar, 90 días,
+                  mínimo 5 observaciones) y si no da un número honesto no sale
+                  nada — ver `tutor_response_time`. Los otros dos siguen sin
+                  estar en ninguna tabla (idioma es DD-03). */}
               <div className="mt-3 flex flex-wrap items-center gap-4 text-sm">
                 {reviews.length > 0 && tutor.ratingAvg ? (
                   <span className="flex items-center gap-1.5">
@@ -160,7 +177,29 @@ export default async function TutorProfilePage({
                     </span>
                   </>
                 ) : null}
+                {/* Sin dato suficiente no hay chip. Un "responde en 2 horas" de
+                    adorno es una promesa que la plataforma no puede cumplir y
+                    que el alumno usa para decidir la compra. */}
+                {respuesta ? (
+                  <>
+                    <span aria-hidden className="size-1 rounded-full bg-white" />
+                    <span className="text-[13px] text-white/90">{respuesta}</span>
+                  </>
+                ) : null}
               </div>
+
+              {/* M-12 · preguntar ANTES de pagar. Va aquí, junto al nombre y a
+                  la altura del panel de reserva, porque es el mismo momento: se
+                  está decidiendo si comprarle a esta persona. */}
+              {esMiFicha ? null : (
+                <div className="mt-5">
+                  <ContactTutor
+                    tutorId={tutor.id}
+                    tutorName={name}
+                    anonimo={!user}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </Container>

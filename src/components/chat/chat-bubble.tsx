@@ -5,7 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeftIcon, MessageCircleIcon, XIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import { ChatThread } from "./chat-thread";
+import { counterpartFallback, type Conversation } from "./types";
 import {
   totalUnread,
   useChatUnread,
@@ -18,33 +20,29 @@ import {
   type MessageRow,
 } from "@/lib/chat/messages";
 
-export type Conversation = {
-  bookingId: string;
-  title: string;
-  subtitle: string;
-  /** N-28 · nombre del otro participante, o `null` si no hay ninguno legible. */
-  counterpart: string | null;
-  /** RN-41: la ventana del hilo la decide la 1ª sesión, no la burbuja. */
-  firstSessionAt: string | null;
-};
+export type { Conversation } from "./types";
+
+/** Con quién hablas, o el respaldo por rol. Nunca un "Alumno" de relleno. */
+function nombreDe(c: Conversation): string {
+  return c.counterpart ?? counterpartFallback(c.counterpartRole);
+}
 
 /**
  * Burbuja flotante de chat (R24-21, decisión 15): una **bandeja** al estilo
  * LinkedIn — abre la lista de conversaciones y el hilo **dentro de la propia
  * burbuja**, sin sacar a nadie de la página en la que está (reunión 7-ago).
- * Antes cada conversación era un enlace a `/chat/[id]`, así que abrir el chat
- * te echaba de la pantalla que estabas usando.
  *
  * `/chat/[id]` sigue existiendo para enlaces directos; esto es la vía rápida,
- * no su sustituto.
+ * no su sustituto. Solo se monta con sesión (lo decide `ChatLauncher`).
  *
- * Solo se monta con sesión (lo decide `ChatLauncher` en servidor).
+ * N-23 · y además SE ENTERA: los no leídos salen de `./unread`, que mantiene su
+ * propio canal de Realtime a nivel de burbuja.
  *
- * N-23 · y además SE ENTERA. El contador que había aquí era
- * `conversations.length` disfrazado de insignia —cuántas conversaciones tienes,
- * no cuántos mensajes te deben—, y como el Realtime vivía solo dentro del hilo,
- * con la burbuja cerrada no llegaba nada. Ahora los no leídos salen de
- * `./unread`, que mantiene su propio canal a nivel de burbuja.
+ * M-12 · y ahora la bandeja es de PERSONAS, no de reservas. Una fila por cada
+ * tutor (o alumno) con el que hablas, tenga o no reserva de por medio, y ahí
+ * dentro está todo lo hablado con esa persona — incluido lo de antes de
+ * comprar. Era lo que la decisión 15 ya pedía al llamarla "bandeja tipo
+ * LinkedIn": en una bandeja se habla con gente, no con facturas.
  */
 export function ChatBubble({
   conversations,
@@ -78,17 +76,16 @@ export function ChatBubble({
     enabled: visible,
     currentUserId,
     reloadKey: aperturas,
-    onMessage: (bookingId) => {
-      // La lista de conversaciones la arma el servidor (`ChatLauncher`), así que
-      // una conversación que hoy no está en ella —una reserva recién aceptada,
-      // o una cuya ventana de RN-41 acaba de abrirse— no aparecería hasta
-      // recargar la página. Un mensaje de una reserva desconocida es justo la
-      // señal de que la lista se quedó vieja: `router.refresh()` vuelve a
-      // ejecutar los componentes de servidor sin tirar el estado del cliente.
-      if (conversations.some((c) => c.bookingId === bookingId)) return;
-      // Con freno de mano: si tras refrescar la conversación SIGUE sin salir
-      // (una reserva cancelada, que la bandeja no lista a propósito), cada
-      // mensaje siguiente pediría otro refresco.
+    onMessage: (conversationId) => {
+      // La lista la arma el servidor (`ChatLauncher`), así que una conversación
+      // que hoy no está en ella —alguien que acaba de escribirte por primera
+      // vez desde tu ficha pública— no aparecería hasta recargar la página. Un
+      // mensaje de una conversación desconocida es justo la señal de que la
+      // lista se quedó vieja: `router.refresh()` vuelve a ejecutar los
+      // componentes de servidor sin tirar el estado del cliente.
+      if (conversations.some((c) => c.id === conversationId)) return;
+      // Con freno de mano: si tras refrescar la conversación SIGUE sin salir,
+      // cada mensaje siguiente pediría otro refresco.
       const ahora = Date.now();
       if (ahora - ultimoRefresco.current < 10_000) return;
       ultimoRefresco.current = ahora;
@@ -96,23 +93,21 @@ export function ChatBubble({
     },
   });
 
-  // Sin leer de las conversaciones que la bandeja SÍ lista. Sumar todo lo que
-  // hay en el almacén sería enseñar una insignia que no se puede abrir ni
-  // apagar: `unread_message_counts` también cuenta hilos de reservas canceladas.
+  // Sin leer de las conversaciones que la bandeja SÍ lista: sumar todo lo que
+  // hay en el almacén sería enseñar una insignia que no se puede abrir.
   const total = useMemo(
-    () => totalUnread(unread, conversations.map((c) => c.bookingId)),
+    () => totalUnread(unread, conversations.map((c) => c.id)),
     [unread, conversations],
   );
 
   // Quien te acaba de escribir, arriba. `sort` es estable, así que las
   // conversaciones sin actividad conocida conservan el orden del servidor
-  // (reserva más reciente primero).
+  // (que ya viene por `last_message_at`).
   const ordenadas = useMemo(
     () =>
       [...conversations].sort(
         (a, b) =>
-          (unread[b.bookingId]?.activityAt ?? 0) -
-          (unread[a.bookingId]?.activityAt ?? 0),
+          (unread[b.id]?.activityAt ?? 0) - (unread[a.id]?.activityAt ?? 0),
       ),
     [conversations, unread],
   );
@@ -136,9 +131,9 @@ export function ChatBubble({
   }, []);
 
   // Los mensajes se piden al abrir la conversación, no al montar la burbuja:
-  // cargar de golpe los hilos de hasta 20 reservas para una bandeja que puede
-  // que nadie despliegue es trabajo tirado. La RLS de participante ya filtra,
-  // así que se leen desde el navegador sin endpoint propio.
+  // cargar de golpe los hilos de veinte conversaciones para una bandeja que
+  // puede que nadie despliegue es trabajo tirado. La RLS de participante ya
+  // filtra, así que se leen desde el navegador sin endpoint propio.
   useEffect(() => {
     if (!abierta) return;
     let cancelado = false;
@@ -147,7 +142,7 @@ export function ChatBubble({
       const { data } = await createClient()
         .from("messages")
         .select(MESSAGE_COLUMNS)
-        .eq("booking_id", abierta.bookingId)
+        .eq("conversation_id", abierta.id)
         .order("created_at");
       // Sin esto, cambiar de conversación deprisa puede pintar los mensajes de
       // la anterior encima de la nueva.
@@ -194,17 +189,16 @@ export function ChatBubble({
                 <ArrowLeftIcon className="size-4" />
               </button>
             ) : null}
-            {/* N-28 · con el hilo abierto manda el NOMBRE de la otra persona, y
-                la mentoría baja a la línea pequeña: en una bandeja con varias
-                conversaciones, saber con quién hablas es lo primero. Sin nombre
-                legible se queda como estaba (el título de la mentoría). */}
+            {/* Con el hilo abierto manda el NOMBRE de la otra persona, y la
+                mentoría baja a la línea pequeña: en una bandeja con varias
+                conversaciones, saber con quién hablas es lo primero. */}
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-[#19191f]">
-                {abierta ? (abierta.counterpart ?? abierta.title) : "Mensajes"}
+                {abierta ? nombreDe(abierta) : "Mensajes"}
               </p>
-              {abierta?.counterpart ? (
+              {abierta ? (
                 <p className="truncate text-[11px] text-[#6b6b6b]">
-                  {abierta.title}
+                  {abierta.productTitle ?? "Consulta antes de reservar"}
                 </p>
               ) : null}
             </div>
@@ -228,10 +222,14 @@ export function ChatBubble({
                 <ChatThread
                   // Sin `key` React reutilizaría el hilo anterior con su estado:
                   // borrador a medio escribir y suscripción de Realtime incluidos.
-                  key={abierta.bookingId}
-                  bookingId={abierta.bookingId}
+                  key={abierta.id}
+                  conversationId={abierta.id}
+                  // La reserva más reciente del par, si la hay: es lo que
+                  // etiqueta el mensaje y lo que permite adjuntar.
+                  bookingId={abierta.bookingId ?? undefined}
+                  hasBooking={abierta.hasBooking}
+                  blocked={abierta.blocked}
                   currentUserId={currentUserId}
-                  firstSessionAt={abierta.firstSessionAt}
                   initialMessages={mensajes}
                   fill
                 />
@@ -239,22 +237,36 @@ export function ChatBubble({
             </div>
           ) : conversations.length === 0 ? (
             <p className="px-4 py-5 text-[13px] text-[#6b6b6b]">
-              Todavía no tienes conversaciones. El chat se abre 2 días antes de
-              tu primera mentoría.
+              Todavía no tienes conversaciones. Puedes escribirle a cualquier
+              tutor desde su perfil, antes incluso de reservar.
             </p>
           ) : (
             <ul className="max-h-[60vh] divide-y divide-[#f0f0f0] overflow-auto">
               {ordenadas.map((c) => {
-                const sinLeer = unread[c.bookingId]?.unread ?? 0;
+                const sinLeer = unread[c.id]?.unread ?? 0;
+                const nombre = nombreDe(c);
+                const avatar = storageUrl("avatars", c.avatarPath);
                 return (
-                  <li key={c.bookingId}>
+                  <li key={c.id}>
                     <button
                       type="button"
                       onClick={() => setAbierta(c)}
                       className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted"
                     >
-                      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#e0eeff] text-brand">
-                        <MessageCircleIcon className="size-4" />
+                      <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-[#e0eeff] text-[11px] font-semibold text-brand">
+                        {avatar ? (
+                          // `img` a secas y no `next/image`: es un avatar de 36
+                          // px dentro de una lista que puede tener veinte, y
+                          // `unoptimized` haría lo mismo con más ceremonia.
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={avatar}
+                            alt=""
+                            className="size-9 object-cover"
+                          />
+                        ) : (
+                          initialsFrom(nombre)
+                        )}
                       </span>
                       <span className="min-w-0 flex-1">
                         <span
@@ -262,10 +274,10 @@ export function ChatBubble({
                             sinLeer > 0 ? "font-bold" : "font-medium"
                           }`}
                         >
-                          {c.title}
+                          {nombre}
                         </span>
                         <span className="block truncate text-xs text-[#6b6b6b]">
-                          {c.subtitle}
+                          {c.productTitle ?? "Consulta antes de reservar"}
                         </span>
                       </span>
                       {sinLeer > 0 ? (
@@ -296,8 +308,7 @@ export function ChatBubble({
       >
         <MessageCircleIcon className="size-6" />
         {/* La insignia dice MENSAJES SIN LEER, no conversaciones: si no te deben
-            nada, no hay número. Antes salía siempre que tuvieras algún chat, así
-            que dejaba de significar nada y la gente la ignoraba. */}
+            nada, no hay número. */}
         {total > 0 ? (
           <span className="absolute -top-0.5 -right-0.5 grid size-5 place-items-center rounded-full bg-primary text-[11px] font-bold text-white">
             {total > 9 ? "9+" : total}

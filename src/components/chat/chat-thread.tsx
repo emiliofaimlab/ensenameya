@@ -16,23 +16,16 @@ import {
   type Attachment,
 } from "@/lib/chat/attachments";
 import {
+  MESSAGE_COLUMNS,
   toChatMessage,
   type ChatMessage,
   type MessageRow,
 } from "@/lib/chat/messages";
+import { asRpc } from "./rpc";
+import { ReportConversation } from "./report-conversation";
 import { markConversationRead, useOpenThread } from "./unread";
 
 export type { ChatMessage } from "@/lib/chat/messages";
-
-// RN-41: el chat abre 2 días antes de la 1ª sesión. El server es la barrera
-// (send_message); aquí solo se pinta el estado.
-const OPEN_BEFORE_MS = 2 * 24 * 60 * 60 * 1000;
-
-/** RN-41: ¿la ventana del chat ya abrió? (2 días antes de la 1ª sesión). */
-function computeOpen(firstSessionAt: string | null): boolean {
-  if (!firstSessionAt) return false;
-  return Date.now() >= new Date(firstSessionAt).getTime() - OPEN_BEFORE_MS;
-}
 
 /** Adjunto: el bucket es privado, así que la URL se firma al hacer clic. */
 function AttachmentLink({ a, mine }: { a: Attachment; mine: boolean }) {
@@ -81,50 +74,150 @@ function AttachmentLink({ a, mine }: { a: Attachment; mine: boolean }) {
   );
 }
 
+/**
+ * El hilo 1:1 — el mismo componente para los cinco sitios donde vive (la
+ * bandeja, `/chat/[id]`, la sala, la ficha de la reserva del alumno y la del
+ * tutor).
+ *
+ * ── M-12 · QUÉ CAMBIÓ ───────────────────────────────────────────────────────
+ * El hilo ya no es "el chat de una reserva" sino la conversación entre dos
+ * personas, exista reserva o no. En consecuencia:
+ *
+ *  · **Se acabó la ventana de RN-41** (2 días antes de la 1ª sesión). No es que
+ *    se haya quitado: es que dejó de poder existir. Si el alumno puede escribir
+ *    desde la ficha pública del tutor, un candado que solo mira reservas no
+ *    cierra nada — solo lograría que el mismo hilo acepte mensajes en un sitio
+ *    y los rechace en otro. Por eso ya no se pinta el cartel de "el chat se abre
+ *    2 días antes".
+ *  · **`firstSessionAt` sigue en las props y ya no se usa.** Lo pasan cuatro
+ *    páginas que no son de este carril (`/reservas/[id]`, `/tutor/reservas/[id]`
+ *    y la sala); quitarlo de la firma las rompería sin que lo viera ningún
+ *    typecheck. Se acepta y se ignora, hasta que esas páginas se limpien.
+ *  · **`bookingId` pasó de identidad a contexto.** Si viene, el mensaje se
+ *    etiqueta con esa reserva (retención de 30 días por mensaje, adjuntos
+ *    permitidos, carpeta de Storage). Si no viene, es una consulta previa a la
+ *    compra: sin adjuntos y con topes, los dos impuestos en el servidor.
+ */
 export function ChatThread({
+  conversationId: conversationIdProp,
   bookingId,
   currentUserId,
-  firstSessionAt,
   initialMessages,
   fill,
+  hasBooking,
+  blocked,
 }: {
-  bookingId: string;
+  /** El hilo. Lo pasan las pantallas nuevas (bandeja, `/chat/[id]`). */
+  conversationId?: string;
+  /**
+   * La reserva desde la que se escribe, si la hay. Las pantallas viejas solo
+   * pasan esto: la conversación se resuelve aquí dentro.
+   */
+  bookingId?: string;
   currentUserId: string;
-  firstSessionAt: string | null;
+  /**
+   * ⚠️ Aceptado por compatibilidad y sin efecto: ver la nota de arriba sobre
+   * RN-41. No se destructura para que no parezca que se usa.
+   */
+  firstSessionAt?: string | null;
   initialMessages: ChatMessage[];
   /** En la sala (LV01) el hilo ocupa el alto de su columna; suelto, no. */
   fill?: boolean;
+  /** ¿El par ya compró? Decide el aviso de los topes previos a la reserva. */
+  hasBooking?: boolean;
+  /** Bloqueada por moderación: se lee, no se escribe. */
+  blocked?: boolean;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  // Inicializador perezoso (se evalúa una vez, no en cada render). El server
-  // sigue siendo la barrera real (send_message); esto solo pinta el estado.
-  const [isOpen, setIsOpen] = useState(() => computeOpen(firstSessionAt));
+  // La conversación resuelta a partir de `bookingId`, para las pantallas que
+  // solo pasan la reserva. Se guarda APARTE de la prop y se combina abajo: un
+  // estado inicializado desde la prop tendría que resincronizarse en un efecto
+  // —copiar props a estado— y eso son renders en cascada (y un error de
+  // `react-hooks/set-state-in-effect`, que aquí avisa con razón).
+  const [resuelta, setResuelta] = useState<string | null>(null);
+  // `null` mientras se resuelve. Con `null` no se puede ni suscribir ni marcar
+  // leído, así que todo lo de abajo espera.
+  const conversationId = conversationIdProp ?? resuelta;
 
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Con reserva se manda por `send_message` (etiqueta el mensaje, permite
+  // adjunto); sin ella, por `send_conversation_message`.
+  //
+  // Esconder el clip NO es la barrera —esconder un botón no impide nada—: la
+  // barrera está en el servidor, y por partida triple (la RPC de consulta no
+  // tiene parámetro de adjunto, la RLS de Storage exige carpeta de reserva y un
+  // `check` de la tabla ata adjunto y reserva). Esto solo evita ofrecer un
+  // botón que únicamente puede terminar en error.
+  //
+  // ⚠️ `hasBooking === false` con `bookingId` puesto SÍ pasa: es un checkout
+  // abandonado (la reserva nace en `pending_payment`). Eso no es una compra, así
+  // que ni adjuntos ni trato de cliente — el servidor lo reenvía por la vía de
+  // consulta aunque se le mande el `booking_id`.
+  const puedeAdjuntar = Boolean(bookingId) && hasBooking !== false;
+  const esConsulta = hasBooking === false || (!bookingId && hasBooking === undefined);
+
   // N-23 · tener el hilo delante ES leerlo: se marca al abrirlo y, mientras
-  // siga montado, la burbuja no cuenta como pendiente lo que entra aquí. Sirve
-  // para los cuatro sitios donde vive este componente (la bandeja, `/chat/[id]`,
-  // la sala y la ficha de la reserva) porque el registro es del hilo, no de
-  // quien lo pinta.
-  useOpenThread(bookingId);
+  // siga montado, la burbuja no cuenta como pendiente lo que entra aquí.
+  useOpenThread(conversationId);
 
+  // ── Resolver la conversación desde la reserva (pantallas viejas) ───────────
   useEffect(() => {
-    if (isOpen || !firstSessionAt) return;
-    const opensAt = new Date(firstSessionAt).getTime() - OPEN_BEFORE_MS;
-    const id = setInterval(() => {
-      if (Date.now() >= opensAt) setIsOpen(true);
-    }, 30_000);
-    return () => clearInterval(id);
-  }, [isOpen, firstSessionAt]);
+    if (conversationIdProp || !bookingId) return;
+    let cancelado = false;
 
-  // Realtime: cada INSERT en messages de ESTA reserva. Para tablas con RLS hay
-  // que autenticar el websocket con el JWT del usuario (`setAuth`) o los cambios
-  // no llegan; la RLS de SELECT limita a su reserva y el filtro la estrecha.
+    void (async () => {
+      const { data } = await asRpc(createClient()).rpc(
+        "conversation_of_booking",
+        { p_booking_id: bookingId },
+      );
+      if (!cancelado && typeof data === "string") setResuelta(data);
+    })();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [conversationIdProp, bookingId]);
+
+  // ── Histórico completo ─────────────────────────────────────────────────────
+  // Quien entra por `bookingId` trae los mensajes DE ESA RESERVA, que ya no son
+  // toda la conversación: lo hablado antes de comprar no lleva `booking_id`.
+  // Sin este recargado, el histórico continuo se vería en la bandeja y no en la
+  // ficha de la reserva — o sea, la mitad de la promesa. Cuando la conversación
+  // llega por props, quien pinta ya cargó el hilo entero y esto no se ejecuta.
   useEffect(() => {
+    if (conversationIdProp || !conversationId) return;
+    let cancelado = false;
+
+    void (async () => {
+      const { data } = await createClient()
+        .from("messages")
+        .select(MESSAGE_COLUMNS)
+        .eq("conversation_id", conversationId)
+        .order("created_at");
+      if (cancelado || !data) return;
+      // Reemplazo y no mezcla: esta consulta es un superconjunto de lo que se
+      // pintó al montar. Los que hayan entrado por Realtime entretanto los
+      // vuelve a poner el dedup del canal.
+      setMessages(data.map((m) => toChatMessage(m as MessageRow)));
+    })();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [conversationIdProp, conversationId]);
+
+  // ── Realtime ───────────────────────────────────────────────────────────────
+  // Cada INSERT en messages de ESTA conversación. Para tablas con RLS hay que
+  // autenticar el websocket con el JWT del usuario (`setAuth`) o los cambios no
+  // llegan; la RLS de SELECT limita a sus conversaciones y el filtro la
+  // estrecha a esta.
+  useEffect(() => {
+    if (!conversationId) return;
+
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;
@@ -137,14 +230,14 @@ export function ChatThread({
       if (session?.access_token) supabase.realtime.setAuth(session.access_token);
 
       channel = supabase
-        .channel(`messages:${bookingId}`)
+        .channel(`messages:${conversationId}`)
         .on(
           "postgres_changes",
           {
             event: "INSERT",
             schema: "public",
             table: "messages",
-            filter: `booking_id=eq.${bookingId}`,
+            filter: `conversation_id=eq.${conversationId}`,
           },
           (payload) => {
             const m = payload.new as MessageRow;
@@ -159,7 +252,7 @@ export function ChatThread({
             // esto la marca se quedaría en el momento de abrir y esos mensajes
             // volverían a contarse como pendientes en la siguiente visita.
             if (m.sender_id !== currentUserId) {
-              void markConversationRead(bookingId);
+              void markConversationRead(conversationId);
             }
           },
         )
@@ -173,7 +266,7 @@ export function ChatThread({
     // `currentUserId` no cambia en la vida del componente (viene del servidor):
     // está en la lista por la regla de dependencias, no porque se espere que
     // rehaga el canal.
-  }, [bookingId, currentUserId]);
+  }, [conversationId, currentUserId]);
 
   // Autoscroll al último mensaje.
   useEffect(() => {
@@ -189,13 +282,24 @@ export function ChatThread({
     const body = draft.trim();
     if (!body) return;
     setBusy(true);
+
     const supabase = createClient();
-    const { data, error } = await supabase.rpc("send_message", {
-      p_booking_id: bookingId,
-      p_body: body,
-    });
+    // Con reserva, la vía de siempre: etiqueta el mensaje con ella, que es lo
+    // que le da su retención de 30 días y su carpeta de adjuntos.
+    const { data, error } = bookingId
+      ? await asRpc(supabase).rpc("send_message", {
+          p_booking_id: bookingId,
+          p_body: body,
+        })
+      : await asRpc(supabase).rpc("send_conversation_message", {
+          p_conversation_id: conversationId,
+          p_body: body,
+        });
+
     setBusy(false);
     if (error) {
+      // Los mensajes de las RPC ya vienen redactados para el usuario (el tope
+      // de mensajes, el bloqueo de moderación): se enseñan tal cual.
       toast.error(error.message || "No se pudo enviar el mensaje.");
       return;
     }
@@ -212,6 +316,7 @@ export function ChatThread({
   }
 
   async function attach(file: File) {
+    if (!bookingId) return; // sin reserva no hay dónde subirlo (ni RPC que lo acepte)
     setBusy(true);
     const res = await uploadAttachment(bookingId, file);
     setBusy(false);
@@ -229,46 +334,38 @@ export function ChatThread({
     toast.success("Documento compartido.");
   }
 
-  if (!isOpen) {
-    return (
-      <p className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        {firstSessionAt
-          ? "El chat se abre 2 días antes de tu primera mentoría."
-          : "El chat se habilita cuando la reserva esté confirmada."}
-      </p>
-    );
-  }
+  const listo = conversationId !== null;
 
   return (
     <div className={cn("flex flex-col gap-3", fill && "h-full min-h-0")}>
-      {/* US-1702 · descarga del hilo. Enlace normal con `download`: el servidor
-          arma el archivo y la RLS decide si hay algo que armar. Solo con
-          mensajes — un archivo vacío no le sirve a nadie.
-          N-26 · UN solo enlace, y al .txt. El `.json` que había al lado era la
-          misma conversación en un formato que nadie de fuera va a abrir; el
-          endpoint lo sigue aceptando con `?format=json` para soporte, pero
-          ofrecerlo aquí solo servía para que la mitad se llevara el archivo
-          equivocado.
-          ⚠️ AB-01 · "a los 30 días" es verdad a medias y este cartel lo dice
-          como si fuera un plazo único. El reloj corre por MENSAJE
-          (`messages.expires_at` = `now() + 30 días` en cada insert), así que lo
-          que se borra primero es el principio de la conversación mientras el
-          final sigue vivo. Y no hay cierre: nadie decidió cuánto tiempo queda
-          abierto el chat después de la clase. El razonamiento completo y lo que
-          habría que cambiar están en `chat-launcher.tsx`, junto a
-          `OPEN_STATUSES`. */}
-      {messages.length > 0 ? (
+      {/* El aviso de retención dice la verdad de CADA hilo, que no es la misma.
+          · Con reserva: el reloj corre por MENSAJE (`expires_at` = now() + 30
+            días en cada insert), así que la conversación se erosiona por
+            arriba. Eso es AB-01 y sigue sin decidirse; el cartel al menos ya no
+            promete un plazo único.
+          · Consulta previa: el reloj corre por CONVERSACIÓN y solo si no se
+            llega a reservar (decisión b de M-12). No se erosiona: o está el
+            hilo entero o no está. */}
+      {messages.length > 0 && listo ? (
         <p className="text-[11px] text-muted-foreground">
-          El chat se borra a los 30 días.{" "}
+          {esConsulta
+            ? "Si no llegas a reservar, esta conversación se borra a los 30 días del último mensaje."
+            : "Los mensajes se borran a los 30 días de escribirse."}{" "}
           <a
-            href={`/api/chat/${bookingId}/download`}
+            href={`/api/chat/${conversationId}/download`}
             download
             className="font-semibold text-brand hover:underline"
           >
             Descargar la conversación
           </a>
-          . Los archivos adjuntos no van dentro: ábrelos y guárdalos desde aquí
-          antes de que el hilo se borre.
+          {esConsulta ? (
+            "."
+          ) : (
+            <>
+              . Los archivos adjuntos no van dentro: ábrelos y guárdalos desde
+              aquí antes de que el hilo se borre.
+            </>
+          )}
         </p>
       ) : null}
 
@@ -279,8 +376,10 @@ export function ChatThread({
         )}
       >
         {messages.length === 0 ? (
-          <p className="m-auto text-sm text-muted-foreground">
-            Aún no hay mensajes. Escribe el primero.
+          <p className="m-auto max-w-[42ch] text-center text-sm text-muted-foreground">
+            {esConsulta
+              ? "Pregúntale lo que necesites saber antes de reservar: si la mentoría cubre tu caso, qué nivel hace falta o cómo trabaja."
+              : "Aún no hay mensajes. Escribe el primero."}
           </p>
         ) : (
           messages.map((m) => {
@@ -321,44 +420,71 @@ export function ChatThread({
         <div ref={bottomRef} />
       </div>
 
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send();
-        }}
-      >
-        <input
-          ref={fileRef}
-          type="file"
-          accept={ATTACHMENT_TYPES.join(",")}
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void attach(f);
-            e.target.value = "";
+      {blocked ? (
+        <p className="rounded-lg border border-dashed p-4 text-center text-[13px] text-muted-foreground">
+          Esta conversación está bloqueada por moderación. Puedes leerla y
+          descargarla, pero no escribir.
+        </p>
+      ) : (
+        <form
+          className="flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send();
           }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          disabled={busy}
-          aria-label="Adjuntar documento"
-          onClick={() => fileRef.current?.click()}
         >
-          <PaperclipIcon className="size-4" />
-        </Button>
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Escribe un mensaje…"
-          maxLength={2000}
-        />
-        <Button type="submit" disabled={busy || !draft.trim()}>
-          Enviar
-        </Button>
-      </form>
+          {puedeAdjuntar ? (
+            <>
+              <input
+                ref={fileRef}
+                type="file"
+                accept={ATTACHMENT_TYPES.join(",")}
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void attach(f);
+                  e.target.value = "";
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={busy}
+                aria-label="Adjuntar documento"
+                onClick={() => fileRef.current?.click()}
+              >
+                <PaperclipIcon className="size-4" />
+              </Button>
+            </>
+          ) : null}
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={
+              listo ? "Escribe un mensaje…" : "Abriendo la conversación…"
+            }
+            maxLength={2000}
+            disabled={!listo}
+          />
+          <Button type="submit" disabled={busy || !listo || !draft.trim()}>
+            Enviar
+          </Button>
+        </form>
+      )}
+
+      {esConsulta && listo ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+          {/* Decir el límite ANTES de chocar con él. El servidor es quien lo
+              impone (5 seguidos sin respuesta, 20 en total): esto solo evita
+              que el alumno se entere por un error rojo. */}
+          <span>
+            Antes de reservar no se pueden enviar archivos y el número de
+            mensajes es limitado.
+          </span>
+          <ReportConversation conversationId={conversationId} />
+        </div>
+      ) : null}
     </div>
   );
 }
