@@ -35,6 +35,12 @@ type State = "idle" | "processing";
  * que el cobro esté ruteado al proveedor simulado, así que el día que entre un
  * PSP real este botón deja de funcionar solo — que es lo que debe pasar.
  *
+ * N-37 · vive fuera del layout de `(app)`: esta pantalla no tiene cabecera, ni
+ * menú, ni pie, ni chat flotante. Petición del cliente —«el checkout tiene que
+ * estar lo más aislado posible […] no debe tener más nada esa página»— y
+ * también la práctica normal de cualquier pasarela: cada enlace de escape en
+ * una pantalla de pago es una compra que no se termina.
+ *
  * ⚠️ SIN campos de tarjeta NUESTROS, a propósito. El Figma dibuja aquí número
  * de tarjeta, titular, vencimiento y CVC en campos propios; capturar el PAN en
  * nuestro formulario metería el proyecto en PCI-DSS SAQ D (alcance completo).
@@ -55,6 +61,7 @@ export function CheckoutForm({
   simulado,
   tarjetas,
   hayUltimaUsada,
+  aceptaSola,
 }: {
   productId: string;
   slots: string[];
@@ -73,6 +80,14 @@ export function CheckoutForm({
   /** true si la primera de la lista es de verdad la última usada, no solo la
    *  más reciente. Cambia la etiqueta: sin cobros previos no se puede afirmar. */
   hayUltimaUsada: boolean;
+  /**
+   * M-02 · `products.auto_accept_bookings`. Cambia lo que se PROMETE aquí, y
+   * por eso llega hasta el formulario: con la aceptación automática puesta la
+   * reserva pagada salta a `confirmed` sin pasar por `pending_acceptance`, así
+   * que no existe la ventana de 24 h ni su reembolso íntegro automático. Anunciar
+   * ese reembolso igualmente sería prometer algo que el código ya no hace.
+   */
+  aceptaSola: boolean;
 }) {
   const tarjeta = tarjetas[0] ?? null;
   const router = useRouter();
@@ -224,7 +239,7 @@ export function CheckoutForm({
                 <span className="font-semibold">
                   {tarjeta
                     ? `${String(tarjeta.expMonth).padStart(2, "0")}/${String(tarjeta.expYear).slice(-2)}`
-                    : "\u2013\u2013/\u2013\u2013"}
+                    : "––/––"}
                 </span>
               </span>
             </div>
@@ -264,11 +279,20 @@ export function CheckoutForm({
               {formatMoney(total, currency)}
             </span>
           </div>
+          {/* M-06 · aquí ponía "(RN-27/37)". Esos son códigos de NUESTRA
+              documentación interna y no significan nada para quien está a punto
+              de pagar; el "N.º de sesión" de N-27 sí se enseña, porque ese lo
+              pidió el cliente para poder hablar por teléfono de una clase.
+
+              M-02 · y la promesa cambia con la mentoría: si acepta sola, la
+              reserva se confirma con el cobro y la ventana de 24 h no llega a
+              existir. Prometerla igual sería un reembolso que nadie va a hacer. */}
           <p className="mt-3.5 flex gap-2 text-[11px] text-[#6b6b6b]">
             <ShieldCheckIcon className="mt-px size-3.5 shrink-0 text-success" />
             <span>
-              Reembolso del {P.refundPct.studentEarly} % si el tutor no acepta en{" "}
-              {P.cutoffHours} h (RN-27/37).
+              {aceptaSola
+                ? `Tu horario queda confirmado en cuanto se acredite el pago. Cancela con ${P.cutoffHours} h o más y recibe el ${P.refundPct.studentEarly} %.`
+                : `Reembolso del ${P.refundPct.studentEarly} % si el tutor no acepta en ${P.cutoffHours} h.`}
             </span>
           </p>
         </PanelCard>

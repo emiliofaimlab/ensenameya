@@ -14,6 +14,11 @@ import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
  * en `pending_payment` reteniendo el horario y la única acción ofrecida era
  * cancelarla. Detectado usando la app el 12-ago.
  *
+ * N-37 · desde el 17-ago NO se monta dentro del detalle de la reserva: vive en
+ * `/reservas/<id>/pagar`, dentro del grupo `(checkout)`, sin cabecera ni menú
+ * ni chat, igual que el checkout de una reserva nueva. Dos pantallas de cobro
+ * con dos aspectos distintos era peor que no aislar ninguna.
+ *
  * NO crea nada: reutiliza la reserva que ya existe. `create_booking` no se
  * llama aquí —eso es lo que la duplicaría—; el Route Handler acepta el
  * `bookingId` y él mismo rechaza con 409 si ya no está en `pending_payment`
@@ -52,10 +57,15 @@ export function ResumePayment({ bookingId }: { bookingId: string }) {
       });
       return;
     }
-    // Ruteo simulado: el cobro no pasa por Stripe y esta pantalla no tiene el
-    // botón de simular fallo del checkout. Se manda al checkout de siempre en
-    // vez de inventar aquí un segundo camino de dinero.
-    toast.info("Este cobro va por el proveedor simulado; termínalo en el checkout.");
+    // Ruteo simulado (`payment_routing_rules` en 'simulated'): no hay Session
+    // que abrir. Aquí NO se llama a `confirm_simulated_payment` a propósito —
+    // sería un segundo camino de dinero escrito para un proveedor de mentira—,
+    // así que se dice lo que va a pasar de verdad: la reserva caduca sola y se
+    // vuelve a reservar. Antes este aviso mandaba "al checkout", que con el
+    // flujo nuevo crearía una reserva DISTINTA en vez de terminar esta.
+    toast.info(
+      "Este cobro está ruteado al proveedor simulado y no se puede retomar. La reserva se libera sola y podrás volver a reservar el horario.",
+    );
   }
 
   if (embed) return <StripeEmbed {...embed} />;

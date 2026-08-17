@@ -32,6 +32,39 @@ const slotTime = (iso: string, timeZone: string) =>
     timeZone,
   });
 
+/** Horarios que hay que elegir para reservar esta mentoría (RN-12). */
+const sesionesPorReserva = (p: ProductCardData) =>
+  p.pricingModel === "per_package" ? (p.packageNumSessions ?? 1) : 1;
+
+/**
+ * N-33 + N-32 · a dónde lleva pulsar una hora. Del calendario al pago, sin
+ * volver a preguntar lo mismo.
+ *
+ * El cliente lo dijo con estas palabras: «estás seleccionando dos veces algo»
+ * y «me mareó un poco que el calendario salga dos veces […] yo selecciono el 14
+ * a las 8 de la mañana y después me salta, y como salta en otra forma, yo digo
+ * "ya estoy reservando, ¿a qué hora es que yo reservé?"». Pulsar una hora AQUÍ
+ * ya es elegir; `/reservar/<id>` repintaba otro calendario —con otra forma y
+ * otro día de inicio de semana— para preguntar exactamente lo mismo.
+ *
+ * ⚠️ POR QUÉ LA PANTALLA INTERMEDIA NO SE BORRA. Parece vacía y no lo está: es
+ * la única que resuelve la selección MÚLTIPLE de los paquetes (`per_package`
+ * con N sesiones exige elegir N horarios, RN-12) y no hay sitio en este panel
+ * lateral para eso. Así que:
+ *
+ *   · sesión suelta  → derecho al checkout, con el horario ya en la URL;
+ *   · paquete        → a `/reservar/<id>?slot=…`, que preselecciona esa primera
+ *                      hora (M-10) y pide las que faltan.
+ *
+ * Y `/reservar/<id>` sigue existiendo además como respaldo para quien llega sin
+ * hora elegida (el botón grande de abajo, un enlace guardado, un hueco que se
+ * ocupó entre medias).
+ */
+const destinoDeLaHora = (p: ProductCardData, iso: string) =>
+  sesionesPorReserva(p) > 1
+    ? `/reservar/${p.id}?slot=${encodeURIComponent(iso)}`
+    : `/reservar/${p.id}/checkout?slots=${encodeURIComponent(iso)}`;
+
 /**
  * Panel de reserva de P07/P08 — flujo **día → clase → horario** (R24-13).
  *
@@ -290,21 +323,32 @@ export async function BookingPanel({
                   Esta sesión no tiene horarios ese día. Prueba con otro día.
                 </p>
               ) : (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {times.map((iso, i) => (
-                    <Link
-                      key={iso}
-                      href={`/reservar/${chosen.id}?slot=${encodeURIComponent(iso)}`}
-                      className={`rounded-[8px] px-3 py-2 text-[13px] transition-colors ${
-                        i === 0
-                          ? "bg-brand text-white hover:bg-brand-foreground"
-                          : "border border-[#cccccc] text-[#333333] hover:bg-muted"
-                      }`}
-                    >
-                      {slotTime(iso, timeZone)}
-                    </Link>
-                  ))}
-                </div>
+                <>
+                  {/* N-32 · se dice ANTES de pulsar a dónde lleva pulsar. La
+                      queja no era el número de pasos, era no saber en cuál
+                      estabas: «ya estoy reservando, ¿a qué hora es que yo
+                      reservé?». */}
+                  <p className="mt-1 text-xs text-[#6b6b6b]">
+                    {sesionesPorReserva(chosen) > 1
+                      ? `Elige aquí la primera; las ${sesionesPorReserva(chosen) - 1} restantes en el siguiente paso.`
+                      : "Al elegir una hora pasas directo a confirmar el pago."}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {times.map((iso, i) => (
+                      <Link
+                        key={iso}
+                        href={destinoDeLaHora(chosen, iso)}
+                        className={`rounded-[8px] px-3 py-2 text-[13px] transition-colors ${
+                          i === 0
+                            ? "bg-brand text-white hover:bg-brand-foreground"
+                            : "border border-[#cccccc] text-[#333333] hover:bg-muted"
+                        }`}
+                      >
+                        {slotTime(iso, timeZone)}
+                      </Link>
+                    ))}
+                  </div>
+                </>
               )}
             </>
           ) : (
@@ -341,6 +385,11 @@ export async function BookingPanel({
       ) : null}
 
       {chosen ? (
+        // N-33 · el botón grande NO lleva al pago: quien llega hasta aquí sin
+        // pulsar una hora todavía no ha elegido ninguna, y elegirla por él
+        // sería peor que pedírsela. Va al selector de `/reservar/<id>`, que en
+        // este camino es la PRIMERA vez que se ve un calendario de horas, no la
+        // segunda. Con una hora ya pulsada nadie pasa por aquí.
         <Button asChild className="mt-4 h-[51px] w-full text-[15px]">
           <Link href={`/reservar/${chosen.id}`}>{ctaLabel}</Link>
         </Button>

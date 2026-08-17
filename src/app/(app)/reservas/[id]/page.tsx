@@ -11,7 +11,6 @@ import {
   tutorNames,
 } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
-import { ResumePayment } from "@/components/checkout/resume-payment";
 import {
   PanelCard,
   PanelCardTitle,
@@ -21,6 +20,7 @@ import {
 } from "@/components/layout/panel-shell";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { RecordingLink } from "@/components/room/recording-link";
+import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/lib/database.types";
 
@@ -59,7 +59,11 @@ export default async function BookingDetailPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id), sessions(id, start_at, status), payments(status, gross_amount, currency, paid_at, refunded_amount)",
+      // N-27 · `session_ref` es el "N.º de sesión" visible (`7K3M9Q-2`). Se pide
+      // aquí y no se deriva: se calcula en la BD al insertar la sesión
+      // (`20260817140000`) y componerlo otra vez en el cliente es la forma de
+      // que un día deje de coincidir con el que el alumno tiene apuntado.
+      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id), sessions(id, start_at, status, session_ref), payments(status, gross_amount, currency, paid_at, refunded_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -145,6 +149,15 @@ export default async function BookingDetailPage({
                       <p className="text-[13px] text-[#6b6b6b] first-letter:uppercase">
                         {formatSessionTime(s.start_at, tz)} · tu hora local
                       </p>
+                      {/* N-27 · el número que se dicta por teléfono. NO es un
+                          código interno de los que barre M-06: los `RN-xx` y
+                          `US-xx` no significan nada para un alumno, este lo pidió
+                          el cliente para poder seguir una clase y su cobro. El
+                          "Sesión 1 · 2 · 3" de arriba se queda porque es el
+                          ordinal dentro del paquete y sigue valiendo para las
+                          reservas anteriores a la migración, que no tienen
+                          número (`SessionRef` devuelve null y no pinta nada). */}
+                      <SessionRef nro={s.session_ref} className="mt-1" />
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <StatusPill>
@@ -162,9 +175,12 @@ export default async function BookingDetailPage({
                           <Link href={`/room/${s.id}`}>Entrar a sala</Link>
                         </Button>
                       ) : null}
-                      {/* US-1802 · la grabación vive 30 días desde la clase. */}
+                      {/* US-1802 · la grabación vive 30 días desde la clase. El
+                          nº de sesión viaja con el botón: una grabación se
+                          reclama por correo ("la de la 7K3M9Q-2") y el uuid de
+                          la URL no sirve para eso. */}
                       {s.status === "completed" ? (
-                        <RecordingLink sessionId={s.id} />
+                        <RecordingLink sessionId={s.id} nroSesion={s.session_ref} />
                       ) : null}
                     </div>
                   </li>
@@ -205,7 +221,14 @@ export default async function BookingDetailPage({
           </PanelCard>
 
           {/* La reserva existe pero nunca se cobró: sin esto el horario se
-              quedaba retenido y lo único ofrecido era cancelarla (12-ago). */}
+              quedaba retenido y lo único ofrecido era cancelarla (12-ago).
+
+              N-37 · el formulario de Stripe ya NO se monta aquí dentro. Cobrar
+              en mitad de la ficha —con cabecera, menú lateral, pie y chat
+              alrededor— era la segunda experiencia de pago del producto, y el
+              cliente pidió justo lo contrario: «el checkout tiene que estar lo
+              más aislado posible». El botón lleva a `/reservas/<id>/pagar`, que
+              comparte layout con el checkout de una reserva nueva. */}
           {booking.status === "pending_payment" ? (
             <PanelCard>
               <PanelCardTitle>Termina tu pago</PanelCardTitle>
@@ -213,7 +236,12 @@ export default async function BookingDetailPage({
                 Tu horario está reservado, pero el pago quedó a medias. La
                 reserva se libera sola si no se completa.
               </p>
-              <ResumePayment bookingId={booking.id} />
+              <Button
+                asChild
+                className="mt-3.5 h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
+              >
+                <Link href={`/reservas/${booking.id}/pagar`}>Pagar ahora</Link>
+              </Button>
             </PanelCard>
           ) : null}
 

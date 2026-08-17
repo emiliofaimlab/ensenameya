@@ -6,6 +6,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
+import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Reserva confirmada · Enséñame Ya" };
@@ -44,7 +45,10 @@ export default async function ConfirmationPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, products(title, tutor_id), sessions(start_at, end_at)",
+      // N-27 · `session_ref` es el "N.º de sesión" (`7K3M9Q-2`) que el cliente
+      // pidió para seguir una clase y su cobro. Esta pantalla es lo más
+      // parecido a un resguardo que ve el alumno: es donde lo va a copiar.
+      "id, status, total_amount, currency, products(title, tutor_id), sessions(start_at, end_at, session_ref)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -90,6 +94,19 @@ export default async function ConfirmationPage({
               <span className="font-medium text-[#333333]">Mis reservas</span>{" "}
               verás el estado actualizado.
             </>
+          ) : booking.status === "confirmed" ? (
+            // M-02 · la mentoría acepta sola (`products.auto_accept_bookings`),
+            // así que la reserva NO pasa por `pending_acceptance` y no existe
+            // ninguna ventana de 24 h que contar. Repetir aquí el texto de
+            // "cuando la acepte… si no responde se reembolsa el 100 %" sería
+            // prometer un reembolso automático que ya no puede ocurrir.
+            <>
+              {tutor
+                ? `Tu reserva con ${tutor} está confirmada. `
+                : "Tu reserva está confirmada. "}
+              Ya le avisamos: el horario queda bloqueado en su agenda y te
+              esperamos en la sala.
+            </>
           ) : (
             <>
               {tutor
@@ -127,10 +144,13 @@ export default async function ConfirmationPage({
             {sessions.map((s) => (
               <li
                 key={s.start_at}
-                className="flex items-center gap-2 text-[13px] text-[#404040]"
+                className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-[#404040]"
               >
-                <CheckIcon className="size-3.5 shrink-0 text-brand" strokeWidth={3} />
-                <span className="first-letter:uppercase">{range(s)}</span>
+                <span className="flex items-center gap-2">
+                  <CheckIcon className="size-3.5 shrink-0 text-brand" strokeWidth={3} />
+                  <span className="first-letter:uppercase">{range(s)}</span>
+                </span>
+                <SessionRef nro={s.session_ref} />
               </li>
             ))}
           </ul>
