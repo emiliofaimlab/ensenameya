@@ -54,6 +54,7 @@ export function LiveRoom({
   bookingStatus,
   productTitle,
   sessionRef,
+  timeZone,
   isTutor,
   currentUserId,
   firstSessionAt,
@@ -69,6 +70,9 @@ export function LiveRoom({
   productTitle: string;
   /** N-27 · "N.º de sesión" visible. Null en reservas viejas (ver migración). */
   sessionRef: string | null;
+  /** RV-18/RN-01 · la resuelve la página en servidor; sin ella el SSR
+   *  formatea en UTC y la hora no coincide con la del navegador. */
+  timeZone: string;
   isTutor: boolean;
   currentUserId: string;
   firstSessionAt: string | null;
@@ -77,7 +81,21 @@ export function LiveRoom({
   consent: { mine: boolean; other: boolean };
 }) {
   const router = useRouter();
-  const [now, setNow] = useState(() => Date.now());
+  /**
+   * RV-18 · `now` arranca en `null` A PROPÓSITO, y no en `Date.now()`.
+   *
+   * Este componente es de cliente pero SE RENDERIZA TAMBIÉN EN EL SERVIDOR, y
+   * de `now` salen `beforeWindow` y `afterWindow`, que deciden QUÉ RAMA del
+   * árbol se pinta. Si el SSR cae a un lado del umbral y la hidratación al
+   * otro, no cambia un texto: cambia la ESTRUCTURA — que es exactamente el
+   * React #418 de "marcado distinto", no el #425 de "texto distinto". Y el
+   * `suppressHydrationWarning` de la cuenta atrás no cubre nada de esto:
+   * silencia el texto de ESE nodo, no la elección de rama.
+   *
+   * Con `null`, el servidor y el primer render del cliente pintan lo mismo
+   * (la sala aún no decidida) y el reloj entra en el efecto de montaje.
+   */
+  const [now, setNow] = useState<number | null>(null);
   const [joined, setJoined] = useState<Joined | null>(null);
   const [busy, setBusy] = useState(false);
   // Controles locales de la sala simulada (con Daily real los trae el SDK).
@@ -94,9 +112,20 @@ export function LiveRoom({
   const closesAt = new Date(endAt).getTime() + WINDOW_MIN * 60000;
 
   // Reloj de 1 s para la cuenta regresiva y para reaccionar al abrir/cerrar.
+  //
+  // La primera puesta en hora va en un `setTimeout(…, 0)` y no en una llamada
+  // directa a `setNow` dentro del efecto: así el reloj arranca en el primer
+  // hueco tras pintar —sin el segundo de espera que costaría dejárselo al
+  // intervalo— y sin el `setState` directo en el efecto, que `react-hooks`
+  // marca con razón porque fuerza un render extra en cascada.
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
+    const enHora = () => setNow(Date.now());
+    const primera = setTimeout(enHora, 0);
+    const id = setInterval(enHora, 1000);
+    return () => {
+      clearTimeout(primera);
+      clearInterval(id);
+    };
   }, []);
 
   // Escape sale del modo teatro. Es lo que hace el fullscreen del navegador y
@@ -116,8 +145,11 @@ export function LiveRoom({
     sessionStatus === "completed" ||
     sessionStatus === "cancelled" ||
     sessionStatus === "no_show";
-  const beforeWindow = now < opensAt;
-  const afterWindow = now > closesAt;
+  // Mientras no haya reloj (SSR y primer render del cliente) no se decide nada:
+  // ni "todavía no abre" ni "ya cerró". Así las dos pasadas pintan el mismo
+  // árbol y la elección de rama ocurre después de hidratar.
+  const beforeWindow = now !== null && now < opensAt;
+  const afterWindow = now !== null && now > closesAt;
 
   // "En vivo" es un estado DERIVADO: uniste y la ventana sigue abierta.
   const live = joined !== null && !afterWindow;
@@ -221,7 +253,7 @@ export function LiveRoom({
   }
 
   // ── Estado en vivo (unido) ────────────────────────────────────────────────
-  if (live && joined) {
+  if (live && joined && now !== null) {
     const total = new Date(endAt).getTime() - new Date(startAt).getTime();
     const elapsed = now - new Date(startAt).getTime();
 
@@ -302,7 +334,7 @@ export function LiveRoom({
 
             <div className="flex flex-wrap items-center gap-2 border-t bg-background p-3">
               <span className="mr-auto text-sm text-muted-foreground" suppressHydrationWarning>
-                Termina en {human(new Date(joined.endsAt).getTime() - now)}
+                Termina en {human(new Date(joined.endsAt).getTime() - (now ?? 0))}
               </span>
 
               {/* Con Daily real los controles los trae el SDK (y con ellos la
@@ -397,7 +429,22 @@ export function LiveRoom({
         <SessionRef nro={sessionRef} />
       </div>
 
-      {!bookingActive || sessionOver ? (
+      {now === null ? (
+        /*
+         * RV-18 · Estado neutro mientras no hay reloj — o sea, en el SSR y en
+         * el primer render del cliente.
+         *
+         * NO se puede caer a ninguna de las ramas de abajo: todas dependen de
+         * comparar la hora actual con la ventana de la sala, y si el servidor
+         * eligiera una rama y el navegador otra, cambiaría la ESTRUCTURA del
+         * árbol — el React #418 que se ve en producción. Un estado propio, que
+         * dura lo que tarda el efecto de montaje, es la única forma de que las
+         * dos pasadas pinten lo mismo sin mentir sobre el estado de la sala.
+         */
+        <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+          Comprobando el horario de la sesión…
+        </p>
+      ) : !bookingActive || sessionOver ? (
         <>
           <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
             {sessionOver
@@ -422,7 +469,7 @@ export function LiveRoom({
             </p>
           </div>
           <p className="text-sm text-muted-foreground">
-            {new Date(startAt).toLocaleString("es")}
+            {new Date(startAt).toLocaleString("es", { timeZone, dateStyle: "full", timeStyle: "short" })}
           </p>
           {/* El permiso se puede dar mientras esperas: RN-42 pide que esté
               decidido ANTES de entrar, no que la sala ya esté abierta. */}
@@ -446,7 +493,7 @@ export function LiveRoom({
       ) : (
         <>
           <p className="text-sm text-muted-foreground" suppressHydrationWarning>
-            La sala está abierta. Cierra en {human(closesAt - now)}.
+            La sala está abierta. Cierra en {human(closesAt - (now ?? 0))}.
           </p>
           {/* RN-42: el permiso se pide ANTES de entrar, no a mitad de clase. */}
           <RecordingConsent

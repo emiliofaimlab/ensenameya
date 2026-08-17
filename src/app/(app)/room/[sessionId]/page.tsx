@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ChatMessage } from "@/components/chat/chat-thread";
+import { getUserTimezone } from "@/lib/auth/server";
 import { LiveRoom } from "./live-room";
 
 export const metadata = { title: "Sala en vivo · Enséñame Ya" };
@@ -71,6 +72,7 @@ export default async function RoomPage({
 
   return (
     <LiveRoom
+      timeZone={await getUserTimezone()}
       sessionId={s.id}
       bookingId={s.booking_id}
       startAt={s.start_at}

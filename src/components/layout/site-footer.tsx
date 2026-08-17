@@ -42,6 +42,19 @@ const columns = [
   },
 ];
 
+/**
+ * RV-18 · El año se calcula UNA vez al cargar el módulo, no en cada render.
+ *
+ * Parece un componente de servidor —lo es en el layout público— pero en `(app)`
+ * lo monta `app-chrome.tsx`, que es `"use client"`, y un módulo importado desde
+ * un módulo de cliente entra al bundle de cliente. O sea que ese `new Date()`
+ * corría en el SSR y otra vez al hidratar: desajuste garantizado en el cambio
+ * de año, y el patrón exacto que produce el React #418 que se ve en `/app`.
+ *
+ * A nivel de módulo se congela por proceso, que para un año es de sobra.
+ */
+const AÑO = new Date().getFullYear();
+
 export function SiteFooter() {
   return (
     <footer className="mt-auto bg-muted">
@@ -109,7 +122,7 @@ export function SiteFooter() {
         <hr className="mt-8 border-t border-primary" />
 
         <div className="flex flex-col gap-2 pt-4 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} {COMPANY.brand}</p>
+          <p>© {AÑO} {COMPANY.brand}</p>
 
           <div className="flex flex-wrap items-center gap-4">
             {/* `mailto:` y no texto plano: en móvil un correo que no se puede
