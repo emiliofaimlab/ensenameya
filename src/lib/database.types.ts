@@ -280,6 +280,62 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_messages: {
+        Row: {
+          created_at: string
+          delivered_at: string | null
+          delivery: Database["public"]["Enums"]["contact_delivery_status"]
+          delivery_error: string | null
+          email: string
+          handled_at: string | null
+          id: string
+          ip: unknown
+          message: string
+          name: string
+          sender_id: string | null
+          updated_at: string
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          delivered_at?: string | null
+          delivery?: Database["public"]["Enums"]["contact_delivery_status"]
+          delivery_error?: string | null
+          email: string
+          handled_at?: string | null
+          id?: string
+          ip?: unknown
+          message: string
+          name: string
+          sender_id?: string | null
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          delivered_at?: string | null
+          delivery?: Database["public"]["Enums"]["contact_delivery_status"]
+          delivery_error?: string | null
+          email?: string
+          handled_at?: string | null
+          id?: string
+          ip?: unknown
+          message?: string
+          name?: string
+          sender_id?: string | null
+          updated_at?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           attachment_name: string | null
@@ -1415,6 +1471,7 @@ export type Database = {
       }
       process_notifications: { Args: never; Returns: Json }
       process_scheduled_payouts: { Args: never; Returns: Json }
+      purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
       recording_allowed: { Args: { p_session_id: string }; Returns: boolean }
       refund_payment: {
@@ -1492,6 +1549,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "refunded"
+      contact_delivery_status: "pending" | "sent" | "failed"
       document_status: "pending" | "approved" | "rejected" | "draft"
       identity_verification_status:
         | "not_submitted"
@@ -1664,6 +1722,7 @@ export const Constants = {
         "cancelled",
         "refunded",
       ],
+      contact_delivery_status: ["pending", "sent", "failed"],
       document_status: ["pending", "approved", "rejected", "draft"],
       identity_verification_status: [
         "not_submitted",

@@ -3,7 +3,10 @@ import Link from "next/link";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { COMPANY } from "@/lib/company";
-import { CANCELLATION_POLICY as P } from "@/lib/policy";
+// `CANCELLATION_POLICY` ya no se importa aquí: lo usaba el §4 de los términos,
+// que ahora es el contrato del cliente (`terms-content.ts`). Privacidad y
+// cookies no citan porcentajes. La garantía de que el texto y el código no
+// divergen se comprueba en `npm run check:terms`.
 
 /**
  * DD-06 · Páginas legales (`/terms`, `/privacy`, `/cookies`).
@@ -47,96 +50,21 @@ const ACTUALIZADO = "6 de agosto de 2026";
 type Seccion = { titulo: string; parrafos: string[] };
 type Doc = { title: string; intro: string; secciones: Seccion[] };
 
-const TERMS: Doc = {
-  title: "Términos y condiciones",
-  intro:
-    "Estas condiciones rigen el uso de Enséñame Ya, la plataforma que conecta a quien quiere aprender con quien sabe enseñar mediante clases en vivo 1 a 1 por videollamada.",
-  secciones: [
-    {
-      titulo: "1. Qué es Enséñame Ya y qué no",
-      parrafos: [
-        "Enséñame Ya es un intermediario: pone en contacto a alumnos y tutores, gestiona la reserva y el cobro, y provee la sala de videollamada. No imparte las clases ni emplea a los tutores, que actúan por cuenta propia y son responsables del contenido y la calidad de lo que enseñan.",
-        "Para usar la plataforma hay que tener capacidad legal para contratar. Si eres menor de edad, necesitas que quien ejerza tu tutela legal acepte estas condiciones y supervise el uso.",
-      ],
-    },
-    {
-      titulo: "2. Cuentas",
-      parrafos: [
-        "El registro se hace con correo y contraseña o con una cuenta de Google. Para completar el perfil pedimos nombre, zona horaria y teléfono: la zona horaria es imprescindible porque todos los horarios se muestran en la hora local de cada persona, y el teléfono se usa para contacto operativo sobre tus reservas.",
-        "Quien quiera enseñar pasa además por una verificación: publica su perfil profesional y aporta documentación acreditativa (documento de identidad, titulación, certificados, diplomas, expediente académico, currículum y un enlace profesional). Un administrador revisa esa documentación y solo entonces el tutor puede publicar mentorías y recibir reservas.",
-        "Eres responsable de la confidencialidad de tus credenciales y de la actividad que ocurra en tu cuenta.",
-      ],
-    },
-    {
-      titulo: "3. Reservas y pago",
-      parrafos: [
-        "Al reservar eliges el horario entre los que el tutor tiene disponibles y pagas en ese momento; el importe queda retenido por la plataforma. Si el pago no se completa en 20 minutos, la reserva se cancela automáticamente y el horario vuelve a estar libre para otros alumnos.",
-        "El tutor dispone de 24 horas para aceptar la reserva. Si la rechaza, o si deja pasar ese plazo sin responder, la reserva se cancela y se te devuelve el 100 % del importe. Algunos tutores tienen activada la aceptación automática: en ese caso la reserva queda confirmada en cuanto se registra el pago.",
-        "Los precios se muestran siempre antes de pagar, con el formato de la mentoría (sesión suelta, por hora o paquete de varias sesiones).",
-      ],
-    },
-    {
-      titulo: "4. Cancelaciones y reembolsos",
-      parrafos: [
-        `La política de cancelación es única para toda la plataforma, igual para todos los tutores: si cancelas con ${P.cutoffHours} horas o más de antelación respecto al inicio de la clase, se te reembolsa el ${P.refundPct.studentEarly} %. Si cancelas con menos de ${P.cutoffHours} horas, se te reembolsa el ${P.refundPct.studentLate} %, porque el tutor ya había reservado ese tiempo.`,
-        `Si quien cancela es el tutor, se te reembolsa el ${P.refundPct.tutorCancels} % en cualquier momento y sin condiciones.`,
-        "El reembolso se calcula en el servidor en el momento de cancelar y se devuelve por el mismo medio de pago que usaste.",
-      ],
-    },
-    {
-      titulo: "5. La clase en vivo",
-      parrafos: [
-        "La sala de videollamada se abre 10 minutos antes de la hora de inicio y se cierra 10 minutos después de la hora de fin. Fuera de esa ventana no se puede entrar, ni siquiera conservando el enlace: el permiso de entrada se firma para cada participante y caduca con la sesión.",
-        "Una clase solo se graba si alumno y tutor lo aceptan por separado, y el consentimiento se da antes de entrar a la sala. Si falta el de cualquiera de los dos, la sala ni siquiera ofrece el botón de grabar: no hay forma de grabar sin el sí de ambos. Puedes retirar tu consentimiento, y a partir de ese momento deja de poder grabarse.",
-        "Cuando hay grabación, queda disponible para los dos participantes durante 30 días desde que termina la clase; pasado ese plazo dejamos de darte acceso a ella.",
-      ],
-    },
-    {
-      titulo: "6. Chat de la reserva",
-      parrafos: [
-        "Cada reserva tiene un chat privado entre alumno y tutor, disponible desde 2 días antes de la primera clase. Solo pueden leerlo esas dos personas.",
-        "Los mensajes y los archivos adjuntos se borran a los 30 días de haberse enviado. El borrado es automático y definitivo: se elimina tanto el mensaje como el archivo. Antes de que eso ocurra puedes descargarte la conversación entera desde la propia reserva.",
-      ],
-    },
-    {
-      titulo: "7. Reseñas",
-      parrafos: [
-        "Solo puede reseñar quien ha completado la clase, y se admite una reseña por reserva. Puedes editarla más adelante si cambias de opinión.",
-        "En el perfil del tutor las reseñas se publican sin identificar a su autor. En la página de inicio se muestra una selección de reseñas firmada con el nombre y la inicial del apellido de quien la escribió; si prefieres que la tuya no aparezca así, escríbenos y la retiramos de esa selección.",
-      ],
-    },
-    {
-      titulo: "8. Cobros de los tutores",
-      parrafos: [
-        "De cada clase pagada, la plataforma retiene una comisión y el resto corresponde al tutor. El porcentaje aplicable queda fijado en el momento de la reserva, de modo que un cambio posterior de comisión no afecta a reservas ya hechas.",
-        "El importe del tutor queda en retención durante 7 días desde que la clase se marca como completada. Pasado ese plazo entra en el lote de liquidación semanal, que se procesa los lunes. El tutor también puede solicitar desde su panel el retiro de su saldo ya liberado sin esperar al lote.",
-      ],
-    },
-    {
-      titulo: "9. Uso aceptable",
-      parrafos: [
-        "No se permite usar la plataforma para actividades ilícitas, suplantar a otra persona, acosar a otros usuarios, ni intentar acceder a datos o cuentas que no sean tuyos. Tampoco está permitido acordar el pago fuera de la plataforma para eludir la comisión, porque eso deja la reserva sin la protección de reembolso descrita arriba.",
-        "El incumplimiento de estas condiciones puede llevar a la suspensión de la cuenta y, en el caso de los tutores, a la retirada de la aprobación para publicar.",
-      ],
-    },
-    {
-      // El cliente ya publica esta limitación en ensenameya.com §8; se
-      // mantiene aquí para no perderla al unificar los dos textos.
-      titulo: "10. Limitación de responsabilidad",
-      parrafos: [
-        "Enséñame Ya no responde de la calidad, la exactitud ni el resultado de las clases, que son responsabilidad de cada tutor, ni de las disputas que surjan entre alumno y tutor más allá de la política de reembolsos descrita en el punto 4.",
-        "Tampoco respondemos de las interrupciones causadas por servicios externos de los que dependemos —proveedor de videollamada, proveedor de pagos, alojamiento— ni por fallos de la conexión o del equipo de los participantes. Si una clase no puede celebrarse por una caída de la plataforma, se cancela y se reembolsa el 100 %.",
-      ],
-    },
-    {
-      titulo: "11. Cambios y contacto",
-      parrafos: [
-        "Podemos actualizar estas condiciones; la fecha de la última revisión aparece al final de esta página. Si el cambio es sustancial, lo avisaremos por los medios de contacto que nos hayas facilitado.",
-        `Para cualquier duda sobre estas condiciones, escríbenos a ${CONTACTO}.`,
-      ],
-    },
-  ],
-};
+/*
+ * ⚠️ AQUÍ VIVÍA EL TEXTO DE LOS TÉRMINOS, y ya no.
+ *
+ * Desde el 17-ago los Términos y Condiciones son el contrato que redactó el
+ * cliente (39 secciones, inglés y español), y viven en `terms-content.ts` con
+ * su propia página. Este archivo se queda con PRIVACIDAD y COOKIES, que siguen
+ * siendo texto nuestro escrito desde el funcionamiento real del sistema.
+ *
+ * El texto que había aquí describía la plataforma con precisión y hasta
+ * importaba los porcentajes de `lib/policy.ts` para que no pudieran divergir,
+ * pero le faltaba lo que un contrato necesita —identidad del prestador, ley
+ * aplicable y jurisdicción— y lo que dLocal exige. Esa garantía de no
+ * divergencia no se ha perdido: se comprueba ahora en `terms-content.check.ts`
+ * (`npm run check:terms`).
+ */
 
 const PRIVACY: Doc = {
   title: "Política de privacidad",
@@ -236,7 +164,7 @@ const COOKIES: Doc = {
   ],
 };
 
-export const LEGAL_DOCS = { terms: TERMS, privacy: PRIVACY, cookies: COOKIES };
+export const LEGAL_DOCS = { privacy: PRIVACY, cookies: COOKIES };
 export type LegalSlug = keyof typeof LEGAL_DOCS;
 
 export function LegalDocPage({ slug }: { slug: LegalSlug }) {

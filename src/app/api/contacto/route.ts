@@ -140,22 +140,7 @@ export async function POST(req: Request) {
     // Sin sesión es el caso normal de un formulario público, no un error.
   }
 
-  // ⚠️ TEMPORAL — el cast se quita en cuanto se regeneren los tipos.
-  // `contact_messages` existe en `20260817120000` pero NO en
-  // `database.types.ts`, porque `npm run db:types` devuelve hoy 403
-  // ("your account does not have the necessary privileges"), igual que
-  // `npm run db:push`. Es un permiso de la cuenta de Supabase sobre el
-  // Management API, no un problema de este código.
-  //
-  // Cuando se arregle: `npm run db:types`, borrar este cast y volver a
-  // `const admin = createAdminClient();`. El resto del archivo compila igual —
-  // los nombres de columna ya son los de la migración.
-  //
-  // ⚠️ Y ojo al regenerar: `db:types` redirige con `>`, así que si vuelve a
-  // fallar VACÍA `database.types.ts` antes de darse cuenta. Comprobar el
-  // archivo después de correrlo (`git diff --stat`).
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const admin = createAdminClient() as any;
+  const admin = createAdminClient();
 
   // Límite por IP. No es antispam serio —para eso haría falta un captcha, que
   // dLocal no pide y que añade fricción a un formulario que tienen que poder
