@@ -155,6 +155,7 @@ export type Database = {
       }
       bookings: {
         Row: {
+          booking_ref: string | null
           cancel_reason: string | null
           cancellation_policy: Json | null
           cancelled_at: string | null
@@ -177,6 +178,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          booking_ref?: string | null
           cancel_reason?: string | null
           cancellation_policy?: Json | null
           cancelled_at?: string | null
@@ -199,6 +201,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          booking_ref?: string | null
           cancel_reason?: string | null
           cancellation_policy?: Json | null
           cancelled_at?: string | null
@@ -332,6 +335,56 @@ export type Database = {
             columns: ["sender_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      late_payment_refunds: {
+        Row: {
+          amount: number
+          booking_id: string
+          booking_status: Database["public"]["Enums"]["booking_status"]
+          created_at: string
+          currency: string
+          event_id: string | null
+          id: string
+          provider: string
+          provider_payment_id: string
+          provider_refund_id: string | null
+          reason: string
+        }
+        Insert: {
+          amount: number
+          booking_id: string
+          booking_status: Database["public"]["Enums"]["booking_status"]
+          created_at?: string
+          currency: string
+          event_id?: string | null
+          id?: string
+          provider?: string
+          provider_payment_id: string
+          provider_refund_id?: string | null
+          reason: string
+        }
+        Update: {
+          amount?: number
+          booking_id?: string
+          booking_status?: Database["public"]["Enums"]["booking_status"]
+          created_at?: string
+          currency?: string
+          event_id?: string | null
+          id?: string
+          provider?: string
+          provider_payment_id?: string
+          provider_refund_id?: string | null
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "late_payment_refunds_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
         ]
@@ -985,6 +1038,7 @@ export type Database = {
           id: string
           recordings_purged_at: string | null
           sequence_no: number | null
+          session_ref: string | null
           start_at: string
           status: Database["public"]["Enums"]["session_status"]
           student_id: string
@@ -1004,6 +1058,7 @@ export type Database = {
           id?: string
           recordings_purged_at?: string | null
           sequence_no?: number | null
+          session_ref?: string | null
           start_at: string
           status?: Database["public"]["Enums"]["session_status"]
           student_id: string
@@ -1023,6 +1078,7 @@ export type Database = {
           id?: string
           recordings_purged_at?: string | null
           sequence_no?: number | null
+          session_ref?: string | null
           start_at?: string
           status?: Database["public"]["Enums"]["session_status"]
           student_id?: string
@@ -1458,6 +1514,7 @@ export type Database = {
         Returns: Json
       }
       f_unaccent: { Args: { "": string }; Returns: string }
+      generar_referencia_reserva: { Args: never; Returns: string }
       get_available_slots: {
         Args: { p_from?: string; p_product_id: string; p_to?: string }
         Returns: {
@@ -1573,6 +1630,15 @@ export type Database = {
         Returns: string
       }
       tutor_balance: { Args: { p_retention_days?: number }; Returns: Json }
+      tutor_students: {
+        Args: { p_student_id?: string }
+        Returns: {
+          avatar_path: string
+          full_name: string
+          student_id: string
+          timezone: string
+        }[]
+      }
     }
     Enums: {
       app_role: "alumno" | "tutor" | "admin"

@@ -32,6 +32,64 @@ import {
  * repartido por el código: mientras la regla diga `simulated`, el checkout de
  * hoy funciona igual que siempre.
  */
+
+/**
+ * X-02 · CUÁNDO DEBE MORIR LA CHECKOUT SESSION.
+ *
+ * Hasta hoy no se le ponía `expires_at`, así que vivía el default de Stripe:
+ * 24 HORAS. La reserva, en cambio, la mata `expire_stale_bookings` a los 20
+ * minutos. O sea que durante casi un día entero quedaba un formulario de pago
+ * abierto contra un horario que ya se le había dado a otra persona.
+ *
+ * NO SE PUEDEN CUADRAR LOS DOS PLAZOS, y conviene decirlo claro porque parece
+ * que sí. Por dos razones:
+ *
+ *   · Stripe EXIGE que `expires_at` esté entre 30 minutos y 24 horas desde la
+ *     creación de la Session. Nuestra ventana son 20. No hay valor legal que
+ *     coincida.
+ *   · Aunque subiéramos la ventana de reserva a 30 tampoco coincidirían: los
+ *     dos relojes NO arrancan en el mismo instante. La reserva nace en
+ *     `create_booking`, que dispara el navegador al elegir horario; la Session
+ *     nace después, cuando la persona llega a la pantalla de pago. Siempre
+ *     sobrevive a la reserva, y la diferencia depende de lo que tarde en
+ *     rellenar el formulario. Alinearlos es un espejismo.
+ *
+ * DECISIÓN: se acepta el mínimo de Stripe y se **calcula desde la reserva**, no
+ * desde ahora. `created_at + 60 min` sale de sumar el peor caso: la reserva
+ * vive 20 minutos, el pg_cron corre cada 5 (así que puede tardar 25 en morir) y
+ * este endpoint puede abrir un cobro hasta ese último instante — 25 + los 30 de
+ * Stripe = 55, redondeado a 60 con margen. No se sube la ventana de reserva a
+ * 30 porque eso son 10 minutos más de horario bloqueado por cada checkout
+ * abandonado, que es el coste que paga el tutor.
+ *
+ * Que sea DETERMINISTA por reserva no es un detalle estético: la clave de
+ * idempotencia de la Session es la reserva, y Stripe devuelve error —no la
+ * respuesta cacheada— si la misma clave llega con parámetros distintos. Un
+ * `now + 30 min` cambiaría en cada recarga de la pantalla y rompería el
+ * checkout con un error opaco. Aun así, el valor entra también en la clave (más
+ * abajo) por si el suelo defensivo llega a actuar.
+ *
+ * El hueco que queda —de los ~25 minutos de la reserva a los 60 de la Session—
+ * lo tapa el webhook: si el cobro llega con la reserva ya liberada, lo
+ * reembolsa. Esto solo hace que ese caso sea raro; la red de seguridad es
+ * `src/app/api/webhooks/stripe`.
+ */
+const CADUCIDAD_MIN = 60;
+const MINIMO_STRIPE_MIN = 30;
+
+function caducidadSesion(creadaEn: string | null): number {
+  const ahora = Math.floor(Date.now() / 1000);
+  // Suelo: si el pg_cron estuviera parado, una reserva podría llevar horas en
+  // `pending_payment` y `created_at + 60 min` ya sería pasado — Stripe
+  // rechazaría la Session entera. Un minuto de colchón sobre su mínimo.
+  const suelo = ahora + (MINIMO_STRIPE_MIN + 1) * 60;
+
+  const nacimiento = Date.parse(creadaEn ?? "");
+  if (!Number.isFinite(nacimiento)) return suelo;
+
+  return Math.max(Math.floor(nacimiento / 1000) + CADUCIDAD_MIN * 60, suelo);
+}
+
 export async function POST(req: Request) {
   const { bookingId, guardarTarjeta } = (await req.json().catch(() => ({}))) as {
     bookingId?: string;
@@ -49,9 +107,11 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "no autenticado" }, { status: 401 });
 
+  // `created_at` no es decorativo: de ahí sale la caducidad de la Session
+  // (X-02). Es la marca de cuándo empezó a correr la ventana de 20 minutos.
   const { data: booking } = await supabase
     .from("bookings")
-    .select("id, status, product_id, products(title)")
+    .select("id, status, product_id, created_at, products(title)")
     .eq("id", bookingId)
     .maybeSingle();
 
@@ -114,12 +174,18 @@ export async function POST(req: Request) {
   if (customer !== perfil?.stripe_customer_id) await guardarCustomer(customer);
 
   const base = siteUrl();
+  const caduca = caducidadSesion(booking.created_at);
   const crearSesion = (cliente: string, claveIdem: string) =>
     stripe().checkout.sessions.create(
     {
       mode: "payment",
       customer: cliente,
       client_reference_id: bookingId,
+      // X-02 · en segundos Unix, no en milisegundos: Stripe cuenta épocas en
+      // segundos y pasarle `Date.now()` a secas daría un año del 57000 que
+      // rebota con "no puede ser más de 24 horas". El razonamiento del valor
+      // está arriba, en `caducidadSesion`.
+      expires_at: caduca,
       // Solo tarjeta. Por defecto Stripe ofrece los métodos activos de la
       // cuenta y salían Cash App Pay, Amazon Pay y Klarna: irrelevantes para
       // Latinoamérica y ruido en una pantalla que se quiere simple. Fijarlo
@@ -199,7 +265,16 @@ export async function POST(req: Request) {
 
   // La casilla entra en la clave: reutilizar la misma con parámetros distintos
   // es un error de la API, no la respuesta cacheada.
-  const clave = `booking-${bookingId}${guardarTarjeta ? "-save" : ""}`;
+  //
+  // Y por lo mismo entra la caducidad (X-02). Normalmente es constante para una
+  // reserva dada —se calcula desde su `created_at`— y la clave no se mueve, que
+  // es lo que queremos: recargar la pantalla devuelve LA MISMA Session. Pero si
+  // el suelo defensivo de `caducidadSesion` llegara a actuar, el valor cambiaría
+  // entre peticiones; llevarlo en la clave convierte ese caso en "se abre una
+  // Session nueva" en lugar de "el checkout devuelve un error de idempotencia y
+  // nadie entiende por qué". Que se abra una segunda Session ya no es peligroso:
+  // si acabaran pagándose las dos, el webhook reembolsa la segunda.
+  const clave = `booking-${bookingId}${guardarTarjeta ? "-save" : ""}-c${caduca}`;
 
   let session;
   try {

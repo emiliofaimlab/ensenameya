@@ -221,3 +221,25 @@ export function esCustomerInexistente(e: unknown): boolean {
     err?.param === "customer"
   );
 }
+
+/**
+ * ¿Stripe dice que ese cargo ya estaba devuelto?
+ *
+ * X-02 · el webhook reembolsa los cobros que llegan cuando la reserva ya no
+ * espera pago. Ese cargo puede haberlo devuelto ya otra mano: alguien desde el
+ * panel de Stripe, o el reembolso de plataforma el día que mueva dinero de
+ * verdad (RN-37 / X-01). Cuando pasa, la API responde 400 con
+ * `charge_already_refunded` — y si no se reconoce, el webhook devolvería 500 y
+ * Stripe reintentaría el mismo evento durante tres días contra una operación
+ * que nunca va a poder completarse.
+ *
+ * No es lo mismo que la idempotencia: la `idempotencyKey` cubre que NOSOTROS
+ * pidamos dos veces el mismo reembolso; esto cubre que lo pidiera otro.
+ */
+export function esCargoYaReembolsado(e: unknown): boolean {
+  const err = e as { type?: string; code?: string };
+  return (
+    err?.type === "StripeInvalidRequestError" &&
+    err?.code === "charge_already_refunded"
+  );
+}
