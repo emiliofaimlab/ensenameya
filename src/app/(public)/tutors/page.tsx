@@ -6,6 +6,7 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Pager } from "@/components/catalog/pager";
 import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
+import { EmptyResults } from "@/components/catalog/empty-results";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import { TutorFilters } from "@/components/catalog/tutor-filters";
 import { LANGUAGES } from "@/components/catalog/product-filters";
@@ -120,6 +121,14 @@ export default async function TutorsPage({
   };
 
   const current = { cat, rating: minRating, avail: availability, pmin, pmax, lang: language, sort };
+  /** ¿hay filtro que quitar? El orden no cuenta: es preferencia de vista. */
+  const anyFilter =
+    Boolean(cat) ||
+    minRating != null ||
+    Boolean(availability) ||
+    pmin != null ||
+    pmax != null ||
+    Boolean(language);
   // Rango elegido: sólo cuenta si al menos un extremo acota de verdad.
   const price =
     priceBounds && (pmin != null || pmax != null)
@@ -187,7 +196,10 @@ export default async function TutorsPage({
             priceBounds={priceBounds}
             priceBaseHref={buildHref({ ...current, pmin: undefined, pmax: undefined })}
             language={language}
-            hrefFor={(next) => buildHref({ sort, ...next })}
+            // RV-16 · el orden va DESPUÉS del spread a propósito: `next` trae
+            // el estado de los filtros y el día que alguien le añada un `sort`
+            // (aunque sea `undefined`) el orden se perdería en silencio.
+            hrefFor={(next) => buildHref({ ...next, sort })}
           />
 
           <div>
@@ -223,10 +235,18 @@ export default async function TutorsPage({
             </div>
 
             {tutors.length === 0 ? (
-              <p className="mt-6 text-sm text-muted-foreground">
-                No hay tutores para este filtro todavía. Prueba con otra
-                categoría.
-              </p>
+              // RV-11 · mismo estado vacío que el buscador (ver EmptyResults).
+              <EmptyResults
+                className="mt-6"
+                message="No hay tutores para este filtro todavía."
+                action={
+                  anyFilter
+                    ? { href: buildHref({ sort }), label: "Quitar los filtros" }
+                    : undefined
+                }
+                categories={categories}
+                hrefFor={(slug) => buildHref({ cat: slug, sort })}
+              />
             ) : (
               <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
                 {tutors.map((t) => (

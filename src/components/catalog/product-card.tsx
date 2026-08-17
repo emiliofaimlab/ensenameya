@@ -3,9 +3,8 @@ import Link from "next/link";
 import { ArrowUpRightIcon, StarIcon } from "lucide-react";
 
 import {
-  formatMoney,
   initialsFrom,
-  priceUnitLabel,
+  priceDisplay,
   sessionsLabel,
   storageUrl,
 } from "@/lib/catalog/format";
@@ -29,6 +28,8 @@ export function ProductCard({
   compact?: boolean;
 }) {
   const sessions = sessionsLabel(product);
+  // RV-08 · manda el total de la reserva, no la tarifa (ver `priceDisplay`).
+  const precio = priceDisplay(product);
   const thumb = storageUrl("product-images", product.imagePath);
   const tutorAvatar = storageUrl("avatars", product.tutor?.avatarPath ?? null);
   const tutorName =
@@ -86,9 +87,13 @@ export function ProductCard({
                 initialsFrom(tutorName)
               )}
             </span>
+            {/* N-12 · `min-w-0` en el PROPIO enlace: es un ítem flex, y sin él
+                `min-width:auto` le impide encoger, así que el `truncate` no
+                recortaba nada y un nombre largo empujaba a la estrella fuera
+                de la tarjeta. El subrayado del hover sigue el recorte. */}
             <Link
               href={`/tutors/${product.tutor.id}`}
-              className="truncate text-[13px] font-medium text-[#474747] hover:underline"
+              className="min-w-0 truncate text-[13px] font-medium text-[#474747] hover:underline"
             >
               {tutorName}
             </Link>
@@ -130,17 +135,19 @@ export function ProductCard({
         >
           <div className="flex items-end justify-between gap-3">
             {/* Precio destacado (24-jul): el monto grande arriba y la unidad
-                pequeña debajo, para que sea el ancla visual de la tarjeta. */}
+                pequeña debajo, para que sea el ancla visual de la tarjeta.
+                RV-08: el monto grande es lo que se COBRA por reservar; la
+                tarifa por hora, cuando la hay, es la línea de abajo. */}
             <div className="min-w-0">
               <p
                 className={`font-bold text-[#19191f] ${compact ? "text-base" : "text-[19px]"} leading-tight`}
               >
-                {formatMoney(product.priceAmount, product.currency)}
+                {precio.amount}
               </p>
               <p
-                className={`text-[#666666] ${compact ? "text-[11px]" : "text-xs"}`}
+                className={`truncate text-[#666666] ${compact ? "text-[11px]" : "text-xs"}`}
               >
-                {priceUnitLabel(product)}
+                {precio.note}
               </p>
             </div>
             {action === "ver" ? (

@@ -2,11 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import {
-  formatMoney,
-  perSessionLabel,
-  priceUnitLabel,
-} from "@/lib/catalog/format";
+import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
 import { listProductSlots } from "@/lib/catalog/queries";
 import type { ProductCardData } from "@/lib/catalog/queries";
 
@@ -122,6 +118,16 @@ export async function BookingPanel({
 
   /** Clases con hueco el día elegido (las que ofrece el selector). */
   const dayProducts = products.filter((p) => productsByDay.get(day)?.has(p.id));
+  // RV-08 · el precio de la clase elegida, ya resuelto a "lo que se cobra".
+  // El rótulo cambia con el modelo: en un paquete el importe es del paquete
+  // entero, no de una sesión, y llamarlo igual sería otra media verdad.
+  const precio = chosen ? priceDisplay(chosen) : null;
+  const totalLabel = !precio?.isTotal
+    ? "Precio"
+    : chosen?.pricingModel === "per_package"
+      ? "Total del paquete"
+      : "Total de la sesión";
+
   /** Horarios de la clase elegida ESE día. */
   const times = chosen
     ? (slotsByProduct.get(chosen.id) ?? []).filter(
@@ -239,6 +245,10 @@ export async function BookingPanel({
               <ul className="mt-2 flex flex-col gap-2">
                 {dayProducts.map((p) => {
                   const on = p.id === chosen?.id;
+                  // RV-08 · aquí se COMPARAN precios entre clases: si una se
+                  // anuncia por hora y otra por sesión, la comparación solo es
+                  // honesta si las dos enseñan el cobro de la reserva.
+                  const precioClase = priceDisplay(p);
                   return (
                     <li key={p.id}>
                       <Link
@@ -254,9 +264,8 @@ export async function BookingPanel({
                           <span className="block truncate text-[13.5px] font-medium text-[#212121]">
                             {p.title}
                           </span>
-                          <span className="block text-xs text-[#6b6b6b]">
-                            {formatMoney(p.priceAmount, p.currency)} ·{" "}
-                            {priceUnitLabel(p)}
+                          <span className="block truncate text-xs text-[#6b6b6b]">
+                            {precioClase.amount} · {precioClase.note}
                           </span>
                         </span>
                       </Link>
@@ -309,26 +318,25 @@ export async function BookingPanel({
       {/* R29-01 — el precio, al final: lo último antes de decidir, no lo primero
           que tapa el calendario. Sale del `chosen` de la URL, así que cambiar de
           clase lo cambia sin estado de cliente. */}
-      {chosen ? (
+      {chosen && precio ? (
         <>
           <hr className="mt-5 border-[#e0e0e0]" />
+          {/* RV-08 · este es el último número antes del botón de pagar: tiene
+              que ser EL que se cobra. Antes ponía la tarifa ("30 US$ / hora")
+              y el checkout pedía 45 en una clase de 90 min. Ahora manda el
+              total y la tarifa queda debajo, explicando de dónde sale. */}
           <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <span className="text-[15px] text-[#6b6b6b]">Precio</span>
-            <span className="flex items-baseline gap-1.5">
-              <span className="text-[30px] font-bold text-[#19191f]">
-                {formatMoney(chosen.priceAmount, chosen.currency)}
-              </span>
-              <span className="text-[15px] text-[#6b6b6b]">
-                / {priceUnitLabel(chosen)}
-              </span>
+            <span className="text-[15px] text-[#6b6b6b]">{totalLabel}</span>
+            <span className="text-[30px] font-bold text-[#19191f]">
+              {precio.amount}
             </span>
           </div>
-          {/* El desglose por sesión solo en P08, donde hay sitio para detalle. */}
-          {details && perSessionLabel(chosen) ? (
-            <p className="mt-1 text-[13px] text-[#6b6b6b]">
-              {perSessionLabel(chosen)}
-            </p>
-          ) : null}
+          {/* De dónde sale la cifra. En P08 el desglose por sesión de un
+              paquete dice ya todo lo que diría la nota ("paquete · 6
+              sesiones"), así que sustituye — no se apilan las dos. */}
+          <p className="text-right text-[13px] text-[#6b6b6b]">
+            {(details ? perSessionLabel(chosen) : null) ?? precio.note}
+          </p>
         </>
       ) : null}
 

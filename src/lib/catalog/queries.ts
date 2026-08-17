@@ -736,6 +736,29 @@ const PRODUCT_CARD_SELECT =
   "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))";
 
 /**
+ * RV-17 · cuánto pesa que el término esté en el TÍTULO.
+ *
+ * Las tres ramas de `searchProducts` buscan contra `search_vector`/`search_text`,
+ * que son título **y** descripción pegados: `?q=calculo` devolvía "Álgebra y
+ * Cálculo desde cero" (bien) al mismo nivel que "Finanzas para emprendedores",
+ * que solo menciona "cálculo" de pasada en su cuerpo. No es un falso positivo
+ * —el alumno puede querer encontrarla— pero no puede salir por delante de la
+ * que lo lleva en el nombre.
+ *
+ * 3 = el término entero en el título · 2 = todas sus palabras · 1 = alguna ·
+ * 0 = solo casa por el cuerpo.
+ */
+function tituloScore(title: string, termino: string, palabras: string[]): number {
+  const t = stripAccents(title).toLowerCase();
+  if (termino && t.includes(termino)) return 3;
+  // Con `palabras` vacío (término de 1-2 letras) `every` daría `true` sobre la
+  // lista vacía y TODO puntuaría 2: el guard evita ese empate falso.
+  if (palabras.length === 0) return 0;
+  if (palabras.every((w) => t.includes(w))) return 2;
+  return palabras.some((w) => t.includes(w)) ? 1 : 0;
+}
+
+/**
  * US-303 — búsqueda por texto en productos (título+descripción, RN-20).
  *
  * Dos caminos que se complementan (EY-109):
@@ -836,8 +859,30 @@ export async function searchProducts(
       }
     }
   }
+
+  // RV-17 · el título por delante del cuerpo. Se reordena AQUÍ y no en SQL a
+  // propósito: llevar el ranking a Postgres es tocar `search_vector` /
+  // `search_text`, y ese arreglo (EY-109, migraciones `20260727120000` y
+  // `20260727130000`) costó dos intentos — no se mueve por una cuestión de
+  // orden. Son ≤4 ramas de PAGE_SIZE filas, ya traídas.
+  //
+  // El desempate es el índice de llegada, explícito y no confiando en que
+  // `sort` sea estable: dentro del mismo peso sigue mandando la relevancia del
+  // tsvector, y la rama sin acentos y la difusa quedan detrás, que es el orden
+  // en que llegaron.
+  const termino = plain.toLowerCase();
+  const palabras = [
+    ...new Set(termino.split(/\s+/).filter((w) => w.length >= 3)),
+  ];
+  const ordenados = [...seen.values()]
+    .map((p, i) => ({ p, i, peso: tituloScore(p.title, termino, palabras) }))
+    .sort((a, b) => b.peso - a.peso || a.i - b.i)
+    .map((x) => x.p);
+
+  // El corte va DESPUÉS de ordenar: cortando antes, una coincidencia de título
+  // que llegó por la rama difusa se perdía sin llegar a subir.
   // La tarjeta de P09 firma con el tutor: hay que traerlo.
-  return withTutors([...seen.values()].slice(0, PAGE_SIZE));
+  return withTutors(ordenados.slice(0, PAGE_SIZE));
 }
 
 /** Cifras de la home (P01). La RPC agrega en vivo; los países se derivan de la

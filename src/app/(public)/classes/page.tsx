@@ -4,6 +4,7 @@ import { ArrowRightIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
+import { EmptyResults } from "@/components/catalog/empty-results";
 import { Pager } from "@/components/catalog/pager";
 import { ProductCard } from "@/components/catalog/product-card";
 import {
@@ -95,6 +96,10 @@ export default async function ClassesPage({
     return q ? `/classes?${q}` : "/classes";
   };
 
+  /** ¿hay algo que quitar? El orden no cuenta: es una preferencia de vista, no
+   *  un filtro, y quitarlo no devuelve ni un resultado más. */
+  const anyFilter = Object.values(active).some(Boolean);
+
   return (
     <>
       {/* Hero sobre el degradado azul del Figma (el mismo asset que P01). */}
@@ -159,9 +164,14 @@ export default async function ClassesPage({
                   const on = active.model === m.id;
                   return (
                     <li key={m.id}>
+                      {/* RV-16 · `sort` viaja con el resto. Era el único enlace
+                          de la pantalla que lo dejaba caer: ordenabas por
+                          precio, tocabas "Paquete" y volvías a "Más
+                          relevantes" sin que nada lo dijera. */}
                       <Link
                         href={buildHref({
                           ...active,
+                          sort,
                           model: on ? undefined : m.id,
                         })}
                         aria-pressed={on}
@@ -233,10 +243,20 @@ export default async function ClassesPage({
             </div>
 
             {products.length === 0 ? (
-              <p className="mt-6 text-sm text-muted-foreground">
-                No hay mentorías para este filtro todavía. Prueba con otra
-                categoría.
-              </p>
+              // RV-11 · mismo estado vacío que el buscador. Las burbujas se
+              // quedan en ESTA pantalla (`?cat=`) en vez de mandar al índice
+              // de categorías: es un filtro más, no un cambio de sitio.
+              <EmptyResults
+                className="mt-6"
+                message="No hay mentorías para este filtro todavía."
+                action={
+                  anyFilter
+                    ? { href: buildHref({ sort }), label: "Quitar los filtros" }
+                    : undefined
+                }
+                categories={categories}
+                hrefFor={(slug) => buildHref({ cat: slug, sort })}
+              />
             ) : (
               <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                 {products.map((p) => (

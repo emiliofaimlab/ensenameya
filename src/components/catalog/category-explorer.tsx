@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
+import { EmptyResults } from "@/components/catalog/empty-results";
 import { Pager } from "@/components/catalog/pager";
 import { ProductCard } from "@/components/catalog/product-card";
 import { TutorCard } from "@/components/catalog/tutor-card";
@@ -133,6 +134,18 @@ export async function CategoryExplorer({
     const q = p.toString();
     return q ? `${base}?${q}` : base;
   };
+
+  /** ¿hay filtro que quitar? El orden queda fuera: es preferencia de vista, y
+   *  quitarlo no devuelve ni un resultado más. */
+  const anyFilter = Object.values(active).some(Boolean);
+
+  /**
+   * RV-16 · irse a otra categoría no se lleva los filtros —son de ÉSTA— pero
+   * sí el orden: quien está mirando "de menor a mayor" lo sigue estando al
+   * cambiar de categoría. `buildHref` no sirve aquí porque va atado a `base`.
+   */
+  const categoryHref = (s: string) =>
+    sort ? `/categories/${s}?sort=${sort}` : `/categories/${s}`;
 
   const total = tab === "productos" ? products.total : tutors.total;
   const ratings = tutors.tutors
@@ -339,7 +352,7 @@ export async function CategoryExplorer({
             className="mt-5 gap-3.5"
             categories={categories}
             activeSlug={slug}
-            hrefFor={(s) => `/categories/${s}`}
+            hrefFor={categoryHref}
             limit={0}
           />
         </Container>
@@ -430,7 +443,7 @@ export async function CategoryExplorer({
                   </ul>
                 </details>
               ))}
-              {Object.values(active).some(Boolean) ? (
+              {anyFilter ? (
                 <Link
                   href={buildHref({ tab, sort })}
                   className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
@@ -444,9 +457,22 @@ export async function CategoryExplorer({
           <div className="mt-6">
             {tab === "productos" ? (
               products.products.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Aún no hay mentorías que encajen con este filtro.
-                </p>
+                // RV-11 · mismo estado vacío que el buscador (ver EmptyResults).
+                // Aquí las burbujas SÍ llevan al índice de categorías: estás
+                // dentro de una y la salida natural es cambiarte de categoría.
+                <EmptyResults
+                  message="Aún no hay mentorías que encajen con este filtro."
+                  action={
+                    anyFilter
+                      ? {
+                          href: buildHref({ tab, sort }),
+                          label: "Quitar los filtros",
+                        }
+                      : undefined
+                  }
+                  categories={categories}
+                  hrefFor={categoryHref}
+                />
               ) : (
                 <div className="grid gap-[25px] sm:grid-cols-2 lg:grid-cols-3">
                   {products.products.map((p) => (
@@ -455,9 +481,17 @@ export async function CategoryExplorer({
                 </div>
               )
             ) : tutors.tutors.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Aún no hay tutores que encajen con este filtro.
-              </p>
+              // La pestaña de tutores no lleva filtros propios: solo la
+              // categoría, así que la única salida útil son las burbujas.
+              <EmptyResults
+                message={
+                  category
+                    ? `Aún no hay tutores en ${category.name}.`
+                    : "Aún no hay tutores publicados."
+                }
+                categories={categories}
+                hrefFor={categoryHref}
+              />
             ) : (
               <div className="grid gap-[25px] sm:grid-cols-2 lg:grid-cols-3">
                 {tutors.tutors.map((t) => (

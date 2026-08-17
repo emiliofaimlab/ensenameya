@@ -5,7 +5,7 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
 import { categoryIcon } from "@/components/catalog/category-icons";
-import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
+import { EmptyResults } from "@/components/catalog/empty-results";
 import { ProductCard } from "@/components/catalog/product-card";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import {
@@ -221,31 +221,26 @@ export default async function SearchPage({
                 </details>
               </div>
 
-              {total === 0 && cat ? (
-                <p className="mt-6 text-sm text-muted-foreground">
-                  Sin resultados para &quot;{query}&quot; dentro de {catName}.{" "}
-                  <Link
-                    href={hrefFor({ tab, sort, cat: null })}
-                    className="font-medium text-brand hover:underline"
-                  >
-                    Buscar en todas las categorías
-                  </Link>
-                  .
-                </p>
-              ) : null}
-
-              {total === 0 && !cat ? (
-                <div className="mt-6 flex flex-col gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    Sin resultados para &quot;{query}&quot;. Prueba con otra
-                    palabra o explora por categoría:
-                  </p>
-                  <CategoryIconChips
-                    categories={categories}
-                    hrefFor={(slug) => `/categories/${slug}`}
-                    tone="light"
-                  />
-                </div>
+              {/* RV-11 · el estado vacío de esta pantalla es el bueno, y ahora
+                  vive en `EmptyResults`: lo comparten P04, P05 y P06. */}
+              {total === 0 ? (
+                <EmptyResults
+                  className="mt-6"
+                  message={
+                    cat
+                      ? `Sin resultados para "${query}" dentro de ${catName}.`
+                      : `Sin resultados para "${query}". Prueba con otra palabra.`
+                  }
+                  action={
+                    cat
+                      ? {
+                          href: hrefFor({ tab, sort, cat: null }),
+                          label: "Buscar en todas las categorías",
+                        }
+                      : undefined
+                  }
+                  categories={categories}
+                />
               ) : null}
 
               {show("productos") && products.length > 0 ? (

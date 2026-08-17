@@ -4,9 +4,9 @@ import Link from "next/link";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import {
-  formatMoney,
   initialsFrom,
   modelLabel,
+  priceDisplay,
   sessionsLabel,
   storageUrl,
 } from "@/lib/catalog/format";
@@ -41,11 +41,15 @@ export function FeaturedProducts({
           <ul className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {products.map((p) => {
               const sessions = sessionsLabel(p);
+              // RV-08 · la portada enseñaba el importe a secas, sin unidad
+              // siquiera: en una clase por hora de 90 min anunciaba 30 y el
+              // checkout pedía 45. Mismo criterio que la tarjeta de catálogo.
+              const precio = priceDisplay(p);
               const thumb = storageUrl("product-images", p.imagePath);
               return (
                 <li
                   key={p.id}
-                  className="flex flex-col overflow-hidden rounded-[20px] bg-card shadow-card"
+                  className="flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-card shadow-card"
                 >
                   {/* Miniatura 276×124 del Figma (DD-02). Sin imagen se pinta la
                       banda vacía igual: si no, las tarjetas quedan desalineadas. */}
@@ -63,7 +67,12 @@ export function FeaturedProducts({
                   )}
 
                   <div className="flex flex-1 flex-col gap-3 p-5">
-                    <h3 className="text-[15px] font-semibold">{p.title}</h3>
+                    {/* N-12 · dos líneas y corta. Sin esto un título largo
+                        estiraba la tarjeta y bajaba el "Ver detalle →" de las
+                        cuatro columnas a alturas distintas. */}
+                    <h3 className="line-clamp-2 text-[15px] font-semibold">
+                      {p.title}
+                    </h3>
 
                     {/* Tutor de la tutoría (DD-01): foto + nombre, como el Figma. */}
                     {p.tutor ? (
@@ -100,11 +109,16 @@ export function FeaturedProducts({
                     </span>
 
                     <div className="mt-auto flex items-baseline justify-between gap-2">
-                      <span className="text-lg font-semibold">
-                        {formatMoney(p.priceAmount, p.currency)}
+                      <span className="min-w-0">
+                        <span className="block text-lg font-semibold">
+                          {precio.amount}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {precio.note}
+                        </span>
                       </span>
                       {sessions ? (
-                        <span className="text-xs text-muted-foreground">
+                        <span className="shrink-0 text-xs text-muted-foreground">
                           {sessions}
                         </span>
                       ) : null}
