@@ -16,6 +16,8 @@ import { TutorShell } from "@/components/layout/tutor-shell";
 import { Button } from "@/components/ui/button";
 import { AcceptRejectButtons } from "./booking-actions";
 import { AutoAcceptToggle } from "./auto-accept-toggle";
+import { studentsOfTutor } from "../students";
+import { StudentLink } from "../student-link";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Reservas · Enséñame Ya" };
@@ -78,12 +80,20 @@ export default async function TutorReservasPage({
   let query = supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, created_at, products(title), sessions(id, start_at, status)",
+      "id, status, total_amount, currency, created_at, student_id, products(title), sessions(id, start_at, status)",
     )
     .eq("tutor_id", userId)
     .order("created_at", { ascending: false });
   if (filter.statuses.length > 0) query = query.in("status", filter.statuses);
-  const { data } = await query;
+
+  // N-13 — el nombre del alumno no sale del `select` de arriba: `bookings` solo
+  // guarda el `student_id` y `profiles` es own-only por RLS. Lo resuelve la RPC
+  // `tutor_students`, en una sola llamada para toda la página y en paralelo con
+  // el listado (no depende de él: devuelve todos los alumnos del tutor).
+  const [{ data }, students] = await Promise.all([
+    query,
+    studentsOfTutor(supabase),
+  ]);
 
   const bookings = data ?? [];
   const pending = bookings.filter((b) => b.status === "pending_acceptance");
@@ -177,6 +187,14 @@ export default async function TutorReservasPage({
             <hr className="my-4 border-[#e0e0e0]" />
 
             <div className="flex flex-wrap gap-10">
+              {/* Primero el alumno: es el dato con el que se decide aceptar o
+                  rechazar, y hasta N-13 no estaba en ninguna parte. */}
+              <div>
+                <p className="text-xs text-[#6b6b6b]">Alumno</p>
+                <p className="mt-0.5 text-[13px] font-medium text-[#404040]">
+                  <StudentLink student={students.get(b.student_id)} />
+                </p>
+              </div>
               <div>
                 <p className="text-xs text-[#6b6b6b]">Fecha y hora</p>
                 <p className="mt-0.5 text-[13px] font-medium text-[#404040] first-letter:uppercase">
@@ -221,6 +239,12 @@ export default async function TutorReservasPage({
                     </p>
                     <p className="text-xs text-[#6b6b6b]">
                       {formatMoney(b.total_amount, b.currency)}
+                    </p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11.5px] text-[#6b6b6b]">Alumno</p>
+                    <p className="truncate text-[13px] font-medium text-[#404040]">
+                      <StudentLink student={students.get(b.student_id)} />
                     </p>
                   </div>
                   <div>

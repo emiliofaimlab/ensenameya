@@ -19,6 +19,8 @@ import {
   CompleteSessionButton,
   TutorCancelButton,
 } from "../booking-actions";
+import { studentName, studentOfTutor } from "../../students";
+import { StudentAvatar } from "../../student-avatar";
 import type { Database } from "@/lib/database.types";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
@@ -49,8 +51,13 @@ export const metadata = { title: "Detalle de la sesión · Enséñame Ya" };
  * derecha (202:87). RLS filtra por `tutor_id`: la reserva de otro da 404.
  *
  * La tarjeta "Grabación" del Figma (202:72) es US-1802 y ya existe: cada sesión
- * completada lleva su "Ver grabación" (`RecordingLink`). El nombre del alumno
- * sigue sin pintarse: `profiles` es RLS own-only.
+ * completada lleva su "Ver grabación" (`RecordingLink`).
+ *
+ * N-13/N-14: el nombre del alumno ya se pinta. No sale del `select` —`profiles`
+ * sigue siendo own-only por RLS— sino de la RPC `tutor_students`
+ * (`20260817150000`), que devuelve identidad mínima al tutor que comparte
+ * reserva. Si la reserva está cancelada la RPC no da acceso y la tarjeta cae a
+ * "Alumno": es a propósito, no un fallo de carga.
  */
 export default async function TutorBookingDetailPage({
   params,
@@ -65,13 +72,18 @@ export default async function TutorBookingDetailPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, tutor_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, status)",
+      "id, status, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, status)",
     )
     .eq("id", id)
     .eq("tutor_id", user.id)
     .maybeSingle();
 
   if (!booking) notFound();
+
+  // N-13: identidad del alumno. Va después del `booking` a propósito —hace
+  // falta su `student_id`— y no se mezcla con el `select`: `profiles` es
+  // own-only por RLS y el join no devolvería nada.
+  const student = await studentOfTutor(supabase, booking.student_id);
 
   const sessions = [...(booking.sessions ?? [])].sort((a, b) =>
     a.start_at.localeCompare(b.start_at),
@@ -202,12 +214,43 @@ export default async function TutorBookingDetailPage({
               </>
             ) : null}
           </PanelCard>
+
+          {/* N-13/N-14 — con quién es la clase, y por dónde se llega a su
+              ficha. La zona horaria va aquí porque es lo que evita el "te
+              agendé a las 10" que para el alumno son las 3 de la mañana
+              (RN-01/02). */}
+          <PanelCard className="flex flex-wrap items-center gap-4">
+            <StudentAvatar student={student} size={52} />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-[#6b6b6b]">Alumno</p>
+              <p className="truncate text-[15px] font-semibold text-[#19191f]">
+                {studentName(student)}
+              </p>
+              {student?.timezone ? (
+                <p className="text-[12.5px] text-[#6b6b6b]">
+                  Zona horaria: {student.timezone}
+                </p>
+              ) : null}
+            </div>
+            {student ? (
+              <Button
+                asChild
+                variant="outline"
+                className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+              >
+                <Link href={`/tutor/alumnos/${student.id}`}>Ver perfil</Link>
+              </Button>
+            ) : null}
+          </PanelCard>
         </div>
 
         <PanelCard className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold text-[#19191f]">
-              Chat con el alumno
+              {/* Con nombre cuando lo hay: "Chat con Alumno" sonaría a error. */}
+              {student?.fullName
+                ? `Chat con ${student.fullName}`
+                : "Chat con el alumno"}
             </h2>
             <span className="text-[11px] text-[#6b6b6b]">RN-41</span>
           </div>

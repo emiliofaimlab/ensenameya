@@ -11,6 +11,9 @@ import {
   BOOKING_STATUS_LABEL,
 } from "@/lib/booking";
 import type { TutorBalance } from "@/lib/payouts";
+import { studentsOfTutor } from "./students";
+import { StudentLink } from "./student-link";
+import { formatPct, tutorTier } from "./tier";
 import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import {
   PanelCard,
@@ -67,6 +70,8 @@ export default async function TutorHomePage() {
     { count: pendingCount },
     { data: bookings },
     { count: deliveredCount },
+    students,
+    tier,
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
@@ -78,7 +83,9 @@ export default async function TutorHomePage() {
     supabase.rpc("tutor_balance"),
     supabase
       .from("sessions")
-      .select("id, start_at, status, booking_id, bookings(products(title))")
+      .select(
+        "id, start_at, status, booking_id, student_id, bookings(products(title))",
+      )
       .eq("tutor_id", userId)
       .in("status", ["scheduled", "in_progress"])
       // Se filtra por el FIN, no por el inicio: una clase que empezó hace un
@@ -95,10 +102,13 @@ export default async function TutorHomePage() {
       .eq("status", "pending_acceptance"),
     supabase
       .from("bookings")
-      // Sin fecha, varias clases del mismo producto se ven como una fila
-      // repetida. El nombre del alumno distinguiría mejor, pero `profiles`
-      // es RLS own-only: el tutor no puede leer el perfil de su alumno.
-      .select("id, status, total_amount, currency, created_at, products(title)")
+      // Con el nombre del alumno (N-13) dos clases del mismo producto dejan de
+      // verse como la misma fila repetida. `student_id` es solo la clave: el
+      // nombre lo resuelve `studentsOfTutor` contra la RPC, porque `profiles`
+      // sigue siendo own-only por RLS.
+      .select(
+        "id, status, total_amount, currency, created_at, student_id, products(title)",
+      )
       .eq("tutor_id", userId)
       .order("created_at", { ascending: false })
       .limit(3),
@@ -108,6 +118,12 @@ export default async function TutorHomePage() {
       .select("id", { count: "exact", head: true })
       .eq("tutor_id", userId)
       .eq("status", "completed"),
+    // N-13: los nombres de TODOS sus alumnos de una vez (la RPC ya filtra por
+    // `auth.uid()`), no una consulta por reserva.
+    studentsOfTutor(supabase),
+    // N-16: el nivel y el reparto. Sin migración: `tutor_tiers_select_own` ya
+    // existía; lo que faltaba era enseñárselo al tutor.
+    tutorTier(supabase, userId),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -189,6 +205,29 @@ export default async function TutorHomePage() {
         </PanelCard>
       ) : null}
 
+      {/* N-16 — nivel y reparto, en el panel PRIVADO. Va pegado a las cifras de
+          dinero porque es lo que las explica: "saldo disponible" es el neto
+          después de este split. Etiqueta, no control: el tier lo mueve el admin
+          (`assign_tutor_tier`), y el tutor no tiene grant sobre `tier_id`.
+          Ojo: esto NO sube al catálogo — la insignia se dejó fuera de
+          `TutorCard` a propósito, publicar el tramo filtra margen. */}
+      {tier ? (
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <StatusPill tone="blue" className="h-7">
+            {tier.name}
+          </StatusPill>
+          <p className="text-[12.5px] text-[#6b6b6b]">
+            Te quedas con el{" "}
+            <span className="font-semibold text-[#19191f]">
+              {formatPct(tier.splitPct)}
+            </span>{" "}
+            de cada reserva; la comisión de Enséñame Ya es el{" "}
+            {formatPct(tier.commissionPct)}. Tu nivel lo asigna el equipo y solo
+            aplica a reservas nuevas.
+          </p>
+        </div>
+      ) : null}
+
       {/* Ganancias (EP-10, 195:49). El detalle vive en /tutor/payouts.
           El Figma pide además "Total ganado" (bruto): `tutor_balance` solo
           devuelve NETOS — no se enseña una cifra que no se sabe qué mide. */}
@@ -236,6 +275,16 @@ export default async function TutorHomePage() {
                     <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                       {s.bookings?.products?.title ?? "Mentoría"}
                     </p>
+                    {/* N-13: con quién es la llamada. Es el dato que faltaba —
+                        el tutor entraba a la sala sin saber a quién iba a
+                        encontrarse. */}
+                    <p className="truncate text-[12.5px] text-[#404040]">
+                      con{" "}
+                      <StudentLink
+                        student={students.get(s.student_id)}
+                        className="font-medium"
+                      />
+                    </p>
                     <p className="text-xs text-[#6b6b6b] first-letter:uppercase">
                       {formatSessionTime(s.start_at, tz)} · tu hora local
                     </p>
@@ -265,9 +314,20 @@ export default async function TutorHomePage() {
         <div className="flex flex-col gap-5">
           {/* Reservas recientes (196:28). */}
           <PanelCard>
-            <h2 className="text-base font-semibold text-[#19191f]">
-              Reservas recientes
-            </h2>
+            {/* N-11: la lista corta a 3, así que sin "Ver todas" el panel era
+                un callejón sin salida — el mismo remate que ya tenían las
+                próximas sesiones. */}
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-[#19191f]">
+                Reservas recientes
+              </h2>
+              <Link
+                href="/tutor/reservas"
+                className="text-[12.5px] font-medium text-brand hover:underline"
+              >
+                Ver todas
+              </Link>
+            </div>
             {(bookings ?? []).length === 0 ? (
               <p className="mt-4 text-[13px] text-[#6b6b6b]">
                 Aún no tienes reservas.
@@ -282,6 +342,12 @@ export default async function TutorHomePage() {
                     <div className="min-w-0">
                       <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                         {b.products?.title ?? "Mentoría"}
+                      </p>
+                      <p className="truncate text-[12.5px] text-[#404040]">
+                        <StudentLink
+                          student={students.get(b.student_id)}
+                          className="font-medium"
+                        />
                       </p>
                       <p className="text-xs text-[#6b6b6b]">
                         {formatMoney(b.total_amount, b.currency)} ·{" "}

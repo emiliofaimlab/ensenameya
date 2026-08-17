@@ -11,6 +11,7 @@ import {
 } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { WithdrawButton } from "./withdraw-button";
+import { formatPct, tutorTier } from "../tier";
 
 export const metadata = { title: "Payouts · Enséñame Ya" };
 
@@ -55,15 +56,18 @@ export default async function TutorPayoutsPage() {
   // `requireRole("tutor")` un tutor aprobado sin el rol concedido (o uno
   // pendiente, al que el menú ya le ofrece Payouts) rebotaba a /app. La RPC
   // `tutor_balance` y la RLS de `payouts` ya limitan a lo propio.
-  await requireTutorProfile();
+  const { userId } = await requireTutorProfile();
 
   const supabase = await createClient();
-  const [{ data: balanceData }, { data: payouts }] = await Promise.all([
+  const [{ data: balanceData }, { data: payouts }, tier] = await Promise.all([
     supabase.rpc("tutor_balance"),
     supabase
       .from("payouts")
       .select("id, status, currency, amount, scheduled_for, paid_at, created_at")
       .order("created_at", { ascending: false }),
+    // N-16: aquí es donde el tutor viene a mirar cuánto cobra, así que aquí es
+    // donde tiene que estar el reparto que produjo esas cifras.
+    tutorTier(supabase, userId),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -136,6 +140,21 @@ export default async function TutorPayoutsPage() {
               <StatusPill tone="amber">Pendiente</StatusPill>
             </dd>
           </div>
+          {/* N-16 — el tutor no veía su comisión por ningún lado, y estas
+              cifras ya son NETAS de ella: sin el reparto, los importes no
+              cuadran con lo que cobró el alumno. Etiqueta, no control: el nivel
+              lo asigna el admin (`assign_tutor_tier`) y el tutor no tiene grant
+              sobre `tier_id`. */}
+          {tier ? (
+            <div>
+              <dt className="text-xs text-[#6b6b6b]">Tu nivel</dt>
+              <dd className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
+                <StatusPill tone="blue">{tier.name}</StatusPill>
+                Te quedas con el {formatPct(tier.splitPct)} · comisión{" "}
+                {formatPct(tier.commissionPct)}
+              </dd>
+            </div>
+          ) : null}
         </dl>
         <p className="mt-3 text-[13px] text-[#6b6b6b]">
           Todavía no hay cuenta de cobro que registrar: la pedirá el proveedor
