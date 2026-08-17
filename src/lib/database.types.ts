@@ -1083,6 +1083,38 @@ export type Database = {
           },
         ]
       }
+      terms_acceptances: {
+        Row: {
+          accepted_at: string
+          id: string
+          locale: string
+          user_id: string
+          version: string
+        }
+        Insert: {
+          accepted_at?: string
+          id?: string
+          locale: string
+          user_id: string
+          version: string
+        }
+        Update: {
+          accepted_at?: string
+          id?: string
+          locale?: string
+          user_id?: string
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "terms_acceptances_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tutor_categories: {
         Row: {
           category_id: string
@@ -1473,6 +1505,10 @@ export type Database = {
       process_scheduled_payouts: { Args: never; Returns: Json }
       purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
+      record_terms_acceptance: {
+        Args: { p_locale?: string; p_version: string }
+        Returns: undefined
+      }
       recording_allowed: { Args: { p_session_id: string }; Returns: boolean }
       refund_payment: {
         Args: { p_amount?: number; p_payment_id: string }

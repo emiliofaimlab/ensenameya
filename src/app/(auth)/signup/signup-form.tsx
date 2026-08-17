@@ -11,6 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GoogleButton } from "@/components/auth/google-button";
+import {
+  TERMS_GOVERNING_LOCALE,
+  TERMS_VERSION,
+} from "@/components/legal/terms-content";
 import { AuthDivider } from "@/components/auth/auth-divider";
 import {
   AUTH_FIELD,
@@ -66,6 +70,14 @@ export function SignupForm({
           // S-18: lo persiste `handle_new_user` al crear el perfil — también
           // cuando el alta espera confirmación por correo y aquí no hay sesión.
           referral_code: referralCode,
+          // Constancia de la aceptación. Va por el metadata y lo escribe el
+          // mismo trigger, por el mismo motivo que el código de referido: con
+          // la confirmación por correo activa aquí NO hay sesión todavía, así
+          // que un insert desde el cliente fallaría en silencio.
+          terms_version: TERMS_VERSION,
+          // Qué versión enlazaba la casilla. La que obliga es la inglesa (§38);
+          // esto solo deja constancia de cuál se le puso delante.
+          terms_locale: TERMS_GOVERNING_LOCALE,
         },
       },
     });
@@ -123,6 +135,14 @@ export function SignupForm({
         next={next}
         intent={intent}
         referralCode={referralCode}
+        // La casilla de términos se pinta más abajo, dentro del formulario,
+        // pero aplica a los DOS caminos de alta. Sin esto, este botón la
+        // esquivaba por completo.
+        terms={{
+          aceptado: accepted,
+          version: TERMS_VERSION,
+          locale: TERMS_GOVERNING_LOCALE,
+        }}
         label="Registrarme con Google"
         className={`${AUTH_FIELD} font-medium`}
       />
@@ -188,6 +208,13 @@ export function SignupForm({
           </div>
         </div>
 
+        {/*
+          La casilla enlaza a `/terms`, que sirve la versión INGLESA — la que
+          gobierna según el §38 del propio contrato y la que el cliente pidió
+          que se acepte. La traducción al español está a un clic desde ahí y se
+          enlaza también aquí, para que nadie tenga que aceptar un texto que no
+          puede leer sin buscarlo.
+        */}
         <label className="flex items-start gap-2 text-[13px] text-muted-foreground">
           <input
             type="checkbox"
@@ -198,8 +225,15 @@ export function SignupForm({
           <span>
             Acepto los{" "}
             <Link href="/terms" className="text-brand hover:underline">
-              Términos
+              Términos y Condiciones
             </Link>{" "}
+            <span className="text-muted-foreground">
+              (
+              <Link href="/terms/es" className="hover:underline">
+                versión en español
+              </Link>
+              )
+            </span>{" "}
             y la{" "}
             <Link href="/privacy" className="text-brand hover:underline">
               Política de privacidad
