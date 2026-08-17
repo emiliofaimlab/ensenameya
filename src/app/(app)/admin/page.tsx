@@ -53,6 +53,8 @@ export default async function AdminDashboardPage() {
     { data: statsData },
     { count: pendingTutors },
     { count: pendingPayments },
+    { count: pendingEmails },
+    { count: pendingRefunds },
     recent,
   ] = await Promise.all([
     supabase.rpc("admin_stats", { p_from: last30().from }),
@@ -64,6 +66,17 @@ export default async function AdminDashboardPage() {
       .from("payments")
       .select("id", { count: "exact", head: true })
       .in("status", ["pending", "authorized"]),
+    // RV-04b · las dos colas que hasta hoy solo se veían por SQL. Van aquí
+    // porque el dashboard es la única puerta que tienen: sus entradas de menú
+    // viven en `components/layout/app-sidebar.tsx`, que no es de este carril.
+    supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase
+      .from("refund_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
     listBookings({ page: 1 }),
   ]);
 
@@ -91,6 +104,21 @@ export default async function AdminDashboardPage() {
       href: "/admin/alertas",
       cta: "Ver alertas",
     },
+    {
+      // Dinero ya prometido al alumno que todavía no ha salido de la cuenta
+      // (X-01). Es la cola más urgente de las cinco: las demás retrasan trabajo,
+      // esta incumple los Términos §13 mientras siga sin bajar.
+      label: "Reembolsos sin ejecutar",
+      value: pendingRefunds ?? 0,
+      href: "/admin/reembolsos?status=pending",
+      cta: "Ver reembolsos",
+    },
+    {
+      label: "Correos en cola",
+      value: pendingEmails ?? 0,
+      href: "/admin/notificaciones?status=pending",
+      cta: "Ver la cola",
+    },
   ];
 
   return (
@@ -109,8 +137,10 @@ export default async function AdminDashboardPage() {
         <Stat label="Tutores activos" value={String(stats.active_tutors)} />
       </div>
 
-      {/* Colas de trabajo (218:1786): lo que espera una acción del admin. */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Colas de trabajo (218:1786): lo que espera una acción del admin.
+          Eran tres; con las dos de operaciones (reembolsos y correos) la
+          rejilla pasa a 2/3 columnas para que no quede una fila coja. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {queues.map((q) => (
           <PanelCard key={q.label} className="p-5">
             <div className="flex items-start justify-between gap-2">
@@ -135,6 +165,19 @@ export default async function AdminDashboardPage() {
           </PanelCard>
         ))}
       </div>
+
+      {/* RV-20: no es una cola, es una herramienta, y no tiene entrada de menú
+          propia. Sin este enlace no se llega a ella desde ninguna parte. */}
+      <p className="text-[13px] text-[#6b6b6b]">
+        ¿Comprobando el vencimiento de las 24 h de aceptación?{" "}
+        <Link
+          href="/admin/operaciones"
+          className="font-semibold text-brand hover:underline"
+        >
+          Vencer reservas caducadas
+        </Link>{" "}
+        lo dispara a mano, sin esperar al cron.
+      </p>
 
       {/* Reservas recientes (218:1814). */}
       <PanelCard>
