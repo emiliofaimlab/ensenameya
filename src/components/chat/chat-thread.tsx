@@ -20,6 +20,7 @@ import {
   type ChatMessage,
   type MessageRow,
 } from "@/lib/chat/messages";
+import { markConversationRead, useOpenThread } from "./unread";
 
 export type { ChatMessage } from "@/lib/chat/messages";
 
@@ -104,6 +105,13 @@ export function ChatThread({
   const bottomRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // N-23 · tener el hilo delante ES leerlo: se marca al abrirlo y, mientras
+  // siga montado, la burbuja no cuenta como pendiente lo que entra aquí. Sirve
+  // para los cuatro sitios donde vive este componente (la bandeja, `/chat/[id]`,
+  // la sala y la ficha de la reserva) porque el registro es del hilo, no de
+  // quien lo pinta.
+  useOpenThread(bookingId);
+
   useEffect(() => {
     if (isOpen || !firstSessionAt) return;
     const opensAt = new Date(firstSessionAt).getTime() - OPEN_BEFORE_MS;
@@ -147,6 +155,12 @@ export function ChatThread({
                 ? prev
                 : [...prev, toChatMessage(m)],
             );
+            // N-23 · lo que llega con el hilo abierto se lee al llegar. Sin
+            // esto la marca se quedaría en el momento de abrir y esos mensajes
+            // volverían a contarse como pendientes en la siguiente visita.
+            if (m.sender_id !== currentUserId) {
+              void markConversationRead(bookingId);
+            }
           },
         )
         .subscribe();
@@ -156,7 +170,10 @@ export function ChatThread({
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [bookingId]);
+    // `currentUserId` no cambia en la vida del componente (viene del servidor):
+    // está en la lista por la regla de dependencias, no porque se espere que
+    // rehaga el canal.
+  }, [bookingId, currentUserId]);
 
   // Autoscroll al último mensaje.
   useEffect(() => {
@@ -231,7 +248,15 @@ export function ChatThread({
           misma conversación en un formato que nadie de fuera va a abrir; el
           endpoint lo sigue aceptando con `?format=json` para soporte, pero
           ofrecerlo aquí solo servía para que la mitad se llevara el archivo
-          equivocado. */}
+          equivocado.
+          ⚠️ AB-01 · "a los 30 días" es verdad a medias y este cartel lo dice
+          como si fuera un plazo único. El reloj corre por MENSAJE
+          (`messages.expires_at` = `now() + 30 días` en cada insert), así que lo
+          que se borra primero es el principio de la conversación mientras el
+          final sigue vivo. Y no hay cierre: nadie decidió cuánto tiempo queda
+          abierto el chat después de la clase. El razonamiento completo y lo que
+          habría que cambiar están en `chat-launcher.tsx`, junto a
+          `OPEN_STATUSES`. */}
       {messages.length > 0 ? (
         <p className="text-[11px] text-muted-foreground">
           El chat se borra a los 30 días.{" "}

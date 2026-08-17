@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
-import { getUserTimezone } from "@/lib/auth/server";
+import { getSessionContext, getUserTimezone } from "@/lib/auth/server";
 import { humanSize } from "@/lib/chat/attachments";
+import { chatCounterpart } from "@/components/chat/counterpart";
 import { NRO_SESION_LABEL } from "@/components/room/session-ref";
 
 /**
@@ -24,6 +25,13 @@ import { NRO_SESION_LABEL } from "@/components/room/session-ref";
  * abría el archivo leía como un código interno nuestro: no se puede dictar, no
  * se puede buscar y no dice qué clase era.
  *
+ * N-28 · cada línea la firma un NOMBRE. Hasta hoy ponía el rol ("Alumno",
+ * "Tutor") y no por gusto: `profiles` es own-only, así que el tutor no podía
+ * leer el nombre de su alumno ni para el archivo. Con `chatCounterpart` los dos
+ * lados tienen nombre (público el del tutor, por RPC acotada el del alumno) y
+ * el rol pasa a la cabecera, donde se dice una vez quién es quién — que es lo
+ * que hace falta si este .txt acaba en una disputa.
+ *
  * ⚠️ LOS ADJUNTOS NO VAN DENTRO, Y ESO TIENE UN FILO. Viven en un bucket
  * privado y meterlos exigiría armar un zip. Se listan con su nombre y su peso,
  * pero quien descarga "la conversación" antes de que se cumplan los 30 días se
@@ -40,9 +48,9 @@ export async function GET(
     new URL(request.url).searchParams.get("format") === "json" ? "json" : "txt";
 
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // `getSessionContext` en vez de `auth.getUser()` porque además del usuario
+  // trae su `full_name`, que es lo que firma sus propias líneas del archivo.
+  const { user, fullName: miNombre } = await getSessionContext();
   if (!user) {
     return NextResponse.json({ error: "auth requerido" }, { status: 401 });
   }
@@ -71,12 +79,21 @@ export async function GET(
 
   const rows = msgs ?? [];
 
-  // Sin nombres: `profiles` es privado (el tutor no puede leer el del alumno).
-  // El rol en la reserva identifica igual de bien y no abre nada.
+  // N-28 · el otro participante, por el camino que corresponda a cada rol.
+  const other = await chatCounterpart(supabase, user.id, booking);
+
   const roleOf = (senderId: string) =>
     senderId === booking.student_id ? "Alumno" : "Tutor";
+
+  // Solo hay dos personas en el hilo: la que descarga y la otra. Un nombre
+  // puede faltar (perfil sin `full_name`, o reserva cancelada que ya no da
+  // acceso al dato del alumno) → se cae al rol, que es lo que había antes.
+  const nameOf = (senderId: string) =>
+    (senderId === user.id ? miNombre : other.name)?.trim() || null;
   const label = (senderId: string) =>
-    `${roleOf(senderId)}${senderId === user.id ? " (tú)" : ""}`;
+    `${nameOf(senderId) ?? roleOf(senderId)}${senderId === user.id ? " (tú)" : ""}`;
+  // Para la cabecera: quién es quién, dicho una sola vez.
+  const quien = (senderId: string) => nameOf(senderId) ?? "(sin nombre)";
 
   const title = booking.products?.title ?? "Mentoría";
 
@@ -101,6 +118,10 @@ export async function GET(
         mentoria: title,
         referencia: booking.booking_ref,
         nros_sesion: nrosSesion,
+        participantes: {
+          alumno: nameOf(booking.student_id),
+          tutor: nameOf(booking.tutor_id),
+        },
         // El uuid se queda SOLO aquí: el .json es la vía de soporte y ahí sí
         // hace falta poder cruzar con la BD. En el .txt sobra.
         reserva: bookingId,
@@ -110,7 +131,10 @@ export async function GET(
         caduca_el: rows.at(-1)?.expires_at ?? null,
         mensajes: rows.map((m) => ({
           fecha: m.created_at,
+          // `de` se queda con el ROL y no con el nombre: es la vía de soporte y
+          // hay volcados viejos con este campo. El nombre va al lado, nuevo.
           de: roleOf(m.sender_id),
+          nombre: nameOf(m.sender_id),
           texto: m.body,
           adjunto: m.attachment_name
             ? { nombre: m.attachment_name, bytes: m.attachment_size ?? 0 }
@@ -152,6 +176,10 @@ export async function GET(
     ...(nrosSesion.length > 0
       ? [`${NRO_SESION_LABEL}: ${nrosSesion.join(", ")}`]
       : []),
+    // Quién es quién. Los mensajes van firmados con el nombre a secas, así que
+    // el rol se dice aquí: en una disputa importa saber cuál de los dos daba la
+    // clase, y el nombre solo no lo dice.
+    `Alumno: ${quien(booking.student_id)} · Tutor: ${quien(booking.tutor_id)}`,
     `Descargado: ${fmt(new Date().toISOString())} (${tz})`,
     ...(rows.at(-1)?.expires_at
       ? [

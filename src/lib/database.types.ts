@@ -389,6 +389,39 @@ export type Database = {
           },
         ]
       }
+      message_reads: {
+        Row: {
+          booking_id: string
+          last_read_at: string
+          user_id: string
+        }
+        Insert: {
+          booking_id: string
+          last_read_at?: string
+          user_id: string
+        }
+        Update: {
+          booking_id?: string
+          last_read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reads_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           attachment_name: string | null
@@ -1623,6 +1656,7 @@ export type Database = {
         Args: { p_action: string; p_payout_id: string }
         Returns: string
       }
+      mark_messages_read: { Args: { p_booking_id: string }; Returns: string }
       mark_notification: {
         Args: { p_id: string; p_ok: boolean }
         Returns: undefined
@@ -1719,6 +1753,14 @@ export type Database = {
           full_name: string
           student_id: string
           timezone: string
+        }[]
+      }
+      unread_message_counts: {
+        Args: never
+        Returns: {
+          booking_id: string
+          last_message_at: string
+          unread: number
         }[]
       }
     }

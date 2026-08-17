@@ -1,7 +1,7 @@
 import { getUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { tutorNames } from "@/lib/booking";
 import { ChatBubble, type Conversation } from "./chat-bubble";
+import { chatCounterparts, counterpartFallback } from "./counterpart";
 
 /**
  * ¿El hilo de esta reserva ya está abierto? RN-41: desde 2 días antes de la
@@ -14,7 +14,32 @@ function chatIsOpen(starts: string[]): boolean {
   return first - 2 * 86_400_000 <= Date.now();
 }
 
-/** Estados en los que la reserva sigue viva para conversar. */
+/**
+ * Estados en los que la reserva sigue viva para conversar.
+ *
+ * ⚠️ AB-01 · NADIE HA DECIDIDO CUÁNTO SIGUE ABIERTO EL CHAT DESPUÉS DE LA CLASE,
+ * y hoy la respuesta del código es "para siempre". `completed` está en esta
+ * lista y `send_message` (`20260716180000`) solo comprueba el borde de ABAJO de
+ * la ventana —2 días antes de la primera sesión—, nunca el de arriba: alumno y
+ * tutor pueden seguir escribiéndose meses después de la última clase.
+ *
+ * Lo único que caduca es la RETENCIÓN, y no es lo mismo ni se comporta como la
+ * gente supone: `messages.expires_at` nace como `now() + 30 días` en CADA
+ * mensaje, así que el plazo cuenta desde el mensaje, no desde la clase. Efecto
+ * real, y es el que hay que contarle al cliente antes de que lo descubra solo:
+ *   · la conversación se erosiona por arriba — a los 31 días de la clase el
+ *     principio del hilo ya no está, aunque el final sí;
+ *   · un hilo con respuestas nuevas no muere nunca del todo: cada mensaje
+ *     renueva su propia cuenta atrás y arrastra la conversación viva.
+ *
+ * Si lo que el cliente entendió al aprobar la decisión 22 fue "30 días desde la
+ * clase", entonces el ancla no puede ser `now()` de cada mensaje sino el FIN DE
+ * LA ÚLTIMA SESIÓN de la reserva, y hacen falta dos cosas que hoy no existen:
+ * un cierre (dejar de admitir mensajes pasado el plazo, arriba en
+ * `send_message`) y un `expires_at` calculado desde esa fecha, igual para todo
+ * el hilo. Hasta que se decida no se toca nada: cambiar la retención por nuestra
+ * cuenta borra conversaciones que hoy la gente da por guardadas.
+ */
 const OPEN_STATUSES = [
   "pending_acceptance",
   "confirmed",
@@ -48,26 +73,27 @@ export async function ChatLauncher() {
     chatIsOpen((b.sessions ?? []).map((s) => s.start_at)),
   );
 
-  // Como alumno, la contraparte es el tutor (nombre público, DD-01). Como
-  // tutor, el nombre del alumno no es legible (profiles es own-only por RLS),
-  // así que la conversación se identifica por la mentoría.
-  const names = await tutorNames(
-    supabase,
-    open.filter((b) => b.student_id === user.id).map((b) => b.tutor_id),
-  );
+  // N-28 · con quién habla en cada conversación. Antes aquí solo se resolvía el
+  // lado tutor (público) y el alumno se quedaba en "con tu alumno" porque
+  // `profiles` es own-only; hoy los dos lados salen de `chatCounterparts`.
+  const others = await chatCounterparts(supabase, user.id, open);
 
-  const conversations: Conversation[] = open.map((b) => ({
-    bookingId: b.id,
-    title: b.products?.title ?? "Mentoría",
-    subtitle:
-      b.student_id === user.id
-        ? `con ${names.get(b.tutor_id) ?? "tu tutor"}`
-        : "con tu alumno",
-    // La 1ª sesión de la reserva: el hilo la necesita para saber si la ventana
-    // de RN-41 está abierta y dejar escribir o no.
-    firstSessionAt:
-      (b.sessions ?? []).map((s) => s.start_at).sort()[0] ?? null,
-  }));
+  const conversations: Conversation[] = open.map((b) => {
+    const other = others.get(b.id);
+    const name = other?.name ?? null;
+    return {
+      bookingId: b.id,
+      title: b.products?.title ?? "Mentoría",
+      subtitle: `con ${name ?? counterpartFallback(other?.role ?? "tutor")}`,
+      // Suelto y sin adornos: la cabecera del hilo lo usa a secas, no dentro de
+      // la frase "con …".
+      counterpart: name,
+      // La 1ª sesión de la reserva: el hilo la necesita para saber si la ventana
+      // de RN-41 está abierta y dejar escribir o no.
+      firstSessionAt:
+        (b.sessions ?? []).map((s) => s.start_at).sort()[0] ?? null,
+    };
+  });
 
   return <ChatBubble conversations={conversations} currentUserId={user.id} />;
 }
