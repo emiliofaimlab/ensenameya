@@ -13,13 +13,20 @@ export const metadata = { title: "Elegir horario · Enséñame Ya" };
  * US-601 (SCR-AL04) — elegir horario. Requiere sesión (alumno). Los slots los
  * calcula la función controlada get_available_slots (reglas − excepciones −
  * ocupados, S-41). El checkout (US-602) recibe los slots elegidos.
+ *
+ * M-10 · `?slot=…` llega desde el panel de reserva de la ficha pública
+ * (`BookingPanel`), donde el alumno YA pulsó una hora. Sin sesión, esa hora
+ * sobrevive al desvío por el login gracias a que el `?next=` ahora viaja con su
+ * query (`lib/supabase/middleware.ts`); aquí se vuelve a marcar sola.
  */
 export default async function ReservarPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ productId: string }>;
+  searchParams: Promise<{ slot?: string }>;
 }) {
-  const { productId } = await params;
+  const [{ productId }, { slot }] = await Promise.all([params, searchParams]);
   await requireUser();
 
   // getProductDetail solo devuelve productos reservables (active + tutor aprobado).
@@ -35,6 +42,17 @@ export default async function ReservarPage({
   const tutorName = names.get(product.tutor.id) ?? product.tutor.headline ?? undefined;
   const required =
     product.pricingModel === "per_package" ? (product.packageNumSessions ?? 1) : 1;
+
+  // Se compara por INSTANTE, no por cadena: el hueco que enlaza la ficha sale
+  // de otra llamada a `get_available_slots` (con rango de fechas propio) y basta
+  // con que Postgres devuelva el mismo momento con otro formato —o que el
+  // navegador reescriba el `+` del ISO— para que un `===` no case nunca. Se
+  // guarda el `slot_start` canónico, que es la clave que maneja el selector.
+  const elegido = slot
+    ? (slots ?? []).find(
+        (s) => Date.parse(s.slot_start) === Date.parse(slot),
+      )?.slot_start
+    : undefined;
 
   return (
     <PanelShell back={{ href: `/products/${productId}`, label: "Volver a la mentoría" }}>
@@ -59,6 +77,7 @@ export default async function ReservarPage({
         productTitle={product.title}
         tutorName={tutorName}
         slots={slots ?? []}
+        preselected={elegido ?? null}
         required={required}
         total={bookingTotal(product)}
         currency={product.currency}

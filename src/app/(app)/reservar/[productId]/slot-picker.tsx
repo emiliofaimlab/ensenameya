@@ -56,6 +56,7 @@ export function SlotPicker({
   productTitle,
   tutorName,
   slots,
+  preselected = null,
   required,
   total,
   currency,
@@ -65,6 +66,12 @@ export function SlotPicker({
   productTitle: string;
   tutorName?: string;
   slots: Slot[];
+  /**
+   * M-10 · Horario que el alumno ya eligió en la ficha (`?slot=`), validado
+   * contra los huecos reales por la página. Llega marcado y con su día abierto:
+   * repetir la elección era justo lo que se sentía como "se perdió".
+   */
+  preselected?: string | null;
   required: number;
   /** Total de la reserva (fijo): paquete completo o sesión suelta. */
   total: number;
@@ -72,7 +79,9 @@ export function SlotPicker({
   durationMin: number | null;
 }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(preselected ? [preselected] : []),
+  );
 
   // Slots por día local. El orden dentro de cada día ya viene por slot_start.
   const byDay = useMemo(() => {
@@ -86,12 +95,18 @@ export function SlotPicker({
     return groups;
   }, [slots]);
 
-  const first = slots.length > 0 ? new Date(slots[0]!.slot_start) : new Date();
+  // El calendario arranca donde está el horario que traía el alumno; si no
+  // trae ninguno, en el primer hueco libre, como siempre.
+  const first = preselected
+    ? new Date(preselected)
+    : slots.length > 0
+      ? new Date(slots[0]!.slot_start)
+      : new Date();
   const [month, setMonth] = useState(
     () => new Date(first.getFullYear(), first.getMonth(), 1),
   );
   const [openDay, setOpenDay] = useState<string | null>(
-    slots.length > 0 ? dayKey(first) : null,
+    preselected || slots.length > 0 ? dayKey(first) : null,
   );
 
   // Rejilla del mes empezando en lunes. `getDay()` da 0=domingo.

@@ -17,6 +17,11 @@ import {
   AUTH_LABEL,
   AUTH_SUBMIT,
 } from "@/components/auth/field-classes";
+import { FieldError } from "@/components/form/field-error";
+import { describedBy, emailError, requiredError } from "@/components/form/validation";
+
+/** Errores por campo (RV-14) + el del intento fallido, que no es de un campo. */
+type Errores = Partial<Record<"email" | "password" | "form", string>>;
 
 export function LoginForm({
   next,
@@ -28,15 +33,29 @@ export function LoginForm({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errores, setErrores] = useState<Errores>({});
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setLoading(true);
 
     const form = new FormData(e.currentTarget);
     const email = String(form.get("email") ?? "").trim();
     const password = String(form.get("password") ?? "");
 
+    // RV-14 · Mensajes propios bajo cada campo. Aquí NO se valida el largo de
+    // la contraseña: las cuentas anteriores a RV-12 tienen 6 caracteres y
+    // rechazarlas en el login las dejaría fuera de su propia cuenta.
+    const fallos: Errores = {
+      email: emailError(email) ?? undefined,
+      password: requiredError(password, "Escribe tu contraseña.") ?? undefined,
+    };
+    setErrores(fallos);
+    if (Object.values(fallos).some(Boolean)) {
+      document.getElementById(fallos.email ? "email" : "password")?.focus();
+      return;
+    }
+
+    setLoading(true);
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -44,8 +63,11 @@ export function LoginForm({
     });
 
     if (error) {
-      // Mensaje genérico: no revelar si la cuenta existe (S-40).
-      toast.error("Correo o contraseña incorrectos.");
+      // Mensaje genérico y NO colgado del correo: decir "ese correo no existe"
+      // revelaría qué direcciones tienen cuenta (S-40).
+      const msg = "Correo o contraseña incorrectos.";
+      setErrores({ form: msg });
+      toast.error(msg);
       setLoading(false);
       return;
     }
@@ -73,7 +95,9 @@ export function LoginForm({
         className={`${AUTH_FIELD} font-medium`}
       />
       <AuthDivider />
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      {/* `noValidate`: valida `onSubmit` y el mensaje se pinta bajo el campo,
+          en español y anunciable (RV-14). Ver signup-form. */}
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
         <div className="grid gap-2">
           <Label htmlFor="email" className={AUTH_LABEL}>
             Correo
@@ -84,9 +108,12 @@ export function LoginForm({
             type="email"
             autoComplete="email"
             required
+            aria-invalid={Boolean(errores.email)}
+            aria-describedby={describedBy(errores.email && "email-error")}
             placeholder="tucorreo@ejemplo.com"
             className={AUTH_FIELD}
           />
+          <FieldError id="email-error" message={errores.email} />
         </div>
         <div className="grid gap-2">
           <Label
@@ -102,6 +129,8 @@ export function LoginForm({
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
               required
+              aria-invalid={Boolean(errores.password)}
+              aria-describedby={describedBy(errores.password && "password-error")}
               placeholder="Tu contraseña"
               className={`${AUTH_FIELD} pr-20`}
             />
@@ -114,6 +143,7 @@ export function LoginForm({
               {showPassword ? "Ocultar" : "Mostrar"}
             </button>
           </div>
+          <FieldError id="password-error" message={errores.password} />
           <Link
             href="/reset"
             className="text-right text-[13px] font-medium text-brand hover:underline"
@@ -121,8 +151,12 @@ export function LoginForm({
             ¿Olvidaste tu contraseña?
           </Link>
         </div>
+        {/* Fallo del intento (credenciales): no cuelga de ningún campo, pero
+            sigue siendo `role="alert"` para que se anuncie. Antes solo existía
+            como aviso flotante, que se va solo y no siempre se lee. */}
+        <FieldError id="login-error" message={errores.form} className="text-sm" />
         {oauthError ? (
-          <p className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-destructive">
             No se pudo completar el inicio con Google. Intenta de nuevo.
           </p>
         ) : null}

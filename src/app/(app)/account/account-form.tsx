@@ -11,6 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TimezoneSelect } from "@/components/form/timezone-select";
+import { FieldError } from "@/components/form/field-error";
+import {
+  PASSWORD_MIN,
+  describedBy,
+  passwordError,
+  requiredError,
+} from "@/components/form/validation";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 
@@ -37,6 +44,11 @@ export function AccountForm({
   const router = useRouter();
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  // RV-14 · Errores por campo. Dos formularios distintos, un solo estado: sus
+  // claves no se pisan y así el reset de uno no toca al otro.
+  const [errores, setErrores] = useState<
+    Partial<Record<"full_name" | "password" | "confirm", string>>
+  >({});
 
   // La foto se guarda al instante: AvatarUpload sube al bucket y devuelve la
   // ruta; aquí se apunta `profiles.avatar_path` (no hay "submit" como en el
@@ -57,12 +69,19 @@ export function AccountForm({
 
   async function saveProfile(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSavingProfile(true);
 
     const form = new FormData(e.currentTarget);
     const full_name = String(form.get("full_name") ?? "").trim();
     const tz = String(form.get("timezone") ?? "UTC");
 
+    const fallo = requiredError(full_name, "Escribe tu nombre.");
+    setErrores((prev) => ({ ...prev, full_name: fallo ?? undefined }));
+    if (fallo) {
+      document.getElementById("full_name")?.focus();
+      return;
+    }
+
+    setSavingProfile(true);
     const supabase = createClient();
     const { error } = await supabase
       .from("profiles")
@@ -87,21 +106,36 @@ export function AccountForm({
     const password = String(data.get("password") ?? "");
     const confirm = String(data.get("confirm") ?? "");
 
-    if (password !== confirm) {
-      toast.error("Las contraseñas no coinciden.");
+    // RV-12 · Mínimo 8 (`PASSWORD_MIN`), validado también aquí: el `minLength`
+    // del HTML no se cumple en un submit programático.
+    const fallos = {
+      password: passwordError(password) ?? undefined,
+      confirm:
+        !password || password === confirm
+          ? undefined
+          : "Las contraseñas no coinciden.",
+    };
+    setErrores((prev) => ({ ...prev, ...fallos }));
+    if (fallos.password || fallos.confirm) {
+      document.getElementById(fallos.password ? "password" : "confirm")?.focus();
       return;
     }
-    setSavingPassword(true);
 
+    setSavingPassword(true);
     const supabase = createClient();
     const { error } = await supabase.auth.updateUser({ password });
     if (error) {
-      toast.error("No se pudo cambiar la contraseña. Intenta de nuevo.");
+      // El servidor de Auth tiene su propia política (longitud mínima del
+      // panel de Supabase): puede rechazar lo que aquí pasó.
+      const msg = "No se pudo cambiar la contraseña. Intenta de nuevo.";
+      setErrores((prev) => ({ ...prev, password: msg }));
+      toast.error(msg);
       setSavingPassword(false);
       return;
     }
     toast.success("Contraseña actualizada.");
     form.reset();
+    setErrores((prev) => ({ ...prev, password: undefined, confirm: undefined }));
     setSavingPassword(false);
   }
 
@@ -129,7 +163,9 @@ export function AccountForm({
       {/* Información personal */}
       <PanelCard>
         <PanelCardTitle>Información personal</PanelCardTitle>
-        <form onSubmit={saveProfile} className="mt-4 flex flex-col gap-4">
+        {/* `noValidate` en los dos formularios: los mensajes son nuestros y van
+            bajo el campo, no en el globo del navegador (RV-14). */}
+        <form onSubmit={saveProfile} noValidate className="mt-4 flex flex-col gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="full_name">Nombre</Label>
             <Input
@@ -137,9 +173,15 @@ export function AccountForm({
               name="full_name"
               defaultValue={fullName}
               autoComplete="name"
+              required
+              aria-invalid={Boolean(errores.full_name)}
+              aria-describedby={describedBy(
+                errores.full_name && "full_name-error",
+              )}
               placeholder="Tu nombre"
               className="h-[45px] rounded-[8px]"
             />
+            <FieldError id="full_name-error" message={errores.full_name} />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="email">Correo</Label>
@@ -155,7 +197,11 @@ export function AccountForm({
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="timezone">Zona horaria</Label>
-            <TimezoneSelect name="timezone" defaultValue={timezone} />
+            <TimezoneSelect
+              name="timezone"
+              defaultValue={timezone}
+              className="h-[45px] rounded-[8px]"
+            />
             <p className="text-xs text-muted-foreground">
               Tus mentorías se muestran en esta hora local.
             </p>
@@ -176,7 +222,7 @@ export function AccountForm({
         <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
           Cambia tu contraseña cuando lo necesites.
         </p>
-        <form onSubmit={savePassword} className="mt-4 flex flex-col gap-4">
+        <form onSubmit={savePassword} noValidate className="mt-4 flex flex-col gap-4">
           <div className="grid gap-1.5">
             <Label htmlFor="password">Nueva contraseña</Label>
             <Input
@@ -185,9 +231,18 @@ export function AccountForm({
               type="password"
               autoComplete="new-password"
               required
-              minLength={6}
+              minLength={PASSWORD_MIN}
+              aria-invalid={Boolean(errores.password)}
+              aria-describedby={describedBy(
+                "password-hint",
+                errores.password && "password-error",
+              )}
               className="h-[45px] rounded-[8px]"
             />
+            <p id="password-hint" className="text-xs text-muted-foreground">
+              Mínimo {PASSWORD_MIN} caracteres.
+            </p>
+            <FieldError id="password-error" message={errores.password} />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="confirm">Repite la contraseña</Label>
@@ -197,9 +252,12 @@ export function AccountForm({
               type="password"
               autoComplete="new-password"
               required
-              minLength={6}
+              minLength={PASSWORD_MIN}
+              aria-invalid={Boolean(errores.confirm)}
+              aria-describedby={describedBy(errores.confirm && "confirm-error")}
               className="h-[45px] rounded-[8px]"
             />
+            <FieldError id="confirm-error" message={errores.confirm} />
           </div>
           <Button
             type="submit"

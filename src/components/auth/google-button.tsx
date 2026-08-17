@@ -42,6 +42,7 @@ export function GoogleButton({
   intent,
   referralCode,
   terms,
+  onTermsMissing,
 }: {
   next: string | null;
   label: string;
@@ -67,6 +68,12 @@ export function GoogleButton({
    * para entrar sería pedir dos veces lo mismo.
    */
   terms?: { aceptado: boolean; version: string; locale: string };
+  /**
+   * RV-14 · Qué hacer cuando falta la casilla de términos. La pantalla de
+   * registro lo usa para encender su error bajo la casilla —que es donde hay
+   * que mirar—; sin él queda el aviso flotante de siempre.
+   */
+  onTermsMissing?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
 
@@ -74,7 +81,8 @@ export function GoogleButton({
     // Mismo mensaje y mismo momento que el submit por correo, para que los dos
     // caminos de alta se comporten igual.
     if (terms && !terms.aceptado) {
-      toast.error("Debes aceptar los términos para continuar.");
+      if (onTermsMissing) onTermsMissing();
+      else toast.error("Debes aceptar los términos para continuar.");
       return;
     }
 

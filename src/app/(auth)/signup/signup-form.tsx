@@ -21,8 +21,21 @@ import {
   AUTH_LABEL,
   AUTH_SUBMIT,
 } from "@/components/auth/field-classes";
+import { FieldError } from "@/components/form/field-error";
+import {
+  PASSWORD_MIN,
+  describedBy,
+  emailError,
+  passwordError,
+  requiredError,
+} from "@/components/form/validation";
 
 type Intent = "alumno" | "tutor";
+
+/** Errores por campo (RV-14). La clave es el `name` del input. */
+type Errores = Partial<
+  Record<"full_name" | "email" | "password" | "terms", string>
+>;
 
 const intentOptions: { value: Intent; label: string }[] = [
   { value: "alumno", label: "Quiero aprender" },
@@ -41,20 +54,39 @@ export function SignupForm({
   const [intent, setIntent] = useState<Intent>("alumno");
   const [accepted, setAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errores, setErrores] = useState<Errores>({});
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!accepted) {
-      toast.error("Debes aceptar los términos para continuar.");
-      return;
-    }
-    setLoading(true);
 
     const form = new FormData(e.currentTarget);
     const fullName = String(form.get("full_name") ?? "").trim();
     const email = String(form.get("email") ?? "").trim();
     const password = String(form.get("password") ?? "");
 
+    // RV-12 / RV-14 · Validación propia, no la del navegador. El `minLength`
+    // del HTML no protege de un submit programático y su globo de error se
+    // escribe en el idioma del sistema; esto se pinta bajo cada campo.
+    const fallos: Errores = {
+      full_name: requiredError(fullName, "Escribe tu nombre.") ?? undefined,
+      email: emailError(email) ?? undefined,
+      password: passwordError(password) ?? undefined,
+      terms: accepted
+        ? undefined
+        : "Debes aceptar los términos para continuar.",
+    };
+    setErrores(fallos);
+    if (Object.values(fallos).some(Boolean)) {
+      // El foco al primer campo con fallo: en móvil el error puede quedar
+      // fuera de pantalla y parecería que el botón no hace nada.
+      const primero = (["full_name", "email", "password"] as const).find(
+        (k) => fallos[k],
+      );
+      if (primero) document.getElementById(primero)?.focus();
+      return;
+    }
+
+    setLoading(true);
     const supabase = createClient();
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -83,9 +115,15 @@ export function SignupForm({
     });
 
     if (error) {
-      const msg = /registered|already/i.test(error.message)
+      const yaExiste = /registered|already/i.test(error.message);
+      const msg = yaExiste
         ? "Ese correo ya tiene una cuenta. Inicia sesión."
         : "No se pudo crear la cuenta. Revisa los datos e intenta de nuevo.";
+      // Si el problema es el correo, el error vive BAJO el correo; si es
+      // genérico no hay campo al que colgarlo y se queda en el aviso flotante.
+      // ⚠️ El servidor de Auth puede rechazar la contraseña por su propia
+      // política (longitud mínima del panel de Supabase) aunque aquí pase.
+      if (yaExiste) setErrores({ email: msg });
       toast.error(msg);
       setLoading(false);
       return;
@@ -143,12 +181,25 @@ export function SignupForm({
           version: TERMS_VERSION,
           locale: TERMS_GOVERNING_LOCALE,
         }}
+        onTermsMissing={() =>
+          setErrores((prev) => ({
+            ...prev,
+            terms: "Debes aceptar los términos para continuar.",
+          }))
+        }
         label="Registrarme con Google"
         className={`${AUTH_FIELD} font-medium`}
       />
       <AuthDivider />
 
-      <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      {/*
+        `noValidate`: la validación la hace `onSubmit` y se pinta bajo cada
+        campo (RV-14). Los atributos `required` / `minLength` se quedan porque
+        son semántica que el lector de pantalla anuncia, pero sin ellos
+        mandando el navegador dispararía además su propio globo, en el idioma
+        del sistema y por encima del nuestro.
+      */}
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-4">
         <div className="grid gap-2">
           <Label
             htmlFor="full_name"
@@ -161,9 +212,14 @@ export function SignupForm({
             name="full_name"
             autoComplete="name"
             required
+            aria-invalid={Boolean(errores.full_name)}
+            aria-describedby={describedBy(
+              errores.full_name && "full_name-error",
+            )}
             placeholder="Tu nombre"
             className={AUTH_FIELD}
           />
+          <FieldError id="full_name-error" message={errores.full_name} />
         </div>
         <div className="grid gap-2">
           <Label htmlFor="email" className={AUTH_LABEL}>
@@ -175,9 +231,12 @@ export function SignupForm({
             type="email"
             autoComplete="email"
             required
+            aria-invalid={Boolean(errores.email)}
+            aria-describedby={describedBy(errores.email && "email-error")}
             placeholder="tucorreo@ejemplo.com"
             className={AUTH_FIELD}
           />
+          <FieldError id="email-error" message={errores.email} />
         </div>
         <div className="grid gap-2">
           <Label
@@ -193,7 +252,12 @@ export function SignupForm({
               type={showPassword ? "text" : "password"}
               autoComplete="new-password"
               required
-              minLength={6}
+              minLength={PASSWORD_MIN}
+              aria-invalid={Boolean(errores.password)}
+              aria-describedby={describedBy(
+                "password-hint",
+                errores.password && "password-error",
+              )}
               placeholder="Crea una contraseña"
               className={`${AUTH_FIELD} pr-20`}
             />
@@ -206,6 +270,12 @@ export function SignupForm({
               {showPassword ? "Ocultar" : "Mostrar"}
             </button>
           </div>
+          {/* La regla se dice ANTES de fallar: enterarse del mínimo al pulsar
+              "Crear cuenta" es la forma cara de enterarse. */}
+          <p id="password-hint" className="text-[13px] text-muted-foreground">
+            Mínimo {PASSWORD_MIN} caracteres.
+          </p>
+          <FieldError id="password-error" message={errores.password} />
         </div>
 
         {/*
@@ -219,7 +289,15 @@ export function SignupForm({
           <input
             type="checkbox"
             checked={accepted}
-            onChange={(e) => setAccepted(e.target.checked)}
+            onChange={(e) => {
+              setAccepted(e.target.checked);
+              // El error se apaga al marcarla: dejarlo ahí después de
+              // corregirlo hace dudar de si se corrigió.
+              if (e.target.checked)
+                setErrores((prev) => ({ ...prev, terms: undefined }));
+            }}
+            aria-invalid={Boolean(errores.terms)}
+            aria-describedby={describedBy(errores.terms && "terms-error")}
             className="mt-0.5 size-[18px] rounded-[5px] border-input accent-primary"
           />
           <span>
@@ -241,6 +319,7 @@ export function SignupForm({
             .
           </span>
         </label>
+        <FieldError id="terms-error" message={errores.terms} />
 
         <Button
           type="submit"

@@ -5,12 +5,42 @@ import { PANEL_COOKIE, panelFromPath } from "@/lib/panel";
 import { REFERRAL_COOKIE } from "@/lib/referral";
 
 /**
+ * Los dos asistentes de onboarding, a los que se llega SIEMPRE con `?next=…`.
+ * Ver `rutaActual()`: son la excepción que se queda sin query.
+ */
+const ONBOARDINGS = new Set(["/onboarding", "/tutor/onboarding"]);
+
+/**
+ * M-10 · La ruta actual viaja CON su query.
+ *
+ * `requireUser()` (lib/auth/server.ts) arma el `?next=` del login con esta
+ * cabecera. Mandaba solo el pathname, así que quien elegía horario sin sesión
+ * en `/reservar/<id>?slot=…` volvía del login a la pantalla en blanco: el
+ * horario que había elegido no llegaba nunca. `safeNext()` ya acepta cualquier
+ * ruta interna, query incluida, así que no hay nada que aflojar ahí.
+ *
+ * ⚠️ Los dos onboardings se quedan con el pathname PELADO a propósito. Ese
+ * mismo `requireUser()` decide "ya estoy dentro de un onboarding" comparando
+ * esta cabecera con las cadenas `/onboarding` y `/tutor/onboarding`; como a
+ * esas pantallas se entra justamente con `?next=…`, incluir la query rompería
+ * la igualdad y el guarda se redirigiría a sí mismo para siempre, anidando un
+ * `next` dentro de otro en cada vuelta.
+ *
+ * El valor es siempre ASCII: `URL#search` devuelve la query ya
+ * percent-encoded, y una cabecera con bytes UTF-8 crudos reventaría en Node.
+ */
+function rutaActual(url: { pathname: string; search: string }): string {
+  if (ONBOARDINGS.has(url.pathname)) return url.pathname;
+  return url.pathname + url.search;
+}
+
+/**
  * Refresca la sesión de Supabase en cada request y la propaga a las cookies de
  * la respuesta. Patrón oficial de @supabase/ssr para Next.js App Router.
  */
 export async function updateSession(request: NextRequest) {
   // Expone la ruta actual a los Server Components (guardas de rol → ?next=).
-  request.headers.set("x-pathname", request.nextUrl.pathname);
+  request.headers.set("x-pathname", rutaActual(request.nextUrl));
 
   let supabaseResponse = NextResponse.next({ request });
 
