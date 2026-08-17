@@ -16,6 +16,8 @@ import { HomeFaq } from "@/components/home/home-faq";
 import { HomeStats } from "@/components/home/home-stats";
 import { Testimonials } from "@/components/home/testimonials";
 import { FinalCta } from "@/components/home/final-cta";
+import { hrefSignup } from "@/components/auth/auth-links";
+import { getVisitorState } from "@/components/auth/visitor-state";
 import {
   getHomeStats,
   listActiveCategories,
@@ -25,14 +27,36 @@ import {
 } from "@/lib/catalog/queries";
 
 export default async function HomePage() {
-  const [categories, featuredTutors, { products }, stats, testimonials] =
-    await Promise.all([
-      listActiveCategories(),
-      listFeaturedTutors(),
-      listActiveProducts({ page: 1 }),
-      getHomeStats(),
-      listTestimonials(),
-    ]);
+  const [
+    categories,
+    featuredTutors,
+    { products },
+    stats,
+    testimonials,
+    visitante,
+  ] = await Promise.all([
+    listActiveCategories(),
+    listFeaturedTutors(),
+    listActiveProducts({ page: 1 }),
+    getHomeStats(),
+    listTestimonials(),
+    getVisitorState(),
+  ]);
+
+  /*
+   * N-01 · "Quiero enseñar YA": el destino depende de quién mire. Apuntando
+   * fijo a `/signup`, el guarda `requireGuest()` del layout `(auth)` rebotaba a
+   * cualquiera con sesión a `pickHome(roles)`: el tutor aprobado llegaba a
+   * `/tutor` dando un rodeo, y el que aún NO tiene el rol —el que está
+   * esperando aprobación— acababa en `/app`, el panel de ALUMNO. "Obviamente
+   * causa confusión": el botón dice enseñar y te deja en el sitio de aprender.
+   *
+   * Al anónimo se le sigue mandando a la PANTALLA de alta y no al modal: aquí
+   * el CTA es de conversión y `FeatureSplit` pinta un `<Link href>`, así que
+   * colgarle un diálogo obligaría a tocar ese componente, que es de otro
+   * carril. El `intent=tutor` deja el alta abierta ya por su lado.
+   */
+  const teachHref = visitante.teachHref ?? hrefSignup(null, "tutor");
 
   return (
     <>
@@ -67,7 +91,7 @@ export default async function HomePage() {
           { icon: ShieldCheckIcon, text: "Ingresos garantizados y respaldados" },
           { icon: BadgeCheckIcon, text: "Verificación de perfil y credenciales" },
         ]}
-        cta={{ href: "/signup", label: "Quiero enseñar YA" }}
+        cta={{ href: teachHref, label: "Quiero enseñar YA" }}
         image={{
           src: "/img/home-teach.jpg",
           alt: "Tutor impartiendo una clase desde su portátil",
