@@ -15,6 +15,14 @@
 > del webhook, y el checkout de Stripe probado de punta a punta en test mode. La matriz por rol de
 > §1 **no** se re-ejecutó y no hacía falta: nada de esto cambia políticas de RLS — cambia **grants**
 > y **quién puede invocar qué**, que es la otra barrera y hasta ahora no estaba en este documento.
+>
+> Añadidos del **2026-08-17**, que **no son una pasada de QA** y conviene no confundirlos con una:
+> el inventario de las cinco superficies nuevas del día (§1, con lo que se comprobó de cada una al
+> escribirla), el **tercer job programado** (reembolsos, §4.3) y el procedimiento para **vaciar la
+> cola vieja de correo** antes de encender Actions (**§4.6**, lo único de este documento con un orden
+> obligatorio). La matriz por rol de §1 sigue siendo la del 29-jul y **hay que re-ejecutarla antes de
+> abrir**: desde entonces han entrado el dinero real, los datos del alumno visibles para su tutor y
+> la constancia de aceptación de términos.
 
 ---
 
@@ -96,6 +104,25 @@ corredor de pago —o sea, decidir a dónde va el dinero— sigue exigiendo una 
 cuatro se va a estrellar igual hasta que declare sus grants. `notifications`, por ejemplo, sigue
 **sin** abrirse a `service_role` a propósito — comprobado, el `select` directo devuelve permission
 denied — y el job de correo entra por RPC.
+
+### Superficies nuevas del 17-ago — comprobadas una a una, sin re-ejecutar la matriz
+
+Cinco migraciones del 17-ago añaden tablas o RPC nuevas, y **cuatro de ellas tocan datos sensibles**:
+dinero, datos personales del alumno y constancia legal. Lo que sigue es lo que se comprobó al
+escribirlas —cada línea sale de su commit—, **no** una nueva pasada completa de §1. La matriz por rol
+sigue siendo la del 29-jul y **hay que re-ejecutarla antes de abrir**.
+
+| Superficie | Migración | Qué se comprobó |
+| :-- | :-- | :-- |
+| `contact_messages` | `20260817120000` | público solo por Route Handler con `service_role`; `anon` no inserta (un `insert` abierto a `anon` es un formulario de spam) |
+| `terms_acceptances` | `20260817130000` | **el propio interesado no puede crearla ni borrarla** (403 en insert y delete) — una constancia que el interesado pudiera editar no es una constancia |
+| `tutor_students` (RPC) | `20260817150000` | `security definer` con **columnas explícitas** y acotada por reserva compartida: un alumno no lista alumnos (0 filas), no pide un perfil ajeno por id (0 filas) y sigue sin leer `profiles`; `anon` 401 |
+| `late_payment_refunds` | `20260817160000` | `anon` 401; grants a `service_role` declarados en la misma migración (regla de oro 9) |
+| `refund_requests` | `20260817170000` | `anon` 401, un usuario normal ve 0 filas y su `insert` da 403, y **`enqueue_refund` no es invocable** (404) — encolar reembolsos a mano por la API no debe poder hacerse |
+
+⚠️ **`tutor_students` es la primera excepción a que el tutor no vea ningún dato personal del alumno.**
+No es un cambio de copy: es un cambio de privacidad, y la próxima pasada de §1 tiene que entrar por
+ahí — probando que un tutor **sin** reserva compartida no obtiene nada.
 
 ### Funciones: quién puede invocarlas (6-ago)
 
@@ -221,21 +248,34 @@ entró en el barrido.
 
 ### 4.1 Antes de abrir
 
-- [ ] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`). Hoy
-      faltan **20** por aplicar: de `20260729130000_us1302_referral_code` a
-      `20260806180000_routing_rules_grant_service_role`. Y ya es **un solo** merge hasta prod
-      (`dev` → `main`): el PR #11 se mergeó a `dev` en `1a36da2`.
+- [ ] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`). Al
+      **17-ago** faltan **30**: de `20260729130000_us1302_referral_code` a
+      `20260817180000_m02_acepta_sola_por_mentoria`. Sigue siendo **un solo** merge (`dev` → `main`),
+      pero ya no es un merge pequeño — 85 commits y 30 migraciones de una tacada.
 - [ ] **`npm run db:types` regenerado** y sin cambios pendientes en el PR.
 - [ ] **`lint` + `typecheck` + `build`** en verde.
 - [ ] **Cuenta de admin sembrada** en prod (`supabase/seed/admin-bootstrap.sql`) — y **completar su
       onboarding**: el gate de `requireUser` (RN-44) también aplica al admin.
+      ⚠️ **Con contraseña propia, y no la de dev** (RV-19): en dev el admin comparte contraseña con
+      las 12 cuentas de prueba, y esa contraseña está **en claro en el repositorio público**
+      (`supabase/seed/dev-poblar.sql`). Procedimiento, rotación y custodia en
+      **`docs/ACCESO-ADMIN-DEV.md`** — el acceso de admin ya no vive en el documento de pruebas.
 - [ ] **Categorías reales** cargadas (las 10 del seed son de dev).
-- [x] **Páginas legales redactadas** (DD-06). `/terms`, `/privacy` y `/cookies` dejaron de ser 404 y
-      describen lo que la plataforma hace **de verdad**: los plazos salen de las migraciones y los
-      reembolsos se importan de `lib/policy.ts`, no se reescriben a mano. ⚠️ **En prod siguen siendo
-      404**: `main` no tiene ni las páginas. Se arregla con el merge de arriba.
+- [x] **Páginas legales publicadas** (DD-06 → DL-05). Desde el **17-ago** `/terms` sirve los
+      **Términos del cliente** (39 secciones, versión **inglesa, que es la que gobierna** por su §38)
+      y `/terms/es` la española; `/privacy` y `/cookies` siguen siendo texto nuestro, porque el
+      cliente no mandó esos dos. ⚠️ **En prod siguen siendo 404**: `main` no tiene ni las páginas, y
+      el pie de producción las enlaza igual. Se arregla con el merge de arriba y con nada más.
+- [x] **Constancia de aceptación de términos** (`terms_acceptances`, `20260817130000`): quién, cuándo,
+      qué versión y qué idioma. ⚠️ **Las cuentas anteriores al 17-ago no tienen fila** — aceptaron una
+      casilla que no dejaba rastro, y de un texto distinto. Decidir antes de abrir si se les vuelve a
+      pedir (lo contempla el §34) o se da por buena la anterior.
 - [ ] **Fila de `payment_routing_rules` en prod** apuntando al proveedor que toque. En dev está en
-      `'stripe'`; cambiarla es un `UPDATE`, no una migración.
+      `'stripe'`; cambiarla es un `UPDATE`, no una migración. ⚠️ Desde el 17-ago **producción ya tiene
+      `STRIPE_API_KEY`, y es de *test mode*** — si esa fila entrara en `'stripe'` sin cambiar la clave,
+      producción aceptaría tarjetas de prueba y no cobraría ni una real.
+- [ ] **Cola de correo vieja vaciada** antes de dar reloj a Actions — §4.6. Es lo único de esta lista
+      que hay que hacer **en un orden concreto** y que no se puede deshacer.
 
 **Sobre las legales, un hallazgo que nadie había mirado.** El cliente **ya tenía** términos y
 privacidad publicados en `ensenameya.com` (GoDaddy, "Última actualización: Marzo 23, 2026"). De ahí
@@ -254,31 +294,29 @@ RN-37 ya es código. Las dos se reconcilian **con el cliente**, no en el repo.
 | `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | sin monitoreo de errores |
 | `STRIPE_API_KEY` | el checkout ruteado a Stripe responde **503** (no cae al simulado: regalaría clases) |
 | `STRIPE_WEBHOOK_SECRET` | el webhook no procesa **nada**: 503 |
-| `CRON_SECRET` | los dos crons responden **503** y no corren |
-| `RESEND_API_KEY` | el job de correo no toca la cola: los avisos se quedan `pending` |
+| `CRON_SECRET` | los **tres** crons responden **503** y no corren |
+| `RESEND_API_KEY` | el job de correo no toca la cola (los avisos se quedan `pending`) y el formulario de contacto guarda pero no entrega → **DL-01 sin cumplir** |
 | `REFERRAL_FACTORY_API_KEY` | sin atribución de referidos |
 
 Detalle en `docs/ENTORNOS.md`. **`service_role` jamás en `NEXT_PUBLIC_*`** (regla de oro 3).
 
-**Estado real al 6-ago.** Las seis variables nuevas (`CRON_SECRET`, `STRIPE_API_KEY`,
-`STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `REFERRAL_FACTORY_API_KEY` y
-`NEXT_PUBLIC_REFERRAL_URL`) existen **en local**. En **Vercel (scope Preview)** solo están las dos
-de Stripe. Faltan por poner:
+**Estado real al 17-ago.** Se repartieron las de Stripe a **Production** y se dio de alta
+`RESEND_API_KEY` en local, Preview y Production. Faltan por poner:
 
-- [ ] `CRON_SECRET` en Vercel — sin ella el cron de grabaciones responde 503 en cada pasada.
-- [ ] `RESEND_API_KEY` en Vercel — y antes, la **cuenta de Resend**, que tampoco existe todavía.
+- [ ] `CRON_SECRET` en Vercel (Preview y Production) — sin ella los tres crons responden 503.
 - [ ] `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel (la URL de campaña es
       `https://vercel.referral-factory.com/cXr65Wou/signup`).
 
-**Y en GitHub**, que es donde vive el reloj del correo
-(`.github/workflows/notifications-cron.yml`):
+**Y en GitHub**, que es donde viven los relojes del correo y de los reembolsos
+(`.github/workflows/notifications-cron.yml` y `refunds-cron.yml`, que comparten las dos):
 
 - [ ] variable `APP_BASE_URL`
-- [ ] secret `CRON_SECRET`
+- [ ] secret `CRON_SECRET` — **el mismo valor que en Vercel**
+- [ ] *(opcional)* secret `VERCEL_PROTECTION_BYPASS`, solo si `APP_BASE_URL` apunta a una preview
 
-Sin las dos el workflow **falla en rojo cada 5 minutos**, y es a propósito: el job trata el 503 ("no
-hay `CRON_SECRET` en Vercel") y el 401 ("no coincide") como configuración a medias, que es
-exactamente lo que son.
+Sin las dos primeras los workflows **fallan en rojo** cada 5 y cada 15 minutos, y es a propósito: el
+503 ("no hay `CRON_SECRET` en Vercel") y el 401 ("no coincide") son configuración a medias, que es
+exactamente lo que son. ⚠️ **Antes de darlas de alta, §4.6.**
 
 ### 4.3 Jobs de `pg_cron` (verificar que existen en prod)
 
@@ -300,20 +338,35 @@ ahora cuánto hay encolado, así que si el remitente se cae la cola se ve **crec
 desaparecer.
 
 **Jobs que NO son `pg_cron`.** Postgres no puede llamar a APIs externas aquí (no está `pg_net`, no
-hay Vault y el repo es público, así que no tiene dónde guardar una clave), de modo que estos dos son
-HTTP y su reloj vive fuera de la base de datos:
+hay Vault y el repo es público, así que no tiene dónde guardar una clave), de modo que estos **tres**
+son HTTP y su reloj vive fuera de la base de datos:
 
 | Job | Reloj | Cadencia | Qué pasa si no corre |
 | :-- | :-- | :-- | :-- |
 | `/api/cron/recordings-purge` | Vercel Cron (`vercel.json`) | 04:00 diario | las grabaciones no se borran en Daily (RN-42) |
-| `/api/cron/notifications-send` | GitHub Actions | `*/5` | los avisos se quedan en `pending` |
+| `/api/cron/notifications-send` | GitHub Actions (`notifications-cron.yml`) | `*/5` | los avisos se quedan en `pending` |
+| **`/api/cron/refunds-process`** | GitHub Actions (`refunds-cron.yml`) | **`7,22,37,52`** (cada 15 min) | **el dinero no vuelve**: la base de datos y el correo dicen "reembolsado" y el alumno no recibe nada (X-01) |
 
-El de correo no está en Vercel Cron porque **el plan Hobby limita los crons a uno al día**, y un
-aviso de "tienes 24 h para aceptar esta reserva" que llega mañana no sirve de nada. El peaje de
-Actions está escrito en el propio workflow: los programados se retrasan cuando la cola va cargada
-(10-15 min es normal, aceptable para un correo y no para un cobro) y GitHub los **desactiva tras 60
-días sin actividad** en el repo. Si los correos dejan de salir sin motivo aparente, mirar eso
-primero.
+Los dos de Actions no están en Vercel Cron porque **el plan Hobby limita los crons a uno al día** y
+ese hueco lo gasta la purga. Aunque quedara sitio, la cadencia diaria no sirve para ninguno: un aviso
+de "tienes 24 h para aceptar esta reserva" que llega mañana no vale, y un reembolso pedido a las
+04:05 esperaría un día entero cuando el §13 de los Términos promete devolver "al método de pago
+original". El de reembolsos va cada **15** y no cada 5 porque, una vez pedido a Stripe, el dinero
+tarda 5-10 días hábiles en llegar a la tarjeta: lo que importa no es adelantar diez minutos el envío,
+es que un 429 del PSP no cueste un día de espera hasta el reintento.
+
+El peaje de Actions está escrito en los propios workflows: los programados se retrasan cuando la cola
+va cargada (10-15 min es normal, aceptable para un correo y para un reembolso, **no** para un cobro),
+GitHub los **desactiva tras 60 días sin actividad** en el repo, y **solo programa los de la rama por
+defecto** — mientras vivan únicamente en `dev`, ninguno de los dos tiene reloj. Si los correos o los
+reembolsos dejan de salir sin motivo aparente, mirar esas tres cosas por ese orden.
+
+⚠️ **La trampa de Deployment Protection también aplica aquí**, y es la misma que ya mordió con el
+webhook de Stripe (§2): apuntado a una **preview**, el job se come un **302** antes de que corra una
+línea nuestra. Con un webhook se nota (el evento sale como no entregado); con un cron **no se nota
+nada**, porque un cron que no llega a ninguna parte se parece a un cron que no tenía trabajo.
+`refunds-cron.yml` distingue el 3xx y lo dice con todas las letras, y acepta un secret opcional
+`VERCEL_PROTECTION_BYPASS` que manda por cabecera; `notifications-cron.yml` todavía no.
 
 ### 4.4 Lo que sigue simulado
 
@@ -364,10 +417,106 @@ parámetro `ref_email` para eso — los tres que RF ofrece estaban apagados y el
 nada. Aparte: los términos que RF le enseña al referido son **su plantilla sin rellenar**, con
 corchetes tipo "[Insert link to Privacy Policy here]". Redactarlos antes de abrir.
 
+### 4.6 ⚠️ Vaciar la cola vieja de correo — ANTES de dar reloj a Actions
+
+**El riesgo, con números.** En **dev** hay **126 notificaciones en `pending`**, de reservas de prueba
+de agosto que nunca se enviaron porque no había remitente. Reparto comprobado el 17-ago:
+
+| Destinatario | Pendientes | Qué pasaría |
+| :-- | --: | :-- |
+| `veronica@faimlab.com` | 24 | 24 correos absurdos sobre reservas de prueba |
+| `jose@faimlab.com` | 7 | ídem |
+| `diana@faimlab.com` | 6 | ídem |
+| cuentas `@ensenameya.dev` | ~89 | **~89 REBOTES**: ese dominio no tiene buzón |
+
+`RESEND_API_KEY` ya está puesta desde el 17-ago, así que **lo único que falta para que salgan todas
+de golpe es el reloj**: en cuanto se den de alta `APP_BASE_URL` y `CRON_SECRET` en GitHub, la primera
+pasada coge las 50 más viejas y las siguientes el resto, en menos de quince minutos.
+
+**Por qué importa y no es cosmético.** La cuenta de Resend es nueva y no tiene historial de envío.
+Estrenarla con ~89 rebotes es la forma más rápida de que limiten o suspendan el envío — y es
+exactamente lo que hace falta que funcione para **DL-01**, el formulario de contacto que el revisor
+de dLocal va a probar a mano esperando respuesta. Se perdería la validación por un montón de correos
+de prueba que a nadie le importan.
+
+**Cuándo ejecutarlo.** En la **misma ventana** en la que se configura Actions y **antes** de guardar
+la segunda variable: primero el censo, luego el `update`, luego `APP_BASE_URL` + `CRON_SECRET`. El
+orden importa porque el interruptor son **dos** cosas (clave de Resend **y** reloj) y ya hay una
+puesta; en cuanto entre la otra, no hay marcha atrás.
+
+**1) Censo — confirmar que los números siguen siendo estos.** Desde el SQL editor de **dev** (hace
+falta leer `auth.users`, así que esto no sale por la API):
+
+```sql
+select public.process_notifications();          -- el resumen rápido
+
+select coalesce(split_part(u.email, '@', 2), '(sin usuario)') as dominio,
+       count(*) as pendientes,
+       min(n.created_at) as mas_antigua
+  from public.notifications n
+  left join auth.users u on u.id = n.recipient_id
+ where n.status = 'pending' and n.channel = 'email'
+ group by 1
+ order by 2 desc;
+```
+
+**2) El cambio.** Se marca `failed`, en una transacción y guardando antes la foto de lo que se toca:
+
+```sql
+begin;
+
+-- Foto de lo que se va a cerrar, para poder decir después qué se hizo.
+create temp table _cola_vieja as
+  select id, type, template, recipient_id, created_at
+    from public.notifications
+   where status  = 'pending'
+     and channel = 'email'
+     -- ⚠️ El corte: el instante JUSTO ANTES de configurar el cron. Todo lo
+     -- posterior es tráfico real y tiene que salir. Poner aquí la hora de
+     -- verdad, no dejar la de ejemplo.
+     and created_at < timestamptz '2026-08-18 00:00:00+00';
+
+select count(*) from _cola_vieja;   -- ¿cuadra con las 126? Si no, parar y mirar.
+
+update public.notifications
+   set status = 'failed'
+ where id in (select id from _cola_vieja);
+
+commit;
+```
+
+**3) Comprobar.** `select public.process_notifications();` → `pendientes_email` en 0 (o solo lo
+nuevo). Después ya se pueden dar de alta `APP_BASE_URL` y `CRON_SECRET`.
+
+**Las cuatro decisiones que hay detrás, por si alguien las discute más adelante:**
+
+- **`failed` y no `sent`.** El enum solo tiene `pending | sent | failed`. `sent` escribiría en la
+  única tabla que dice si a una persona se la avisó que sí se la avisó, y eso es mentira; `failed`
+  dice "no salió y no va a salir", que es exactamente lo que pasó. Además es terminal para el job,
+  que solo lee `pending`, y `mark_notification` deja `sent_at` **nulo** al fallar: una fila cerrada a
+  mano se distingue siempre de una entregada de verdad.
+- **`update`, nunca `delete`.** `idempotency_key` es `unique` y es lo que impide que un mismo evento
+  se encole dos veces (US-1202). Borrar las filas destruiría la traza y dejaría la puerta abierta a
+  reencolar lo mismo. Cuesta lo mismo y se puede auditar.
+- **Solo `channel = 'email'`.** Las `in_app` son la **misma fila** que pinta la campana (US-1203), y
+  la campana filtra por `read_at`, no por `status` — así que esto no le quita a nadie sus avisos de
+  la app. Acotarlo igualmente es gratis y evita explicaciones.
+- **Solo en dev.** La cola de **prod** debería estar vacía: allí no ha llegado ni el código que
+  encola. Censarla igual antes del merge; si tuviera algo, es que alguien probó donde no tocaba.
+
+⚠️ **Y esto va a volver a pasar si no se toca el seed.** Las 12 cuentas de prueba viven en
+`@ensenameya.dev`, un dominio que **no recibe correo**: cada tanda de pruebas nueva vuelve a llenar
+la cola de futuros rebotes. Mientras siga así, este procedimiento hay que repetirlo antes de cada
+encendido. La salida limpia es que el seed use direcciones que acepten correo (un buzón propio con
+subdirecciones `+algo`, o las direcciones de prueba del propio Resend).
+
 ---
 
-*Se actualiza en cada pasada de QA. Última edición: **2026-08-07**, recogiendo la pasada del 5-6 de
-agosto: grants de `service_role` y su mínimo privilegio, `confirm_payment` fuera del alcance del
-cliente, fail-closed de los dos crons y del webhook, Stripe de punta a punta contra la preview, y el
-checklist al día (20 migraciones pendientes de prod, un solo merge, variables que faltan en Vercel y
-en GitHub). Creado el 2026-07-29 con la tanda 6 del plan de los sprints 6 AC / 7 / 8.*
+*Se actualiza en cada pasada de QA. Última edición: **2026-08-17** — superficies nuevas del día
+(contacto, aceptación de términos, alumnos del tutor, cobro tardío, cola de reembolsos), tercer job
+programado, §4.6 para vaciar la cola vieja de correo, y el checklist al día (30 migraciones
+pendientes de prod, variables repartidas, Stripe de test mode ya en producción). Edición previa el
+2026-08-07 con la pasada del 5-6 de agosto: grants de `service_role` y su mínimo privilegio,
+`confirm_payment` fuera del alcance del cliente, fail-closed de los crons y del webhook, y Stripe de
+punta a punta contra la preview. Creado el 2026-07-29 con la tanda 6 del plan de los sprints 6 AC /
+7 / 8.*

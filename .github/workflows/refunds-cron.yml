@@ -1,0 +1,188 @@
+# Ejecuta la cola de reembolsos contra Stripe (X-01).
+#
+# QUÉ HAY DETRÁS. Desde `20260817170000` los tres caminos de reembolso —RN-37 al
+# cancelar, el reembolso manual del admin (US-704) y el vencimiento de las 24 h
+# de aceptación (RN-38)— ya no se limitan a escribir `payments.status='refunded'`
+# en Postgres: ENCOLAN en `refund_requests`. Quien mueve el dinero de verdad es
+# `/api/cron/refunds-process`, y ese endpoint no lo llama nadie por sí solo.
+# Sin este workflow la cola crece en silencio y el alumno no ve un céntimo,
+# aunque la base de datos y el correo (NTF-10) le digan que sí.
+#
+# POR QUÉ NO VA EN VERCEL CRON, como la purga de grabaciones. El plan **Hobby
+# limita los crons a UNO AL DÍA** y ese hueco ya lo gasta `vercel.json`
+# (`/api/cron/recordings-purge`, 04:00). Aunque quedara sitio, la cadencia
+# diaria no sirve: un reembolso pedido a las 04:05 esperaría 24 h a que alguien
+# lo mandara, y el §13 de los Términos publicados el 17-ago promete devolver
+# "al método de pago original" — no "algún día". Así que se monta donde ya está
+# el otro job que Vercel no puede darnos, GitHub Actions.
+#
+# ⚠️ POR QUÉ CADA 15 MINUTOS Y NO CADA 5 COMO EL CORREO. Un reembolso no es un
+# aviso: una vez pedido a Stripe, el dinero tarda entre 5 y 10 días hábiles en
+# aparecer en la tarjeta del alumno, así que adelantar el envío diez minutos no
+# le cambia la vida a nadie. Lo que sí importa es el REINTENTO: un 429 o un 5xx
+# de Stripe deja la fila en `pending` a propósito, y con cadencia diaria ese mal
+# minuto costaría un día entero de retraso. Cada 15 min da tres reintentos por
+# hora, deja el peor caso (retraso de GitHub + espera) por debajo de la media
+# hora, y una pasada con la cola vacía no llama a Stripe: son dos consultas y se
+# acabó. Si algún día urgiera más, bajarlo es cambiar la línea de abajo.
+#
+# Los minutos van desplazados (7, 22, 37, 52) a propósito: GitHub retrasa más
+# los programados que caen en punto, que es donde los pone todo el mundo.
+#
+# ⚠️ TRES PEAJES DE LOS PROGRAMADOS DE GITHUB, dichos aquí para que nadie los
+# descubra depurando — los dos primeros son los mismos que ya están anotados en
+# `notifications-cron.yml`:
+#   · se retrasan cuando la cola de Actions va cargada (10-15 min es normal);
+#   · GitHub DESACTIVA los workflows programados tras 60 días sin actividad en
+#     el repo: si los reembolsos dejan de salir sin más, mirar eso primero;
+#   · solo se programan desde la RAMA POR DEFECTO (`main`). Mientras este
+#     archivo viva únicamente en `dev`, este reloj no existe. Es el mismo motivo
+#     por el que hoy no corre ninguno de los otros dos.
+#
+# El termómetro que no depende de este workflow, para mirar desde el SQL editor:
+#   select public.refunds_backlog();
+# Si `pendiente_importe` no baja entre pasadas, el que no corre es esto.
+name: Reembolsos pendientes
+
+on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
+  # Para forzar una pasada sin esperar, y sobre todo para el ENSAYO: la ruta
+  # acepta `?simulacro=1`, que lee la cola y cuenta qué mandaría sin llamar a
+  # Stripe ni escribir nada. Es la única forma de mirar por dentro de este job
+  # antes de que mueva el primer euro de verdad.
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: "Ensayo: enseña qué mandaría, sin mandarlo"
+        type: boolean
+        default: false
+
+# Este job mueve dinero: `cancel-in-progress: false` no es una preferencia. Si
+# GitHub cancelara una pasada a mitad de un `refunds.create`, el reembolso
+# podría estar hecho en Stripe y sin anotar en la fila. La cola está diseñada
+# para sobrevivir a eso (la fila sigue `pending` y la clave de idempotencia hace
+# que Stripe devuelva el MISMO reembolso en vez de crear otro), pero provocarlo
+# a propósito cada 15 minutos sería absurdo. La siguiente pasada espera.
+concurrency:
+  group: refunds-cron
+  cancel-in-progress: false
+
+# El token de Actions no pinta nada aquí: esto es un `curl` a una URL pública.
+# Sin permisos explícitos hereda los del repo, y no hay motivo.
+permissions: {}
+
+jobs:
+  process:
+    runs-on: ubuntu-latest
+    # Con `LOTE = 25` reembolsos por pasada y la API de Stripe de por medio, una
+    # pasada normal son segundos. Si tarda 10 minutos es que algo está colgado y
+    # más vale liberar el candado de `concurrency` que arrastrarlo.
+    timeout-minutes: 10
+    steps:
+      - name: Vaciar la cola de reembolsos
+        env:
+          BASE_URL: ${{ vars.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # OPCIONAL y normalmente vacío. Solo hace falta si `APP_BASE_URL`
+          # apunta a un despliegue de PREVIEW — ver el bloque de abajo.
+          BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
+          SIMULACRO: ${{ inputs.simulacro }}
+        run: |
+          set -uo pipefail
+
+          # FALLA CERRADO, igual que el endpoint y que el job de correo. Una
+          # configuración a medias tiene que verse en rojo, no fingir que la
+          # pasada fue bien: mientras esto no corra hay alumnos esperando dinero
+          # que la base de datos ya da por devuelto.
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Falta la variable APP_BASE_URL o el secret CRON_SECRET del repo."
+            echo "CRON_SECRET tiene que valer LO MISMO aquí y en Vercel: GitHub lo"
+            echo "manda en la cabecera y Vercel lo compara. Ver docs/ENTORNOS.md §4."
+            exit 1
+          fi
+
+          URL="$BASE_URL/api/cron/refunds-process"
+          if [ "$SIMULACRO" = "true" ]; then
+            URL="$URL?simulacro=1"
+            echo "▶ ENSAYO: no se llama a Stripe ni se escribe nada."
+          fi
+
+          # ⚠️ LA TRAMPA DE DEPLOYMENT PROTECTION, la misma que ya mordió con el
+          # webhook de Stripe (docs/ENTORNOS.md §5). Los despliegues de preview
+          # están detrás del SSO de Vercel, que responde **302 hacia la pantalla
+          # de login ANTES de que corra una línea de nuestro código**. No es un
+          # fallo del endpoint ni del secreto: la petición no llega. En
+          # producción no pasa —el dominio de producción no está protegido— así
+          # que con `APP_BASE_URL` apuntando a prod este secret sobra.
+          #
+          # Se manda por CABECERA y no por query como en el webhook de Stripe,
+          # porque Stripe no puede poner cabeceras y nosotros sí: así el token no
+          # acaba escrito en una URL, ni en los logs de Actions, ni en los de
+          # Vercel.
+          if [ -n "${BYPASS:-}" ]; then
+            set -- -H "x-vercel-protection-bypass: $BYPASS"
+          else
+            set --
+          fi
+
+          code=$(curl -sS --max-time 300 -o /tmp/refunds.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$@" \
+            "$URL")
+
+          echo "HTTP $code"
+          cat /tmp/refunds.json; echo
+
+          # Cada código dice una cosa distinta y confundirlos cuesta una tarde.
+          case "$code" in
+            200) ;;
+            30*)
+              echo "::error::$code — Deployment Protection: la petición ni llegó al código."
+              echo "APP_BASE_URL apunta a una PREVIEW protegida. O se apunta a producción,"
+              echo "o se da de alta el secret VERCEL_PROTECTION_BYPASS (Vercel → Settings →"
+              echo "Deployment Protection → Protection Bypass for Automation)."
+              exit 1 ;;
+            503)
+              echo "::error::503 — falta CRON_SECRET en VERCEL (aquí sí está)."
+              exit 1 ;;
+            401)
+              echo "::error::401 — CRON_SECRET no coincide entre GitHub y Vercel."
+              exit 1 ;;
+            *)
+              echo "::error::$code — respuesta inesperada del endpoint."
+              exit 1 ;;
+          esac
+
+          # A partir de aquí el HTTP fue 200, que significa "el job corrió", no
+          # "el dinero salió". Estas dos son las señales de que no salió, y no se
+          # ven en el código de estado.
+          if command -v jq >/dev/null 2>&1; then
+            estado=$(jq -r '.status // "?"'            /tmp/refunds.json)
+            hechos=$(jq -r '.reembolsados // 0'        /tmp/refunds.json)
+            fallos=$(jq -r '.fallosPermanentes // 0'   /tmp/refunds.json)
+
+            # Sin STRIPE_API_KEY en Vercel el job no toca la cola —las filas
+            # siguen `pending`, que es lo correcto: marcarlas de otro modo sería
+            # inventarse que el dinero se movió—. Pero es configuración a medias
+            # y hay que verla. No tumba el workflow a propósito: quedaría en rojo
+            # cada 15 minutos hasta que alguien ponga la clave, y una alarma que
+            # suena siempre deja de ser una alarma.
+            if [ "$estado" = "sin-stripe" ]; then
+              echo "::warning::Sin STRIPE_API_KEY en Vercel: la cola sigue intacta y creciendo."
+            fi
+
+            # Reembolsos que el PSP RECHAZÓ por la petición, no por el momento
+            # (importe mayor que el cargo, cargo disputado, PaymentIntent de otra
+            # cuenta). No se reintentan solos y no se van a arreglar solos: hay
+            # dinero prometido que no va a salir sin que una persona mire.
+            if [ "$fallos" != "0" ] && [ "$fallos" != "null" ]; then
+              echo "::warning::$fallos reembolso(s) en 'failed' — requieren revisión manual."
+            fi
+
+            {
+              echo "**Reembolsos** · estado \`$estado\` · ejecutados **$hechos** · fallos permanentes **$fallos**"
+              echo ""
+              echo "Termómetro completo: \`select public.refunds_backlog();\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
