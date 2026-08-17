@@ -66,51 +66,81 @@ export async function getUser(): Promise<User | null> {
 }
 
 /**
- * Zona horaria IANA del usuario (`profiles.timezone`, la que fijó en el
- * onboarding). Para formatear horas en componentes **server**: sin ella el SSR
- * usa la tz del servidor —UTC— y no la del usuario (bug R24-12 / RN-01/02).
- * `cache()` la memoiza por request: aunque varios sitios la pidan, una consulta.
- * Sin sesión → "UTC" (el llamador puede preferir la del navegador en cliente).
+ * ⚠️ RV-03 · `'UTC'` en `profiles.timezone` significa «nadie la fijó», no «vive
+ * en UTC».
+ *
+ * Es el **default de la columna**, y un navegador real nunca devuelve esa
+ * cadena: `Intl` da nombres IANA (`America/Caracas`, `Europe/London`, incluso
+ * `Atlantic/Reykjavik` para quien de verdad está en UTC+0). Comprobado en dev:
+ * de 25 perfiles, 20 tienen zona IANA y **5 tienen el literal `'UTC'`**, que
+ * salieron del default.
+ *
+ * Esos 5 veían las horas desplazadas —hasta +8 h— bajo un rótulo que decía
+ * «tu hora local», porque las dos funciones de abajo devolvían ese `'UTC'` tal
+ * cual y nunca llegaban a mirar la cookie del navegador.
+ *
+ * El desplazamiento que se reportó (+7 h, a veces +1 día) venía de aquí, NO de
+ * que unas pantallas pasaran `timeZone` y otras no: todas la pasan. Lo que
+ * fallaba era el valor que se les pasaba.
+ *
+ * Coste del arreglo: si alguien eligiera `UTC` a propósito en el selector y su
+ * navegador dijera otra cosa, le mostraríamos la de su navegador. A cambio de
+ * arreglar al 20 % de las cuentas, es un cambio que vale la pena. La solución
+ * sin ese coste —columna anulable o marca de «configurada»— toca
+ * `get_available_slots`, que interpreta la disponibilidad del tutor en esta
+ * misma zona, y no es un cambio para hacer con prisa.
  */
-export const getUserTimezone = cache(async (): Promise<string> => {
+function zonaConfigurada(valor: string | null | undefined): string | null {
+  const tz = valor?.trim();
+  return tz && tz !== "UTC" ? tz : null;
+}
+
+/** La que el navegador dejó en la cookie `ey-tz` (`TimezoneSync`), si la hay. */
+async function zonaDelNavegador(): Promise<string | null> {
+  const jar = await cookies();
+  const cruda = jar.get(TZ_COOKIE)?.value;
+  return zonaConfigurada(cruda ? decodeURIComponent(cruda) : null);
+}
+
+/** `profiles.timezone` del usuario en sesión, solo si está configurada. */
+async function zonaDelPerfil(): Promise<string | null> {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return "UTC";
+  if (!user) return null;
   const { data } = await supabase
     .from("profiles")
     .select("timezone")
     .eq("id", user.id)
     .maybeSingle();
-  return data?.timezone ?? "UTC";
+  return zonaConfigurada(data?.timezone);
+}
+
+/**
+ * Zona horaria IANA del usuario. Para formatear horas en componentes
+ * **server**: sin ella el SSR usa la del servidor —UTC— y no la del usuario
+ * (bug R24-12 / RN-01/02). `cache()` la memoiza por request.
+ *
+ * Orden: la del perfil si está configurada → la del navegador → "UTC".
+ */
+export const getUserTimezone = cache(async (): Promise<string> => {
+  return (await zonaDelPerfil()) ?? (await zonaDelNavegador()) ?? "UTC";
 });
 
 /**
- * Zona horaria del **visitante**, tenga sesión o no (R24-22): la del perfil si
- * está identificado; si no, la que dejó el navegador en la cookie `ey-tz`
- * (`TimezoneSync`). "UTC" solo en el primer render de un anónimo, antes de que
- * la cookie exista.
+ * Zona horaria del **visitante**, tenga sesión o no (R24-22).
  *
  * Es la que deben usar las pantallas **públicas** con horarios: un visitante en
  * Venezuela tiene que ver la clase de un tutor de México en su propia hora.
+ *
+ * Hoy resuelve igual que `getUserTimezone` —las dos prefieren el perfil y caen
+ * al navegador— y se conservan separadas porque expresan intenciones distintas:
+ * una es «el usuario», la otra «quien esté mirando». Antes divergían de verdad,
+ * y esa divergencia era la mitad de RV-03.
  */
 export const getViewerTimezone = cache(async (): Promise<string> => {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("timezone")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (data?.timezone) return data.timezone;
-  }
-  const jar = await cookies();
-  const fromBrowser = jar.get(TZ_COOKIE)?.value;
-  return fromBrowser ? decodeURIComponent(fromBrowser) : "UTC";
+  return (await zonaDelPerfil()) ?? (await zonaDelNavegador()) ?? "UTC";
 });
 
 /** Roles del usuario actual (vacío si anónimo). */

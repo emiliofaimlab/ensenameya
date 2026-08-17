@@ -3,7 +3,6 @@ import { toHeaderUser } from "@/lib/auth/header-user";
 import { listNotices } from "@/lib/notifications-server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
-import { TimezoneSync } from "@/components/layout/timezone-sync";
 import { ChatLauncher } from "@/components/chat/chat-launcher";
 
 export default async function PublicLayout({
@@ -17,9 +16,9 @@ export default async function PublicLayout({
   const notices = user ? await listNotices() : [];
   return (
     <div className="flex min-h-svh flex-col">
-      {/* Deja la tz del navegador en cookie: los horarios públicos se pintan en
-          la hora del visitante aunque no tenga sesión (R24-22). */}
-      <TimezoneSync />
+      {/* `TimezoneSync` estaba aquí y subió al layout raíz (RV-03): montado solo
+          en lo público, quien entraba directo a /app o /reservas nunca dejaba la
+          cookie y el servidor le pintaba las horas en UTC. */}
       <SiteHeader
         user={toHeaderUser(user, roles, { fullName, avatarPath })}
         notices={notices}

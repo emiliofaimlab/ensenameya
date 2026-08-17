@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -75,21 +75,28 @@ export function OnboardingForm({
     new Set(selectedInterests),
   );
   const [goal, setGoal] = useState(primaryGoal ?? "");
-  // 'UTC' es el default de la BD → si no lo tocaron, proponemos la del navegador.
-  const defaultTz = useMemo(
-    () =>
-      tz0 && tz0 !== "UTC"
-        ? tz0
-        : Intl.DateTimeFormat().resolvedOptions().timeZone,
-    [tz0],
-  );
-  const [timezone, setTimezone] = useState(defaultTz);
+  const [timezone, setTimezone] = useState(tz0);
   const [phone, setPhone] = useState(phone0);
   // El prefijo sigue a la zona horaria mientras no haya número escrito; si ya
   // lo escribiste manda tu número. La librería no admite país controlado, así
   // que el cambio se aplica remontando el campo (`key`), que estando vacío no
   // pierde nada.
-  const [country, setCountry] = useState(() => countryFromTimezone(defaultTz));
+  const [country, setCountry] = useState(() => countryFromTimezone(tz0));
+
+  /*
+   * RV-03c / RV-18 · La zona ya llega RESUELTA desde el servidor.
+   *
+   * Aquí había un `useMemo` que llamaba a `Intl.DateTimeFormat()` en el cuerpo
+   * del componente cuando `tz0` era 'UTC' (el default de la columna, o sea:
+   * toda cuenta nueva). Ese `Intl` devuelve la zona del SERVIDOR durante el
+   * SSR —UTC en Vercel— y la del NAVEGADOR al hidratar: un desajuste
+   * garantizado, y el candidato principal del React #418 que se ve en esta
+   * pantalla.
+   *
+   * La página lo resuelve ahora con `getUserTimezone()`, que prefiere la del
+   * perfil y cae a la cookie `ey-tz` que ya deja `TimezoneSync`. Servidor y
+   * cliente pintan lo mismo y el cliente no necesita `Intl` para nada.
+   */
   function pickTimezone(tz: string) {
     setTimezone(tz);
     if (!phone.trim()) setCountry(countryFromTimezone(tz) ?? country);

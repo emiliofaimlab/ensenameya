@@ -98,6 +98,23 @@ export function TutorOnboardingForm({
   // que el cambio se aplica remontando el campo (`key`), que estando vacío no
   // pierde nada.
   const [country, setCountry] = useState(() => countryFromTimezone(tz0));
+
+  /*
+   * RV-03c · Este asistente NO proponía zona horaria y el de alumno sí, así que
+   * un tutor que no tocara el selector se guardaba con el `'UTC'` que trae por
+   * defecto la columna. Es la vía más probable por la que hay perfiles en
+   * `'UTC'` en la base, y de ahí salían las horas desplazadas de RV-03.
+   *
+   * Y aquí importa más que en el de alumno: `profiles.timezone` del tutor no es
+   * decorativa — `get_available_slots` interpreta en esa zona sus reglas de
+   * disponibilidad, así que un tutor guardado como UTC publica sus horas
+   * corridas. (Comprobado el 17-ago: ningún tutor APROBADO estaba así, o sea
+   * que nadie tiene hoy la agenda torcida. Esto evita que vuelva a pasar.)
+   *
+   * Se resuelve en la página con `getUserTimezone()` y llega ya en `tz0`, en
+   * vez de detectarla aquí: leer `Intl` durante el render daría un valor en el
+   * servidor y otro en el cliente, que es el desajuste de hidratación de RV-18.
+   */
   function pickTimezone(tz: string) {
     setTimezone(tz);
     if (!phone.trim()) setCountry(countryFromTimezone(tz) ?? country);

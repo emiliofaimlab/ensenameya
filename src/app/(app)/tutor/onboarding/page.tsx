@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 
 import { storageUrl } from "@/lib/catalog/format";
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
 import { Container } from "@/components/layout/container";
@@ -170,7 +170,7 @@ export default async function TutorOnboardingPage({
             fullName={prof?.full_name ?? ""}
             avatarPath={tp?.avatar_path ?? null}
             avatarUrl={avatarUrl}
-            timezone={prof?.timezone ?? "UTC"}
+            timezone={await getUserTimezone()}
             phone={prof?.phone ?? ""}
             level={tp?.teaching_level ?? null}
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}

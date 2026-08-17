@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { storageUrl } from "@/lib/catalog/format";
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/roles";
 import { Container } from "@/components/layout/container";
@@ -51,7 +51,7 @@ export default async function OnboardingPage({
               (user.user_metadata?.intended_role as string | undefined) ?? null
             }
             fullName={profile?.full_name ?? ""}
-            timezone={profile?.timezone ?? "UTC"}
+            timezone={await getUserTimezone()}
             phone={profile?.phone ?? ""}
             avatarPath={profile?.avatar_path ?? null}
             avatarUrl={avatarUrl}
