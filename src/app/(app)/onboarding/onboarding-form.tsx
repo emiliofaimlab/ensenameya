@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
@@ -14,11 +13,18 @@ import {
 import { TimezoneSelect } from "@/components/form/timezone-select";
 import {
   WizardShell,
+  WizardDone,
+  DoneChecklist,
   ChipGroup,
   Field,
   FIELD_CLASS,
+  useWizardStep,
+  useSaveOnExit,
 } from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
+import type { Database } from "@/lib/database.types";
+
+type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 
 // E.164: '+' + 7–15 dígitos, el primero no cero (RN-44).
 const E164 = /^\+[1-9]\d{6,14}$/;
@@ -43,6 +49,8 @@ const PRIMARY_GOALS = [
 export function OnboardingForm({
   userId,
   next,
+  initialStep,
+  totalSteps,
   intendedRole,
   fullName: name0,
   timezone: tz0,
@@ -55,6 +63,9 @@ export function OnboardingForm({
 }: {
   userId: string;
   next: string | null;
+  /** M-03: paso ya resuelto en servidor (URL → cookie → 1). */
+  initialStep: number;
+  totalSteps: number;
   intendedRole: string | null;
   fullName: string;
   timezone: string;
@@ -65,9 +76,12 @@ export function OnboardingForm({
   selectedInterests: string[];
   primaryGoal: string | null;
 }) {
-  const router = useRouter();
-  const [step, setStep] = useState(1);
+  const { step, setStep, finish } = useWizardStep("alumno", initialStep);
   const [busy, setBusy] = useState(false);
+  // M-03: la pantalla de cierre se pinta EN SITIO. No se puede navegar a ella
+  // ni refrescar: con `onboarding_complete` ya en true, la página redirige
+  // fuera (línea 32) y se comería su propio cierre.
+  const [done, setDone] = useState(false);
 
   const [fullName, setFullName] = useState(name0);
   const [avatar, setAvatar] = useState<string | null>(avatarPath);
@@ -108,6 +122,46 @@ export function OnboardingForm({
     toast.error(msg);
     setBusy(false);
   }
+
+  // ¿La selección de intereses difiere de la que trajo el servidor? Solo si
+  // cambió se toca `student_interests`: el guardado los reemplaza en bloque
+  // (delete + insert) y no vale la pena hacerlo para dejarlos igual.
+  const interestsChanged =
+    interests.size !== selectedInterests.length ||
+    selectedInterests.some((id) => !interests.has(id));
+
+  /**
+   * M-03 · Lo que guarda "Guardar y salir" (ver `useSaveOnExit`): lo que haya
+   * en pantalla AHORA, sin exigir que el paso esté completo y sin avisos —el
+   * usuario ya se ha ido, un toast no lo alcanza—.
+   *
+   * Salta lo que rompería la base: `profiles.phone` tiene CHECK E.164 (RN-44),
+   * así que un número a medio escribir se descarta y el resto sí se guarda. Un
+   * update fallido aquí no dejaría rastro para nadie.
+   */
+  async function guardarBorrador() {
+    if (done) return; // ya terminó: no hay borrador, hay perfil
+
+    const patch: ProfileUpdate = {
+      full_name: fullName.trim() || null,
+      avatar_path: avatar,
+      primary_goal: goal || null,
+      timezone,
+    };
+    if (E164.test(phone.trim())) patch.phone = phone.trim();
+    await supabase.from("profiles").update(patch).eq("id", userId);
+
+    if (interestsChanged) {
+      await supabase.from("student_interests").delete().eq("student_id", userId);
+      const rows = [...interests].map((category_id) => ({
+        student_id: userId,
+        category_id,
+      }));
+      if (rows.length > 0) await supabase.from("student_interests").insert(rows);
+    }
+  }
+
+  useSaveOnExit(guardarBorrador);
 
   async function next_() {
     setBusy(true);
@@ -158,13 +212,14 @@ export function OnboardingForm({
 
       // Espeja el nombre en el metadata de Auth → header/saludo sin query extra.
       await supabase.auth.updateUser({ data: { full_name: fullName.trim() } });
-      setBusy(false);
 
-      // Intención "tutor" (S-37) → sigue al onboarding de tutor.
-      router.push(
-        intendedRole === "tutor" ? "/tutor/onboarding" : safeNext(next, "/app"),
-      );
-      router.refresh();
+      // M-03 · El asistente TERMINA aquí, no expulsa. Antes esto era un
+      // `router.push` y el alumno aparecía en el panel sin saber si había
+      // acabado bien ("directamente me sacó"). Ahora se pinta el cierre en
+      // sitio; salir es una decisión suya, con su botón.
+      finish(); // olvida el paso: volver a entrar ya no reabre el asistente
+      setDone(true);
+      setBusy(false);
       return;
     }
 
@@ -174,11 +229,49 @@ export function OnboardingForm({
 
   const back = () => setStep((s) => Math.max(1, s - 1));
 
+  // M-03 · Cierre. Al alumno que se registró para enseñar (S-37) le queda otro
+  // asistente: se lo decimos aquí en vez de encadenarlo sin avisar.
+  if (done) {
+    const seguirDeTutor = intendedRole === "tutor";
+    // Quien llegó aquí rebotado desde otra pantalla (`?next=`) vuelve a ELLA,
+    // no al panel: el botón dice a dónde lleva de verdad.
+    const destino = safeNext(next, "/app");
+    return (
+      <WizardDone
+        title="¡Listo! Tu perfil está completo"
+        description={
+          seguirDeTutor
+            ? "Ya puedes reservar mentorías. Como te registraste para enseñar, te queda un último asistente: el de tu perfil de tutor."
+            : "Ya puedes explorar tutores y reservar tu primera mentoría."
+        }
+        href={seguirDeTutor ? "/tutor/onboarding?start=1" : destino}
+        cta={
+          seguirDeTutor
+            ? "Continuar como tutor"
+            : destino === "/app"
+              ? "Ir a mi panel"
+              : "Continuar donde estabas"
+        }
+      >
+        <DoneChecklist
+          items={[
+            `Tu nombre: ${fullName.trim()}`,
+            `Zona horaria: ${timezone} — tus mentorías se muestran en esta hora`,
+            "Teléfono de contacto verificado en formato internacional",
+            interests.size > 0
+              ? `${interests.size} ${interests.size === 1 ? "interés guardado" : "intereses guardados"}`
+              : "Puedes elegir tus intereses más adelante, desde Mi cuenta",
+          ]}
+        />
+      </WizardDone>
+    );
+  }
+
   if (step === 1) {
     return (
       <WizardShell
         step={1}
-        total={3}
+        total={totalSteps}
         title="Te damos la bienvenida a Enséñame Ya"
         description="Completa tu perfil para reservar tu primera mentoría."
         onNext={next_}
@@ -211,7 +304,7 @@ export function OnboardingForm({
     return (
       <WizardShell
         step={2}
-        total={3}
+        total={totalSteps}
         title="¿Qué quieres aprender?"
         description="Elige tus intereses para recomendarte mejores tutores."
         onBack={back}
@@ -257,7 +350,7 @@ export function OnboardingForm({
   return (
     <WizardShell
       step={3}
-      total={3}
+      total={totalSteps}
       title="Zona horaria y contacto"
       description="Usamos tu zona horaria para mostrarte los horarios correctos."
       onBack={back}

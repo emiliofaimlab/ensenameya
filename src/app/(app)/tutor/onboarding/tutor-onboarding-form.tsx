@@ -1,10 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, TriangleAlertIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
@@ -18,22 +16,37 @@ import {
 import { TimezoneSelect } from "@/components/form/timezone-select";
 import {
   WizardShell,
+  WizardDone,
+  DoneChecklist,
   ChipGroup,
   Field,
   FIELD_CLASS,
+  useWizardStep,
+  useSaveOnExit,
 } from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
-import { VerificationForm, type DocState } from "../verification/verification-form";
+import { FirstProductForm } from "@/components/onboarding/first-product-form";
+import {
+  VerificationForm,
+  type DocState,
+  type IdentityStatus,
+} from "../verification/verification-form";
 import type { SocialLink } from "@/lib/socials";
 import type { Database } from "@/lib/database.types";
 
 type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
+type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 
 const LEVELS: { id: TeachingLevel; label: string }[] = [
   { id: "basico", label: "Básico" },
   { id: "intermedio", label: "Intermedio" },
   { id: "avanzado", label: "Avanzado" },
 ];
+
+// E.164: '+' + 7–15 dígitos, el primero no cero (RN-44). Es el mismo CHECK que
+// tiene `profiles.phone`; comprobarlo aquí cambia un "no se pudo guardar" seco
+// por un aviso que dice qué falta.
+const E164 = /^\+[1-9]\d{6,14}$/;
 
 /**
  * US-202 / UX-202 (SCR-TU01) — asistente de 5 pasos: perfil, categorías,
@@ -47,22 +60,29 @@ const LEVELS: { id: TeachingLevel; label: string }[] = [
 export function TutorOnboardingForm({
   userId,
   exists,
+  initialStep,
+  totalSteps,
   headline: headline0,
   bio: bio0,
-  fullName,
+  fullName: name0,
   avatarPath,
   avatarUrl,
   timezone: tz0,
   phone: phone0,
   level: level0,
   categories,
+  productCategories,
   selectedCategories,
   docsByType,
+  identityStatus,
   socials,
-  hasProduct,
+  productCount: productCount0,
 }: {
   userId: string;
   exists: boolean;
+  /** M-03: paso ya resuelto en servidor (URL → cookie → 1). */
+  initialStep: number;
+  totalSteps: number;
   headline: string;
   bio: string;
   fullName: string;
@@ -72,20 +92,38 @@ export function TutorOnboardingForm({
   phone: string;
   level: TeachingLevel | null;
   categories: { id: string; label: string }[];
+  /** Categorías ACTIVAS, que son las que puede llevar una mentoría (N-03). */
+  productCategories: { id: string; name: string }[];
   selectedCategories: string[];
   docsByType: Record<string, DocState>;
+  /** Estado global de la verificación → checklist del paso 4 (N-10). */
+  identityStatus: IdentityStatus;
   /** R29-02: redes/portafolio ya guardados; los edita el módulo del paso 4. */
   socials: SocialLink[];
-  /** UX-204: sin al menos una oferta creada, el asistente no se puede cerrar. */
-  hasProduct: boolean;
+  /** Mentorías ya creadas. EX-02: se puede posponer, pero sin ninguna el
+   *  perfil no se aprueba — el asistente lo dice, no lo bloquea. */
+  productCount: number;
 }) {
-  const router = useRouter();
-  const [step, setStep] = useState(1);
+  const { step, setStep, finish } = useWizardStep("tutor", initialStep);
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   // `exists` viene del server y no se entera del INSERT del paso 1: sin este
   // estado, el paso 2 reintenta insertar la misma fila y choca contra la PK.
   const [hasProfile, setHasProfile] = useState(exists);
+  /**
+   * N-03 · El número de mentorías llegaba del servidor y era inmutable, así que
+   * al crear la oferta desde aquí el paso 5 seguía diciendo que no había
+   * ninguna. Sube a estado: es el asistente quien la crea.
+   */
+  const [productCount, setProductCount] = useState(productCount0);
+  /** "Añadir otra" reabre el formulario embebido sin salir del asistente. */
+  const [addingProduct, setAddingProduct] = useState(false);
 
+  // M-05 · El nombre viaja del alta al onboarding. Aquí faltaba: quien elige
+  // "quiero enseñar" al registrarse salta DIRECTO a este asistente sin pasar
+  // por el de alumno, así que sin este campo el tutor se quedaba sin nombre —
+  // y `display_name` (la vitrina pública, DD-01) sin nada que copiar.
+  const [fullName, setFullName] = useState(name0);
   const [headline, setHeadline] = useState(headline0);
   const [bio, setBio] = useState(bio0);
   const [avatar, setAvatar] = useState<string | null>(avatarPath);
@@ -145,13 +183,64 @@ export function TutorOnboardingForm({
     return error;
   }
 
+  // ¿Las categorías elegidas difieren de las que trajo el servidor? El guardado
+  // las reemplaza en bloque (delete + insert), así que solo se toca si cambió.
+  const catsChanged =
+    cats.size !== selectedCategories.length ||
+    selectedCategories.some((id) => !cats.has(id));
+
+  /**
+   * M-03 · Lo que guarda "Guardar y salir" (ver `useSaveOnExit`): lo que haya
+   * en pantalla, sin exigir que el paso esté completo y sin avisos —el usuario
+   * ya se fue—. Descarta lo que rompería la base (`profiles.phone` tiene CHECK
+   * E.164).
+   */
+  async function guardarBorrador() {
+    if (done) return; // ya terminó: no hay borrador, hay perfil enviado
+
+    const patch: ProfileUpdate = { timezone };
+    if (fullName.trim()) patch.full_name = fullName.trim();
+    if (E164.test(phone.trim())) patch.phone = phone.trim();
+    await supabase.from("profiles").update(patch).eq("id", userId);
+
+    /*
+     * ⚠️ La fila de `tutor_profiles` NO se crea con el paso 1 en blanco. Es la
+     * que decide si sales de aquí siendo tutor: la pantalla de bienvenida solo
+     * aparece mientras no existe (`!tp`), y `pickHome({esTutor})` manda al
+     * panel de tutor a quien la tenga. Crearla porque alguien pulsó "Comenzar
+     * registro" y se arrepintió lo convertiría en tutor a medias sin haber
+     * escrito una línea.
+     */
+    if (hasProfile || headline.trim() || bio.trim() || avatar) {
+      await saveProfile();
+      if (catsChanged) {
+        await supabase.from("tutor_categories").delete().eq("tutor_id", userId);
+        const rows = [...cats].map((category_id) => ({ tutor_id: userId, category_id }));
+        if (rows.length > 0) await supabase.from("tutor_categories").insert(rows);
+      }
+    }
+  }
+
+  useSaveOnExit(guardarBorrador);
+
   async function next() {
     setBusy(true);
 
     if (step === 1) {
+      // M-05: el nombre es del USUARIO → va a `profiles`; `saveProfile` lo
+      // copia a `tutor_profiles.display_name`, que es lo que ve el catálogo.
+      if (!fullName.trim()) return fail("Escribe tu nombre.");
       if (!headline.trim()) return fail("Escribe un titular para tu perfil.");
       if (!avatar) return fail("La foto de perfil es obligatoria.");
       if (!bio.trim()) return fail("Escribe tu biografía.");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName.trim() })
+        .eq("id", userId); // RLS profiles_update_own limita a la fila propia.
+      if (error) return fail("No se pudo guardar tu nombre.");
+      // Espeja el nombre en el metadata de Auth → header/saludo sin query
+      // extra, igual que hace el asistente de alumno al terminar.
+      await supabase.auth.updateUser({ data: { full_name: fullName.trim() } });
       // La foto va SOLO a tutor_profiles (dentro de saveProfile): la foto de
       // tutor es independiente de la personal de `profiles` (R24-23).
       if (await saveProfile()) return fail("No se pudo guardar tu perfil.");
@@ -168,7 +257,9 @@ export function TutorOnboardingForm({
     }
 
     if (step === 3) {
-      if (!phone.trim()) return fail("El teléfono es obligatorio (RN-44).");
+      if (!E164.test(phone.trim())) {
+        return fail("Escribe tu teléfono completo, sin el código de país.");
+      }
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -188,10 +279,11 @@ export function TutorOnboardingForm({
 
     setBusy(false);
 
-    if (step === 5) {
-      toast.success("¡Listo! Tu perfil pasó a revisión.");
-      router.push("/tutor");
-      router.refresh();
+    if (step === totalSteps) {
+      // M-03 · El asistente TERMINA aquí. Antes hacía `router.push("/tutor")`
+      // y el tutor aterrizaba en el menú sin señal de haber acabado.
+      finish(); // olvida el paso: volver a entrar ya no reabre el asistente
+      setDone(true);
       return;
     }
     setStep((s) => s + 1);
@@ -210,16 +302,68 @@ export function TutorOnboardingForm({
     return n;
   };
 
+  // M-03 · Cierre del asistente de tutor.
+  if (done) {
+    return (
+      <WizardDone
+        title="¡Listo! Tu perfil pasó a revisión"
+        description="Revisamos tu expediente y te avisamos por correo. Mientras tanto puedes seguir preparando tus mentorías desde tu panel."
+        href="/tutor"
+      >
+        <DoneChecklist
+          items={[
+            `Perfil público a nombre de ${fullName.trim()}`,
+            `${cats.size} ${cats.size === 1 ? "categoría elegida" : "categorías elegidas"}`,
+            `Zona horaria: ${timezone} — tus horarios se publican en esta hora`,
+            productCount > 0
+              ? `${productCount} ${productCount === 1 ? "mentoría creada" : "mentorías creadas"} (en borrador hasta que te aprobemos)`
+              : "Sin mentorías todavía",
+          ]}
+        />
+        {/* EX-02 · Se puede posponer la primera mentoría, pero sin ella el
+            perfil no se aprueba. Que el tutor lo sepa antes de irse, no
+            cuando se pregunte por qué su revisión no avanza. */}
+        {productCount === 0 ? (
+          <div className="flex w-full gap-3 rounded-[16px] border border-[#f0d9a8] bg-[#fdf6e7] p-5">
+            <TriangleAlertIcon className="mt-0.5 size-4.5 shrink-0 text-[#9a6b00]" />
+            <p className="text-[12.5px] text-[#7a5600]">
+              <strong className="font-semibold">Perfil incompleto:</strong> te
+              falta tu primera mentoría. Puedes crearla cuando quieras desde «Mis
+              mentorías», pero hasta que exista no podemos aprobar tu perfil.
+            </p>
+          </div>
+        ) : null}
+      </WizardDone>
+    );
+  }
+
   if (step === 1) {
     return (
       <WizardShell
         step={1}
-        total={5}
+        total={totalSteps}
         title="Crea tu perfil de tutor"
         description="Empecemos por lo básico. Esta info es parte de tu entrevista de ingreso."
         onNext={next}
         busy={busy}
       >
+        {/* M-05 · Va el primero: es el nombre con el que apareces en el
+            catálogo, y quien llegó aquí desde el alta como tutor no lo dio en
+            ningún otro sitio. */}
+        <Field
+          label="¿Cómo te llamas? (obligatorio)"
+          htmlFor="full_name"
+          hint="Es el nombre con el que te verán los alumnos."
+        >
+          <Input
+            id="full_name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            autoComplete="name"
+            placeholder="Ej: María Fernández"
+            className={FIELD_CLASS}
+          />
+        </Field>
         <Field label="Foto de perfil (obligatoria)">
           <AvatarUpload
             userId={userId}
@@ -257,7 +401,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={2}
-        total={5}
+        total={totalSteps}
         title="¿Qué enseñas?"
         description="Elige al menos una categoría. Podrás ajustarlas luego."
         onBack={back}
@@ -301,7 +445,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={3}
-        total={5}
+        total={totalSteps}
         title="Zona horaria y contacto"
         description="Usamos tu zona horaria para mostrar tus horarios correctamente (RN-44)."
         onBack={back}
@@ -338,7 +482,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={4}
-        total={5}
+        total={totalSteps}
         title="Verifica tu identidad"
         description="Sube tus documentos con el mismo módulo de tu panel. Guárdalos como borrador y continúa; puedes terminar cuando quieras."
         onBack={back}
@@ -351,65 +495,85 @@ export function TutorOnboardingForm({
           userId={userId}
           docsByType={docsByType}
           socials={socials}
+          identityStatus={identityStatus}
+          hasAvatar={!!avatar}
+          productCount={productCount}
+          // La mentoría es el paso SIGUIENTE de este mismo asistente: el
+          // checklist muestra su estado pero no manda a crearla fuera, que es
+          // exactamente el salto que hay que evitar aquí (N-03).
+          inWizard
         />
       </WizardShell>
     );
   }
 
-  // UX-204: no se cierra el asistente sin una oferta. El CTA deja de ser
-  // opcional y "Finalizar" queda bloqueado hasta que exista al menos una.
+  /*
+   * N-03 · La primera mentoría se crea AQUÍ DENTRO.
+   *
+   * Antes esto eran dos `<Link>` a `/tutor/products/new`: el tutor salía del
+   * asistente y aterrizaba en el panel del tutor, donde ya no había ni rastro
+   * del asistente ni de "vuelve a terminar" — "quien se sale ahí no vuelve".
+   *
+   * Y "Finalizar" ya NO se bloquea (EX-02): el tutor puede posponer su primera
+   * mentoría; lo que no puede es que le aprueben el perfil sin ella. Eso se
+   * dice —aquí y en la pantalla de cierre— en vez de dejarle un botón muerto
+   * cuya causa no se ve.
+   */
+  const mostrarFormulario = productCount === 0 || addingProduct;
   return (
     <WizardShell
-      step={5}
-      total={5}
-      title="Tu primera oferta"
+      step={totalSteps}
+      total={totalSteps}
+      title="Tu primera mentoría"
       description={
-        hasProduct
+        productCount > 0
           ? "Ya tienes tu primera mentoría creada. Puedes finalizar tu registro."
-          : "Necesitas al menos una mentoría publicable para enviar tu perfil a revisión."
+          : "Créala sin salir de aquí. Lo básico basta: podrás completarla y publicarla desde tu panel."
       }
       onBack={back}
       onNext={next}
       nextLabel="Finalizar"
-      nextDisabled={!hasProduct}
       busy={busy}
     >
-      {/* 186:119 — texto, CTA azul a lo ancho y la nota de revisión. */}
-      {hasProduct ? (
+      {productCount > 0 ? (
         <>
           <p className="flex items-center gap-2 text-[13px] font-medium text-success">
             <CheckIcon className="size-4" />
-            Tienes una oferta creada.
+            {productCount === 1
+              ? "Tienes una mentoría creada."
+              : `Tienes ${productCount} mentorías creadas.`}
           </p>
-          <Button
-            asChild
-            variant="outline"
-            className="h-[45px] w-full rounded-[8px] text-sm"
-          >
-            <Link href="/tutor/products/new">Crear otra oferta</Link>
-          </Button>
+          {!addingProduct ? (
+            <Button
+              variant="outline"
+              onClick={() => setAddingProduct(true)}
+              className="h-[45px] w-full rounded-[8px] text-sm"
+            >
+              Añadir otra mentoría
+            </Button>
+          ) : null}
         </>
       ) : (
-        <>
-          <p className="text-[13px] text-[#4d4d4d]">
-            Crea una oferta con su resultado, precio y disponibilidad. Sin ella
-            tu perfil no puede pasar a revisión.
-          </p>
-          <Button
-            asChild
-            className="h-[45px] w-full rounded-[8px] bg-brand text-sm font-semibold hover:bg-brand/90"
-          >
-            <Link href="/tutor/products/new">
-              Crear mi primera oferta
-            </Link>
-          </Button>
-          {/* Al volver de crearla, el asistente arranca de nuevo: los datos ya
-              están guardados, así que es avanzar hasta aquí. */}
-          <p className="text-xs text-[#6b6b6b]">
-            Cuando la guardes, vuelve a este asistente para finalizar.
-          </p>
-        </>
+        // EX-02: la salida por arriba existe y se nombra, para que posponer sea
+        // una decisión y no un abandono.
+        <p className="text-[13px] text-[#4d4d4d]">
+          Sin al menos una mentoría no podemos aprobar tu perfil. Si prefieres
+          dejarlo para luego, pulsa «Finalizar»: tu perfil se envía igual y
+          quedará marcado como incompleto hasta que la crees.
+        </p>
       )}
+
+      {mostrarFormulario ? (
+        <FirstProductForm
+          userId={userId}
+          categories={productCategories}
+          onCreated={() => {
+            setProductCount((n) => n + 1);
+            setAddingProduct(false);
+          }}
+        />
+      ) : null}
+
       <p className="text-xs text-[#6b6b6b]">
         Al finalizar, tu perfil pasa a revisión.
       </p>

@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { storageUrl } from "@/lib/catalog/format";
@@ -5,9 +6,13 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/roles";
 import { Container } from "@/components/layout/container";
+import { resolveStep, stepCookie } from "@/components/onboarding/wizard-step";
 import { OnboardingForm } from "./onboarding-form";
 
 export const metadata = { title: "Completa tu perfil · Enséñame Ya" };
+
+/** Pasos del asistente de alumno; lo sabe la página para saturar `?paso=`. */
+const TOTAL_STEPS = 3;
 
 /**
  * US-201 (SCR-AL01) — Onboarding del alumno. Nombre, `timezone` (RN-01) y
@@ -17,10 +22,20 @@ export const metadata = { title: "Completa tu perfil · Enséñame Ya" };
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; paso?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, paso } = await searchParams;
   const { user } = await requireUser();
+
+  // M-03 · El paso se resuelve en el SERVIDOR (URL → cookie → 1) para que el
+  // primer HTML ya venga con el paso correcto. Resolverlo al hidratar pintaría
+  // "Paso 1 de 3" durante un instante, que es justo la impresión que hay que
+  // quitar.
+  const initialStep = resolveStep({
+    param: paso,
+    cookie: (await cookies()).get(stepCookie("alumno"))?.value,
+    total: TOTAL_STEPS,
+  });
 
   const supabase = await createClient();
   const { data: profile } = await supabase
@@ -47,6 +62,8 @@ export default async function OnboardingPage({
           <OnboardingForm
             userId={user.id}
             next={next ?? null}
+            initialStep={initialStep}
+            totalSteps={TOTAL_STEPS}
             intendedRole={
               (user.user_metadata?.intended_role as string | undefined) ?? null
             }

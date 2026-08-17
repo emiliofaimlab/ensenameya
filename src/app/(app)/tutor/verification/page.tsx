@@ -49,15 +49,24 @@ export default async function VerificationPage() {
   // Requiere haber hecho el onboarding de tutor (existe la fila tutor_profiles).
   const { data: tp } = await supabase
     .from("tutor_profiles")
-    .select("identity_verification_status, socials")
+    .select("identity_verification_status, socials, avatar_path")
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!tp) redirect("/tutor/onboarding");
 
-  const { data: docs } = await supabase
-    .from("verification_documents")
-    .select("doc_type, status, link_url")
-    .eq("tutor_id", user.id);
+  // N-10 · El checklist deriva su estado de TRES fuentes; dos se leen aquí y
+  // la tercera (la foto) ya viene en `tp`. Sin el nº de mentorías esta pantalla
+  // seguiría obligando a salir a "Mis mentorías" solo para saber si falta.
+  const [{ data: docs }, { count: productCount }] = await Promise.all([
+    supabase
+      .from("verification_documents")
+      .select("doc_type, status, link_url")
+      .eq("tutor_id", user.id),
+    supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("tutor_id", user.id),
+  ]);
 
   const docsByType: Record<string, DocState> = Object.fromEntries(
     (docs ?? []).map((d) => [d.doc_type, { status: d.status, linkUrl: d.link_url }]),
@@ -93,6 +102,9 @@ export default async function VerificationPage() {
         userId={user.id}
         docsByType={docsByType}
         socials={parseSocials(tp.socials)}
+        identityStatus={tp.identity_verification_status}
+        hasAvatar={!!tp.avatar_path}
+        productCount={productCount ?? 0}
       />
     </TutorShell>
   );

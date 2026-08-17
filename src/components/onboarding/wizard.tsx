@@ -1,24 +1,155 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { CheckIcon } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { forgetStep, rememberStep, type WizardId } from "./wizard-step";
 
 /**
  * Armazón del asistente de onboarding (AL01 / TU01). El Figma reparte la
  * columna de 600 px en cuatro bloques separados por 24 px: progreso, título,
  * tarjeta (SOLO los campos) y botonera. La tarjeta no envuelve la pantalla.
  *
- * "Guardar y salir" vive en el header (`SiteHeader onboarding`), no aquí.
+ * El BOTÓN "Guardar y salir" vive en el header (`SiteHeader onboarding`), no
+ * aquí; el GUARDADO que promete sí es de aquí (`useSaveOnExit`).
  *
- * ponytail: el paso vive en el componente de cada asistente, no en la URL. El
- * borrador se guarda al avanzar, así que recargar no pierde datos y no hacía
- * falta cablear historial ni query params.
+ * ⚠️ El paso YA NO vive solo en `useState`. Lo decía este comentario —"recargar
+ * no pierde datos"— y era verdad a medias: los datos sí sobrevivían, el PASO
+ * no, así que quien salía volvía a "Paso 1 de 3" y leía eso como haberlo
+ * perdido todo. Ahora lo llevan la URL y una cookie (`useWizardStep`, ver
+ * `wizard-step.ts`).
  */
 
 /** Alto y forma de los controles del asistente: 45 px, r8 (AL01 180:1297). */
 export const FIELD_CLASS =
   "h-[45px] rounded-[8px] px-3.5 text-sm placeholder:text-[#8c8c8c]";
+
+/**
+ * M-03 · Paso del asistente, recordado. `initial` lo resuelve la PÁGINA
+ * (`resolveStep`) leyendo `?paso=` y la cookie, así que el servidor ya pinta el
+ * paso correcto y no hay parpadeo de "Paso 1" al hidratar.
+ *
+ * El espejo en la URL se hace con `history.replaceState` y NO con
+ * `router.replace`: cambiar el query con el router vuelve a pedir el RSC de la
+ * página entera —y con él el `redirect` de `onboarding_complete`— solo para
+ * mover un número. Next integra la History API nativa desde la 14.1, así que
+ * `useSearchParams` sigue viendo el valor. `replace` y no `push` a propósito:
+ * el asistente ya tiene su botón "Atrás" y no queremos que salir del onboarding
+ * cueste cinco pulsaciones del botón del navegador.
+ */
+export function useWizardStep(wizard: WizardId, initial: number) {
+  const [step, setStep] = useState(initial);
+
+  useEffect(() => {
+    rememberStep(wizard, step);
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("paso") === String(step)) return;
+    url.searchParams.set("paso", String(step));
+    window.history.replaceState(null, "", url);
+  }, [wizard, step]);
+
+  /** El asistente terminó: la próxima visita no debe reabrirlo a medias. */
+  const finish = () => forgetStep(wizard);
+
+  return { step, setStep, finish };
+}
+
+/**
+ * M-03 · "Guardar y salir" que guarda de verdad.
+ *
+ * El enlace vive en `SiteHeader` (modo onboarding) y es un `<Link href="/">`
+ * pelado: prometía un guardado que no ocurría. Ese header es de otra pantalla y
+ * duplicar el botón aquí dejaría dos "Guardar y salir" en la misma barra, así
+ * que el asistente guarda **al desmontarse**: salir por ese enlace, por el
+ * botón atrás del navegador o por cualquier otro sitio pasa por aquí, porque
+ * Next navega en cliente y el desmontaje ocurre antes de que la pantalla
+ * cambie. La petición a Supabase sale y termina aunque ya no se vea nada.
+ *
+ * `save` debe ser tolerante: se llama con el paso a medio rellenar, así que
+ * escribe lo que sea válido y calla lo que no (un teléfono a medias rompería
+ * el CHECK E.164 de `profiles`).
+ */
+export function useSaveOnExit(save: () => void | Promise<void>) {
+  // La cleanup se cierra sobre el `save` del PRIMER render y guardaría un
+  // formulario vacío; el ref lo mantiene apuntando a los valores actuales.
+  // Se actualiza en un efecto, no en el cuerpo: escribir un ref durante el
+  // render es justo lo que prohíbe `react-hooks/refs`.
+  const latest = useRef(save);
+  useEffect(() => {
+    latest.current = save;
+  });
+  useEffect(() => () => void latest.current(), []);
+}
+
+/**
+ * M-03 · Pantalla de cierre del asistente. "Yo nunca terminé, a mí nunca me
+ * vino la satisfacción de que terminé el onboarding… directamente me sacó":
+ * antes el último paso hacía `router.push` y el usuario aterrizaba en un panel
+ * sin saber si había acabado bien.
+ *
+ * El check es el mismo de "reserva confirmada" (SCR-AL06) —mismo medallón de
+ * 120/80 px y mismo trazo— pero en verde, que es como lo pidió Diana. Allí va
+ * en naranja de marca; si algún día se unifican, se unifican los dos.
+ *
+ * ⚠️ Se pinta EN SITIO, sin navegar: la página de alumno redirige fuera cuando
+ * `onboarding_complete` es true, así que un `router.refresh()` aquí se comería
+ * su propia pantalla de cierre.
+ */
+export function WizardDone({
+  title,
+  description,
+  href,
+  cta = "Ir a mi panel",
+  children,
+}: {
+  title: string;
+  description: React.ReactNode;
+  href: string;
+  cta?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="mx-auto flex w-full max-w-[600px] flex-col items-center gap-4">
+      <span className="grid size-[120px] place-items-center rounded-full bg-success-muted">
+        <span className="grid size-20 place-items-center rounded-full bg-success text-white">
+          <CheckIcon className="size-9" strokeWidth={3} />
+        </span>
+      </span>
+
+      <h1 className="text-center text-[26px] font-bold text-[#19191f]">
+        {title}
+      </h1>
+      <p className="text-center text-sm text-[#6b6b6b]">{description}</p>
+
+      {children}
+
+      <Button
+        asChild
+        className="mt-2 h-[49px] rounded-[10px] px-6 font-semibold"
+      >
+        <Link href={href}>{cta}</Link>
+      </Button>
+    </div>
+  );
+}
+
+/** Lista de "lo que hiciste" de la pantalla de cierre: check verde por línea. */
+export function DoneChecklist({ items }: { items: string[] }) {
+  return (
+    <ul className="mt-2 flex w-full flex-col gap-2 rounded-[16px] border border-[#e0e0e0] bg-card p-5">
+      {items.map((t) => (
+        <li key={t} className="flex items-center gap-2 text-[13px] text-[#404040]">
+          <CheckIcon className="size-3.5 shrink-0 text-success" strokeWidth={3} />
+          <span>{t}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** Botonera: 45 px de alto y 22 de padding → 116×45 "Continuar", 82×45 "Atrás". */
 const BUTTON_CLASS = "h-[45px] rounded-[8px] px-[22px] text-sm";

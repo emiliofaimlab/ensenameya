@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import {
   BadgeCheckIcon,
   GraduationCapIcon,
@@ -10,6 +11,7 @@ import { storageUrl } from "@/lib/catalog/format";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
+import { resolveStep, stepCookie } from "@/components/onboarding/wizard-step";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
@@ -36,26 +38,32 @@ const WELCOME_POINTS = [
   { icon: BadgeCheckIcon, text: "Perfil y credenciales verificados" },
 ];
 
+/** Pasos del asistente de tutor; lo sabe la página para saturar `?paso=`. */
+const TOTAL_STEPS = 5;
+
 export default async function TutorOnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ start?: string }>;
+  searchParams: Promise<{ start?: string; paso?: string }>;
 }) {
   const { user } = await requireUser();
-  const { start } = await searchParams;
+  const { start, paso } = await searchParams;
 
   const supabase = await createClient();
   const [
     { data: tp },
     { data: prof },
     { data: cats },
+    { data: activeCats },
     { data: myCats },
     { data: docs },
     { count: productCount },
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
-      .select("headline, bio, socials, approval_status, teaching_level, avatar_path")
+      .select(
+        "headline, bio, socials, approval_status, identity_verification_status, teaching_level, avatar_path",
+      )
       .eq("profile_id", user.id)
       .maybeSingle(),
     supabase
@@ -64,17 +72,35 @@ export default async function TutorOnboardingPage({
       .eq("id", user.id)
       .maybeSingle(),
     supabase.from("categories").select("id, name").order("sort_order"),
+    // N-03 · Las categorías que puede llevar una MENTORÍA son solo las activas
+    // (mismo filtro que `/tutor/products/new`). Las de arriba, sin filtrar, son
+    // las que el tutor declara enseñar: filtrar ahí escondería las que ya tiene
+    // elegidas de antes.
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("sort_order"),
     supabase.from("tutor_categories").select("category_id").eq("tutor_id", user.id),
     supabase
       .from("verification_documents")
       .select("doc_type, status, link_url")
       .eq("tutor_id", user.id),
-    // UX-204: el asistente no se cierra sin al menos una oferta creada.
+    // EX-02: sin mentoría no se aprueba el perfil, pero el asistente sí se
+    // cierra. El número alimenta el paso 5 y el checklist de verificación.
     supabase
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("tutor_id", user.id),
   ]);
+
+  // M-03 · Paso resuelto en servidor (URL → cookie → 1): el primer HTML ya sale
+  // con el paso bueno y no parpadea un "Paso 1 de 5" que no es.
+  const initialStep = resolveStep({
+    param: paso,
+    cookie: (await cookies()).get(stepCookie("tutor"))?.value,
+    total: TOTAL_STEPS,
+  });
 
   // Estado de los documentos KYC → el paso de verificación reusa el módulo TU02.
   const docsByType: Record<string, DocState> = Object.fromEntries(
@@ -165,6 +191,8 @@ export default async function TutorOnboardingPage({
           <TutorOnboardingForm
             userId={user.id}
             exists={!!tp}
+            initialStep={initialStep}
+            totalSteps={TOTAL_STEPS}
             headline={tp?.headline ?? ""}
             bio={tp?.bio ?? ""}
             fullName={prof?.full_name ?? ""}
@@ -174,10 +202,12 @@ export default async function TutorOnboardingPage({
             phone={prof?.phone ?? ""}
             level={tp?.teaching_level ?? null}
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
+            productCategories={activeCats ?? []}
             selectedCategories={(myCats ?? []).map((r) => r.category_id)}
             docsByType={docsByType}
+            identityStatus={tp?.identity_verification_status ?? "not_submitted"}
             socials={parseSocials(tp?.socials)}
-            hasProduct={(productCount ?? 0) > 0}
+            productCount={productCount ?? 0}
           />
         </div>
       </Container>
