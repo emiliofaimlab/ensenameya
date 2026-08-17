@@ -11,7 +11,7 @@ import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { RecordingConsent } from "@/components/room/recording-consent";
-import { ATTACHMENT_TYPES, uploadAttachment } from "@/lib/chat/attachments";
+import { SessionRef } from "@/components/room/session-ref";
 
 type SessionStatus = Database["public"]["Enums"]["session_status"];
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
@@ -53,6 +53,7 @@ export function LiveRoom({
   sessionStatus,
   bookingStatus,
   productTitle,
+  sessionRef,
   isTutor,
   currentUserId,
   firstSessionAt,
@@ -66,6 +67,8 @@ export function LiveRoom({
   sessionStatus: SessionStatus;
   bookingStatus: BookingStatus;
   productTitle: string;
+  /** N-27 · "N.º de sesión" visible. Null en reservas viejas (ver migración). */
+  sessionRef: string | null;
   isTutor: boolean;
   currentUserId: string;
   firstSessionAt: string | null;
@@ -80,14 +83,12 @@ export function LiveRoom({
   // Controles locales de la sala simulada (con Daily real los trae el SDK).
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
-  const [uploading, setUploading] = useState(false);
   // "Modo teatro" (reunión 7-ago): la sala ocupa toda la ventana y el vídeo
   // crece, pero el chat sigue al lado. Es lo que el fullscreen de Daily no
   // puede hacer, porque el suyo solo agranda su iframe.
   const [teatro, setTeatro] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
   const callRef = useRef<DailyCall | null>(null);
-  const docRef = useRef<HTMLInputElement>(null);
 
   const opensAt = new Date(startAt).getTime() - WINDOW_MIN * 60000;
   const closesAt = new Date(endAt).getTime() + WINDOW_MIN * 60000;
@@ -190,21 +191,19 @@ export function LiveRoom({
     });
   }
 
-  /**
-   * "Subir documentos" (LV01). Publica el archivo en el hilo de la reserva: el
-   * panel de al lado lo recibe por Realtime, así que no hace falta cablear nada
-   * entre los dos componentes.
-   */
-  async function shareDoc(file: File) {
-    setUploading(true);
-    const res = await uploadAttachment(bookingId, file);
-    setUploading(false);
-    if ("error" in res) {
-      toast.error(res.error);
-      return;
-    }
-    toast.success("Documento compartido en el chat.");
-  }
+  // N-24 · AQUÍ VIVÍA "Subir documentos", y se quita por feedback del cliente:
+  // subir un archivo se ofrecía DOS veces en la misma pantalla —este botón de la
+  // barra y el clip del composer del chat, a treinta centímetros— y las dos
+  // acababan en el mismo sitio, `uploadAttachment(bookingId, …)`, porque el
+  // panel de al lado es el hilo de EP-17, no una copia.
+  //
+  // Se va este y no el clip porque este era además el peor de los dos: no hacía
+  // append optimista, así que quien subía desde la barra no veía su archivo
+  // hasta que Realtime devolvía el eco, y con la sala en primer plano eso
+  // parecía que no había pasado nada.
+  //
+  // ⚠️ Venía del Figma (LV01). Si no queda constancia, la próxima pasada de
+  // diseño lo devuelve tal cual y volvemos a tener dos botones.
 
   async function complete() {
     if (!window.confirm("¿Marcar la sesión como completada? La sala se cerrará.")) return;
@@ -234,9 +233,15 @@ export function LiveRoom({
             : "mx-auto flex w-full max-w-7xl flex-col px-4 py-4"
         }
       >
-        {/* Barra de sesión (LV01): qué clase es y cuánto lleva. */}
+        {/* Barra de sesión (LV01): qué clase es, con qué número y cuánto lleva.
+            El número va en la cabecera y no escondido en un menú porque el caso
+            de uso es "estoy en la clase y llamo a soporte": tiene que poder
+            leerse sin salir de aquí. */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b bg-background pb-3">
-          <h1 className="font-bold">{productTitle}</h1>
+          <div className="flex min-w-0 flex-col">
+            <h1 className="truncate font-bold">{productTitle}</h1>
+            <SessionRef nro={sessionRef} />
+          </div>
           <div className="ml-auto text-right">
             <p
               className="font-mono text-lg tabular-nums"
@@ -320,25 +325,6 @@ export function LiveRoom({
                 </>
               ) : null}
 
-              <input
-                ref={docRef}
-                type="file"
-                accept={ATTACHMENT_TYPES.join(",")}
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) void shareDoc(f);
-                  e.target.value = "";
-                }}
-              />
-              <Button
-                variant="outline"
-                disabled={uploading}
-                onClick={() => docRef.current?.click()}
-              >
-                {uploading ? "Subiendo…" : "Subir documentos"}
-              </Button>
-
               {/* Sustituye al fullscreen de Daily: mismo objetivo (ver grande),
                   pero sin perder el chat. Como el de teatro de YouTube.
                   Solo en lg+: medido en móvil, el "teatro" deja el vídeo MÁS
@@ -403,9 +389,12 @@ export function LiveRoom({
   // ── Estados previos / posteriores ─────────────────────────────────────────
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
-      <div>
+      <div className="flex flex-col items-center gap-1">
         <p className="text-sm text-muted-foreground">Mentoría</p>
         <h1 className="text-xl font-semibold">{productTitle}</h1>
+        {/* También antes de entrar y después de salir: la consulta a soporte
+            suele ser justo cuando la sala NO deja pasar. */}
+        <SessionRef nro={sessionRef} />
       </div>
 
       {!bookingActive || sessionOver ? (

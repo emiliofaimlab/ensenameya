@@ -224,28 +224,26 @@ export function ChatThread({
 
   return (
     <div className={cn("flex flex-col gap-3", fill && "h-full min-h-0")}>
-      {/* US-1702 · descarga del hilo. Enlaces normales con `download`: el
-          servidor arma el archivo y la RLS decide si hay algo que armar. Solo
-          con mensajes — un archivo vacío no le sirve a nadie. */}
+      {/* US-1702 · descarga del hilo. Enlace normal con `download`: el servidor
+          arma el archivo y la RLS decide si hay algo que armar. Solo con
+          mensajes — un archivo vacío no le sirve a nadie.
+          N-26 · UN solo enlace, y al .txt. El `.json` que había al lado era la
+          misma conversación en un formato que nadie de fuera va a abrir; el
+          endpoint lo sigue aceptando con `?format=json` para soporte, pero
+          ofrecerlo aquí solo servía para que la mitad se llevara el archivo
+          equivocado. */}
       {messages.length > 0 ? (
         <p className="text-[11px] text-muted-foreground">
-          El chat se borra a los 30 días. Descárgalo en{" "}
+          El chat se borra a los 30 días.{" "}
           <a
-            href={`/api/chat/${bookingId}/download?format=txt`}
+            href={`/api/chat/${bookingId}/download`}
             download
             className="font-semibold text-brand hover:underline"
           >
-            .txt
-          </a>{" "}
-          o{" "}
-          <a
-            href={`/api/chat/${bookingId}/download?format=json`}
-            download
-            className="font-semibold text-brand hover:underline"
-          >
-            .json
+            Descargar la conversación
           </a>
-          .
+          . Los archivos adjuntos no van dentro: ábrelos y guárdalos desde aquí
+          antes de que el hilo se borre.
         </p>
       ) : null}
 
@@ -267,9 +265,18 @@ export function ChatThread({
                 key={m.id}
                 className={cn("flex flex-col", mine ? "items-end" : "items-start")}
               >
+                {/* N-22 · `wrap-anywhere` + `min-w-0`: una URL larga es una
+                    sola "palabra" y sin esto empujaba la burbuja más allá del
+                    80 %, metía barra horizontal en el hilo y estrujaba el resto
+                    de los mensajes. `wrap-anywhere` (y no `break-words`) porque
+                    además de partir la palabra reduce el ancho mínimo del
+                    contenido, que es lo que el flex mira para repartir sitio.
+                    ⚠️ Nada de `overflow-hidden` aquí: eso no parte la URL, la
+                    recorta — el mensaje llegaría cortado y sin manera de leerlo
+                    entero. */}
                 <div
                   className={cn(
-                    "flex max-w-[80%] flex-col gap-1.5 rounded-2xl px-3 py-2 text-sm",
+                    "flex max-w-[80%] min-w-0 flex-col gap-1.5 rounded-2xl px-3 py-2 text-sm wrap-anywhere",
                     mine ? "bg-foreground text-background" : "bg-muted",
                   )}
                 >

@@ -25,7 +25,7 @@ export default async function RoomPage({
   const { data: s } = await supabase
     .from("sessions")
     .select(
-      "id, status, start_at, end_at, tutor_id, student_id, booking_id, bookings(status, products(title))",
+      "id, status, start_at, end_at, tutor_id, student_id, booking_id, session_ref, bookings(status, products(title))",
     )
     .eq("id", sessionId)
     .maybeSingle();
@@ -78,6 +78,9 @@ export default async function RoomPage({
       sessionStatus={s.status}
       bookingStatus={s.bookings?.status ?? "cancelled"}
       productTitle={s.bookings?.products?.title ?? "Mentoría"}
+      // N-27 · el número que el cliente pidió para poder seguir la clase y su
+      // cobro. Puede ser null en reservas anteriores a `20260817140000`.
+      sessionRef={s.session_ref}
       isTutor={s.tutor_id === user.id}
       currentUserId={user.id}
       firstSessionAt={firstSession?.start_at ?? null}
