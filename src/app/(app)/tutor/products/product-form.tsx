@@ -7,12 +7,19 @@ import { InfoIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { bookingTotal } from "@/lib/booking";
-import { formatMoney } from "@/lib/catalog/format";
+import { formatMoney, storageUrl } from "@/lib/catalog/format";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 import { PanelCard } from "@/components/layout/panel-shell";
-import { MaterialsUpload } from "@/components/onboarding/materials-upload";
+import {
+  CoverImagePicker,
+  MaterialsPicker,
+  stage,
+  type SavedMaterial,
+  type StagedFile,
+} from "@/components/tutor/product-uploads";
+import { PRODUCT_IMAGE_HINT } from "@/components/tutor/upload-formats";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +41,20 @@ const PRICING: { id: PricingModel; label: string }[] = [
   { id: "per_hour", label: "Por hora" },
   { id: "per_package", label: "Paquete" },
 ];
+
+/**
+ * N-07 · topes de los campos de texto. El `maxLength` del input corta sin
+ * avisar —el tutor escribe y las letras dejan de aparecer—, así que el número
+ * sale del mismo sitio que el atributo y se escribe debajo del campo.
+ */
+const MAX_TITULO = 120;
+const MAX_OUTCOME = 160;
+
+/** "las categorías y los materiales" — enumeración con «y» al final. */
+function enumerar(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} y ${items.at(-1)}`;
+}
 
 /** DD-03 — mismas etiquetas que el filtro del Figma (386:1196). */
 export const PRODUCT_LEVELS = [
@@ -71,10 +92,14 @@ export type ProductFormValues = {
  * tarjetas "Detalles" y "Precio y formato", chips para modelo y categorías,
  * la nota de política única (193:30) y doble acción Publicar/Guardar borrador.
  *
- * El Figma pide además "Calendario de la clase" (fechas por producto) y
- * "Material de apoyo" (archivos por producto): el modelo no tiene ninguna de
- * las dos — la agenda sale de la disponibilidad general del tutor y
- * `tutor_materials` es por tutor. Quedan como huecos de EP-23, no se fingen.
+ * El Figma pide además "Calendario de la clase" (fechas por producto): el
+ * modelo no lo tiene — la agenda sale de la disponibilidad general del tutor.
+ * Queda como hueco de EP-23, no se finge.
+ *
+ * N-05/N-06 · portada y materiales se eligen aquí y suben al pulsar guardar.
+ * No es una preferencia de estilo: en el ALTA todavía no hay `product_id` al
+ * que colgar los archivos, así que o se difiere la subida o se obliga a
+ * guardar y volver a entrar (que es justo lo que se reportó).
  */
 export function ProductForm({
   userId,
@@ -86,8 +111,8 @@ export function ProductForm({
   userId: string;
   categories: { id: string; name: string }[];
   product?: ProductFormValues;
-  /** Materiales de ESTA oferta (R24-16); solo se adjuntan al editar. */
-  materials?: { id: string; file_name: string; size_bytes: number }[];
+  /** Materiales YA guardados de esta oferta (R24-16); solo existen al editar. */
+  materials?: SavedMaterial[];
   /** Habilita "Publicar" al guardar (RN-23: solo tutor aprobado). */
   isApproved?: boolean;
 }) {
@@ -113,6 +138,17 @@ export function ProductForm({
   const [faqs, setFaqs] = useState<{ q: string; a: string }[]>(
     product?.faqs ?? [],
   );
+  // N-06: la portada dejó de viajar en el `FormData` y vive aquí. Sigue
+  // valiendo la regla de antes — `null` significa "no eligió ninguna nueva",
+  // y entonces al editar se conserva la que ya estaba.
+  const [cover, setCover] = useState<File | null>(null);
+  // N-05: los materiales elegidos esperan en memoria hasta el guardado. Los
+  // que ya estaban en la BD se listan aparte porque se borran en el acto.
+  const [savedMaterials, setSavedMaterials] =
+    useState<SavedMaterial[]>(materials);
+  const [stagedMaterials, setStagedMaterials] = useState<StagedFile[]>([]);
+
+  const coverUrl = storageUrl("product-images", product?.imagePath);
 
   const cobroPorSesion = bookingTotal({
     pricingModel,
@@ -161,22 +197,61 @@ export function ProductForm({
     setLoading(true);
     const supabase = createClient();
 
+    // ── Fase 1 · Storage ─────────────────────────────────────────────────
+    // Todo lo que va a disco sube ANTES de tocar la BD, a propósito: si el
+    // bucket falla no hay ningún producto a medias que explicar, y lo ya
+    // subido se puede retirar. Al revés (producto primero) el fallo dejaría
+    // una mentoría publicada prometiendo unos materiales que no existen.
+    const subidos: string[] = []; // rutas en `tutor-materials`
+    let nuevaPortada: string | null = null;
+
+    /** Retira del bucket lo subido en este intento. Best-effort: si el borrado
+     *  falla no hay nada mejor que hacer, el objeto queda huérfano pero no lo
+     *  referencia ninguna fila y nadie lo ve. */
+    async function retirar() {
+      if (nuevaPortada)
+        await supabase.storage.from("product-images").remove([nuevaPortada]);
+      if (subidos.length)
+        await supabase.storage.from("tutor-materials").remove(subidos);
+    }
+
     // Imagen del producto (DD-02). Solo se sube si el tutor eligió una nueva;
     // al editar sin tocarla, se conserva la que ya estaba.
     let imagePath = product?.imagePath ?? null;
-    const file = form.get("image");
-    if (file instanceof File && file.size > 0) {
-      if (file.size > 5 * 1024 * 1024) return fail("La imagen supera los 5 MB.");
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    if (cover) {
+      const ext = cover.name.split(".").pop()?.toLowerCase() ?? "jpg";
       // La RLS de Storage exige que el primer segmento sea el uid del tutor.
       const path = `${userId}/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage
         .from("product-images")
-        .upload(path, file, { contentType: file.type });
-      if (error) return fail("No se pudo subir la imagen.");
+        .upload(path, cover, { contentType: cover.type });
+      if (error)
+        return fail(
+          "No se pudo subir la imagen de portada, así que no se guardó nada. Tus datos siguen en el formulario: vuelve a intentarlo.",
+        );
+      nuevaPortada = path;
       imagePath = path;
     }
 
+    // Materiales, uno a uno: Storage no tiene subida en lote. Si uno falla se
+    // dice CUÁL y se deshace lo demás — dejarlo a medias sería peor, porque el
+    // tutor no tendría forma de saber cuáles repetir.
+    for (const { file } of stagedMaterials) {
+      // Prefijo aleatorio: dos archivos con el mismo nombre no se pisan.
+      const path = `${userId}/${crypto.randomUUID()}-${file.name}`;
+      const { error } = await supabase.storage
+        .from("tutor-materials")
+        .upload(path, file, { contentType: file.type });
+      if (error) {
+        await retirar();
+        return fail(
+          `No se pudo subir «${file.name}», así que no se guardó nada${subidos.length ? ` (tampoco los ${subidos.length} archivos anteriores)` : ""}. Tus datos siguen en el formulario: vuelve a intentarlo.`,
+        );
+      }
+      subidos.push(path);
+    }
+
+    // ── Fase 2 · Base de datos ───────────────────────────────────────────
     const row = {
       title,
       image_path: imagePath,
@@ -200,15 +275,20 @@ export function ProductForm({
     };
 
     // ponytail: catálogo, no dinero → escritura directa bajo RLS (regla 2 aplica a
-    // payments/bookings). Producto + categorías van en 2 pasos no atómicos; si el
-    // 2º falla queda un borrador sin categorías y el tutor reintenta al editar.
+    // payments/bookings). Producto, categorías y materiales son escrituras
+    // separadas y no atómicas: no hay transacción de cliente. Mientras el
+    // producto no exista se puede abortar limpio (se retira lo del bucket);
+    // en cuanto existe, ya no — de ahí lo de abajo.
     let productId = product?.id;
     if (isEdit) {
       const { error } = await supabase
         .from("products")
         .update(row)
         .eq("id", productId!);
-      if (error) return fail(error.message);
+      if (error) {
+        await retirar();
+        return fail(error.message);
+      }
       // Reconciliar categorías: borrar todas y reinsertar las elegidas.
       await supabase
         .from("product_categories")
@@ -220,27 +300,72 @@ export function ProductForm({
         .insert({ tutor_id: userId, ...row })
         .select("id")
         .single();
-      if (error || !data) return fail(error?.message);
+      if (error || !data) {
+        await retirar();
+        return fail(error?.message);
+      }
       productId = data.id;
     }
+
+    // A partir de aquí el producto EXISTE, así que ya no se aborta: cada fallo
+    // se anota por su nombre y se cuenta al final. Un "no se pudo guardar" a
+    // secas dejaba al tutor sin saber si repetir el alta entera o solo volver a
+    // adjuntar — que es lo que N-05 pide evitar.
+    const aMedias: string[] = [];
 
     const { error: catErr } = await supabase
       .from("product_categories")
       .insert([...selected].map((category_id) => ({ product_id: productId!, category_id })));
-    if (catErr) return fail(catErr.message);
+    if (catErr) aMedias.push("las categorías");
+
+    if (subidos.length > 0) {
+      // Las N filas en UN insert: Postgres lo resuelve en una transacción, así
+      // que o quedan todas o ninguna. Con un insert por archivo podía quedar
+      // "3 de 5 adjuntos" y ni el tutor ni nosotros sabríamos cuáles.
+      const { error: matErr } = await supabase.from("tutor_materials").insert(
+        subidos.map((storage_path, i) => ({
+          tutor_id: userId,
+          product_id: productId!,
+          storage_path,
+          file_name: stagedMaterials[i].file.name,
+          size_bytes: stagedMaterials[i].file.size,
+        })),
+      );
+      if (matErr) {
+        // Los archivos están en el bucket pero no los referencia ninguna fila:
+        // se retiran para que no cuenten en la cuota ni reaparezcan luego.
+        await supabase.storage.from("tutor-materials").remove(subidos);
+        aMedias.push(
+          subidos.length === 1
+            ? "el material adjunto"
+            : `los ${subidos.length} materiales`,
+        );
+      } else {
+        // Ya no están pendientes. La lista definitiva la trae el servidor en
+        // el `router.refresh()` de más abajo, con los ids reales.
+        setStagedMaterials([]);
+      }
+    }
 
     if (publishAfter) {
       const { error: pubErr } = await supabase
         .from("products")
         .update({ status: "active" })
         .eq("id", productId!);
-      if (pubErr) {
-        // Guardado sí, publicado no (p. ej. el guard RN-23): se dice tal cual.
-        toast.error("Se guardó como borrador, pero no se pudo publicar.");
-        router.push("/tutor/products");
-        router.refresh();
-        return;
-      }
+      // Guardado sí, publicado no (p. ej. el guard RN-23 de BD): se dice tal cual.
+      if (pubErr) aMedias.push("la publicación (sigue como borrador)");
+    }
+
+    if (aMedias.length > 0) {
+      // Se dice qué quedó guardado y qué no, y se abre la edición de ESTA
+      // mentoría: lo que falta se remata ahí sin reescribir el formulario.
+      toast.error(
+        `La mentoría se guardó, pero faltó ${enumerar(aMedias)}. Complétalo desde aquí.`,
+        { duration: 12_000 },
+      );
+      router.push(`/tutor/products/${productId}/edit`);
+      router.refresh();
+      return;
     }
 
     toast.success(
@@ -259,6 +384,28 @@ export function ProductForm({
     }
   }
 
+  /**
+   * Quita un material YA guardado. Aquí no se difiere nada: el producto existe
+   * y la fila es suya. Se borra primero la fila (es la que ve la ficha) y
+   * después el objeto; si lo segundo falla queda un archivo huérfano en un
+   * bucket privado, que es preferible a una fila apuntando a un archivo que ya
+   * no está.
+   */
+  async function removeSavedMaterial(id: string) {
+    const material = savedMaterials.find((m) => m.id === id);
+    if (!material) return;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("tutor_materials")
+      .delete()
+      .eq("id", id);
+    if (error) return toast.error("No se pudo quitar el material.");
+    await supabase.storage
+      .from("tutor-materials")
+      .remove([material.storage_path]);
+    setSavedMaterials((prev) => prev.filter((m) => m.id !== id));
+  }
+
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5">
       <PanelCard className="flex flex-col gap-4">
@@ -275,10 +422,13 @@ export function ProductForm({
             name="title"
             defaultValue={product?.title}
             required
-            maxLength={120}
+            maxLength={MAX_TITULO}
             placeholder="Ej: Inglés para entrevistas tech"
             className={FIELD}
           />
+          <p className="text-xs text-[#6b6b6b]">
+            Máx. {MAX_TITULO} caracteres.
+          </p>
         </div>
 
         <div className="grid gap-1.5">
@@ -289,10 +439,14 @@ export function ProductForm({
             id="outcome"
             name="outcome"
             defaultValue={product?.outcome}
-            maxLength={160}
+            maxLength={MAX_OUTCOME}
             placeholder="Ej: apruebas tu entrevista técnica en inglés"
             className={FIELD}
           />
+          <p className="text-xs text-[#6b6b6b]">
+            Máx. {MAX_OUTCOME} caracteres. Es la línea que se lee bajo el título
+            en el catálogo.
+          </p>
         </div>
 
         <div className="grid gap-1.5">
@@ -310,20 +464,17 @@ export function ProductForm({
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="image" className={LABEL}>
-            Imagen de portada (opcional)
-          </Label>
-          <Input
-            id="image"
-            name="image"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="h-[45px] rounded-[8px] pt-2.5"
-          />
+          <p className={LABEL}>Imagen de portada (opcional)</p>
           <p className="text-xs text-[#6b6b6b]">
-            Es la miniatura de la tarjeta en el catálogo. JPG, PNG o WebP · máx 5 MB.
-            {product?.imagePath ? " Ya tienes una: sube otra para reemplazarla." : ""}
+            Es la miniatura de la tarjeta en el catálogo. {PRODUCT_IMAGE_HINT}.
           </p>
+          <CoverImagePicker
+            currentUrl={coverUrl}
+            file={cover}
+            onPick={setCover}
+            onClear={() => setCover(null)}
+            disabled={loading}
+          />
         </div>
 
         <fieldset className="grid gap-2">
@@ -509,22 +660,28 @@ export function ProductForm({
       </PanelCard>
 
       {/* Materiales de clase de ESTA oferta (R24-16): se movieron aquí desde el
-          onboarding. Solo al editar (el producto ya existe y tiene id). */}
+          onboarding. N-05 — ya no hace falta guardar y volver a entrar: se
+          eligen ahora y suben con el resto del formulario. */}
       <PanelCard className="flex flex-col gap-3">
         <h2 className="text-base font-semibold text-[#19191f]">
           Materiales de la mentoría
         </h2>
-        {isEdit && product ? (
-          <MaterialsUpload
-            userId={userId}
-            productId={product.id}
-            initial={materials}
-          />
-        ) : (
-          <p className="text-[13px] text-[#6b6b6b]">
-            Guarda la oferta primero y podrás adjuntar sus materiales al editarla.
-          </p>
-        )}
+        <p className="text-[13px] text-[#6b6b6b]">
+          Guías, plantillas o ejercicios que tus alumnos usarán en clase. Se
+          suben al guardar la mentoría.
+        </p>
+        <MaterialsPicker
+          saved={savedMaterials}
+          staged={stagedMaterials}
+          onAdd={(files) =>
+            setStagedMaterials((prev) => [...prev, ...files.map(stage)])
+          }
+          onRemoveStaged={(key) =>
+            setStagedMaterials((prev) => prev.filter((s) => s.key !== key))
+          }
+          onRemoveSaved={removeSavedMaterial}
+          disabled={loading}
+        />
       </PanelCard>
 
       {/* FAQ de ESTA mentoría (R24-17). Si no pone ninguna, el detalle muestra

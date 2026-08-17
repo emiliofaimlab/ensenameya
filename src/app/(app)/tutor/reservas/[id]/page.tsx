@@ -14,11 +14,9 @@ import {
 } from "@/components/layout/panel-shell";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { RecordingLink } from "@/components/room/recording-link";
+import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
-import {
-  CompleteSessionButton,
-  TutorCancelButton,
-} from "../booking-actions";
+import { CompleteSessionButton } from "../booking-actions";
 import { studentName, studentOfTutor } from "../../students";
 import { StudentAvatar } from "../../student-avatar";
 import type { Database } from "@/lib/database.types";
@@ -72,7 +70,11 @@ export default async function TutorBookingDetailPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, status)",
+      // N-27 · `session_ref` es el "N.º de sesión" que el cliente pidió para
+      // seguir transacciones. Se LEE de la fila (lo pone un trigger); no se
+      // deriva aquí, que es como US-1802 se rompió en silencio con el nombre
+      // de la sala de Daily.
+      "id, status, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, status, session_ref)",
     )
     .eq("id", id)
     .eq("tutor_id", user.id)
@@ -125,7 +127,10 @@ export default async function TutorBookingDetailPage({
         <div className="flex flex-col gap-5">
           <PanelCard>
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <p className="text-base font-bold text-[#19191f]">
+              {/* N-12 · `min-w-0` para que el título pueda encoger y `break-words`
+                  para que parta: en un detalle truncar el nombre de la mentoría
+                  sería esconder justo el dato que se vino a mirar. */}
+              <p className="min-w-0 flex-1 text-base font-bold break-words text-[#19191f]">
                 {booking.products?.title ?? "Mentoría"}
               </p>
               <StatusPill
@@ -172,13 +177,17 @@ export default async function TutorBookingDetailPage({
                       key={s.id}
                       className="flex flex-wrap items-center justify-between gap-3"
                     >
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-[13px] font-medium text-[#404040]">
                           Sesión {i + 1} ·{" "}
                           <span className="first-letter:uppercase">
                             {formatSessionTime(s.start_at, tz)}
                           </span>
                         </p>
+                        {/* N-27 · el número que hay que dar por teléfono o por
+                            correo. "Sesión 2" no distingue nada: todas las
+                            reservas tienen una. */}
+                        <SessionRef nro={s.session_ref} className="mt-0.5" />
                       </div>
                       <div className="flex items-center gap-2.5">
                         <StatusPill className="h-7">
@@ -196,9 +205,14 @@ export default async function TutorBookingDetailPage({
                             <CompleteSessionButton sessionId={s.id} />
                           </>
                         ) : null}
-                        {/* US-1802 · disponible 30 días desde la clase. */}
+                        {/* US-1802 · disponible 30 días desde la clase. Con el
+                            N.º de sesión pegado (N-27): una grabación se
+                            reclama por correo, y el uuid de la URL no sirve. */}
                         {s.status === "completed" ? (
-                          <RecordingLink sessionId={s.id} />
+                          <RecordingLink
+                            sessionId={s.id}
+                            nroSesion={s.session_ref}
+                          />
                         ) : null}
                       </div>
                     </li>
@@ -207,10 +221,21 @@ export default async function TutorBookingDetailPage({
               </>
             ) : null}
 
+            {/* N-34 · cancelar es una pantalla, no un `window.confirm()`: hay
+                importe, política y motivo que enseñar antes de tirar la clase.
+                El alumno ya la tenía (SCR-AL07); esta es la del tutor. */}
             {CANCELLABLE.has(booking.status) ? (
               <>
                 <hr className="my-4 border-[#e0e0e0]" />
-                <TutorCancelButton bookingId={booking.id} />
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-[43px] rounded-[8px] px-4 text-sm text-[#4d4d4d]"
+                >
+                  <Link href={`/tutor/reservas/${booking.id}/cancelar`}>
+                    Cancelar reserva
+                  </Link>
+                </Button>
               </>
             ) : null}
           </PanelCard>

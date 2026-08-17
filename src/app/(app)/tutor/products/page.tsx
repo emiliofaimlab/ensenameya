@@ -88,7 +88,10 @@ export default async function TutorProductsPage() {
               <li key={p.id}>
                 <PanelCard>
                   <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div className="flex min-w-0 items-start gap-3.5">
+                    {/* N-12 · `flex-1` además de `min-w-0`: sin él el bloque
+                        mide lo que mida el título y la píldora de estado se
+                        salía de la tarjeta con nombres largos. */}
+                    <div className="flex min-w-0 flex-1 items-start gap-3.5">
                       {/* Miniatura 64×64 r12 (191:55); iniciales si no hay. */}
                       <span className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-[12px] bg-brand-muted font-semibold text-brand">
                         {thumb ? (
@@ -105,7 +108,7 @@ export default async function TutorProductsPage() {
                         )}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-[14.5px] font-semibold text-[#19191f]">
+                        <p className="truncate text-[14.5px] font-semibold text-[#19191f]">
                           {p.title}
                         </p>
                         {p.outcome ? (

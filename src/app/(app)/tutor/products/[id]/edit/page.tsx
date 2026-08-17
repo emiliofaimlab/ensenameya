@@ -32,10 +32,13 @@ export default async function EditProductPage({
         .select("id, name")
         .eq("is_active", true)
         .order("sort_order"),
-      // Materiales de ESTA oferta (R24-16).
+      // Materiales de ESTA oferta (R24-16). `storage_path` va en el select
+      // porque quitar un material tiene que borrar TAMBIÉN el objeto del
+      // bucket: sin la ruta, la fila desaparecía y el archivo se quedaba
+      // ocupando cuota en un bucket privado para siempre.
       supabase
         .from("tutor_materials")
-        .select("id, file_name, size_bytes")
+        .select("id, file_name, size_bytes, storage_path")
         .eq("product_id", id)
         .order("created_at"),
     ]);

@@ -163,8 +163,13 @@ export default async function TutorReservasPage({
             className={cn(dl?.urgent && "border-[1.5px] border-[#f0bfbf]")}
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-[#19191f]">
+              {/* N-12 · `truncate` no basta por sí solo: sin `flex-1` este
+                  bloque se dimensiona por su contenido (`min-w-0` solo le
+                  permite encoger, no le da un ancho al que ajustarse), así que
+                  un título largo seguía empujando la cuenta atrás fuera de la
+                  tarjeta. Los dos, o no se ve nada. */}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-[#19191f]">
                   {b.products?.title ?? "Mentoría"}
                 </p>
                 <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
