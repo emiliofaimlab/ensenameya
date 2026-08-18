@@ -87,7 +87,7 @@ export async function BookingPanel({
   selectedId,
   selectedDay,
   hrefFor,
-  ctaLabel = "Reservar clase YA",
+  ctaLabel = "Reservar mentoría YA",
   note = "Pago protegido · Cancela con 24h y recibe el 100%.",
   details = false,
   footer,

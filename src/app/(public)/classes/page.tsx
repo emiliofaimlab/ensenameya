@@ -215,8 +215,8 @@ export default async function ClassesPage({
               <p className="text-[15px] font-medium text-[#666666]">
                 {total}{" "}
                 {total === 1
-                  ? "tutoría lista para reservar"
-                  : "tutorías listas para reservar"}
+                  ? "mentoría lista para reservar"
+                  : "mentorías listas para reservar"}
               </p>
 
               {/* ponytail: `<details>` nativo, igual que en P04. `name` lo marca

@@ -22,7 +22,7 @@ import { getHomeStats, listTestimonials } from "@/lib/catalog/queries";
 export const metadata = {
   title: "Sobre nosotros · Enséñame Ya",
   description:
-    "Conectamos a quien quiere aprender con quien sabe enseñar: tutorías 1:1 en vivo, con tutores verificados y enfoque en el resultado.",
+    "Conectamos a quien quiere aprender con quien sabe enseñar: mentorías 1:1 en vivo, con tutores verificados y enfoque en el resultado.",
 };
 
 /** Las 4 tarjetas de "En qué creemos". Las fotos salen del propio Figma; el
@@ -117,7 +117,7 @@ export default async function AboutPage() {
           {
             icon: UserIcon,
             text: "Mentoría 1 a 1",
-            desc: "Clases totalmente personalizadas y adaptadas a tu propio ritmo de aprendizaje.",
+            desc: "Mentorías totalmente personalizadas y adaptadas a tu propio ritmo de aprendizaje.",
           },
           {
             icon: TargetIcon,
@@ -130,16 +130,16 @@ export default async function AboutPage() {
             desc: "Tú decides cuándo y con quién conectarte con total libertad y flexibilidad.",
           },
         ]}
-        cta={{ href: "/tutors", label: "Explorar tutorías", variant: "outline" }}
+        cta={{ href: "/tutors", label: "Explorar mentorías", variant: "outline" }}
         image={{
           src: "/img/about-mission.jpg",
-          alt: "Alumna tomando una clase en vivo",
+          alt: "Alumna tomando una mentoría en vivo",
         }}
         badge={
           stats
             ? {
                 value: compactCount(stats.sessions),
-                label: "clases impartidas",
+                label: "mentorías impartidas",
                 position: "bottom-left",
               }
             : undefined
@@ -154,7 +154,7 @@ export default async function AboutPage() {
           {
             icon: TargetIcon,
             text: "Resultados asegurados",
-            desc: "Cada tutoría detalla con precisión la meta real que vas a conquistar.",
+            desc: "Cada mentoría detalla con precisión la meta real que vas a conquistar.",
           },
           {
             icon: ShieldCheckIcon,

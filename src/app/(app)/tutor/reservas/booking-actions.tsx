@@ -178,7 +178,7 @@ export function CompleteSessionButton({ sessionId }: { sessionId: string }) {
         open={confirming}
         onOpenChange={setConfirming}
         title="¿Marcar la sesión como completada?"
-        description="La clase queda como dictada y se cierra su sala. Cuando a la reserva no le queden sesiones abiertas pasará a completada: es eso lo que arranca la retención de tu pago y la invitación al alumno para que te reseñe. No se puede reabrir."
+        description="La mentoría queda como dictada y se cierra su sala. Cuando a la reserva no le queden sesiones abiertas pasará a completada: es eso lo que arranca la retención de tu pago y la invitación al alumno para que te reseñe. No se puede reabrir."
         confirmLabel="Sí, completar"
         busyLabel="Guardando…"
         busy={busy}

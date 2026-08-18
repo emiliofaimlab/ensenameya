@@ -63,7 +63,7 @@ export default async function HomePage() {
       <HomeHero categories={categories} />
 
       <FeatureSplit
-        title="Clases en vivo 1 a 1: interactúa en tiempo real"
+        title="Mentorías en vivo 1 a 1: interactúa en tiempo real"
         text="Avanza con total confianza y cara a cara con tu tutor, dedicando cada minuto exclusivamente al objetivo que elegiste lograr."
         points={[
           { icon: VideoIcon, text: "Video en vivo con alta calidad" },
@@ -73,7 +73,7 @@ export default async function HomePage() {
         cta={{ href: "/tutors", label: "Explorar tutores YA" }}
         image={{
           src: "/img/home-live.jpg",
-          alt: "Alumna en una clase 1 a 1 por videollamada",
+          alt: "Alumna en una mentoría 1 a 1 por videollamada",
         }}
       />
 
@@ -94,7 +94,7 @@ export default async function HomePage() {
         cta={{ href: teachHref, label: "Quiero enseñar YA" }}
         image={{
           src: "/img/home-teach.jpg",
-          alt: "Tutor impartiendo una clase desde su portátil",
+          alt: "Tutor impartiendo una mentoría desde su portátil",
         }}
       />
 

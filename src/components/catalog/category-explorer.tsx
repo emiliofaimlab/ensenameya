@@ -159,8 +159,8 @@ export async function CategoryExplorer({
   const description =
     category?.description ??
     (category
-      ? "Asegura los resultados que deseas de la mano de mentores validados, enfocados en lo que quieres conquistar."
-      : "Elige por dónde empezar. Cada categoría reúne tutorías con una meta concreta y tutores verificados listos para acompañarte en vivo.");
+      ? "Asegura los resultados que deseas de la mano de tutores validados, enfocados en lo que quieres conquistar."
+      : "Elige por dónde empezar. Cada categoría reúne mentorías con una meta concreta y tutores verificados listos para acompañarte en vivo.");
 
   /** Desplegables de filtro de la fila horizontal (386:1558). */
   const dropdowns = [

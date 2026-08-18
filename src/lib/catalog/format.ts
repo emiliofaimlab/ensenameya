@@ -41,7 +41,7 @@ export function modelLabel(p: {
 }): string {
   switch (p.pricingModel) {
     case "per_session":
-      return "Clase única";
+      return "Sesión única";
     case "per_hour":
       return "Por hora";
     case "per_package":

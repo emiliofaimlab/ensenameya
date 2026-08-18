@@ -25,7 +25,7 @@ import { FinalCta } from "@/components/home/final-cta";
 export const metadata = {
   title: "¿Cómo funciona? · Enséñame Ya",
   description:
-    "Encuentras al tutor ideal, reservas con pago protegido y aseguras el éxito en vivo. Si vienes a enseñar, lanzas tus tutorías y cobras seguro.",
+    "Encuentras al tutor ideal, reservas con pago protegido y aseguras el éxito en vivo. Si vienes a enseñar, lanzas tus mentorías y cobras seguro.",
 };
 
 const STUDENT_STEPS = [
@@ -133,7 +133,7 @@ export default function HowItWorksPage() {
               Lo que ya sabes vale oro y lo que puedes aprender también. En
               Enséñame Ya encuentras al tutor ideal, reservas con pago protegido
               y aseguras el éxito en vivo. Si vienes a enseñar, lanzas tus
-              tutorías y cobras seguro.
+              mentorías y cobras seguro.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
               <Button
@@ -169,7 +169,7 @@ export default function HowItWorksPage() {
         steps={STUDENT_STEPS}
         image={{
           src: "/img/how-alumno.jpg",
-          alt: "Alumna en una clase por videollamada",
+          alt: "Alumna en una mentoría por videollamada",
         }}
         accent="brand"
         background="bg-[#e8f2ff]"
@@ -198,7 +198,7 @@ export default function HowItWorksPage() {
         steps={TUTOR_STEPS}
         image={{
           src: "/img/how-tutor.jpg",
-          alt: "Tutora preparando su clase",
+          alt: "Tutora preparando su mentoría",
         }}
         accent="primary"
         background="bg-muted"

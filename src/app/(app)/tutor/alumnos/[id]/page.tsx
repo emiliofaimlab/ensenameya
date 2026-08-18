@@ -112,7 +112,7 @@ export default async function AlumnoDelTutorPage({
       back={{ href: "/tutor/reservas", label: "Volver a reservas" }}
       eyebrow="Reservas / Alumno"
       title={nombre}
-      description="Lo que necesitas saber para preparar la clase."
+      description="Lo que necesitas saber para preparar la mentoría."
     >
       <PanelCard className="flex flex-wrap items-center gap-5">
         <StudentAvatar student={student} size={72} />

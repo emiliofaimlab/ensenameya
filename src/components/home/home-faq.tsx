@@ -74,7 +74,7 @@ export const FAQ_SOBRE_NOSOTROS = [
   },
   {
     q: '¿A qué nos referimos con "aprender con un objetivo claro"?',
-    a: "Significa que te enfocas en metas concretas. En lugar de acumular horas de videos estáticos o clases teóricas interminables, en Enséñame Ya eliges un plan orientado a un logro específico —como preparar una entrevista en inglés o dominar un tema puntual— para que aproveches al máximo tu tiempo.",
+    a: "Significa que te enfocas en metas concretas. En lugar de acumular horas de videos estáticos o mentorías teóricas interminables, en Enséñame Ya eliges un plan orientado a un logro específico —como preparar una entrevista en inglés o dominar un tema puntual— para que aproveches al máximo tu tiempo.",
   },
   {
     q: "¿Cómo garantizan que las mentorías en vivo sean seguras?",

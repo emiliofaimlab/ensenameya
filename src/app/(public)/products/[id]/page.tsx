@@ -40,7 +40,7 @@ const PRODUCT_FAQ = [
     a: "Depende de lo que el tutor indique en la descripción. Si tienes dudas, el objetivo declarado de la mentoría es la mejor guía: describe exactamente el resultado con el que vas a terminar.",
   },
   {
-    q: "¿Cómo se imparten las clases en vivo?",
+    q: "¿Cómo se imparten las mentorías en vivo?",
     a: "Son sesiones 1 a 1 en una sala de video privada integrada en la plataforma. Entras desde tu panel a la hora de la sesión; no necesitas instalar nada.",
   },
   {
@@ -67,7 +67,7 @@ export async function generateMetadata({
 }) {
   const { id } = await params;
   const product = await getProductDetail(id);
-  return { title: product ? `${product.title} · Enséñame Ya` : "Clase" };
+  return { title: product ? `${product.title} · Enséñame Ya` : "Mentoría" };
 }
 
 export default async function ProductPage({
@@ -293,7 +293,7 @@ export default async function ProductPage({
               ctaLabel={
                 product.pricingModel === "per_package"
                   ? "Reservar paquete YA"
-                  : "Reservar clase YA"
+                  : "Reservar mentoría YA"
               }
               note="Pago protegido · Datos cifrados"
               hrefFor={(next) =>

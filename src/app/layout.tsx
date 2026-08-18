@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Enséñame Ya",
-  description: "Marketplace de tutorías 1:1 en vivo entre alumnos y tutores.",
+  description: "Marketplace de mentorías 1:1 en vivo entre alumnos y tutores.",
 };
 
 export default function RootLayout({

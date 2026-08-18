@@ -7,7 +7,7 @@ const STEPS = [
   {
     n: "01",
     title: "Elige tu meta",
-    text: "Cuéntanos qué quieres lograr. Encuentra tutorías diseñadas específicamente para alcanzar un objetivo real.",
+    text: "Cuéntanos qué quieres lograr. Encuentra mentorías diseñadas específicamente para alcanzar un objetivo real.",
     img: "/img/step-1.png",
   },
   {

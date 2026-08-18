@@ -71,7 +71,7 @@ export function HomeStats({
     {
       icon: MonitorPlayIcon,
       value: compactCount(stats.sessions),
-      label: "Clases impartidas",
+      label: "Mentorías impartidas",
       show: stats.sessions >= MINIMO_PARA_ENSENAR.clases,
     },
     {
