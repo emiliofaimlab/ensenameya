@@ -96,7 +96,7 @@ export async function CategoryExplorer({
     listActiveProducts({
       categorySlug: primary,
       // "Temas" cruza con otra categoría: `product_categories` es N–M, así que
-      // una tutoría de Matemáticas puede estar también en Preparación de exámenes.
+      // una mentoría de Matemáticas puede estar también en Preparación de exámenes.
       secondCategorySlug: secondary,
       model: active.model as PricingModel | undefined,
       minPriceMinor: price?.min,

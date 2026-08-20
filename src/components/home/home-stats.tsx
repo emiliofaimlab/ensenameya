@@ -54,7 +54,7 @@ export function HomeStats({
   overlap = false,
 }: {
   stats: HomeStatsData | null;
-  /** En el Figma la tarjeta cabalga el borde de "Tutorías destacadas": justo
+  /** En el Figma la tarjeta cabalga el borde de "Mentorías destacadas": justo
    *  media tarjeta (99 de 199px) queda sobre el gris. Sin esa sección delante
    *  no hay borde que cabalgar, así que el tirón se pide desde fuera. */
   overlap?: boolean;
@@ -90,7 +90,7 @@ export function HomeStats({
   ].filter((i) => i.show);
 
   // Ojo: aquí NO se devuelve `null` por quedarse en una sola cifra, por
-  // tentador que sea. "Tutorías destacadas" reserva 164px de hueco para que
+  // tentador que sea. "Mentorías destacadas" reserva 164px de hueco para que
   // esta tarjeta lo cabalgue (ver FeaturedProducts), y si desaparece el hueco
   // se queda abierto. Con productos publicados siempre hay ≥1 tutor aprobado,
   // así que siempre queda al menos una cifra que enseñar.

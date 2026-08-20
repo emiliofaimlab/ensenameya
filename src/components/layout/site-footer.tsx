@@ -69,7 +69,7 @@ export function SiteFooter() {
               className="h-[60px] w-auto"
             />
             <p className="mt-2 text-[13px] text-muted-foreground">
-              Conectamos el conocimiento y la pasión con tutorías en vivo 1 - 1
+              Conectamos el conocimiento y la pasión con mentorías en vivo 1 - 1
               con expertos verificados. El espacio donde lo que YA sabes vale
               oro, y lo que quieres aprender se logra YA.
             </p>
