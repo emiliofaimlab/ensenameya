@@ -1,25 +1,25 @@
 import { createClient } from "@/lib/supabase/client";
+import {
+  ATTACHMENT_HINT,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_TYPES,
+  fileProblem,
+  humanSize,
+} from "@/components/tutor/upload-formats";
 
-/** Límites del bucket `chat-attachments` (los repite la migración). */
-export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
-
-export const ATTACHMENT_TYPES = [
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/msword",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.ms-excel",
-];
+/**
+ * MN-11a · Los límites del bucket `chat-attachments` ya no se declaran aquí:
+ * viven con los de los otros cuatro buckets en
+ * `components/tutor/upload-formats.ts`, que es también donde está apuntado qué
+ * hay que hacer en la BD el día que el número cambie (P-8).
+ *
+ * Se re-exportan porque el chat los pide a ESTE módulo desde antes
+ * (`chat-thread.tsx` y la descarga del hilo en `api/chat/[threadId]/download`);
+ * reapuntar esos imports no es de esta ficha, y el alias no cuesta nada.
+ */
+export { ATTACHMENT_MAX_BYTES, ATTACHMENT_TYPES, humanSize };
 
 export type Attachment = { path: string; name: string; size: number };
-
-export const humanSize = (b: number) =>
-  b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`;
 
 /**
  * Sube un documento al hilo de la reserva y lo publica como mensaje.
@@ -35,12 +35,14 @@ export async function uploadAttachment(
   bookingId: string,
   file: File,
 ): Promise<{ id: string; attachment: Attachment } | { error: string }> {
-  if (!ATTACHMENT_TYPES.includes(file.type)) {
-    return { error: "Formato no admitido. Usa PDF, imagen o documento de Office." };
-  }
-  if (file.size > ATTACHMENT_MAX_BYTES) {
-    return { error: "El archivo supera los 10 MB." };
-  }
+  // Mismo juez que el resto de subidas: el mensaje nombra el archivo y repite
+  // lo que SÍ vale, con el tope sacado de la constante y no escrito a mano.
+  const problema = fileProblem(file, {
+    types: ATTACHMENT_TYPES,
+    maxBytes: ATTACHMENT_MAX_BYTES,
+    hint: ATTACHMENT_HINT,
+  });
+  if (problema) return { error: problema };
 
   const supabase = createClient();
   // Prefijo aleatorio: dos archivos con el mismo nombre no se pisan.

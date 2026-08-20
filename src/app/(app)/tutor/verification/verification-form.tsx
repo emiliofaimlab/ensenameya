@@ -21,6 +21,16 @@ import {
   type SocialLink,
 } from "@/lib/socials";
 import { PanelCard, StatusPill, type PillTone } from "@/components/layout/panel-shell";
+// MN-11a · El tope y los formatos del bucket `kyc-documents` no se escriben
+// aquí: salen de la fuente única, que es también donde está apuntado qué hay
+// que hacer en la BD si el número cambia (P-8).
+import {
+  KYC_HINT,
+  KYC_MAX_BYTES,
+  KYC_TYPES,
+  fileProblem,
+  maxLabel,
+} from "@/components/tutor/upload-formats";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Database } from "@/lib/database.types";
@@ -30,6 +40,17 @@ export type IdentityStatus =
   Database["public"]["Enums"]["identity_verification_status"];
 
 /**
+ * El tope, ya escrito: «10 MB». Se repite en las seis filas y en dos frases
+ * más de esta pantalla, y antes eran siete literales a mano — cambiar el
+ * número dejaba a la mitad de la pantalla mintiendo (MN-11a).
+ *
+ * El formato SÍ se escribe por documento a propósito: es una recomendación de
+ * qué mandar (una cédula escaneada, un PDF del título), no lo que el bucket
+ * admite — que es siempre `KYC_TYPES`, y se dice entero abajo y en el resumen.
+ */
+const TOPE = maxLabel(KYC_MAX_BYTES);
+
+/**
  * C-14 — set final confirmado por el cliente (UX-203 / EY-100): 6 documentos
  * de archivo. Las redes ya NO son un documento: viven en `tutor_profiles.socials`
  * como lista (R29-02), en la tarjeta de abajo.
@@ -37,16 +58,13 @@ export type IdentityStatus =
  * la pantalla de revisión del admin son genéricas y no se enteran.
  */
 const KYC_DOCS = [
-  { type: "id_document", label: "Documento de identidad", hint: "Cédula o pasaporte · PDF/JPG, máx 10 MB" },
-  { type: "degree", label: "Título académico", hint: "PDF, máx 10 MB" },
-  { type: "certificate", label: "Certificado", hint: "PDF, máx 10 MB" },
-  { type: "diploma", label: "Diploma", hint: "PDF/JPG, máx 10 MB" },
-  { type: "transcript", label: "Corte de notas (transcript)", hint: "PDF, máx 10 MB" },
-  { type: "cv", label: "Currículum vitae", hint: "PDF, máx 10 MB" },
+  { type: "id_document", label: "Documento de identidad", hint: `Cédula o pasaporte · PDF/JPG, máx ${TOPE}` },
+  { type: "degree", label: "Título académico", hint: `PDF, máx ${TOPE}` },
+  { type: "certificate", label: "Certificado", hint: `PDF, máx ${TOPE}` },
+  { type: "diploma", label: "Diploma", hint: `PDF/JPG, máx ${TOPE}` },
+  { type: "transcript", label: "Corte de notas (transcript)", hint: `PDF, máx ${TOPE}` },
+  { type: "cv", label: "Currículum vitae", hint: `PDF, máx ${TOPE}` },
 ] as const;
-
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB (S-42)
-const ACCEPT = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
 
 export type DocState = { status: DocStatus; linkUrl: string | null };
 
@@ -85,12 +103,13 @@ function FileRow({
     const file = e.target.files?.[0];
     e.target.value = ""; // permite re-seleccionar el mismo archivo
     if (!file) return;
-    if (!ACCEPT.includes(file.type)) {
-      toast.error("Solo imágenes (PNG/JPG/WebP) o PDF.");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      toast.error("El archivo supera 10 MB.");
+    const problema = fileProblem(file, {
+      types: KYC_TYPES,
+      maxBytes: KYC_MAX_BYTES,
+      hint: KYC_HINT,
+    });
+    if (problema) {
+      toast.error(problema);
       return;
     }
     onPick(file); // solo lo dejamos listo; sube al pulsar un botón de abajo
@@ -128,7 +147,7 @@ function FileRow({
         <input
           ref={inputRef}
           type="file"
-          accept={ACCEPT.join(",")}
+          accept={KYC_TYPES.join(",")}
           className="hidden"
           onChange={onFile}
         />
@@ -540,7 +559,7 @@ export function VerificationForm({
         n={2}
         icon={FileTextIcon}
         title="Documentos de identidad y formación"
-        summary={`${docsListos} de ${KYC_DOCS.length} preparados · PNG, JPG, WebP o PDF, máx. 10 MB`}
+        summary={`${docsListos} de ${KYC_DOCS.length} preparados · ${KYC_HINT}`}
         state={docsState}
         open={abiertos.has(2)}
         onToggle={() => togglePaso(2)}
@@ -721,7 +740,7 @@ export function VerificationForm({
       </div>
 
       <p className="text-xs text-[#6b6b6b]">
-        Formatos: PNG, JPG, WebP o PDF · máx. 10 MB. Tus documentos son privados;
+        Formatos: {KYC_HINT}. Tus documentos son privados;
         solo el equipo de revisión los ve. Elige tus archivos y guárdalos como
         borrador para seguir más tarde: nada llega a revisión hasta que pulses
         «Guardar y enviar a revisión».

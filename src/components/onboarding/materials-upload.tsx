@@ -5,22 +5,19 @@ import { toast } from "sonner";
 import { FileTextIcon, UploadCloudIcon, XIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
-
-const MAX_BYTES = 10 * 1024 * 1024; // 10 MB por archivo, como dice el Figma
-const TYPES = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-powerpoint",
-  "application/msword",
-  "application/vnd.ms-excel",
-];
+// MN-11a · Este paso del asistente y el formulario de mentoría suben al MISMO
+// bucket (`tutor-materials`), así que comparten formatos, tope y frase: salen
+// de la fuente única, que es también donde está apuntado qué hay que hacer en
+// la BD si el número cambia (P-8).
+import {
+  MATERIAL_HINT,
+  MATERIAL_MAX_BYTES,
+  MATERIAL_TYPES,
+  fileProblem,
+  humanSize,
+} from "@/components/tutor/upload-formats";
 
 type Material = { id: string; file_name: string; size_bytes: number };
-
-const humanSize = (b: number) =>
-  b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`;
 
 /**
  * TU01 paso 4 — materiales de clase. Van al bucket PRIVADO `tutor-materials`
@@ -46,12 +43,15 @@ export function MaterialsUpload({
     const supabase = createClient();
 
     for (const file of Array.from(files)) {
-      if (!TYPES.includes(file.type)) {
-        toast.error(`${file.name}: formato no admitido.`);
-        continue;
-      }
-      if (file.size > MAX_BYTES) {
-        toast.error(`${file.name}: supera los 10 MB.`);
+      // Archivo a archivo, no la tanda entera: si arrastra cinco y uno es un
+      // .zip, los otros cuatro sí valen.
+      const problema = fileProblem(file, {
+        types: MATERIAL_TYPES,
+        maxBytes: MATERIAL_MAX_BYTES,
+        hint: MATERIAL_HINT,
+      });
+      if (problema) {
+        toast.error(problema);
         continue;
       }
 
@@ -106,7 +106,7 @@ export function MaterialsUpload({
         ref={inputRef}
         type="file"
         multiple
-        accept={TYPES.join(",")}
+        accept={MATERIAL_TYPES.join(",")}
         className="hidden"
         onChange={(e) => {
           if (e.target.files?.length) void upload(e.target.files);
@@ -129,9 +129,7 @@ export function MaterialsUpload({
         <span className="text-sm font-medium">
           {busy ? "Subiendo…" : "Arrastra tus archivos aquí o haz clic para subir"}
         </span>
-        <span className="text-xs text-muted-foreground">
-          PDF, PPT, DOCX o XLSX · máx. 10 MB por archivo
-        </span>
+        <span className="text-xs text-muted-foreground">{MATERIAL_HINT}</span>
       </button>
 
       {items.length > 0 ? (

@@ -1,47 +1,107 @@
 /**
- * N-07 · Formatos y topes de los archivos del formulario de mentoría, en UN
- * sitio: el `accept` del input y la frase que lee el tutor salen de aquí.
+ * MN-11a · Formatos y topes de subida del CLIENTE, en UN sitio: los cinco
+ * buckets que toca el navegador declaran aquí qué aceptan, cuánto pesa como
+ * máximo y con qué frase se le cuenta al usuario.
  *
- * Estaban separados —la lista en el `accept`, el texto escrito a mano al lado—
- * y pasó lo que tenía que pasar: se tocó uno sin el otro y el formulario
- * prometía formatos que el bucket rechazaba. Si añades un tipo, añádelo a la
- * lista y la frase se actualiza sola.
+ * Nació para el formulario de mentoría (N-07) —de ahí que viva en
+ * `components/tutor/`—: la lista estaba en el `accept` del input y el texto
+ * escrito a mano al lado, se tocó uno sin el otro y el formulario prometía
+ * formatos que el bucket rechazaba. Las demás pantallas repetían el mismo
+ * patrón por su cuenta: seis declaraciones del tope y siete literales
+ * «máx 10 MB» a mano. Ahora todas importan de aquí, y las frases se generan
+ * del número en vez de escribirse. Añadir un tipo o cambiar un tope es una
+ * línea de este fichero.
  *
- * ⚠️ Quien manda de verdad es el bucket: Storage devuelve 400 si el MIME no
- * está en su `allowed_mime_types` o si el archivo pasa de `file_size_limit`.
- * Esto es la copia CLIENTE de lo que declaran las migraciones
- * `20260723120000` (product-images: 5 MB · png/jpeg/webp) y `20260722160000`
- * (tutor-materials: 10 MB · PDF + Office). Cambiar una sin la otra devuelve el
- * error a su forma original: solo se descubre fallando.
+ * ⚠️ Quien manda de verdad es el bucket. La subida va del navegador a Storage
+ * con la clave anon, sin pasar por nuestro servidor, así que Storage es el
+ * ÚNICO sitio donde el límite se aplica: 400 si el MIME no está en
+ * `allowed_mime_types`, 413 si pasa de `file_size_limit`. Lo de aquí es la
+ * copia cliente, y solo sirve para dar un mensaje decente en vez de un error
+ * crudo. Nunca es la barrera.
  *
- * ponytail: fuera de este carril quedan más copias de listas parecidas
- * (`lib/chat/attachments.ts`, `components/onboarding/avatar-upload.tsx` y
- * `.../materials-upload.tsx`, `tutor/verification/verification-form.tsx`). Son
- * otros buckets, pero piden el mismo tratamiento cuando se toquen.
+ * ⚠️⚠️ SI VIENES A CAMBIAR UN NÚMERO (P-8 / MN-11b), LEE ESTO ANTES.
+ * Tocar solo la constante hace que la UI mienta al revés: promete el tope
+ * nuevo y Storage sigue cortando por el viejo, con un error que ya no
+ * explicamos. El cambio de verdad es una migración NUEVA con
+ *     update storage.buckets set file_size_limit = … where id = '<bucket>';
+ * y **NO** el patrón de las migraciones que crearon los buckets: los cinco son
+ * `insert into storage.buckets … on conflict (id) do nothing`, y sobre un
+ * bucket que ya existe eso es un NO-OP SILENCIOSO — `db:push` en verde,
+ * `typecheck` en verde, y el bucket exactamente igual que estaba. Solo se
+ * descubre subiendo un archivo grande. En todo el repo no hay ni un
+ * `update storage.buckets`: no hay precedente que copiar, hay que escribirlo.
+ *
+ * Espejo de lo que declaran las migraciones, para contrastar sin salir de aquí:
+ *   `avatars`           5 MB · `20260722160000`
+ *   `product-images`    5 MB · `20260723120000`
+ *   `tutor-materials`  10 MB · `20260722160000`
+ *   `chat-attachments` 10 MB · `20260722180000`
+ *   `kyc-documents`    10 MB · `20260706150000`
  */
 
-/** Portada de la mentoría → bucket público `product-images`. */
-export const PRODUCT_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-export const PRODUCT_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
-export const PRODUCT_IMAGE_HINT = "JPG, PNG o WebP · máx. 5 MB";
+const MB = 1024 * 1024;
 
-/** Materiales de la mentoría → bucket privado `tutor-materials`. */
-export const MATERIAL_MAX_BYTES = 10 * 1024 * 1024;
-export const MATERIAL_TYPES = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+/** PDF, que lo aceptan cuatro de los cinco buckets. */
+const PDF = "application/pdf";
+
+/**
+ * Imágenes. Hoy los tres buckets que las admiten declaran la misma lista
+ * (`avatars`, `product-images` y —con PDF al lado— `kyc-documents`), así que
+ * comparten esta. Si mañana uno diverge, se separa aquí y ya.
+ */
+const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+/**
+ * Word, PowerPoint y Excel: los de ahora y los de antes de 2007. Los repiten
+ * igual `tutor-materials` y `chat-attachments`.
+ */
+const OFFICE_TYPES = [
   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-powerpoint",
   "application/msword",
+  "application/vnd.ms-powerpoint",
   "application/vnd.ms-excel",
 ];
-export const MATERIAL_HINT =
-  "PDF, Word, PowerPoint o Excel · máx. 10 MB por archivo";
 
-/** Tamaño legible. Mismo formato que los adjuntos del chat. */
+/** Tamaño legible de un archivo concreto: «3.4 MB», «812 KB». */
 export const humanSize = (b: number) =>
-  b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`;
+  b >= MB ? `${(b / MB).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`;
+
+/**
+ * El tope, tal y como se escribe en una frase: «máx. 10 MB». Va aparte de
+ * `humanSize` porque los topes son megas redondos y «máx. 10.0 MB» se lee a
+ * trompicones; si algún día el tope es 7.5 MB, el decimal vuelve solo.
+ */
+export const maxLabel = (b: number) => `${+(b / MB).toFixed(1)} MB`;
+
+/* ── Foto de perfil → bucket público `avatars` ────────────────────────────── */
+export const AVATAR_MAX_BYTES = 5 * MB;
+export const AVATAR_TYPES = IMAGE_TYPES;
+export const AVATAR_HINT = `JPG, PNG o WebP · máx. ${maxLabel(AVATAR_MAX_BYTES)}`;
+
+/* ── Portada de la mentoría → bucket público `product-images` ─────────────── */
+export const PRODUCT_IMAGE_MAX_BYTES = 5 * MB;
+export const PRODUCT_IMAGE_TYPES = IMAGE_TYPES;
+export const PRODUCT_IMAGE_HINT =
+  `JPG, PNG o WebP · máx. ${maxLabel(PRODUCT_IMAGE_MAX_BYTES)}`;
+
+/* ── Materiales de la mentoría → bucket privado `tutor-materials` ─────────── */
+export const MATERIAL_MAX_BYTES = 10 * MB;
+export const MATERIAL_TYPES = [PDF, ...OFFICE_TYPES];
+export const MATERIAL_HINT =
+  `PDF, Word, PowerPoint o Excel · máx. ${maxLabel(MATERIAL_MAX_BYTES)} por archivo`;
+
+/* ── Adjuntos del chat → bucket privado `chat-attachments` ────────────────── */
+export const ATTACHMENT_MAX_BYTES = 10 * MB;
+export const ATTACHMENT_TYPES = [PDF, ...IMAGE_TYPES, ...OFFICE_TYPES];
+export const ATTACHMENT_HINT =
+  `PDF, imagen o documento de Office · máx. ${maxLabel(ATTACHMENT_MAX_BYTES)}`;
+
+/* ── Documentos de verificación → bucket privado `kyc-documents` (S-42) ───── */
+export const KYC_MAX_BYTES = 10 * MB;
+export const KYC_TYPES = [...IMAGE_TYPES, PDF];
+export const KYC_HINT = `PNG, JPG, WebP o PDF · máx. ${maxLabel(KYC_MAX_BYTES)}`;
 
 /**
  * Motivo por el que un archivo NO vale, o `null` si vale. Se comprueba al
@@ -49,7 +109,8 @@ export const humanSize = (b: number) =>
  * entero es exactamente lo que reporta N-07.
  *
  * El mensaje repite la regla completa en vez de decir "formato no admitido":
- * quien acaba de equivocarse necesita saber qué SÍ puede subir.
+ * quien acaba de equivocarse necesita saber qué SÍ puede subir. Y el tope sale
+ * del `spec`, nunca escrito en el texto: es la mitad de MN-11a.
  */
 export function fileProblem(
   file: File,
@@ -59,7 +120,7 @@ export function fileProblem(
     return `«${file.name}»: ese formato no se admite. Acepta ${spec.hint}.`;
   }
   if (file.size > spec.maxBytes) {
-    return `«${file.name}» pesa ${humanSize(file.size)}. El máximo es ${humanSize(spec.maxBytes)}.`;
+    return `«${file.name}» pesa ${humanSize(file.size)}. El máximo es ${maxLabel(spec.maxBytes)}.`;
   }
   return null;
 }
