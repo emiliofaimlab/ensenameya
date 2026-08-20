@@ -415,4 +415,41 @@ porque la unión de `ui_mode` acaba en `OtherString` y ya dejó pasar un 400. La
 
 ---
 
+## 20.10 · Respuestas del cliente — 20 de agosto
+
+Ocho de las nueve preguntas de §20.3, contestadas. Con esto **el Lote 2 deja de estar bloqueado**.
+
+| # | Respuesta | Qué desbloquea |
+| :-- | :-- | :-- |
+| **P-1** | **Sí, el chat solo tras reservar. «La minuta manda.»** | **MN-06.** Marcha atrás consciente sobre M-12. Se hace con migración nueva sobre `open_conversation` — **no** revirtiendo `9305c1c` ni editando `20260817210000` |
+| **P-2** | **No quieren que el domicilio sea público.** No es un problema visual | **MN-10**, con reservas: ver el aviso de abajo |
+| **P-3** | **No se sabe qué URL se presentó a dLocal** | Nada. Sigue abierta y sigue siendo la pregunta que ningún merge arregla |
+| **P-4** | Hoy se pinta el **embed completo de Stripe**; solo quieren **los campos de la tarjeta** | **MN-01**, y confirma el escenario caro: es el resumen que Stripe pinta DENTRO del iframe → hay que cambiar de `ui_mode` |
+| **P-5** | Titular **opcional**, y **también** al guardar tarjeta | **MN-02** |
+| **P-6** | **7 días antes y 7 después.** Y **NO** aceptan que el tutor cobre más tarde | **MN-05**, y confirma el desacople: la ventana de acceso se amplía, el cierre de la sesión NO se mueve |
+| **P-7** | Pendiente: no estaba clara la pregunta | Nada crítico — **las dos columnas ya están entregadas**, solo falta elegir cuál se pinta |
+| **P-8** | **25 MB** | **MN-11b** |
+| **P-9** | Pendiente: se pide por escrito a través de Verónica | **MN-14b** sigue bloqueado |
+
+### ⚠️ Tres consecuencias que hay que decir antes de ejecutar
+
+**1 · P-2 no se cumple quitando la línea del pie.** El domicilio está en **tres** sitios: el pie,
+`/contacto` y el **§39 de los Términos**, en inglés y en español. Quitarlo del pie deja los otros dos.
+Y los Términos son el documento que redactó y firmó el cliente: no se tocan desde desarrollo.
+Además el domicilio es **DL-03**, uno de los datos que dLocal comprueba a mano contra su panel, y
+`lib/company.ts` avisa de que tienen que coincidir. **Hace falta una decisión explícita antes de
+tocar nada.**
+
+**2 · P-1 le quita casi todo el sentido a MN-07.** El valor de que el tutor mande el enlace de
+reserva por el chat es máximo **en la conversación previa a la compra**, que es justo la que P-1
+cierra. Con el chat post-reserva, el alumno ya reservó. Conviene confirmarlo antes de construirlo.
+
+**3 · P-6 encaja con lo ya hecho, y eso es una buena noticia.** Que el cierre de la sesión no se
+mueva evita de un plumazo el choque con el §12 del contrato (payouts a 7-14 días) y el agujero del
+§17 (cancelar al 50 % después de la clase). Y la sala abierta 7 días **no cuesta nada** en Daily
+—se factura por minuto-participante— ni firma credenciales largas, porque **MN-05a ya desacopló el
+token** (`05d1286`).
+
+---
+
 *Faim Lab · Doc 20 · Plan de acción sobre la minuta del 17-ago · 20 de agosto de 2026.*
