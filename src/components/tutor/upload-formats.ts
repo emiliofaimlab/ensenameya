@@ -7,10 +7,10 @@
  * `components/tutor/`—: la lista estaba en el `accept` del input y el texto
  * escrito a mano al lado, se tocó uno sin el otro y el formulario prometía
  * formatos que el bucket rechazaba. Las demás pantallas repetían el mismo
- * patrón por su cuenta: seis declaraciones del tope y siete literales
- * «máx 10 MB» a mano. Ahora todas importan de aquí, y las frases se generan
- * del número en vez de escribirse. Añadir un tipo o cambiar un tope es una
- * línea de este fichero.
+ * patrón por su cuenta: seis declaraciones del tope y siete literales del
+ * tope escritos a mano. Ahora todas importan de aquí, y las frases se
+ * generan del número en vez de escribirse. Añadir un tipo o cambiar un
+ * tope es una línea de este fichero.
  *
  * ⚠️ Quien manda de verdad es el bucket. La subida va del navegador a Storage
  * con la clave anon, sin pasar por nuestro servidor, así que Storage es el
@@ -19,7 +19,7 @@
  * copia cliente, y solo sirve para dar un mensaje decente en vez de un error
  * crudo. Nunca es la barrera.
  *
- * ⚠️⚠️ SI VIENES A CAMBIAR UN NÚMERO (P-8 / MN-11b), LEE ESTO ANTES.
+ * ⚠️⚠️ SI VIENES A CAMBIAR UN NÚMERO, LEE ESTO ANTES.
  * Tocar solo la constante hace que la UI mienta al revés: promete el tope
  * nuevo y Storage sigue cortando por el viejo, con un error que ya no
  * explicamos. El cambio de verdad es una migración NUEVA con
@@ -28,14 +28,25 @@
  * `insert into storage.buckets … on conflict (id) do nothing`, y sobre un
  * bucket que ya existe eso es un NO-OP SILENCIOSO — `db:push` en verde,
  * `typecheck` en verde, y el bucket exactamente igual que estaba. Solo se
- * descubre subiendo un archivo grande. En todo el repo no hay ni un
- * `update storage.buckets`: no hay precedente que copiar, hay que escribirlo.
+ * descubre subiendo un archivo grande.
+ *
+ * Eso ya tiene precedente que copiar: `20260820170000_chat_attachments_25mb.sql`
+ * (MN-11b / P-8, el 10 → 25 MB del chat), que además cierra el `update` con un
+ * `do $$ … raise exception` verificando el valor, para que el no-op no pueda
+ * volver a pasar callado.
+ *
+ * ⚠️ Y hay un techo por encima del bucket: el límite GLOBAL del proyecto
+ * (panel de Supabase → Storage → Settings) acota a cualquier bucket, no se ve
+ * desde el repo y no se toca con SQL. Si algún tope de aquí lo supera, la
+ * migración pasa en verde y las subidas siguen fallando. El 20-ago aceptaba
+ * 24,5 MB sin rechistar, así que hasta 25 MB hay sitio; por encima, mirar el
+ * panel ANTES de escribir la migración.
  *
  * Espejo de lo que declaran las migraciones, para contrastar sin salir de aquí:
  *   `avatars`           5 MB · `20260722160000`
  *   `product-images`    5 MB · `20260723120000`
  *   `tutor-materials`  10 MB · `20260722160000`
- *   `chat-attachments` 10 MB · `20260722180000`
+ *   `chat-attachments` 25 MB · `20260722180000` → `20260820170000` (MN-11b)
  *   `kyc-documents`    10 MB · `20260706150000`
  */
 
@@ -93,7 +104,7 @@ export const MATERIAL_HINT =
   `PDF, Word, PowerPoint o Excel · máx. ${maxLabel(MATERIAL_MAX_BYTES)} por archivo`;
 
 /* ── Adjuntos del chat → bucket privado `chat-attachments` ────────────────── */
-export const ATTACHMENT_MAX_BYTES = 10 * MB;
+export const ATTACHMENT_MAX_BYTES = 25 * MB;
 export const ATTACHMENT_TYPES = [PDF, ...IMAGE_TYPES, ...OFFICE_TYPES];
 export const ATTACHMENT_HINT =
   `PDF, imagen o documento de Office · máx. ${maxLabel(ATTACHMENT_MAX_BYTES)}`;

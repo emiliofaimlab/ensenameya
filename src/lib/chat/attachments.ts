@@ -11,7 +11,12 @@ import {
  * MN-11a · Los límites del bucket `chat-attachments` ya no se declaran aquí:
  * viven con los de los otros cuatro buckets en
  * `components/tutor/upload-formats.ts`, que es también donde está apuntado qué
- * hay que hacer en la BD el día que el número cambie (P-8).
+ * hay que hacer en la BD el día que el número vuelva a cambiar.
+ *
+ * MN-11b (P-8) · El tope del chat son **25 MB** desde el 20-ago, y los pone el
+ * bucket: `20260820170000_chat_attachments_25mb.sql`. Cambiar la constante sin
+ * la migración —o al revés— deja a la UI mintiendo en una dirección o en la
+ * otra; el porqué está entero en la cabecera de `upload-formats.ts`.
  *
  * Se re-exportan porque el chat los pide a ESTE módulo desde antes
  * (`chat-thread.tsx` y la descarga del hilo en `api/chat/[threadId]/download`);
@@ -63,7 +68,16 @@ export async function uploadAttachment(
 
   if (error) {
     // El objeto ya subió pero el mensaje no salió: sin la fila nadie lo ve, así
-    // que se retira para no dejar basura en el bucket.
+    // que se intenta retirar para no dejar basura en el bucket.
+    //
+    // ⚠️ Hoy este `remove` NO borra nada: `20260722180000` da a `authenticated`
+    // políticas de INSERT y SELECT sobre `chat-attachments` y **ninguna de
+    // DELETE**, a propósito («un adjunto ya enviado no se retira del hilo del
+    // otro»). Storage responde 403 y el objeto se queda huérfano — comprobado
+    // el 20-ago con la clave anon. Se deja la llamada porque no cuesta nada y
+    // empieza a funcionar sola el día que exista esa política o un Route
+    // Handler con `service_role`; lo que no se puede es dar por hecho que
+    // limpia. Y desde MN-11b cada huérfano pesa hasta 25 MB, no 10.
     await supabase.storage.from("chat-attachments").remove([path]);
     return { error: error.message || "No se pudo compartir el archivo." };
   }
