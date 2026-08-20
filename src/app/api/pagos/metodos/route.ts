@@ -3,14 +3,16 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  crearSesionDeAltaDeTarjeta,
   detachCard,
   ensureCustomer,
   esCustomerInexistente,
   isStripeConfigured,
   listSavedCards,
+  permitirReutilizacion,
   publishableKey,
+  recuperarSesionDeAlta,
   siteUrl,
-  stripe,
 } from "@/lib/stripe";
 
 /**
@@ -20,6 +22,14 @@ import {
  * que TODA comprobación de pertenencia se hace a mano contra el Customer de
  * quien llama. Un id `pm_…` o `cs_…` es solo una cadena, y sin ese chequeo
  * bastaría para tocarle el medio de pago a otra persona.
+ *
+ * ⚠️ ESTA RUTA NO PASA POR EL PUERTO DE PAGOS, y es deliberado: guardar
+ * tarjetas no es cobrar. El puerto cubre lo que un segundo PSP tendrá que
+ * implementar entero (cobro, reembolso, webhook) y el vault de tarjetas de
+ * Stripe no tiene equivalente garantizado en dLocal — meterlo en la interfaz
+ * sería obligar al próximo adaptador a fingir tres métodos más. Lo que sí se
+ * respeta es el invariante: las llamadas al SDK viven en `lib/stripe.ts`, no
+ * aquí. El porqué completo está allí, en «la caja fuerte de tarjetas».
  */
 
 /**
@@ -101,57 +111,13 @@ export async function POST() {
 
   const base = siteUrl();
   const crearSesion = (cliente: string) =>
-    stripe().checkout.sessions.create({
-      mode: "setup",
-      customer: cliente,
-      // Mismo criterio que el cobro: solo tarjeta. Dejarlo al panel traería
-      // Cash App Pay, Amazon Pay y Klarna, que además de irrelevantes para
-      // Latinoamérica ni siquiera se pueden "guardar" como un card-on-file.
-      payment_method_types: ["card"],
-      // ⚠️ ESTA LÍNEA ES LA QUE HACE QUE TODO ESTO SIRVA DE ALGO.
-      //
-      // El checkout de una reserva filtra las tarjetas guardadas por
-      // `saved_payment_method_options.allow_redisplay_filters: ['always',
-      // 'limited']` (ver `api/pagos/checkout/route.ts`). Una tarjeta que nace
-      // con `allow_redisplay: 'unspecified'` —el valor por defecto de las que se
-      // guardan fuera de un cobro— NO entra en ese filtro: se vería en esta
-      // pantalla y NO aparecería a la hora de pagar. O sea, la funcionalidad
-      // parecería hecha y no serviría para nada, que es el peor fallo posible
-      // porque nadie lo reporta.
-      //
-      // El campo existe justo para esto: la propia API lo describe como
-      // "override the allow_redisplay value determined by Checkout".
-      payment_method_data: { allow_redisplay: "always" },
-      setup_intent_data: {
-        // Para poder rastrear de quién salió, igual que el `booking_id` del
-        // cobro: los eventos de SetupIntent no traen la Session.
-        metadata: { profile_id: user.id },
-      },
-      // OJO: `saved_payment_method_options` NO se pasa aquí. La API solo lo
-      // admite en `payment` y `subscription`; en `setup` devuelve 400.
-      //
-      // ⚠️ Y `setup_intent_data` no expone `usage`, así que esta Session crea el
-      // SetupIntent con el `off_session` que Checkout pone por defecto — más
-      // permisivo que el `setup_future_usage: 'on_session'` que pide PAC-02 en
-      // el cobro. Eso cambia cómo se autentica la tarjeta (se pide 3DS ahora
-      // para que un cargo futuro sin la persona delante no lo vuelva a pedir),
-      // NO lo que hacemos con ella: no existe ni un solo camino que cobre fuera
-      // de una Checkout Session con la persona delante. Si algún día se quisiera
-      // el permiso menor de verdad, habría que bajar a SetupIntent + Elements.
-      ui_mode: "embedded_page",
-      // Sin esto Stripe rotula según el navegador y salía "Payment method" en
-      // mitad de una pantalla en español.
-      locale: "es",
+    crearSesionDeAltaDeTarjeta({
+      customerId: cliente,
+      profileId: user.id,
       // Vuelve a la misma pantalla, con el id de la Session para poder
       // verificar lo guardado (ver PATCH). El placeholder lo sustituye Stripe.
-      return_url: `${base}/pagos?tarjeta={CHECKOUT_SESSION_ID}`,
+      returnUrl: `${base}/pagos?tarjeta={CHECKOUT_SESSION_ID}`,
     });
-  // SIN `idempotencyKey`, y es a propósito: aquí no hay entidad estable que
-  // sirva de clave —una persona puede querer añadir una segunda tarjeta un
-  // minuto después de la primera, y cualquier clave por usuario le devolvería
-  // la Session anterior—. Reservar sí la necesitaba porque un doble clic abría
-  // dos cobros; una Session de `setup` no mueve dinero, así que la peor
-  // consecuencia de duplicarla es una Session sin completar que caduca sola.
 
   let session;
   try {
@@ -221,15 +187,8 @@ export async function PATCH(req: Request) {
 
   // El id viene de la URL, así que puede ser cualquier cosa con forma de `cs_`.
   // Un id inexistente es "no encontrada", no un 500 nuestro llenando los logs.
-  let session;
-  try {
-    session = await stripe().checkout.sessions.retrieve(sessionId, {
-      expand: ["setup_intent"],
-    });
-  } catch (e) {
-    if ((e as { type?: string })?.type !== "StripeInvalidRequestError") throw e;
-    return NextResponse.json({ error: "no encontrada" }, { status: 404 });
-  }
+  const session = await recuperarSesionDeAlta(sessionId);
+  if (!session) return NextResponse.json({ error: "no encontrada" }, { status: 404 });
 
   // Pertenencia: la Session tiene que ser de NUESTRO Customer y de tipo setup.
   // Mismo criterio que la RLS — si no es tuya, no existe.
@@ -254,9 +213,7 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ guardada: false });
   }
 
-  // Se pone sin preguntar antes: comprobar el valor actual costaría una llamada
-  // extra siempre para ahorrar una escritura que ya es idempotente.
-  await stripe().paymentMethods.update(metodo, { allow_redisplay: "always" });
+  await permitirReutilizacion(metodo);
 
   return NextResponse.json({ guardada: true });
 }
