@@ -430,7 +430,7 @@ Ocho de las nueve preguntas de §20.3, contestadas. Con esto **el Lote 2 deja de
 | **P-6** | **7 días antes y 7 después.** Y **NO** aceptan que el tutor cobre más tarde | **MN-05**, y confirma el desacople: la ventana de acceso se amplía, el cierre de la sesión NO se mueve |
 | **P-7** | **Mentorías distintas** (quien compró dos veces la misma ve un 1). Contestada el 20-ago con el ejemplo de las tres cuentas | 🟢 **Cerrada.** Era la que ya se pintaba; se retiró el mapeo de `session_count`, que no lo leía nadie |
 | **P-8** | **25 MB** | **MN-11b** |
-| **P-9** | **Mensaje enviado a Verónica el 20-ago**, con el ejemplo numérico de quién absorbe el descuento | **MN-14b** sigue bloqueado hasta que responda el cliente |
+| **P-9** | **Contestada el 20-ago:** la campaña se monta sobre **Referral Factory** (ya se está pagando) y **el descuento lo absorbe la plataforma** | Ver §20.12 |
 
 ### ⚠️ Tres consecuencias que hay que decir antes de ejecutar
 
@@ -515,6 +515,51 @@ cascada y un cambio de ventana que toca el reloj del dinero— y porque le falta
 | **P-10** — el snippet de widget de Referral Factory | RF | MN-12 |
 | **P-3** — qué URL se presentó a dLocal | Cliente | MN-13, MN-03 |
 | `STRIPE_PUBLISHABLE_KEY`, `CRON_SECRET` y `APP_BASE_URL` | Jose (paneles) | Revisar la tanda B · que un reembolso mueva un euro |
+
+---
+
+## 20.12 · La campaña, tras la respuesta de P-9
+
+Dos respuestas, y la primera **cambia el tamaño del trabajo por un orden de magnitud**.
+
+**«Usamos Referral Factory, que ya lo pagamos».** Es el camino barato: el programa entero
+—invitaciones, seguimiento, calificación de referidos— vive en RF y el código del repo es **cero o
+casi cero**. Se acabó la épica del motor de promociones… **si el premio lo entrega RF** (efectivo,
+tarjeta regalo, lo que su panel permita).
+
+**«El descuento lo asume la plataforma».** Buena noticia técnica: significa que
+`bookings.tutor_net_amount` **no se toca**. El descuento sale de `platform_fee_amount`, así que el
+tutor cobra exactamente lo mismo con promoción que sin ella y **no hay que tocar el reparto de
+`create_booking`** — que era la parte cara y la que congela el snapshot financiero.
+
+### ⚠️ Pero queda una pregunta, y de ella depende que haya código o no
+
+**¿En qué consiste el premio?**
+
+- **Si RF lo entrega** (efectivo, tarjeta regalo, transferencia): **no hay nada que programar**. Se
+  configura la campaña en su panel, se rellena la plantilla de términos —hoy en blanco— y se dan de
+  alta `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel.
+- **Si el premio es un descuento en una mentoría de la plataforma**, RF **no puede aplicarlo**: no
+  llega a `create_booking`. Hay que construir el mínimo —código de promoción, canje y el descuento
+  saliendo de la comisión— aunque sea la versión barata por absorberlo la plataforma.
+
+### ⚠️ Y un límite aritmético que conviene decir antes de prometer un porcentaje
+
+Si la plataforma absorbe el descuento, **el descuento máximo sin perder dinero es su propia
+comisión**. Con los tiers actuales (75/85/90 para el tutor) la comisión es del **25 %, 15 % o 10 %**.
+Con un tutor al 85 %, un descuento del 20 % sobre una mentoría de 100 $ deja a la plataforma
+poniendo **5 $ de su bolsillo** en cada reserva, porque el tutor sigue cobrando sus 85 $.
+**Es sostenible solo si se decide a propósito.**
+
+### Lo que sigue sin resolverse de referidos
+
+- **P-10 · el embed sigue descartado.** Comprobado el 20-ago: la página de campaña de RF responde
+  `x-frame-options: SAMEORIGIN`. Que se pague RF no cambia su cabecera. Sigue haciendo falta pedirles
+  **su snippet de widget**.
+- ⚠️ **La atribución NO va por email**, pase lo que pase con la campaña. Cuatro documentos del repo
+  dicen que sí y **es falso** (§20.6): lo implementado es la cookie `ey-ref`, y
+  `REFERRAL_FACTORY_API_KEY` no se lee en ninguna línea de código. Si la campaña depende de atribuir
+  bien, ese trabajo **está entero por hacer** y no lo arregla pagar la suscripción.
 
 ---
 
