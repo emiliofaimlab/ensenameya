@@ -12,6 +12,7 @@ import { ensureRoom, isDailyConfigured, mintToken } from "@/lib/daily";
  *      La barrera con dientes sigue siendo la BD, no este endpoint.
  *   2. Crea/reusa la sala en Daily y firma un meeting-token acotado a
  *      (sala, usuario, expiración). La API key nunca sale del servidor.
+ *      La expiración del token es la SUYA, no la de la sala (MN-05a).
  *
  * El token no se almacena (Doc 1 §1.4.11): se firma en cada entrada.
  */
@@ -59,6 +60,11 @@ export async function POST(
 
   // 2) Sala + token. La sala expira al cerrar la ventana (fin + 10 min, S-45):
   // aunque alguien guarde la URL, Daily no admite a nadie después.
+  // ⚠️ MN-05a: esta fecha es SOLO de la sala. El token dejó de heredarla — lo
+  // firma `mintToken` a partir del fin de la sesión, corto y por su cuenta — para
+  // que el día que MN-05 abra la sala días antes y días después no estemos
+  // firmando credenciales de acceso válidas durante días. Si vuelves a pasarle
+  // `windowClosesAt` al token, deshaces exactamente eso.
   const windowClosesAt = new Date(new Date(auth.ends_at).getTime() + 10 * 60_000);
 
   // US-1801 · la sala se crea con grabación SOLO si los dos consintieron
@@ -78,7 +84,7 @@ export async function POST(
       userName: profile?.full_name ?? (auth.is_tutor ? "Tutor" : "Alumno"),
       userId: user!.id,
       isOwner: auth.is_tutor, // el tutor controla la sala
-      expiresAt: windowClosesAt,
+      endsAt: new Date(auth.ends_at),
     });
 
     return NextResponse.json({

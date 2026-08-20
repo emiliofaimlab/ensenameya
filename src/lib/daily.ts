@@ -44,6 +44,20 @@ async function daily(path: string, init?: RequestInit) {
  * que ya existe, se recupera — dos participantes entrando a la vez no chocan.
  * `exp` cierra la sala sola pasada la ventana de acceso (RN-18): aunque alguien
  * guarde la URL, Daily deja de admitir a nadie.
+ *
+ * MN-05a · Este `exp` es el de la SALA y ya no manda sobre el del token: el
+ * meeting-token se firma corto por su cuenta (ver `mintToken`). Por eso abrir
+ * la sala días antes y dejarla abierta días después —lo que pidió el cliente en
+ * MN-05— dejó de ser un riesgo: lo que se alargaba con la sala no era la sala,
+ * eran las CREDENCIALES de entrada.
+ *
+ * Y que quede escrito para no volver a discutirlo: **Daily no factura por sala
+ * abierta, sino por minuto-participante**. Una sala vacía con el `exp` lejano
+ * no cuesta nada — el coste nunca fue un argumento contra MN-05; el token sí.
+ *
+ * Ojo al tocar la ventana: cuando la sala ya existe, más abajo se le REAPLICAN
+ * las propiedades en cada join. Un cambio de fórmula alcanza a las salas ya
+ * creadas, pero solo en el siguiente join, nunca antes.
  */
 export async function ensureRoom(
   name: string,
@@ -60,6 +74,14 @@ export async function ensureRoom(
     // razones: no queremos dos chats, y el suyo se cobra aparte como
     // almacenamiento. Es propiedad de SALA, no del iframe.
     enable_chat: false,
+    // N-18 · sin antesala: quien pulsa «entrar» ya decidió entrar, y el paso
+    // intermedio de Daily solo añade una pantalla que no es nuestra.
+    // ⚠️ Propiedad EXCLUSIVA de Daily Prebuilt. Si algún día se aprueba el
+    // rediseño de la llamada (MN-04, que obliga a migrar a `createCallObject`),
+    // esta línea deja de existir en la API y su papel lo hereda un prejoin
+    // nuestro. Hasta entonces NO se borra "porque no parece hacer nada": hoy es
+    // lo único que quita esa pantalla.
+    enable_prejoin_ui: false,
     // Sin consentimiento la sala ni ofrece el botón de grabar: el permiso no
     // se pide en la interfaz, se quita del proveedor (RN-42).
     enable_recording: recording ? "cloud" : false,
@@ -93,16 +115,51 @@ export async function ensureRoom(
 }
 
 /**
+ * MN-05a · Margen tras el fin de la mentoría: una sesión se alarga un poco y el
+ * token la acompaña. Es el margen DEL TOKEN, no la ventana de acceso (que la
+ * fija `session_access_window` en la BD y hoy son 10 min a cada lado): son dos
+ * números distintos que hoy coinciden, y ese es justo el motivo de separarlos.
+ */
+const TOKEN_GRACE_MS = 10 * 60_000;
+
+/**
+ * Suelo de vida del token contado desde que se firma. Sin él, un join
+ * autorizado DESPUÉS de `endsAt + TOKEN_GRACE_MS` —imposible hoy, pero rutina
+ * en cuanto MN-05 alargue la ventana a días— recibiría un token ya caducado y
+ * el alumno vería nuestro 502 sin entender nada. Es corto a propósito: quien
+ * necesite más tiempo vuelve a pedir el endpoint, que es quien autoriza.
+ *
+ * Sí, en un join de los últimos minutos este suelo deja el token vivo algo más
+ * allá del cierre de la ventana. No abre nada: la sala expira igual y con
+ * `eject_at_room_exp` echa a todo el mundo — la barrera es la sala, no el token.
+ */
+const TOKEN_MIN_LIFE_MS = 10 * 60_000;
+
+/** `exp` (epoch en segundos) del meeting-token. Ver las dos constantes de arriba. */
+function tokenExpiry(endsAt: Date, now = Date.now()): number {
+  const exp = Math.max(endsAt.getTime() + TOKEN_GRACE_MS, now + TOKEN_MIN_LIFE_MS);
+  return Math.floor(exp / 1000);
+}
+
+/**
  * Firma un meeting-token acotado a (sala, usuario, expiración). El tutor entra
  * como `owner` (puede expulsar/controlar la sala); el alumno, no.
  * No se almacena (Doc 1 §1.4.11).
+ *
+ * MN-05a · El `exp` sale del fin de la SESIÓN, nunca del de la sala. Antes se
+ * le pasaba el mismo `Date` que a `ensureRoom` y no se notaba porque la ventana
+ * son 10 minutos; el día que la sala abra días (MN-05) eso sería firmar
+ * credenciales de acceso válidas durante días — lo contrario exacto de «token
+ * efímero, no almacenado». Por eso el parámetro se llama `endsAt` y no
+ * `expiresAt`: para que el `exp` de la sala no pueda volver a colarse aquí.
  */
 export async function mintToken(opts: {
   room: string;
   userName: string;
   userId: string;
   isOwner: boolean;
-  expiresAt: Date;
+  /** Fin de la sesión (`sessions.end_at`), NO el cierre de la ventana ni el de la sala. */
+  endsAt: Date;
 }): Promise<string> {
   const res = await daily("/meeting-tokens", {
     method: "POST",
@@ -112,7 +169,7 @@ export async function mintToken(opts: {
         user_name: opts.userName,
         user_id: opts.userId,
         is_owner: opts.isOwner,
-        exp: Math.floor(opts.expiresAt.getTime() / 1000),
+        exp: tokenExpiry(opts.endsAt),
       },
     }),
   });
