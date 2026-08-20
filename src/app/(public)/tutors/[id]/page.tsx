@@ -44,7 +44,7 @@ export default async function TutorProfilePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ p?: string; d?: string }>;
+  searchParams: Promise<{ p?: string; d?: string; h?: string }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   // M-12 · el tiempo de respuesta se pide en paralelo con lo demás: alimenta el
@@ -78,10 +78,25 @@ export default async function TutorProfilePage({
     ).values(),
   ];
 
-  const hrefFor = (next: { p?: string; d?: string }) => {
+  /**
+   * El estado del panel de reserva vive ENTERO en la query: clase (`p`), día
+   * (`d`) y —desde MN-16— hora (`h`). Nada de estado de cliente: la ficha es un
+   * server component y así la elección se puede compartir, recargar y deshacer
+   * con el botón atrás.
+   *
+   * ⚠️ `URLSearchParams` no es adorno: la hora es un ISO con `:` y, según el
+   * huso, un `+` en el offset. Concatenarla a mano dejaría ese `+` crudo en la
+   * query, donde significa "espacio" — la hora llegaría destrozada al otro lado
+   * y el panel la descartaría por no casar con ningún hueco.
+   *
+   * El `#reservar` mantiene la vista en el panel: sin él, elegir una hora
+   * rebotaría al principio de la ficha en cada pulsación.
+   */
+  const hrefFor = (next: { p?: string; d?: string; h?: string }) => {
     const q = new URLSearchParams();
     if (next.p) q.set("p", next.p);
     if (next.d) q.set("d", next.d);
+    if (next.h) q.set("h", next.h);
     const s = q.toString();
     return s ? `/tutors/${id}?${s}#reservar` : `/tutors/${id}#reservar`;
   };
@@ -280,6 +295,7 @@ export default async function TutorProfilePage({
               products={products}
               selectedId={sp.p}
               selectedDay={sp.d}
+              selectedTime={sp.h}
               timeZone={await getViewerTimezone()}
               hrefFor={hrefFor}
             />

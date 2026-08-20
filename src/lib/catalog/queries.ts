@@ -959,20 +959,63 @@ export async function listCategoriesWithCounts(): Promise<
   }));
 }
 
+/**
+ * Hasta dónde llega la agenda que se PUBLICA. **Un solo número para todo el
+ * cliente**, y no es una preferencia estética: los mismos huecos se pintaban con
+ * tres ventanas distintas y eso era un bug con cara de mentira.
+ *
+ *   · la ficha pública pedía **60 días**;
+ *   · el selector de `/reservar/<id>` no pasaba rango y caía al default de la
+ *     RPC, **21 días**;
+ *   · `create_booking` revalida contra `current_date + 30` antes de escribir.
+ *
+ * Resultado: la vitrina ofrecía horarios del día +45 que la reserva rechazaba, y
+ * el error mentía —«algún horario ya no está disponible»— cuando el hueco estaba
+ * libre y el problema era la fecha. Y por el otro lado, un hueco del día +25 era
+ * reservable pero invisible en el selector.
+ *
+ * Se elige **30 = el límite que la base de datos YA acepta**, no un número nuevo:
+ * bajar la vitrina no necesita migración y ninguna reserva que hoy funciona deja
+ * de funcionar. Subir el tope de `create_booking` habría sido tocar dinero y
+ * disponibilidad para enseñar tres semanas más de agenda que casi nadie reserva.
+ *
+ * ⚠️ El default de la RPC sigue siendo 21 y **no se toca** (regla de oro 5: la
+ * migración está aplicada). Se neutraliza por el otro lado: **todo llamador pasa
+ * el rango explícito**, así que ese default no se alcanza desde el cliente. Si
+ * añades una llamada a `get_available_slots`, pásale `rangoPublicado()` — si la
+ * dejas sin rango vuelves a tener dos verdades, y esta vez en silencio.
+ *
+ * Y si algún día hay que subirlo: se cambia AQUÍ **y** en `create_booking`, con
+ * migración nueva. Cambiar solo uno reabre exactamente este bug.
+ */
+export const HORIZONTE_RESERVA_DIAS = 30;
+
+/**
+ * Rango `date` que espera `get_available_slots`, en el mismo huso en el que
+ * Postgres evalúa `current_date` (UTC en Supabase) — por eso el corte se hace
+ * con `toISOString()` y no con la fecha local del servidor de Next: un `new
+ * Date().getDate()` en Vercel y el `current_date` de la BD no siempre son el
+ * mismo día, y ahí se cuela el hueco fantasma del borde.
+ */
+export function rangoPublicado(days = HORIZONTE_RESERVA_DIAS) {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const hoy = new Date();
+  return {
+    p_from: iso(hoy),
+    p_to: iso(new Date(hoy.getTime() + days * 86400000)),
+  };
+}
+
 /** P07 · huecos libres de un producto para pintar el calendario público.
  *  `get_available_slots` ya descuenta reglas, excepciones y sesiones ocupadas. */
 export async function listProductSlots(
   productId: string,
-  days = 60,
+  days = HORIZONTE_RESERVA_DIAS,
 ): Promise<{ start: string; end: string }[]> {
   const supabase = await createClient();
-  const today = new Date();
-  const to = new Date(today.getTime() + days * 86400000);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
   const { data } = await supabase.rpc("get_available_slots", {
     p_product_id: productId,
-    p_from: iso(today),
-    p_to: iso(to),
+    ...rangoPublicado(days),
   });
   return (data ?? []).map((s) => ({ start: s.slot_start, end: s.slot_end }));
 }

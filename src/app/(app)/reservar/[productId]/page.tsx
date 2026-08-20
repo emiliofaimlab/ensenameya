@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { getProductDetail } from "@/lib/catalog/queries";
+import { getProductDetail, rangoPublicado } from "@/lib/catalog/queries";
 import { bookingTotal, tutorNames } from "@/lib/booking";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { SlotPicker } from "./slot-picker";
@@ -27,7 +27,9 @@ export const metadata = { title: "Elegir horario · Enséñame Ya" };
  * Lo que le queda —y no es poco, por eso la pantalla sigue viva—:
  *   · los PAQUETES, que exigen elegir N horarios (RN-12) y no tienen otro sitio
  *     donde hacerlo;
- *   · quien llega SIN hora (el botón grande de la ficha, un enlace guardado);
+ *   · quien llega SIN hora: un enlace guardado, un marcador. Ya NO el botón
+ *     grande de la ficha — desde MN-16 ese botón lleva la hora elegida encima y
+ *     solo pasa por aquí si la mentoría es un paquete;
  *   · quien llega con una hora que ya no existe: se la ocuparon mientras
  *     miraba, o se registró por el camino y pasaron minutos. Ahí el calendario
  *     es la respuesta correcta, no un estorbo.
@@ -48,7 +50,17 @@ export default async function ReservarPage({
 
   const supabase = await createClient();
   const [{ data: slots }, names, tz] = await Promise.all([
-    supabase.rpc("get_available_slots", { p_product_id: productId }),
+    // ⚠️ El rango va EXPLÍCITO. Sin él la RPC caía a su default de 21 días
+    // mientras la ficha pública pedía 60 y `create_booking` revalidaba contra
+    // 30: tres ventanas para los mismos huecos. Aquí el síntoma era el
+    // silencioso —un hueco del día +25 se anunciaba en la ficha, se reservaba
+    // bien, y aun así no aparecía en este calendario, así que quien llegaba sin
+    // hora no podía elegirlo—. `rangoPublicado()` es el único sitio donde vive
+    // ese número; ver su nota en `lib/catalog/queries`.
+    supabase.rpc("get_available_slots", {
+      p_product_id: productId,
+      ...rangoPublicado(),
+    }),
     tutorNames(supabase, [product.tutor.id]),
     // Sin zona explícita el SSR agruparía los huecos por el día del SERVIDOR
     // (UTC en Vercel) y el calendario del cliente por el del navegador: dos
@@ -100,7 +112,12 @@ export default async function ReservarPage({
         {/* Traía una hora concreta y ya no está entre las libres: se la
             ocuparon mientras miraba, o se registró por el camino. Sin este
             aviso el calendario aparece "en blanco" y parece que se perdió la
-            elección — que es justo la sensación que arregla N-33. */}
+            elección — que es justo la sensación que arregla N-33.
+            ⚠️ Este cartel MENTÍA hasta que se unificaron los horizontes: la
+            ficha ofrecía hasta el día +60 y aquí solo se pedían 21, así que un
+            hueco perfectamente libre del día +30 caía en esta rama y se
+            anunciaba como ocupado. Hoy los dos lados piden el mismo rango, así
+            que si sale este texto es porque el hueco de verdad se fue. */}
         {slot && !elegido ? (
           <p className="text-[13px] text-warning">
             El horario que habías elegido ya no está libre. Elige otro.

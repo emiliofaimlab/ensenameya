@@ -37,13 +37,13 @@ const sesionesPorReserva = (p: ProductCardData) =>
   p.pricingModel === "per_package" ? (p.packageNumSessions ?? 1) : 1;
 
 /**
- * N-33 + N-32 · a dónde lleva pulsar una hora. Del calendario al pago, sin
+ * N-33 + N-32 · a dónde lleva CONFIRMAR una hora. Del calendario al pago, sin
  * volver a preguntar lo mismo.
  *
  * El cliente lo dijo con estas palabras: «estás seleccionando dos veces algo»
  * y «me mareó un poco que el calendario salga dos veces […] yo selecciono el 14
  * a las 8 de la mañana y después me salta, y como salta en otra forma, yo digo
- * "ya estoy reservando, ¿a qué hora es que yo reservé?"». Pulsar una hora AQUÍ
+ * "ya estoy reservando, ¿a qué hora es que yo reservé?"». Elegir la hora AQUÍ
  * ya es elegir; `/reservar/<id>` repintaba otro calendario —con otra forma y
  * otro día de inicio de semana— para preguntar exactamente lo mismo.
  *
@@ -57,8 +57,9 @@ const sesionesPorReserva = (p: ProductCardData) =>
  *                      hora (M-10) y pide las que faltan.
  *
  * Y `/reservar/<id>` sigue existiendo además como respaldo para quien llega sin
- * hora elegida (el botón grande de abajo, un enlace guardado, un hueco que se
- * ocupó entre medias).
+ * hora elegida: un enlace guardado, un marcador, un hueco que se ocupó entre
+ * medias. Ya NO se llega ahí desde el botón grande de este panel — ver la nota
+ * del CTA.
  */
 const destinoDeLaHora = (p: ProductCardData, iso: string) =>
   sesionesPorReserva(p) > 1
@@ -86,6 +87,7 @@ export async function BookingPanel({
   products,
   selectedId,
   selectedDay,
+  selectedTime,
   hrefFor,
   ctaLabel = "Reservar mentoría YA",
   note = "Pago protegido · Cancela con 24h y recibe el 100%.",
@@ -96,10 +98,16 @@ export async function BookingPanel({
   products: ProductCardData[];
   selectedId?: string;
   selectedDay?: string;
+  /**
+   * MN-16 · la hora elegida, en ISO, tal cual viaja por la URL. Llega SIN
+   * validar: es texto de la barra de direcciones. Se contrasta abajo contra los
+   * huecos reales y solo entonces pinta o desbloquea nada.
+   */
+  selectedTime?: string;
   /** Zona del visitante (`getViewerTimezone`): con sesión, la suya; sin sesión,
    *  la del navegador. Sin ella el SSR pintaría la hora del servidor (R24-22). */
   timeZone: string;
-  hrefFor: (next: { p?: string; d?: string }) => string;
+  hrefFor: (next: { p?: string; d?: string; h?: string }) => string;
   ctaLabel?: string;
   note?: string;
   /** P08 añade equivalencia por sesión y duración bajo el precio. */
@@ -143,9 +151,36 @@ export async function BookingPanel({
   const chosen =
     single ?? products.find((p) => p.id === selectedId) ?? undefined;
 
+  /**
+   * MN-16 · la hora elegida, ya contrastada contra los huecos REALES de la clase
+   * elegida. Lo que se queda es el ISO **canónico** de la BD, no el de la URL.
+   *
+   * ⚠️ Se compara por INSTANTE, nunca con `===`. La cadena de la URL la produjo
+   * un render anterior y basta con que Postgres devuelva el mismo momento con
+   * otro formato (`+00:00` frente a `Z`), o con que un `+` del ISO se lea como
+   * espacio al decodificar, para que la igualdad de texto no case jamás — y el
+   * síntoma sería "pulso la hora y no se marca", sin error en ningún sitio. Es
+   * la misma trampa que ya documenta `/reservar/<id>` al validar su `?slot=`.
+   *
+   * Si no casa —hueco ocupado entre medias, URL vieja, clase cambiada— vale
+   * `undefined` y el panel se comporta como si no hubiera hora: ninguna
+   * seleccionada, botón bloqueado. Nunca se hereda una hora que no existe.
+   */
+  const hora =
+    chosen && selectedTime
+      ? (slotsByProduct.get(chosen.id) ?? []).find(
+          (iso) => Date.parse(iso) === Date.parse(selectedTime),
+        )
+      : undefined;
+
   const allDays = [...productsByDay.keys()].sort();
-  const day =
-    selectedDay && productsByDay.has(selectedDay)
+  // La hora MANDA sobre el día: si las dos vienen en la URL y se contradicen
+  // (enlace editado a mano, marcador viejo), gana la hora, que es la elección
+  // concreta y la que va a viajar al pago. Los chips emiten siempre las dos a
+  // la vez, así que en el uso normal esto no se nota.
+  const day = hora
+    ? slotDay(hora, timeZone)
+    : selectedDay && productsByDay.has(selectedDay)
       ? selectedDay
       : (allDays[0] ?? slotDay(new Date().toISOString(), timeZone));
 
@@ -250,6 +285,9 @@ export async function BookingPanel({
                   key={i}
                   // Cambiar de día conserva la clase solo si sigue teniendo
                   // hueco; si no, se vuelve a elegir (evita un combo imposible).
+                  // La hora NO se conserva —no se pasa `h`— porque pertenece a
+                  // un día concreto: arrastrarla al día siguiente sería marcar
+                  // como elegido un hueco que el alumno no ha visto.
                   href={hrefFor({
                     p:
                       chosen && productsByDay.get(key)?.has(chosen.id)
@@ -285,6 +323,8 @@ export async function BookingPanel({
                   return (
                     <li key={p.id}>
                       <Link
+                        // Igual que con el día: cambiar de clase suelta la hora.
+                        // Los huecos son de la mentoría, no del tutor.
                         href={hrefFor({ p: p.id, d: day })}
                         aria-current={on ? "true" : undefined}
                         className={`flex items-center justify-between gap-3 rounded-[10px] border px-3.5 py-2.5 text-left transition-colors ${
@@ -324,29 +364,59 @@ export async function BookingPanel({
                 </p>
               ) : (
                 <>
-                  {/* N-32 · se dice ANTES de pulsar a dónde lleva pulsar. La
-                      queja no era el número de pasos, era no saber en cuál
-                      estabas: «ya estoy reservando, ¿a qué hora es que yo
-                      reservé?». */}
+                  {/* N-32 · se dice ANTES de pulsar qué hace pulsar. La queja no
+                      era el número de pasos, era no saber en cuál estabas: «ya
+                      estoy reservando, ¿a qué hora es que yo reservé?». */}
                   <p className="mt-1 text-xs text-[#6b6b6b]">
                     {sesionesPorReserva(chosen) > 1
                       ? `Elige aquí la primera; las ${sesionesPorReserva(chosen) - 1} restantes en el siguiente paso.`
-                      : "Al elegir una hora pasas directo a confirmar el pago."}
+                      : "Elige tu hora y confirma abajo: pasas directo al pago."}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {times.map((iso, i) => (
-                      <Link
-                        key={iso}
-                        href={destinoDeLaHora(chosen, iso)}
-                        className={`rounded-[8px] px-3 py-2 text-[13px] transition-colors ${
-                          i === 0
-                            ? "bg-brand text-white hover:bg-brand-foreground"
-                            : "border border-[#cccccc] text-[#333333] hover:bg-muted"
-                        }`}
-                      >
-                        {slotTime(iso, timeZone)}
-                      </Link>
-                    ))}
+                    {/*
+                      MN-16 · estos chips SELECCIONAN; antes navegaban al pago.
+                      El cambio no es cosmético, arregla dos cosas a la vez:
+
+                      1. el naranja se pintaba en `i === 0` — el PRIMER chip,
+                         siempre, hubiera elegido el alumno lo que fuera. Es el
+                         mismo naranja que en el resto de la app significa
+                         "seleccionado", así que el alumno leía "08:00 ya está
+                         elegido", bajaba al botón grande, y ese botón iba a
+                         `/reservar/<id>` pelado: segundo calendario. La pantalla
+                         que el cliente quería quitar la abría una hora que él
+                         creía haber elegido y que nadie había elegido.
+                      2. como eran enlaces al pago, "elegir la hora y LUEGO
+                         pulsar el botón" era imposible: no había estado entre
+                         medias. Ahora lo hay, y vive en la URL.
+
+                      Siguen siendo enlaces a propósito: este panel es 100 %
+                      servidor (sin `use client`), así que el estado es la query
+                      — se comparte, se recarga y se vuelve atrás gratis.
+
+                      ponytail: `aria-current` y no `aria-pressed`. La ficha
+                      pedía `aria-pressed`, pero eso solo es válido en `role=
+                      button`; ponerlo en un enlace lo invalida y los lectores de
+                      pantalla lo ignoran. `aria-current="true"` dice lo mismo
+                      —"este de la lista es el activo"— es válido en un enlace y
+                      es lo que ya usan aquí arriba los días y las clases.
+                    */}
+                    {times.map((iso) => {
+                      const on = iso === hora;
+                      return (
+                        <Link
+                          key={iso}
+                          href={hrefFor({ p: chosen.id, d: day, h: iso })}
+                          aria-current={on ? "true" : undefined}
+                          className={`rounded-[8px] px-3 py-2 text-[13px] transition-colors ${
+                            on
+                              ? "bg-brand font-semibold text-white hover:bg-brand-foreground"
+                              : "border border-[#cccccc] text-[#333333] hover:bg-muted"
+                          }`}
+                        >
+                          {slotTime(iso, timeZone)}
+                        </Link>
+                      );
+                    })}
                   </div>
                 </>
               )}
@@ -384,20 +454,38 @@ export async function BookingPanel({
         </>
       ) : null}
 
-      {chosen ? (
-        // N-33 · el botón grande NO lleva al pago: quien llega hasta aquí sin
-        // pulsar una hora todavía no ha elegido ninguna, y elegirla por él
-        // sería peor que pedírsela. Va al selector de `/reservar/<id>`, que en
-        // este camino es la PRIMERA vez que se ve un calendario de horas, no la
-        // segunda. Con una hora ya pulsada nadie pasa por aquí.
+      {/*
+        MN-16 · el botón grande usa EL MISMO destino que la hora elegida
+        (`destinoDeLaHora`), que es quien sabe distinguir paquete de sesión
+        suelta. Con eso hay un solo calendario en los dos casos: la suelta va
+        derecha al pago y el paquete al selector con su primera hora ya marcada.
+
+        Antes iba a `/reservar/<id>` PELADO y ese era el bug entero: sin `?slot=`
+        la pantalla intermedia no puede saltarse, así que el alumno veía el
+        segundo calendario. Y llegaba ahí creyendo que ya había elegido hora,
+        porque el primer chip se pintaba naranja solo.
+
+        Sin hora se queda bloqueado, no se manda a elegirla a otra pantalla:
+        elegirla está a dos centímetros, y el `title` dice qué falta. Elegirla
+        por él —coger la primera y tirar— es exactamente lo que se está
+        arreglando. Quien tenga guardado un `/reservar/<id>` sin hora sigue
+        entrando por ahí sin problema; esa puerta no se cierra.
+      */}
+      {chosen && hora ? (
         <Button asChild className="mt-4 h-[51px] w-full text-[15px]">
-          <Link href={`/reservar/${chosen.id}`}>{ctaLabel}</Link>
+          <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
         </Button>
       ) : (
         <Button
           disabled
           className="mt-5 h-[51px] w-full text-[15px]"
-          title="Elige primero una sesión"
+          title={
+            !chosen
+              ? "Elige primero una sesión"
+              : allDays.length === 0
+                ? "Esta mentoría todavía no tiene horarios publicados"
+                : "Elige primero una hora en el calendario"
+          }
         >
           {ctaLabel}
         </Button>

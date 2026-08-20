@@ -76,7 +76,7 @@ export default async function ProductPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ d?: string }>;
+  searchParams: Promise<{ d?: string; h?: string }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const product = await getProductDetail(id);
@@ -285,10 +285,15 @@ export default async function ProductPage({
             </div>
           </div>
 
-          <div>
+          {/* El ancla es de MN-16: los chips de hora ahora navegan a esta misma
+              página para seleccionarse, y sin `#reservar` cada pulsación
+              devolvía la vista al principio de la ficha — con el panel fuera de
+              pantalla en móvil, parecía que no había pasado nada. */}
+          <div id="reservar">
             <BookingPanel
               products={[product]}
               selectedDay={sp.d}
+              selectedTime={sp.h}
               timeZone={await getViewerTimezone()}
               details
               ctaLabel={
@@ -297,9 +302,19 @@ export default async function ProductPage({
                   : "Reservar mentoría YA"
               }
               note="Pago protegido · Datos cifrados"
-              hrefFor={(next) =>
-                next.d ? `/products/${id}?d=${next.d}` : `/products/${id}`
-              }
+              /* Aquí no hay `p`: la ficha de producto ya es de UNA mentoría, y
+                 `BookingPanel` la da por elegida. Solo viajan día y hora.
+                 `URLSearchParams` codifica el ISO de la hora (los `:` y el `+`
+                 del offset); montarla a mano rompía la hora en algunos husos. */
+              hrefFor={(next) => {
+                const q = new URLSearchParams();
+                if (next.d) q.set("d", next.d);
+                if (next.h) q.set("h", next.h);
+                const s = q.toString();
+                return s
+                  ? `/products/${id}?${s}#reservar`
+                  : `/products/${id}#reservar`;
+              }}
               footer={<CancellationPolicy className="mt-5" />}
             />
           </div>
