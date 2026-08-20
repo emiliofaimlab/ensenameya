@@ -118,6 +118,7 @@ puesta, no en abstracto.
 | **P-7** | **El contador: «3 mentorías» ¿son tres títulos distintos, tres compras o tres clases?** Los tres números son distintos sobre las mismas filas | MN-08 |
 | **P-8** | **El límite de subida: ¿qué número?** Hoy son 10 MB y funcionan. Para referencia: portadas 5 MB, materiales 10 MB, KYC 10 MB | MN-11 |
 | **P-9** | **La campaña: ¿quién absorbe el descuento, la plataforma o el tutor?** Sin esa respuesta el esquema no se puede escribir. Y ¿es un caso de Referral Factory —que ya está contratado— o un motor propio? | MN-14 |
+| **P-10** | **A Referral Factory (no al cliente): ¿cuál es vuestro snippet de embed/widget?** Su página de campaña responde `SAMEORIGIN`, así que el iframe está descartado — pero `embed.referral-factory.com` sale en su propia CSP, o sea que producto de embed tienen | MN-12 |
 
 ---
 
@@ -135,7 +136,7 @@ No es paralelo con nada: es la barrera de todo lo demás.
 | **L0-1** | **Merge `dev` → `main`** con ventana propia. Antes: Google en prod (credenciales propias) y decidir qué se hace con la fila de `payment_routing_rules` de producción, que hoy convive con una `STRIPE_API_KEY` de *test mode*. Arrastra ~30 migraciones de una tacada | Jose | ❌ humano |
 | **L0-2** | `STRIPE_PUBLISHABLE_KEY` en Vercel (Preview **y** Production). Sin ella el checkout es 503 fuera de local | Jose (panel) | ❌ humano |
 | **L0-3** | `NEXT_PUBLIC_REFERRAL_URL` en Vercel. Sin ella el bloque de referidos ni se pinta | Jose (panel) | ❌ humano |
-| **L0-4** | Cargar la URL de la campaña de RF dentro de un `<iframe>` y mirar `X-Frame-Options` / `frame-ancestors`. **5 minutos que deciden MN-12 entero** | Jose | ✅ sí |
+| **L0-4** | ~~Comprobar `X-Frame-Options` de la campaña de RF.~~ 🟢 **Hecho el 20-ago: `SAMEORIGIN`, no se puede embeber.** Sustituida por **P-10**: pedir a RF su snippet de widget | — | ✅ hecha |
 | **L0-5** | Leer en el panel de Supabase (dev **y** prod) el `file_size_limit` vigente de los cinco buckets. Si alguno se creó desde el dashboard, **el repo no es fuente de verdad** ahí | Jose | ❌ humano |
 | **L0-6** | Enviar las nueve preguntas de §20.3 | Verónica | ❌ humano |
 | **L0-7** | **Corregir la documentación que miente** (§20.6). Dos correcciones, con `grep` de respaldo en el commit | — | ✅ sí |
@@ -229,7 +230,7 @@ ellas.
 | **L2-5** | **MN-05** | **P-6** | Poblar `sessions.access_opens_at` / `access_closes_at` al confirmar la reserva y que `join_session` **lea** esas columnas en vez de recalcular. **Y desacoplar `close_expired_sessions()`**, que hoy comparte el `+10 minutes` por accidente. En la misma pasada: cerrar el agujero de `cancel_booking` al 50 % después de la clase, que contradice el §17 del contrato |
 | **L2-6** | **MN-11b** | P-8 + L0-5 | `update storage.buckets set file_size_limit = …` + los espejos que L1-5 dejó unificados. Verificar con **una subida real**, no con `tsc` |
 | **L2-7** | **MN-10** | **P-2** | Si se confirma: quitar **solo** la línea del pie (`site-footer.tsx:89-90`). **No tocar `lib/company.ts`** ni `/contacto` ni los Términos. Y **nunca antes del merge**: hoy el revisor sigue viendo el pie viejo, sin identidad y con tres redes muertas |
-| **L2-8** | **MN-12** | **L0-4** | Si RF permite el embebido: sustituir el `<Link target="_blank">` por un `<iframe>` en `referral-card.tsx`. Si no: no hay implementación posible y se dice así. ⚠️ El embed **no toca la atribución** en ninguno de los dos casos — ver §20.6 |
+| **L2-8** | **MN-12** | ~~L0-4~~ → **RF** | 🔴 **Comprobado el 20-ago: RF NO permite embeber.** `https://vercel.referral-factory.com/cXr65Wou/signup` responde `x-frame-options: SAMEORIGIN`, así que un `<iframe>` desde nuestro dominio se queda en blanco. **El punto, tal como lo pide la minuta, no es implementable y no es cosa nuestra.** ⚠️ Pero no es un «no» seco: la propia CSP de RF declara `embed.referral-factory.com` y `js.referral-factory.com`, o sea que **sí tienen producto de embed** — solo que no es la URL de la campaña. La petición a RF es **su snippet de widget**, no permiso para el iframe. ⚠️ El embed **no toca la atribución** en ningún caso — ver §20.6 |
 
 ---
 
