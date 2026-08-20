@@ -2,11 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
-import {
-  COMPANY,
-  COMPANY_ADDRESS_LINE,
-  COMPANY_SOCIALS,
-} from "@/lib/company";
+import { COMPANY, COMPANY_SOCIALS } from "@/lib/company";
 
 /**
  * Columnas de v3-footer.
@@ -79,15 +75,26 @@ export function SiteFooter() {
                 Hasta hoy el único dato de contacto del sitio entero vivía
                 dentro de los términos, en el §11, como texto sin enlazar: para
                 verlo había que entrar y bajar. Los datos salen del §39 del
-                contrato — ver `lib/company.ts`. */}
+                contrato — ver `lib/company.ts`.
+
+                ⚠️ **El domicilio ya no se pinta aquí** (MN-10). Estaba, junto a
+                la razón social y el EIN, porque es DL-03; se quitó el 20-ago
+                por **decisión expresa del cliente** (P-2): preguntado si la
+                molestia era cómo se veía o publicar el domicilio, respondió que
+                lo segundo, y que se retirara **solo del pie**. O sea que no es
+                un descuido de maquetación: si vuelves a ponerlo «porque lo pide
+                dLocal», estás deshaciendo la decisión.
+
+                Y no lo hace privado: el domicilio **sigue publicado** en
+                `/contacto` y en el §39 de los Términos, en inglés y en español.
+                Por eso `COMPANY.address` y `COMPANY_ADDRESS_LINE` siguen en
+                `lib/company.ts` — borrarlos allí rompería el contrato. */}
             <address className="mt-5 text-[12.5px] leading-relaxed not-italic text-muted-foreground">
               <span className="font-medium text-foreground">
                 {COMPANY.legalName}
               </span>
               {" · "}
               {COMPANY.taxIdLabel} {COMPANY.taxId}
-              <br />
-              {COMPANY_ADDRESS_LINE}
             </address>
           </div>
 

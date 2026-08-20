@@ -39,7 +39,12 @@ export const COMPANY = {
   jurisdiction: "Estado de Florida, Estados Unidos",
 } as const;
 
-/** La dirección en una línea, que es como se pinta en el pie. */
+/**
+ * La dirección en una línea. La consumen `/contacto` y el §39 de los Términos
+ * en los dos idiomas — **ya no el pie**, que la dejó de pintar el 20-ago con
+ * MN-10, por decisión del cliente. No borrar este export: `terms-content.ts`
+ * lo necesita y quitarlo rompe el contrato firmado.
+ */
 export const COMPANY_ADDRESS_LINE = [
   COMPANY.address.street,
   COMPANY.address.city,
