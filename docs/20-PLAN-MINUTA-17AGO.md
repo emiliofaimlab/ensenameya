@@ -681,14 +681,44 @@ de RN-38) y la política de cancelación **completa**.
 ⚠️ Con dos frenos: los códigos internos (RN-xx) no se enseñan —se quitaron a propósito en M-06— y
 **el reparto con el tutor no se enseña jamás**: es información interna.
 
-### Las cuatro decisiones que hacen falta antes de tocar nada
+### Las cuatro decisiones — **contestadas por el cliente el 20-ago, las cuatro que sí**
 
 | # | Pregunta | Bloquea |
 | :-- | :-- | :-- |
-| **D-1** | ¿Vale la versión honesta de la tarjeta en vivo — reacciona, pero nunca muestra los dígitos ni la marca de una tarjeta nueva? | Punto 3 |
-| **D-2** | Montar el formulario al llegar **retiene el horario por visita** y obliga a poner un contador visible. ¿Se acepta? | Punto 2 |
-| **D-3** | ¿Se acepta que la casilla de guardar tarjeta la **redacte Stripe**, con su texto en español, como se aceptó «Nombre»? | Punto 2 |
-| **D-4** | ¿El resumen cuenta también la **mitad mala** de la política — 50 % si cancelas con menos de 24 h? Es lo más honesto; callarlo probablemente vende algo más | Punto 4 |
+| **D-1** | ✅ **Sí.** La tarjeta reacciona (se ilumina al escribir, se marca completa al terminar) y se rellena de verdad solo con tarjetas **guardadas**. Los dígitos y la marca de una tarjeta nueva **no aparecen nunca** | Punto 3 |
+| **D-2** | ✅ **Sí.** El horario se retiene al abrir el checkout, con contador visible. ⚠️ Efecto que salió después y conviene tener presente: **también se da de alta el Customer en Stripe por visita**, no por intención de pagar | Punto 2 |
+| **D-3** | ✅ **Sí.** La casilla la pinta y la redacta Stripe dentro de su formulario (`payment_method_save`) | Punto 2 |
+| **D-4** | ✅ **Sí.** El resumen cuenta la política entera: 100 % con 24 h o más, **50 % con menos** | Punto 4 |
+
+### Cierre — hecho y verificado en navegador (20-ago)
+
+| Qué | Commit |
+| :-- | :-- |
+| **Punto 1** · la hora elegida deja de perderse + los tres horizontes unificados | `d8d164b` |
+| **Puntos 2, 3 y 4** · formulario al llegar, tarjeta reactiva, resumen con detalle | `ab0705b` |
+
+**La revisión encontró siete cosas y tres eran serias.** Las tres nacieron del mismo sitio: al crear
+la reserva **al llegar**, el hold propio empezó a estorbar al propio alumno.
+
+| Hallazgo | Estado |
+| :-- | :-- |
+| **«Cambiar horario» era un callejón sin salida** — ibas al calendario y tu hora ya no estaba, porque la retenías tú | 🟢 Salir suelta el hold. Verificado: reserva `cancelled` con motivo, y el hueco reaparece en la RPC |
+| **La tarjeta ilustrada mentía** — seguía enseñando «•••• 4242» y su caducidad mientras tecleabas OTRO número | 🟢 Vuelve a genérica con rótulo «TARJETA NUEVA» |
+| **El selector prometía lo contrario** («el horario queda reservado al confirmar el pago») | 🟢 «Al continuar te guardamos el horario 20 minutos…», con el número desde `policy.ts` |
+| Volver atrás tras pagar acusaba de «horario no disponible» una reserva **ya pagada** | 🟢 |
+| D-4 solo en una de las dos pantallas de pago | 🟢 Política compartida |
+| Dos pestañas → mensaje crudo del índice de Postgres | 🟢 |
+| El Customer de Stripe se crea **por visita**, no por intención | 🟠 Consecuencia aceptada de D-2, anotada en el código |
+
+**Verificado en el navegador, no en el build:**
+· elegir la **segunda** hora → ese chip queda marcado y el CTA va directo al checkout · dos
+recargas → **una sola reserva, la misma** · «Cambiar horario» → hueco libre otra vez · contador
+corriendo (19:46 → 19:02) · el resumen con duración, rango horario y el 50 % · la hora en **zona del
+alumno** (Bogotá), la misma que se eligió.
+
+⚠️ **Lo que NO se ejercitó:** pagar de verdad con `4242…` hasta la confirmación, el caso de un alumno
+**con tarjeta guardada** (la tarjeta ilustrada tiene ahí su caso más delicado) y un **paquete** de
+punta a punta.
 
 ---
 
