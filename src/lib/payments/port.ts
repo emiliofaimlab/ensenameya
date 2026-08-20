@@ -61,6 +61,19 @@ export type ChargeResult = ChargeEmbebido | ChargeFallido;
  * ⚠️ `amountMinor` SIEMPRE viene de `payments.gross_amount` (regla de oro 2).
  * El puerto no calcula importes, no aplica políticas y no mira el navegador:
  * recibe el número que `create_booking` congeló y lo manda tal cual.
+ *
+ * ⚠️ AQUÍ HABÍA UN `guardarMedioDePago: boolean`, LA CASILLA DE PAC-02, Y NO
+ * VUELVE (D-3 del §20.14). Se traducía en `setup_future_usage`, un parámetro
+ * que se fija AL CREAR la sesión de pago; desde que el formulario se monta al
+ * llegar al checkout, la sesión ya existe cuando el alumno decidiría marcarla,
+ * así que el dato llegaría tarde POR DEFINICIÓN. El consentimiento lo recoge
+ * ahora el formulario del propio proveedor —en Stripe,
+ * `saved_payment_method_options.payment_method_save`— o sea en el momento de
+ * confirmar, que es donde tiene que estar.
+ *
+ * Quien lo devuelva a este tipo que sepa lo que arrastra: reaparecerían DOS
+ * casillas de guardado para la misma cosa (la nuestra y la del proveedor) y la
+ * clave de idempotencia dejaría de ser determinista por reserva.
  */
 export type ChargeInput = {
   bookingId: string;
@@ -81,8 +94,6 @@ export type ChargeInput = {
    * proveedor— cambiaría la clave y rompería los checkouts ya abiertos.
    */
   expiresAt: number;
-  /** PAC-02 · la casilla del alumno, que nace desmarcada. */
-  guardarMedioDePago: boolean;
   /** Absoluta y con protocolo. */
   returnUrl: string;
   /** Un doble clic no puede abrir dos cobros para la misma reserva. */

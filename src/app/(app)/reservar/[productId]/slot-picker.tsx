@@ -7,6 +7,7 @@ import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/catalog/format";
+import { HOLD_POLICY } from "@/lib/policy";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
 
@@ -392,11 +393,23 @@ export function SlotPicker({
           </span>
         </div>
 
-        {/* El Figma promete "reserva tentativa: tienes 20 min para pagar"; en
-            nuestro flujo `create_booking` no corre hasta confirmar el pago, así
-            que el horario no se bloquea antes. Se cuenta lo que pasa de verdad. */}
+        {/* ⚠️ ESTA FRASE PROMETÍA EXACTAMENTE LO CONTRARIO DE LO QUE PASA, y
+            dejó de ser cierta con D-2 (§20.14) — el mismo cambio que trajo el
+            formulario de pago montado al llegar. Decía «el horario queda
+            reservado al confirmar el pago» porque hasta entonces
+            `create_booking` no corría hasta pulsar pagar y el hueco seguía
+            libre mientras tanto. Ahora la reserva se crea AL LLEGAR al
+            checkout: el horario se retiene ANTES de pagar. La promesa que
+            queda es la que el Figma ya traía, y que resultó ser la correcta.
+
+            Y el número no se escribe a mano: sale de `HOLD_POLICY`, el mismo
+            sitio del que lo saca el contador del checkout —y ese es la copia
+            del `p_payment_cutoff` de `expire_stale_bookings`—. Tener el plazo
+            tecleado en dos pantallas es justo como se llega a que una de las
+            dos mienta. */}
         <p className="mt-3 text-xs text-[#6b6b6b]">
-          El horario queda reservado al confirmar el pago.
+          Al continuar te guardamos el horario {HOLD_POLICY.minutes} minutos
+          para que completes el pago.
         </p>
 
         <Button

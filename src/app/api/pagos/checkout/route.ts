@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { adapterFor } from "@/lib/payments";
+import { HOLD_POLICY } from "@/lib/policy";
 import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
 
 /**
@@ -30,6 +31,11 @@ import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
  * interruptor sigue siendo el dato —`payment_routing_rules`— y no un flag
  * repartido por el código: mientras la regla diga `simulated`, el checkout de
  * hoy funciona igual que siempre.
+ *
+ * Los dos caminos devuelven además `retencionHasta`: el instante en que el
+ * horario se libera solo si nadie paga (D-2 del §20.14). Va aquí y no en el
+ * navegador porque se calcula sobre `bookings.created_at` y la ventana de
+ * `expire_stale_bookings` — ver `RETENCION_MIN` más abajo.
  *
  * NO HABLA CON NINGÚN SDK. Desde el puerto de pagos (`lib/payments`), lo único
  * que este archivo sabe del proveedor es lo que el puerto expone: si abre cobro
@@ -83,6 +89,26 @@ const CADUCIDAD_MIN = 60;
 const MINIMO_STRIPE_MIN = 30;
 
 /**
+ * CUÁNTO TIEMPO SE LE RETIENE EL HORARIO AL ALUMNO — el número del contador.
+ *
+ * ⚠️ YA NO SE ESCRIBE AQUÍ: vive en `lib/policy.ts`, que es la copia que se
+ * ENSEÑA del `p_payment_cutoff` de `expire_stale_bookings` (`20260709190000`,
+ * pg_cron cada 5 minutos dentro de la propia base). La fuente de verdad sigue
+ * siendo la migración (regla de oro 5); si divergen, gana el SQL.
+ *
+ * Se movió porque hay DOS sitios que le prometen este plazo al alumno y tienen
+ * que decir el mismo número: este contador y la línea de «Continuar al pago»
+ * del selector de horarios. Con el número tecleado en cada sitio, el selector
+ * llegó a prometer justo lo contrario de lo que hace el código.
+ *
+ * Se cuenta desde `bookings.created_at`, no desde ahora: la reserva ya existía
+ * cuando esta pantalla se pintó —desde D-2 (§20.14) se crea AL LLEGAR al
+ * checkout— y un contador que arrancara en la petición mentiría en cada
+ * recarga.
+ */
+const RETENCION_MIN = HOLD_POLICY.minutes;
+
+/**
  * ⚠️ VERSIÓN DE LOS PARÁMETROS DE LA SESSION — SÚBELA AL CAMBIARLOS.
  *
  * La clave de idempotencia se compone por reserva (`booking-<id>…`), y Stripe
@@ -99,8 +125,21 @@ const MINIMO_STRIPE_MIN = 30;
  * webhook reembolsa la segunda (X-02).
  *
  * v2 · 2026-08-20 — MN-01/MN-02: `ui_mode: 'form'` y el titular opcional.
+ * v3 · 2026-08-21 — D-3 (§20.14): la casilla de guardar tarjeta la pinta ahora
+ *   Stripe (`saved_payment_method_options.payment_method_save`) y desaparece
+ *   nuestro `setup_future_usage`. Son parámetros distintos para la MISMA
+ *   reserva, así que sin esta subida toda Session abierta el día del despliegue
+ *   chocaría contra su propia clave.
  */
-const VERSION_PARAMS = "v2";
+const VERSION_PARAMS = "v3";
+
+/** Hasta cuándo se le promete el horario al alumno, en ISO (o null si no
+ *  hay `created_at` legible: mejor sin contador que con uno inventado). */
+function retencionHasta(creadaEn: string | null): string | null {
+  const nacimiento = Date.parse(creadaEn ?? "");
+  if (!Number.isFinite(nacimiento)) return null;
+  return new Date(nacimiento + RETENCION_MIN * 60_000).toISOString();
+}
 
 function caducidadSesion(creadaEn: string | null): number {
   const ahora = Math.floor(Date.now() / 1000);
@@ -116,9 +155,12 @@ function caducidadSesion(creadaEn: string | null): number {
 }
 
 export async function POST(req: Request) {
-  const { bookingId, guardarTarjeta } = (await req.json().catch(() => ({}))) as {
+  // ⚠️ El cuerpo trae SOLO la reserva. Aquí llegaba también `guardarTarjeta`,
+  // la casilla de PAC-02, y desde D-3 (§20.14) la pinta Stripe dentro de su
+  // formulario: ver el bloque de `saved_payment_method_options` en
+  // `lib/payments/stripe-provider.ts` antes de volver a añadirla.
+  const { bookingId } = (await req.json().catch(() => ({}))) as {
     bookingId?: string;
-    guardarTarjeta?: boolean;
   };
   if (!bookingId) {
     return NextResponse.json({ error: "falta bookingId" }, { status: 400 });
@@ -166,8 +208,12 @@ export async function POST(req: Request) {
   // dar de alta al Customer porque al revés el camino simulado empezaría a
   // llamar a Stripe, que hoy no lo hace.
   const proveedor = adapterFor(payment.provider);
+  const retencion = retencionHasta(booking.created_at);
   if (!proveedor.opensRemoteCheckout) {
-    return NextResponse.json({ simulated: true });
+    // El contador viaja también por aquí: con el proveedor simulado no hay
+    // formulario que montar, pero el horario se retiene exactamente igual y la
+    // pantalla tiene que poder decir hasta cuándo.
+    return NextResponse.json({ simulated: true, retencionHasta: retencion });
   }
 
   // Ruteado a un PSP pero sin credencial: es un error de configuración y se
@@ -188,6 +234,26 @@ export async function POST(req: Request) {
     await admin.from("profiles").update({ stripe_customer_id: id }).eq("id", user.id);
   };
 
+  // ⚠️ AQUÍ SE DA DE ALTA AL ALUMNO EN STRIPE, Y DESDE EL 21-AGO ESO OCURRE POR
+  // VISITA, NO POR INTENCIÓN DE PAGAR.
+  //
+  // Qué cambió: hasta D-2 (§20.14) este endpoint solo se llamaba al pulsar
+  // «Continuar al pago», así que el Customer —correo y nombre del alumno, que
+  // son datos personales— salía hacia un tercero cuando alguien decidía pagar.
+  // Con el formulario montándose al llegar al checkout, esta petición sale sola
+  // al ABRIR la pantalla: quien entre a mirar el precio y se vaya ya tiene una
+  // ficha creada en Stripe.
+  //
+  // NO SE CORRIGE, y por eso queda escrito. Es consecuencia directa de lo que
+  // el cliente aprobó: el formulario al llegar exige un `client_secret`, que
+  // exige una Session, que exige un Customer. Retrasarlo sería volver a poner
+  // la puerta que D-2 quitó. Lo que no puede ser es que nadie recuerde que se
+  // decidió: si algún día hay que declarar qué se envía a quién y cuándo —una
+  // política de privacidad, un encargado de tratamiento, una pregunta del
+  // cliente—, el momento del alta es ESTE y no el del pago.
+  //
+  // Lo que se manda es lo mínimo (correo, nombre y el id de perfil como
+  // metadato); ampliarlo es una decisión aparte y más gorda de lo que parece.
   let customer = await ensureCustomer({
     email: user.email!,
     nombre: perfil?.full_name ?? null,
@@ -209,15 +275,19 @@ export async function POST(req: Request) {
       concepto: booking.products?.title ?? "Mentoría",
       customerRef: cliente,
       expiresAt: caduca,
-      guardarMedioDePago: Boolean(guardarTarjeta),
       // Con el formulario en nuestra pantalla NO hay `cancel_url`: Stripe
       // devuelve aquí ya pagado, y cancelar es no rellenar el formulario.
       returnUrl: `${base}/reservas/${bookingId}/confirmacion`,
       idempotencyKey: claveIdem,
     });
 
-  // La casilla entra en la clave: reutilizar la misma con parámetros distintos
-  // es un error de la API, no la respuesta cacheada.
+  // ⚠️ LA CLAVE VOLVIÓ A SER DETERMINISTA POR RESERVA, Y AHORA HACE FALTA QUE
+  // LO SEA. Llevaba un sufijo `-save` cuando la casilla de guardar tarjeta era
+  // nuestra y viajaba en el cuerpo: dos valores posibles, dos Sessions posibles
+  // para la misma reserva. Desde D-3 (§20.14) esa casilla la pinta Stripe y no
+  // entra en los parámetros, así que la misma reserva pide siempre la MISMA
+  // Session — que es justo lo que sostiene el montaje al llegar de D-2: recargar
+  // el checkout devuelve el cobro que ya estaba abierto en vez de abrir otro.
   //
   // Y por lo mismo entra la caducidad (X-02). Normalmente es constante para una
   // reserva dada —se calcula desde su `created_at`— y la clave no se mueve, que
@@ -229,7 +299,7 @@ export async function POST(req: Request) {
   // si acabaran pagándose las dos, el webhook reembolsa la segunda.
   //
   // Y por lo mismo va la VERSIÓN de los parámetros: ver `VERSION_PARAMS` arriba.
-  const clave = `booking-${bookingId}${guardarTarjeta ? "-save" : ""}-c${caduca}-${VERSION_PARAMS}`;
+  const clave = `booking-${bookingId}-c${caduca}-${VERSION_PARAMS}`;
 
   let cobro;
   try {
@@ -267,5 +337,10 @@ export async function POST(req: Request) {
   return NextResponse.json({
     clientSecret: cobro.clientSecret,
     publishableKey: cobro.publishableKey,
+    // D-2 (§20.14) · hasta cuándo se le retiene el horario. Sale del servidor y
+    // no del navegador a propósito: es `bookings.created_at` + la ventana de
+    // `expire_stale_bookings`, dos datos que el cliente no tiene y no debería
+    // adivinar.
+    retencionHasta: retencion,
   });
 }

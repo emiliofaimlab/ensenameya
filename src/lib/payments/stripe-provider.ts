@@ -198,26 +198,58 @@ export const stripeProvider: PspProvider = {
         // reembolso y disputa solo traen el PaymentIntent. Sin esta segunda copia
         // no habría forma de mapear un reembolso a su reserva.
         metadata: { booking_id: input.bookingId },
-        // Sin esto la pasarela NO ofrece las tarjetas ya guardadas: pide una
-        // nueva cada vez y la pantalla de "Métodos de pago" no sirve de nada.
-        // Comprobado abriendo cuatro sesiones y mirándolas: el filtro es lo único
-        // que hace falta —`payment_method_save` no, y añadirlo metería una
-        // segunda casilla de guardado, la de Stripe, encima de la nuestra—.
-        // `limited` es como `setup_future_usage` marca lo que guarda; `always`
-        // por si algún día se guarda desde otro sitio.
+        // ── PAC-02 · GUARDAR LA TARJETA, Y POR QUÉ LA CASILLA CAMBIÓ DE DUEÑO ──
+        //
+        // `allow_redisplay_filters` es lo que hace que la pasarela OFREZCA las
+        // tarjetas ya guardadas: sin él pide una nueva cada vez y la pantalla
+        // de "Métodos de pago" no sirve de nada. `limited` es como se marca lo
+        // guardado dentro de un cobro; `always`, lo guardado desde otro sitio
+        // (el alta desde el perfil lo fuerza — ver `lib/stripe.ts`).
+        //
+        // `payment_method_save: 'enabled'` es NUEVO y es la mitad de D-3
+        // (§20.14): es Stripe quien pinta ahora la casilla de «guardar esta
+        // tarjeta», dentro de su formulario y con su texto en español (sale del
+        // `locale` de más abajo). Hasta hoy la pintábamos nosotros antes de
+        // montar el iframe y se traducía en `setup_future_usage`, que se fija AL
+        // CREAR esta Session; con el formulario montado ya al llegar al
+        // checkout, la Session existe antes de que nadie marque nada, así que
+        // esa casilla no podía llegar a tiempo. Este parámetro mueve el
+        // consentimiento al momento de confirmar, que es donde corresponde.
+        //
+        // ⚠️ NO SE PONEN LOS DOS. `setup_future_usage` guarda la tarjeta sin
+        // preguntar; la casilla pregunta. Juntos, la casilla queda de adorno:
+        // se guarda igual la marque o no. Y no esperes que la API te avise:
+        // comprobado contra *test mode* el 20-ago-2026 —Session `cs_test_a1htHL…`
+        // creada con `payment_method_save=enabled` Y
+        // `payment_intent_data[setup_future_usage]=on_session` a la vez, sin un
+        // solo error—. Va uno u otro, y el que decide es este fichero.
+        //
+        // ⚠️ TODO ESTE BLOQUE EXIGE `customer` EN LA SESSION — no es nuevo de
+        // `payment_method_save`, ya lo exigía el filtro. Sin Customer la API
+        // responde, literal y comprobado contra *test mode* el 20-ago-2026:
+        // «`saved_payment_method_options` requires a customer. You can attach a
+        // customer and set this option together later via the update
+        // endpoint.» Lo hay siempre porque
+        // `api/pagos/checkout` pasa por `ensureCustomer` antes de llamar aquí;
+        // el día que alguien abra un cobro sin dar de alta al cliente, esto
+        // revienta con un 400 y no con un cobro a medias.
+        //
+        // Lo que Stripe pone cuando la persona MARCA la casilla es su propio
+        // `setup_future_usage` (`off_session`), más permisivo que el
+        // `on_session` que poníamos nosotros. Cambia cómo se autentica la
+        // tarjeta —pide 3DS ahora para no pedirlo en un cargo futuro— y NO lo
+        // que hacemos con ella: no existe un solo camino que cobre fuera de una
+        // Session con la persona delante. Es el mismo trato que ya se aceptó en
+        // el alta de tarjeta desde el perfil, y por el mismo motivo: la
+        // alternativa es bajar a SetupIntent + Elements y mantener un segundo
+        // formulario de pago.
         saved_payment_method_options: {
           allow_redisplay_filters: ["always", "limited"],
+          payment_method_save: "enabled",
         },
         payment_intent_data: {
           metadata: { booking_id: input.bookingId },
-          // PAC-02 · solo si la persona marcó la casilla, que nace DESMARCADA.
-          // `on_session` y no `off_session` a propósito: el permiso que pedimos
-          // es reutilizar la tarjeta con ella delante, en su próxima reserva —
-          // no cobrarle cuando no está. Es el permiso menor de los dos y es el
-          // que corresponde a lo que dice la casilla.
-          ...(input.guardarMedioDePago
-            ? { setup_future_usage: "on_session" as const }
-            : {}),
+          // SIN `setup_future_usage`: lee el bloque de arriba antes de añadirlo.
         },
         // MN-01 · `form`, no `embedded_page`. Los dos montan el formulario DENTRO
         // de nuestra pantalla en vez de mandar a checkout.stripe.com (reunión

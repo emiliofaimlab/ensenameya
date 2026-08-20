@@ -1,15 +1,15 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
 
-import { requireUser } from "@/lib/auth/server";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
+import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
 import { bookingTotal, tutorNames } from "@/lib/booking";
 import { activeChargeProvider } from "@/lib/payments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isStripeConfigured, lastUsedCardId, listSavedCards } from "@/lib/stripe";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
+import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 
 export const metadata = { title: "Confirmar pago · Enséñame Ya" };
 
@@ -50,6 +50,11 @@ export default async function CheckoutPage({
   if (slots.length !== required) redirect(`/reservar/${productId}`);
 
   const supabase = await createClient();
+  // RN-01/RN-02 · la zona del alumno, resuelta en SERVIDOR. El checkout pintaba
+  // las horas sin ella —y por tanto en la del servidor durante el SSR, UTC en
+  // Vercel— mientras el calendario que las eligió y `/reservas/[id]/pagar` sí la
+  // usan. O sea que podía enseñar una hora distinta de la reservada.
+  const tz = await getUserTimezone();
   const names = await tutorNames(supabase, [product.tutor.id]);
   // La pantalla tiene que decir la verdad ANTES de que el alumno pulse.
   const simulado = (await activeChargeProvider()) === "simulated";
@@ -96,14 +101,23 @@ export default async function CheckoutPage({
       <div>
         {/* La ÚNICA salida de esta pantalla, y no es una salida del sitio: es
             parte de la misma compra. Aislar el checkout no puede significar
-            dejar a alguien encerrado con un horario que ya no le sirve. */}
-        <Link
-          href={`/reservar/${productId}`}
+            dejar a alguien encerrado con un horario que ya no le sirve.
+
+            ⚠️ Y desde D-2 (§20.14) no puede ser un enlace pelado. Al llegar
+            aquí se creó la reserva, o sea que el horario está RETENIDO: un
+            `<Link>` normal llevaba al selector donde el propio hueco ya no
+            aparecía —`get_available_slots` descuenta toda sesión no cancelada
+            sin mirar de quién es— y, en un paquete, cualquier conjunto que
+            solapara chocaba contra la reserva a medias del propio alumno.
+            `ChangeSlotLink` la cancela antes de irse: pulsar «Cambiar horario»
+            es decir que ese hueco ya no se quiere. */}
+        <ChangeSlotLink
+          productId={productId}
+          studentId={user.id}
+          slots={slots}
+          etiqueta="Cambiar horario"
           className="mb-4 flex w-fit items-center gap-1.5 text-sm text-[#6b6b6b] transition-colors hover:text-foreground"
-        >
-          <ArrowLeftIcon className="size-4" />
-          Cambiar horario
-        </Link>
+        />
         <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">
           Confirmar pago
         </h1>
@@ -118,7 +132,18 @@ export default async function CheckoutPage({
         tarjetas={tarjetas}
         hayUltimaUsada={Boolean(ultimaId && tarjetas[0]?.id === ultimaId)}
         productId={productId}
+        // D-2 · con la reserva creándose al llegar, el formulario tiene que
+        // poder buscar la que ya hubiera de ESTE alumno. El id sale de la
+        // sesión de servidor y no de `auth.getUser()` en el navegador: una
+        // llamada menos y un dato menos que el cliente pueda equivocar.
+        studentId={user.id}
+        // El tutor de la mentoría: con él se localizan los holds propios que
+        // solapan lo que se va a pedir, que es como se mide el choque en el SQL
+        // (`get_available_slots` filtra por tutor, no por mentoría).
+        tutorId={product.tutor.id}
         slots={slots}
+        timeZone={tz}
+        durationMin={product.sessionDurationMin}
         total={bookingTotal(product)}
         currency={product.currency}
         productTitle={product.title}
@@ -126,6 +151,12 @@ export default async function CheckoutPage({
         packageLabel={
           required > 1 ? `Paquete ${required} sesiones` : "Sesión suelta"
         }
+        // Las dos etiquetas ya existían en el catálogo y se reutilizan tal cual:
+        // "4 × 60 min" y "Equivale a 24,00 US$ por sesión · 4 sesiones". Escribir
+        // aquí otra versión de lo mismo es como acaban divergiendo la ficha y el
+        // checkout en el precio de un paquete.
+        incluye={sessionsLabel(product)}
+        precioPorSesion={perSessionLabel(product)}
         // Sin fila legible se asume que NO acepta sola: es el mensaje
         // conservador (promete la ventana de 24 h, que es lo que pasa cuando la
         // columna está en false) y nunca promete de menos.

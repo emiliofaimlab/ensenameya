@@ -6,8 +6,8 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
-import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { ResumePayment } from "@/components/checkout/resume-payment";
+import { PaymentPolicy } from "@/components/checkout/payment-policy";
 import { SessionRef } from "@/components/room/session-ref";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 
@@ -23,8 +23,9 @@ export const metadata = { title: "Confirmar pago · Enséñame Ya" };
  * experiencias de pago distintas para el mismo dinero, que es peor que no
  * aislar ninguno. Comparte layout con el checkout de una reserva nueva.
  *
- * NO crea nada ni cobra nada por sí sola: el botón reutiliza la reserva que ya
- * existe (ver `components/checkout/resume-payment.tsx`).
+ * NO crea nada ni cobra nada por sí sola: reutiliza la reserva que ya existe
+ * (ver `components/checkout/resume-payment.tsx`), que desde D-2 (§20.14) abre
+ * su formulario al llegar en vez de esperar a un botón.
  */
 export default async function PagarReservaPage({
   params,
@@ -124,20 +125,30 @@ export default async function PagarReservaPage({
         {/* M-02 · lo que pasa DESPUÉS de pagar depende de la mentoría, no del
             tutor: si acepta sola, el cobro confirma la reserva y la ventana de
             24 h de RN-38 —con su reembolso íntegro automático— no llega a
-            existir. Se cuenta lo que va a pasar de verdad. */}
-        <p className="mt-3.5 text-[11px] text-[#6b6b6b]">
-          {booking.products?.auto_accept_bookings
-            ? `Tu horario queda confirmado en cuanto se acredite el pago. Cancela con ${P.cutoffHours} h o más y recibe el ${P.refundPct.studentEarly} %.`
-            : `Reembolso del ${P.refundPct.studentEarly} % si el tutor no acepta en ${P.cutoffHours} h.`}
-        </p>
+            existir. Se cuenta lo que va a pasar de verdad.
+
+            ⚠️ D-4 (§20.14) SE HABÍA APLICADO A UNA SOLA DE LAS DOS PANTALLAS DE
+            PAGO. Aquí ponía un párrafo propio que contaba la mitad buena de la
+            política —«cancela con 24 h y recibe el 100 %»— y callaba el 50 % de
+            quien cancela tarde, mientras el checkout de una reserva nueva ya la
+            contaba entera. Misma reserva, mismo dinero, dos promesas distintas,
+            y el sesgo iba en la dirección que vende. El texto es ahora el mismo
+            componente en las dos, con los números saliendo de `lib/policy.ts`
+            —o sea de lo que aplica `cancel_booking`— y no escritos a mano. */}
+        <PaymentPolicy
+          aceptaSola={Boolean(booking.products?.auto_accept_bookings)}
+          className="mt-3.5 border-t border-[#e0e0e0] pt-3.5"
+        />
       </PanelCard>
 
       <PanelCard>
         <PanelCardTitle className="text-[15px]">Método de pago</PanelCardTitle>
+        {/* D-2 (§20.14) · el formulario ya no espera a que nadie pulse: se
+            monta al llegar. Así que esto deja de anunciarlo en futuro y se
+            queda con lo único que hay que decir aquí. */}
         <p className="mt-3.5 text-[13px] text-[#6b6b6b]">
-          El formulario seguro de nuestro proveedor de pagos se abre aquí mismo.
-          Los datos de tu tarjeta viajan a él directamente: nunca pasan por
-          Enséñame Ya.
+          Los datos de tu tarjeta viajan directamente a nuestro proveedor de
+          pagos: nunca pasan por Enséñame Ya.
         </p>
         <ResumePayment bookingId={booking.id} />
       </PanelCard>

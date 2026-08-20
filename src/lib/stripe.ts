@@ -290,13 +290,17 @@ export async function crearSesionDeAltaDeTarjeta(opts: {
     // admite en `payment` y `subscription`; en `setup` devuelve 400.
     //
     // ⚠️ Y `setup_intent_data` no expone `usage`, así que esta Session crea el
-    // SetupIntent con el `off_session` que Checkout pone por defecto — más
-    // permisivo que el `setup_future_usage: 'on_session'` que pide PAC-02 en
-    // el cobro. Eso cambia cómo se autentica la tarjeta (se pide 3DS ahora
-    // para que un cargo futuro sin la persona delante no lo vuelva a pedir),
-    // NO lo que hacemos con ella: no existe ni un solo camino que cobre fuera
-    // de una Checkout Session con la persona delante. Si algún día se quisiera
-    // el permiso menor de verdad, habría que bajar a SetupIntent + Elements.
+    // SetupIntent con el `off_session` que Checkout pone por defecto. Antes
+    // eso era una divergencia —el cobro pedía el permiso menor,
+    // `setup_future_usage: 'on_session'`, y esta pantalla el mayor—; desde D-3
+    // (§20.14) el cobro también deja el guardado en manos de Checkout
+    // (`payment_method_save`), así que los dos caminos guardan igual y el
+    // trato es el mismo en los dos sitios. Cambia cómo se autentica la tarjeta
+    // (se pide 3DS ahora para que un cargo futuro sin la persona delante no lo
+    // vuelva a pedir), NO lo que hacemos con ella: no existe ni un solo camino
+    // que cobre fuera de una Checkout Session con la persona delante. Si algún
+    // día se quisiera el permiso menor de verdad, habría que bajar a
+    // SetupIntent + Elements en los DOS.
     //
     // MN-01 · `form`, igual que el cobro, y por la MISMA razón: `embedded_page`
     // pintaba la pantalla completa de Stripe dentro del recuadro y su interior
