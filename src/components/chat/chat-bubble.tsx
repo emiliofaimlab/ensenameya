@@ -234,6 +234,15 @@ export function ChatBubble({
                   // etiqueta el mensaje y lo que permite adjuntar.
                   bookingId={abierta.bookingId ?? undefined}
                   hasBooking={abierta.hasBooking}
+                  // MN-06 · la bandeja es donde siguen viviendo los hilos que
+                  // el cierre del chat previo dejó en solo lectura (P-1b: se
+                  // ven, no se escriben).
+                  canChat={abierta.canChat}
+                  reservarHref={
+                    abierta.counterpartRole === "tutor"
+                      ? `/tutors/${abierta.counterpartId}`
+                      : undefined
+                  }
                   blocked={abierta.blocked}
                   currentUserId={currentUserId}
                   initialMessages={mensajes}
@@ -242,9 +251,17 @@ export function ChatBubble({
               )}
             </div>
           ) : conversations.length === 0 ? (
+            // ⚠️ MN-06 · esta frase decía «puedes escribirle a cualquier tutor
+            // desde su perfil, antes incluso de reservar». Eso dejó de ser
+            // verdad el 20-ago: el chat se abre AL reservar, y el botón de la
+            // ficha pública ya no existe.
+            //
+            // Redactada sin rol: con cero conversaciones esta burbuja no sabe
+            // si la mira un alumno o un tutor, y a un tutor no se le dice que
+            // reserve.
             <p className="px-4 py-5 text-[13px] text-[#6b6b6b]">
-              Todavía no tienes conversaciones. Puedes escribirle a cualquier
-              tutor desde su perfil, antes incluso de reservar.
+              Todavía no tienes conversaciones. El chat se abre con la primera
+              mentoría reservada.
             </p>
           ) : (
             <ul className="max-h-[60vh] divide-y divide-[#f0f0f0] overflow-auto">

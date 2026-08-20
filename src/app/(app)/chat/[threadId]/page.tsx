@@ -73,9 +73,15 @@ export default async function ChatPage({
           // última reserva. El respaldo largo se conserva: aquí hay sitio para
           // una frase entera, y en un hilo sin compra es lo único que explica
           // qué es esta pantalla.
+          //
+          // ⚠️ MN-06 · pero ese respaldo cambió de sentido. Solo se usa cuando
+          // no hay ni recuento ni título, o sea cuando el par NUNCA reservó — y
+          // desde MN-06 eso es exactamente un hilo de solo lectura. El texto de
+          // M-12 («pregúntale lo que necesites») invitaba a algo que ya no se
+          // puede hacer.
           description={conversationSubtitle(
             conversation,
-            "Consulta antes de reservar: pregúntale lo que necesites saber.",
+            "Conversación de solo lectura: no hay ninguna mentoría reservada entre los dos.",
           )}
         />
         <ChatThread
@@ -84,6 +90,17 @@ export default async function ChatPage({
           // mensaje (retención de 30 días) y lo que permite adjuntar.
           bookingId={conversation.bookingId ?? undefined}
           hasBooking={conversation.hasBooking}
+          // MN-06 · esta pantalla SÍ alcanza hilos cerrados: es el destino de
+          // los enlaces viejos y de la bandeja, y ahí viven los hilos previos a
+          // MN-06 y los de reservas canceladas.
+          canChat={conversation.canChat}
+          // Solo cuando el otro es el tutor: es el único que tiene mentorías
+          // que reservar.
+          reservarHref={
+            conversation.counterpartRole === "tutor"
+              ? `/tutors/${conversation.counterpartId}`
+              : undefined
+          }
           blocked={conversation.blocked}
           currentUserId={user.id}
           initialMessages={initial}

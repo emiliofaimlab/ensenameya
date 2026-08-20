@@ -31,12 +31,16 @@ export async function ChatLauncher() {
 
   const todas = await listConversations();
 
-  // Una conversación recién abierta desde la ficha del tutor existe ANTES de
-  // que se escriba el primer mensaje (`open_conversation` la crea al pulsar).
-  // Sin este filtro, al tutor le aparecería en la bandeja una fila vacía de
-  // alguien que abrió el chat y se arrepintió — y al alumno, un hilo consigo
-  // mismo. Con reserva sí se lista aunque esté muda: ahí hay una relación real
-  // aunque nadie haya escrito todavía.
+  // Un hilo puede existir ANTES de que se escriba el primer mensaje. Sin este
+  // filtro, al tutor le aparecería en la bandeja una fila vacía de alguien que
+  // abrió el chat y se arrepintió. Con reserva sí se lista aunque esté muda:
+  // ahí hay una relación real aunque nadie haya escrito todavía.
+  //
+  // ⚠️ MN-06 · quien abre hilos vacíos ya no es la ficha pública del tutor
+  // —`open_conversation` exige reserva desde el 20-ago— sino el trigger
+  // `bookings_ensure_conversation`, que dispara con la reserva todavía en
+  // `pending_payment`. O sea que el filtro sigue haciendo falta y tapa el mismo
+  // caso: el checkout que se abandonó sin escribir nada.
   const conversations = todas
     .filter((c) => c.lastMessageAt !== null || c.hasBooking)
     // Tope de cortesía: la bandeja es una lista corta con scroll, no un

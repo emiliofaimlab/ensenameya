@@ -3,8 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BadgeCheckIcon } from "lucide-react";
 
-import { getSessionContext, getViewerTimezone } from "@/lib/auth/server";
-import { ContactTutor } from "@/components/chat/contact-tutor";
+import { getViewerTimezone } from "@/lib/auth/server";
 import { tutorResponseTime } from "@/components/chat/conversations";
 import { responseTimeLabel } from "@/components/chat/types";
 import { Container } from "@/components/layout/container";
@@ -48,23 +47,25 @@ export default async function TutorProfilePage({
   searchParams: Promise<{ p?: string; d?: string }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  // M-12 · el tiempo de respuesta y la sesión se piden en paralelo con lo
-  // demás: los dos alimentan el mismo bloque del hero y ninguno depende del
-  // otro. `tutorResponseTime` devuelve `null` mucho más a menudo de lo que
-  // parece (tutor nuevo, o que no contesta), y `null` significa NO PINTAR NADA.
-  const [data, reviews, respuestaMin, { user }] = await Promise.all([
+  // M-12 · el tiempo de respuesta se pide en paralelo con lo demás: alimenta el
+  // mismo bloque del hero y no depende de nada. `tutorResponseTime` devuelve
+  // `null` mucho más a menudo de lo que parece (tutor nuevo, o que no
+  // contesta), y `null` significa NO PINTAR NADA.
+  //
+  // ⚠️ MN-06 · aquí ya no se pide la sesión. La pedía el botón «Escribir a …»,
+  // que se retiró: desde MN-06 el chat solo existe con mentoría reservada, así
+  // que la ficha pública no es una puerta de entrada al chat. El chip de tiempo
+  // de respuesta SÍ se queda — no invita a escribir, informa de cómo atiende
+  // este tutor a quien ya reservó, que es parte de decidir la compra.
+  const [data, reviews, respuestaMin] = await Promise.all([
     getTutorDetail(id),
     listTutorReviews(id),
     tutorResponseTime(id),
-    getSessionContext(),
   ]);
   if (!data) notFound();
   const { tutor, products } = data;
 
   const respuesta = responseTimeLabel(respuestaMin);
-  // Escribirse a uno mismo no es una conversación (la RPC lo rechaza igual;
-  // esto es para no enseñar un botón que solo puede fallar).
-  const esMiFicha = user?.id === tutor.id;
 
   const name = tutor.displayName ?? tutor.headline ?? "Tutor";
   const avatar = storageUrl("avatars", tutor.avatarPath);
@@ -188,18 +189,13 @@ export default async function TutorProfilePage({
                 ) : null}
               </div>
 
-              {/* M-12 · preguntar ANTES de pagar. Va aquí, junto al nombre y a
-                  la altura del panel de reserva, porque es el mismo momento: se
-                  está decidiendo si comprarle a esta persona. */}
-              {esMiFicha ? null : (
-                <div className="mt-5">
-                  <ContactTutor
-                    tutorId={tutor.id}
-                    tutorName={name}
-                    anonimo={!user}
-                  />
-                </div>
-              )}
+              {/* ⚠️ MN-06 · aquí vivía «Escribir a …», la entrada al chat previo
+                  a la compra que trajo M-12. La retira la respuesta del cliente
+                  a P-1 (20-ago): el chat solo existe después de reservar, así
+                  que la única llamada a la acción de esta ficha es el panel de
+                  reserva de la derecha. No se sustituye por un botón
+                  deshabilitado ni por un aviso: ofrecer algo que no se puede
+                  hacer es peor que no ofrecerlo. */}
             </div>
           </div>
         </Container>

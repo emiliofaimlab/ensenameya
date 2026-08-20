@@ -29,6 +29,19 @@ export type Conversation = {
    */
   hasBooking: boolean;
   /**
+   * MN-06 · ¿se puede ESCRIBIR aquí? Lo decide el servidor (`pair_can_chat`):
+   * hay mentoría reservada, o hay un checkout en curso.
+   *
+   * ⚠️ No es lo mismo que `hasBooking`, y por eso son dos campos. `hasBooking`
+   * dice si el par llegó a pagar —de ahí cuelgan los adjuntos y el trato de
+   * cliente—; `canChat` dice si el cuadro de texto tiene sentido. Los dos
+   * únicos sitios donde se separan: el checkout a medias (`hasBooking` false,
+   * `canChat` true) y el hilo previo a MN-06 o de reserva cancelada (los dos
+   * false). Mezclarlos deja al alumno escribiendo en la pantalla de su propia
+   * reserva para recibir un error del servidor.
+   */
+  canChat: boolean;
+  /**
    * MN-08 · Cuántas mentorías DISTINTAS le compró el alumno al tutor.
    *
    * Es la cuenta que eligió el cliente (P-7, 20-ago) de las tres posibles sobre
@@ -91,10 +104,15 @@ export function mentoriasLabel(count: number): string | null {
  * MN-08. No es pereza: `last_product_title` sale de la última reserva del par
  * SIN filtrar por estado, así que un par cuya única reserva se canceló tiene
  * título pero no cuenta. Ahí seguía pintándose el título y se sigue pintando.
+ *
+ * ⚠️ MN-06 · el respaldo solo se usa cuando no hay NI recuento NI título, que
+ * desde el 20-ago significa una sola cosa: un par que nunca reservó, o sea un
+ * hilo de solo lectura. Decía «Consulta antes de reservar» y describía un
+ * producto que ya no existe.
  */
 export function conversationSubtitle(
   c: Pick<Conversation, "productCount" | "productTitle">,
-  fallback = "Consulta antes de reservar",
+  fallback = "Sin mentoría reservada",
 ): string {
   const partes = [mentoriasLabel(c.productCount), c.productTitle].filter(
     (x): x is string => Boolean(x),

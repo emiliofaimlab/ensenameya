@@ -40,6 +40,14 @@ export type ConversationRow = {
   last_message_at: string | null;
   has_booking: boolean;
   /**
+   * MN-06 · ¿se puede escribir en este hilo? Es la MISMA función que rechaza en
+   * el servidor (`pair_can_chat`), así que la pantalla y la RPC no pueden
+   * discrepar. Difiere de `has_booking` solo mientras el checkout está en curso
+   * —la reserva vive en `pending_payment` unos 20 minutos—, que es exactamente
+   * el caso que la UI no podía distinguir del hilo legado de solo lectura.
+   */
+  can_chat: boolean;
+  /**
    * MN-08 · Las DOS lecturas de «cuántas mentorías» que devuelve la función.
    * Se piden las dos a la base de datos aunque hoy solo se pinte una: la
    * pregunta P-7 (¿«3 mentorías» son tres títulos, tres compras o tres

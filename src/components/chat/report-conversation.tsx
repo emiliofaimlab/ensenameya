@@ -27,6 +27,13 @@ import { asRpc } from "./rpc";
  * `send_conversation_message` frenan lo primero; lo segundo no lo puede detectar
  * una regla, lo denuncia la persona que lo recibe.
  *
+ * ⚠️ MN-06 · el canal sin compra se cerró el 20-ago, así que el spam de
+ * desconocidos casi desaparece — pero esto NO se retira, por dos razones: la
+ * desintermediación se propone sobre todo DENTRO de una mentoría ya pagada, que
+ * es donde hay algo que llevarse fuera; y el botón sigue apareciendo en los
+ * hilos que quedaron en solo lectura, donde lo que hay que denunciar ya está
+ * escrito y no se puede borrar respondiendo.
+ *
  * Esto es la puerta, no la sala: guarda el reporte en `conversation_reports`
  * con el motivo. Revisarlos y bloquear la conversación (`blocked_at`, que ya
  * corta el envío en las dos RPC) es trabajo del panel de admin, que es de otro

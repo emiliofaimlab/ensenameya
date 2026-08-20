@@ -1816,6 +1816,7 @@ export type Database = {
         Args: never
         Returns: {
           blocked_at: string
+          can_chat: boolean
           has_booking: boolean
           id: string
           last_booking_id: string
@@ -1837,6 +1838,10 @@ export type Database = {
           product_count: number
           session_count: number
         }[]
+      }
+      pair_can_chat: {
+        Args: { p_student_id: string; p_tutor_id: string }
+        Returns: boolean
       }
       pair_has_booking: {
         Args: { p_student_id: string; p_tutor_id: string }
@@ -1909,6 +1914,10 @@ export type Database = {
         Returns: string
       }
       session_access_window: {
+        Args: { p_end: string; p_start: string }
+        Returns: unknown
+      }
+      session_live_window: {
         Args: { p_end: string; p_start: string }
         Returns: unknown
       }
