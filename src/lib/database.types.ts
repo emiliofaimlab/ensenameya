@@ -1952,6 +1952,19 @@ export type Database = {
           timezone: string
         }[]
       }
+      tutor_teaching_record: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: {
+          alumnos_distintos: number
+          aprobado: boolean
+          impartidas: number
+          no_shows: number
+          primera_clase: string
+          tutor_id: string
+          tutor_nombre: string
+          ultima_clase: string
+        }[]
+      }
       unread_conversation_counts: {
         Args: never
         Returns: {

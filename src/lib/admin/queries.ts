@@ -423,3 +423,86 @@ export async function getBookingDetail(id: string): Promise<BookingDetail | null
       .sort((a, z) => a.startAt.localeCompare(z.startAt)),
   };
 }
+
+/* ==========================================================================
+ * MN-14a · Registro de clases impartidas (`tutor_teaching_record`)
+ *
+ * Sale de la minuta del 17-ago: la campaña de tutores «considerando el registro
+ * de las últimas clases impartidas». El motor de promociones está bloqueado por
+ * P-9 (quién absorbe el descuento); esto es la parte que se sostiene sola —
+ * quién está activo, cuánto ha dado y desde cuándo.
+ *
+ * MÉTRICA INTERNA. No hay superficie pública que la enseñe y no debe haberla
+ * sin decisión de producto: ver la cabecera de `20260820160000`. La barrera de
+ * verdad está DENTRO de la función (`has_role('admin')`), no en este fichero.
+ *
+ * A diferencia del resto de este módulo —que lee tablas por RLS— aquí se llama
+ * a una RPC: son agregados sobre todas las sesiones de la plataforma, y traerse
+ * `sessions` entera al servidor de Next para contarla en JS sería el error que
+ * `20260715190000` ya razonó para `admin_stats`.
+ * ========================================================================== */
+
+export type TutorTeachingRow = {
+  tutorId: string;
+  nombre: string;
+  aprobado: boolean;
+  /** ⚠️ `impartidas` y `noShows` NO se suman: DP-08 sigue abierta. */
+  impartidas: number;
+  noShows: number;
+  alumnosDistintos: number;
+  primeraClase: string | null;
+  ultimaClase: string | null;
+};
+
+/**
+ * ⚠️ El generador de tipos de Supabase declara `primera_clase`, `ultima_clase` y
+ * `tutor_nombre` como `string` a secas, y los tres **son nulables**: un
+ * `min()`/`max()` sobre cero filas devuelve NULL —el caso de todo tutor sin
+ * clases en la ventana, o sea la mitad de las filas— y el nombre sale de un
+ * `coalesce(full_name, display_name)` que puede quedarse sin ninguno de los
+ * dos. El generador no puede saberlo: para él es el tipo de la columna del
+ * `returns table`, y ahí no hay `not null` que declarar. Se corrige aquí, en la
+ * frontera, para que ninguna pantalla se coma un `new Date(undefined)`. No
+ * editar `database.types.ts` a mano (regla de oro 6).
+ */
+type RpcRow = Omit<
+  Database["public"]["Functions"]["tutor_teaching_record"]["Returns"][number],
+  "primera_clase" | "ultima_clase" | "tutor_nombre"
+> & {
+  primera_clase: string | null;
+  ultima_clase: string | null;
+  tutor_nombre: string | null;
+};
+
+/**
+ * Registro de docencia de TODOS los tutores, ya ordenado por actividad.
+ *
+ * ⚠️ La ventana se aplica a la fila entera: con `from`/`to`, `ultimaClase` es la
+ * última clase **dentro** de la ventana, no la última en absoluto. Es lo que se
+ * quiere para segmentar («quién está activo ahora»), pero hay que decirlo en la
+ * pantalla o el número engaña. Sin ventana, es el histórico completo.
+ *
+ * Las fechas se validan con el mismo `asDay` que el resto del panel: lo que
+ * llegue roto por la query string se ignora en vez de tumbar la consulta.
+ */
+export async function tutorTeachingRecord(f: {
+  from?: string;
+  to?: string;
+}): Promise<TutorTeachingRow[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.rpc("tutor_teaching_record", {
+    p_from: asDay(f.from),
+    p_to: asDay(f.to),
+  });
+
+  return ((data ?? []) as RpcRow[]).map((r) => ({
+    tutorId: r.tutor_id,
+    nombre: r.tutor_nombre ?? "Tutor sin nombre",
+    aprobado: r.aprobado,
+    impartidas: r.impartidas,
+    noShows: r.no_shows,
+    alumnosDistintos: r.alumnos_distintos,
+    primeraClase: r.primera_clase,
+    ultimaClase: r.ultima_clase,
+  }));
+}
