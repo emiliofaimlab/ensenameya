@@ -223,52 +223,112 @@ export function esCustomerInexistente(e: unknown): boolean {
 }
 
 /**
- * ¿Stripe dice que ese cargo ya estaba devuelto?
+ * ── LA CAJA FUERTE DE TARJETAS (N-31 / PAC-02) ─────────────────────────────
  *
- * X-02 · el webhook reembolsa los cobros que llegan cuando la reserva ya no
- * espera pago. Ese cargo puede haberlo devuelto ya otra mano: alguien desde el
- * panel de Stripe, o el reembolso de plataforma el día que mueva dinero de
- * verdad (RN-37 / X-01). Cuando pasa, la API responde 400 con
- * `charge_already_refunded` — y si no se reconoce, el webhook devolvería 500 y
- * Stripe reintentaría el mismo evento durante tres días contra una operación
- * que nunca va a poder completarse.
+ * Guardar, listar y quitar tarjetas NO está en el puerto de pagos, y es una
+ * decisión, no un olvido: el puerto cubre cobrar, devolver y escuchar webhooks
+ * —lo que un segundo PSP tendrá que implementar entero— y el vault de tarjetas
+ * de Stripe no tiene equivalente garantizado en dLocal. Meterlo en la interfaz
+ * sería obligar al próximo adaptador a fingir tres métodos más.
  *
- * No es lo mismo que la idempotencia: la `idempotencyKey` cubre que NOSOTROS
- * pidamos dos veces el mismo reembolso; esto cubre que lo pidiera otro.
+ * Vive aquí, junto al cliente del SDK, para que siga cumpliéndose el invariante
+ * que hace barato el adaptador de dLocal: `stripe()` solo se importa en ESTE
+ * archivo y en `lib/payments/stripe-provider.ts`. Si aparece un tercero, algo
+ * se ha escapado del puerto.
  */
-export function esCargoYaReembolsado(e: unknown): boolean {
-  const err = e as { type?: string; code?: string };
-  return (
-    err?.type === "StripeInvalidRequestError" &&
-    err?.code === "charge_already_refunded"
-  );
+
+/**
+ * N-31 · abre el formulario para AÑADIR una tarjeta desde el perfil, sin
+ * empezar una compra.
+ *
+ * `mode: 'setup'` en vez de un SetupIntent + Elements a pelo porque reutiliza
+ * entero el camino que ya está probado: mismo embed, mismo `locale`, mismo
+ * `return_url`. Un PaymentElement propio daría control sobre `usage` (ver abajo)
+ * a cambio de un segundo formulario de pago que mantener. Y sigue siendo
+ * PCI-DSS SAQ A: el PAN vive en un iframe del proveedor y no toca nuestro DOM.
+ *
+ * SIN `idempotencyKey`, y es a propósito: aquí no hay entidad estable que sirva
+ * de clave —una persona puede querer añadir una segunda tarjeta un minuto
+ * después de la primera, y cualquier clave por usuario le devolvería la Session
+ * anterior—. El cobro sí la necesita porque un doble clic abría dos cobros; una
+ * Session de `setup` no mueve dinero, así que la peor consecuencia de
+ * duplicarla es una Session sin completar que caduca sola.
+ */
+export async function crearSesionDeAltaDeTarjeta(opts: {
+  customerId: string;
+  profileId: string;
+  returnUrl: string;
+}): Promise<Stripe.Checkout.Session> {
+  return await stripe().checkout.sessions.create({
+    mode: "setup",
+    customer: opts.customerId,
+    // Mismo criterio que el cobro: solo tarjeta. Dejarlo al panel traería
+    // Cash App Pay, Amazon Pay y Klarna, que además de irrelevantes para
+    // Latinoamérica ni siquiera se pueden "guardar" como un card-on-file.
+    payment_method_types: ["card"],
+    // ⚠️ ESTA LÍNEA ES LA QUE HACE QUE TODO ESTO SIRVA DE ALGO.
+    //
+    // El checkout de una reserva filtra las tarjetas guardadas por
+    // `saved_payment_method_options.allow_redisplay_filters: ['always',
+    // 'limited']` (ver `lib/payments/stripe-provider.ts`). Una tarjeta que nace
+    // con `allow_redisplay: 'unspecified'` —el valor por defecto de las que se
+    // guardan fuera de un cobro— NO entra en ese filtro: se vería en esta
+    // pantalla y NO aparecería a la hora de pagar. O sea, la funcionalidad
+    // parecería hecha y no serviría para nada, que es el peor fallo posible
+    // porque nadie lo reporta.
+    //
+    // El campo existe justo para esto: la propia API lo describe como
+    // "override the allow_redisplay value determined by Checkout".
+    payment_method_data: { allow_redisplay: "always" },
+    setup_intent_data: {
+      // Para poder rastrear de quién salió, igual que el `booking_id` del
+      // cobro: los eventos de SetupIntent no traen la Session.
+      metadata: { profile_id: opts.profileId },
+    },
+    // OJO: `saved_payment_method_options` NO se pasa aquí. La API solo lo
+    // admite en `payment` y `subscription`; en `setup` devuelve 400.
+    //
+    // ⚠️ Y `setup_intent_data` no expone `usage`, así que esta Session crea el
+    // SetupIntent con el `off_session` que Checkout pone por defecto — más
+    // permisivo que el `setup_future_usage: 'on_session'` que pide PAC-02 en
+    // el cobro. Eso cambia cómo se autentica la tarjeta (se pide 3DS ahora
+    // para que un cargo futuro sin la persona delante no lo vuelva a pedir),
+    // NO lo que hacemos con ella: no existe ni un solo camino que cobre fuera
+    // de una Checkout Session con la persona delante. Si algún día se quisiera
+    // el permiso menor de verdad, habría que bajar a SetupIntent + Elements.
+    ui_mode: "embedded_page",
+    // Sin esto Stripe rotula según el navegador y salía "Payment method" en
+    // mitad de una pantalla en español.
+    locale: "es",
+    return_url: opts.returnUrl,
+  });
 }
 
 /**
- * ¿El fallo fue del momento o del contenido de la petición?
+ * La Session de alta, con su SetupIntent dentro, o `null` si Stripe no la
+ * reconoce.
  *
- * X-01 lo necesita para decidir algo que no tiene vuelta atrás: si una fila de
- * la cola de reembolsos se queda `pending` (y se reintenta en la pasada
- * siguiente) o se marca `failed` (y se queda ahí hasta que una persona la
- * mire). Marcar `failed` un 429 de Stripe sería quedarse con el dinero del
- * alumno por un mal minuto del proveedor; dejar `pending` un
- * `charge_already_refunded` sería reintentar cada cinco minutos para siempre.
- *
- * Los tres de aquí son los que Stripe documenta como reintentables y ninguno
- * dice nada de lo que pedimos: la red se cayó, su API tuvo un problema, o
- * fuimos demasiado rápido. Todo lo demás —`StripeInvalidRequestError` sobre
- * todo— es la petición, y repetirla dará el mismo error mañana.
- *
- * ⚠️ `StripeIdempotencyError` NO entra: significa que reusamos una clave de
- * idempotencia con parámetros distintos, o sea que algo cambió el importe de
- * una fila ya intentada. Reintentar eso a ciegas es justo lo que no se debe
- * hacer con dinero — que salte a `failed` y lo mire alguien.
+ * El id viene de la URL, así que puede ser cualquier cosa con forma de `cs_`.
+ * Un id inexistente es "no encontrada", no un 500 nuestro llenando los logs.
  */
-export function esFalloTransitorio(e: unknown): boolean {
-  const tipo = (e as { type?: string })?.type;
-  return (
-    tipo === "StripeConnectionError" ||
-    tipo === "StripeAPIError" ||
-    tipo === "StripeRateLimitError"
-  );
+export async function recuperarSesionDeAlta(
+  sessionId: string,
+): Promise<Stripe.Checkout.Session | null> {
+  try {
+    return await stripe().checkout.sessions.retrieve(sessionId, {
+      expand: ["setup_intent"],
+    });
+  } catch (e) {
+    if ((e as { type?: string })?.type !== "StripeInvalidRequestError") throw e;
+    return null;
+  }
+}
+
+/**
+ * Deja la tarjeta marcada como reutilizable. Es idempotente: se pone sin
+ * preguntar antes, porque comprobar el valor actual costaría una llamada extra
+ * siempre para ahorrar una escritura que ya no hace daño.
+ */
+export async function permitirReutilizacion(paymentMethodId: string): Promise<void> {
+  await stripe().paymentMethods.update(paymentMethodId, { allow_redisplay: "always" });
 }

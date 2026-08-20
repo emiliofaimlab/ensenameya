@@ -2,14 +2,8 @@ import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  ensureCustomer,
-  esCustomerInexistente,
-  isStripeConfigured,
-  publishableKey,
-  siteUrl,
-  stripe,
-} from "@/lib/stripe";
+import { adapterFor } from "@/lib/payments";
+import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
 
 /**
  * EP-20 / PAC-01 · abre el checkout de Stripe para una reserva y devuelve su
@@ -31,6 +25,12 @@ import {
  * interruptor sigue siendo el dato —`payment_routing_rules`— y no un flag
  * repartido por el código: mientras la regla diga `simulated`, el checkout de
  * hoy funciona igual que siempre.
+ *
+ * NO HABLA CON NINGÚN SDK. Desde el puerto de pagos (`lib/payments`), lo único
+ * que este archivo sabe del proveedor es lo que el puerto expone: si abre cobro
+ * remoto, qué credencial le falta y cómo se le pide un cobro. Lo que queda aquí
+ * —la caducidad, la clave de idempotencia y el rescate del Customer perdido— se
+ * queda a propósito: es política de ESTA reserva, no del proveedor.
  */
 
 /**
@@ -135,24 +135,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "sin pago asociado" }, { status: 500 });
   }
 
-  // El ruteo manda. Mientras la regla siga en 'simulated', el camino de hoy.
-  if (payment.provider !== "stripe") {
+  // El ruteo manda, y manda el SNAPSHOT: `payments.provider` es lo que
+  // `create_booking` congeló al reservar, no la regla activa de ahora mismo.
+  // Mientras siga en 'simulated', el camino de hoy — y la pregunta va ANTES de
+  // dar de alta al Customer porque al revés el camino simulado empezaría a
+  // llamar a Stripe, que hoy no lo hace.
+  const proveedor = adapterFor(payment.provider);
+  if (!proveedor.opensRemoteCheckout) {
     return NextResponse.json({ simulated: true });
   }
-  // El embed necesita LAS DOS claves: la secreta para crear la Session y la
-  // publicable para que el navegador monte el iframe. Sin la publicable el
-  // formulario no aparecería y el alumno se quedaría mirando un hueco, así que
-  // se falla aquí y se dice cuál falta.
-  const pk = publishableKey();
-  if (!isStripeConfigured() || !pk) {
-    // Ruteado a Stripe pero sin clave: es un error de configuración y se dice.
-    // Caer al simulado aquí sería regalar mentorías (mismo criterio que Daily).
-    return NextResponse.json(
-      {
-        error: `Stripe no configurado (falta ${!isStripeConfigured() ? "STRIPE_API_KEY" : "STRIPE_PUBLISHABLE_KEY"})`,
-      },
-      { status: 503 },
-    );
+
+  // Ruteado a un PSP pero sin credencial: es un error de configuración y se
+  // dice cuál falta. Caer al simulado aquí sería regalar mentorías (mismo
+  // criterio que Daily).
+  const falta = proveedor.missingChargeConfig();
+  if (falta) {
+    return NextResponse.json({ error: falta }, { status: 503 });
   }
 
   const { data: perfil } = await admin
@@ -176,92 +174,22 @@ export async function POST(req: Request) {
   const base = siteUrl();
   const caduca = caducidadSesion(booking.created_at);
   const crearSesion = (cliente: string, claveIdem: string) =>
-    stripe().checkout.sessions.create(
-    {
-      mode: "payment",
-      customer: cliente,
-      client_reference_id: bookingId,
-      // X-02 · en segundos Unix, no en milisegundos: Stripe cuenta épocas en
-      // segundos y pasarle `Date.now()` a secas daría un año del 57000 que
-      // rebota con "no puede ser más de 24 horas". El razonamiento del valor
-      // está arriba, en `caducidadSesion`.
-      expires_at: caduca,
-      // Solo tarjeta. Por defecto Stripe ofrece los métodos activos de la
-      // cuenta y salían Cash App Pay, Amazon Pay y Klarna: irrelevantes para
-      // Latinoamérica y ruido en una pantalla que se quiere simple. Fijarlo
-      // aquí también apaga los métodos que se activen mañana en el panel sin
-      // que nadie lo revise. Los locales (C-13) entran por aquí cuando se
-      // decida el mercado.
-      payment_method_types: ["card"],
-      // M-01 · La app presupuesta y confirma «45,00 US$» en tres pantallas y la
-      // pasarela cobraba «PAB 46,80», un 4 % más, con un tipo de 1,0400. El
-      // balboa está anclado 1:1 al dólar desde 1904: ese tipo no es una
-      // conversión, es el margen del *adaptive pricing* de Stripe, que convierte
-      // por geolocalización sin avisar. El alumno ve un precio durante toda la
-      // compra y otro justo donde pone la tarjeta.
-      //
-      // Se apaga AQUÍ y no en el panel a propósito: en el panel se pierde el día
-      // que se cree otra cuenta o se pase de sandbox a live, y el fallo vuelve
-      // sin que nadie lo note. El importe sale de `payments.gross_amount` y la
-      // moneda de `payment.currency`, así que una sola moneda de punta a punta.
-      adaptive_pricing: { enabled: false },
-      line_items: [
-        {
-          price_data: {
-            currency: payment.currency.toLowerCase(),
-            unit_amount: payment.gross_amount,
-            product_data: { name: booking.products?.title ?? "Mentoría" },
-          },
-          quantity: 1,
-        },
-      ],
-      // La metadata de la Session NO baja al PaymentIntent, y los eventos de
-      // reembolso y disputa solo traen el PaymentIntent. Sin esta segunda copia
-      // no habría forma de mapear un reembolso a su reserva.
-      metadata: { booking_id: bookingId },
-      // Sin esto la pasarela NO ofrece las tarjetas ya guardadas: pide una
-      // nueva cada vez y la pantalla de "Métodos de pago" no sirve de nada.
-      // Comprobado abriendo cuatro sesiones y mirándolas: el filtro es lo único
-      // que hace falta —`payment_method_save` no, y añadirlo metería una
-      // segunda casilla de guardado, la de Stripe, encima de la nuestra—.
-      // `limited` es como `setup_future_usage` marca lo que guarda; `always`
-      // por si algún día se guarda desde otro sitio.
-      saved_payment_method_options: {
-        allow_redisplay_filters: ["always", "limited"],
-      },
-      payment_intent_data: {
-        metadata: { booking_id: bookingId },
-        // PAC-02 · solo si la persona marcó la casilla, que nace DESMARCADA.
-        // `on_session` y no `off_session` a propósito: el permiso que pedimos
-        // es reutilizar la tarjeta con ella delante, en su próxima reserva —
-        // no cobrarle cuando no está. Es el permiso menor de los dos y es el
-        // que corresponde a lo que dice la casilla.
-        ...(guardarTarjeta ? { setup_future_usage: "on_session" as const } : {}),
-      },
-      // Embedded Checkout: el formulario de tarjeta se monta DENTRO de nuestra
-      // pantalla (reunión 7-ago) en vez de mandar a checkout.stripe.com. Sigue
-      // siendo un iframe de Stripe, así que el PAN no toca nuestro DOM y el
-      // proyecto se queda en PCI-DSS SAQ A — que era la razón de no dibujar
-      // campos propios.
-      // `embedded_page`, NO `embedded`: en la versión de API que tenemos fijada
-      // el valor se renombró y la vieja devuelve 400. El typecheck no lo pilla
-      // porque la unión del SDK acaba en `OtherString`, que traga cualquier
-      // cadena — esto solo se ve llamando a la API de verdad.
-      ui_mode: "embedded_page",
-      // Sin esto Stripe rotula el formulario según el navegador y en un sitio
-      // en español salía "Payment method" / "Save my information". Con el
-      // checkout alojado se notaba menos porque era otra página; embebido,
-      // media pantalla quedaba en otro idioma.
-      locale: "es",
-      // Con el checkout embebido NO existe `success_url` ni `cancel_url`: hay
-      // un único `return_url` al que Stripe lleva ya pagado. Cancelar es no
-      // rellenar el formulario, así que no hay a dónde volver.
-      return_url: `${base}/reservas/${bookingId}/confirmacion`,
-    },
-    // Un doble clic o un reintento de red no debe abrir dos cobros para la
-    // misma reserva. La clave es la reserva porque es lo único estable aquí.
-    { idempotencyKey: claveIdem },
-  );
+    proveedor.charge({
+      bookingId,
+      // ⚠️ EL IMPORTE Y LA MONEDA SALEN DE `payments`, NUNCA DEL NAVEGADOR
+      // (regla de oro 2). El puerto los transporta; no los calcula nadie por
+      // el camino.
+      amountMinor: payment.gross_amount,
+      currency: payment.currency,
+      concepto: booking.products?.title ?? "Mentoría",
+      customerRef: cliente,
+      expiresAt: caduca,
+      guardarMedioDePago: Boolean(guardarTarjeta),
+      // Con el checkout embebido NO hay `cancel_url`: Stripe devuelve aquí ya
+      // pagado, y cancelar es no rellenar el formulario.
+      returnUrl: `${base}/reservas/${bookingId}/confirmacion`,
+      idempotencyKey: claveIdem,
+    });
 
   // La casilla entra en la clave: reutilizar la misma con parámetros distintos
   // es un error de la API, no la respuesta cacheada.
@@ -276,13 +204,18 @@ export async function POST(req: Request) {
   // si acabaran pagándose las dos, el webhook reembolsa la segunda.
   const clave = `booking-${bookingId}${guardarTarjeta ? "-save" : ""}-c${caduca}`;
 
-  let session;
+  let cobro;
   try {
-    session = await crearSesion(customer, clave);
+    cobro = await crearSesion(customer, clave);
   } catch (e) {
     // El Customer que teníamos guardado ya no existe en Stripe (datos de prueba
     // borrados, cuenta cambiada, alguien lo eliminó). Sin esto, esa persona se
     // queda con un 500 en cada intento de pago para siempre.
+    //
+    // Este rescate es LO ÚNICO que queda aquí con nombre de Stripe, y se queda
+    // a propósito: lo que repara es `profiles.stripe_customer_id`, una columna
+    // nuestra y de Stripe. Generalizarlo sin un segundo proveedor que tenga el
+    // mismo problema sería inventarse la forma del hueco.
     if (!esCustomerInexistente(e)) throw e;
 
     customer = await ensureCustomer({
@@ -294,21 +227,18 @@ export async function POST(req: Request) {
     await guardarCustomer(customer);
     // Clave de idempotencia DISTINTA: reutilizar la misma con parámetros
     // distintos es un error de la API de Stripe, no la respuesta cacheada.
-    session = await crearSesion(customer, `${clave}-r2`);
+    cobro = await crearSesion(customer, `${clave}-r2`);
   }
 
-  if (!session.client_secret) {
-    return NextResponse.json(
-      { error: "Stripe no devolvió client_secret" },
-      { status: 502 },
-    );
+  if (!cobro.ok) {
+    return NextResponse.json({ error: cobro.error }, { status: 502 });
   }
   // La publicable viaja con la respuesta en vez de por `NEXT_PUBLIC_*`: así el
   // interruptor de Stripe sigue siendo UNA sola cosa (las claves del servidor) y
   // no hay que acordarse de una variante pública en Vercel. Es pública por
   // diseño —solo permite crear tokens—, así que no roza la regla de oro 3.
   return NextResponse.json({
-    clientSecret: session.client_secret,
-    publishableKey: pk,
+    clientSecret: cobro.clientSecret,
+    publishableKey: cobro.publishableKey,
   });
 }

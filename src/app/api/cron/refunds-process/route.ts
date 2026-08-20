@@ -1,13 +1,7 @@
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  esCargoYaReembolsado,
-  esFalloTransitorio,
-  isStripeConfigured,
-  stripe,
-} from "@/lib/stripe";
+import { stripeProvider } from "@/lib/payments/stripe-provider";
 
 /**
  * X-01 · devuelve de verdad el dinero que la base de datos ya dio por devuelto.
@@ -42,7 +36,7 @@ import {
  * crece en silencio: `select public.refunds_backlog();` es el termómetro.
  */
 
-/** Node, no edge: se usa el SDK de Stripe, igual que el webhook. */
+/** Node, no edge: por debajo del puerto está el SDK del PSP, igual que el webhook. */
 export const runtime = "nodejs";
 
 /**
@@ -94,6 +88,12 @@ export async function GET(req: Request) {
   // service_role a propósito: la cola es admin-only por RLS y este trabajo no
   // tiene ninguna persona detrás. Regla de oro 9 — los grants de tabla (select
   // + update por columnas) están en la migración `20260817170000`.
+  //
+  // El filtro por proveedor se queda tal cual: el único adaptador que sabe
+  // reembolsar es el de Stripe. El día que haya un segundo, esto pasa a un
+  // `in (...)` y el adaptador se resuelve por fila con `adapterFor(r.provider)`
+  // — el cuerpo del bucle ya no tiene nada específico dentro. Ampliarlo HOY
+  // sería encolar trabajo contra un adaptador que no existe.
   const { data, error } = await admin
     .from("refund_requests")
     .select("id, payment_id, booking_id, provider_payment_id, amount, currency, reason")
@@ -121,7 +121,7 @@ export async function GET(req: Request) {
   if (simulacro) {
     return NextResponse.json({
       status: "simulacro",
-      stripeConfigurado: isStripeConfigured(),
+      stripeConfigurado: stripeProvider.canRefund(),
       // Sin `provider_payment_id`: en un ensayo no hace falta sacar
       // referencias de cobro al log de nadie.
       mandaria: pendientes.map((r) => ({
@@ -139,7 +139,11 @@ export async function GET(req: Request) {
   // Sin clave no se toca la cola: las filas siguen `pending` y salen enteras en
   // la primera pasada con Stripe encendido. Marcarlas de cualquier otra forma
   // sería inventarse que el dinero se movió. (La credencial es el interruptor.)
-  if (!isStripeConfigured()) {
+  //
+  // ⚠️ Es `canRefund()` y NO la pregunta del cobro: devolver dinero solo
+  // necesita la clave secreta, y exigir además la publicable dejaría la cola
+  // parada por una clave que este job no usa.
+  if (!stripeProvider.canRefund()) {
     return NextResponse.json({
       status: "sin-stripe",
       reembolsados: 0,
@@ -184,93 +188,81 @@ export async function GET(req: Request) {
       continue;
     }
 
-    let reembolso: Stripe.Refund | null = null;
-    try {
-      reembolso = await stripe().refunds.create(
-        {
-          payment_intent: r.provider_payment_id,
-          // ⚠️ PARCIAL. RN-37 devuelve el 50 % cuando el alumno cancela tarde,
-          // y el admin puede devolver el trozo que quiera (US-704). El importe
-          // sale de la fila —que lo copió de `payments` al encolar— y NUNCA de
-          // un cálculo nuevo aquí: dos sitios calculando el mismo porcentaje es
-          // dos sitios que pueden discrepar (regla de oro 2).
-          amount: r.amount,
-          // La taxonomía de Stripe solo admite 'duplicate' | 'fraudulent' |
-          // 'requested_by_customer'. Es el tercero incluso cuando cancela el
-          // tutor o vence el plazo: 'fraudulent' metería la tarjeta y el correo
-          // del alumno en las listas de Radar por una cancelación normal.
-          reason: "requested_by_customer",
-          metadata: {
-            solicitud_id: r.id,
-            booking_id: r.booking_id,
-            motivo: r.reason,
-          },
-        },
-        {
-          // ⚠️ IDEMPOTENCIA, CAMINO 2 DE 2. El `unique` de la cola impide
-          // ENCOLAR dos veces el mismo reembolso; esto impide EJECUTARLO dos
-          // veces. Hacen falta los dos: si el proceso muere entre la llamada a
-          // Stripe y el `update` de la fila, la fila sigue `pending` y la
-          // pasada siguiente vuelve a pedir exactamente lo mismo — con esta
-          // clave Stripe devuelve EL MISMO reembolso en vez de crear otro. Va
-          // atada al id de la solicitud (inmutable) y no al pago, porque un
-          // pago puede devolverse en varios tramos legítimos.
-          idempotencyKey: `x01-reembolso-${r.id}`,
-        },
-      );
-    } catch (e) {
-      // Ya lo devolvió otra mano: el panel de Stripe, o el reembolso de cobro
-      // tardío de X-02 sobre este mismo cargo. El dinero está donde tiene que
-      // estar, así que la fila se cierra en vez de reintentarse para siempre.
-      if (esCargoYaReembolsado(e)) {
-        await admin
-          .from("refund_requests")
-          .update({
-            status: "refunded",
-            last_error: "el PSP dice que el cargo ya estaba reembolsado",
-            last_attempt_at: ahora(),
-            processed_at: ahora(),
-          })
-          .eq("id", r.id)
-          .eq("status", "pending");
-        console.error("[X-01] el cargo ya estaba reembolsado en el PSP", {
-          solicitud: r.id,
-          pago: r.payment_id,
-          pi: r.provider_payment_id,
-        });
-        yaEstaban++;
-        continue;
-      }
+    const salida = await stripeProvider.refund({
+      chargeRef: r.provider_payment_id,
+      // ⚠️ PARCIAL. RN-37 devuelve el 50 % cuando el alumno cancela tarde, y el
+      // admin puede devolver el trozo que quiera (US-704). El importe sale de
+      // la fila —que lo copió de `payments` al encolar— y NUNCA de un cálculo
+      // nuevo aquí: dos sitios calculando el mismo porcentaje es dos sitios que
+      // pueden discrepar (regla de oro 2).
+      amountMinor: r.amount,
+      metadata: {
+        solicitud_id: r.id,
+        booking_id: r.booking_id,
+        motivo: r.reason,
+      },
+      // ⚠️ IDEMPOTENCIA, CAMINO 2 DE 2. El `unique` de la cola impide ENCOLAR
+      // dos veces el mismo reembolso; esto impide EJECUTARLO dos veces. Hacen
+      // falta los dos: si el proceso muere entre la llamada al PSP y el
+      // `update` de la fila, la fila sigue `pending` y la pasada siguiente
+      // vuelve a pedir exactamente lo mismo — con esta clave el proveedor
+      // devuelve EL MISMO reembolso en vez de crear otro. Va atada al id de la
+      // solicitud (inmutable) y no al pago, porque un pago puede devolverse en
+      // varios tramos legítimos.
+      idempotencyKey: `x01-reembolso-${r.id}`,
+    });
 
-      const mensaje = e instanceof Error ? e.message : "error desconocido";
+    // Ya lo devolvió otra mano: el panel del PSP, o el reembolso de cobro
+    // tardío de X-02 sobre este mismo cargo. El dinero está donde tiene que
+    // estar, así que la fila se cierra en vez de reintentarse para siempre.
+    if (salida.estado === "ya-reembolsado") {
+      await admin
+        .from("refund_requests")
+        .update({
+          status: "refunded",
+          last_error: "el PSP dice que el cargo ya estaba reembolsado",
+          last_attempt_at: ahora(),
+          processed_at: ahora(),
+        })
+        .eq("id", r.id)
+        .eq("status", "pending");
+      console.error("[X-01] el cargo ya estaba reembolsado en el PSP", {
+        solicitud: r.id,
+        pago: r.payment_id,
+        pi: r.provider_payment_id,
+      });
+      yaEstaban++;
+      continue;
+    }
 
-      // Transitorio (429, 5xx, red caída): se deja `pending` A PROPÓSITO y lo
-      // coge la pasada siguiente. Marcarlo `failed` sería quedarnos con el
-      // dinero del alumno por un mal minuto de Stripe. Se anota el intento para
-      // que la fila cuente su historia aunque acabe bien.
-      if (esFalloTransitorio(e)) {
-        await admin
-          .from("refund_requests")
-          .update({ last_error: mensaje, last_attempt_at: ahora() })
-          .eq("id", r.id)
-          .eq("status", "pending");
-        console.error("[X-01] fallo transitorio, se reintenta", {
-          solicitud: r.id,
-          pago: r.payment_id,
-          error: mensaje,
-        });
-        reintentables++;
-        continue;
-      }
+    // Transitorio (429, 5xx, red caída): se deja `pending` A PROPÓSITO y lo
+    // coge la pasada siguiente. Marcarlo `failed` sería quedarnos con el
+    // dinero del alumno por un mal minuto del proveedor. Se anota el intento
+    // para que la fila cuente su historia aunque acabe bien.
+    if (salida.estado === "transitorio") {
+      await admin
+        .from("refund_requests")
+        .update({ last_error: salida.mensaje, last_attempt_at: ahora() })
+        .eq("id", r.id)
+        .eq("status", "pending");
+      console.error("[X-01] fallo transitorio, se reintenta", {
+        solicitud: r.id,
+        pago: r.payment_id,
+        error: salida.mensaje,
+      });
+      reintentables++;
+      continue;
+    }
 
-      // Todo lo demás es la petición, no el momento: importe mayor que el
-      // cargo, PaymentIntent de otra cuenta, cargo ya disputado. Repetirlo dará
-      // el mismo error mañana, así que se para y se grita.
+    // La petición, no el momento: importe mayor que el cargo, referencia de
+    // otra cuenta, cargo ya disputado. Repetirlo dará el mismo error mañana,
+    // así que se para y se grita.
+    if (salida.estado === "rechazado") {
       await admin
         .from("refund_requests")
         .update({
           status: "failed",
-          last_error: mensaje,
+          last_error: salida.mensaje,
           last_attempt_at: ahora(),
           processed_at: ahora(),
         })
@@ -282,22 +274,23 @@ export async function GET(req: Request) {
         booking: r.booking_id,
         pi: r.provider_payment_id,
         importe: r.amount,
-        error: mensaje,
+        error: salida.mensaje,
       });
       permanentes++;
       continue;
     }
 
-    // Stripe puede responder con el reembolso ya rechazado (fondos retenidos,
-    // cuenta del comercio sin saldo). Tiene `re_…` pero el dinero NO se movió:
-    // darlo por bueno sería mentir en la única tabla que dice que se devolvió.
-    if (reembolso.status === "failed" || reembolso.status === "canceled") {
+    // El PSP creó el reembolso y lo dejó sin completar (fondos retenidos,
+    // cuenta del comercio sin saldo). Tiene referencia pero el dinero NO se
+    // movió: darlo por bueno sería mentir en la única tabla que dice que se
+    // devolvió.
+    if (salida.estado === "no-completado") {
       await admin
         .from("refund_requests")
         .update({
           status: "failed",
-          provider_refund_id: reembolso.id,
-          last_error: `el PSP creó el reembolso pero lo dejó en '${reembolso.status}'`,
+          provider_refund_id: salida.refundId,
+          last_error: `el PSP creó el reembolso pero lo dejó en '${salida.detalle}'`,
           last_attempt_at: ahora(),
           processed_at: ahora(),
         })
@@ -306,8 +299,8 @@ export async function GET(req: Request) {
       console.error("[X-01] el PSP no completó el reembolso", {
         solicitud: r.id,
         pago: r.payment_id,
-        reembolso: reembolso.id,
-        estado: reembolso.status,
+        reembolso: salida.refundId,
+        estado: salida.detalle,
       });
       permanentes++;
       continue;
@@ -317,7 +310,7 @@ export async function GET(req: Request) {
       .from("refund_requests")
       .update({
         status: "refunded",
-        provider_refund_id: reembolso.id,
+        provider_refund_id: salida.refundId,
         last_attempt_at: ahora(),
         processed_at: ahora(),
       })
@@ -335,7 +328,7 @@ export async function GET(req: Request) {
       console.error("[X-01] ⚠️ reembolso HECHO pero no anotado — se reintenta la marca", {
         solicitud: r.id,
         pago: r.payment_id,
-        reembolso: reembolso.id,
+        reembolso: salida.refundId,
         error: errorMarca.message,
       });
       reintentables++;
@@ -351,7 +344,7 @@ export async function GET(req: Request) {
       pago: r.payment_id,
       booking: r.booking_id,
       pi: r.provider_payment_id,
-      reembolso: reembolso.id,
+      reembolso: salida.refundId,
       importe: r.amount,
       moneda: r.currency,
       motivo: r.reason,

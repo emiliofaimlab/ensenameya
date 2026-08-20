@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import type Stripe from "stripe";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { esCargoYaReembolsado, stripe } from "@/lib/stripe";
+import { stripeProvider } from "@/lib/payments/stripe-provider";
 import type { Database } from "@/lib/database.types";
 
 /** El estado de la reserva tal y como lo declara el esquema, no un `string`
@@ -20,73 +19,67 @@ type EstadoReserva = Database["public"]["Enums"]["booking_status"];
  * ── Las cuatro trampas que tiene este archivo ──────────────────────────────
  * 1. `req.text()`, nunca `req.json()`. Stripe firma un HMAC sobre la cadena
  *    EXACTA del cuerpo; `JSON.parse` + `stringify` reordena claves y cambia
- *    espacios, y la firma deja de cuadrar. El cuerpo se lee UNA vez.
+ *    espacios, y la firma deja de cuadrar. El cuerpo se lee UNA vez y entra
+ *    tal cual en `verifyWebhook`. **La verificación se queda en el borde**: el
+ *    puerto le da forma, no la generaliza — si algún día lo que entra ahí es un
+ *    objeto ya parseado, la firma no protege nada.
  * 2. Firma inválida → **400**, no 500. Un 500 hace que Stripe reintente
  *    durante tres días un payload que no va a validar nunca.
  * 3. `payment_intent.payment_failed` NO está en la lista. Una tarjeta
  *    rechazada deja la Session abierta y el alumno reintenta con otra; si
  *    canceláramos ahí, le habríamos liberado el horario a alguien que estaba
  *    a punto de pagar. Los únicos fallos terminales son `expired` y
- *    `async_payment_failed`.
+ *    `async_payment_failed`. La traducción vive en `traducirTipo`, dentro del
+ *    adaptador, y ese comentario va con ella.
  * 4. X-02 · **un cobro que llega tarde no se acredita: se devuelve.** Ver el
  *    bloque de `cobroEntrante` más abajo; es la parte de este archivo donde de
  *    verdad se mueve dinero fuera y la que hay que leer entera antes de
  *    tocarla.
+ *
+ * Lo que este archivo YA NO sabe, desde el puerto de pagos: cómo se llaman los
+ * eventos de Stripe, cómo se firma un webhook y cómo se pide un reembolso. Todo
+ * eso es del adaptador. Lo que queda aquí es la lógica —X-02, la idempotencia,
+ * el sello del `pi_`— y no tiene nada de Stripe dentro.
  */
 
-/** Node, no edge: `constructEvent` usa crypto de Node. Es el runtime por defecto. */
+/** Node, no edge: la verificación de firma usa crypto de Node. Es el runtime por defecto. */
 export const runtime = "nodejs";
-
-/**
- * El `pi_…` del evento. Llega como id en los eventos de Session, pero puede
- * venir expandido si algún día se pide con `expand`; y en una Session expirada
- * (nadie pagó) no viene en absoluto.
- */
-function idDePaymentIntent(sesion: Stripe.Checkout.Session): string | null {
-  const pi = sesion.payment_intent;
-  if (typeof pi === "string") return pi;
-  return pi?.id ?? null;
-}
 
 /** Estados de `payments` en los que el cobro ya está contabilizado. */
 const YA_CONTABILIZADO = ["paid", "refunded", "partially_refunded"];
 
 export async function POST(req: Request) {
-  const secret = process.env.STRIPE_WEBHOOK_SECRET;
-  // Sin secreto no se procesa NADA. Aceptar sin verificar sería dejar que
-  // cualquiera marque reservas como pagadas con un POST.
-  if (!secret) {
-    return NextResponse.json({ error: "STRIPE_WEBHOOK_SECRET no configurada" }, { status: 503 });
-  }
-
-  const firma = req.headers.get("stripe-signature");
-  if (!firma) return NextResponse.json({ error: "sin firma" }, { status: 400 });
-
+  // ⚠️ EL CUERPO CRUDO. `req.text()` y no `req.json()`, y viaja como cadena
+  // hasta el verificador. Lee la trampa 1 de arriba antes de tocar estas
+  // cuatro líneas: es la diferencia entre un webhook firmado y un endpoint
+  // público capaz de marcar reservas como pagadas con un POST.
   const crudo = await req.text();
+  const verificacion = stripeProvider.verifyWebhook({
+    rawBody: crudo,
+    signature: req.headers.get("stripe-signature"),
+  });
 
-  let evento: Stripe.Event;
-  try {
-    evento = stripe().webhooks.constructEvent(crudo, firma, secret);
-  } catch (e) {
+  if (!verificacion.ok) {
+    // Sin secreto es un fallo NUESTRO de configuración (503, que Stripe
+    // reintenta); una firma que no cuadra es un 400 definitivo, porque
+    // reintentar el mismo payload no lo va a validar nunca.
     return NextResponse.json(
-      { error: `firma inválida: ${e instanceof Error ? e.message : "?"}` },
-      { status: 400 },
+      { error: verificacion.error },
+      { status: verificacion.motivo === "sin-secreto" ? 503 : 400 },
     );
   }
+  const evento = verificacion.evento;
 
   const admin = createAdminClient();
 
-  /**
-   * El booking viaja en `client_reference_id` y, por si acaso, en metadata.
-   * Se comprueban los dos: el primero solo existe en los eventos de Session.
-   */
-  const sesion = evento.data.object as Stripe.Checkout.Session;
-  const bookingId = sesion.client_reference_id ?? sesion.metadata?.booking_id ?? null;
+  // El booking lo trae el evento ya extraído (`client_reference_id` o, por si
+  // acaso, la metadata: el adaptador mira los dos).
+  const bookingId = evento.bookingId;
 
   if (!bookingId) {
     // No es nuestro, o es un evento que no lleva reserva. 200 para que Stripe
     // no reintente: no hay nada que arreglar reintentando.
-    return NextResponse.json({ status: "ignorado", tipo: evento.type });
+    return NextResponse.json({ status: "ignorado", tipo: evento.rawType });
   }
 
   /**
@@ -139,7 +132,7 @@ export async function POST(req: Request) {
       // no sabemos localizar: se grita en el log y NO se confirma la reserva.
       console.error("[X-02] cobro huérfano sin PaymentIntent", {
         booking: bookingId,
-        session: sesion.id,
+        session: evento.objectRef,
         evento: evento.id,
         estadoReserva,
       });
@@ -159,34 +152,38 @@ export async function POST(req: Request) {
       });
     }
 
-    let reembolso: Stripe.Refund | null = null;
-    try {
-      reembolso = await stripe().refunds.create(
-        {
-          payment_intent: pi,
-          // Sin `amount`: se devuelve el cargo entero. Un cobro por una reserva
-          // que no existe no se retiene ni en parte, y la política de
-          // cancelación (RN-37) aquí no pinta nada — no hubo cancelación,
-          // hubo un cobro que no debió pasar.
-          //
-          // La taxonomía de Stripe no tiene "cobro huérfano" y solo admite
-          // 'duplicate' | 'fraudulent' | 'requested_by_customer'. Se usa el
-          // tercero: 'fraudulent' metería la tarjeta y el correo del alumno en
-          // las listas de bloqueo de Radar por un fallo NUESTRO.
-          reason: "requested_by_customer",
-          metadata: { booking_id: bookingId, motivo: "x02_cobro_tardio" },
-        },
-        { idempotencyKey: `x02-reembolso-${pi}` },
-      );
-    } catch (e) {
+    // Sin `amountMinor`: se devuelve el cargo entero. Un cobro por una reserva
+    // que no existe no se retiene ni en parte, y la política de cancelación
+    // (RN-37) aquí no pinta nada — no hubo cancelación, hubo un cobro que no
+    // debió pasar.
+    const salida = await stripeProvider.refund({
+      chargeRef: pi,
+      metadata: { booking_id: bookingId, motivo: "x02_cobro_tardio" },
+      idempotencyKey: `x02-reembolso-${pi}`,
+    });
+
+    if (salida.estado === "transitorio" || salida.estado === "rechazado") {
+      // Se relanza EL ERROR ORIGINAL del proveedor, no uno nuestro: el webhook
+      // devuelve 500, Stripe reintenta y el log dice lo que decía siempre.
+      throw salida.causa;
+    }
+
+    if (salida.estado === "ya-reembolsado") {
       // Ya lo devolvió otra mano (panel de Stripe, reembolso de plataforma).
       // Se anota igual para que quede la constancia y no se reintente eternamente.
-      if (!esCargoYaReembolsado(e)) throw e;
       console.error("[X-02] el cargo ya estaba reembolsado en el PSP", {
         booking: bookingId,
         pi,
       });
     }
+
+    // ⚠️ `no-completado` (el PSP creó el reembolso y lo dejó en 'failed') se
+    // trata aquí IGUAL que uno bueno, que es lo que este archivo hacía antes
+    // del puerto: X-02 nunca ha mirado el estado del reembolso. La cola de X-01
+    // sí lo mira y lo marca `failed`. La discrepancia es real y es previa; se
+    // deja anotada en vez de corregirse de tapadillo, porque cambiarla es
+    // cambiar comportamiento y merece su propia ficha.
+    const reembolso = salida.estado === "ya-reembolsado" ? null : salida;
 
     // Constancia. `upsert` ignorando duplicados y no `insert` a secas: dos
     // entregas simultáneas pueden llegar aquí las dos, y una violación de
@@ -196,13 +193,13 @@ export async function POST(req: Request) {
         booking_id: bookingId,
         provider: "stripe",
         provider_payment_id: pi,
-        provider_refund_id: reembolso?.id ?? null,
+        provider_refund_id: reembolso?.refundId ?? null,
         event_id: evento.id,
         // Del objeto de reembolso, no de `payments.gross_amount`: lo que vale
         // es lo que se movió de verdad. Si Stripe dijo que ya estaba devuelto,
         // se cae al importe de la Session, que es lo único que tenemos.
-        amount: reembolso?.amount ?? sesion.amount_total ?? 0,
-        currency: (reembolso?.currency ?? sesion.currency ?? "usd").toUpperCase(),
+        amount: reembolso?.amountMinor ?? evento.amountMinor ?? 0,
+        currency: (reembolso?.currency ?? evento.currency ?? "usd").toUpperCase(),
         booking_status: estadoReserva,
         reason: `cobro recibido con la reserva en '${estadoReserva}'`,
       },
@@ -216,7 +213,7 @@ export async function POST(req: Request) {
       booking: bookingId,
       estadoReserva,
       pi,
-      reembolso: reembolso?.id ?? "(ya estaba)",
+      reembolso: reembolso?.refundId ?? "(ya estaba)",
     });
 
     // La reserva NO se toca y `payments` tampoco: ese cobro no era suyo. La
@@ -225,7 +222,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       status: "reembolsado",
       booking: bookingId,
-      reembolso: reembolso?.id ?? null,
+      reembolso: reembolso?.refundId ?? null,
     });
   };
 
@@ -236,7 +233,7 @@ export async function POST(req: Request) {
    * que Stripe acepta son 30 minutos y la reserva muere a los 20.
    */
   const cobroEntrante = async (): Promise<NextResponse> => {
-    const pi = idDePaymentIntent(sesion);
+    const pi = evento.chargeRef;
 
     const [{ data: reserva, error: eReserva }, { data: pago, error: ePago }] = await Promise.all([
       admin.from("bookings").select("status").eq("id", bookingId).maybeSingle(),
@@ -295,41 +292,39 @@ export async function POST(req: Request) {
     }
 
     await llamar(true);
-    return NextResponse.json({ status: "ok", tipo: evento.type, booking: bookingId });
+    return NextResponse.json({ status: "ok", tipo: evento.rawType, booking: bookingId });
   };
 
-  switch (evento.type) {
-    // Cobro completado. `payment_status` importa: con métodos diferidos la
-    // Session se completa ANTES de que el dinero exista.
-    case "checkout.session.completed": {
-      if (sesion.payment_status === "unpaid") {
-        return NextResponse.json({ status: "en-curso", tipo: evento.type });
-      }
-      return await cobroEntrante();
-    }
+  // El `switch` es sobre NUESTRO vocabulario, no sobre el de Stripe: qué evento
+  // del proveedor cae en cada rama lo decide `traducirTipo` en el adaptador, y
+  // ahí está también el porqué de que `payment_intent.payment_failed` no sea un
+  // fallo terminal.
+  switch (evento.kind) {
+    // La Session se completó pero el dinero todavía no existe (métodos
+    // diferidos). No es un cobro y no se acredita nada.
+    case "cobro-en-curso":
+      return NextResponse.json({ status: "en-curso", tipo: evento.rawType });
 
-    // Métodos no instantáneos (transferencia, débito bancario): el dinero
-    // llega días después de que la Session se completara. Es justo el caso en
-    // que la reserva lleva mucho rato muerta, así que pasa por el mismo filtro.
-    case "checkout.session.async_payment_succeeded":
+    // Cobro confirmado — instantáneo o diferido, el mismo filtro para los dos:
+    // el diferido es justo el caso en que la reserva lleva mucho rato muerta.
+    case "cobro-confirmado":
       return await cobroEntrante();
 
-    // Los DOS únicos fallos terminales. `expired` es además el que libera el
-    // horario cuando el alumno abandona el checkout.
-    case "checkout.session.async_payment_failed":
-    case "checkout.session.expired":
+    // Fallo terminal. `expired` es además el que libera el horario cuando el
+    // alumno abandona el checkout.
+    case "cobro-fallido":
       await llamar(false);
       break;
 
     default:
-      return NextResponse.json({ status: "ignorado", tipo: evento.type });
+      return NextResponse.json({ status: "ignorado", tipo: evento.rawType });
   }
 
   // Solo quedan los caminos de fallo. La referencia externa se guarda aquí
   // DESPUÉS de resolver, y su fallo no tumba el webhook: no hay cobro que
   // proteger, y perder el `pi_` de un pago fallido solo complica una
   // conciliación futura. (En `expired` no hay PaymentIntent siquiera.)
-  const pi = idDePaymentIntent(sesion);
+  const pi = evento.chargeRef;
   if (pi) {
     await admin
       .from("payments")
@@ -337,5 +332,5 @@ export async function POST(req: Request) {
       .eq("booking_id", bookingId);
   }
 
-  return NextResponse.json({ status: "ok", tipo: evento.type, booking: bookingId });
+  return NextResponse.json({ status: "ok", tipo: evento.rawType, booking: bookingId });
 }
