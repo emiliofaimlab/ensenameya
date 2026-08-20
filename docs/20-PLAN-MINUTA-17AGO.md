@@ -563,4 +563,46 @@ poniendo **5 $ de su bolsillo** en cada reserva, porque el tutor sigue cobrando 
 
 ---
 
+## 20.13 · Cierre de la minuta — 20 de agosto
+
+**Los 6 puntos que se podían hacer sin esperar a nadie están hechos.** Todo en `dev`.
+`lint`, `typecheck`, `check:terms` y `build` en verde.
+
+| Punto | Commit |
+| :-- | :-- |
+| **MN-15** el titular no salta con «emprendimiento» | `7da1492` |
+| **MN-11b** adjuntos hasta 25 MB | `5ecd0aa` |
+| **MN-01 + MN-02** solo los campos de la tarjeta, titular opcional | `94f5d21` |
+| **MN-06** el chat exige haber reservado | `b786e38` |
+| **MN-05** la sala abre 7 días antes y después | `40156e8` |
+| **MN-10** el domicilio fuera del pie | `2703811` |
+
+### Lo que las revisiones evitaron, que es la parte útil
+
+| Qué | Dónde iba a doler |
+| :-- | :-- |
+| **«Lo alargado» reaparecía**: con el modo nuevo los campos se estiran, y en `/pagos` salían a **903px** | Es literalmente lo que MN-01 venía a quitar, en otra pantalla. Ahora 528 |
+| **El hero se rompía otra vez entre 1024 y 1065px** (iPad apaisado), y al revés de lo esperable: a 1023 dos líneas, a 1024 tres | Ensanchar la ventana empeoraba el titular |
+| **«Marcar completada» venía con la sala**: el tutor podía entrar 6 días antes, pulsar, y fijar `completed_at` | Es **el reloj de su propio payout**, justo lo que MN-05 existe para no mover |
+| **`exp` a 7 días desactivaba el tope de coste de Daily** | Una pestaña olvidada = ~10.000 minutos-participante facturados |
+| **El «7» estaba copiado en cuatro sitios** mientras la migración afirmaba ser el único | Cambiarlo dejaría la pantalla ofreciendo un botón que el servidor rechaza |
+
+### 🔴 Lo que NO está hecho
+
+| # | Qué | Por qué importa |
+| :-- | :-- | :-- |
+| 1 | **El alta de tarjeta no se ejercitó entera.** La URL de vuelta usa un placeholder que en el modo viejo sustituía Stripe; con el modo nuevo redirige el navegador y nadie ha comprobado que se siga sustituyendo | Si no, no sale el aviso «Tarjeta guardada» y la tarjeta no se marca reutilizable. **Un minuto**: guardar una tarjeta con `4242…` y mirar |
+| 2 | **Los hilos pre-compra caducan a los 30 días** aunque el cliente los quisiera visibles (ver MN-06) | Coincide con la retención publicada, así que es **decisión de producto**, no fallo |
+| 3 | **El domicilio sigue en `/contacto` y en el §39 de los Términos** | El cliente dijo «no público». Quitarlo del pie no lo hace privado — falta decidir los otros dos |
+| 4 | **El reembolso real sigue sin mover un euro** | Sigue siendo el punto 2 de §19.10, y pesa más que todo lo demás porque es dinero |
+| 5 | **Nada de esto está en producción** | `main` sigue en el commit del 29-jul |
+
+### Lo que queda de la minuta, y no depende de desarrollo
+
+**MN-04** (llamada tipo Meet, XL sin diseño) · **MN-03** y **MN-13** (esperan a dLocal, que espera
+al merge) · **MN-12** (RF no deja embeber: hace falta su snippet, P-10) · **MN-07** (el enlace en el
+chat perdió sentido al cerrar el chat pre-compra) · **MN-14b** (depende de qué sea el premio, §20.12).
+
+---
+
 *Faim Lab · Doc 20 · Plan de acción sobre la minuta del 17-ago · 20 de agosto de 2026.*
