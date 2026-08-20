@@ -405,7 +405,7 @@ export async function getTutorDetail(
   const { data: prods } = await supabase
     .from("products")
     .select(
-      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))",
+      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name, icon))",
     )
     .eq("tutor_id", id)
     .eq("status", "active")
@@ -470,7 +470,7 @@ export async function getProductDetail(
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, level, language, tutor_id, product_categories(categories(slug, name))",
+      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, level, language, tutor_id, product_categories(categories(slug, name, icon))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -583,7 +583,7 @@ export async function listActiveProducts(opts: {
   let base = supabase
     .from("products")
     .select(
-      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, level, language, product_categories(categories(slug, name))",
+      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, level, language, product_categories(categories(slug, name, icon))",
       { count: "exact" },
     )
     .eq("status", "active");
@@ -733,7 +733,7 @@ export async function suggestSearch(q: string): Promise<SearchSuggestions> {
 }
 
 const PRODUCT_CARD_SELECT =
-  "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))";
+  "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name, icon))";
 
 /**
  * RV-17 · cuánto pesa que el término esté en el TÍTULO.
@@ -929,7 +929,7 @@ export async function listTestimonials(limit = 7): Promise<Testimonial[]> {
   }));
 }
 
-/** Índice de categorías: cada una con cuántas tutorías activas tiene.
+/** Índice de categorías: cada una con cuántas mentorías activas tiene.
  *  Una sola consulta al puente + recuento en memoria; con ~10 categorías y el
  *  volumen del MVP no hace falta agregación en BD. */
 export async function listCategoriesWithCounts(): Promise<

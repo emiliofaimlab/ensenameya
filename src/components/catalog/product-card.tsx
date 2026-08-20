@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRightIcon, StarIcon } from "lucide-react";
 
+import { ProductCover } from "@/components/catalog/product-cover";
 import {
   initialsFrom,
   perSessionLabel,
@@ -53,29 +54,22 @@ export function ProductCard({
    * compra. Con dato de verdad detrás se puede añadir; sin él, no.
    */
   const porSesion = perSessionLabel(product);
-  const thumb = storageUrl("product-images", product.imagePath);
   const tutorAvatar = storageUrl("avatars", product.tutor?.avatarPath ?? null);
   const tutorName =
     product.tutor?.displayName ?? product.tutor?.headline ?? "Tutor";
 
   return (
     <article className="flex h-full flex-col overflow-hidden rounded-[16px] border border-[#ebebeb] bg-card shadow-[0_8px_22px_rgb(0_0_0/0.06)]">
-      {/* Miniatura 276×140 (DD-02). Sin imagen se pinta la banda igual para que
-          las tarjetas de la rejilla no queden desalineadas. */}
-      {thumb ? (
-        <Image
-          src={thumb}
-          alt=""
-          width={276}
-          height={compact ? 120 : 140}
-          className={`w-full object-cover ${compact ? "h-[120px]" : "h-[140px]"}`}
-          unoptimized
-        />
-      ) : (
-        <div
-          className={`w-full bg-muted ${compact ? "h-[120px]" : "h-[140px]"}`}
-        />
-      )}
+      {/* Miniatura 276×140 (DD-02). MN-09 · sin imagen se pinta el icono de
+          categoría, no una banda gris: la caja ocupa lo mismo en los dos casos
+          (por eso el alto va en `className`, que `ProductCover` aplica a las dos
+          ramas) y la rejilla no se desalinea. */}
+      <ProductCover
+        product={product}
+        width={276}
+        height={compact ? 120 : 140}
+        className={compact ? "h-[120px]" : "h-[140px]"}
+      />
 
       <div
         className={`flex flex-1 flex-col ${compact ? "gap-2 p-3.5" : "gap-3 p-[18px]"}`}

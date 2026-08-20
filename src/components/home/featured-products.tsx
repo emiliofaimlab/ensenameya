@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
+import { ProductCover } from "@/components/catalog/product-cover";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import {
@@ -28,7 +29,7 @@ export function FeaturedProducts({
         <Section className="pb-[124px] sm:pb-[164px]">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-2xl font-semibold">
-              Tutorías destacadas listas para reservar
+              Mentorías destacadas listas para reservar
             </h2>
             <Link
               href="/classes"
@@ -45,26 +46,21 @@ export function FeaturedProducts({
               // siquiera: en una clase por hora de 90 min anunciaba 30 y el
               // checkout pedía 45. Mismo criterio que la tarjeta de catálogo.
               const precio = priceDisplay(p);
-              const thumb = storageUrl("product-images", p.imagePath);
               return (
                 <li
                   key={p.id}
                   className="flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-card shadow-card"
                 >
-                  {/* Miniatura 276×124 del Figma (DD-02). Sin imagen se pinta la
-                      banda vacía igual: si no, las tarjetas quedan desalineadas. */}
-                  {thumb ? (
-                    <Image
-                      src={thumb}
-                      alt=""
-                      width={276}
-                      height={124}
-                      className="h-[124px] w-full object-cover"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="h-[124px] w-full bg-muted" />
-                  )}
+                  {/* Miniatura 276×124 del Figma (DD-02). MN-09 · el hueco sin
+                      foto lo rellena `ProductCover`, el MISMO componente que la
+                      tarjeta de catálogo y la ficha: aquí había una banda gris
+                      propia y ya divergía del resto. */}
+                  <ProductCover
+                    product={p}
+                    width={276}
+                    height={124}
+                    className="h-[124px]"
+                  />
 
                   <div className="flex flex-1 flex-col gap-3 p-5">
                     {/* N-12 · dos líneas y corta. Sin esto un título largo
@@ -74,7 +70,7 @@ export function FeaturedProducts({
                       {p.title}
                     </h3>
 
-                    {/* Tutor de la tutoría (DD-01): foto + nombre, como el Figma. */}
+                    {/* Tutor de la mentoría (DD-01): foto + nombre, como el Figma. */}
                     {p.tutor ? (
                       <div className="flex items-center gap-2">
                         <span className="grid size-[18px] shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-[8px] font-semibold">

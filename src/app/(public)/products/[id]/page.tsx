@@ -9,6 +9,7 @@ import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
 import { BookingPanel } from "@/components/catalog/booking-panel";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
+import { ProductCover } from "@/components/catalog/product-cover";
 import { LEVELS, LANGUAGES } from "@/components/catalog/product-filters";
 import {
   ReviewsSummary,
@@ -84,7 +85,6 @@ export default async function ProductPage({
   const reviews = await listTutorReviews(product.tutor.id);
 
   const sessions = sessionsLabel(product);
-  const thumb = storageUrl("product-images", product.imagePath);
   const tutorName =
     product.tutor.displayName ?? product.tutor.headline ?? "Tutor";
   const tutorAvatar = storageUrl("avatars", product.tutor.avatarPath);
@@ -159,17 +159,18 @@ export default async function ProductPage({
       <Container>
         <Section className="grid items-start gap-10 lg:grid-cols-[1fr_348px]">
           <div className="flex flex-col gap-10">
-            {thumb ? (
-              <Image
-                src={thumb}
-                alt=""
-                width={764}
-                height={360}
-                className="aspect-[764/360] w-full rounded-[16px] object-cover"
-                unoptimized
-                priority
-              />
-            ) : null}
+            {/* MN-09 · antes, sin foto, esto era `null`: la ficha se quedaba
+                literalmente SIN portada y arrancaba en "Qué vas a conquistar",
+                así que la misma mentoría se veía con cabecera en el catálogo y
+                sin ella al abrirla. Ahora se pinta siempre, con la caja del
+                Figma (764×360) y el mismo relleno que las tarjetas. */}
+            <ProductCover
+              product={product}
+              width={764}
+              height={360}
+              className="aspect-[764/360] rounded-[16px]"
+              priority
+            />
 
             {product.description ? (
               <div>
