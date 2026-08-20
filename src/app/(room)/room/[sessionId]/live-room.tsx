@@ -1,0 +1,939 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { XIcon } from "lucide-react";
+import type {
+  DailyCall,
+  DailyCustomTrayButtons,
+  DailyThemeConfig,
+} from "@daily-co/daily-js";
+
+import { createClient } from "@/lib/supabase/client";
+import type { Database } from "@/lib/database.types";
+import { Button } from "@/components/ui/button";
+import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { RecordingConsent } from "@/components/room/recording-consent";
+import { SessionRef } from "@/components/room/session-ref";
+
+type SessionStatus = Database["public"]["Enums"]["session_status"];
+type BookingStatus = Database["public"]["Enums"]["booking_status"];
+
+// MN-05 · La ventana de acceso ya NO se calcula aquí. Llega por props desde
+// `page.tsx`, que la lee de `sessions.access_opens_at` / `access_closes_at` —
+// las columnas que la migración `20260820190000` despertó. Antes esto era
+// `const WINDOW_MIN = 10` y era una de las cinco copias del número; con la
+// ventana en días, una copia desactualizada sería un botón que aparece siete
+// días antes junto a un texto que promete diez minutos.
+//
+// Lo que sigue siendo cierto: el server es la barrera real (`join_session`),
+// aquí solo se pinta el estado.
+
+/**
+ * MN-04 · La paleta de la sala, en UN solo sitio.
+ *
+ * ⚠️ De dónde salen los hex. `globals.css` **no tiene paleta oscura**: el
+ * layout raíz fuerza el tema claro (`forcedTheme="light"`) porque el Figma no
+ * dibujó modo oscuro. Así que la sala no puede "leer" tokens oscuros — no
+ * existen. Lo que se hace es:
+ *   · `accent` / `accentText` → `--primary` (#fe6a00) y `--primary-foreground`
+ *     (#ffffff) tal cual: es la naranja de marca y aquí manda igual que fuera.
+ *   · `background` → `--foreground` (#14141a), la tinta del Figma usada
+ *     INVERTIDA como superficie. No es un color nuevo, es el mismo del otro lado.
+ *   · el resto (`mainAreaBg`, `backgroundAccent`, `border`, `supportiveText`)
+ *     son escalones derivados de ese #14141a, decididos AQUÍ por falta de
+ *     tokens oscuros. Si algún día Diana entrega paleta oscura, este objeto es
+ *     el único sitio que hay que cambiar.
+ *
+ * Se usa dos veces y por eso vive en un objeto: como `theme` de Daily —que
+ * exige hex en JS, no variables CSS— y como variables CSS del marco nuestro
+ * (`VARS_SALA`), para que el iframe y el panel de chat no puedan desafinar.
+ */
+const SALA = {
+  /** `--primary` de globals.css. */
+  accent: "#fe6a00",
+  /** `--primary-foreground`. */
+  accentText: "#ffffff",
+  /** `--foreground` (#14141a) invertido: la barra de controles y el marco. */
+  background: "#14141a",
+  /** Un escalón por encima del fondo: botones y superficies secundarias. */
+  backgroundAccent: "#26262f",
+  baseText: "#ffffff",
+  border: "#3a3a45",
+  /** El área de vídeo, un punto MÁS oscura que la barra (como Meet). */
+  mainAreaBg: "#0f0f14",
+  /** Tesela de participante con la cámara apagada. */
+  mainAreaBgAccent: "#26262f",
+  mainAreaText: "#ffffff",
+  /** Texto secundario sobre oscuro: contraste 7,4:1 sobre #14141a. */
+  supportiveText: "#a3a3ad",
+} as const;
+
+/**
+ * El mismo objeto en el formato que espera Daily. Se pasa como `DailyTheme`
+ * suelto (no como `{ light, dark }`) a propósito: la sala es oscura siempre,
+ * pase lo que pase con el modo del navegador o el del propio Prebuilt.
+ */
+const TEMA_DAILY: DailyThemeConfig = { colors: { ...SALA } };
+
+/**
+ * Y el mismo objeto como variables CSS, para el marco que sí es nuestro (barra
+ * de sesión y panel de chat). Sin esto los hex estarían escritos dos veces —una
+ * para Daily y otra en clases de Tailwind— y el día que cambie uno, el iframe y
+ * el panel de al lado dejarían de ser el mismo color.
+ */
+const VARS_SALA = {
+  "--sala-bg": SALA.background,
+  "--sala-surface": SALA.backgroundAccent,
+  "--sala-video": SALA.mainAreaBg,
+  "--sala-text": SALA.baseText,
+  "--sala-supportive": SALA.supportiveText,
+  "--sala-border": SALA.border,
+} as React.CSSProperties;
+
+/** Ver `public/img/room-chat.svg`: por qué es absoluta y por qué es blanca. */
+const ICONO_CHAT = "/img/room-chat.svg";
+
+/**
+ * MN-04 · El botón de chat que se inyecta EN LA BARRA DE DAILY.
+ *
+ * Es lo que hace que esto se sienta una sala y no «un iframe con una columna al
+ * lado»: el usuario abre y cierra el panel desde la misma barra donde tiene el
+ * micro y la cámara. Daily lo pinta y nos avisa por `custom-button-click`; el
+ * panel sigue siendo nuestro.
+ *
+ * `visualState: 'sidebar-open'` es el estado que Prebuilt usa para sus propios
+ * paneles laterales (participantes, red): el botón se queda "encendido"
+ * mientras el panel está abierto, igual que los suyos.
+ *
+ * ⚠️ Se llama SOLO desde efectos. Lee `window.location.origin`, así que en
+ * render (o en el SSR de este componente de cliente) reventaría.
+ */
+function botonesTray(abierto: boolean): DailyCustomTrayButtons {
+  const icono = `${window.location.origin}${ICONO_CHAT}`;
+  return {
+    chat: {
+      iconPath: icono,
+      // Mismo fichero para los dos modos: nuestro `theme` fija `background`
+      // oscuro pase lo que pase, así que el icono blanco vale siempre. Si un
+      // día la sala tuviera modo claro, aquí va la variante oscura.
+      iconPathDarkMode: icono,
+      label: "Chat",
+      tooltip: abierto ? "Ocultar el chat" : "Mostrar el chat",
+      visualState: abierto ? "sidebar-open" : "default",
+    },
+  };
+}
+
+type Joined = {
+  roomUrl: string;
+  token: string | null;
+  endsAt: string;
+  /** Sin credenciales de Daily la sala va simulada (ver `lib/daily.ts`). */
+  simulated: boolean;
+};
+
+/** ms → "12:34" para el cronómetro de la sesión (AL/LV01). */
+function clock(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * ms → "6 d 04 h" / "2 h 05 min" / "4 min 12 s" para la cuenta regresiva.
+ *
+ * MN-05 · El tramo de días es nuevo y hace falta: con la sala abierta 7 días,
+ * la cuenta atrás llegaba a "167 h 59 min", que no lo lee nadie.
+ */
+function human(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d} d ${String(h).padStart(2, "0")} h`;
+  if (h > 0) return `${h} h ${String(m).padStart(2, "0")} min`;
+  if (m > 0) return `${m} min ${String(sec).padStart(2, "0")} s`;
+  return `${sec} s`;
+}
+
+/**
+ * MN-04 · El corte en el que el panel de chat deja de superponerse y pasa a ser
+ * la columna de 360px de la derecha. Es el `lg:` de Tailwind, y tiene que
+ * coincidir con las clases del `aside`: si divergen, el panel se declara de una
+ * forma y se pinta de otra.
+ */
+const MOVIL = "(max-width: 1023px)";
+const leerMovil = () => window.matchMedia(MOVIL).matches;
+const subMovil = (avisar: () => void) => {
+  const mql = window.matchMedia(MOVIL);
+  mql.addEventListener("change", avisar);
+  return () => mql.removeEventListener("change", avisar);
+};
+
+export function LiveRoom({
+  sessionId,
+  bookingId,
+  startAt,
+  endAt,
+  opensAt,
+  closesAt,
+  sessionStatus,
+  bookingStatus,
+  productTitle,
+  sessionRef,
+  timeZone,
+  isTutor,
+  currentUserId,
+  firstSessionAt,
+  initialMessages,
+  consent,
+}: {
+  sessionId: string;
+  bookingId: string;
+  startAt: string;
+  endAt: string;
+  /** MN-05 · `sessions.access_opens_at`: cuándo la sala admite gente (7 días
+   *  antes del inicio). NO es cuándo empieza la mentoría — eso es `startAt`. */
+  opensAt: string;
+  /** MN-05 · `sessions.access_closes_at` (7 días tras el fin). Tampoco es
+   *  cuándo se cierra la contabilidad: eso pasa a los 10 min y no se toca. */
+  closesAt: string;
+  sessionStatus: SessionStatus;
+  bookingStatus: BookingStatus;
+  productTitle: string;
+  /** N-27 · "N.º de sesión" visible. Null en reservas viejas (ver migración). */
+  sessionRef: string | null;
+  /** RV-18/RN-01 · la resuelve la página en servidor; sin ella el SSR
+   *  formatea en UTC y la hora no coincide con la del navegador. */
+  timeZone: string;
+  isTutor: boolean;
+  currentUserId: string;
+  firstSessionAt: string | null;
+  initialMessages: ChatMessage[];
+  /** US-1801 · quién ha aceptado ya que se grabe (RN-42). */
+  consent: { mine: boolean; other: boolean };
+}) {
+  const router = useRouter();
+  /**
+   * RV-18 · `now` arranca en `null` A PROPÓSITO, y no en `Date.now()`.
+   *
+   * Este componente es de cliente pero SE RENDERIZA TAMBIÉN EN EL SERVIDOR, y
+   * de `now` salen `beforeWindow` y `afterWindow`, que deciden QUÉ RAMA del
+   * árbol se pinta. Si el SSR cae a un lado del umbral y la hidratación al
+   * otro, no cambia un texto: cambia la ESTRUCTURA — que es exactamente el
+   * React #418 de "marcado distinto", no el #425 de "texto distinto". Y el
+   * `suppressHydrationWarning` de la cuenta atrás no cubre nada de esto:
+   * silencia el texto de ESE nodo, no la elección de rama.
+   *
+   * Con `null`, el servidor y el primer render del cliente pintan lo mismo
+   * (la sala aún no decidida) y el reloj entra en el efecto de montaje.
+   */
+  const [now, setNow] = useState<number | null>(null);
+  const [joined, setJoined] = useState<Joined | null>(null);
+  const [busy, setBusy] = useState(false);
+  // Controles locales de la sala simulada (con Daily real los trae el SDK).
+  const [muted, setMuted] = useState(false);
+  const [camOff, setCamOff] = useState(false);
+  /**
+   * MN-04 · ¿el panel de chat está desplegado? Arranca ABIERTO porque es el
+   * estado que tenía la sala hasta hoy (dos columnas fijas) y porque es lo que
+   * pidió el cliente: el chat incrustado a la derecha, no escondido.
+   *
+   * ⚠️ El panel se MONTA siempre, abierto o no; lo que hace este estado es
+   * enseñarlo u ocultarlo con CSS. Desmontarlo cortaría la suscripción de
+   * Realtime del hilo, así que cerrar el chat un minuto haría perder los
+   * mensajes de ese minuto hasta recargar. Ver el `aside` de más abajo.
+   */
+  /**
+   * ⚠️ `null` = «el usuario no ha tocado el interruptor»: entonces manda el
+   * ancho. En escritorio el panel nace ABIERTO —es lo que pidió el cliente, el
+   * chat incrustado a la derecha— y en móvil nace CERRADO, porque ahí se
+   * superpone y taparía el iframe entero: micro, cámara y botón de salir de
+   * Daily incluidos. Arrancar abierto en móvil convertiría «entrar a la sala»
+   * en «abrir el chat».
+   *
+   * Derivado y no un `setState` en un efecto de montaje a propósito: eso último
+   * lo prohíbe `react-hooks/set-state-in-effect` (renders en cascada), y leer
+   * el viewport durante el render rompería la hidratación. `useSyncExternalStore`
+   * es la vía buena para un `matchMedia`: el servidor contesta `false` —o sea
+   * escritorio, que es lo que ya pintaba— y el cliente corrige en el primer
+   * render sin parpadeo de estado.
+   */
+  const esMovil = useSyncExternalStore(subMovil, leerMovil, () => false);
+  const [chatManual, setChatManual] = useState<boolean | null>(null);
+  const chatAbierto = chatManual ?? !esMovil;
+  const setChatAbierto = useCallback(
+    (v: boolean | ((prev: boolean) => boolean)) =>
+      setChatManual((prev) => {
+        const actual = prev ?? !leerMovil();
+        return typeof v === "function" ? v(actual) : v;
+      }),
+    [],
+  );
+  const frameRef = useRef<HTMLDivElement>(null);
+  // Para devolver el foco al cerrar el panel desde su aspa: si no, el
+  // `display:none` del `aside` deja el foco huérfano y el navegador lo manda
+  // al `body`, o sea a tabular desde el principio.
+  const toggleChatRef = useRef<HTMLButtonElement>(null);
+  const callRef = useRef<DailyCall | null>(null);
+  // Espejo de `chatAbierto` para el efecto que crea el iframe: ese efecto NO
+  // puede depender del estado del chat (recrearía la llamada entera al abrir el
+  // panel), pero sí necesita saber en qué estado nace el botón de la barra.
+  const chatAbiertoRef = useRef(true);
+  // MN-05 · cuándo se pidió entrada. Solo se usa para saber si fue ANTES de que
+  // la mentoría empezara; ver el efecto de re-autorización más abajo.
+  const joinedAt = useRef<number | null>(null);
+  const cicloPedido = useRef(false);
+
+  const opens = new Date(opensAt).getTime();
+  const closes = new Date(closesAt).getTime();
+  // La ventana de la CLASE (RN-18/S-45, los 10 min de siempre). Es la que
+  // decide si esto es la mentoría o alguien mirando la sala, y la que el server
+  // usa para mover el ciclo M5 — de ahí cuelga el cobro del tutor. Se pinta a
+  // partir de `startAt`/`endAt` porque es una propiedad de la clase, no una
+  // columna: en la BD es `session_live_window()`.
+  const liveOpens = new Date(startAt).getTime() - 10 * 60_000;
+  const liveCloses = new Date(endAt).getTime() + 10 * 60_000;
+
+  // Reloj de 1 s para la cuenta regresiva y para reaccionar al abrir/cerrar.
+  //
+  // La primera puesta en hora va en un `setTimeout(…, 0)` y no en una llamada
+  // directa a `setNow` dentro del efecto: así el reloj arranca en el primer
+  // hueco tras pintar —sin el segundo de espera que costaría dejárselo al
+  // intervalo— y sin el `setState` directo en el efecto, que `react-hooks`
+  // marca con razón porque fuerza un render extra en cascada.
+  useEffect(() => {
+    const enHora = () => setNow(Date.now());
+    const primera = setTimeout(enHora, 0);
+    const id = setInterval(enHora, 1000);
+    return () => {
+      clearTimeout(primera);
+      clearInterval(id);
+    };
+  }, []);
+
+  // MN-04 · El botón de la barra de Daily tiene que reflejar si el panel está
+  // abierto, y el iframe no se entera solo. Este efecto hace las dos cosas:
+  // mantiene el espejo para cuando la llamada se cree DESPUÉS, y repinta el
+  // botón cuando ya existe. Sin setState: no hay render en cascada.
+  useEffect(() => {
+    chatAbiertoRef.current = chatAbierto;
+    // ⚠️ `updateCustomTrayButtons()` NO es tolerante: en daily-js 0.91 empieza
+    // por un guardia de estado y **lanza** `"only supported after join"` si la
+    // llamada aún no está en `joined-meeting`. Y la ventana existe de verdad:
+    // `callRef.current` se asigna antes del `await call.join(...)`, y entre
+    // medias están la carga del iframe desde daily.co y el permiso de cámara.
+    // Cerrar el chat en ese hueco tumbaba la sala. Si todavía no se ha unido no
+    // pasa nada: el espejo de arriba ya guarda el estado y el listener de
+    // `joined-meeting` repinta el botón en cuanto se puede.
+    const call = callRef.current;
+    if (call && call.meetingState() === "joined-meeting") {
+      call.updateCustomTrayButtons(botonesTray(chatAbierto));
+    }
+  }, [chatAbierto]);
+
+
+  // ⚠️ MN-04 · AQUÍ VIVÍA EL "MODO TEATRO", y se retira a propósito.
+  //
+  // Existía (reunión del 7-ago) porque la sala vivía dentro del layout de la
+  // app y el vídeo se quedaba en una franja de 34rem; el botón la estiraba a
+  // toda la ventana conservando el chat, que es lo que el fullscreen de Daily
+  // no sabe hacer. Desde que la ruta cuelga de `(room)` el vídeo YA ocupa el
+  // viewport entero: el modo teatro sería un botón para pasar de pantalla
+  // completa a pantalla completa. Su otra mitad —"quiero MÁS vídeo"— la cubre
+  // ahora el botón de chat de la barra, que es el que repliega el panel.
+  //
+  // Con él se va su escucha de `Escape`. No se sustituye por "Escape cierra el
+  // chat": el foco vive dentro del iframe de Daily casi todo el tiempo, así que
+  // sería un atajo que funciona a veces, y eso es peor que no tenerlo.
+
+  // MN-05 · `completed` entra en la lista. En cuanto el cron cierra la última
+  // sesión, la reserva pasa a `completed`; sin esta línea la sala se cerraría a
+  // los 10 min por la puerta de al lado y los 7 días no se notarían. Fuera se
+  // quedan las que no deben tener sala nunca: `cancelled`/`refunded` porque el
+  // dinero volvió, y las dos pendientes porque aún no hay clase que abrir.
+  // Misma lista, palabra por palabra, que la guarda de `join_session`: si
+  // divergen, el botón aparece y el server dice que no.
+  const bookingAllowsRoom =
+    bookingStatus === "confirmed" ||
+    bookingStatus === "in_progress" ||
+    bookingStatus === "completed";
+
+  // ⚠️ MN-05 · Antes esto incluía `completed` y `no_show` y cerraba la sala.
+  // Ya no: esos dos son estados de la CONTABILIDAD —dicen que el reloj de la
+  // clase venció y que arrancó el del cobro del tutor—, no una orden de cerrar
+  // la puerta. La única sesión sin sala es la `cancelled`: esa clase no va a
+  // existir y su dinero volvió.
+  const sessionCancelled = sessionStatus === "cancelled";
+  const sessionEnded =
+    sessionStatus === "completed" || sessionStatus === "no_show";
+  // Mientras no haya reloj (SSR y primer render del cliente) no se decide nada:
+  // ni "todavía no abre" ni "ya cerró". Así las dos pasadas pintan el mismo
+  // árbol y la elección de rama ocurre después de hidratar.
+  const beforeWindow = now !== null && now < opens;
+  const afterWindow = now !== null && now > closes;
+
+  // "En vivo" es un estado DERIVADO: uniste y la ventana sigue abierta.
+  const live = joined !== null && !afterWindow;
+
+  // Embed de Daily: se monta al unirse y se destruye al salir/desmontar. El SDK
+  // trae los controles (micro, cámara, salir, compartir pantalla) y la
+  // reconexión automática ante caída de red (US-803).
+  useEffect(() => {
+    if (!live || !joined || joined.simulated || !frameRef.current || callRef.current) return;
+
+    let cancelled = false;
+    void (async () => {
+      const DailyIframe = (await import("@daily-co/daily-js")).default;
+      if (cancelled || !frameRef.current) return;
+
+      const call = DailyIframe.createFrame(frameRef.current, {
+        // MN-04 · La sala hablaba INGLÉS. Todo lo que se ve dentro del iframe lo
+        // escribe Daily —"Waiting for others to join", "People", "Share",
+        // "Leave", el permiso de cámara— y por defecto sale en inglés aunque el
+        // resto del producto esté en español. `lang` no se estaba pasando: es
+        // una línea y es la diferencia entre una sala nuestra y una sala ajena.
+        // ⚠️ No se usa `'user'` (el idioma del navegador) a propósito: el
+        // producto es en español y no queremos media sala en el idioma del
+        // sistema operativo de cada uno.
+        lang: "es",
+        showLeaveButton: true,
+        // SIN el botón de pantalla completa de Daily. Antes (reunión 7-ago) el
+        // motivo era que ponía el IFRAME a pantalla completa y se llevaba por
+        // delante nuestro chat, que vivía fuera. Desde MN-04 el motivo es otro
+        // y más simple: la sala YA ocupa el viewport, así que ese botón solo
+        // serviría para tapar el chat y la barra de sesión — y su versión útil
+        // ("quiero más vídeo") es el botón de chat de aquí abajo.
+        showFullscreenButton: false,
+        // MN-04 · Mentorías 1:1: dos teselas caben de sobra en la rejilla, y la
+        // tira lateral de participantes de Prebuilt solo restaría ancho al
+        // vídeo repitiendo lo que ya se ve. Si algún día hay sesiones de grupo,
+        // esta línea es la que hay que quitar.
+        showParticipantsBar: false,
+        layoutConfig: { grid: { maxTilesPerPage: 2 } },
+        // MN-04 · el naranja de marca dentro del iframe. Ver `SALA`.
+        theme: TEMA_DAILY,
+        // MN-04 · nuestro botón de chat, en SU barra. Nace en el estado que
+        // tenga el panel ahora mismo: el efecto de arriba puede haber corrido
+        // antes de que terminara el `import()` dinámico.
+        customTrayButtons: botonesTray(chatAbiertoRef.current),
+        // El contenedor es `relative` y el iframe se ancla a sus cuatro lados:
+        // con `height: 100%` a secas, un contenedor que saca su alto del flex
+        // deja el iframe en 0 en algunos navegadores.
+        iframeStyle: {
+          position: "absolute",
+          top: "0",
+          left: "0",
+          width: "100%",
+          height: "100%",
+          border: "0",
+        },
+      });
+      callRef.current = call;
+
+      call.on("left-meeting", () => {
+        setJoined(null);
+        router.refresh();
+      });
+      call.on("error", (e) => {
+        toast.error("Se perdió la conexión con la sala.");
+        console.error("[daily] error:", JSON.stringify(e));
+      });
+      // MN-04 · el clic llega desde dentro del iframe. `button_id` es la clave
+      // del objeto que se le pasó en `customTrayButtons`.
+      call.on("custom-button-click", (e) => {
+        if (e.button_id !== "chat") return;
+        setChatAbierto((v) => !v);
+      });
+      // Y aquí se salda la deuda del efecto de arriba: mientras la llamada no
+      // estaba unida, `updateCustomTrayButtons()` no se podía llamar (lanza).
+      // El espejo guardó el estado real del panel; al unirse se repinta el
+      // botón para que no salga apagado con el chat abierto, o al revés.
+      call.on("joined-meeting", () => {
+        call.updateCustomTrayButtons(botonesTray(chatAbiertoRef.current));
+      });
+
+      try {
+        await call.join({ url: joined.roomUrl, token: joined.token ?? undefined });
+      } catch (e) {
+        console.error("[daily] join falló:", JSON.stringify(e));
+        toast.error("No pudimos conectar con la sala de video.");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (callRef.current) {
+        void callRef.current.destroy();
+        callRef.current = null;
+      }
+    };
+  }, [live, joined, router, setChatAbierto]);
+
+  async function join() {
+    setBusy(true);
+    // El endpoint autoriza vía `join_session` (ventana, participante, ciclo) y
+    // firma el token contra Daily con la API key (server-only).
+    const res = await fetch(`/api/room/${sessionId}`, { method: "POST" });
+    const body = await res.json();
+    setBusy(false);
+
+    if (!res.ok) {
+      toast.error(body.error ?? "No se pudo entrar a la sala.");
+      router.refresh();
+      return;
+    }
+    joinedAt.current = Date.now();
+    setJoined({
+      roomUrl: body.roomUrl,
+      token: body.token,
+      endsAt: body.endsAt,
+      simulated: Boolean(body.simulated),
+    });
+  }
+
+  // ⚠️ MN-05 · Vuelve a pedir entrada cuando empieza la MENTORÍA. Aquí hay
+  // dinero, aunque no lo parezca.
+  //
+  // `join_session` solo mueve el ciclo M5 (sesión → `in_progress`, y con ella la
+  // reserva) si el reloj cae dentro de la ventana de la CLASE, no de la de
+  // acceso. Es a propósito: abrir la sala el martes para probar la cámara no es
+  // empezar la clase del lunes siguiente, y si lo fuera, la reserva saltaría a
+  // `in_progress` una semana antes y `cancel_booking` dejaría de aceptarla — el
+  // alumno perdería sin enterarse el reembolso del 100 % que le da RN-37 por
+  // avisar con 24 h.
+  //
+  // El precio de esa decisión es este efecto. Quien entró antes de esos 10
+  // minutos y se quedó dentro del iframe toda la clase no volvería a pedir
+  // entrada jamás: el cron cerraría la sesión como `no_show` y el tutor no
+  // cobraría una clase que sí dio. Una llamada más, justo al abrirse la
+  // ventana de la clase, lo arregla.
+  //
+  // Solo para quien entró ANTES: en una entrada normal el ciclo ya se movió en
+  // el `join()` de arriba y repetir solo gastaría un token de Daily.
+  useEffect(() => {
+    if (!joined || now === null || cicloPedido.current) return;
+    if (joinedAt.current === null || joinedAt.current >= liveOpens) return;
+    if (now < liveOpens || now > liveCloses) return;
+    cicloPedido.current = true;
+    void fetch(`/api/room/${sessionId}`, { method: "POST" });
+  }, [joined, now, liveOpens, liveCloses, sessionId]);
+
+  // N-24 · AQUÍ VIVÍA "Subir documentos", y se quita por feedback del cliente:
+  // subir un archivo se ofrecía DOS veces en la misma pantalla —este botón de la
+  // barra y el clip del composer del chat, a treinta centímetros— y las dos
+  // acababan en el mismo sitio, `uploadAttachment(bookingId, …)`, porque el
+  // panel de al lado es el hilo de EP-17, no una copia.
+  //
+  // Se va este y no el clip porque este era además el peor de los dos: no hacía
+  // append optimista, así que quien subía desde la barra no veía su archivo
+  // hasta que Realtime devolvía el eco, y con la sala en primer plano eso
+  // parecía que no había pasado nada.
+  //
+  // ⚠️ Venía del Figma (LV01). Si no queda constancia, la próxima pasada de
+  // diseño lo devuelve tal cual y volvemos a tener dos botones. Y ojo: con
+  // MN-04 la barra de abajo la pinta DAILY, así que devolverlo sería además
+  // pelearse con `customTrayButtons`.
+
+  async function complete() {
+    if (!window.confirm("¿Marcar la sesión como completada? La sala se cerrará.")) return;
+    setBusy(true);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("complete_session", { p_session_id: sessionId });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message || "No se pudo completar la sesión.");
+      return;
+    }
+    setJoined(null);
+    toast.success("Sesión completada.");
+    router.refresh();
+  }
+
+  // ── Estado en vivo (unido) ────────────────────────────────────────────────
+  if (live && joined && now !== null) {
+    const total = new Date(endAt).getTime() - new Date(startAt).getTime();
+    // MN-05 · topado al total. Sin esto, entrar a la sala al día siguiente
+    // pintaba "4320:00 / 60:00" en la cabecera: la sala vive una semana, la
+    // clase sigue durando lo que dura.
+    const elapsed = Math.min(now - new Date(startAt).getTime(), total);
+
+    return (
+      /*
+       * MN-04 · La sala, a pantalla completa y oscura.
+       *
+       * `h-svh` + `overflow-hidden`: el alto lo reparte esta rejilla y no hay
+       * scroll de página. Se usa la unidad `svh` (viewport PEQUEÑO) y no `dvh`
+       * a propósito — con `dvh` la barra del navegador móvil al replegarse
+       * cambia el alto y la barra de controles de Daily baila.
+       */
+      <div
+        style={VARS_SALA}
+        className="flex h-svh w-full flex-col overflow-hidden bg-[color:var(--sala-bg)] text-[color:var(--sala-text)]"
+      >
+        {/* Barra de sesión (LV01): qué clase es, con qué número y cuánto lleva.
+            El número va aquí y no escondido en un menú porque el caso de uso es
+            "estoy en la clase y llamo a soporte": tiene que poder leerse sin
+            salir de aquí.
+
+            ⚠️ Es lo ÚNICO nuestro que queda por fuera del iframe además del
+            chat: el cliente pidió que "toda la pantalla sea de Daily", y esta
+            franja de ~52px es el precio de no perder el N.º de sesión ni el
+            botón de completar. Micro, cámara, compartir pantalla, dispositivos
+            y "salir" son de Daily y viven en SU barra, abajo. */}
+        <header className="flex shrink-0 items-center gap-4 border-b border-[color:var(--sala-border)] px-3 py-2 sm:px-4">
+          <div className="flex min-w-0 flex-col">
+            <h1 className="truncate text-sm font-bold">{productTitle}</h1>
+            {/* El rótulo hereda `text-muted-foreground`, que sobre #14141a no se
+                lee. `cn` deja que la clase de aquí gane. */}
+            <SessionRef nro={sessionRef} className="text-[color:var(--sala-supportive)]" />
+          </div>
+
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            {/*
+              MN-04 · El interruptor del chat también aquí, y no solo en la barra
+              de Daily. Tres razones, y ninguna es de gusto:
+              · La barra de Daily **aparece y desaparece con el ratón**, así que
+                el único camino de vuelta al chat sería un botón efímero.
+              · Vive DENTRO del iframe: para un lector de pantalla o para el
+                teclado, nuestro panel se quedaría sin control alcanzable.
+              · En móvil el panel tapa la barra entera, incluido ese botón.
+              Aquí además puede declarar `aria-expanded`/`aria-controls`, cosa
+              que un botón inyectado en un iframe ajeno no puede.
+            */}
+            {/*
+              ⚠️ `<button>` plano y NO el componente `Button`: su variante
+              `ghost` trae su propio color de texto y gana al nuestro por
+              `tailwind-merge`, así que el rótulo salía en #14141a —el mismo
+              #14141a del fondo— y el botón quedaba invisible aunque medía sus
+              104×28 y respondía al clic. Es el mismo idioma que ya usa el aspa
+              del panel unas líneas más abajo.
+            */}
+            <button
+              ref={toggleChatRef}
+              type="button"
+              aria-expanded={chatAbierto}
+              aria-controls="panel-chat-sala"
+              onClick={() => setChatAbierto((v) => !v)}
+              className="rounded-md border border-[color:var(--sala-border)] px-2.5 py-1 text-xs text-[color:var(--sala-text)] hover:bg-[color:var(--sala-surface)]"
+            >
+              {chatAbierto ? "Ocultar chat" : "Mostrar chat"}
+            </button>
+
+            <div className="text-right">
+              <p
+                className="font-mono text-sm tabular-nums sm:text-base"
+                suppressHydrationWarning
+              >
+                {clock(elapsed)} / {clock(total)}
+              </p>
+              {/* Antes vivía en la barra inferior nuestra, que ya no existe:
+                  abajo manda Daily. Aquí abajo del cronómetro dice lo mismo. */}
+              <p
+                className="text-[11px] text-[color:var(--sala-supportive)]"
+                suppressHydrationWarning
+              >
+                Termina en {human(new Date(joined.endsAt).getTime() - now)}
+              </p>
+            </div>
+
+            {/*
+              ⚠️ Doble puerta, y la segunda es de dinero.
+
+              Hasta MN-05 esta vista solo se alcanzaba dentro de los ±10 min
+              de la clase, así que el botón vivía pegado a ella. Ahora la sala
+              abre 7 días antes, y con ella venía el botón.
+
+              · El ESTADO evita el botón que solo sabe dar error:
+                `complete_session` acepta `scheduled`/`in_progress` y nada
+                más. Es el mismo criterio que `tutor/reservas/[id]`.
+              · La VENTANA DE LA CLASE es la que importa de verdad: una
+                mentoría que es dentro de seis días también está `scheduled`,
+                así que sin esto el tutor podía entrar el martes, pulsar, y
+                `complete_session` ponía `bookings.completed_at = now()` —
+                exactamente el reloj que toda la migración de MN-05 existe
+                para NO mover, y del que cuelga su payout.
+
+              Y se queda AQUÍ, fuera de `customTrayButtons`: un botón que mueve
+              el reloj del cobro no puede ser un icono de 36px sin etiqueta en
+              una barra que aparece y desaparece con el ratón.
+            */}
+            {isTutor &&
+            (sessionStatus === "scheduled" || sessionStatus === "in_progress") &&
+            now >= liveOpens &&
+            now <= liveCloses ? (
+              <Button size="sm" disabled={busy} onClick={complete}>
+                Marcar completada
+              </Button>
+            ) : null}
+          </div>
+        </header>
+
+        {/* Vídeo + chat. `relative` porque en móvil el panel se SUPERPONE a esta
+            zona (ver el `aside`), no se pone al lado: a 375px dos columnas no
+            caben, y partir el alto dejaría el vídeo en un sello. */}
+        <div className="relative flex min-h-0 flex-1">
+          <div className="relative flex min-w-0 flex-1 flex-col bg-[color:var(--sala-video)]">
+            {joined.simulated ? (
+              // Sin credenciales de Daily: la sala, el token y la ventana ya
+              // funcionan; falta solo el transporte de video.
+              <div className="flex min-h-0 flex-1 items-center justify-center text-[color:var(--sala-supportive)]">
+                <div className="flex flex-col items-center gap-2 p-6 text-center">
+                  <p className="text-sm uppercase tracking-wide">Sala simulada</p>
+                  <p className="max-w-sm text-sm">
+                    Falta configurar el proveedor de video. La sala, el token y la
+                    ventana de acceso ya funcionan.
+                  </p>
+                  <p className="mt-2 break-all font-mono text-xs opacity-70">
+                    {joined.roomUrl}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              // El iframe prefabricado de Daily: sus teselas, su barra de
+              // controles, su selector de dispositivos, su compartir pantalla y
+              // su reconexión de red (US-803). Lo nuestro es el marco y el chat
+              // — el rediseño de MN-04 se hizo SOBRE Prebuilt, no migrando a
+              // `createCallObject`, que habría obligado a reimplementar todo eso.
+              <div ref={frameRef} className="relative min-h-0 flex-1" />
+            )}
+
+            {/* Barra de controles SOLO en simulado: con Daily real esta franja
+                la pinta el iframe (y con ella la reconexión, US-803). Aquí se
+                pinta a mano para que la sala siga siendo ejercitable sin
+                credenciales — incluido el botón que abre el chat, que en real
+                vive en la barra de Daily. */}
+            {joined.simulated ? (
+              <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] p-3">
+                <Button
+                  size="sm"
+                  variant={muted ? "default" : "outline"}
+                  onClick={() => setMuted((m) => !m)}
+                >
+                  {muted ? "Activar micro" : "Silenciar"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={camOff ? "default" : "outline"}
+                  onClick={() => setCamOff((c) => !c)}
+                >
+                  {camOff ? "Activar cámara" : "Apagar cámara"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant={chatAbierto ? "default" : "outline"}
+                  aria-pressed={chatAbierto}
+                  onClick={() => setChatAbierto((v) => !v)}
+                >
+                  Chat
+                </Button>
+                <Button size="sm" variant="destructive" onClick={() => setJoined(null)}>
+                  Salir
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          {/* El hilo es el MISMO de EP-17 (`/chat/<reserva>`), no una copia:
+              mismos mensajes, misma RLS, mismo Realtime.
+
+              ⚠️ Se monta SIEMPRE y se esconde con `hidden`, en vez de sacarlo
+              del árbol cuando está cerrado. Desmontarlo cerraría el canal de
+              Realtime del hilo: quien pliegue el chat para ver el vídeo grande
+              se perdería los mensajes de ese rato. Es además el comportamiento
+              que ya tenía la sala, donde el panel estaba siempre montado.
+
+              Móvil: `absolute inset-0` sobre la zona de vídeo. Escritorio
+              (`lg:`): vuelve al flujo como columna de 360px a la derecha, que
+              es el "chat incrustado a la derecha" que pidió el cliente. */}
+          <aside
+            id="panel-chat-sala"
+            aria-label="Chat de la mentoría"
+            className={
+              chatAbierto
+                ? "absolute inset-0 z-20 flex flex-col border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] lg:relative lg:inset-auto lg:z-auto lg:w-[360px] lg:shrink-0 lg:border-l"
+                : "hidden"
+            }
+          >
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[color:var(--sala-border)] px-4 py-3">
+              <h2 className="font-semibold">Chat</h2>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/chat/${bookingId}`}
+                  className="text-[11px] text-[color:var(--sala-supportive)] underline-offset-2 hover:underline"
+                  title="Ver el hilo completo fuera de la sala"
+                >
+                  Ver hilo completo
+                </Link>
+                {/* ⚠️ Este aspa NO es un duplicado del botón de la barra de
+                    Daily: en móvil el panel TAPA el iframe, así que ese botón
+                    queda debajo y no hay forma de volver al vídeo sin esto. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChatAbierto(false);
+                    // El `aside` pasa a `display:none` con el foco DENTRO: sin
+                    // esto el navegador lo devuelve al `body` y quien navega con
+                    // teclado tiene que tabular desde el principio de la página.
+                    toggleChatRef.current?.focus();
+                  }}
+                  aria-label="Ocultar el chat"
+                  className="rounded-md p-1 text-[color:var(--sala-supportive)] hover:bg-[color:var(--sala-surface)] hover:text-[color:var(--sala-text)]"
+                >
+                  <XIcon className="size-4" />
+                </button>
+              </div>
+            </div>
+            {/*
+              El hilo es un componente del sistema claro (burbujas, composer,
+              botones) y aquí vive sobre fondo oscuro. Se le da su propia
+              superficie clara en vez de repintarlo: es el MISMO componente de
+              `/chat/[id]`, de la bandeja y de las dos pantallas de reserva, y
+              tocarle los colores por la sala se los cambiaría a las cinco.
+            */}
+            <div className="min-h-0 flex-1 bg-background p-3 text-foreground">
+              <ChatThread
+                fill
+                bookingId={bookingId}
+                currentUserId={currentUserId}
+                firstSessionAt={firstSessionAt}
+                initialMessages={initialMessages}
+              />
+            </div>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Estados previos / posteriores ─────────────────────────────────────────
+  return (
+    <div className="flex flex-1 flex-col">
+      {/* MN-04 · Barra mínima. La sala ya no cuelga de `(app)`, así que la
+          cabecera del sitio no está: sin esto, quien llega diez minutos antes
+          se queda en una pantalla sin marca y sin salida. En vivo NO se pinta —
+          allí manda Daily y el marco es el mínimo imprescindible. */}
+      <div className="border-b bg-card">
+        <div className="mx-auto flex w-full max-w-[1120px] items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
+          <Link href={isTutor ? "/tutor" : "/app"} aria-label="Ir a mi panel">
+            <Image
+              src="/img/logo-ya.svg"
+              alt="Enséñame Ya"
+              width={38}
+              height={40}
+              className="h-10 w-auto"
+              priority
+            />
+          </Link>
+          <Link
+            href={isTutor ? "/tutor/reservas" : "/reservas"}
+            className="text-sm text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Volver a mis reservas
+          </Link>
+        </div>
+      </div>
+
+      <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center">
+        <div className="flex flex-col items-center gap-1">
+          <p className="text-sm text-muted-foreground">Mentoría</p>
+          <h1 className="text-xl font-semibold">{productTitle}</h1>
+          {/* También antes de entrar y después de salir: la consulta a soporte
+              suele ser justo cuando la sala NO deja pasar. */}
+          <SessionRef nro={sessionRef} />
+        </div>
+
+        {now === null ? (
+          /*
+           * RV-18 · Estado neutro mientras no hay reloj — o sea, en el SSR y en
+           * el primer render del cliente.
+           *
+           * NO se puede caer a ninguna de las ramas de abajo: todas dependen de
+           * comparar la hora actual con la ventana de la sala, y si el servidor
+           * eligiera una rama y el navegador otra, cambiaría la ESTRUCTURA del
+           * árbol — el React #418 que se ve en producción. Un estado propio, que
+           * dura lo que tarda el efecto de montaje, es la única forma de que las
+           * dos pasadas pinten lo mismo sin mentir sobre el estado de la sala.
+           */
+          <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+            Comprobando el horario de la sesión…
+          </p>
+        ) : !bookingAllowsRoom || sessionCancelled ? (
+          <>
+            <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+              {sessionCancelled
+                ? "Esta sesión se canceló, así que su sala no se abre."
+                : "Esta reserva no está activa, así que la sala no está disponible."}
+            </p>
+            <Button asChild variant="outline">
+              <Link href={isTutor ? "/tutor/reservas" : "/reservas"}>Volver a mis reservas</Link>
+            </Button>
+          </>
+        ) : beforeWindow ? (
+          <>
+            <div className="rounded-lg border p-6">
+              <p className="text-sm text-muted-foreground">La sala abre en</p>
+              {/* El reloj del server y el del cliente difieren en segundos: es
+                  esperado en una cuenta regresiva, no un fallo de render. */}
+              <p className="mt-1 text-3xl font-semibold tabular-nums" suppressHydrationWarning>
+                {human(opens - now)}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                La sala abre 7 días antes de la mentoría y sigue abierta 7 días
+                después.
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {new Date(startAt).toLocaleString("es", { timeZone, dateStyle: "full", timeStyle: "short" })}
+            </p>
+            {/* El permiso se puede dar mientras esperas: RN-42 pide que esté
+                decidido ANTES de entrar, no que la sala ya esté abierta. */}
+            <RecordingConsent
+              sessionId={sessionId}
+              userId={currentUserId}
+              isTutor={isTutor}
+              mine={consent.mine}
+              other={consent.other}
+            />
+          </>
+        ) : afterWindow ? (
+          <>
+            <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
+              La ventana de acceso de esta sesión ya cerró.
+            </p>
+            <Button asChild variant="outline">
+              <Link href={isTutor ? "/tutor/reservas" : "/reservas"}>Volver a mis reservas</Link>
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground" suppressHydrationWarning>
+              {/* MN-05 · Con la clase ya cerrada la sala sigue abierta una
+                  semana, y decir solo "la sala está abierta" haría pensar que la
+                  mentoría no ha ocurrido. El estado de la sesión y el de la sala
+                  son cosas distintas y aquí se dicen las dos. */}
+              {sessionEnded
+                ? `Esta mentoría ya terminó, pero su sala sigue abierta ${human(closes - now)} más.`
+                : `La sala está abierta. Cierra en ${human(closes - now)}.`}
+            </p>
+            {/* RN-42: el permiso se pide ANTES de entrar, no a mitad de clase. */}
+            <RecordingConsent
+              sessionId={sessionId}
+              userId={currentUserId}
+              isTutor={isTutor}
+              mine={consent.mine}
+              other={consent.other}
+            />
+            <Button size="lg" disabled={busy} onClick={join} className="min-w-40">
+              {busy ? "Entrando…" : "Entrar a la sala"}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

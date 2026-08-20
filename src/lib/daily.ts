@@ -118,14 +118,24 @@ export async function ensureRoom(
     // NUESTRO (EP-17, panel lateral de LV01). El de Daily se apaga por dos
     // razones: no queremos dos chats, y el suyo se cobra aparte como
     // almacenamiento. Es propiedad de SALA, no del iframe.
+    //
+    // MN-04 lo confirma y lo hace más visible: el panel nuestro va ahora
+    // acoplado a la derecha del vídeo y se abre desde un botón dentro de la
+    // propia barra de Daily (`customTrayButtons`). Si esta línea se pusiera a
+    // `true`, la barra tendría DOS iconos de chat que abren cosas distintas.
     enable_chat: false,
     // N-18 · sin antesala: quien pulsa «entrar» ya decidió entrar, y el paso
     // intermedio de Daily solo añade una pantalla que no es nuestra.
-    // ⚠️ Propiedad EXCLUSIVA de Daily Prebuilt. Si algún día se aprueba el
-    // rediseño de la llamada (MN-04, que obliga a migrar a `createCallObject`),
-    // esta línea deja de existir en la API y su papel lo hereda un prejoin
-    // nuestro. Hasta entonces NO se borra "porque no parece hacer nada": hoy es
-    // lo único que quita esa pantalla.
+    //
+    // ⚠️ Propiedad EXCLUSIVA de Daily Prebuilt, así que NO se borra "porque no
+    // parece hacer nada": hoy es lo único que quita esa pantalla.
+    //
+    // (Corrección: esta nota decía que MN-04 obligaría a migrar a
+    // `createCallObject` y se llevaría por delante esta línea. El cliente
+    // reformuló el punto el 20-ago —«un embed de Daily a pantalla completa y el
+    // chat incrustado a la derecha»— y el rediseño se hizo SOBRE Prebuilt: el
+    // vídeo, la barra de controles y la reconexión de US-803 siguen siendo de
+    // Daily. Prebuilt se queda, y esta propiedad con él.)
     enable_prejoin_ui: false,
     // Sin consentimiento la sala ni ofrece el botón de grabar: el permiso no
     // se pide en la interfaz, se quita del proveedor (RN-42).

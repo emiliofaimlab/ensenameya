@@ -46,7 +46,12 @@ export function SessionRef({
       {/* `select-all`: un clic selecciona los seis caracteres enteros. Se copia
           para pegarlo en un correo o en una hoja de cálculo, y a mano se falla
           justo en el guion. */}
-      <code className="select-all rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold tracking-wider text-foreground">
+      {/* ⚠️ `whitespace-nowrap`: el número lleva un guion, y sin esto el
+          navegador lo trata como punto de corte válido. En la cabecera de la
+          sala a 375px se partía en dos líneas —"YKGF43-" arriba y "1" abajo—,
+          que es exactamente el sitio donde alguien lo está leyendo en voz alta
+          por teléfono a soporte. */}
+      <code className="select-all whitespace-nowrap rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] font-semibold tracking-wider text-foreground">
         {nro}
       </code>
     </span>

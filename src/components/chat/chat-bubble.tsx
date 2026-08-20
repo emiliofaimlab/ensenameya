@@ -71,6 +71,10 @@ export function ChatBubble({
   // aquí arriba, y no como un `return null` antes de tiempo, porque los hooks
   // de abajo tienen que llamarse siempre; lo que hace `visible` es apagarles el
   // trabajo (ni recuento ni websocket) mientras no se pinta nada.
+  // ⚠️ Lo de `/room/` es un cinturón, no una condición viva: desde MN-04 la sala
+  // cuelga del grupo `(room)`, que NO monta el launcher —solo lo montan `(app)`
+  // y `(public)`—, así que esa rama ya no puede darse. Se conserva para que
+  // devolver la ruta a `(app)` no reviva la burbuja flotante encima del vídeo.
   const visible =
     !pathname.startsWith("/chat/") && !pathname.startsWith("/room/");
 
