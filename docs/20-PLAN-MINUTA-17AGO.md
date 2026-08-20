@@ -352,7 +352,7 @@ Las cuatro correcciones van en `20260820150000_correcciones_revision_lote1.sql`.
 
 | # | Qué | Por qué importa |
 | :-- | :-- | :-- |
-| 1 | **Nadie ha visto el placeholder con los ojos.** Pasa build y typecheck; no se ha arrancado `npm run dev` ni se ha mirado en las cuatro superficies, y el tamaño del icono es el detalle con más miga (px fijo se desmadra en la ficha, % se desmadra en la rejilla) | Es un cambio **visual**: `tsc` no dice nada de si se ve bien |
+| 1 | ~~Nadie ha visto el placeholder con los ojos.~~ 🟢 **Verificado el 20-ago** (ver §20.9): el icono cambia por categoría, cae al genérico sin categoría, y la proporción sale 0,40 del alto en tarjeta y 0,30 en ficha. ⚠️ Hizo falta una página temporal para verlo: **las 15 mentorías de dev tienen foto**, así que la rama del placeholder es inalcanzable con los datos actuales | Un cambio visual que `tsc` no juzga — y que el sembrado de dev no ejercita |
 | 2 | **Salió una migración de más que no estaba en ninguna ficha:** `20260820140000`, un `update` que rellena `last_message_at` en las conversaciones sembradas por M-12. Está justificada —sin ella la purga nueva podía llevarse hilos con mensajes reales— pero es **escritura de DATOS**, no DDL | Va a ejecutarse contra producción en la ventana de L0-1 junto a las ~30 atrasadas. **Quien haga ese merge tiene que saber que ahí dentro hay un `update`**, no solo esquema |
 | 3 | **`pair_has_booking` conserva su `grant … to authenticated`** (viene de M-12) y filtra el mismo par en versión booleana | Es un agujero **preexistente y más pequeño**, no lo abrió este lote. Cerrarlo cambia comportamiento existente y **merece su propia ficha**, no ir de polizón en una corrección |
 | 4 | **`queries.ts:190` (`withProductFacts`) sigue sin `icon`**, así que las burbujas de categoría de las tarjetas de **tutor** pintan siempre el genérico | Preexistente. Ticket de una línea, pero toca `tutor-card.tsx`, que no era de ninguna ficha |
@@ -360,6 +360,57 @@ Las cuatro correcciones van en `20260820150000_correcciones_revision_lote1.sql`.
 
 > **Nada de esto cambia la barrera:** el Lote 1 vive en `dev`, y `dev` sigue sin llegar a `main`.
 > **L0-1 sigue siendo lo primero.**
+
+---
+
+## 20.9 · Cierre del Lote 3 (parte aprovechable) — 20 de agosto
+
+Las dos fichas del Lote 3 que **no dependen de nadie**: L3-3 (el registro de mentorías impartidas) y
+L3-2 (el puerto de pagos). Dos agentes con ficheros disjuntos, tres revisores adversariales.
+`lint`, `typecheck`, `check:terms` y `build`: los cuatro en verde.
+
+### Lo cerrado
+
+| Ficha | Qué quedó | Commit |
+| :-- | :-- | :-- |
+| **L3-3 · MN-14a** | RPC `tutor_teaching_record` + pantalla en `/admin/tutores/actividad`. **Interna**, no toca `tutors_public` | `694a44c` |
+| **L3-2** | El puerto del Doc 6 §6.2 con Stripe dentro, **y el simulado como segundo adaptador de verdad** | `653a1e0` |
+| — | El vault de tarjetas, en commit aparte por ser fuera de alcance | `6da49eb` |
+
+### 🟢 El camino del dinero, ejercitado de punta a punta
+
+No es un detalle de proceso: §20.5 dice que **ningún cambio de Stripe se da por bueno con `tsc`**,
+porque la unión de `ui_mode` acaba en `OtherString` y ya dejó pasar un 400. La revisión encontró que
+**nadie lo había ejercitado**. Hecho después, contra *test mode*:
+
+| Paso | Resultado |
+| :-- | :-- |
+| `POST /api/pagos/checkout` sobre una reserva `pending_payment` | 200 con `cs_test_…` real |
+| Session expirada desde la API de Stripe | `status: expired` |
+| Webhook **firmado** | 200, tipo y reserva correctos → reserva `cancelled` (X-02 intacto) |
+| Webhook con firma **falsa** | **400** — la firma se sigue verificando sobre el cuerpo crudo, que es lo que este refactor rompe cuando sale mal |
+| Job de reembolsos en simulacro | 200, ve la solicitud pendiente, `stripeConfigurado: true` |
+| El mismo job **sin `CRON_SECRET`** | 401 — sigue fallando cerrado |
+| `POST /api/pagos/metodos` (alta de tarjeta) | 200 con `cs_test_…` en `mode:'setup'` |
+
+### Lo que encontró la revisión
+
+| # | Hallazgo | Estado |
+| :-- | :-- | :-- |
+| 1 | **La pantalla nueva reintroducía «clase» en 12 cadenas visibles**, justo después de que el Lote 1 dejara `grep -i tutoría src/` en 0. El «clases» del nombre de la ficha se coló a la interfaz | 🟢 Corregido. `home-stats.tsx` ya llamaba a este mismo dato «Mentorías impartidas» |
+| 2 | **Nadie había ejercitado el puerto contra la API real** | 🟢 Hecho, tabla de arriba |
+| 3 | **El vault de tarjetas se refactorizó sin estar en la ficha** | 🟠 Se conserva —verificado línea a línea y ahora ejercitado— pero **en commit aparte**, para poder revertirlo solo |
+| 4 | Un comentario nombraba `missingConfig()`, un método que no existe | 🟢 Corregido, y dicho de quién es la responsabilidad de llamarlo |
+
+### 🔴 Lo que NO está hecho
+
+| # | Qué | Por qué importa |
+| :-- | :-- | :-- |
+| 1 | **La pantalla de admin no tiene entrada en el menú lateral.** `ADMIN_ITEMS` vive en `app-sidebar.tsx`, que no era de la ficha. Se entra por un botón en `/admin/tutores` | Una línea. Si la pantalla se va a usar, hace falta |
+| 2 | **El sembrado de dev no ejercita el placeholder:** las 15 mentorías tienen foto | Cualquier regresión futura en esa rama **no la va a ver nadie**. Merece una mentoría sin foto en el seed |
+| 3 | **`admin_gmv_weekly` y `admin_bookings_by_category` no revocan `execute` de `PUBLIC`** antes de su grant | **No es fuga** —la guarda `has_role('admin')` las corta— pero están a una guarda de serlo. Preexistente; su propia ficha, como `pair_has_booking` |
+| 4 | **El reembolso real sigue sin moverse.** El job se ejercitó en *simulacro*, no contra la fila real | Es el punto 2 de §19.10 y sigue abierto: encolar no es haber devuelto |
+| 5 | **La pantalla de admin no se ha mirado en el navegador**, solo servida y comprobadas sus cadenas | La fila usa `flex-wrap` con anchos fijos |
 
 ---
 
