@@ -16,9 +16,15 @@ import { SessionRef } from "@/components/room/session-ref";
 type SessionStatus = Database["public"]["Enums"]["session_status"];
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
-// RN-18 / S-45: la ventana abre 10 min antes y cierra 10 min después. El server
-// es la barrera real; aquí solo se pinta el estado.
-const WINDOW_MIN = 10;
+// MN-05 · La ventana de acceso ya NO se calcula aquí. Llega por props desde
+// `page.tsx`, que la lee de `sessions.access_opens_at` / `access_closes_at` —
+// las columnas que la migración `20260820190000` despertó. Antes esto era
+// `const WINDOW_MIN = 10` y era una de las cinco copias del número; con la
+// ventana en días, una copia desactualizada sería un botón que aparece siete
+// días antes junto a un texto que promete diez minutos.
+//
+// Lo que sigue siendo cierto: el server es la barrera real (`join_session`),
+// aquí solo se pinta el estado.
 
 type Joined = {
   roomUrl: string;
@@ -34,12 +40,19 @@ function clock(ms: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** ms → "2 h 05 min" / "4 min 12 s" para la cuenta regresiva. */
+/**
+ * ms → "6 d 04 h" / "2 h 05 min" / "4 min 12 s" para la cuenta regresiva.
+ *
+ * MN-05 · El tramo de días es nuevo y hace falta: con la sala abierta 7 días,
+ * la cuenta atrás llegaba a "167 h 59 min", que no lo lee nadie.
+ */
 function human(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
-  const h = Math.floor(s / 3600);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
+  if (d > 0) return `${d} d ${String(h).padStart(2, "0")} h`;
   if (h > 0) return `${h} h ${String(m).padStart(2, "0")} min`;
   if (m > 0) return `${m} min ${String(sec).padStart(2, "0")} s`;
   return `${sec} s`;
@@ -50,6 +63,8 @@ export function LiveRoom({
   bookingId,
   startAt,
   endAt,
+  opensAt,
+  closesAt,
   sessionStatus,
   bookingStatus,
   productTitle,
@@ -65,6 +80,12 @@ export function LiveRoom({
   bookingId: string;
   startAt: string;
   endAt: string;
+  /** MN-05 · `sessions.access_opens_at`: cuándo la sala admite gente (7 días
+   *  antes del inicio). NO es cuándo empieza la mentoría — eso es `startAt`. */
+  opensAt: string;
+  /** MN-05 · `sessions.access_closes_at` (7 días tras el fin). Tampoco es
+   *  cuándo se cierra la contabilidad: eso pasa a los 10 min y no se toca. */
+  closesAt: string;
   sessionStatus: SessionStatus;
   bookingStatus: BookingStatus;
   productTitle: string;
@@ -107,9 +128,20 @@ export function LiveRoom({
   const [teatro, setTeatro] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
   const callRef = useRef<DailyCall | null>(null);
+  // MN-05 · cuándo se pidió entrada. Solo se usa para saber si fue ANTES de que
+  // la mentoría empezara; ver el efecto de re-autorización más abajo.
+  const joinedAt = useRef<number | null>(null);
+  const cicloPedido = useRef(false);
 
-  const opensAt = new Date(startAt).getTime() - WINDOW_MIN * 60000;
-  const closesAt = new Date(endAt).getTime() + WINDOW_MIN * 60000;
+  const opens = new Date(opensAt).getTime();
+  const closes = new Date(closesAt).getTime();
+  // La ventana de la CLASE (RN-18/S-45, los 10 min de siempre). Es la que
+  // decide si esto es la mentoría o alguien mirando la sala, y la que el server
+  // usa para mover el ciclo M5 — de ahí cuelga el cobro del tutor. Se pinta a
+  // partir de `startAt`/`endAt` porque es una propiedad de la clase, no una
+  // columna: en la BD es `session_live_window()`.
+  const liveOpens = new Date(startAt).getTime() - 10 * 60_000;
+  const liveCloses = new Date(endAt).getTime() + 10 * 60_000;
 
   // Reloj de 1 s para la cuenta regresiva y para reaccionar al abrir/cerrar.
   //
@@ -140,16 +172,31 @@ export function LiveRoom({
     return () => document.removeEventListener("keydown", onKey);
   }, [teatro]);
 
-  const bookingActive = bookingStatus === "confirmed" || bookingStatus === "in_progress";
-  const sessionOver =
-    sessionStatus === "completed" ||
-    sessionStatus === "cancelled" ||
-    sessionStatus === "no_show";
+  // MN-05 · `completed` entra en la lista. En cuanto el cron cierra la última
+  // sesión, la reserva pasa a `completed`; sin esta línea la sala se cerraría a
+  // los 10 min por la puerta de al lado y los 7 días no se notarían. Fuera se
+  // quedan las que no deben tener sala nunca: `cancelled`/`refunded` porque el
+  // dinero volvió, y las dos pendientes porque aún no hay clase que abrir.
+  // Misma lista, palabra por palabra, que la guarda de `join_session`: si
+  // divergen, el botón aparece y el server dice que no.
+  const bookingAllowsRoom =
+    bookingStatus === "confirmed" ||
+    bookingStatus === "in_progress" ||
+    bookingStatus === "completed";
+
+  // ⚠️ MN-05 · Antes esto incluía `completed` y `no_show` y cerraba la sala.
+  // Ya no: esos dos son estados de la CONTABILIDAD —dicen que el reloj de la
+  // clase venció y que arrancó el del cobro del tutor—, no una orden de cerrar
+  // la puerta. La única sesión sin sala es la `cancelled`: esa clase no va a
+  // existir y su dinero volvió.
+  const sessionCancelled = sessionStatus === "cancelled";
+  const sessionEnded =
+    sessionStatus === "completed" || sessionStatus === "no_show";
   // Mientras no haya reloj (SSR y primer render del cliente) no se decide nada:
   // ni "todavía no abre" ni "ya cerró". Así las dos pasadas pintan el mismo
   // árbol y la elección de rama ocurre después de hidratar.
-  const beforeWindow = now !== null && now < opensAt;
-  const afterWindow = now !== null && now > closesAt;
+  const beforeWindow = now !== null && now < opens;
+  const afterWindow = now !== null && now > closes;
 
   // "En vivo" es un estado DERIVADO: uniste y la ventana sigue abierta.
   const live = joined !== null && !afterWindow;
@@ -215,6 +262,7 @@ export function LiveRoom({
       router.refresh();
       return;
     }
+    joinedAt.current = Date.now();
     setJoined({
       roomUrl: body.roomUrl,
       token: body.token,
@@ -222,6 +270,33 @@ export function LiveRoom({
       simulated: Boolean(body.simulated),
     });
   }
+
+  // ⚠️ MN-05 · Vuelve a pedir entrada cuando empieza la MENTORÍA. Aquí hay
+  // dinero, aunque no lo parezca.
+  //
+  // `join_session` solo mueve el ciclo M5 (sesión → `in_progress`, y con ella la
+  // reserva) si el reloj cae dentro de la ventana de la CLASE, no de la de
+  // acceso. Es a propósito: abrir la sala el martes para probar la cámara no es
+  // empezar la clase del lunes siguiente, y si lo fuera, la reserva saltaría a
+  // `in_progress` una semana antes y `cancel_booking` dejaría de aceptarla — el
+  // alumno perdería sin enterarse el reembolso del 100 % que le da RN-37 por
+  // avisar con 24 h.
+  //
+  // El precio de esa decisión es este efecto. Quien entró antes de esos 10
+  // minutos y se quedó dentro del iframe toda la clase no volvería a pedir
+  // entrada jamás: el cron cerraría la sesión como `no_show` y el tutor no
+  // cobraría una clase que sí dio. Una llamada más, justo al abrirse la
+  // ventana de la clase, lo arregla.
+  //
+  // Solo para quien entró ANTES: en una entrada normal el ciclo ya se movió en
+  // el `join()` de arriba y repetir solo gastaría un token de Daily.
+  useEffect(() => {
+    if (!joined || now === null || cicloPedido.current) return;
+    if (joinedAt.current === null || joinedAt.current >= liveOpens) return;
+    if (now < liveOpens || now > liveCloses) return;
+    cicloPedido.current = true;
+    void fetch(`/api/room/${sessionId}`, { method: "POST" });
+  }, [joined, now, liveOpens, liveCloses, sessionId]);
 
   // N-24 · AQUÍ VIVÍA "Subir documentos", y se quita por feedback del cliente:
   // subir un archivo se ofrecía DOS veces en la misma pantalla —este botón de la
@@ -255,7 +330,10 @@ export function LiveRoom({
   // ── Estado en vivo (unido) ────────────────────────────────────────────────
   if (live && joined && now !== null) {
     const total = new Date(endAt).getTime() - new Date(startAt).getTime();
-    const elapsed = now - new Date(startAt).getTime();
+    // MN-05 · topado al total. Sin esto, entrar a la sala al día siguiente
+    // pintaba "4320:00 / 60:00" en la cabecera: la sala vive una semana, la
+    // clase sigue durando lo que dura.
+    const elapsed = Math.min(now - new Date(startAt).getTime(), total);
 
     return (
       <div
@@ -372,7 +450,27 @@ export function LiveRoom({
                 {teatro ? "Salir del modo teatro" : "Modo teatro"}
               </Button>
 
-              {isTutor ? (
+              {/*
+                ⚠️ Doble puerta, y la segunda es de dinero.
+
+                Hasta MN-05 esta vista solo se alcanzaba dentro de los ±10 min
+                de la clase, así que el botón vivía pegado a ella. Ahora la sala
+                abre 7 días antes, y con ella venía el botón.
+
+                · El ESTADO evita el botón que solo sabe dar error:
+                  `complete_session` acepta `scheduled`/`in_progress` y nada
+                  más. Es el mismo criterio que `tutor/reservas/[id]`.
+                · La VENTANA DE LA CLASE es la que importa de verdad: una
+                  mentoría que es dentro de seis días también está `scheduled`,
+                  así que sin esto el tutor podía entrar el martes, pulsar, y
+                  `complete_session` ponía `bookings.completed_at = now()` —
+                  exactamente el reloj que toda la migración de MN-05 existe
+                  para NO mover, y del que cuelga su payout.
+              */}
+              {isTutor &&
+              (sessionStatus === "scheduled" || sessionStatus === "in_progress") &&
+              now >= liveOpens &&
+              now <= liveCloses ? (
                 <Button disabled={busy} onClick={complete}>
                   Marcar completada
                 </Button>
@@ -444,11 +542,11 @@ export function LiveRoom({
         <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
           Comprobando el horario de la sesión…
         </p>
-      ) : !bookingActive || sessionOver ? (
+      ) : !bookingAllowsRoom || sessionCancelled ? (
         <>
           <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
-            {sessionOver
-              ? "Esta sesión ya terminó."
+            {sessionCancelled
+              ? "Esta sesión se canceló, así que su sala no se abre."
               : "Esta reserva no está activa, así que la sala no está disponible."}
           </p>
           <Button asChild variant="outline">
@@ -462,10 +560,11 @@ export function LiveRoom({
             {/* El reloj del server y el del cliente difieren en segundos: es
                 esperado en una cuenta regresiva, no un fallo de render. */}
             <p className="mt-1 text-3xl font-semibold tabular-nums" suppressHydrationWarning>
-              {human(opensAt - now)}
+              {human(opens - now)}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Podrás entrar {WINDOW_MIN} min antes de la hora de inicio.
+              La sala abre 7 días antes de la mentoría y sigue abierta 7 días
+              después.
             </p>
           </div>
           <p className="text-sm text-muted-foreground">
@@ -493,7 +592,13 @@ export function LiveRoom({
       ) : (
         <>
           <p className="text-sm text-muted-foreground" suppressHydrationWarning>
-            La sala está abierta. Cierra en {human(closesAt - (now ?? 0))}.
+            {/* MN-05 · Con la clase ya cerrada la sala sigue abierta una
+                semana, y decir solo "la sala está abierta" haría pensar que la
+                mentoría no ha ocurrido. El estado de la sesión y el de la sala
+                son cosas distintas y aquí se dicen las dos. */}
+            {sessionEnded
+              ? `Esta mentoría ya terminó, pero su sala sigue abierta ${human(closes - (now ?? 0))} más.`
+              : `La sala está abierta. Cierra en ${human(closes - (now ?? 0))}.`}
           </p>
           {/* RN-42: el permiso se pide ANTES de entrar, no a mitad de clase. */}
           <RecordingConsent

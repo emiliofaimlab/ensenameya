@@ -92,7 +92,15 @@ export default async function AppHome() {
     [...open, ...completed].map((b) => b.products?.tutor_id),
   );
 
-  /** Sesión relevante de la reserva: la primera que aún no ha terminado. */
+  /**
+   * Sesión relevante de la reserva: la primera que aún no ha terminado.
+   *
+   * MN-05 · Sigue mirando `end_at` y NO la ventana de acceso, a propósito. Esto
+   * es "Próximas sesiones": una clase de hace cuatro días cuya sala sigue
+   * abierta no es próxima, y meterla aquí llenaría el panel de pasado. A su
+   * sala se llega igual desde el detalle de la reserva, que es donde vive la
+   * lista completa.
+   */
   const nextSession = (b: (typeof open)[number]) =>
     [...(b.sessions ?? [])]
       .filter((s) => s.status === "scheduled" || s.status === "in_progress")
@@ -168,8 +176,10 @@ export default async function AppHome() {
                       timeZone={tz}
                       status={BOOKING_STATUS_LABEL[b.status]}
                       note={
+                        // MN-05 · el botón de sala aparece 7 días antes; el
+                        // texto tiene que decir lo mismo que hace el botón.
                         ready
-                          ? "Disponible 10 min antes"
+                          ? "La sala abre 7 días antes"
                           : "Reembolso 100 % si no acepta en 24 h"
                       }
                       action={

@@ -5,14 +5,22 @@ import { createClient } from "@/lib/supabase/server";
 import type { ChatMessage } from "@/components/chat/chat-thread";
 import { getUserTimezone } from "@/lib/auth/server";
 import { LiveRoom } from "./live-room";
+import { ACCESS_WINDOW_DAYS, withDays } from "@/lib/room-window";
 
 export const metadata = { title: "Sala en vivo · Enséñame Ya" };
+
 
 /**
  * SCR-LV01 — sala de clase 1:1 (EP-08). La ventana de acceso y el token los
  * gobierna el server (`join_session`, RN-18); esta página solo pinta el estado
  * y delega el "unirse" a la RPC. RLS de participante ya filtra: si no eres
  * alumno ni tutor de la sesión, no la lees → notFound.
+ *
+ * MN-05 · La ventana ya no se recalcula en el cliente: se LEEN
+ * `access_opens_at` / `access_closes_at`, que es donde vive desde la migración
+ * `20260820190000`. Antes `live-room.tsx` tenía su propio `WINDOW_MIN = 10` y
+ * era uno de los cinco sitios donde el número estaba copiado; ahora la pantalla
+ * y el server no pueden discrepar porque leen la misma fila.
  */
 export default async function RoomPage({
   params,
@@ -26,7 +34,7 @@ export default async function RoomPage({
   const { data: s } = await supabase
     .from("sessions")
     .select(
-      "id, status, start_at, end_at, tutor_id, student_id, booking_id, session_ref, bookings(status, products(title))",
+      "id, status, start_at, end_at, access_opens_at, access_closes_at, tutor_id, student_id, booking_id, session_ref, bookings(status, products(title))",
     )
     .eq("id", sessionId)
     .maybeSingle();
@@ -77,6 +85,12 @@ export default async function RoomPage({
       bookingId={s.booking_id}
       startAt={s.start_at}
       endAt={s.end_at}
+      // El respaldo replica la fórmula de `session_access_window` para una fila
+      // que llegara sin ventana. No debería existir —hay backfill y trigger—,
+      // pero es la misma cautela que la RPC: aquí se cae a la fórmula, NUNCA a
+      // "sin límite", que es lo que haría un rango construido con nulos.
+      opensAt={s.access_opens_at ?? withDays(s.start_at, -ACCESS_WINDOW_DAYS)}
+      closesAt={s.access_closes_at ?? withDays(s.end_at, ACCESS_WINDOW_DAYS)}
       sessionStatus={s.status}
       bookingStatus={s.bookings?.status ?? "cancelled"}
       productTitle={s.bookings?.products?.title ?? "Mentoría"}

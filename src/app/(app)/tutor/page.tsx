@@ -89,9 +89,13 @@ export default async function TutorHomePage() {
       .eq("tutor_id", userId)
       .in("status", ["scheduled", "in_progress"])
       // Se filtra por el FIN, no por el inicio: una clase que empezó hace un
-      // rato sigue entrable (la ventana cierra 10 min después de acabar), y
-      // desaparecer del panel dejaría al tutor creyendo que no tiene clase
-      // mientras el alumno espera en la sala.
+      // rato sigue en curso, y desaparecer del panel dejaría al tutor creyendo
+      // que no tiene clase mientras el alumno espera en la sala.
+      //
+      // MN-05 · Y se queda en `end_at`, NO en `access_closes_at`. La sala ahora
+      // sigue abierta 7 días, pero esto es "Próximas clases": arrastrar aquí
+      // una semana de clases ya dadas taparía justo lo que el tutor viene a
+      // mirar. La sala de una clase pasada se alcanza desde su reserva.
       .gte("end_at", new Date().toISOString())
       .order("start_at")
       .limit(3),

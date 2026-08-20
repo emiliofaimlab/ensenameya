@@ -20,6 +20,7 @@ import { CompleteSessionButton } from "../booking-actions";
 import { studentName, studentOfTutor } from "../../students";
 import { StudentAvatar } from "../../student-avatar";
 import type { Database } from "@/lib/database.types";
+import { roomOpen } from "@/lib/room-window";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -33,7 +34,19 @@ const BOOKING_PILL: Record<string, PillTone> = {
   pending_payment: "neutral",
 };
 
-const LIVE = new Set<BookingStatus>(["confirmed", "in_progress"]);
+/**
+ * MN-05 · Reservas cuya sala puede abrirse. `completed` entra porque el cron
+ * cierra la reserva a los 10 min de acabar la clase mientras la sala sigue viva
+ * 7 días. Misma lista, palabra por palabra, que la guarda de `join_session` y
+ * que la del detalle del alumno: tres definiciones distintas de "hay sala"
+ * acabarían discrepando.
+ */
+const LIVE = new Set<BookingStatus>([
+  "confirmed",
+  "in_progress",
+  "completed",
+]);
+
 const CHAT_BOOKING = new Set<BookingStatus>([
   "confirmed",
   "in_progress",
@@ -74,7 +87,9 @@ export default async function TutorBookingDetailPage({
       // seguir transacciones. Se LEE de la fila (lo pone un trigger); no se
       // deriva aquí, que es como US-1802 se rompió en silencio con el nombre
       // de la sala de Daily.
-      "id, status, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, status, session_ref)",
+      // MN-05 · la ventana de acceso viaja con la sesión (`20260820190000`): es
+      // lo que decide si el botón de sala sirve, y no se recalcula aquí.
+      "id, status, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at)",
     )
     .eq("id", id)
     .eq("tutor_id", user.id)
@@ -192,8 +207,7 @@ export default async function TutorBookingDetailPage({
                         <StatusPill>
                           {SESSION_STATUS_LABEL[s.status] ?? s.status}
                         </StatusPill>
-                        {LIVE.has(booking.status) &&
-                        (s.status === "scheduled" || s.status === "in_progress") ? (
+                        {LIVE.has(booking.status) && roomOpen(s) ? (
                           <>
                             <Button
                               asChild
@@ -201,7 +215,15 @@ export default async function TutorBookingDetailPage({
                             >
                               <Link href={`/room/${s.id}`}>Entrar a la sala</Link>
                             </Button>
-                            <CompleteSessionButton sessionId={s.id} />
+                            {/* "Marcar completada" sigue atado al ESTADO, no a
+                                la ventana: `complete_session` solo acepta
+                                `scheduled`/`in_progress`, así que ofrecerlo
+                                sobre una sesión ya cerrada sería un botón que
+                                solo sabe dar error. */}
+                            {s.status === "scheduled" ||
+                            s.status === "in_progress" ? (
+                              <CompleteSessionButton sessionId={s.id} />
+                            ) : null}
                           </>
                         ) : null}
                         {/* US-1802 · disponible 30 días desde la clase. Con el

@@ -23,15 +23,27 @@ import { RecordingLink } from "@/components/room/recording-link";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/lib/database.types";
+import { roomOpen } from "@/lib/room-window";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
-const ROOM_BOOKING = new Set<BookingStatus>(["confirmed", "in_progress"]);
+/**
+ * MN-05 · Reservas cuya sala puede abrirse. `completed` entra porque el cron
+ * cierra la reserva a los 10 min de acabar la clase y la sala sigue viva 7 días:
+ * sin ella, el botón desaparecería justo cuando MN-05 dice que tiene que estar.
+ * Misma lista, palabra por palabra, que la guarda de `join_session`.
+ */
+const ROOM_BOOKING = new Set<BookingStatus>([
+  "confirmed",
+  "in_progress",
+  "completed",
+]);
 const CHAT_BOOKING = new Set<BookingStatus>([
   "confirmed",
   "in_progress",
   "completed",
 ]);
+
 const CANCELLABLE = new Set<BookingStatus>([
   "pending_payment",
   "pending_acceptance",
@@ -63,7 +75,10 @@ export default async function BookingDetailPage({
       // aquí y no se deriva: se calcula en la BD al insertar la sesión
       // (`20260817140000`) y componerlo otra vez en el cliente es la forma de
       // que un día deje de coincidir con el que el alumno tiene apuntado.
-      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id), sessions(id, start_at, status, session_ref), payments(status, gross_amount, currency, paid_at, refunded_amount)",
+      // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
+      // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
+      // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
+      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at), payments(status, gross_amount, currency, paid_at, refunded_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -164,10 +179,9 @@ export default async function BookingDetailPage({
                         {SESSION_STATUS_LABEL[s.status] ?? s.status}
                       </StatusPill>
                       {/* El gate real de la ventana (RN-18) lo pone el server;
-                          la sala muestra la cuenta regresiva. */}
-                      {ROOM_BOOKING.has(booking.status) &&
-                      (s.status === "scheduled" ||
-                        s.status === "in_progress") ? (
+                          la sala muestra la cuenta regresiva. Aquí solo se
+                          decide si enseñar el botón. */}
+                      {ROOM_BOOKING.has(booking.status) && roomOpen(s) ? (
                         <Button
                           asChild
                           className="h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"

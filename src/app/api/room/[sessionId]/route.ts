@@ -1,18 +1,30 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
-import { ensureRoom, isDailyConfigured, mintToken } from "@/lib/daily";
+import {
+  ensureRoom,
+  isDailyConfigured,
+  mintToken,
+  participantEjectAfterSec,
+} from "@/lib/daily";
 
 /**
  * US-801 — entrar a la sala (Daily real).
  *
  * Orquesta lo que la BD no puede hacer sola:
- *   1. `join_session` (RPC) AUTORIZA: participante, reserva activa, ventana
- *      RN-18/S-45, y mueve el ciclo M5. Si algo falla, lanza y aquí se traduce.
- *      La barrera con dientes sigue siendo la BD, no este endpoint.
+ *   1. `join_session` (RPC) AUTORIZA: participante, reserva activa, ventana de
+ *      acceso (RN-18; desde MN-05, 7 días a cada lado) y —solo si esto es de
+ *      verdad la hora de la clase— mueve el ciclo M5. Si algo falla, lanza y
+ *      aquí se traduce. La barrera con dientes sigue siendo la BD.
  *   2. Crea/reusa la sala en Daily y firma un meeting-token acotado a
  *      (sala, usuario, expiración). La API key nunca sale del servidor.
  *      La expiración del token es la SUYA, no la de la sala (MN-05a).
+ *
+ * ⚠️ Este endpoint se llama MÁS DE UNA VEZ por clase desde MN-05: la sala lo
+ * vuelve a pedir cuando se abre la ventana de la mentoría para que el ciclo M5
+ * se mueva aunque el alumno hubiera entrado horas antes. Es idempotente —
+ * `join_session` no repite transiciones— pero cada llamada firma un token
+ * nuevo, así que no se llama en bucle.
  *
  * El token no se almacena (Doc 1 §1.4.11): se firma en cada entrada.
  */
@@ -34,7 +46,19 @@ export async function POST(
     return NextResponse.json({ error: error.message }, { status: 403 });
   }
 
-  const auth = data as { room_name: string; is_tutor: boolean; ends_at: string };
+  // Tres relojes, tres consumidores. `join_session` los devuelve por separado
+  // desde MN-05 justamente para que nadie vuelva a usar uno donde va otro:
+  //   · `ends_at`   → fin de la mentoría → `exp` del meeting-token (corto).
+  //   · `closes_at` → `sessions.access_closes_at` → `exp` de la SALA (7 días).
+  //   · `starts_at` → con `ends_at`, la duración de la clase → tope de minutos
+  //                   que un participante puede estar conectado de seguido.
+  const auth = data as {
+    room_name: string;
+    is_tutor: boolean;
+    starts_at: string;
+    ends_at: string;
+    closes_at: string;
+  };
 
   // Sin credenciales de Daily → sala simulada. La autorización y el ciclo (lo
   // de arriba) YA ocurrieron: lo único que falta es el transporte de video.
@@ -58,14 +82,19 @@ export async function POST(
     .eq("id", user!.id)
     .maybeSingle();
 
-  // 2) Sala + token. La sala expira al cerrar la ventana (fin + 10 min, S-45):
-  // aunque alguien guarde la URL, Daily no admite a nadie después.
-  // ⚠️ MN-05a: esta fecha es SOLO de la sala. El token dejó de heredarla — lo
-  // firma `mintToken` a partir del fin de la sesión, corto y por su cuenta — para
-  // que el día que MN-05 abra la sala días antes y días después no estemos
-  // firmando credenciales de acceso válidas durante días. Si vuelves a pasarle
-  // `windowClosesAt` al token, deshaces exactamente eso.
-  const windowClosesAt = new Date(new Date(auth.ends_at).getTime() + 10 * 60_000);
+  // 2) Sala + token. La sala expira cuando cierra la ventana de acceso, que
+  // desde MN-05 es `end_at + 7 días` y ya NO se calcula aquí: la trae la BD en
+  // `closes_at` (columna `sessions.access_closes_at`). Antes esta línea era un
+  // `+ 10 * 60_000` a mano, y era uno de los cinco sitios donde la ventana
+  // estaba duplicada. Aunque alguien guarde la URL, pasado ese `exp` Daily no
+  // admite a nadie.
+  //
+  // ⚠️ MN-05a: esta fecha es SOLO de la sala. El token NO la hereda — lo firma
+  // `mintToken` a partir del fin de la sesión, corto y por su cuenta. Con la
+  // sala viva una semana, pasársela al token sería firmar credenciales de
+  // acceso válidas siete días. Si se la vuelves a pasar, deshaces exactamente
+  // eso, y no lo va a avisar ni el typecheck: los dos son `Date`.
+  const roomClosesAt = new Date(auth.closes_at);
 
   // US-1801 · la sala se crea con grabación SOLO si los dos consintieron
   // (RN-42). La regla vive en `recording_allowed`, no aquí.
@@ -76,8 +105,12 @@ export async function POST(
   try {
     const roomUrl = await ensureRoom(
       auth.room_name,
-      windowClosesAt,
+      roomClosesAt,
       allowed === true,
+      // MN-05 · con la sala viva 7 días, `eject_at_room_exp` dejó de ser el
+      // tope de nadie. Este es el que queda, y se cuenta desde que cada persona
+      // entra. Ver `participantEjectAfterSec`.
+      participantEjectAfterSec(new Date(auth.starts_at), new Date(auth.ends_at)),
     );
     const token = await mintToken({
       room: auth.room_name,

@@ -34,6 +34,15 @@
 --     status = case when s.status = 'in_progress' then 'completed' else 'no_show' end
 --
 -- O sea: `no_show` = **NADIE abrió la sala** dentro de la ventana. Si UNO de
+-- ⚠️ ACTUALIZADO EL 20-AGO POR MN-05 (`20260820190000`): «la ventana» ya no
+-- es una sola. La sala abre 7 días antes y cierra 7 después, pero el ciclo de
+-- la sesión solo se mueve dentro de `session_live_window()` (los ±10 min de
+-- siempre). Así que ahora se puede abrir la sala SIN que la sesión salga de
+-- `scheduled`, y el cron la cerrará como `no_show` aunque hubiera gente
+-- dentro. Lee `no_show` como «nadie abrió la sala DENTRO de la ventana de la
+-- clase», no como «nadie abrió la sala». Si algún día hace falta el dato
+-- real, lo que falta es dejar rastro de la entrada (un `first_join_at` que
+-- `join_session` escriba siempre), no retocar este recuento.
 -- los dos entró, la sesión pasó a `in_progress` en `join_session()` y al vencer
 -- la ventana se cierra como `completed` — aunque el otro no llegara a
 -- aparecer. Por tanto:

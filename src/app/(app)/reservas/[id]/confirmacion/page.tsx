@@ -18,7 +18,10 @@ const STEPS = [
   },
   {
     icon: VideoIcon,
-    text: 'Entra a la sala desde "Mis reservas" hasta 10 min antes de cada sesión.',
+    // MN-05 · era "hasta 10 min antes", y desde la migración 20260820190000 la
+    // ventana son 7 días a cada lado. Un texto que promete diez minutos junto a
+    // un botón que aparece una semana antes es peor que no haber cambiado nada.
+    text: 'Entra a la sala desde "Mis reservas": abre 7 días antes de cada sesión y sigue abierta 7 días después.',
   },
   {
     icon: MessageSquareIcon,
