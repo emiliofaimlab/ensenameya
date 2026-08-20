@@ -10,7 +10,10 @@ import {
   conversationIdOfBooking,
   getConversation,
 } from "@/components/chat/conversations";
-import { counterpartFallback } from "@/components/chat/types";
+import {
+  conversationSubtitle,
+  counterpartFallback,
+} from "@/components/chat/types";
 import { MESSAGE_COLUMNS, toChatMessage } from "@/lib/chat/messages";
 
 export const metadata = { title: "Mensajes · Enséñame Ya" };
@@ -66,10 +69,14 @@ export default async function ChatPage({
       <Section className="flex flex-col gap-6">
         <PageHeader
           title={`Chat con ${nombre}`}
-          description={
-            conversation.productTitle ??
-            "Consulta antes de reservar: pregúntale lo que necesites saber."
-          }
+          // MN-08 · el recuento de mentorías del par delante del título de la
+          // última reserva. El respaldo largo se conserva: aquí hay sitio para
+          // una frase entera, y en un hilo sin compra es lo único que explica
+          // qué es esta pantalla.
+          description={conversationSubtitle(
+            conversation,
+            "Consulta antes de reservar: pregúntale lo que necesites saber.",
+          )}
         />
         <ChatThread
           conversationId={conversation.id}

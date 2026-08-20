@@ -7,7 +7,11 @@ import { ArrowLeftIcon, MessageCircleIcon, XIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import { ChatThread } from "./chat-thread";
-import { counterpartFallback, type Conversation } from "./types";
+import {
+  conversationSubtitle,
+  counterpartFallback,
+  type Conversation,
+} from "./types";
 import {
   totalUnread,
   useChatUnread,
@@ -197,8 +201,10 @@ export function ChatBubble({
                 {abierta ? nombreDe(abierta) : "Mensajes"}
               </p>
               {abierta ? (
+                // MN-08 · «3 mentorías · Álgebra desde cero». El contador va
+                // delante porque esto trunca; el porqué, en `types.ts`.
                 <p className="truncate text-[11px] text-[#6b6b6b]">
-                  {abierta.productTitle ?? "Consulta antes de reservar"}
+                  {conversationSubtitle(abierta)}
                 </p>
               ) : null}
             </div>
@@ -276,8 +282,10 @@ export function ChatBubble({
                         >
                           {nombre}
                         </span>
+                        {/* MN-08 · el recuento de mentorías del par, delante
+                            del título de la última reserva. */}
                         <span className="block truncate text-xs text-[#6b6b6b]">
-                          {c.productTitle ?? "Consulta antes de reservar"}
+                          {conversationSubtitle(c)}
                         </span>
                       </span>
                       {sinLeer > 0 ? (

@@ -39,6 +39,15 @@ export type ConversationRow = {
   other_is_tutor: boolean;
   last_message_at: string | null;
   has_booking: boolean;
+  /**
+   * MN-08 · Las DOS lecturas de «cuántas mentorías» que devuelve la función.
+   * Se piden las dos a la base de datos aunque hoy solo se pinte una: la
+   * pregunta P-7 (¿«3 mentorías» son tres títulos, tres compras o tres
+   * clases?) sigue sin respuesta del cliente, y así elegir es cambiar una
+   * línea de pintado y no otra migración. Ver `20260820130000`.
+   */
+  product_count: number;
+  session_count: number;
   blocked_at: string | null;
   last_booking_id: string | null;
   last_product_title: string | null;

@@ -1825,9 +1825,19 @@ export type Database = {
           other_id: string
           other_is_tutor: boolean
           other_name: string
+          product_count: number
+          session_count: number
         }[]
       }
       open_conversation: { Args: { p_tutor_id: string }; Returns: string }
+      pair_booking_stats: {
+        Args: { p_student_id: string; p_tutor_id: string }
+        Returns: {
+          has_booking: boolean
+          product_count: number
+          session_count: number
+        }[]
+      }
       pair_has_booking: {
         Args: { p_student_id: string; p_tutor_id: string }
         Returns: boolean

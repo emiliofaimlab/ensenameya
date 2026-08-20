@@ -28,6 +28,20 @@ export type Conversation = {
    * adjuntos y si el hilo lleva el aviso de los topes previos a la reserva.
    */
   hasBooking: boolean;
+  /**
+   * MN-08 · Cuántas mentorías DISTINTAS le compró el alumno al tutor. Es la
+   * lectura literal de «cuántas mentorías» y es la que se pinta hoy.
+   */
+  productCount: number;
+  /**
+   * MN-08 · Cuántas clases suman esas reservas. Se trae y NO SE PINTA todavía:
+   * el cliente aún no ha dicho qué cuenta quiere ver (pregunta P-7 del Doc 20)
+   * y las dos salen de la misma llamada. Cuando conteste, esto es cambiar
+   * `productCount` por `sessionCount` en `conversationSubtitle` — no una
+   * migración. Si la respuesta llega y elige clases, borra la que sobre en vez
+   * de dejar las dos: un campo que nadie lee acaba mintiendo.
+   */
+  sessionCount: number;
   /** Bloqueada por moderación: se lee, no se escribe. */
   blocked: boolean;
   /** La reserva más reciente del par, si la hay (para adjuntos y contexto). */
@@ -45,6 +59,46 @@ export type Conversation = {
  */
 export function counterpartFallback(role: CounterpartRole): string {
   return role === "tutor" ? "tu tutor" : "tu alumno";
+}
+
+/**
+ * MN-08 · «3 mentorías» / «1 mentoría», o `null` si no hay ninguna.
+ *
+ * `null` y no «0 mentorías»: en un hilo previo a la compra el cero no es un
+ * dato, es que todavía no ha pasado nada — y escribirlo suena a reproche.
+ */
+export function mentoriasLabel(count: number): string | null {
+  if (!Number.isFinite(count) || count <= 0) return null;
+  return count === 1 ? "1 mentoría" : `${count} mentorías`;
+}
+
+/**
+ * La línea pequeña de un hilo: el contador y, detrás, la mentoría de la última
+ * reserva.
+ *
+ * Vive aquí y no en cada pantalla porque son TRES superficies (la fila de la
+ * bandeja, la cabecera del hilo dentro de la burbuja y la página `/chat/[id]`)
+ * y ya se habían desincronizado una vez.
+ *
+ * ⚠️ El contador va DELANTE del título a propósito. Las tres superficies
+ * truncan con `truncate`, y en la fila de la bandeja —320 px— lo que se sale
+ * por la derecha se pierde: si el orden fuera el natural («Álgebra desde
+ * cero · 3 mentorías»), justo el número que pidió el cliente sería lo primero
+ * en desaparecer.
+ *
+ * ⚠️ Cuando no hay contador, la línea queda EXACTAMENTE como estaba antes de
+ * MN-08. No es pereza: `last_product_title` sale de la última reserva del par
+ * SIN filtrar por estado, así que un par cuya única reserva se canceló tiene
+ * título pero no cuenta. Ahí seguía pintándose el título y se sigue pintando.
+ */
+export function conversationSubtitle(
+  c: Pick<Conversation, "productCount" | "productTitle">,
+  fallback = "Consulta antes de reservar",
+): string {
+  const partes = [mentoriasLabel(c.productCount), c.productTitle].filter(
+    (x): x is string => Boolean(x),
+  );
+  return partes.length > 0 ? partes.join(" · ") : fallback;
 }
 
 /**
