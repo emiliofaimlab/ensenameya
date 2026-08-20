@@ -605,4 +605,91 @@ chat perdió sentido al cerrar el chat pre-compra) · **MN-14b** (depende de qu�
 
 ---
 
+## 20.14 · Los cuatro cambios del flujo reserva → checkout (21-ago)
+
+Cuatro peticiones con capturas delante. **Dos tienen un diagnóstico distinto al que parecía**, y una
+no se puede hacer como se pide.
+
+### 1 · «La segunda pantalla sobra» — tiene razón en el síntoma, no en la causa
+
+🔴 **La pantalla intermedia YA se salta para sesión suelta desde el 17-ago (N-33).** Lo que falla es
+que **hay dos caminos en la ficha del tutor y solo uno lleva la hora**:
+
+- **Pulsar un chip de hora** → va derecho al checkout. Funciona, un solo calendario.
+- **Pulsar «Reservar mentoría YA»** → va a `/reservar/<id>` **pelado, sin hora** → segundo calendario.
+
+Y hay un detalle de interfaz que empuja justo al camino malo: **el primer chip se pinta naranja de
+marca**, idéntico al estado «seleccionado» del resto de la app. El alumno ve «08:00» resaltado, cree
+que ya eligió, y baja al botón grande. Además los chips **son enlaces**, no controles de selección:
+elegir la hora y *luego* pulsar el botón es literalmente imposible.
+
+**Arreglo:** los chips pasan a seleccionar dentro de la ficha (la hora viaja en la URL como el día y
+la mentoría), el naranja solo marca la hora real elegida, y el botón grande lleva esa hora — con lo
+que sesión suelta va al checkout y paquete al selector, con la primera hora ya marcada.
+
+⚠️ **La pantalla NO se borra.** Es donde se eligen las N sesiones de un paquete, y el seed de dev
+tiene tres productos de 4, 8 y 4 sesiones. `create_booking` exige exactamente N horarios.
+
+🐛 **Y salió un bug que no veníamos a buscar: tres horizontes de fechas distintos** para los mismos
+huecos — la ficha publica **60 días**, el selector pide **21** y `create_booking` acepta **30**. Hoy
+la ficha ofrece horarios que la reserva rechaza, y el mensaje de error miente: dice «ya no está
+libre» cuando sí lo está.
+
+### 2 · El formulario de Stripe al llegar, sin perder la casilla
+
+**El nudo no es el botón, es la casilla:** «Guardar esta tarjeta» acaba en `setup_future_usage`, un
+parámetro que se fija **al crear la sesión de pago**. Si el formulario se monta al llegar, la sesión
+ya existe cuando el alumno marca la casilla.
+
+**Salida:** que la casilla la pinte **Stripe dentro de su formulario**
+(`saved_payment_method_options.payment_method_save`), que su documentación describe para
+exactamente nuestro modo. El consentimiento se mueve del momento «crear sesión» al momento
+«confirmar», que es donde tiene que estar.
+
+⚠️ **Pero esto arrastra algo grande, y hay que decirlo:** montar el formulario al llegar **obliga a
+crear la reserva al llegar**, y eso significa que **el horario del tutor se retiene por visita, no
+por intención**. Quien abra el checkout y se lo piense bloquea el hueco. El Doc 19 ya avisó de este
+choque (N-38 contra M-11): si se hace, **el contador visible de tiempo deja de ser deseable y pasa a
+ser obligatorio**.
+
+⚠️ Y un fallo que no caza el typecheck: **recargar la pantalla rompería la reserva**, porque
+`create_booking` comprueba que el hueco siga libre y **tu propia reserva te lo bloquea a ti mismo**.
+
+### 3 · La tarjeta rellenándose en vivo — se puede la mitad, y no la que parecía
+
+Los tipos instalados son taxativos. El evento existe (`CheckoutFormProps.onChange`), pero su payload
+trae `complete`, `empty` y `status.payment` — **y no trae `brand`, `last4`, ni la caducidad** del
+número que se está tecleando.
+
+- ❌ Los **dígitos**: imposible, y es la razón de ser de la arquitectura de pago (PCI-DSS SAQ A).
+- ❌ **La marca tampoco.** El logo de Mastercard que se ve en la captura lo pinta Stripe **dentro de
+  su iframe**; no nos llega.
+- ✅ **Sí se puede:** que la tarjeta reaccione —se ilumine al empezar a escribir, se marque completa
+  al terminar—, y que se rellene de verdad cuando el alumno usa una **tarjeta guardada**, porque
+  esos datos sí los tenemos (`last4`, marca y caducidad, del lado servidor).
+
+### 4 · Más detalle en el resumen — pero primero, un fallo
+
+🐛 **El checkout no usa la zona horaria del alumno** en las horas que pinta, mientras la pantalla
+hermana (`/reservas/[id]/pagar`) sí. O sea que puede estar enseñando **una hora distinta a la que se
+eligió**. Eso no es «más detalle»: es que el dato sea correcto, y va primero.
+
+Después, las líneas que de verdad quitan dudas antes de pagar: **hora de fin y duración**, **qué
+incluye el paquete y el precio por sesión**, **cuándo queda confirmada** (auto-aceptación o las 24 h
+de RN-38) y la política de cancelación **completa**.
+
+⚠️ Con dos frenos: los códigos internos (RN-xx) no se enseñan —se quitaron a propósito en M-06— y
+**el reparto con el tutor no se enseña jamás**: es información interna.
+
+### Las cuatro decisiones que hacen falta antes de tocar nada
+
+| # | Pregunta | Bloquea |
+| :-- | :-- | :-- |
+| **D-1** | ¿Vale la versión honesta de la tarjeta en vivo — reacciona, pero nunca muestra los dígitos ni la marca de una tarjeta nueva? | Punto 3 |
+| **D-2** | Montar el formulario al llegar **retiene el horario por visita** y obliga a poner un contador visible. ¿Se acepta? | Punto 2 |
+| **D-3** | ¿Se acepta que la casilla de guardar tarjeta la **redacte Stripe**, con su texto en español, como se aceptó «Nombre»? | Punto 2 |
+| **D-4** | ¿El resumen cuenta también la **mitad mala** de la política — 50 % si cancelas con menos de 24 h? Es lo más honesto; callarlo probablemente vende algo más | Punto 4 |
+
+---
+
 *Faim Lab · Doc 20 · Plan de acción sobre la minuta del 17-ago · 20 de agosto de 2026.*
