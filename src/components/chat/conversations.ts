@@ -31,7 +31,6 @@ function toConversation(r: ConversationRow): Conversation {
     // (`pair_booking_stats`), así que no pueden contradecirlo: si aquí hay
     // reserva, `productCount` es como mínimo 1.
     productCount: r.product_count ?? 0,
-    sessionCount: r.session_count ?? 0,
     blocked: r.blocked_at !== null,
     bookingId: r.last_booking_id,
     productTitle: r.last_product_title,

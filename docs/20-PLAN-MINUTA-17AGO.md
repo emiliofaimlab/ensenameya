@@ -427,9 +427,9 @@ Ocho de las nueve preguntas de §20.3, contestadas. Con esto **el Lote 2 deja de
 | **P-4** | Hoy se pinta el **embed completo de Stripe**; solo quieren **los campos de la tarjeta** | **MN-01**, y confirma el escenario caro: es el resumen que Stripe pinta DENTRO del iframe → hay que cambiar de `ui_mode` |
 | **P-5** | Titular **opcional**, y **también** al guardar tarjeta | **MN-02** |
 | **P-6** | **7 días antes y 7 después.** Y **NO** aceptan que el tutor cobre más tarde | **MN-05**, y confirma el desacople: la ventana de acceso se amplía, el cierre de la sesión NO se mueve |
-| **P-7** | Pendiente: no estaba clara la pregunta | Nada crítico — **las dos columnas ya están entregadas**, solo falta elegir cuál se pinta |
+| **P-7** | **Mentorías distintas** (quien compró dos veces la misma ve un 1). Contestada el 20-ago con el ejemplo de las tres cuentas | 🟢 **Cerrada.** Era la que ya se pintaba; se retiró el mapeo de `session_count`, que no lo leía nadie |
 | **P-8** | **25 MB** | **MN-11b** |
-| **P-9** | Pendiente: se pide por escrito a través de Verónica | **MN-14b** sigue bloqueado |
+| **P-9** | **Mensaje enviado a Verónica el 20-ago**, con el ejemplo numérico de quién absorbe el descuento | **MN-14b** sigue bloqueado hasta que responda el cliente |
 
 ### ⚠️ Tres consecuencias que hay que decir antes de ejecutar
 

@@ -29,19 +29,20 @@ export type Conversation = {
    */
   hasBooking: boolean;
   /**
-   * MN-08 · Cuántas mentorías DISTINTAS le compró el alumno al tutor. Es la
-   * lectura literal de «cuántas mentorías» y es la que se pinta hoy.
+   * MN-08 · Cuántas mentorías DISTINTAS le compró el alumno al tutor.
+   *
+   * Es la cuenta que eligió el cliente (P-7, 20-ago) de las tres posibles sobre
+   * las mismas filas: mentorías distintas, veces que compró, o clases en total.
+   * Ganó ésta porque es lo que dice la palabra «mentorías»: quien compró dos
+   * veces la misma ve un 1, no un 2.
+   *
+   * ⚠️ `my_conversations()` sigue devolviendo también `session_count` (las
+   * clases). NO se mapea aquí a propósito: un campo que nadie lee acaba
+   * mintiendo el día que la RPC cambie y nadie se entere. Si algún día se
+   * quiere pintar, la RPC ya lo trae y es una línea en `toConversation` — no
+   * hace falta migración.
    */
   productCount: number;
-  /**
-   * MN-08 · Cuántas clases suman esas reservas. Se trae y NO SE PINTA todavía:
-   * el cliente aún no ha dicho qué cuenta quiere ver (pregunta P-7 del Doc 20)
-   * y las dos salen de la misma llamada. Cuando conteste, esto es cambiar
-   * `productCount` por `sessionCount` en `conversationSubtitle` — no una
-   * migración. Si la respuesta llega y elige clases, borra la que sobre en vez
-   * de dejar las dos: un campo que nadie lee acaba mintiendo.
-   */
-  sessionCount: number;
   /** Bloqueada por moderación: se lee, no se escribe. */
   blocked: boolean;
   /** La reserva más reciente del par, si la hay (para adjuntos y contexto). */
