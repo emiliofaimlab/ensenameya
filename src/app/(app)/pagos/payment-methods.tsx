@@ -25,11 +25,16 @@ export type Card = {
  * listo antes de reservar no tenía manera.
  *
  * ⚠️ SIN CAMPOS DE TARJETA NUESTROS, que es lo que bloqueaba esto. El formulario
- * que se monta al pulsar "Añadir tarjeta" es el MISMO embed de Stripe que el
- * checkout (`StripeEmbed`), abierto en `mode: 'setup'`: el PAN vive en un iframe
- * del proveedor y no toca nuestro DOM, así que el proyecto sigue en PCI-DSS
- * SAQ A. Pintar aquí número/CVC propios nos llevaría a SAQ D, y por eso la
- * versión anterior de este comentario decía que no había formulario.
+ * que se monta al pulsar "Añadir tarjeta" es el MISMO de Stripe que el checkout
+ * (`StripeEmbed`), abierto en `mode: 'setup'`: el PAN vive en un iframe del
+ * proveedor y no toca nuestro DOM, así que el proyecto sigue en PCI-DSS SAQ A.
+ * Pintar aquí número/CVC propios nos llevaría a SAQ D, y por eso la versión
+ * anterior de este comentario decía que no había formulario.
+ *
+ * MN-01 · este es el TERCER punto de montaje del formulario de pago, y va con
+ * los otros dos: el 20-ago pasó a `ui_mode: 'form'` a la vez que el cobro y que
+ * el "Pagar ahora". Dejarlo atrás habría dejado dos formularios de pago con
+ * aspectos distintos en el mismo producto.
  */
 export function PaymentMethods({
   cards,

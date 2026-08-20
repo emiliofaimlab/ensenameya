@@ -44,11 +44,19 @@ type State = "idle" | "processing";
  * ⚠️ SIN campos de tarjeta NUESTROS, a propósito. El Figma dibuja aquí número
  * de tarjeta, titular, vencimiento y CVC en campos propios; capturar el PAN en
  * nuestro formulario metería el proyecto en PCI-DSS SAQ D (alcance completo).
- * Lo que hay en su lugar es el **Embedded Checkout** de Stripe (reunión 7-ago):
- * el formulario se ve dentro de esta pantalla, pero vive en un iframe del
- * proveedor, así que los datos de la tarjeta no tocan nuestro DOM y seguimos en
- * SAQ A igual que con el checkout alojado. La tarjeta ilustrada de la izquierda
- * es decorativa (no captura nada).
+ * Lo que hay en su lugar es el formulario de pago de Stripe (reunión 7-ago): se
+ * ve dentro de esta pantalla, pero vive en un iframe del proveedor, así que los
+ * datos de la tarjeta no tocan nuestro DOM y seguimos en SAQ A igual que con el
+ * checkout alojado. La tarjeta ilustrada de la izquierda es decorativa (no
+ * captura nada).
+ *
+ * MN-01 · desde el 20-ago ese formulario es `ui_mode: 'form'` y NO el Embedded
+ * Checkout. Cambia lo que Stripe pinta dentro del recuadro, no lo que hace esta
+ * pantalla: antes pintaba su propia pantalla completa —con SU resumen del
+ * pedido, duplicando el «Resumen del pedido» de la izquierda— y ahora pinta solo
+ * los campos de pago. O sea que el resumen de la columna izquierda pasa de ser
+ * el segundo a ser **el único**: si alguien lo quita, el alumno pagará sin ver
+ * qué está comprando. Detalle en `components/checkout/stripe-embed.tsx`.
  */
 export function CheckoutForm({
   productId,
@@ -173,8 +181,9 @@ export function CheckoutForm({
       <div className="flex flex-col gap-5">
         {/* Wallet: la de delante es la última usada; las demás asoman detrás y
             se abren en abanico al pasar el ratón. Es INFORMATIVO, no un
-            selector — elegir se elige en la pasarela, y un selector aquí sería
-            prometer un control que el checkout alojado no nos da. */}
+            selector — elegir se elige en el formulario de Stripe, que es quien
+            tiene las tarjetas, y un selector aquí sería prometer un control que
+            no tenemos. */}
         <div
           className="group relative"
           style={{ height: tarjetas.length > 2 ? 286 : tarjetas.length > 1 ? 232 : 178 }}

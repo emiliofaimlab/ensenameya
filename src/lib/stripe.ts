@@ -29,8 +29,8 @@ export function isStripeConfigured(): boolean {
 }
 
 /**
- * Clave publicable, la que necesita el navegador para montar el Embedded
- * Checkout. Es pública por diseño: solo sirve para crear tokens contra la
+ * Clave publicable, la que necesita el navegador para montar el formulario de
+ * pago. Es pública por diseño: solo sirve para crear tokens contra la
  * cuenta, nunca para leer ni mover dinero. Aun así NO lleva prefijo
  * `NEXT_PUBLIC_` — se manda desde el Route Handler junto al `client_secret`,
  * para que encender Stripe siga siendo poner las claves del servidor y nada más.
@@ -242,10 +242,11 @@ export function esCustomerInexistente(e: unknown): boolean {
  * empezar una compra.
  *
  * `mode: 'setup'` en vez de un SetupIntent + Elements a pelo porque reutiliza
- * entero el camino que ya está probado: mismo embed, mismo `locale`, mismo
- * `return_url`. Un PaymentElement propio daría control sobre `usage` (ver abajo)
- * a cambio de un segundo formulario de pago que mantener. Y sigue siendo
- * PCI-DSS SAQ A: el PAN vive en un iframe del proveedor y no toca nuestro DOM.
+ * entero el camino que ya está probado: mismo componente de montaje
+ * (`StripeEmbed`), mismo `ui_mode`, mismo `locale`, mismo `return_url`. Un
+ * PaymentElement propio daría control sobre `usage` (ver abajo) a cambio de un
+ * segundo formulario de pago que mantener. Y sigue siendo PCI-DSS SAQ A: el PAN
+ * vive en un iframe del proveedor y no toca nuestro DOM.
  *
  * SIN `idempotencyKey`, y es a propósito: aquí no hay entidad estable que sirva
  * de clave —una persona puede querer añadir una segunda tarjeta un minuto
@@ -296,7 +297,19 @@ export async function crearSesionDeAltaDeTarjeta(opts: {
     // NO lo que hacemos con ella: no existe ni un solo camino que cobre fuera
     // de una Checkout Session con la persona delante. Si algún día se quisiera
     // el permiso menor de verdad, habría que bajar a SetupIntent + Elements.
-    ui_mode: "embedded_page",
+    //
+    // MN-01 · `form`, igual que el cobro, y por la MISMA razón: `embedded_page`
+    // pintaba la pantalla completa de Stripe dentro del recuadro y su interior
+    // no se podía reestilizar. Aquí el sinsentido era mayor todavía —una
+    // pantalla de «resumen del pedido» para un alta de tarjeta que no cobra
+    // nada—. Este sitio va con los otros dos A PROPÓSITO: dejar el alta de
+    // tarjeta en el modo viejo dejaría dos formularios de pago con dos aspectos
+    // distintos en el mismo producto, que es justo lo que N-37 vino a arreglar.
+    ui_mode: "form",
+    // MN-02 · el titular, opcional, también al guardar tarjeta — el cliente
+    // pidió las dos (respuesta P-5, 20-ago). Comprobado contra la API real: en
+    // `mode: 'setup'` la Session lo acepta y el init del navegador lo devuelve.
+    name_collection: { individual: { enabled: true, optional: true } },
     // Sin esto Stripe rotula según el navegador y salía "Payment method" en
     // mitad de una pantalla en español.
     locale: "es",

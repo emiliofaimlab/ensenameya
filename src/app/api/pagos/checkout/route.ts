@@ -7,9 +7,14 @@ import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
 
 /**
  * EP-20 / PAC-01 · abre el checkout de Stripe para una reserva y devuelve su
- * `client_secret`, que es lo que el navegador necesita para montar el Embedded
- * Checkout en nuestra propia pantalla. Antes devolvía la URL de
+ * `client_secret`, que es lo que el navegador necesita para montar el formulario
+ * de pago en nuestra propia pantalla. Antes devolvía la URL de
  * checkout.stripe.com y se redirigía; el pago ya no sale del sitio.
+ *
+ * MN-01 · qué formulario se monta con ese secreto lo decide el `ui_mode` de la
+ * Session, y eso vive en el adaptador (`lib/payments/stripe-provider.ts`), no
+ * aquí. Este archivo no cambió con el paso a `ui_mode: 'form'` salvo en una
+ * cosa, y es la importante: la VERSIÓN de la clave de idempotencia (abajo).
  *
  * Recibe una reserva YA creada. `create_booking` sigue llamándose desde el
  * navegador y no se mueve aquí: esa RPC resuelve al alumno con
@@ -76,6 +81,26 @@ import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
  */
 const CADUCIDAD_MIN = 60;
 const MINIMO_STRIPE_MIN = 30;
+
+/**
+ * ⚠️ VERSIÓN DE LOS PARÁMETROS DE LA SESSION — SÚBELA AL CAMBIARLOS.
+ *
+ * La clave de idempotencia se compone por reserva (`booking-<id>…`), y Stripe
+ * NO devuelve la respuesta cacheada cuando la misma clave llega con parámetros
+ * distintos: devuelve un error de idempotencia. O sea que el día que se
+ * despliega un cambio en lo que se le manda a `charge()` —el `ui_mode`, el
+ * `name_collection`, los métodos de pago, lo que sea— toda reserva que tuviera
+ * un checkout abierto con la clave vieja empieza a fallar con un error opaco.
+ *
+ * Es un fallo que NO se ve en local ni en la preview, porque ahí no hay
+ * Sessions viejas: solo aparece en producción y solo el día del despliegue.
+ * Subir esta cadena hace que esas reservas abran una Session NUEVA en vez de
+ * chocar, que es exactamente lo que queremos. Si acabaran pagándose las dos, el
+ * webhook reembolsa la segunda (X-02).
+ *
+ * v2 · 2026-08-20 — MN-01/MN-02: `ui_mode: 'form'` y el titular opcional.
+ */
+const VERSION_PARAMS = "v2";
 
 function caducidadSesion(creadaEn: string | null): number {
   const ahora = Math.floor(Date.now() / 1000);
@@ -185,8 +210,8 @@ export async function POST(req: Request) {
       customerRef: cliente,
       expiresAt: caduca,
       guardarMedioDePago: Boolean(guardarTarjeta),
-      // Con el checkout embebido NO hay `cancel_url`: Stripe devuelve aquí ya
-      // pagado, y cancelar es no rellenar el formulario.
+      // Con el formulario en nuestra pantalla NO hay `cancel_url`: Stripe
+      // devuelve aquí ya pagado, y cancelar es no rellenar el formulario.
       returnUrl: `${base}/reservas/${bookingId}/confirmacion`,
       idempotencyKey: claveIdem,
     });
@@ -202,7 +227,9 @@ export async function POST(req: Request) {
   // Session nueva" en lugar de "el checkout devuelve un error de idempotencia y
   // nadie entiende por qué". Que se abra una segunda Session ya no es peligroso:
   // si acabaran pagándose las dos, el webhook reembolsa la segunda.
-  const clave = `booking-${bookingId}${guardarTarjeta ? "-save" : ""}-c${caduca}`;
+  //
+  // Y por lo mismo va la VERSIÓN de los parámetros: ver `VERSION_PARAMS` arriba.
+  const clave = `booking-${bookingId}${guardarTarjeta ? "-save" : ""}-c${caduca}-${VERSION_PARAMS}`;
 
   let cobro;
   try {

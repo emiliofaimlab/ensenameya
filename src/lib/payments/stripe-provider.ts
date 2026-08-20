@@ -219,24 +219,42 @@ export const stripeProvider: PspProvider = {
             ? { setup_future_usage: "on_session" as const }
             : {}),
         },
-        // Embedded Checkout: el formulario de tarjeta se monta DENTRO de nuestra
-        // pantalla (reunión 7-ago) en vez de mandar a checkout.stripe.com. Sigue
-        // siendo un iframe de Stripe, así que el PAN no toca nuestro DOM y el
-        // proyecto se queda en PCI-DSS SAQ A — que era la razón de no dibujar
-        // campos propios.
-        // `embedded_page`, NO `embedded`: en la versión de API que tenemos fijada
-        // el valor se renombró y la vieja devuelve 400. El typecheck no lo pilla
-        // porque la unión del SDK acaba en `OtherString`, que traga cualquier
-        // cadena — esto solo se ve llamando a la API de verdad.
-        ui_mode: "embedded_page",
+        // MN-01 · `form`, no `embedded_page`. Los dos montan el formulario DENTRO
+        // de nuestra pantalla en vez de mandar a checkout.stripe.com (reunión
+        // 7-ago) y los dos siguen siendo un iframe de Stripe, así que el PAN no
+        // toca nuestro DOM y el proyecto se queda en PCI-DSS SAQ A. La
+        // diferencia es qué pinta Stripe dentro: con `embedded_page` pintaba su
+        // pantalla entera —incluido SU resumen del pedido, duplicando el
+        // nuestro— y su interior no se podía reestilizar (los tipos del SDK no
+        // exponen `appearance` ni `layout` en ese modo). Con `form` pinta solo
+        // el formulario de pago, que es exactamente lo que pidió el cliente:
+        // «solo queremos los inputs de la tarjeta […] y no todo ese contenido
+        // de Stripe».
+        //
+        // ⚠️ ESTA CADENA NO LA VALIDA EL TYPECHECK. La unión de `ui_mode` en el
+        // SDK acaba en `OtherString`, así que traga cualquier cosa y el error
+        // sale como un 400 de la API en tiempo de ejecución. Ya mordió una vez
+        // (`embedded` vs `embedded_page`). Los cuatro valores buenos de hoy son
+        // `hosted_page`, `embedded_page`, `elements` y `form`: si tocas esto,
+        // ejercítalo contra *test mode* antes de creerte que compila.
+        ui_mode: "form",
+        // MN-02 · el titular de la tarjeta, OPCIONAL (respuesta P-5 del cliente,
+        // 20-ago). La etiqueta la escribe Stripe: con `locale: 'es'` sale
+        // «Nombre», no el literal de la minuta. `optional: true` es lo que evita
+        // convertir un campo que nadie pidió obligatorio en un muro más entre el
+        // alumno y el pago. Va también en el alta de tarjeta desde el perfil
+        // (`lib/stripe.ts`), porque el cliente pidió las dos.
+        name_collection: { individual: { enabled: true, optional: true } },
         // Sin esto Stripe rotula el formulario según el navegador y en un sitio
         // en español salía "Payment method" / "Save my information". Con el
         // checkout alojado se notaba menos porque era otra página; embebido,
         // media pantalla quedaba en otro idioma.
         locale: "es",
-        // Con el checkout embebido NO existe `success_url` ni `cancel_url`: hay
+        // Fuera del checkout alojado NO existe `success_url` ni `cancel_url`: hay
         // un único `return_url` al que Stripe lleva ya pagado. Cancelar es no
-        // rellenar el formulario, así que no hay a dónde volver.
+        // rellenar el formulario, así que no hay a dónde volver. Sigue viviendo
+        // en la Session y no en la llamada del navegador: es la confirmación de
+        // ESTA reserva y no tiene por qué viajar por el cliente.
         return_url: input.returnUrl,
       },
       // Un doble clic o un reintento de red no debe abrir dos cobros para la
