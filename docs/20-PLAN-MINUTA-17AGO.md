@@ -406,7 +406,7 @@ porque la unión de `ui_mode` acaba en `OtherString` y ya dejó pasar un 400. La
 
 | # | Qué | Por qué importa |
 | :-- | :-- | :-- |
-| 1 | **La pantalla de admin no tiene entrada en el menú lateral.** `ADMIN_ITEMS` vive en `app-sidebar.tsx`, que no era de la ficha. Se entra por un botón en `/admin/tutores` | Una línea. Si la pantalla se va a usar, hace falta |
+| 1 | ~~La pantalla de admin no tiene entrada en el menú lateral.~~ 🟢 **Hecha** (`3fbf2ca`). No fue una línea: el menú marca por prefijo y `/admin/tutores/actividad` encendía también «Tutores». Ahora gana el prefijo más largo, que además retira el apaño de `exact` para el siguiente caso | El detalle `/admin/tutores/<id>` sigue marcando «Tutores», que es lo que `exact` habría roto |
 | 2 | **El sembrado de dev no ejercita el placeholder:** las 15 mentorías tienen foto | Cualquier regresión futura en esa rama **no la va a ver nadie**. Merece una mentoría sin foto en el seed |
 | 3 | **`admin_gmv_weekly` y `admin_bookings_by_category` no revocan `execute` de `PUBLIC`** antes de su grant | **No es fuga** —la guarda `has_role('admin')` las corta— pero están a una guarda de serlo. Preexistente; su propia ficha, como `pair_has_booking` |
 | 4 | **El reembolso real sigue sin moverse.** El job se ejercitó en *simulacro*, no contra la fila real | Es el punto 2 de §19.10 y sigue abierto: encolar no es haber devuelto |
