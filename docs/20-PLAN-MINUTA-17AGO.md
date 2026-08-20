@@ -85,6 +85,7 @@ nuevo, código que ya existe, o algo que no es código.
 | :-- | :-- | :-- | :-- |
 | **MN-09** | Placeholder de imágenes | 🟢 **Sí.** Hoy hay **tres conductas distintas** y ninguna usa un asset: dos bandas grises y un `null`. 🟢 **Sin depender de Diana**: reutilizar el **icono de categoría** que ya existe en BD (`20260805120000`) sobre fondo de marca — cero arte nueva | S |
 | **MN-10** | Quitar la dirección del pie | 🔴 **Deshace DL-03 (B-3).** Matiz útil para negociar: el domicilio **no desaparece del sitio** si se quita del pie — sigue en `/contacto` y en el §39 de los Términos. ⚠️ **No tocar `lib/company.ts`**: arrastraría el §39 de los Términos en los dos idiomas | XS |
+| **MN-15** | *(añadido el 20-ago)* El titular del hero salta a 3 líneas con «emprendimiento» | 🟢 **Diagnosticado y medido.** De las 8 palabras rotativas **solo «emprendimiento»** rompe: a 910px son 3 líneas, las otras siete 2. Quitar `text-balance` **no** lo arregla (sigue en 3). **Desde 940px entra en 2**, y a 960px el corte de las otras siete **no se mueve** — o sea que es cambiar un número, no rediseñar. ⚠️ En móvil el titular nunca son 2 líneas y **también baila** (3 ó 4 según la palabra): eso no lo arregla el ancho | XS |
 | **MN-11** | Límite de subida en el chat | 🟢 **Ya está hecho: 10 MB, impuestos por el bucket, server-side.** Las subidas van directas navegador→Storage, así que el bucket es el único punto de aplicación real. Falta **el número que quiere el cliente**. ⚠️ **Trampa verificada:** los cinco buckets se crearon con `on conflict (id) do nothing` y **no hay ni un `update storage.buckets` en el repo** — copiar ese patrón para cambiar el tope es un **no-op silencioso** que pasa el `db:push` en verde | S |
 
 ### Infraestructura, Dominios y Referidos
@@ -449,6 +450,71 @@ mueva evita de un plumazo el choque con el §12 del contrato (payouts a 7-14 dí
 §17 (cancelar al 50 % después de la clase). Y la sala abierta 7 días **no cuesta nada** en Daily
 —se factura por minuto-participante— ni firma credenciales largas, porque **MN-05a ya desacopló el
 token** (`05d1286`).
+
+---
+
+## 20.11 · Ruta de desarrollo — el orden previsto tras las respuestas del 20-ago
+
+Tres tandas. **Dentro de una tanda las fichas van en paralelo; entre tandas hay barrera.** El
+criterio de agrupación no es la prioridad: es **quién toca qué fichero** y **quién toca la base de
+datos**, porque una sola cosa puede ser dueña del esquema a la vez.
+
+### Tanda A · Lo de minutos — abre y cierra el mismo día
+
+| Ficha | Qué | Notas |
+| :-- | :-- | :-- |
+| **MN-15** | El titular del hero, `max-w-[910px]` → `960px` | Medido: las 8 palabras en 2 líneas y el corte de las otras siete **no se mueve**. ⚠️ El baile en móvil (3↔4 líneas) es otro problema y **no** lo arregla esto — decidir si se ataca ahora o se anota |
+| **MN-11b** | El tope del chat a **25 MB** | ⚠️ **Antes**: mirar en el panel de Supabase el tope global del proyecto. Si es menor que 25 MB, la migración pasa en verde y las subidas siguen fallando. Y el `update storage.buckets`, nunca el `insert … on conflict` |
+
+### Tanda B · Pagos — la más delicada, y la que el cliente quiere ver
+
+**MN-01 y MN-02 van juntos, en la misma pasada y del mismo agente.** No es una preferencia: los dos
+tocan los tres puntos de montaje del checkout, y `name_collection` (MN-02) hay que verificarlo
+**dentro** del `ui_mode` nuevo (MN-01) — hacerlos por separado obliga a ejercitar el camino del
+dinero dos veces.
+
+· **MN-01** — de `ui_mode: 'embedded_page'` a **`'form'`** con `<CheckoutForm/>` de
+  `@stripe/react-stripe-js/checkout`, que **ya está instalado**. Stripe pinta solo el formulario de
+  la tarjeta, sin su resumen del pedido, y acepta `appearance`. **Misma Checkout Session**, así que
+  webhook, idempotencia y X-02 no cambian. Se sigue en PCI SAQ A.
+· **MN-02** — `name_collection: { individual: { enabled: true, optional: true } }` en **los dos**
+  sitios que crean Session. ⚠️ Con la clave de idempotencia versionada, o al desplegar chocan los
+  checkouts ya abiertos.
+
+⚠️ **Se ejercita contra *test mode* de punta a punta, como L3-2** (§20.9): Session real → expirar →
+webhook firmado → webhook con firma falsa → alta de tarjeta. `tsc` no vale aquí y ya dejó pasar un
+400 una vez.
+⚠️ **Para que Jose pueda REVISARLO** hace falta `STRIPE_PUBLISHABLE_KEY` en Vercel. Sin ella se
+construye y se verifica en local, pero fuera de local el checkout es un 503.
+
+### Tanda C · Esquema — un solo dueño de la base de datos, y en este orden
+
+| Ficha | Qué | Notas |
+| :-- | :-- | :-- |
+| **MN-06** | El chat, solo tras reservar | Migración nueva con `create or replace` sobre `open_conversation`. **No** se revierte `9305c1c` ni se edita `20260817210000`. ⚠️ **No cerrar `send_conversation_message` a secas**: `send_message` delega en ella cuando el par no ha comprado, y cerrarla rompe el chat de un checkout a medias. ⚠️ **Falta una sub-decisión** (abajo) |
+| **MN-05** | La sala, 7 días antes y 7 después | Poblar `access_opens_at`/`access_closes_at` —que existen y están muertas— y **desacoplar `close_expired_sessions()`**, que NO se mueve: el cliente dijo que no acepta cobrar más tarde. Eso además evita el choque con el §12 y el agujero del §17 |
+
+Van las dos en la misma tanda y **secuenciadas**, no en paralelo: las dos escriben migración, y el
+orden `db:push` → `db:types` → frontend no admite dos manos.
+
+### Por qué este orden y no otro
+
+**A primero** porque son minutos y despeja el tablero. **B antes que C** porque el checkout es lo que
+el cliente ha señalado con una captura y lo que va a querer ver, y porque es la única tanda que se
+puede ejercitar entera hoy. **C al final** porque es la de superficie más irreversible —una purga con
+cascada y un cambio de ventana que toca el reloj del dinero— y porque le falta una respuesta.
+
+### Lo que sigue esperando, y a quién
+
+| Qué | A quién | Bloquea |
+| :-- | :-- | :-- |
+| **La sub-decisión de MN-06:** los hilos pre-compra que ya existen, ¿se quedan **visibles en solo lectura** hasta que la purga se los lleve a los 30 días, o se **borran los vacíos** en la propia migración? *(Los que tienen mensajes no se tocan: son datos de usuario.)* 🟢 Dato que la abarata: **en producción no hay ninguno** — M-12 nunca llegó a `main` | Jose / cliente | Tanda C |
+| **MN-07** — el enlace de reserva en el chat pierde casi todo el sentido con el chat post-reserva | Jose / cliente | MN-07 |
+| **MN-10** — el domicilio está en **tres** sitios; quitarlo del pie no lo hace privado, y es lo que dLocal comprueba a mano | Jose / Néstor | MN-10 |
+| **P-9** — quién absorbe el descuento | Cliente, vía Verónica | MN-14b |
+| **P-10** — el snippet de widget de Referral Factory | RF | MN-12 |
+| **P-3** — qué URL se presentó a dLocal | Cliente | MN-13, MN-03 |
+| `STRIPE_PUBLISHABLE_KEY`, `CRON_SECRET` y `APP_BASE_URL` | Jose (paneles) | Revisar la tanda B · que un reembolso mueva un euro |
 
 ---
 
