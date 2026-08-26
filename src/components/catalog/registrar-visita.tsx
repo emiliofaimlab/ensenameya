@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 
 import { createClient } from "@/lib/supabase/client";
-import { asAfinidadRpc } from "@/lib/afinidad";
 
 /**
  * EY-186 (capa 2) · «TUTORES VISTOS»: la única señal de las tres que pidió el
@@ -32,7 +31,7 @@ import { asAfinidadRpc } from "@/lib/afinidad";
  * del JWT verificado.
  *
  * **2 · Retención.** No vive aquí: son 90 días, los aplica `purge_tutor_views`
- * por `pg_cron`. Ver la cabecera de `20260827110000`.
+ * por `pg_cron`. Ver la cabecera de `20260827140000`.
  *
  * **3 · Es la escritura más frecuente de la plataforma.** Tres frenos, de más
  * barato a más caro:
@@ -84,9 +83,7 @@ export function RegistrarVisita({
       if (!vivo || !uid || uid === tutorId) return;
 
       yaEnviadas.add(clave);
-      // ⚠️ Vía `asAfinidadRpc` porque `database.types.ts` todavía no conoce la
-      // función (migración escrita, sin aplicar). Ver `lib/afinidad.ts`.
-      asAfinidadRpc(supabase)
+      supabase
         .rpc("record_tutor_view", { p_tutor_id: tutorId, p_origen: origen })
         // Esto es telemetría de producto en una página pública: que no se pueda
         // anotar una visita —red caída, migración sin aplicar todavía— no puede

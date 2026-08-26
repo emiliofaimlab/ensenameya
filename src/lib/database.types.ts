@@ -1666,6 +1666,55 @@ export type Database = {
         }
         Relationships: []
       }
+      tutor_views: {
+        Row: {
+          class_views: number
+          first_viewed_at: string
+          last_viewed_at: string
+          tutor_id: string
+          user_id: string
+          views: number
+        }
+        Insert: {
+          class_views?: number
+          first_viewed_at?: string
+          last_viewed_at?: string
+          tutor_id: string
+          user_id: string
+          views?: number
+        }
+        Update: {
+          class_views?: number
+          first_viewed_at?: string
+          last_viewed_at?: string
+          tutor_id?: string
+          user_id?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_views_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "tutor_profiles"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "tutor_views_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "tutors_public"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "tutor_views_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -1811,6 +1860,7 @@ export type Database = {
         }[]
       }
       admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
+      afinidad_peso_reciente: { Args: { p_cuando: string }; Returns: number }
       anonymize_account: { Args: { p_user_id: string }; Returns: Json }
       assign_tutor_tier: {
         Args: { p_tier_id: string; p_tutor_id: string }
@@ -1963,9 +2013,14 @@ export type Database = {
       process_scheduled_payouts: { Args: never; Returns: Json }
       purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
+      purge_tutor_views: { Args: never; Returns: Json }
       record_terms_acceptance: {
         Args: { p_locale?: string; p_version: string }
         Returns: undefined
+      }
+      record_tutor_view: {
+        Args: { p_origen?: string; p_tutor_id: string }
+        Returns: boolean
       }
       recording_allowed: { Args: { p_session_id: string }; Returns: boolean }
       refund_payment: {
@@ -2033,6 +2088,24 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      student_tutor_affinity: {
+        Args: { p_limit?: number }
+        Returns: {
+          avatar_path: string
+          compras: number
+          display_name: string
+          headline: string
+          mi_nota: number
+          rating_avg: number
+          rating_count: number
+          score: number
+          sesiones: number
+          tutor_id: string
+          ultima_vez: string
+          vistas: number
+          vistas_clase: number
+        }[]
+      }
       submit_document: {
         Args: {
           p_doc_type: string

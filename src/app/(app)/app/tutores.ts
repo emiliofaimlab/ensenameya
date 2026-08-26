@@ -5,7 +5,6 @@ import { listFeaturedTutors } from "@/lib/catalog/queries";
 import type { TutorCardData } from "@/lib/booking";
 import {
   aTutorCard,
-  asAfinidadRpc,
   motivoDeAfinidad,
   type AfinidadRow,
 } from "@/lib/afinidad";
@@ -24,7 +23,7 @@ import {
  * marcadores ni ningún toggle: todo sale de lo que el alumno ya hizo.
  *
  * ── DÓNDE VIVE EL ALGORITMO: EN POSTGRES ────────────────────────────────────
- * `student_tutor_affinity()` (`20260827110000`) cruza cuatro señales en una
+ * `student_tutor_affinity()` (`20260827140000`) cruza cuatro señales en una
  * consulta. Aquí NO se reparten pesos ni se ordena nada: esta función pide la
  * lista, decide el caso vacío y traduce las filas a lo que sabe pintar
  * `TutorSummary`. Los pesos y su porqué están en la migración, en un solo
@@ -59,9 +58,7 @@ const MAX_TUTORES = 8;
 export async function tutoresParaElAlumno(): Promise<PanelTutores | null> {
   const supabase = await createClient();
 
-  // ⚠️ Vía `asAfinidadRpc` porque `database.types.ts` todavía no conoce la
-  // función: la migración está escrita pero sin aplicar. Ver `lib/afinidad.ts`.
-  const { data, error } = await asAfinidadRpc(supabase).rpc(
+  const { data, error } = await supabase.rpc(
     "student_tutor_affinity",
     { p_limit: MAX_TUTORES },
   );

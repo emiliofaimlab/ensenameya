@@ -1,36 +1,5 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/lib/database.types";
 import type { TutorCardData } from "@/lib/booking";
-
-/**
- * EY-186 · Puerta estrecha a las RPC de afinidad que `database.types.ts`
- * todavía no conoce.
- *
- * ⚠️ **ESTE ARCHIVO ES TEMPORAL Y HAY QUE BORRAR MEDIO ARCHIVO CUANDO SE
- * REGENEREN LOS TIPOS.** Los tipos se regeneran con `npm run db:types` DESPUÉS
- * de aplicar `20260827110000`, y no se tocan a mano (regla de oro 6). Hasta
- * entonces `supabase.rpc("student_tutor_affinity")` NI COMPILA: el nombre está
- * tipado contra la unión de funciones conocidas, así que una función nueva es
- * error de tipos, no de ejecución.
- *
- * Mismo patrón —y mismo motivo— que `src/components/chat/rpc.ts`: la conversión
- * insegura vive en UN sitio para que el día de la regeneración haya un bloque
- * que quitar y no doce `as unknown as` repartidos por las pantallas. Lo que NO
- * es temporal es la mitad de abajo (`AfinidadRow`, `motivoDeAfinidad`,
- * `aTutorCard`): eso sigue haciendo falta con los tipos generados.
- */
-type AfinidadRpc = {
-  rpc: (
-    fn: string,
-    args?: Record<string, unknown>,
-  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
-};
-
-/** ⚠️ Temporal — ver arriba. Sirve para el cliente de navegador y el de servidor. */
-export function asAfinidadRpc(client: SupabaseClient<Database>): AfinidadRpc {
-  return client as unknown as AfinidadRpc;
-}
 
 /**
  * Una fila de `student_tutor_affinity()`. Es la ficha pública del tutor MÁS el
