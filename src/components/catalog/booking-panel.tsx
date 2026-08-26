@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { BookingSelect } from "@/components/catalog/booking-select";
 import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
 import { listProductSlots } from "@/lib/catalog/queries";
 import type { ProductCardData } from "@/lib/catalog/queries";
@@ -250,30 +251,54 @@ export async function BookingPanel({
       {/* R29-01: arriba del calendario va el TÍTULO de la clase; el precio baja
           junto al CTA. Sigue valiendo R24-14 (nada de importe fijo por delante):
           sin clase elegida no hay precio en ninguna de las dos posiciones.
-          V-5 · el plural «Reserva estas mentorías» va SOLO en la rama sin
-          mentoría elegida, que es la ficha del tutor: es el único sitio donde
-          hay varias entre las que elegir. En `/products/[id]` llega un único
-          producto, así que `single` lo fija y esa rama nunca se pinta. */}
-      {chosen ? (
+          V-5 · el plural «Reserva estas mentorías» va SOLO en la ficha del
+          tutor CON VARIAS mentorías: es el único sitio donde hay varias entre
+          las que elegir. En `/products/[id]` llega un único producto, así que
+          `single` lo fija y esa rama nunca se pinta. */}
+      {/*
+        B3.4 · ⚠️ EL ENCABEZADO YA NO DEPENDE DE `chosen`. Petición literal del
+        cliente: «Y no cambies el título de arriba cuando selecciones».
+
+        Antes esta rama era `chosen ? … : …`, o sea que en la ficha del TUTOR el
+        panel se abría con «Reserva estas mentorías» + su línea de ayuda y, en
+        cuanto se elegía una mentoría, el bloque entero se sustituía por el
+        título de esa mentoría — de una a cuatro líneas según lo largo que fuera
+        («Química Orgánica e Intermedia: Descifra la Ciencia Detrás del Mundo
+        Real»). El calendario subía o bajaba con cada selección.
+
+        Ahora la condición es `single`, que **no cambia nunca durante la vida de
+        la pantalla**: es una propiedad de cuántos productos recibe el panel, no
+        de lo que el visitante haya pulsado. Las tres combinaciones quedan así:
+
+          · `/products/[id]` (P08) → siempre `single` → «Reserva esta mentoría».
+            Igual que antes; ahí el título nunca cambió.
+          · ficha del tutor con UNA mentoría → `single` la fija → su título,
+            estable. Igual que antes.
+          · ficha del tutor con VARIAS → el plural, SIEMPRE. Aquí está el
+            cambio.
+
+        Y lo que V-5b defendía —«sin el título no se sabría cuál de sus
+        mentorías se está reservando»— ya no se pierde: la mentoría elegida se
+        lee en el `<select>` de abajo, que la enseña de forma permanente. Antes
+        eso lo decía el color de una tarjeta; ahora lo dice el propio control.
+      */}
+      {single ? (
         <>
           {/* V-5b · En la ficha de la mentoría el título NO se repite. Ahí ya
               es el H1 de la página, a dos dedos de aquí, y volver a escribirlo
-              —a veces en cuatro líneas, como «Química Orgánica e Intermedia:
-              Descifra la Ciencia Detrás del Mundo Real»— no informa de nada y
-              empuja el calendario hacia abajo.
+              no informa de nada y empuja el calendario hacia abajo.
 
               `details` es la señal exacta y no hace falta inventar otra: lo
               pasa SOLO `/products/[id]` (P08), que es justamente la pantalla
               donde el título ya está arriba. En la ficha del TUTOR con una
-              mentoría elegida (`?p=`) no llega, y ahí el título sí hace falta:
-              el H1 es el nombre del tutor, así que sin él no se sabría cuál de
-              sus mentorías se está reservando. */}
+              sola mentoría no llega, y ahí el título sí hace falta: el H1 es el
+              nombre del tutor. */}
           <p className="text-[22px] font-bold text-balance text-[#19191f]">
-            {details ? "Reserva esta mentoría" : chosen.title}
+            {details ? "Reserva esta mentoría" : single.title}
           </p>
-          {details && chosen.sessionDurationMin ? (
+          {details && single.sessionDurationMin ? (
             <p className="mt-1.5 text-sm text-[#595959]">
-              En vivo 1 a 1 · {chosen.sessionDurationMin} min por sesión
+              En vivo 1 a 1 · {single.sessionDurationMin} min por sesión
             </p>
           ) : null}
         </>
@@ -352,115 +377,120 @@ export async function BookingPanel({
           </div>
 
           {/* Paso 2 (R24-13): elegir la clase de ESE día. Con una sola mentoría
-              (P08) no hay nada que elegir y se salta. */}
+              (P08) no hay nada que elegir y se salta.
+
+              B3.4 · era una lista de tarjetas-enlace y ahora es un `<select>`,
+              por petición del cliente: «El selector de mentoría son dos
+              tarjetas, porque tiene dos mentorías; esto se migra a un selector
+              de mentorías, un select normal».
+
+              ⚠️ RV-08 SIGUE VIVO dentro del `<option>`. Aquí se COMPARAN precios
+              entre clases —si una se anuncia por hora y otra por sesión, la
+              comparación solo es honesta si las dos enseñan el cobro de la
+              reserva—, y un `<option>` no admite dos líneas como la tarjeta.
+              Así que el precio va en la MISMA línea, detrás del título. Quitarlo
+              sería perder la comparación, no simplificar. */}
           {single ? null : (
             <div className="mt-5">
-              <p className="text-[13px] font-medium">Elige la sesión</p>
-              <ul className="mt-2 flex flex-col gap-2">
-                {dayProducts.map((p) => {
-                  const on = p.id === chosen?.id;
-                  // RV-08 · aquí se COMPARAN precios entre clases: si una se
-                  // anuncia por hora y otra por sesión, la comparación solo es
-                  // honesta si las dos enseñan el cobro de la reserva.
+              <BookingSelect
+                id="reserva-mentoria"
+                label="Elige la sesión"
+                placeholder="Elige una mentoría"
+                value={chosen?.id ?? ""}
+                options={dayProducts.map((p) => {
                   const precioClase = priceDisplay(p);
-                  return (
-                    <li key={p.id}>
-                      <Link
-                        // Igual que con el día: cambiar de clase suelta la hora.
-                        // Los huecos son de la mentoría, no del tutor.
-                        href={hrefFor({ p: p.id, d: day })}
-                        aria-current={on ? "true" : undefined}
-                        className={`flex items-center justify-between gap-3 rounded-[10px] border px-3.5 py-2.5 text-left transition-colors ${
-                          on
-                            ? "border-brand bg-brand-muted"
-                            : "border-[#e0e0e0] hover:border-brand"
-                        }`}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-[13.5px] font-medium text-[#212121]">
-                            {p.title}
-                          </span>
-                          <span className="block truncate text-xs text-[#6b6b6b]">
-                            {precioClase.amount} · {precioClase.note}
-                          </span>
-                        </span>
-                      </Link>
-                    </li>
-                  );
+                  return {
+                    value: p.id,
+                    label: `${p.title} · ${precioClase.amount} · ${precioClase.note}`,
+                    // Igual que con el día: cambiar de clase suelta la hora.
+                    // Los huecos son de la mentoría, no del tutor. Es EL MISMO
+                    // destino que tenía la tarjeta que esto sustituye.
+                    href: hrefFor({ p: p.id, d: day }),
+                  };
                 })}
-              </ul>
+              />
             </div>
           )}
 
           {/* Paso 3: horarios de la clase elegida ese día. */}
           {chosen ? (
             <>
-              <p className="mt-5 text-[13px] font-medium">
-                Horarios disponibles{" "}
-                <span className="font-normal text-[#6b6b6b]">
-                  · en tu hora local
-                </span>
-              </p>
+              {/* B3.4 · la etiqueta ya no es un `<p>` suelto: viaja dentro de
+                  `BookingSelect` como `<label htmlFor>` de verdad, asociada al
+                  control. Solo se pinta aquí cuando NO hay horarios, porque
+                  entonces no hay control al que asociarla. */}
               {times.length === 0 ? (
-                <p className="mt-2 text-[13px] text-muted-foreground">
-                  Esta sesión no tiene horarios ese día. Prueba con otro día.
-                </p>
+                <>
+                  <p className="mt-5 text-[13px] font-medium">
+                    Horarios disponibles
+                  </p>
+                  <p className="mt-2 text-[13px] text-muted-foreground">
+                    Esta sesión no tiene horarios ese día. Prueba con otro día.
+                  </p>
+                </>
               ) : (
                 <>
+                  {/*
+                    B3.4 · ESTO ERAN CHIPS Y AHORA ES UN `<select>`. Palabras del
+                    cliente: «ahorita despliegas unos cuadritos con las horas, se
+                    va a migrar a un selector y ya». Aplica a las DOS pantallas
+                    —ficha del tutor y ficha de mentoría—, y en las dos el
+                    destino de cada opción es EXACTAMENTE el mismo `hrefFor` que
+                    tenía su chip. No se inventa ninguna ruta nueva.
+
+                    ⚠️ Lo que MN-16 dejó escrito sigue en pie y no se ha tocado:
+                    elegir la hora SELECCIONA, no navega al pago. Antes de MN-16
+                    cada chip era un enlace al checkout y el primero se pintaba
+                    naranja solo (`i === 0`), así que el alumno leía «08:00 ya
+                    está elegido» sin haber elegido nada. Hoy la hora vive en la
+                    query (`?h=`) y el botón grande de abajo es quien lleva al
+                    pago. El `<select>` conserva esa separación tal cual: cambiar
+                    de opción solo cambia la URL.
+
+                    ⚠️ Y desaparece de paso la nota de `aria-current` frente a
+                    `aria-pressed` que hacía falta con enlaces: un `<option>`
+                    seleccionado ya se anuncia solo, sin ARIA que ponerle.
+
+                    De propina, la fuente de salto de altura más grande de
+                    §23.4: los chips ocupaban de una a cuatro filas según cuántas
+                    horas tuviera el día. El `<select>` mide lo mismo siempre.
+                  */}
+                  <div className="mt-5">
+                    <BookingSelect
+                      id="reserva-horario"
+                      label="Horarios disponibles"
+                      hint="· en tu hora local"
+                      placeholder="Elige una hora"
+                      /*
+                       * ⚠️ `hora`, NO `selectedTime`. `hora` es el ISO CANÓNICO
+                       * de la BD, ya contrastado contra los huecos reales por
+                       * instante (`Date.parse`), y es la misma cadena exacta que
+                       * viaja en `times` — así que el `defaultValue` casa con su
+                       * `<option>` por igualdad de texto, que es lo único que
+                       * entiende un `<select>`. Con `selectedTime` (el texto
+                       * crudo de la URL) no casaría: basta con que Postgres
+                       * devuelva `+00:00` donde la URL trae `Z` para que ninguna
+                       * opción salga marcada, sin error en ningún sitio. Es la
+                       * misma trampa que documenta el cálculo de `hora` arriba.
+                       */
+                      value={hora ?? ""}
+                      options={times.map((iso) => ({
+                        value: iso,
+                        label: slotTime(iso, timeZone),
+                        href: hrefFor({ p: chosen.id, d: day, h: iso }),
+                      }))}
+                    />
+                  </div>
                   {/* N-32 · se dice ANTES de pulsar qué hace pulsar. La queja no
                       era el número de pasos, era no saber en cuál estabas: «ya
-                      estoy reservando, ¿a qué hora es que yo reservé?». */}
-                  <p className="mt-1 text-xs text-[#6b6b6b]">
+                      estoy reservando, ¿a qué hora es que yo reservé?».
+                      Baja DEBAJO del selector: encima quedaba entre la etiqueta
+                      y su propio control, separando los dos. */}
+                  <p className="mt-2 text-xs text-[#6b6b6b]">
                     {sesionesPorReserva(chosen) > 1
                       ? `Elige aquí la primera; las ${sesionesPorReserva(chosen) - 1} restantes en el siguiente paso.`
                       : "Elige tu hora y confirma abajo: pasas directo al pago."}
                   </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {/*
-                      MN-16 · estos chips SELECCIONAN; antes navegaban al pago.
-                      El cambio no es cosmético, arregla dos cosas a la vez:
-
-                      1. el naranja se pintaba en `i === 0` — el PRIMER chip,
-                         siempre, hubiera elegido el alumno lo que fuera. Es el
-                         mismo naranja que en el resto de la app significa
-                         "seleccionado", así que el alumno leía "08:00 ya está
-                         elegido", bajaba al botón grande, y ese botón iba a
-                         `/reservar/<id>` pelado: segundo calendario. La pantalla
-                         que el cliente quería quitar la abría una hora que él
-                         creía haber elegido y que nadie había elegido.
-                      2. como eran enlaces al pago, "elegir la hora y LUEGO
-                         pulsar el botón" era imposible: no había estado entre
-                         medias. Ahora lo hay, y vive en la URL.
-
-                      Siguen siendo enlaces a propósito: este panel es 100 %
-                      servidor (sin `use client`), así que el estado es la query
-                      — se comparte, se recarga y se vuelve atrás gratis.
-
-                      ponytail: `aria-current` y no `aria-pressed`. La ficha
-                      pedía `aria-pressed`, pero eso solo es válido en `role=
-                      button`; ponerlo en un enlace lo invalida y los lectores de
-                      pantalla lo ignoran. `aria-current="true"` dice lo mismo
-                      —"este de la lista es el activo"— es válido en un enlace y
-                      es lo que ya usan aquí arriba los días y las clases.
-                    */}
-                    {times.map((iso) => {
-                      const on = iso === hora;
-                      return (
-                        <Link
-                          key={iso}
-                          href={hrefFor({ p: chosen.id, d: day, h: iso })}
-                          aria-current={on ? "true" : undefined}
-                          className={`rounded-[8px] px-3 py-2 text-[13px] transition-colors ${
-                            on
-                              ? "bg-brand font-semibold text-white hover:bg-brand-foreground"
-                              : "border border-[#cccccc] text-[#333333] hover:bg-muted"
-                          }`}
-                        >
-                          {slotTime(iso, timeZone)}
-                        </Link>
-                      );
-                    })}
-                  </div>
                 </>
               )}
             </>
