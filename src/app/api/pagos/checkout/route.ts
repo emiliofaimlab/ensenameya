@@ -130,8 +130,17 @@ const RETENCION_MIN = HOLD_POLICY.minutes;
  *   nuestro `setup_future_usage`. Son parámetros distintos para la MISMA
  *   reserva, así que sin esta subida toda Session abierta el día del despliegue
  *   chocaría contra su propia clave.
+ * v4 · 2026-08-26 — V-4a (A-3 del Doc 22 §22.9): el titular de la tarjeta pasa
+ *   de `optional: true` a `false`. Es un parámetro de la Session como los
+ *   anteriores y le aplica la misma trampa.
+ *   ⚠️ **A-4 (PayPal) tiene que viajar en ESTE mismo bump.** Está pendiente
+ *   solo de activar PayPal en el panel de Stripe (hoy la API lo rechaza con
+ *   «payment method type "paypal" is invalid»), y en cuanto se active es
+ *   añadirlo a `payment_method_types` del cobro. Si para entonces esto ya se
+ *   ha desplegado a producción, hay que subir a v5: son parámetros distintos
+ *   para la misma reserva otra vez.
  */
-const VERSION_PARAMS = "v3";
+const VERSION_PARAMS = "v4";
 
 /** Hasta cuándo se le promete el horario al alumno, en ISO (o null si no
  *  hay `created_at` legible: mejor sin contador que con uno inventado). */

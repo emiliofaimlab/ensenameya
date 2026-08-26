@@ -270,13 +270,27 @@ export const stripeProvider: PspProvider = {
         // `hosted_page`, `embedded_page`, `elements` y `form`: si tocas esto,
         // ejercítalo contra *test mode* antes de creerte que compila.
         ui_mode: "form",
-        // MN-02 · el titular de la tarjeta, OPCIONAL (respuesta P-5 del cliente,
-        // 20-ago). La etiqueta la escribe Stripe: con `locale: 'es'` sale
-        // «Nombre», no el literal de la minuta. `optional: true` es lo que evita
-        // convertir un campo que nadie pidió obligatorio en un muro más entre el
-        // alumno y el pago. Va también en el alta de tarjeta desde el perfil
-        // (`lib/stripe.ts`), porque el cliente pidió las dos.
-        name_collection: { individual: { enabled: true, optional: true } },
+        // MN-02 · el titular de la tarjeta. Va también en el alta de tarjeta
+        // desde el perfil (`lib/stripe.ts`), porque el cliente pidió las dos.
+        //
+        // ⚠️ **REQUERIDO desde V-4a (24-ago), y antes era opcional.** El 20-ago
+        // el cliente lo pidió opcional (P-5) y el 24 pidió lo contrario. Es
+        // marcha atrás deliberada, no un descuido: si lo vuelves a poner en
+        // `true` «porque estorba al alumno», estás deshaciendo la decisión.
+        //
+        // Lo que NO se puede hacer es la otra mitad de V-4: el literal. El
+        // cliente pidió que dijera «Titular de la tarjeta» y la etiqueta la
+        // escribe Stripe dentro de su iframe — `NameCollection.Individual`
+        // solo tiene `enabled` y `optional`, y `custom_text` no cubre este
+        // campo. Con `locale: 'es'` sale «Nombre completo»; el «(opcional)»
+        // que lo acompañaba lo pintaba Stripe a partir de este parámetro y
+        // desaparece solo al ponerlo en `false`.
+        //
+        // ⚠️ Cambiar esto es cambiar los parámetros de la Session → sube
+        // `VERSION_PARAMS` en `api/pagos/checkout` (ya subido a v4).
+        // Comprobado contra *test mode* el 26-ago: la API lo acepta y lo
+        // devuelve en la Session.
+        name_collection: { individual: { enabled: true, optional: false } },
         // Sin esto Stripe rotula el formulario según el navegador y en un sitio
         // en español salía "Payment method" / "Save my information". Con el
         // checkout alojado se notaba menos porque era otra página; embebido,

@@ -310,10 +310,16 @@ export async function crearSesionDeAltaDeTarjeta(opts: {
     // tarjeta en el modo viejo dejaría dos formularios de pago con dos aspectos
     // distintos en el mismo producto, que es justo lo que N-37 vino a arreglar.
     ui_mode: "form",
-    // MN-02 · el titular, opcional, también al guardar tarjeta — el cliente
-    // pidió las dos (respuesta P-5, 20-ago). Comprobado contra la API real: en
-    // `mode: 'setup'` la Session lo acepta y el init del navegador lo devuelve.
-    name_collection: { individual: { enabled: true, optional: true } },
+    // MN-02 · el titular, también al guardar tarjeta — el cliente pidió las
+    // dos. **Requerido desde V-4a (24-ago)**, que da marcha atrás sobre la
+    // respuesta P-5 del 20-ago; el porqué y el límite del literal están en
+    // `lib/payments/stripe-provider.ts`, que es el sitio del cobro.
+    //
+    // Aquí NO hay clave de idempotencia que versionar —esta Session no la
+    // tiene, a propósito (ver arriba)—, así que el cambio no arrastra nada.
+    // Comprobado contra *test mode* el 26-ago: en `mode: 'setup'` la Session
+    // acepta `optional: false` y lo devuelve.
+    name_collection: { individual: { enabled: true, optional: false } },
     // Sin esto Stripe rotula según el navegador y salía "Payment method" en
     // mitad de una pantalla en español.
     locale: "es",
