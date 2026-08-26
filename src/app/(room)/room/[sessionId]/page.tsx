@@ -4,6 +4,9 @@ import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ChatMessage } from "@/components/chat/chat-thread";
 import { getUserTimezone } from "@/lib/auth/server";
+import { toHeaderUser } from "@/lib/auth/header-user";
+import { listNotices } from "@/lib/notifications-server";
+import { SiteHeader } from "@/components/layout/site-header";
 import { LiveRoom } from "./live-room";
 import { ACCESS_WINDOW_DAYS, withDays } from "@/lib/room-window";
 
@@ -21,13 +24,21 @@ export const metadata = { title: "Sala en vivo · Enséñame Ya" };
  * `20260820190000`. Antes `live-room.tsx` tenía su propio `WINDOW_MIN = 10` y
  * era uno de los cinco sitios donde el número estaba copiado; ahora la pantalla
  * y el server no pueden discrepar porque leen la misma fila.
+ *
+ * V-2 · **La cabecera del sitio vuelve a la sala**, y se arma AQUÍ. `SiteHeader`
+ * necesita el usuario, sus roles y los avisos, y las tres cosas son de servidor:
+ * `(app)/layout.tsx` las tiene porque su layout es asíncrono, pero la sala no
+ * cuelga de `(app)` desde MN-04 (ver `(room)/layout.tsx`). Se le pasa a
+ * `LiveRoom` ya renderizada, como slot, en vez de convertir el layout de `(room)`
+ * en uno autenticado: ese layout envuelve la sala y nada más, y darle una
+ * consulta de avisos lo haría correr también en las pantallas de espera.
  */
 export default async function RoomPage({
   params,
 }: {
   params: Promise<{ sessionId: string }>;
 }) {
-  const { user } = await requireUser();
+  const { user, roles, fullName, avatarPath } = await requireUser();
   const { sessionId } = await params;
 
   const supabase = await createClient();
@@ -43,7 +54,7 @@ export default async function RoomPage({
 
   // El panel de chat de LV01 es el hilo de EP-17, no una copia: se precarga el
   // mismo histórico que `/chat/<reserva>` y Realtime sigue desde ahí.
-  const [{ data: msgs }, { data: firstSession }, { data: consents }] = await Promise.all([
+  const [{ data: msgs }, { data: firstSession }, { data: consents }, notices] = await Promise.all([
     supabase
       .from("messages")
       .select("id, sender_id, body, created_at, attachment_path, attachment_name, attachment_size")
@@ -62,6 +73,9 @@ export default async function RoomPage({
       .from("session_recording_consents")
       .select("user_id")
       .eq("session_id", sessionId),
+    // V-2 · la campana de la cabecera. Va en el mismo `Promise.all` para que no
+    // añada un viaje en serie a una pantalla que ya hace tres.
+    listNotices(),
   ]);
 
   const initialMessages: ChatMessage[] = (msgs ?? []).map((m) => ({
@@ -80,6 +94,12 @@ export default async function RoomPage({
 
   return (
     <LiveRoom
+      header={
+        <SiteHeader
+          user={toHeaderUser(user, roles, { fullName, avatarPath })}
+          notices={notices}
+        />
+      }
       timeZone={await getUserTimezone()}
       sessionId={s.id}
       bookingId={s.booking_id}

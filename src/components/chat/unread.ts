@@ -121,10 +121,20 @@ const hilosAbiertos = new Map<string, number>();
  * ⚠️ Acepta `null`: en modo reserva el hilo tarda un viaje de red en saber a
  * qué conversación pertenece (`conversation_of_booking`), y los hooks no se
  * pueden llamar a medias. Con `null` no hace nada y espera.
+ *
+ * ⚠️ **`visible` no es un lujo: sin él «montado» y «delante» son lo mismo, y no
+ * lo son** (V-2, 26-ago). La sala monta el hilo SIEMPRE y lo esconde con
+ * `display:none` cuando el panel está plegado — desmontarlo cerraría su canal de
+ * Realtime y quien pliega el chat se perdería los mensajes de ese rato. Con el
+ * chat plegado por defecto, eso convertía la sala en un agujero: cada mensaje
+ * que llegaba se marcaba como leído sin que nadie lo hubiera visto, y además
+ * `hilosAbiertos` impedía que la insignia se encendiera en ningún otro sitio.
+ * Con `visible: false` el hilo existe, escucha y acumula — pero no dice haber
+ * sido leído.
  */
-export function useOpenThread(conversationId: string | null) {
+export function useOpenThread(conversationId: string | null, visible = true) {
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || !visible) return;
     hilosAbiertos.set(conversationId, (hilosAbiertos.get(conversationId) ?? 0) + 1);
     void markConversationRead(conversationId);
 
@@ -133,7 +143,7 @@ export function useOpenThread(conversationId: string | null) {
       if (n > 0) hilosAbiertos.set(conversationId, n);
       else hilosAbiertos.delete(conversationId);
     };
-  }, [conversationId]);
+  }, [conversationId, visible]);
 }
 
 // ── Mutaciones ───────────────────────────────────────────────────────────────

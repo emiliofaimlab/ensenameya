@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import Image from "next/image";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -94,6 +93,46 @@ const VARS_SALA = {
   "--sala-border": SALA.border,
 } as React.CSSProperties;
 
+/**
+ * V-2 · **El chat, en el gris de Daily.** Y esto no es `bg-gris` en un div: es
+ * redefinir los tokens del sistema PARA ESE SUBÁRBOL.
+ *
+ * El panel monta `ChatThread`, que es el MISMO componente de `/chat/[id]`, de la
+ * bandeja y de las dos pantallas de reserva. Sus burbujas, su composer, su clip
+ * y sus botones están escritos contra `bg-background`, `bg-muted`, `border`…:
+ * repintarlos «para la sala» se los cambiaría a las cinco pantallas. Hasta hoy
+ * eso se esquivaba dándole una isla BLANCA sobre el marco oscuro — que funciona,
+ * pero es exactamente el recuadro claro pegado al vídeo del que se quejó el
+ * cliente.
+ *
+ * Redefiniendo las variables aquí, el mismo componente sin tocar una línea
+ * resuelve sus colores en oscuro dentro de este `aside` y en claro en todas las
+ * demás. Los valores salen de `SALA`, así que el panel y el iframe siguen siendo
+ * literalmente el mismo gris: los dos leen del mismo objeto.
+ *
+ * ⚠️ Ojo con `--foreground`: la burbuja propia es `bg-foreground text-background`
+ * (invertida a propósito), así que aquí sale BLANCA con texto oscuro sobre el
+ * gris — que es justo el contraste que se quiere para «lo mío». Si algún día se
+ * toca, comprobar las dos burbujas, no solo una.
+ */
+const VARS_CHAT_SALA = {
+  "--background": SALA.background,
+  "--foreground": SALA.baseText,
+  "--card": SALA.backgroundAccent,
+  "--card-foreground": SALA.baseText,
+  "--popover": SALA.backgroundAccent,
+  "--popover-foreground": SALA.baseText,
+  /** La burbuja del OTRO y los fondos suaves. */
+  "--muted": SALA.backgroundAccent,
+  "--muted-foreground": SALA.supportiveText,
+  "--secondary": SALA.backgroundAccent,
+  "--secondary-foreground": SALA.baseText,
+  "--accent": SALA.backgroundAccent,
+  "--accent-foreground": SALA.baseText,
+  "--border": SALA.border,
+  "--input": SALA.border,
+} as React.CSSProperties;
+
 /** Ver `public/img/room-chat.svg`: por qué es absoluta y por qué es blanca. */
 const ICONO_CHAT = "/img/room-chat.svg";
 
@@ -112,7 +151,10 @@ const ICONO_CHAT = "/img/room-chat.svg";
  * ⚠️ Se llama SOLO desde efectos. Lee `window.location.origin`, así que en
  * render (o en el SSR de este componente de cliente) reventaría.
  */
-function botonesTray(abierto: boolean): DailyCustomTrayButtons {
+function botonesTray(
+  abierto: boolean,
+  sinLeer: number,
+): DailyCustomTrayButtons {
   const icono = `${window.location.origin}${ICONO_CHAT}`;
   return {
     chat: {
@@ -121,8 +163,19 @@ function botonesTray(abierto: boolean): DailyCustomTrayButtons {
       // oscuro pase lo que pase, así que el icono blanco vale siempre. Si un
       // día la sala tuviera modo claro, aquí va la variante oscura.
       iconPathDarkMode: icono,
-      label: "Chat",
-      tooltip: abierto ? "Ocultar el chat" : "Mostrar el chat",
+      // V-2 · el contador va en el RÓTULO porque es lo único que hay.
+      // `DailyCustomTrayButtons` expone `iconPath`, `label`, `tooltip` y
+      // `visualState`: no hay insignia, y el icono es un SVG remoto que Daily
+      // carga por URL, así que tampoco se puede dibujar el número encima. Un
+      // «Chat (3)» en la barra es feo pero se ve, que es de lo que va esto.
+      // El botón de nuestra barra de arriba sí lleva punto.
+      label: sinLeer > 0 ? `Chat (${sinLeer > 9 ? "9+" : sinLeer})` : "Chat",
+      tooltip:
+        sinLeer > 0
+          ? `${sinLeer === 1 ? "1 mensaje" : `${sinLeer} mensajes`} sin leer`
+          : abierto
+            ? "Ocultar el chat"
+            : "Mostrar el chat",
       visualState: abierto ? "sidebar-open" : "default",
     },
   };
@@ -161,20 +214,99 @@ function human(ms: number): string {
 }
 
 /**
- * MN-04 · El corte en el que el panel de chat deja de superponerse y pasa a ser
- * la columna de 360px de la derecha. Es el `lg:` de Tailwind, y tiene que
- * coincidir con las clases del `aside`: si divergen, el panel se declara de una
- * forma y se pinta de otra.
+ * V-2 · AQUÍ VIVÍA EL `matchMedia` DEL PANEL, y se retira con el resto de MN-04.
+ *
+ * Existía para que el chat naciera abierto en escritorio y cerrado en móvil.
+ * Desde que nace plegado en los dos, no hay nada que derivar del ancho: un
+ * `useState(false)` dice lo mismo, y además no tiene que fingir nada en el SSR.
+ * El corte `lg:` sigue existiendo, pero solo en las clases del `aside` — que es
+ * donde de verdad decide si el panel se superpone o se pone al lado.
  */
-const MOVIL = "(max-width: 1023px)";
-const leerMovil = () => window.matchMedia(MOVIL).matches;
-const subMovil = (avisar: () => void) => {
-  const mql = window.matchMedia(MOVIL);
-  mql.addEventListener("change", avisar);
-  return () => mql.removeEventListener("change", avisar);
-};
+
+/**
+ * V-2 · Lo que se pregunta antes de dejar que un enlace de la cabecera saque a
+ * alguien de una clase en curso. Ver `GuardaDeSalida`.
+ */
+const AVISO_SALIDA =
+  "Si sales de esta pantalla se cierra tu conexión con la sala y tendrás que volver a entrar. ¿Salir de todos modos?";
+
+/**
+ * V-2 · La cabecera del sitio, con red debajo.
+ *
+ * ⚠️ **Sin esto, devolver el `SiteHeader` a la sala es poner una fila de
+ * botones para caerse de la clase.** Cada enlace es una navegación de Next; la
+ * sala se desmonta, su efecto de limpieza llama a `call.destroy()` y la llamada
+ * se acaba. No hay confirmación de Daily ni de nadie: pulsas «Explorar» y estás
+ * fuera.
+ *
+ * Se resuelve en captura y sobre el contenedor, no tocando `SiteHeader`: ese
+ * componente lo montan además `(app)`, `(public)` y el asistente, y meterle una
+ * prop de «pregunta antes de navegar» sería contaminar tres pantallas para
+ * arreglar una. Aquí se mira el clic antes de que llegue al ancla y, si no se
+ * confirma, no llega.
+ *
+ * Se cubren también los `submit` porque en la cabecera hay dos formularios que
+ * navegan: el buscador y el cierre de sesión.
+ *
+ * Lo que NO se intercepta, a propósito: clic con Cmd/Ctrl/Shift/Alt, botón
+ * central y `target="_blank"`. Todos abren en otra pestaña y dejan la clase
+ * donde está, así que preguntar sería ruido.
+ */
+function GuardaDeSalida({
+  activa,
+  children,
+}: {
+  activa: boolean;
+  children: React.ReactNode;
+}) {
+  const alPulsar = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!activa || e.defaultPrevented) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const ancla = (e.target as HTMLElement).closest?.("a[href]");
+    if (!ancla || (ancla as HTMLAnchorElement).target === "_blank") return;
+    if (!window.confirm(AVISO_SALIDA)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  const alEnviar = (e: React.FormEvent<HTMLDivElement>) => {
+    if (!activa || e.defaultPrevented) return;
+    if (!window.confirm(AVISO_SALIDA)) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  return (
+    /*
+     * ⚠️ ESTAS DOS CLASES SON LAS QUE HACEN QUE LA CABECERA SE VEA, y las dos
+     * salieron de mirarla en pantalla, no de leer el código:
+     *
+     * · `bg-background` — `SiteHeader` se pinta con `bg-background/90`,
+     *   translúcido a propósito para que el contenido se intuya al hacer scroll
+     *   por debajo. En el resto del sitio lo que hay detrás es blanco y no se
+     *   nota; en la sala hay #14141a, así que la cabecera salía GRIS. Esta capa
+     *   opaca es el blanco que el header da por supuesto.
+     *
+     * · `text-foreground` — el contenedor de la sala lleva
+     *   `text-[color:var(--sala-text)]`, que es #ffffff, y los iconos del header
+     *   pintan con `currentColor`. O sea: la campana, el menú de cuenta y el ☰
+     *   estaban ahí, a sus 32×32 y respondiendo al clic, en BLANCO SOBRE BLANCO.
+     *   Aquí se corta la herencia.
+     */
+    <div
+      className="shrink-0 bg-background text-foreground"
+      onClickCapture={alPulsar}
+      onSubmitCapture={alEnviar}
+    >
+      {children}
+    </div>
+  );
+}
 
 export function LiveRoom({
+  header,
   sessionId,
   bookingId,
   startAt,
@@ -192,6 +324,12 @@ export function LiveRoom({
   initialMessages,
   consent,
 }: {
+  /**
+   * V-2 · El `SiteHeader` real, ya renderizado por `page.tsx`. Llega como slot
+   * porque necesita usuario, roles y avisos —tres cosas de servidor— y este
+   * componente es de cliente. Ver la nota de la página.
+   */
+  header?: React.ReactNode;
   sessionId: string;
   bookingId: string;
   startAt: string;
@@ -239,51 +377,62 @@ export function LiveRoom({
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
   /**
-   * MN-04 · ¿el panel de chat está desplegado? Arranca ABIERTO porque es el
-   * estado que tenía la sala hasta hoy (dos columnas fijas) y porque es lo que
-   * pidió el cliente: el chat incrustado a la derecha, no escondido.
+   * ¿el panel de chat está desplegado?
    *
-   * ⚠️ El panel se MONTA siempre, abierto o no; lo que hace este estado es
+   * ⚠️ **V-2 · ARRANCA PLEGADO, SIEMPRE, y es marcha atrás sobre MN-04.** Hasta
+   * hoy nacía abierto en escritorio y cerrado en móvil, derivado de un
+   * `matchMedia` — el cliente había pedido «el chat incrustado a la derecha» y
+   * eso se leyó como «desplegado». El 24-ago pidió lo contrario: entrar a la
+   * clase es entrar al vídeo, y el chat se abre cuando hace falta. Ya no hay
+   * dos comportamientos por ancho, así que se fue con ello el `useSyncExternalStore`
+   * del viewport: un `useState(false)` dice lo mismo y no miente en el SSR.
+   *
+   * ⚠️ El panel se MONTA siempre, plegado o no; lo que hace este estado es
    * enseñarlo u ocultarlo con CSS. Desmontarlo cortaría la suscripción de
-   * Realtime del hilo, así que cerrar el chat un minuto haría perder los
+   * Realtime del hilo, así que plegar el chat un minuto haría perder los
    * mensajes de ese minuto hasta recargar. Ver el `aside` de más abajo.
-   */
-  /**
-   * ⚠️ `null` = «el usuario no ha tocado el interruptor»: entonces manda el
-   * ancho. En escritorio el panel nace ABIERTO —es lo que pidió el cliente, el
-   * chat incrustado a la derecha— y en móvil nace CERRADO, porque ahí se
-   * superpone y taparía el iframe entero: micro, cámara y botón de salir de
-   * Daily incluidos. Arrancar abierto en móvil convertiría «entrar a la sala»
-   * en «abrir el chat».
    *
-   * Derivado y no un `setState` en un efecto de montaje a propósito: eso último
-   * lo prohíbe `react-hooks/set-state-in-effect` (renders en cascada), y leer
-   * el viewport durante el render rompería la hidratación. `useSyncExternalStore`
-   * es la vía buena para un `matchMedia`: el servidor contesta `false` —o sea
-   * escritorio, que es lo que ya pintaba— y el cliente corrige en el primer
-   * render sin parpadeo de estado.
+   * Y de ahí sale el problema que arrastra: montado y escondido, el hilo daba
+   * por leído todo lo que entraba. Lo resuelve `visible` (ver `chat-thread.tsx`
+   * y `unread.ts`), que es lo que hace posible el contador de aquí abajo.
    */
-  const esMovil = useSyncExternalStore(subMovil, leerMovil, () => false);
-  const [chatManual, setChatManual] = useState<boolean | null>(null);
-  const chatAbierto = chatManual ?? !esMovil;
-  const setChatAbierto = useCallback(
-    (v: boolean | ((prev: boolean) => boolean)) =>
-      setChatManual((prev) => {
-        const actual = prev ?? !leerMovil();
-        return typeof v === "function" ? v(actual) : v;
-      }),
-    [],
-  );
+  const [chatAbierto, setChatAbierto] = useState(false);
+  /**
+   * V-2 · Mensajes que han entrado con el panel plegado. Es lo que convierte
+   * «plegado» en algo distinto de «sordo»: sin este contador, plegar el chat
+   * —que ahora es el estado por defecto— era perderse la conversación entera
+   * sin un solo aviso.
+   *
+   * Vive aquí y no en el hilo porque quien tiene que enseñarlo es el marco: el
+   * botón de la barra de arriba y el de la barra de Daily, los dos fuera del
+   * componente de chat.
+   */
+  const [sinLeer, setSinLeer] = useState(0);
+  /**
+   * Abrir o plegar, poniendo el contador a cero en los dos sentidos. Al abrir
+   * es evidente; al plegar también es correcto: venías de tenerlo delante, así
+   * que lo que hubiera ya lo has visto.
+   */
+  const alternarChat = useCallback(() => {
+    setChatAbierto((v) => !v);
+    setSinLeer(0);
+  }, []);
+  const plegarChat = useCallback(() => {
+    setChatAbierto(false);
+    setSinLeer(0);
+  }, []);
   const frameRef = useRef<HTMLDivElement>(null);
   // Para devolver el foco al cerrar el panel desde su aspa: si no, el
   // `display:none` del `aside` deja el foco huérfano y el navegador lo manda
   // al `body`, o sea a tabular desde el principio.
   const toggleChatRef = useRef<HTMLButtonElement>(null);
   const callRef = useRef<DailyCall | null>(null);
-  // Espejo de `chatAbierto` para el efecto que crea el iframe: ese efecto NO
-  // puede depender del estado del chat (recrearía la llamada entera al abrir el
-  // panel), pero sí necesita saber en qué estado nace el botón de la barra.
-  const chatAbiertoRef = useRef(true);
+  // Espejo de `chatAbierto` y de `sinLeer` para el efecto que crea el iframe:
+  // ese efecto NO puede depender del estado del chat (recrearía la llamada
+  // entera al abrir el panel), pero sí necesita saber en qué estado nace el
+  // botón de la barra. `false` de arranque desde V-2: el panel nace plegado.
+  const chatAbiertoRef = useRef(false);
+  const sinLeerRef = useRef(0);
   // MN-05 · cuándo se pidió entrada. Solo se usa para saber si fue ANTES de que
   // la mentoría empezara; ver el efecto de re-autorización más abajo.
   const joinedAt = useRef<number | null>(null);
@@ -322,6 +471,7 @@ export function LiveRoom({
   // botón cuando ya existe. Sin setState: no hay render en cascada.
   useEffect(() => {
     chatAbiertoRef.current = chatAbierto;
+    sinLeerRef.current = sinLeer;
     // ⚠️ `updateCustomTrayButtons()` NO es tolerante: en daily-js 0.91 empieza
     // por un guardia de estado y **lanza** `"only supported after join"` si la
     // llamada aún no está en `joined-meeting`. Y la ventana existe de verdad:
@@ -332,9 +482,9 @@ export function LiveRoom({
     // `joined-meeting` repinta el botón en cuanto se puede.
     const call = callRef.current;
     if (call && call.meetingState() === "joined-meeting") {
-      call.updateCustomTrayButtons(botonesTray(chatAbierto));
+      call.updateCustomTrayButtons(botonesTray(chatAbierto, sinLeer));
     }
-  }, [chatAbierto]);
+  }, [chatAbierto, sinLeer]);
 
 
   // ⚠️ MN-04 · AQUÍ VIVÍA EL "MODO TEATRO", y se retira a propósito.
@@ -420,7 +570,7 @@ export function LiveRoom({
         // MN-04 · nuestro botón de chat, en SU barra. Nace en el estado que
         // tenga el panel ahora mismo: el efecto de arriba puede haber corrido
         // antes de que terminara el `import()` dinámico.
-        customTrayButtons: botonesTray(chatAbiertoRef.current),
+        customTrayButtons: botonesTray(chatAbiertoRef.current, sinLeerRef.current),
         // El contenedor es `relative` y el iframe se ancla a sus cuatro lados:
         // con `height: 100%` a secas, un contenedor que saca su alto del flex
         // deja el iframe en 0 en algunos navegadores.
@@ -447,14 +597,16 @@ export function LiveRoom({
       // del objeto que se le pasó en `customTrayButtons`.
       call.on("custom-button-click", (e) => {
         if (e.button_id !== "chat") return;
-        setChatAbierto((v) => !v);
+        alternarChat();
       });
       // Y aquí se salda la deuda del efecto de arriba: mientras la llamada no
       // estaba unida, `updateCustomTrayButtons()` no se podía llamar (lanza).
       // El espejo guardó el estado real del panel; al unirse se repinta el
       // botón para que no salga apagado con el chat abierto, o al revés.
       call.on("joined-meeting", () => {
-        call.updateCustomTrayButtons(botonesTray(chatAbiertoRef.current));
+        call.updateCustomTrayButtons(
+          botonesTray(chatAbiertoRef.current, sinLeerRef.current),
+        );
       });
 
       try {
@@ -472,7 +624,7 @@ export function LiveRoom({
         callRef.current = null;
       }
     };
-  }, [live, joined, router, setChatAbierto]);
+  }, [live, joined, router, alternarChat]);
 
   async function join() {
     setBusy(true);
@@ -575,22 +727,32 @@ export function LiveRoom({
         style={VARS_SALA}
         className="flex h-svh w-full flex-col overflow-hidden bg-[color:var(--sala-bg)] text-[color:var(--sala-text)]"
       >
+        {/* V-2 · La cabecera de marca, activa y con red debajo. Ver
+            `GuardaDeSalida`: sin ella cada enlace de aquí arriba es una forma
+            silenciosa de caerse de la clase. */}
+        <GuardaDeSalida activa>{header}</GuardaDeSalida>
+
         {/* Barra de sesión (LV01): qué clase es, con qué número y cuánto lleva.
             El número va aquí y no escondido en un menú porque el caso de uso es
             "estoy en la clase y llamo a soporte": tiene que poder leerse sin
             salir de aquí.
 
-            ⚠️ Es lo ÚNICO nuestro que queda por fuera del iframe además del
-            chat: el cliente pidió que "toda la pantalla sea de Daily", y esta
-            franja de ~52px es el precio de no perder el N.º de sesión ni el
-            botón de completar. Micro, cámara, compartir pantalla, dispositivos
-            y "salir" son de Daily y viven en SU barra, abajo. */}
-        <header className="flex shrink-0 items-center gap-4 border-b border-[color:var(--sala-border)] px-3 py-2 sm:px-4">
+            ⚠️ V-2 · EN BLANCO, no en el oscuro de la sala. Era oscura desde
+            MN-04, cuando esta franja era lo único que había por encima del
+            vídeo y se quería que no se notara. Con la cabecera de marca justo
+            arriba, dos barras oscuras encadenadas separaban el logo del vídeo
+            con una zanja negra; el cliente pidió esta en blanco y así engancha
+            con la cabecera y hace de borde superior del área de Daily.
+
+            Micro, cámara, compartir pantalla, dispositivos y "salir" siguen
+            siendo de Daily y viven en SU barra, abajo. */}
+        <header className="flex shrink-0 items-center gap-4 border-b bg-background px-3 py-2 text-foreground sm:px-4">
           <div className="flex min-w-0 flex-col">
             <h1 className="truncate text-sm font-bold">{productTitle}</h1>
-            {/* El rótulo hereda `text-muted-foreground`, que sobre #14141a no se
-                lee. `cn` deja que la clase de aquí gane. */}
-            <SessionRef nro={sessionRef} className="text-[color:var(--sala-supportive)]" />
+            {/* V-2 · vuelve a su `text-muted-foreground` de siempre: llevaba
+                el gris claro de la sala porque el fondo era #14141a, y ahora es
+                blanco. Sobre blanco, ese gris no se lee. */}
+            <SessionRef nro={sessionRef} />
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-3">
@@ -606,22 +768,42 @@ export function LiveRoom({
               que un botón inyectado en un iframe ajeno no puede.
             */}
             {/*
-              ⚠️ `<button>` plano y NO el componente `Button`: su variante
-              `ghost` trae su propio color de texto y gana al nuestro por
-              `tailwind-merge`, así que el rótulo salía en #14141a —el mismo
-              #14141a del fondo— y el botón quedaba invisible aunque medía sus
-              104×28 y respondía al clic. Es el mismo idioma que ya usa el aspa
-              del panel unas líneas más abajo.
+              `<button>` plano y no el componente `Button`: aquí lleva un punto
+              de aviso posicionado y dos atributos ARIA propios, y para eso una
+              etiqueta suelta es más honesta que pelearse con las variantes.
+
+              ⚠️ V-2 · CON PUNTO DE AVISO, y es la mitad de la petición. Plegar
+              el chat por defecto sin esto es dejar sordo al usuario: los
+              mensajes entran, el hilo los recibe —sigue montado— y nadie se
+              entera. El punto sale de `sinLeer`, que solo se mueve cuando el
+              panel está plegado (ver `visible` en `chat-thread.tsx`).
             */}
             <button
               ref={toggleChatRef}
               type="button"
               aria-expanded={chatAbierto}
               aria-controls="panel-chat-sala"
-              onClick={() => setChatAbierto((v) => !v)}
-              className="rounded-md border border-[color:var(--sala-border)] px-2.5 py-1 text-xs text-[color:var(--sala-text)] hover:bg-[color:var(--sala-surface)]"
+              onClick={alternarChat}
+              className="relative rounded-md border px-2.5 py-1 text-xs hover:bg-muted"
             >
               {chatAbierto ? "Ocultar chat" : "Mostrar chat"}
+              {sinLeer > 0 ? (
+                <span
+                  // `aria-hidden` en el punto y el número en texto para el
+                  // lector: un círculo naranja no se puede leer en voz alta.
+                  aria-hidden
+                  className="absolute -top-1.5 -right-1.5 flex min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] leading-4 font-bold text-white"
+                >
+                  {sinLeer > 9 ? "9+" : sinLeer}
+                </span>
+              ) : null}
+              {sinLeer > 0 ? (
+                <span className="sr-only">
+                  {" "}
+                  ({sinLeer === 1 ? "1 mensaje" : `${sinLeer} mensajes`} sin
+                  leer)
+                </span>
+              ) : null}
             </button>
 
             <div className="text-right">
@@ -634,7 +816,7 @@ export function LiveRoom({
               {/* Antes vivía en la barra inferior nuestra, que ya no existe:
                   abajo manda Daily. Aquí abajo del cronómetro dice lo mismo. */}
               <p
-                className="text-[11px] text-[color:var(--sala-supportive)]"
+                className="text-[11px] text-muted-foreground"
                 suppressHydrationWarning
               >
                 Termina en {human(new Date(joined.endsAt).getTime() - now)}
@@ -727,9 +909,9 @@ export function LiveRoom({
                   size="sm"
                   variant={chatAbierto ? "default" : "outline"}
                   aria-pressed={chatAbierto}
-                  onClick={() => setChatAbierto((v) => !v)}
+                  onClick={alternarChat}
                 >
-                  Chat
+                  {sinLeer > 0 ? `Chat (${sinLeer > 9 ? "9+" : sinLeer})` : "Chat"}
                 </Button>
                 <Button size="sm" variant="destructive" onClick={() => setJoined(null)}>
                   Salir
@@ -775,7 +957,7 @@ export function LiveRoom({
                 <button
                   type="button"
                   onClick={() => {
-                    setChatAbierto(false);
+                    plegarChat();
                     // El `aside` pasa a `display:none` con el foco DENTRO: sin
                     // esto el navegador lo devuelve al `body` y quien navega con
                     // teclado tiene que tabular desde el principio de la página.
@@ -789,19 +971,29 @@ export function LiveRoom({
               </div>
             </div>
             {/*
-              El hilo es un componente del sistema claro (burbujas, composer,
-              botones) y aquí vive sobre fondo oscuro. Se le da su propia
-              superficie clara en vez de repintarlo: es el MISMO componente de
-              `/chat/[id]`, de la bandeja y de las dos pantallas de reserva, y
-              tocarle los colores por la sala se los cambiaría a las cinco.
+              V-2 · El hilo, en el gris de Daily. Antes esto era una isla BLANCA
+              (`bg-background` con los tokens claros de siempre) pegada al vídeo
+              — el recuadro del que se quejó el cliente. Ahora `VARS_CHAT_SALA`
+              redefine los tokens para este subárbol y el mismo componente se
+              pinta oscuro aquí y claro en las otras cuatro pantallas, sin tocar
+              una línea suya. Ver la nota de la constante.
             */}
-            <div className="min-h-0 flex-1 bg-background p-3 text-foreground">
+            <div
+              style={VARS_CHAT_SALA}
+              className="min-h-0 flex-1 bg-background p-3 text-foreground"
+            >
               <ChatThread
                 fill
                 bookingId={bookingId}
                 currentUserId={currentUserId}
                 firstSessionAt={firstSessionAt}
                 initialMessages={initialMessages}
+                // V-2 · las dos props que hacen que plegar el chat no sea
+                // quedarse sordo: con el panel plegado el hilo sigue montado
+                // (para no perder su Realtime) pero deja de marcar leído y
+                // avisa aquí, que es quien pinta el contador.
+                visible={chatAbierto}
+                onIncoming={() => setSinLeer((n) => n + 1)}
               />
             </div>
           </aside>
@@ -813,30 +1005,15 @@ export function LiveRoom({
   // ── Estados previos / posteriores ─────────────────────────────────────────
   return (
     <div className="flex flex-1 flex-col">
-      {/* MN-04 · Barra mínima. La sala ya no cuelga de `(app)`, así que la
-          cabecera del sitio no está: sin esto, quien llega diez minutos antes
-          se queda en una pantalla sin marca y sin salida. En vivo NO se pinta —
-          allí manda Daily y el marco es el mínimo imprescindible. */}
-      <div className="border-b bg-card">
-        <div className="mx-auto flex w-full max-w-[1120px] items-center justify-between gap-4 px-4 py-3.5 sm:px-6">
-          <Link href={isTutor ? "/tutor" : "/app"} aria-label="Ir a mi panel">
-            <Image
-              src="/img/logo-ya.svg"
-              alt="Enséñame Ya"
-              width={38}
-              height={40}
-              className="h-10 w-auto"
-              priority
-            />
-          </Link>
-          <Link
-            href={isTutor ? "/tutor/reservas" : "/reservas"}
-            className="text-sm text-muted-foreground underline-offset-2 hover:underline"
-          >
-            Volver a mis reservas
-          </Link>
-        </div>
-      </div>
+      {/* V-2 · AQUÍ VIVÍA UNA BARRA MÍNIMA hecha a mano —logo y «Volver a mis
+          reservas»— porque la sala dejó de colgar de `(app)` con MN-04 y se
+          quedó sin cabecera. Ya no hace falta imitarla: la de verdad llega por
+          `header`. Sin guarda en esta rama, y a propósito: aquí no hay llamada
+          viva de la que caerse.
+
+          El enlace directo a las reservas no se pierde — baja al cuerpo, donde
+          se ve en los cuatro estados y no solo en dos. */}
+      {header}
 
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center">
         <div className="flex flex-col items-center gap-1">
@@ -845,6 +1022,12 @@ export function LiveRoom({
           {/* También antes de entrar y después de salir: la consulta a soporte
               suele ser justo cuando la sala NO deja pasar. */}
           <SessionRef nro={sessionRef} />
+          <Link
+            href={isTutor ? "/tutor/reservas" : "/reservas"}
+            className="mt-1 text-sm text-muted-foreground underline-offset-2 hover:underline"
+          >
+            Volver a mis reservas
+          </Link>
         </div>
 
         {now === null ? (

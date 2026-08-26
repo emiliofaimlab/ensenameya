@@ -126,6 +126,8 @@ export function ChatThread({
   canChat,
   reservarHref,
   blocked,
+  visible = true,
+  onIncoming,
 }: {
   /** El hilo. Lo pasan las pantallas nuevas (bandeja, `/chat/[id]`). */
   conversationId?: string;
@@ -165,6 +167,22 @@ export function ChatThread({
   reservarHref?: string;
   /** Bloqueada por moderación: se lee, no se escribe. */
   blocked?: boolean;
+  /**
+   * V-2 · ¿el hilo se está VIENDO ahora mismo? Solo lo pasa la sala, que monta
+   * el chat siempre y lo esconde con `display:none` al plegar el panel — sin
+   * esto, «montado» y «delante» son lo mismo y todo lo que entra con el panel
+   * plegado se marca como leído sin que nadie lo lea.
+   *
+   * Las otras cuatro pantallas no lo pasan porque allí montar el hilo ES
+   * enseñarlo, y `true` por defecto conserva su comportamiento exacto.
+   */
+  visible?: boolean;
+  /**
+   * V-2 · Aviso de mensaje ajeno que llega **con el hilo escondido**. Es lo que
+   * permite a la sala encender su insignia; con `visible` en `true` no se llama
+   * nunca, porque entonces el mensaje se está viendo.
+   */
+  onIncoming?: () => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
@@ -179,7 +197,8 @@ export function ChatThread({
   // leído, así que todo lo de abajo espera.
   const conversationId = conversationIdProp ?? resuelta;
 
-  const bottomRef = useRef<HTMLDivElement>(null);
+  /** La caja con scroll del hilo. Ver el autoscroll, más abajo. */
+  const listaRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Con reserva se manda por `send_message` (etiqueta el mensaje, permite
@@ -206,8 +225,23 @@ export function ChatThread({
   const soloLectura = canChat === false;
 
   // N-23 · tener el hilo delante ES leerlo: se marca al abrirlo y, mientras
-  // siga montado, la burbuja no cuenta como pendiente lo que entra aquí.
-  useOpenThread(conversationId);
+  // siga DELANTE, la burbuja no cuenta como pendiente lo que entra aquí.
+  //
+  // V-2 · "delante" y "montado" dejaron de ser lo mismo el día que la sala pasó
+  // a arrancar con el chat plegado: allí el hilo vive escondido para no cerrar
+  // su Realtime. Ver la nota de `visible`.
+  useOpenThread(conversationId, visible);
+
+  // El aviso se recrea en cada render del padre; en un ref para que el canal de
+  // Realtime no se caiga y se levante por eso. Mismo motivo —y misma forma— que
+  // `onMessageRef` en `useChatUnreadWatcher`: la copia va en un efecto porque
+  // escribir en un ref durante el render está prohibido.
+  const visibleRef = useRef(visible);
+  const onIncomingRef = useRef(onIncoming);
+  useEffect(() => {
+    visibleRef.current = visible;
+    onIncomingRef.current = onIncoming;
+  }, [visible, onIncoming]);
 
   // ── Resolver la conversación desde la reserva (pantallas viejas) ───────────
   useEffect(() => {
@@ -293,11 +327,17 @@ export function ChatThread({
                 ? prev
                 : [...prev, toChatMessage(m)],
             );
-            // N-23 · lo que llega con el hilo abierto se lee al llegar. Sin
+            // N-23 · lo que llega con el hilo DELANTE se lee al llegar. Sin
             // esto la marca se quedaría en el momento de abrir y esos mensajes
             // volverían a contarse como pendientes en la siguiente visita.
+            //
+            // V-2 · y lo que llega con el hilo escondido, no. Ahí se avisa al
+            // padre para que encienda su insignia: es la sala con el panel
+            // plegado, donde el hilo sigue montado precisamente para no perder
+            // estos mensajes.
             if (m.sender_id !== currentUserId) {
-              void markConversationRead(conversationId);
+              if (visibleRef.current) void markConversationRead(conversationId);
+              else onIncomingRef.current?.();
             }
           },
         )
@@ -313,10 +353,39 @@ export function ChatThread({
     // rehaga el canal.
   }, [conversationId, currentUserId]);
 
-  // Autoscroll al último mensaje.
+  /**
+   * V-2 · Autoscroll al último mensaje. Tres cosas, y las tres salieron de que
+   * el hilo abría en el mensaje MÁS VIEJO.
+   *
+   * ⚠️ 1 · SE MUEVE LA CAJA, NO SE «TRAE» UN NODO. Antes era un
+   * `scrollIntoView()` sobre un centinela al final, y eso desplaza TODOS los
+   * ancestros con scroll — incluida la página. En la sala daba igual (no hay
+   * scroll de página), pero en `/reservas/[id]` y en la bandeja el hilo vive a
+   * media pantalla: la pantalla cargaba ya desplazada hasta el chat, saltándose
+   * la mitad de la ficha. Tocando `scrollTop` de su propia caja, el hilo se
+   * coloca solo y la página se queda donde el usuario la dejó.
+   *
+   * ⚠️ 2 · LA PRIMERA VEZ, INSTANTÁNEA. Con `smooth` desde el montaje el hilo
+   * arranca arriba y se desliza; en un hilo largo son varios segundos leyendo lo
+   * de hace un mes, y si el navegador respeta «reducir movimiento» el
+   * deslizamiento no ocurre y te quedas arriba del todo. A partir de ahí sí se
+   * desliza, que es donde el movimiento informa: te enseña que ha llegado algo.
+   *
+   * ⚠️ 3 · ESCONDIDO NO SE HACE NADA. Una caja en `display:none` no tiene
+   * scroll que mover: la llamada no falla, simplemente no hace nada, y el panel
+   * de la sala volvía a abrirse en el mensaje más viejo por otro motivo.
+   * `visible` está en las dependencias para recolocarlo al desplegar.
+   */
+  const yaColocado = useRef(false);
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const caja = listaRef.current;
+    if (!visible || !caja) return;
+    caja.scrollTo({
+      top: caja.scrollHeight,
+      behavior: yaColocado.current ? "smooth" : "auto",
+    });
+    yaColocado.current = true;
+  }, [messages, visible]);
 
   /** Append con dedup por id: Realtime hace eco del propio INSERT. */
   function append(m: ChatMessage) {
@@ -415,6 +484,7 @@ export function ChatThread({
       ) : null}
 
       <div
+        ref={listaRef}
         className={cn(
           "flex flex-col gap-2 overflow-y-auto rounded-lg border p-4",
           fill ? "min-h-0 flex-1" : "max-h-[60vh] min-h-64",
@@ -468,7 +538,6 @@ export function ChatThread({
             );
           })
         )}
-        <div ref={bottomRef} />
       </div>
 
       {blocked ? (
