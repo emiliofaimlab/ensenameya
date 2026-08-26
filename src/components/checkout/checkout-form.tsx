@@ -490,8 +490,37 @@ export function CheckoutForm({
             : `1 DE ${tarjetas.length} · ELIGES AL PAGAR`
           : "TITULAR";
 
+  /*
+   * ⚠️⚠️ B3.6 · «QUITAR LA TARJETA ILUSTRADA Y AGRANDAR EL RESUMEN» —
+   * ESTÁ HECHA A MEDIAS, Y LA MITAD QUE FALTA ES A PROPÓSITO.
+   *
+   * Lo que se ha hecho: agrandar el resumen (columna de 400 px y tipografía
+   * mayor abajo). Lo que NO se ha hecho: borrar la tarjeta ilustrada.
+   *
+   * Porque borrarla contradice una decisión del cliente de HACE SEIS DÍAS. El
+   * 20-ago se le preguntó por escrito si quería que la tarjeta reaccionara
+   * mientras se teclea, y contestó que sí — es la D-1 de `docs/20-PLAN-MINUTA-17AGO.md`
+   * §20.14: «La tarjeta reacciona (se ilumina al escribir, se marca completa al
+   * terminar) y se rellena de verdad solo con tarjetas guardadas». Se
+   * implementó ese mismo día en `ab0705b`, y la revisión posterior aún le dio
+   * otra vuelta (el rótulo «TARJETA NUEVA» nació de ahí).
+   *
+   * Así que hay dos peticiones suyas, con seis días de diferencia, que dicen lo
+   * contrario. Eso lo desempata él, no este fichero: quien borre la tarjeta
+   * ahora está tirando trabajo que él pidió y pagó, y quien la deje está
+   * ignorando lo último que dijo. La pregunta que hay que hacerle está en el
+   * reporte de EY-181.
+   *
+   * 🧭 Y un dato que probablemente explique la petición nueva, porque lo
+   * avisamos nosotros: el Doc 22 §22.2 (punto B4, 24-ago) ya dejó escrito que
+   * «la tarjeta ilustrada **está vacía en toda primera compra**
+   * (“SIN TARJETA GUARDADA”): agrandarla y subirla empeora la pantalla justo
+   * para el grueso de los alumnos». Si B3.6 es la respuesta a ese aviso, es una
+   * decisión nueva e informada y entonces sí se borra — pero conviene
+   * confirmarlo antes, no deducirlo.
+   */
   return (
-    <div className="grid items-start gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+    <div className="grid items-start gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
       {/* Columna izquierda del Figma: tarjeta ilustrada + resumen. */}
       <div className="flex flex-col gap-5">
         {/* Wallet: la de delante es la que se va a usar; las demás asoman
@@ -600,13 +629,32 @@ export function CheckoutForm({
           ) : null}
         </div>
 
-        <PanelCard>
-          <PanelCardTitle className="text-[15px]">
+        {/*
+          B3.6 · el resumen, agrandado. No es «más letra por gusto»: con
+          `ui_mode:'form'` Stripe pinta SOLO los campos de pago (MN-01), así que
+          esta tarjeta es **lo único** que dice qué se está comprando. Estaba
+          escrita a 12-13 px, más pequeña que el propio formulario de al lado,
+          que es al revés de lo que importa.
+
+          Sube en tres sitios y ninguno es cosmético: el título de la mentoría
+          (que es el QUÉ), la lista de horarios (que es el CUÁNDO, y es el dato
+          que el alumno vuelve a mirar antes de pagar) y el total. La política
+          de cancelación y el «con Fulanito» se quedan como estaban: son
+          contexto, y subirlos todos a la vez es no subir ninguno.
+
+          El aire de la tarjeta pasa a 24 px en pantallas ≥ 640 (`sm:p-6`); por
+          debajo se queda en los 20 de `PanelCard`, que en un móvil ya son los
+          que hacen falta.
+        */}
+        <PanelCard className="sm:p-6">
+          <PanelCardTitle className="text-[17px]">
             Resumen del pedido
           </PanelCardTitle>
-          <div className="mt-3.5">
-            <p className="text-sm font-medium text-[#19191f]">{productTitle}</p>
-            <p className="text-xs text-[#6b6b6b]">
+          <div className="mt-4">
+            <p className="text-base font-semibold text-balance text-[#19191f]">
+              {productTitle}
+            </p>
+            <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
               con {tutorName} · {packageLabel}
               {incluye ? ` · ${incluye}` : ""}
             </p>
@@ -618,7 +666,7 @@ export function CheckoutForm({
               (MN-01, «solo los inputs de la tarjeta») y una ficha entera sería
               deshacerlo. */}
           {tutor ? (
-            <div className="mt-3.5 border-t border-[#e0e0e0] pt-3.5">
+            <div className="mt-4 border-t border-[#e0e0e0] pt-4">
               <TutorSummary tutor={tutor} variant="inline" />
             </div>
           ) : null}
@@ -629,7 +677,7 @@ export function CheckoutForm({
               del perfil. Es el mismo helper que la pantalla hermana: la lógica
               de zona horaria vive en UN sitio a propósito — duplicarla es como
               se rompió la última vez. */}
-          <ul className="mt-3.5 flex flex-col gap-1.5 border-t border-[#e0e0e0] pt-3.5 text-xs text-[#6b6b6b]">
+          <ul className="mt-4 flex flex-col gap-2 border-t border-[#e0e0e0] pt-4 text-[13px] text-[#333333]">
             {slots.map((iso) => {
               const fin = horaFin(iso, durationMin, timeZone);
               return (
@@ -641,20 +689,20 @@ export function CheckoutForm({
             })}
           </ul>
 
-          <div className="mt-3.5 flex items-center justify-between border-t border-[#e0e0e0] pt-3.5 text-[13px]">
+          <div className="mt-4 flex items-center justify-between border-t border-[#e0e0e0] pt-4 text-sm">
             <span className="text-[#6b6b6b]">Subtotal</span>
             <span className="text-[#333333]">{formatMoney(total, currency)}</span>
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <span className="font-semibold text-[#19191f]">Total</span>
-            <span className="text-lg font-bold text-brand">
+          <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <span className="text-base font-semibold text-[#19191f]">Total</span>
+            <span className="text-[26px] leading-none font-bold text-brand">
               {formatMoney(total, currency)}
             </span>
           </div>
           {/* Solo en paquetes: en una sesión suelta el precio por sesión ES el
               total y repetirlo sería ruido. */}
           {precioPorSesion ? (
-            <p className="mt-1 text-right text-[11px] text-[#6b6b6b]">
+            <p className="mt-1.5 text-right text-xs text-[#6b6b6b]">
               {precioPorSesion}
             </p>
           ) : null}
@@ -681,7 +729,7 @@ export function CheckoutForm({
               contando media política. */}
           <PaymentPolicy
             aceptaSola={aceptaSola}
-            className="mt-3.5 border-t border-[#e0e0e0] pt-3.5"
+            className="mt-4 border-t border-[#e0e0e0] pt-4"
           />
         </PanelCard>
       </div>

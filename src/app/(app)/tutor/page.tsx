@@ -16,6 +16,7 @@ import { studentsOfTutor } from "./students";
 import { StudentLink } from "./student-link";
 import { formatPct, tutorTier } from "./tier";
 import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
+import { SupportCard } from "@/components/support/support-card";
 import {
   PanelCard,
   PanelShell,
@@ -407,6 +408,14 @@ export default async function TutorHomePage() {
               ))}
             </ul>
           </PanelCard>
+
+          {/* SUP-01 · soporte, debajo de los accesos rápidos y como TARJETA con
+              botón, no como una fila más de la lista de arriba. La lista son
+              atajos a pantallas suyas —sus mentorías, sus payouts— y soporte no
+              es eso: es la salida de cuando algo se ha roto. Mezclarlas la
+              esconde justo el día que hace falta. Es la misma tarjeta que ve el
+              alumno: un solo componente, un solo buzón. */}
+          <SupportCard />
         </div>
       </div>
     </PanelShell>

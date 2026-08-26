@@ -218,8 +218,26 @@ export async function BookingPanel({
     { month: "long", year: "numeric", timeZone: "UTC" },
   );
 
+  /*
+   * B3.5 · `lg:max-h` + `lg:overflow-y-auto` NO son decoración: sin ellos el
+   * CTA es INALCANZABLE en escritorio bajo.
+   *
+   * El panel es `sticky top-24`, así que se queda clavado a 96 px del borde
+   * superior. Cuando su contenido mide más que el hueco que queda —y mide más
+   * en cuanto hay selector de mentoría, seis filas de calendario y dos filas de
+   * horas: ~780 px contra los ~700 de un portátil de 13"— la parte de abajo cae
+   * fuera de la ventana Y NO HAY FORMA DE LLEGAR A ELLA: el panel no baja con
+   * la página, que es justo lo que hace `sticky`. Con altura máxima y scroll
+   * propio, el panel se desplaza por dentro y el CTA vive pegado a su borde
+   * inferior (ver la barra del final).
+   *
+   * ⚠️ El `8rem` deja el borde inferior a 40 px del suelo de la ventana: el
+   * botón queda por dentro de ese borde y NO se cruza con la burbuja de chat
+   * (`chat-bubble.tsx`, `fixed right-5 bottom-5`), que en escritorio cae fuera
+   * del panel. En móvil sí se cruzan, y eso se resuelve en la propia barra.
+   */
   return (
-    <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
+    <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
       {/* R29-01: arriba del calendario va el TÍTULO de la clase; el precio baja
           junto al CTA. Sigue valiendo R24-14 (nada de importe fijo por delante):
           sin clase elegida no hay precio en ninguna de las dos posiciones.
@@ -487,25 +505,59 @@ export async function BookingPanel({
         arreglando. Quien tenga guardado un `/reservar/<id>` sin hora sigue
         entrando por ahí sin problema; esa puerta no se cierra.
       */}
-      {chosen && hora ? (
-        <Button asChild className="mt-4 h-[51px] w-full text-[15px]">
-          <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
-        </Button>
-      ) : (
-        <Button
-          disabled
-          className="mt-5 h-[51px] w-full text-[15px]"
-          title={
-            !chosen
-              ? "Elige primero una sesión"
-              : allDays.length === 0
-                ? "Esta mentoría todavía no tiene horarios publicados"
-                : "Elige primero una hora en el calendario"
-          }
-        >
-          {ctaLabel}
-        </Button>
-      )}
+      {/*
+        B3.5 · LA BARRA. El botón se queda a la vista en TODOS los pasos —día,
+        mentoría y hora—, sin inventarse un CTA por paso.
+
+        El problema era medible y de móvil: el panel es lo último de la página,
+        cada chip navega y aterriza en `#reservar` (el ancla de B2, que existe
+        para que la pulsación no devuelva la vista al principio de la ficha), y
+        desde ahí el botón cae a ~700 px del borde superior. En un teléfono eso
+        es bajo el pliegue en los tres pasos: se elige el día, se elige la hora,
+        y la pantalla nunca enseña a dónde lleva eso. Con `sticky bottom-0` el
+        botón se despega y queda clavado abajo mientras el panel esté a la
+        vista, y vuelve a su sitio al llegar al final.
+
+        ⚠️ Lo que NO se ha hecho, a propósito: un CTA distinto por paso. Eso
+        reabre §20.14 —«la queja no era el número de pasos, era no saber en cuál
+        estabas»—, que ya se respondió con TEXTO (la línea de «Elige tu hora y
+        confirma abajo»). Aquí solo se cambia DÓNDE se ve el mismo botón, que
+        sigue bloqueado hasta que hay hora.
+
+        ⚠️ Y el hueco de la derecha en móvil (`max-lg:pe-[72px]`) no es un
+        descuido de maquetación: la burbuja de chat es `fixed right-5 bottom-5`
+        con `z-50` (`chat-bubble.tsx`), o sea que se pinta ENCIMA de esta barra
+        y se come los últimos ~36 px del botón. Sin ese hueco, tocar el final de
+        «Reservar mentoría YA» abre el chat en vez de ir al pago. Se aparta el
+        botón y no se sube la burbuja porque la burbuja es de todas las
+        pantallas y esta barra es de una.
+
+        El `-mx-6` la lleva de borde a borde del panel: así el contenido pasa
+        por DEBAJO y no se lee a medias detrás del botón. Y el margen superior
+        vive aquí y no en cada botón — antes las dos ramas usaban `mt-4` y
+        `mt-5`, y el panel daba un salto de 4 px al elegir la hora.
+      */}
+      <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 max-lg:pe-[72px]">
+        {chosen && hora ? (
+          <Button asChild className="h-[51px] w-full text-[15px]">
+            <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
+          </Button>
+        ) : (
+          <Button
+            disabled
+            className="h-[51px] w-full text-[15px]"
+            title={
+              !chosen
+                ? "Elige primero una sesión"
+                : allDays.length === 0
+                  ? "Esta mentoría todavía no tiene horarios publicados"
+                  : "Elige primero una hora en el calendario"
+            }
+          >
+            {ctaLabel}
+          </Button>
+        )}
+      </div>
 
       {footer}
 
