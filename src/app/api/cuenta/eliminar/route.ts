@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { asRpc, type AnonymizeResult, type DeletionBlockers } from "./rpc";
+import type { AnonymizeResult, DeletionBlockers } from "./rpc";
 
 /**
  * EY-192 · B5.9 — baja de cuenta con anonimización.
@@ -48,7 +48,7 @@ export async function GET() {
   const ctx = await quienLlama();
   if (!ctx) return noAutenticado();
 
-  const { data, error } = await asRpc(ctx.admin).rpc("account_deletion_blockers", {
+  const { data, error } = await ctx.admin.rpc("account_deletion_blockers", {
     p_user_id: ctx.user.id,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
   // Se consultan aquí, aunque `anonymize_account` los vuelva a comprobar por
   // dentro, para poder contestar 409 con el motivo en vez de un 500 con el
   // texto de una excepción de Postgres.
-  const { data: bloqueos, error: errBloqueos } = await asRpc(ctx.admin).rpc(
+  const { data: bloqueos, error: errBloqueos } = await ctx.admin.rpc(
     "account_deletion_blockers",
     { p_user_id: ctx.user.id },
   );
@@ -102,7 +102,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { data, error } = await asRpc(ctx.admin).rpc("anonymize_account", {
+  const { data, error } = await ctx.admin.rpc("anonymize_account", {
     p_user_id: ctx.user.id,
   });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

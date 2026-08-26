@@ -39,6 +39,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletions: {
+        Row: {
+          deleted_at: string
+          roles: string[]
+          summary: Json
+          user_id: string
+        }
+        Insert: {
+          deleted_at?: string
+          roles?: string[]
+          summary?: Json
+          user_id: string
+        }
+        Update: {
+          deleted_at?: string
+          roles?: string[]
+          summary?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_deletions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alert_acks: {
         Row: {
           acked_at: string
@@ -1741,6 +1770,7 @@ export type Database = {
       }
     }
     Functions: {
+      account_deletion_blockers: { Args: { p_user_id: string }; Returns: Json }
       admin_bookings_by_category: {
         Args: { p_from?: string; p_to?: string }
         Returns: Json
@@ -1781,6 +1811,7 @@ export type Database = {
         }[]
       }
       admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
+      anonymize_account: { Args: { p_user_id: string }; Returns: Json }
       assign_tutor_tier: {
         Args: { p_tier_id: string; p_tutor_id: string }
         Returns: string
