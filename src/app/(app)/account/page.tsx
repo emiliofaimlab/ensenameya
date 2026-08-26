@@ -4,6 +4,8 @@ import { panelItems } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { ReferralCard } from "@/components/referral/referral-card";
+import { CalendarFeedCard } from "@/components/calendar/calendar-feed-card";
+import { asCalendarRpc } from "@/lib/calendar/rpc";
 import { AccountForm } from "./account-form";
 
 export const metadata = { title: "Mi cuenta · Enséñame Ya" };
@@ -26,6 +28,13 @@ export default async function AccountPage() {
 
   const avatarUrl = storageUrl("avatars", profile?.avatar_path);
 
+  // EY-188 · ¿ya hay suscripción de calendario? Se LEE, no se crea: si esta
+  // llamada emitiera el token, todo el que abre su cuenta acabaría con un
+  // secreto vivo que nunca pidió. Crearlo es un clic explícito de la tarjeta.
+  const { data: feedToken } = await asCalendarRpc(supabase).rpc(
+    "my_calendar_feed_token",
+  );
+
   // El menú lateral es el del panel del rol (undefined = alumno por defecto).
   // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
   const items = await panelItems(user.id, roles);
@@ -44,6 +53,12 @@ export default async function AccountPage() {
         timezone={profile?.timezone ?? "UTC"}
         avatarUrl={avatarUrl}
         isTutor={roles.includes("tutor")}
+      />
+
+      {/* EY-188 (B5.5) · la misma tarjeta para alumno y tutor: el feed devuelve
+          las sesiones en las que participas, sin mirar el rol. */}
+      <CalendarFeedCard
+        tokenInicial={typeof feedToken === "string" ? feedToken : null}
       />
 
       {/* G03 · el otro punto de integración de referidos (Doc 4 §4.x). */}
