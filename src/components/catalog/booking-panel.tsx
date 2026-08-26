@@ -229,8 +229,20 @@ export async function BookingPanel({
           producto, así que `single` lo fija y esa rama nunca se pinta. */}
       {chosen ? (
         <>
+          {/* V-5b · En la ficha de la mentoría el título NO se repite. Ahí ya
+              es el H1 de la página, a dos dedos de aquí, y volver a escribirlo
+              —a veces en cuatro líneas, como «Química Orgánica e Intermedia:
+              Descifra la Ciencia Detrás del Mundo Real»— no informa de nada y
+              empuja el calendario hacia abajo.
+
+              `details` es la señal exacta y no hace falta inventar otra: lo
+              pasa SOLO `/products/[id]` (P08), que es justamente la pantalla
+              donde el título ya está arriba. En la ficha del TUTOR con una
+              mentoría elegida (`?p=`) no llega, y ahí el título sí hace falta:
+              el H1 es el nombre del tutor, así que sin él no se sabría cuál de
+              sus mentorías se está reservando. */}
           <p className="text-[22px] font-bold text-balance text-[#19191f]">
-            {chosen.title}
+            {details ? "Reserva esta mentoría" : chosen.title}
           </p>
           {details && chosen.sessionDurationMin ? (
             <p className="mt-1.5 text-sm text-[#595959]">
