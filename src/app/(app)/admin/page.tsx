@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { listBookings } from "@/lib/admin/queries";
+import { countPendingReports } from "@/lib/admin/reports";
 import { formatMoney } from "@/lib/catalog/format";
 import {
   PanelCard,
@@ -56,6 +57,7 @@ export default async function AdminDashboardPage() {
     { count: pendingEmails },
     { count: pendingRefunds },
     recent,
+    pendingReports,
   ] = await Promise.all([
     supabase.rpc("admin_stats", { p_from: last30().from }),
     supabase
@@ -78,6 +80,10 @@ export default async function AdminDashboardPage() {
       .select("id", { count: "exact", head: true })
       .eq("status", "pending"),
     listBookings({ page: 1 }),
+    // EY-189 · La sexta cola. Los reportes se guardaban desde M-12 y no los
+    // miraba nadie: sin este contador, la bandeja nueva sería una pantalla a la
+    // que solo se llega si ya sabes que existe.
+    countPendingReports(),
   ]);
 
   const stats = statsData as unknown as Stats;
@@ -114,6 +120,15 @@ export default async function AdminDashboardPage() {
       cta: "Ver reembolsos",
     },
     {
+      // Denuncias de conducta sin triar. No es la más urgente en dinero, pero
+      // sí la única que puede caducar sola: un reporte sobre un par que no
+      // compró vive lo que viva su conversación (ver `20260826200000`).
+      label: "Reportes sin atender",
+      value: pendingReports,
+      href: "/admin/reportes",
+      cta: "Ver reportes",
+    },
+    {
       label: "Correos en cola",
       value: pendingEmails ?? 0,
       href: "/admin/notificaciones?status=pending",
@@ -139,7 +154,8 @@ export default async function AdminDashboardPage() {
 
       {/* Colas de trabajo (218:1786): lo que espera una acción del admin.
           Eran tres; con las dos de operaciones (reembolsos y correos) la
-          rejilla pasa a 2/3 columnas para que no quede una fila coja. */}
+          rejilla pasó a 2/3 columnas para que no quedara una fila coja, y con
+          la de reportes (EY-189) son seis: dos filas de tres justas. */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {queues.map((q) => (
           <PanelCard key={q.label} className="p-5">

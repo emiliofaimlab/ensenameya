@@ -17,6 +17,7 @@ const COLS: { title: string; links: { href: string; label: string }[] }[] = [
       { href: "/admin/categorias", label: "Categorías" },
       { href: "/admin/tiers", label: "Tiers" },
       { href: "/admin/alertas", label: "Alertas" },
+      { href: "/admin/reportes", label: "Reportes" },
     ],
   },
   {

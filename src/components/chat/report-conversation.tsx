@@ -34,6 +34,13 @@ import { asRpc } from "./rpc";
  * hilos que quedaron en solo lectura, donde lo que hay que denunciar ya está
  * escrito y no se puede borrar respondiendo.
  *
+ * ⚠️ Y ESE PÁRRAFO YA NO DESCRIBE EL MUNDO: el 26-ago EY-194
+ * (`20260826140000`) dio marcha atrás y **el canal sin compra volvió a abrirse**
+ * a petición del cliente. Se deja escrito en vez de borrarlo porque la
+ * conclusión no cambió —el botón se quedó— y porque el argumento de entonces es
+ * el que sigue mandando: con el canal abierto, el spam de desconocidos vuelve a
+ * ser posible y hace todavía más falta.
+ *
  * Esto es la puerta, no la sala: guarda el reporte en `conversation_reports`
  * con el motivo. Revisarlos y bloquear la conversación (`blocked_at`, que ya
  * corta el envío en las dos RPC) es trabajo del panel de admin, que es de otro
@@ -41,8 +48,30 @@ import { asRpc } from "./rpc";
  */
 export function ReportConversation({
   conversationId,
+  trigger,
 }: {
   conversationId: string;
+  /**
+   * EY-189 · El botón que abre el diálogo, si el de por defecto no sirve.
+   *
+   * Existe porque la sala lo necesita con otra piel: allí el enlace gris de
+   * `text-muted-foreground` se pinta sobre la barra BLANCA de sesión, entre
+   * «Mostrar chat» y el cronómetro, y tiene que parecerse a sus vecinos. Lo que
+   * NO se duplica es el diálogo: el texto, el tope de 2000 caracteres y la
+   * llamada a `report_conversation` viven aquí y en un solo sitio, que es lo
+   * que hace que cambiar el copy de moderación sea un cambio y no tres.
+   *
+   * ⚠️ El diálogo se pinta por un PORTAL (Radix lo cuelga de `document.body`),
+   * así que se escapa del subárbol de la sala y de sus tokens redefinidos
+   * (`VARS_CHAT_SALA`): sale en claro, con `text-popover-foreground` explícito,
+   * venga de donde venga el disparador. El único que hereda colores del sitio
+   * donde se monta es este `trigger` — y por eso lo elige quien lo monta.
+   *
+   * `ReactElement` y no `ReactNode`: `DialogTrigger asChild` clona su hijo para
+   * inyectarle el `onClick` y los ARIA del diálogo, así que una cadena o una
+   * lista reventarían en ejecución. Con este tipo lo dice el compilador.
+   */
+  trigger?: React.ReactElement;
 }) {
   const [open, setOpen] = useState(false);
   const [motivo, setMotivo] = useState("");
@@ -69,13 +98,15 @@ export function ReportConversation({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
-        >
-          <FlagIcon className="size-3" />
-          Reportar
-        </button>
+        {trigger ?? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 underline-offset-2 hover:underline"
+          >
+            <FlagIcon className="size-3" />
+            Reportar
+          </button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>

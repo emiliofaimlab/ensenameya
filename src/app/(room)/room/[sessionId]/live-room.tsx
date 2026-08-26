@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { XIcon } from "lucide-react";
+import { FlagIcon, XIcon } from "lucide-react";
 import type {
   DailyCall,
   DailyCustomTrayButtons,
@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { ReportConversation } from "@/components/chat/report-conversation";
 import { RecordingConsent } from "@/components/room/recording-consent";
 import { SessionRef } from "@/components/room/session-ref";
 
@@ -340,6 +341,7 @@ export function LiveRoom({
   header,
   sessionId,
   bookingId,
+  conversationId,
   startAt,
   endAt,
   opensAt,
@@ -363,6 +365,14 @@ export function LiveRoom({
   header?: React.ReactNode;
   sessionId: string;
   bookingId: string;
+  /**
+   * EY-189 · La conversación del par, ya resuelta por la página (ver su nota).
+   * Es lo que se reporta: `conversation_reports` cuelga de la CONVERSACIÓN, no
+   * de la sesión ni de la reserva, así que «reportar conducta» aquí y
+   * «Reportar» en el chat levantan exactamente el mismo caso. `null` solo en el
+   * imposible teórico de una reserva sin hilo; entonces no se pinta el botón.
+   */
+  conversationId: string | null;
   startAt: string;
   endAt: string;
   /** B-2 · `sessions.access_opens_at`: cuándo la sala admite gente (10 min
@@ -868,6 +878,55 @@ export function LiveRoom({
                 </span>
               ) : null}
             </button>
+
+            {/*
+              EY-189 · «Reportar conducta», dentro de la clase.
+
+              Va en ESTA barra y no en la de Daily por lo mismo que «Marcar
+              completada»: la barra del iframe aparece y desaparece con el
+              ratón, vive fuera de nuestro DOM y no admite más que iconos de
+              36px sin ARIA propia. Un botón que se usa una vez al año tiene que
+              estar donde se pueda encontrar cuando hace falta, no donde haya
+              que descubrirlo.
+
+              ⚠️ Y VA AQUÍ ARRIBA, SOBRE BLANCO, A PROPÓSITO. El contenedor de
+              la sala lleva `text-[color:var(--sala-text)]`, que es #ffffff;
+              esta cabecera es la única franja que reestablece `bg-background` +
+              `text-foreground` (misma cura que `GuardaDeSalida` aplica al
+              `SiteHeader`, y por el mismo motivo: allí la campana y el menú de
+              cuenta estaban en blanco sobre blanco). Un botón sin clase de
+              color hereda de la cabecera y se lee. Si algún día se mueve al
+              área de vídeo o al panel de chat, hay que darle color explícito
+              con los tokens `--sala-*` — y comprobarlo en pantalla, que es como
+              se encontraron los dos casos anteriores.
+
+              El diálogo en sí sale por un portal y se pinta en claro pase lo
+              que pase; ver la nota del prop `trigger`.
+            */}
+            {conversationId ? (
+              <ReportConversation
+                conversationId={conversationId}
+                trigger={
+                  <button
+                    type="button"
+                    // Mismas medidas que «Mostrar chat», su vecino: en una
+                    // barra de tres controles, dos pesos distintos se leen como
+                    // dos jerarquías que aquí no existen.
+                    // El rótulo se esconde por debajo de `sm`: a 375px esta
+                    // barra ya iba justa con el cronómetro y «Marcar
+                    // completada», y una etiqueta más la desbordaba. El icono
+                    // se queda, y el nombre accesible lo pone `aria-label` —no
+                    // un `sr-only` extra— para que no haya dos textos.
+                    aria-label="Reportar conducta"
+                    title="Reportar conducta"
+                    className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs hover:bg-muted"
+                  >
+                    <FlagIcon className="size-3.5" aria-hidden />
+                    <span className="hidden sm:inline">Reportar</span>
+                  </button>
+                }
+              />
+            ) : null}
 
             <div className="text-right">
               <p

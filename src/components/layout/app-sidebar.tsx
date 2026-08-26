@@ -7,6 +7,7 @@ import {
   ActivityIcon,
   BarChart3Icon,
   BellIcon,
+  FlagIcon,
   BookOpenIcon,
   CalendarPlusIcon,
   CreditCardIcon,
@@ -113,6 +114,10 @@ export const ADMIN_ITEMS: Item[] = [
   { href: "/admin/tiers", label: "Tiers", icon: PercentIcon },
   { href: "/admin/stats", label: "Estadísticas", icon: BarChart3Icon },
   { href: "/admin/alertas", label: "Alertas", icon: BellIcon },
+  // EY-189 · La cola de moderación. Va pegada a Alertas porque es lo
+  // mismo que ellas —trabajo que pide una decisión— y porque el Figma no
+  // la dibujó: la pantalla nació después.
+  { href: "/admin/reportes", label: "Reportes", icon: FlagIcon },
   { href: "/admin/payouts", label: "Payouts", icon: WalletIcon },
 ];
 
