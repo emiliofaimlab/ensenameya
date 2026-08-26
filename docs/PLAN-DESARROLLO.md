@@ -17,6 +17,26 @@
 > títulos son los **sprints originales**, no el proyecto entero.
 > Los `M1/M2/M4…` que aparecen en los Docs 00–09 son **máquinas de estado** (Doc 2), no hitos.
 
+> ⚠️ **ESTE DOCUMENTO DEJÓ DE SER LA ÚNICA FUENTE EL 7 DE AGOSTO.** Del **17-ago en adelante**
+> el plan vive en los documentos numerados, y esos mandan:
+>
+> | Doc | Cubre | Fiabilidad |
+> | :-- | :-- | :-- |
+> | `docs/22-LISTA-VERONICA-21AGO.md` | la lista consolidada del 21-ago | **la más alta** |
+> | `docs/21-DECISION-CONSULTAS-PREVENTA.md` | la decisión del cliente sobre el chat de preventa | alta |
+> | `docs/20-PLAN-MINUTA-17AGO.md` | la minuta del 17-ago y las respuestas `D-x` / `P-x` | alta |
+> | `docs/23-EVALUACION-EPICAS-PENDIENTES.md` | las nueve fichas de `To Do`, medidas contra el código | alta |
+> | `docs/19-PLAN-DE-EJECUCION.md` | el plan de ejecución previo | media |
+> | **este doc** y `docs/BACKLOG.md` | hasta el 7-ago | **desfasados a partir de ahí** |
+>
+> Entre el **8 y el 25 de agosto hay un hueco** en este relato: ese trabajo (M-12, MN-06, N-33, la
+> ventana de sala, el hold de 7 minutos) está en los docs de arriba y en el `git log`, no aquí.
+> **No se ha reconstruido a posteriori a propósito**: inventar la cronología es peor que admitir el
+> hueco. Lo del **26-ago sí está**, al final, porque se escribió el mismo día.
+>
+> ⚠️ Y `docs/BACKLOG.md` **ya no es espejo de Jira**: ninguna de las nueve fichas de EP-25/EP-26/EP-27
+> aparece en él.
+
 ---
 
 ## Cómo trabajamos (el loop de vibecode)
@@ -1356,4 +1376,75 @@ misma marca sin conectar, con **dos juegos de términos**. Ningún merge lo arre
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: 2026-08-07 (**relato del 5–6 de agosto, tanda a tanda**: la **PR #11 se mergeó** (`1a36da2`, 5-ago) — se acabó el "dos merges", queda **uno** (`dev`→`main`) y las migraciones pendientes de prod pasan de **12 a 20**; `dev` va **43 commits** por delante de `main`. Pulido del 5-ago (5 commits, con la regresión del filtro de precio y el catálogo que dependía de quién miraba); **páginas legales redactadas** y el hallazgo de que el cliente ya tenía términos publicados en `ensenameya.com` desde marzo (buzón real `info@ensenameya.com`); 🐞 **US-1802 no encontraba ninguna grabación** (nombre de sala) y **la retención de 30 días ya borra de verdad**; 🔒 **`confirm_payment` sale del alcance del cliente** y se parte en dos; **C-11 RESUELTA → Resend**, con el stub que vaciaba la cola apagado y 🐞 **NTF-07 avisaba después de aceptar**; **Stripe PAC-01/PAC-03 verificados de punta a punta en test mode** contra la preview con webhook firmado — la premisa de `EY-92` ("esperar a ambas cuentas") era falsa; 🔎 **la campaña de Referral Factory no manda código**, así que la atribución de US-1302 hay que rehacerla por email y **RF-03 (`EY-148`) probablemente sobra**; lección repetida tres veces: **`service_role` no se salta los grants de tabla**; **dLocal rechazó la cuenta** y el fondo son los dos dominios sin conectar. Previo: 2026-08-04 (**pasada de veracidad contra el repo y Jira**: el proyecto lleva **8 sprints**, no 4; **DD-04 rehecho** como vista `tutors_public` + rango logarítmico (`cccb566`/`96f4e0b`, migración `20260804120000`); limpieza de código muerto (`9e56afb`/`63a7896`) y `AdminShell`+`TutorShell`→`PanelShell`; recuperado el bloque de commits del **27–28 jul**; **`EY-109` se arregló dos veces** y la buena es la del 27-jul (`b032cc5`), no la del 21; las 6 IV de EP-22 están en `Done` desde el 27-jul; Sprint 4, P01 y la captura de `?ref=` marcados como lo que son —hechos—; DD-03…DD-08 todas cerradas; C-06/C-12/C-15 añadidas al tracker. **El código está en la PR #11, no en producción**: `main` y `dev` siguen en `57edfa9` y hay **12 migraciones sin aplicar en prod**. Previo: 2026-07-29 (**las 6 tandas del plan, COMPLETAS**: los 20 tickets abiertos de los sprints 7 y 8 en código, más los 4 compromisos del 24-jul que no tenían ticket; 12 migraciones nuevas; QA con matriz de RLS ejecutada en `docs/QA-LANZAMIENTO.md`. Sprint 6 AC sigue esperando credenciales. Previo: **plan de los sprints 6 AC / 7 / 8**: inventario contra Jira — 20 tickets abiertos y todos en estos tres sprints; 4 compromisos del 24-jul sin ticket; `US-1302` y `DD-05` ya cumplidos a falta de verificar; Sprint 6 AC ejecutable a medias vía Stripe test mode). Previo: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
+## 🤖 26 de agosto — la jornada de los agentes, y lo que enseñó probar de verdad
+
+**46 commits · 10 migraciones · 72 ficheros · +7.909 líneas.** Nueve fichas movidas a `In Review`.
+Nada de esto está en producción: sigue pendiente el único merge `dev`→`main`.
+
+### Lo que se cerró
+
+| Ficha | Qué |
+| :-- | :-- |
+| `EY-194` | El **mix** que pidió el cliente: vuelve el chat de preventa (marcha atrás sobre P-1) **y** el tutor escribe FAQ que se heredan en todas sus mentorías |
+| `EY-151` | NTF-21 — un mensaje nuevo por fin avisa por correo, agrupado a 1/hora por hilo |
+| `EY-182` | Ya estaba hecho en `fee79f9`; solo quedaba arrastre de numeración |
+| `EY-183` | La disponibilidad entra como paso 4 de 6 del asistente, **después** de la zona horaria |
+| `EY-180` | El CTA de reserva deja de esconderse bajo el pliegue |
+| `EY-181` | El resumen del pedido se lee; la tarjeta ilustrada **no** se borra (contradice a D-1) |
+| `EY-153` | Soporte en los dos paneles, reusando `/contacto` |
+| `EY-179` | Las tarjetas y los chips pasan a `<select>` |
+| `EY-188` | Feed `.ics` **por suscripción**, con token opaco |
+| `EY-189` | Reportar desde la sala + bandeja de admin que alguien lee |
+| `EY-192` | La baja borra la identidad y conserva la contabilidad |
+| `EY-148` | Cerrada **sin código**: la integración nativa de RF con Stripe ya hace lo que pedía |
+
+### ⚠️ La lección de la jornada: el código verde no es código que funcione
+
+Tres fallos serios pasaron `typecheck`, `lint` y `build`, y **solo aparecieron al ejecutar**:
+
+1. **`anonymize_account` falló dos veces seguidas.** Primero con `42501` — Supabase **prohíbe
+   `delete from storage.objects`**, y con razón: borrar la fila deja el fichero físico huérfano y,
+   en el bucket público, servible por URL. Y en cuanto se arregló, `428C9` — `tutor_profiles.search_text`
+   es una **columna generada** y el `update` intentaba escribirla. Causa común: enumerar columnas en
+   un `update` sin mirar cuáles aceptan escritura. Ni `typecheck` mira dentro del SQL ni `db:push`
+   llama a la función: **una función solo se prueba llamándola**.
+2. **El «arreglo» de escritorio de `EY-180` se apoyaba en una premisa falsa.** `lg:sticky` **nunca
+   tuvo recorrido** en ese panel —el hijo del grid es el `div#reservar` que lo envuelve y mide lo
+   mismo, 0 px de holgura—, así que el CTA nunca fue inalcanzable. Y el `max-h`+`overflow` que se
+   añadió para «arreglarlo» convertía el panel en contenedor de scroll y hacía que la barra opaca
+   tapara **11 de 15 chips de hora**, comiéndose sus clics. Medido antes y después.
+3. **Un `replace` de tres líneas tocó tres sitios en vez de uno**, y `faqs` acabó viajando en el
+   typeahead del catálogo —una consulta por pulsación de cualquier anónimo— para que el código la
+   tirara.
+
+Los tres los encontró una **revisión adversarial** posterior o el navegador. Ninguno el CI.
+
+### 🔴 Lo que salió de rebote y pesa más que varias fichas
+
+- **`purge_expired_messages` hace el mismo `delete` prohibido sobre `storage.objects`.** Es el cron
+  que aplica la **retención de 30 días del chat que publican las páginas legales**. Lleva así desde
+  el 22-jul, arrastrado por siete migraciones. Hoy no salta porque no ha caducado ningún adjunto;
+  el día que caduque el primero, el `42501` **tumba la transacción entera** y dejan de borrarse
+  también los mensajes. Y es un cron: nadie mira si falla.
+- **No existe ninguna vía que mueva `sessions.start_at`.** Auditados los 23 `update public.sessions`:
+  ninguno toca la hora. **No se puede reprogramar**, solo cancelar y volver a reservar. El §14 de los
+  Términos se cubre («sujeto a las funcionalidades de la Plataforma»); la **FAQ pública no**: responde
+  «Por supuesto» a «¿puedo reprogramar?» y a continuación describe la política de reembolso.
+- **`home_testimonials` no filtraba por estado**: la portada publica reseñas de mentorías en borrador
+  y de tutores sin aprobar. Preexistente, arreglado de paso en `EY-192`.
+- **La campana tiene 8 huecos y no prioriza.** NTF-21 es el primer aviso cuya frecuencia depende del
+  tráfico de chat, así que puede desplazar a los que tienen plazo. Decisión de producto, sin tomar.
+- ⚠️ **`grant select, update on public.profiles to authenticated` es de TABLA ENTERA**
+  (`20260703120000:16`). Cualquier columna nueva en `profiles` nace escribible por el propio usuario
+  vía PostgREST, y un `revoke update (columna)` **no lo arregla** mientras el privilegio de tabla siga
+  puesto. Si hace falta guardar algo por usuario: **tabla aparte**.
+
+### 🛠️ Y una lección de método
+
+Los agentes con worktree **se crean desde `main`**, que va 141 commits y 44 migraciones por detrás.
+Quien no hace `git merge dev` antes de leer nada escribe sobre una base fantasma. De cinco agentes,
+uno perdió su ejecución entera diagnosticando el git en vez de su ficha.
+
+---
+
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: **2026-08-26** (la jornada de los agentes: 46 commits, 10 migraciones y nueve fichas a `In Review`; y sobre todo **tres fallos que pasaron typecheck, lint y build y solo aparecieron al ejecutar** — los dos de `anonymize_account` (42501 de Storage y 428C9 de columna generada) y el panel de reserva, cuyo «arreglo» tapaba 11 de 15 chips de hora sobre una premisa falsa. De rebote: **`purge_expired_messages` hace el mismo `delete` prohibido sobre Storage** y es el cron de la retención que publican los legales; **no existe forma de reprogramar** aunque la FAQ lo prometa; `home_testimonials` publicaba borradores. ⚠️ Entre el 8 y el 25 de agosto hay un hueco deliberado en este relato — ver el aviso del encabezado. Previo: 2026-08-07 (**relato del 5–6 de agosto, tanda a tanda**: la **PR #11 se mergeó** (`1a36da2`, 5-ago) — se acabó el "dos merges", queda **uno** (`dev`→`main`) y las migraciones pendientes de prod pasan de **12 a 20**; `dev` va **43 commits** por delante de `main`. Pulido del 5-ago (5 commits, con la regresión del filtro de precio y el catálogo que dependía de quién miraba); **páginas legales redactadas** y el hallazgo de que el cliente ya tenía términos publicados en `ensenameya.com` desde marzo (buzón real `info@ensenameya.com`); 🐞 **US-1802 no encontraba ninguna grabación** (nombre de sala) y **la retención de 30 días ya borra de verdad**; 🔒 **`confirm_payment` sale del alcance del cliente** y se parte en dos; **C-11 RESUELTA → Resend**, con el stub que vaciaba la cola apagado y 🐞 **NTF-07 avisaba después de aceptar**; **Stripe PAC-01/PAC-03 verificados de punta a punta en test mode** contra la preview con webhook firmado — la premisa de `EY-92` ("esperar a ambas cuentas") era falsa; 🔎 **la campaña de Referral Factory no manda código**, así que la atribución de US-1302 hay que rehacerla por email y **RF-03 (`EY-148`) probablemente sobra**; lección repetida tres veces: **`service_role` no se salta los grants de tabla**; **dLocal rechazó la cuenta** y el fondo son los dos dominios sin conectar. Previo: 2026-08-04 (**pasada de veracidad contra el repo y Jira**: el proyecto lleva **8 sprints**, no 4; **DD-04 rehecho** como vista `tutors_public` + rango logarítmico (`cccb566`/`96f4e0b`, migración `20260804120000`); limpieza de código muerto (`9e56afb`/`63a7896`) y `AdminShell`+`TutorShell`→`PanelShell`; recuperado el bloque de commits del **27–28 jul**; **`EY-109` se arregló dos veces** y la buena es la del 27-jul (`b032cc5`), no la del 21; las 6 IV de EP-22 están en `Done` desde el 27-jul; Sprint 4, P01 y la captura de `?ref=` marcados como lo que son —hechos—; DD-03…DD-08 todas cerradas; C-06/C-12/C-15 añadidas al tracker. **El código está en la PR #11, no en producción**: `main` y `dev` siguen en `57edfa9` y hay **12 migraciones sin aplicar en prod**. Previo: 2026-07-29 (**las 6 tandas del plan, COMPLETAS**: los 20 tickets abiertos de los sprints 7 y 8 en código, más los 4 compromisos del 24-jul que no tenían ticket; 12 migraciones nuevas; QA con matriz de RLS ejecutada en `docs/QA-LANZAMIENTO.md`. Sprint 6 AC sigue esperando credenciales. Previo: **plan de los sprints 6 AC / 7 / 8**: inventario contra Jira — 20 tickets abiertos y todos en estos tres sprints; 4 compromisos del 24-jul sin ticket; `US-1302` y `DD-05` ya cumplidos a falta de verificar; Sprint 6 AC ejecutable a medias vía Stripe test mode). Previo: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
