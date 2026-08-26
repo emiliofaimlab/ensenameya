@@ -14,6 +14,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "@/components/layout/notifications-bell";
+import { CartBadge } from "@/components/cart/cart-badge";
 import type { AppNotice } from "@/lib/notifications";
 import {
   Avatar,
@@ -189,10 +190,18 @@ function SearchBox({ className }: { className?: string }) {
 export function SiteHeader({
   user,
   notices = [],
+  cartCount = 0,
 }: {
   user?: HeaderUser | null;
   /** US-1203 · avisos ya consultados por el layout (server). */
   notices?: AppNotice[];
+  /**
+   * EY-177 · cuántas mentorías hay en el carrito, leídas de la cookie por el
+   * layout (server). Es solo el valor de arranque: `CartBadge` relee la cookie
+   * en el navegador, porque un layout del App Router no se vuelve a renderizar
+   * al navegar dentro de su propio segmento y este número se quedaría viejo.
+   */
+  cartCount?: number;
 }) {
   const pathname = usePathname();
   /**
@@ -300,6 +309,12 @@ export function SiteHeader({
         ) : (
           <>
         <div className="hidden items-center gap-2 md:flex">
+          {/* EY-177 · el carrito, CON O SIN SESIÓN. Ésa es la diferencia con la
+              campana de al lado: los avisos son de una cuenta y el carrito es
+              del navegador (vive en una cookie), así que un anónimo puede
+              apuntar mentorías y revisarlas antes de registrarse. En admin no
+              se pinta: ese panel no compra nada. */}
+          {admin ? null : <CartBadge initial={cartCount} />}
           {/* US-1203 · avisos in-app, solo con sesión (son los tuyos). */}
           {user ? <NotificationsBell initial={notices} /> : null}
           {user ? (
@@ -368,6 +383,17 @@ export function SiteHeader({
             </>
           )}
         </div>
+
+        {/* EY-177 · en móvil el carrito NO se esconde en el menú lateral: es el
+            único punto de la cabecera que dice cuántas mentorías llevas
+            apuntadas, y detrás de la hamburguesa no lo diría hasta abrirla. Va
+            fuera del `hidden md:flex` de arriba y con su propio `md:hidden`
+            para no pintarse dos veces. */}
+        {admin ? null : (
+          <span className="md:hidden">
+            <CartBadge initial={cartCount} />
+          </span>
+        )}
 
         <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
           <SheetTrigger asChild>

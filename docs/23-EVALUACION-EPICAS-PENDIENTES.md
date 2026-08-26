@@ -185,6 +185,12 @@ Es exactamente el estado que la migración de **hoy** acaba de cerrar para el ca
 solución es que la clave primaria pase a ser `(event_id, booking_id)` — o sea, **tocar la tabla de
 idempotencia del camino del dinero**. Barato de escribir; caro de descubrir tarde.
 
+> ⚠️ **Esto ya está escrito dentro del código, y a propósito.** `EY-177` se implementó el 27-ago
+> (ver §23.3.6) y su módulo de carrito lleva este mismo fallo documentado en la cabecera —
+> [`src/lib/cart/cookie.ts`](../src/lib/cart/cookie.ts), sección «PARA QUIEN RETOME EY-176»—
+> para que quien abra el carrito buscando por dónde cobrar N líneas se lo encuentre antes de
+> escribir la primera línea de SQL, y no aquí, que es un documento que hay que saber que existe.
+
 ### 23.3.4 · Lo que **no** hay que rehacer, y conviene decirlo
 
 - **Los payouts no salen hoy de Postgres.** `process_scheduled_payouts` marca `provider =
@@ -232,11 +238,36 @@ que hacerla N veces y entre líneas del mismo pedido.
 
 ---
 
+### 23.3.6 · Qué dejó hecho `EY-177` (27-ago) y dónde se paró exactamente
+
+Se implementaron **las dos primeras pantallas** del flujo de tres (selección → revisión → pago).
+El motor de cobro **no se tocó**: ni `create_booking`, ni `payments`, ni la Session de Stripe, ni
+el webhook, ni una migración. `EY-176` sigue entero.
+
+| Decisión | Qué se hizo | Dónde |
+| :-- | :-- | :-- |
+| **Dónde vive el carrito** | Una **cookie** `ey-cart` con solo ids de mentoría e **instantes** (ms). Ni precios ni títulos. La lee el servidor con `cookies()`, así que la revisión y el contador son Server Components y **no hace falta el primer estado global** que temía §23.4 | [`src/lib/cart/cookie.ts`](../src/lib/cart/cookie.ts) |
+| **El anónimo** | Funciona sin sesión y **sobrevive al registro**: la cookie es del navegador. `/carrito` cuelga de `(public)`; la sesión solo se exige al pagar, y el `?next=` del checkout devuelve al alumno con el carrito intacto | [`src/app/(public)/carrito/page.tsx`](../src/app/(public)/carrito/page.tsx) |
+| **El precio** | Se **relee en servidor** contra `products` en cada visita; el de la cookie no existe. Regla de oro 2 intacta | [`src/lib/cart/resolve.ts`](../src/lib/cart/resolve.ts) |
+| **El hold** | **Opción A**: el carrito no retiene nada, el hold sigue naciendo al entrar a pagar (D-2). La revisión revalida cada línea contra `get_available_slots` y distingue cuatro estados: libre, ocupado, caducado y «es tu propio hold» | ídem |
+| **El paso a pago** | **Una línea** → la URL de siempre, `/reservar/<id>/checkout?slots=…`, sin un cambio. **Varias** → se dice en la interfaz que hoy se cobra una a una y cada línea lleva su botón. No se inventó ninguna semántica de pedido | ídem |
+
+**Lo que sigue faltando y es exactamente `EY-176`:** el cobro de N líneas en uno. Las tres
+preguntas de §23.6 (P-1 todo-o-nada, P-2 retención, P-3 un cobro o N) **siguen sin respuesta** y
+ninguna se contestó por la vía de los hechos. El primer punto técnico a resolver es el de §23.3.3.
+
+**Marchas atrás asumidas, las dos con el porqué escrito en el código:** el botón de la ficha ya no
+va derecho al pago (N-33 pierde una pantalla de las que ganó, aunque **no** se vuelve a preguntar
+la hora), y el checkout luce indicador de pasos, que contradice su aislamiento — puesto en la
+**página** y no en el layout, para no arrastrar a `/reservas/[id]/pagar`.
+
+---
+
 ## 23.4 · EP-25 · Las otras tres fichas
 
 | Ficha | Qué existe | Qué falta | Bloqueo | Esf. |
 | :-- | :-- | :-- | :-- | :-- |
-| **EY-177** · Checkout en 3 pasos | El «Resumen del pedido» **ya existe** y es lo único que ve el alumno de lo que compra ([`checkout-form.tsx:603-686`](../src/components/checkout/checkout-form.tsx)); con `ui_mode:'form'` Stripe solo pinta los campos de pago. Hay precedente de asistente por pasos en `onboarding/wizard.tsx:44-60` | Partir una pantalla de 802 líneas en tres, **y decidir en cuál corre `create_booking`** | 🟠 Ver §23.6 P-4 | **L** |
+| **EY-177** · Checkout en 3 pasos ✅ **hecho el 27-ago, ver §23.3.6** | El «Resumen del pedido» **ya existe** y es lo único que ve el alumno de lo que compra ([`checkout-form.tsx:603-686`](../src/components/checkout/checkout-form.tsx)); con `ui_mode:'form'` Stripe solo pinta los campos de pago. Hay precedente de asistente por pasos en `onboarding/wizard.tsx:44-60` | Partir una pantalla de 802 líneas en tres, **y decidir en cuál corre `create_booking`** | 🟠 Ver §23.6 P-4 | **L** |
 | **EY-178** · «Agregar al carrito» | **Nada.** Cero coincidencias reales de carrito en todo el repo | Modelo de datos (= `EY-176`), **el primer estado de cliente compartido entre rutas del proyecto** y el contador en la cabecera | 🔵 `EY-176` | **M** solo el front |
 | **EY-179** · Dos selectores fijos | Los dos selectores existen, pero **son enlaces, no controles**: `booking-panel.tsx` es un **componente de servidor** y todo el estado es la query | Altura fija con 8 fuentes de salto identificadas, o reescribir el panel como cliente | 🟠 Ver §23.6 P-5 | **M–L** |
 
