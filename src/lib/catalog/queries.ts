@@ -388,7 +388,7 @@ export async function listFeaturedTutors(limit = 4): Promise<FeaturedTutor[]> {
   const { data } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, faqs",
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
     )
     .eq("approval_status", "approved")
     .order("rating_avg", { ascending: false, nullsFirst: false })
@@ -491,6 +491,16 @@ export async function getProductDetail(
   // El tutor debe estar aprobado (RLS ya lo exige para que el producto salga).
   const { data: tutor } = await supabase
     .from("tutor_profiles")
+    // ⚠️ `faqs` va SOLO aquí, y esa exclusividad es deliberada. Este mismo
+    // `select` aparece en `listFeaturedTutors` y en `searchTutors`, y en los
+    // dos la fila acaba en `withProductFacts`, que mapea campo a campo y NUNCA
+    // lee la columna: pedirla allí sería bajar un jsonb sin tope de tamaño —la
+    // migración `20260826150000` solo comprueba que sea una lista— para tirarlo.
+    // Y `searchTutors` cuelga del typeahead, que dispara con cada pulsación de
+    // cualquier visitante anónimo. El typecheck no protege de esto: las
+    // propiedades de más se admiten al pasar la variable, así que si se añade
+    // una columna a un `select` de listado nadie se entera. Este comentario es
+    // la única barrera.
     .select(
       "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, faqs",
     )
@@ -695,7 +705,7 @@ export async function searchTutors(
   let query = supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, faqs",
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
     )
     .eq("approval_status", "approved")
     .ilike("search_text", `%${term}%`);

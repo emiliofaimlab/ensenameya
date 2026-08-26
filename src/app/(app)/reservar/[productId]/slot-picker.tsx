@@ -452,16 +452,23 @@ export function SlotPicker({
         está bloqueado. En escritorio no hace falta: la tarjeta de la derecha ya
         es `sticky` y no se mueve.
 
-        ⚠️ El hueco de la derecha (`pe-[72px]`) es para la burbuja de chat:
+        ⚠️ El hueco de la derecha (`pe-[84px]`) es para la burbuja de chat:
         `fixed right-5 bottom-5 z-50` (`chat-bubble.tsx`) se pinta encima de
         esta barra, y sin el hueco el final del botón abre el chat en lugar de
         llevar al pago.
+
+        Y el número sale de una cuenta, no del ojo: la burbuja es `right-5`
+        (20 px) + `size-14` (56 px) = **76 px de huella** desde el borde
+        derecho de la VENTANA, que es hasta donde llega esta barra por el
+        `-mx-4` de abajo. Empezó siendo `pe-[72px]` y se quedaba 4 px corta —
+        justo la esquina del botón, que es donde cae el pulgar. 84 deja 8 px de
+        aire. Ojo si alguien toca el tamaño de la burbuja: este número va detrás.
 
         ⚠️ El `-mx-4 sm:-mx-6` la lleva a los bordes de la ventana cancelando el
         aire lateral de `PanelShell`. Son SUS números: si allí cambia el
         padding, aquí también, o la barra deja de encajar.
       */}
-      <div className="sticky bottom-0 z-30 mt-5 -mx-4 border-t border-[#e0e0e0] bg-card pt-3 pb-3 ps-4 pe-[72px] sm:-mx-6 sm:ps-6 lg:hidden">
+      <div className="sticky bottom-0 z-30 mt-5 -mx-4 border-t border-[#e0e0e0] bg-card pt-3 pb-3 ps-4 pe-[84px] sm:-mx-6 sm:ps-6 lg:hidden">
         <div className="flex items-center gap-3">
           <div className="shrink-0 leading-tight">
             <p className="text-[11px] text-[#6b6b6b]">

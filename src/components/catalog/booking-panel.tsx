@@ -219,25 +219,34 @@ export async function BookingPanel({
   );
 
   /*
-   * B3.5 · `lg:max-h` + `lg:overflow-y-auto` NO son decoración: sin ellos el
-   * CTA es INALCANZABLE en escritorio bajo.
+   * B3.5 · ⚠️ AQUÍ HUBO UN ARREGLO BASADO EN UNA PREMISA FALSA. NO LO REPONGAS.
    *
-   * El panel es `sticky top-24`, así que se queda clavado a 96 px del borde
-   * superior. Cuando su contenido mide más que el hueco que queda —y mide más
-   * en cuanto hay selector de mentoría, seis filas de calendario y dos filas de
-   * horas: ~780 px contra los ~700 de un portátil de 13"— la parte de abajo cae
-   * fuera de la ventana Y NO HAY FORMA DE LLEGAR A ELLA: el panel no baja con
-   * la página, que es justo lo que hace `sticky`. Con altura máxima y scroll
-   * propio, el panel se desplaza por dentro y el CTA vive pegado a su borde
-   * inferior (ver la barra del final).
+   * El 26-ago se añadió `lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto`
+   * argumentando que «el panel es sticky top-24, así que con el contenido largo
+   * el CTA cae fuera de la ventana y no hay forma de llegar a él». Suena bien y
+   * es mentira: **`lg:sticky` no tiene recorrido en este panel**.
    *
-   * ⚠️ El `8rem` deja el borde inferior a 40 px del suelo de la ventana: el
-   * botón queda por dentro de ese borde y NO se cruza con la burbuja de chat
-   * (`chat-bubble.tsx`, `fixed right-5 bottom-5`), que en escritorio cae fuera
-   * del panel. En móvil sí se cruzan, y eso se resuelve en la propia barra.
+   * Un elemento `sticky` solo se despega dentro de su bloque contenedor, y aquí
+   * el hijo del grid no es este `<aside>` sino el `<div id="reservar">` que lo
+   * envuelve — un div sin clases, que por tanto mide EXACTAMENTE lo mismo que
+   * el aside. Recorrido disponible: 0 px. Medido en dev el 26-ago:
+   * `parentElement.height - aside.height === 0`. O sea que el panel nunca se ha
+   * quedado clavado, siempre ha bajado con la página, y el CTA siempre se ha
+   * alcanzado haciendo scroll normal.
+   *
+   * Lo que sí hacía el arreglo era convertir el aside en contenedor de scroll,
+   * y eso rompía la pantalla de verdad: la barra `sticky bottom-0` del final
+   * dejaba de anclarse al pie de la VENTANA y pasaba a anclarse al pie del
+   * PANEL, opaca y por encima de sus propios chips de hora. Medido: **11 de 15
+   * chips dejaban de recibir el clic**, y para destaparlos había que descubrir
+   * un scroll anidado que nadie busca.
+   *
+   * Si algún día se quiere de verdad un panel que acompañe al scroll, lo que
+   * hay que tocar es la ESTRUCTURA —que el hijo del grid sea el que tenga la
+   * altura de la columna—, no meterle un scroll propio al aside.
    */
   return (
-    <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+    <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
       {/* R29-01: arriba del calendario va el TÍTULO de la clase; el precio baja
           junto al CTA. Sigue valiendo R24-14 (nada de importe fijo por delante):
           sin clase elegida no hay precio en ninguna de las dos posiciones.
@@ -536,8 +545,21 @@ export async function BookingPanel({
         por DEBAJO y no se lee a medias detrás del botón. Y el margen superior
         vive aquí y no en cada botón — antes las dos ramas usaban `mt-4` y
         `mt-5`, y el panel daba un salto de 4 px al elegir la hora.
+
+        ⚠️ `lg:static` NO sobra. En escritorio el panel entra entero en pantalla
+        y no hay nada que despegar, pero una barra `sticky` opaca sí tiene algo
+        que tapar: sus propios chips de hora. Dejarla pegada en `lg` es el fallo
+        que se corrigió el 26-ago (ver el comentario del `<aside>`).
+
+        ⚠️ Y en MÓVIL queda un solape TRANSITORIO conocido, medido y aceptado:
+        mientras se baja hacia el panel —la banda de unos 200 px anterior a que
+        asiente— la barra flota sobre los chips y se come su clic (8 de 8 en el
+        peor punto). Se resuelve solo en cuanto se sigue bajando, y quien llega
+        pulsando un día aterriza en `#reservar`, donde el solape ya es CERO. Es
+        el precio del patrón «barra de compra fija» y se paga a sabiendas: la
+        alternativa es devolver el CTA bajo el pliegue, que era la queja.
       */}
-      <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 max-lg:pe-[72px]">
+      <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 max-lg:pe-[72px] lg:static">
         {chosen && hora ? (
           <Button asChild className="h-[51px] w-full text-[15px]">
             <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
