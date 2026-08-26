@@ -222,7 +222,11 @@ export async function BookingPanel({
     <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
       {/* R29-01: arriba del calendario va el TÍTULO de la clase; el precio baja
           junto al CTA. Sigue valiendo R24-14 (nada de importe fijo por delante):
-          sin clase elegida no hay precio en ninguna de las dos posiciones. */}
+          sin clase elegida no hay precio en ninguna de las dos posiciones.
+          V-5 · el plural «Reserva estas mentorías» va SOLO en la rama sin
+          mentoría elegida, que es la ficha del tutor: es el único sitio donde
+          hay varias entre las que elegir. En `/products/[id]` llega un único
+          producto, así que `single` lo fija y esa rama nunca se pinta. */}
       {chosen ? (
         <>
           <p className="text-[22px] font-bold text-balance text-[#19191f]">
@@ -237,7 +241,7 @@ export async function BookingPanel({
       ) : (
         <>
           <p className="text-[22px] font-bold text-[#19191f]">
-            Reserva con este tutor
+            Reserva estas mentorías
           </p>
           <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
             Elige el día y la sesión; el precio depende de la mentoría que
