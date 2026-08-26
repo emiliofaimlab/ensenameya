@@ -118,9 +118,9 @@ export function TutorOnboardingForm({
   productCategories: { id: string; name: string }[];
   selectedCategories: string[];
   docsByType: Record<string, DocState>;
-  /** Estado global de la verificación → checklist del paso 4 (N-10). */
+  /** Estado global de la verificación → checklist del paso 5 (N-10). */
   identityStatus: IdentityStatus;
-  /** R29-02: redes/portafolio ya guardados; los edita el módulo del paso 4. */
+  /** R29-02: redes/portafolio ya guardados; los edita el módulo del paso 5. */
   socials: SocialLink[];
   /** Mentorías ya creadas. EX-02: se puede posponer, pero sin ninguna el
    *  perfil no se aprueba — el asistente lo dice, no lo bloquea. */
@@ -143,7 +143,7 @@ export function TutorOnboardingForm({
   const [hasProfile, setHasProfile] = useState(exists);
   /**
    * N-03 · El número de mentorías llegaba del servidor y era inmutable, así que
-   * al crear la oferta desde aquí el paso 5 seguía diciendo que no había
+   * al crear la oferta desde aquí el último paso seguía diciendo que no había
    * ninguna. Sube a estado: es el asistente quien la crea.
    */
   const [productCount, setProductCount] = useState(productCount0);
@@ -194,7 +194,7 @@ export function TutorOnboardingForm({
   /**
    * Perfil de vitrina: se reescribe entero en cada paso que lo toca.
    * `socials` NO se toca aquí (R29-02): lo escribe el módulo de verificación
-   * del paso 4, y pisarlo con `{}` desde el paso 1 borraría lo ya guardado.
+   * del paso 5, y pisarlo con `{}` desde el paso 1 borraría lo ya guardado.
    */
   async function saveProfile() {
     const payload = {
