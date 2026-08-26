@@ -1716,7 +1716,41 @@ export type Database = {
         Args: { p_from?: string; p_to?: string }
         Returns: Json
       }
+      admin_conversation_reports: {
+        Args: { p_limit?: number; p_pendientes?: boolean }
+        Returns: {
+          blocked_at: string
+          blocked_reason: string
+          conversation_id: string
+          created_at: string
+          handled_at: string
+          handled_by: string
+          handled_by_name: string
+          id: string
+          last_message_at: string
+          message_count: number
+          pair_bought: boolean
+          reason: string
+          reported_id: string
+          reported_name: string
+          reporter_id: string
+          reporter_is_tutor: boolean
+          reporter_name: string
+        }[]
+      }
       admin_gmv_weekly: { Args: { p_weeks?: number }; Returns: Json }
+      admin_report_thread: {
+        Args: { p_limit?: number; p_report_id: string }
+        Returns: {
+          attachment_name: string
+          body: string
+          created_at: string
+          from_reporter: boolean
+          id: string
+          sender_id: string
+          sender_name: string
+        }[]
+      }
       admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       assign_tutor_tier: {
         Args: { p_tier_id: string; p_tutor_id: string }

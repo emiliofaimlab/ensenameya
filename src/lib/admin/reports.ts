@@ -1,7 +1,6 @@
 import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
-import { asRpc } from "@/components/chat/rpc";
 
 /**
  * EY-189 · La cola de moderación del panel de admin (B5.6).
@@ -22,15 +21,15 @@ import { asRpc } from "@/components/chat/rpc";
  * admin **y** que el reporte exista. Ver la migración: el razonamiento largo
  * está allí, que es donde vive la barrera.
  *
- * ⚠️ PUERTA TEMPORAL DE TIPOS. `admin_conversation_reports` y
- * `admin_report_thread` no están en `database.types.ts` porque la migración
- * `20260826200000` todavía no se ha aplicado; hasta que se aplique y se corra
- * `npm run db:types`, `supabase.rpc("admin_conversation_reports")` NI COMPILA
- * (el nombre está tipado contra la unión de funciones conocidas). Se entra por
- * `asRpc`, que es la MISMA puerta única que abrió M-12 en `components/chat/
- * rpc.ts` y que su propia nota dice que sirve igual para el cliente de servidor.
- * Cuando se regeneren los tipos: quitar los dos `asRpc(...)` de este archivo y
- * las dos aserciones de forma de abajo, y llamar a `supabase.rpc(...)` a secas.
+ * Las dos RPC (`admin_conversation_reports` y `admin_report_thread`) son
+ * SECURITY DEFINER y comprueban el rol admin por dentro, así que desde aquí se
+ * llaman a secas: la barrera no es este fichero.
+ *
+ * ⚠️ Y no son un capricho: el admin NO puede leer `conversations` por política
+ * —M-12 lo dejó así a propósito (`20260817210000:150-154`): el chat no se lee
+ * «por soporte», para eso está el reporte, que trae el hilo con consentimiento
+ * de quien lo levanta—. De ahí que `admin_report_thread` se pida con el id del
+ * REPORTE y nunca con el de la conversación: sin denuncia no hay hilo que ver.
  */
 
 /** Fila de `admin_conversation_reports()`. Espejo de su `returns table`. */
@@ -103,13 +102,13 @@ type ThreadRpcRow = {
  * pendientes arriba, para revisar lo atendido sin cambiar de pantalla.
  *
  * Un error NO revienta la pantalla: se devuelve lista vacía y la página dice
- * que la cola está limpia. ⚠️ Es el compromiso a mirar el día que la migración
- * esté aplicada — mientras NO lo esté, la RPC no existe y esto es exactamente
- * lo que hace que `/admin/reportes` se vea vacía en vez de en rojo.
+ * que la cola está limpia. ⚠️ Es el compromiso a vigilar: una cola vacía y una
+ * consulta rota se ven exactamente igual. Si algún día la bandeja aparece
+ * limpia y no cuadra, mira aquí antes que en la tabla.
  */
 export async function listReports(pendientes = true): Promise<ReportRow[]> {
   const supabase = await createClient();
-  const { data } = await asRpc(supabase).rpc("admin_conversation_reports", {
+  const { data } = await supabase.rpc("admin_conversation_reports", {
     p_pendientes: pendientes,
   });
 
@@ -145,7 +144,7 @@ export async function readReportThread(
   reportId: string,
 ): Promise<ReportMessage[]> {
   const supabase = await createClient();
-  const { data } = await asRpc(supabase).rpc("admin_report_thread", {
+  const { data } = await supabase.rpc("admin_report_thread", {
     p_report_id: reportId,
   });
 
