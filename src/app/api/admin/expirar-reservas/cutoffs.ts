@@ -17,7 +17,13 @@
  * (X-01). Esa es exactamente la vulnerabilidad que `20260715150000` cerró
  * quitándole el `execute` a `authenticated`. Con una lista cerrada, el extremo
  * destructivo hay que elegirlo a propósito, sale etiquetado como lo que es, y
- * un dedo torpe no puede escribir "0" donde quería escribir "20".
+ * un dedo torpe no puede escribir "0" donde quería escribir "7".
+ *
+ * ⚠️ B-1 · EL PLAZO REAL DE PAGO ES 7 MIN, NO 20. Y esta lista no es
+ * documentación: el `real: true` se pinta en la pantalla como «el plazo real».
+ * Cuando `expire_stale_bookings` cambió su default (`20260826120000`), dejar
+ * aquí los 20 no habría sido un comentario desactualizado — habría sido el panel
+ * de admin enseñando un número falso etiquetado como verdadero.
  *
  * Los `ms` son para la PREVISUALIZACIÓN, que se calcula en JavaScript. El `sql`
  * es lo único que llega a Postgres.
@@ -29,7 +35,7 @@ export type Preset = {
   /** El mismo plazo en milisegundos, para calcular el corte de la vista previa. */
   ms: number;
   label: string;
-  /** El valor que usa el cron de verdad cada 5 minutos. */
+  /** El valor que usa el cron de verdad (cada minuto desde B-1). */
   real?: boolean;
   /** Alcance máximo: hay que avisarlo en la pantalla. */
   peligro?: boolean;
@@ -64,12 +70,16 @@ export const ACEPTACION: Record<string, Preset> = {
  * Aquí NO hay reembolso —no se llegó a cobrar—, solo se libera el hueco.
  */
 export const PAGO: Record<string, Preset> = {
-  "20m": {
-    sql: "20 minutes",
-    ms: 20 * MIN,
-    label: "20 min — el plazo real",
+  "7m": {
+    sql: "7 minutes",
+    ms: 7 * MIN,
+    label: "7 min — el plazo real",
     real: true,
   },
+  // Se conserva el de 20 para poder comparar contra el comportamiento anterior
+  // sin tocar código: es el plazo con el que se crearon las reservas que ya
+  // están en la base.
+  "20m": { sql: "20 minutes", ms: 20 * MIN, label: "20 min — el plazo anterior" },
   "5m": { sql: "5 minutes", ms: 5 * MIN, label: "5 min" },
   "0": {
     sql: "0 seconds",
@@ -80,7 +90,7 @@ export const PAGO: Record<string, Preset> = {
 };
 
 export const ACEPTACION_DEFECTO = "24h";
-export const PAGO_DEFECTO = "20m";
+export const PAGO_DEFECTO = "7m";
 
 /** Clave de la query string → preset, o `undefined` si no está en la lista. */
 export function preset(

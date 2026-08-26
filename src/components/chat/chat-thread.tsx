@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PaperclipIcon } from "lucide-react";
 
@@ -107,7 +108,7 @@ function AttachmentLink({ a, mine }: { a: Attachment; mine: boolean }) {
  *
  *   · `hasBooking` true                  → hilo de cliente: adjuntos, sin topes.
  *   · `hasBooking` false + `canChat` true → checkout en curso (la reserva vive
- *     en `pending_payment` unos 20 min). Se escribe, sin adjuntos y con topes.
+ *     en `pending_payment` unos 7 min). Se escribe, sin adjuntos y con topes.
  *   · `canChat` false                    → solo lectura: hilo previo a MN-06, o
  *     par cuya única reserva se canceló.
  *
@@ -184,6 +185,7 @@ export function ChatThread({
    */
   onIncoming?: () => void;
 }) {
+  const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -415,6 +417,19 @@ export function ChatThread({
       // Los mensajes de las RPC ya vienen redactados para el usuario (el tope
       // de mensajes, el bloqueo de moderación): se enseñan tal cual.
       toast.error(error.message || "No se pudo enviar el mensaje.");
+      // ⚠️ B-1 · Y ADEMÁS SE VUELVE A PREGUNTAR AL SERVIDOR, que es la parte que
+      // importa. `canChat` se calcula al pintar la pantalla, así que un hilo que
+      // se cierra MIENTRAS lo tienes abierto deja un cuadro de texto que ya no
+      // sirve: escribes, sale un error rojo, y a escribir otra vez.
+      //
+      // Con el hold en 7 minutos eso pasa de rareza a caso normal — el checkout
+      // abandonado habilita el chat exactamente lo que dura el checkout
+      // (`pair_can_chat`, MN-06), y ahora eso son 7 minutos. Refrescando, el
+      // servidor recalcula `canChat` y el hilo se convierte solo en la versión
+      // de SOLO LECTURA con su enlace a reservar, que ya existe unas líneas más
+      // abajo. No hay que adivinar POR QUÉ falló ni leerle el mensaje al SQL:
+      // se le pregunta a quien lo sabe.
+      router.refresh();
       return;
     }
     setDraft("");

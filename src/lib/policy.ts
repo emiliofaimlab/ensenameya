@@ -26,8 +26,9 @@ export const CANCELLATION_POLICY = {
 
 // ⚠️ CUÁNTO SE LE RETIENE EL HORARIO AL ALUMNO — y por qué vive aquí.
 //
-// La fuente de verdad es la migración `20260709190000`: el `p_payment_cutoff`
-// de `expire_stale_bookings`, que pg_cron ejecuta cada 5 minutos dentro de la
+// La fuente de verdad es la migración `20260826120000` (antes `20260709190000`):
+// el `p_payment_cutoff`
+// de `expire_stale_bookings`, que pg_cron ejecuta CADA MINUTO dentro de la
 // propia base (regla de oro 5). Esto es la copia que se ENSEÑA, exactamente
 // igual que `CANCELLATION_POLICY` con los reembolsos: si divergen, gana el SQL
 // y el número equivocado es este.
@@ -39,10 +40,21 @@ export const CANCELLATION_POLICY = {
 // Escribirlo a mano en los dos es como acaban divergiendo — el selector estuvo
 // prometiendo hasta hoy justo lo contrario de lo que hace el código.
 //
-// ⚠️ SE ANUNCIA EL PLAZO CORTO A PROPÓSITO. El cron corre cada 5 minutos, así
-// que una reserva puede sobrevivir hasta 25; prometer 25 sería prometer un
-// retraso del job. Que el horario aguante un poco más de lo anunciado es la
-// dirección buena del error.
+// ⚠️ SE ANUNCIA EL PLAZO CORTO A PROPÓSITO. El corte no lo aplica un reloj por
+// reserva: lo aplica pg_cron cuando pasa, así que el plazo real es el corte más
+// lo que tarde el job. Prometer ese máximo sería prometer un retraso; que el
+// horario aguante un poco más de lo anunciado es la dirección buena del error.
+//
+// ⚠️ V-3 · 20 → 7. El cliente lo pidió literal («7 minutos. Fin.», 24-ago) y es
+// marcha atrás sobre D-2, donde los 20 min se anunciaron a propósito con
+// contador visible. Si vuelves a subirlo «porque 7 es poco», estás deshaciendo
+// la decisión — y si lo bajas más, mira antes `payment_raced` en la salida de
+// `expire_stale_bookings`: cuenta las reservas que se salvaron por pagarse
+// justo a tiempo, o sea a cuánta gente está mordiendo el corte.
+//
+// El bajón obligó a dos cosas más, y las tres viajan juntas (B-1,
+// `20260826120000`): el cron pasa a CADA MINUTO —con el de 5 min, «7» era en
+// realidad «entre 7 y 12»— y `CADUCIDAD_MIN` del checkout baja de 60 a 40.
 export const HOLD_POLICY = {
-  minutes: 20,
+  minutes: 7,
 } as const;

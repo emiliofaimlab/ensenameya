@@ -43,7 +43,7 @@ export type ConversationRow = {
    * MN-06 · ¿se puede escribir en este hilo? Es la MISMA función que rechaza en
    * el servidor (`pair_can_chat`), así que la pantalla y la RPC no pueden
    * discrepar. Difiere de `has_booking` solo mientras el checkout está en curso
-   * —la reserva vive en `pending_payment` unos 20 minutos—, que es exactamente
+   * —la reserva vive en `pending_payment` unos 7 minutos—, que es exactamente
    * el caso que la UI no podía distinguir del hilo legado de solo lectura.
    */
   can_chat: boolean;

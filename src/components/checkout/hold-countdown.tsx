@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
  * o sea, un contador que miente justo en el caso que vino a cubrir.
  *
  * ⚠️ Y QUIEN CANCELA ES EL CRON, NO ESTE RELOJ. Llegar a 00:00 no cancela nada:
- * lo hace `expire_stale_bookings` dentro de Postgres, cada 5 minutos. Por eso
+ * lo hace `expire_stale_bookings` dentro de Postgres, cada minuto. Por eso
  * al agotarse no se dice «se canceló» —sería mentira durante hasta cinco
  * minutos, y el pago seguiría funcionando— sino que puede liberarse en
  * cualquier momento.
@@ -107,7 +107,7 @@ export function HoldCountdown({
   );
 }
 
-/** ms → "09:41". Nunca más de 20 minutos, así que no hace falta tramo de horas. */
+/** ms → "06:41". Nunca más de `HOLD_POLICY.minutes`, así que no hace falta tramo de horas. */
 function reloj(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;

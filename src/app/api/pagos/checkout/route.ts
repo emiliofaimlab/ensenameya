@@ -48,16 +48,17 @@ import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
  * X-02 · CUÁNDO DEBE MORIR LA CHECKOUT SESSION.
  *
  * Hasta hoy no se le ponía `expires_at`, así que vivía el default de Stripe:
- * 24 HORAS. La reserva, en cambio, la mata `expire_stale_bookings` a los 20
- * minutos. O sea que durante casi un día entero quedaba un formulario de pago
- * abierto contra un horario que ya se le había dado a otra persona.
+ * 24 HORAS. La reserva, en cambio, la mata `expire_stale_bookings` en minutos
+ * (`HOLD_POLICY.minutes`). O sea que durante casi un día entero quedaba un
+ * formulario de pago abierto contra un horario que ya se le había dado a otra
+ * persona.
  *
  * NO SE PUEDEN CUADRAR LOS DOS PLAZOS, y conviene decirlo claro porque parece
  * que sí. Por dos razones:
  *
  *   · Stripe EXIGE que `expires_at` esté entre 30 minutos y 24 horas desde la
- *     creación de la Session. Nuestra ventana son 20. No hay valor legal que
- *     coincida.
+ *     creación de la Session. Nuestra ventana es de 7 minutos — antes 20, y
+ *     tampoco entonces. No hay valor legal que coincida.
  *   · Aunque subiéramos la ventana de reserva a 30 tampoco coincidirían: los
  *     dos relojes NO arrancan en el mismo instante. La reserva nace en
  *     `create_booking`, que dispara el navegador al elegir horario; la Session
@@ -66,12 +67,21 @@ import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
  *     rellenar el formulario. Alinearlos es un espejismo.
  *
  * DECISIÓN: se acepta el mínimo de Stripe y se **calcula desde la reserva**, no
- * desde ahora. `created_at + 60 min` sale de sumar el peor caso: la reserva
- * vive 20 minutos, el pg_cron corre cada 5 (así que puede tardar 25 en morir) y
- * este endpoint puede abrir un cobro hasta ese último instante — 25 + los 30 de
- * Stripe = 55, redondeado a 60 con margen. No se sube la ventana de reserva a
- * 30 porque eso son 10 minutos más de horario bloqueado por cada checkout
- * abandonado, que es el coste que paga el tutor.
+ * desde ahora. El número sale de sumar el peor caso: lo que vive la reserva
+ * (`HOLD_POLICY.minutes` + lo que tarde el pg_cron en pasar), más los 30 de
+ * Stripe, más margen. No se sube la ventana de reserva porque cada minuto de
+ * más es horario bloqueado por cada checkout abandonado, y eso lo paga el tutor.
+ *
+ * ⚠️ B-1 · 60 → 40, Y BAJA PORQUE BAJÓ EL HOLD. Los 60 salían de 20 min de
+ * reserva + 5 de cron = 25, más los 30 de Stripe = 55, redondeado. Con V-3 el
+ * hold es de 7 y el cron corre cada minuto, así que el peor caso es 8 + 30 = 38
+ * → 40.
+ *
+ * Y no es cosmético: este número ES la ventana en la que alguien puede pagar
+ * algo que ya se canceló. Dejarlo en 60 con un hold de 7 la habría estirado de
+ * 35-40 minutos a 52-53 — justo lo contrario de lo que pedía la ficha. Con 40
+ * queda en ~32, y no baja más porque el suelo duro de Stripe son 30: ese hueco
+ * no se puede cerrar del todo, solo estrechar.
  *
  * Que sea DETERMINISTA por reserva no es un detalle estético: la clave de
  * idempotencia de la Session es la reserva, y Stripe devuelve error —no la
@@ -80,21 +90,21 @@ import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
  * checkout con un error opaco. Aun así, el valor entra también en la clave (más
  * abajo) por si el suelo defensivo llega a actuar.
  *
- * El hueco que queda —de los ~25 minutos de la reserva a los 60 de la Session—
+ * El hueco que queda —de los ~8 minutos de la reserva a los 40 de la Session—
  * lo tapa el webhook: si el cobro llega con la reserva ya liberada, lo
  * reembolsa. Esto solo hace que ese caso sea raro; la red de seguridad es
  * `src/app/api/webhooks/stripe`.
  */
-const CADUCIDAD_MIN = 60;
+const CADUCIDAD_MIN = 40;
 const MINIMO_STRIPE_MIN = 30;
 
 /**
  * CUÁNTO TIEMPO SE LE RETIENE EL HORARIO AL ALUMNO — el número del contador.
  *
  * ⚠️ YA NO SE ESCRIBE AQUÍ: vive en `lib/policy.ts`, que es la copia que se
- * ENSEÑA del `p_payment_cutoff` de `expire_stale_bookings` (`20260709190000`,
- * pg_cron cada 5 minutos dentro de la propia base). La fuente de verdad sigue
- * siendo la migración (regla de oro 5); si divergen, gana el SQL.
+ * ENSEÑA del `p_payment_cutoff` de `expire_stale_bookings` (hoy en
+ * `20260826120000`, pg_cron cada minuto dentro de la propia base). La fuente de
+ * verdad sigue siendo la migración (regla de oro 5); si divergen, gana el SQL.
  *
  * Se movió porque hay DOS sitios que le prometen este plazo al alumno y tienen
  * que decir el mismo número: este contador y la línea de «Continuar al pago»
@@ -178,7 +188,7 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "no autenticado" }, { status: 401 });
 
   // `created_at` no es decorativo: de ahí sale la caducidad de la Session
-  // (X-02). Es la marca de cuándo empezó a correr la ventana de 20 minutos.
+  // (X-02). Es la marca de cuándo empezó a correr la ventana del hold.
   const { data: booking } = await supabase
     .from("bookings")
     .select("id, status, product_id, created_at, products(title)")

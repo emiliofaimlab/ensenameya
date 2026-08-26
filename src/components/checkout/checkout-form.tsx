@@ -378,7 +378,7 @@ export function CheckoutForm({
 
     // ⚠️ SIN LIMPIEZA QUE CANCELE NADA, y es deliberado: desmontar esta pantalla
     // no debe deshacer una reserva que quizá se esté pagando en otra pestaña. La
-    // reserva la libera `expire_stale_bookings` a los 20 minutos, no el
+    // reserva la libera `expire_stale_bookings` a los 7 minutos, no el
     // navegador. Y sin abortar la petición a medias: si el desmontaje llegara
     // entre `create_booking` y el checkout, cortar dejaría la reserva creada y
     // sin cobro abierto, que es peor que terminar y no pintar nada.

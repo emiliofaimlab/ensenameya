@@ -58,7 +58,7 @@ export default async function AdminOperacionesPage() {
         </h2>
         <p className="text-[13px] text-[#404040]">
           Ejecuta <code className="font-mono text-xs">expire_stale_bookings</code>,
-          la misma función que el cron de la base de datos corre cada 5 minutos.
+          la misma función que el cron de la base de datos corre cada minuto.
           Recorre <strong>todas las reservas de la plataforma</strong> —no una
           selección— y hace dos cosas distintas:
         </p>
@@ -100,8 +100,8 @@ export default async function AdminOperacionesPage() {
       <ExpireForm />
 
       <p className="text-xs text-[#6b6b6b]">
-        Con los plazos reales (24 h y 20 min) esto no hace nada que el cron no
-        vaya a hacer solo en los próximos 5 minutos: sirve para no esperar. Los
+        Con los plazos reales (24 h y 7 min) esto no hace nada que el cron no
+        vaya a hacer solo en el próximo minuto: sirve para no esperar. Los
         plazos cortos existen para verificar el camino completo —cancelación,
         aviso y reembolso— sin tener que dejar pasar un día.
       </p>

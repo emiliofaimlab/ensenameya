@@ -215,8 +215,8 @@ export function ExpireForm() {
 
         <p className="text-xs text-[#6b6b6b]">
           Los plazos salen de una lista cerrada: son los mismos valores que
-          acepta el servidor. Con los reales (24 h y 20 min) esto hace justo lo
-          que ya hace el cron cada 5 minutos.
+          acepta el servidor. Con los reales (24 h y 7 min) esto hace justo lo
+          que ya hace el cron cada minuto.
         </p>
       </PanelCard>
 

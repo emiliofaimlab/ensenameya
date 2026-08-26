@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
  * La clave es que «Cambiar horario» NO ES UN ABANDONO: es una declaración de
  * que ese hueco ya no se quiere. Por eso aquí sí se cancela, y no se espera a
  * `expire_stale_bookings`. Cerrar la pestaña o irse a otro sitio siguen siendo
- * abandonos y esos los sigue limpiando el cron a los 20 minutos: la diferencia
+ * abandonos y esos los sigue limpiando el cron a los 7 minutos: la diferencia
  * es la intención, y esta pantalla la conoce.
  *
  * Lo usan las DOS salidas hacia el selector —el enlace de la cabecera y el
