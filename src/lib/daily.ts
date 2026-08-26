@@ -103,15 +103,20 @@ export async function ensureRoom(
   expiresAt: Date,
   /** US-1801 · solo con el sí de los DOS (RN-42). Es propiedad de SALA. */
   recording = false,
-  /** MN-05 · tope de permanencia por persona. Sin default a propósito: con la
-   *  sala viva 7 días, olvidarlo es dejar el contador de Daily corriendo. */
+  /** Tope de permanencia por persona. Sin default a propósito: nació con la
+   *  sala de 7 días de MN-05, donde olvidarlo era dejar el contador de Daily
+   *  corriendo. B-2 estrechó la sala a 10 min y ya no es la única red, pero
+   *  sigue obligatorio: se cuenta desde que CADA persona entra, así que es el
+   *  único que acota una pestaña olvidada. */
   ejectAfterSec: number,
 ): Promise<string> {
   const exp = Math.floor(expiresAt.getTime() / 1000);
   const properties = {
     exp,
-    // Con `exp` a 7 días esto ya no es el tope real de nadie; se queda porque
-    // es el barrido final de la sala. El tope de verdad es la línea de abajo.
+    // B-2 · con `exp` de vuelta a `end_at + 10 min`, esto VUELVE a ser un tope
+    // real: expulsa a quien siga dentro cuando la sala muere. Con los 7 días de
+    // MN-05 no lo era y el único tope efectivo era la línea de abajo, que se
+    // queda igual — se cuenta por persona y sale de la clase, no de la ventana.
     eject_at_room_exp: true,
     eject_after_elapsed: ejectAfterSec,
     // Acuerdo de la reunión del 17-jul (00:24:48): el chat de la sala es el

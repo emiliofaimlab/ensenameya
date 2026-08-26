@@ -24,9 +24,11 @@ type BookingStatus = Database["public"]["Enums"]["booking_status"];
 // MN-05 · La ventana de acceso ya NO se calcula aquí. Llega por props desde
 // `page.tsx`, que la lee de `sessions.access_opens_at` / `access_closes_at` —
 // las columnas que la migración `20260820190000` despertó. Antes esto era
-// `const WINDOW_MIN = 10` y era una de las cinco copias del número; con la
-// ventana en días, una copia desactualizada sería un botón que aparece siete
-// días antes junto a un texto que promete diez minutos.
+// `const WINDOW_MIN = 10` y era una de las cinco copias del número.
+//
+// B-2 la devolvió a 10 minutos, así que el valor vuelve a ser el de entonces —
+// pero no vuelve la constante: el problema nunca fue el número, era tenerlo
+// escrito en cinco sitios. Sigue viniendo de la fila.
 //
 // Lo que sigue siendo cierto: el server es la barrera real (`join_session`),
 // aquí solo se pinta el estado.
@@ -225,8 +227,10 @@ function clock(ms: number): string {
 /**
  * ms → "6 d 04 h" / "2 h 05 min" / "4 min 12 s" para la cuenta regresiva.
  *
- * MN-05 · El tramo de días es nuevo y hace falta: con la sala abierta 7 días,
- * la cuenta atrás llegaba a "167 h 59 min", que no lo lee nadie.
+ * El tramo de días entró con MN-05, cuando la sala vivía 7 días y la cuenta
+ * atrás llegaba a "167 h 59 min". Con B-2 la ventana vuelve a 10 minutos y ya
+ * casi no se alcanza — se queda porque esta función también pinta la espera
+ * ANTES de que la sala abra, y eso sí puede ser de días.
  */
 function human(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -361,11 +365,12 @@ export function LiveRoom({
   bookingId: string;
   startAt: string;
   endAt: string;
-  /** MN-05 · `sessions.access_opens_at`: cuándo la sala admite gente (7 días
+  /** B-2 · `sessions.access_opens_at`: cuándo la sala admite gente (10 min
    *  antes del inicio). NO es cuándo empieza la mentoría — eso es `startAt`. */
   opensAt: string;
-  /** MN-05 · `sessions.access_closes_at` (7 días tras el fin). Tampoco es
-   *  cuándo se cierra la contabilidad: eso pasa a los 10 min y no se toca. */
+  /** B-2 · `sessions.access_closes_at` (10 min tras el fin). Sigue sin ser
+   *  cuándo se cierra la contabilidad, aunque desde B-2 caigan en el mismo
+   *  instante: eso lo decide `session_live_window()` y no se toca. */
   closesAt: string;
   sessionStatus: SessionStatus;
   bookingStatus: BookingStatus;
@@ -557,7 +562,7 @@ export function LiveRoom({
 
   // MN-05 · `completed` entra en la lista. En cuanto el cron cierra la última
   // sesión, la reserva pasa a `completed`; sin esta línea la sala se cerraría a
-  // los 10 min por la puerta de al lado y los 7 días no se notarían. Fuera se
+  // los 10 min por la puerta de al lado. Fuera se
   // quedan las que no deben tener sala nunca: `cancelled`/`refunded` porque el
   // dinero volvió, y las dos pendientes porque aún no hay clase que abrir.
   // Misma lista, palabra por palabra, que la guarda de `join_session`: si
@@ -885,8 +890,11 @@ export function LiveRoom({
               ⚠️ Doble puerta, y la segunda es de dinero.
 
               Hasta MN-05 esta vista solo se alcanzaba dentro de los ±10 min
-              de la clase, así que el botón vivía pegado a ella. Ahora la sala
-              abre 7 días antes, y con ella venía el botón.
+              de la clase, así que el botón vivía pegado a ella. MN-05 abrió la
+              sala 7 días y con ella se venía el botón; B-2 la devolvió a 10
+              min, así que hoy vuelven a coincidir. La doble puerta se queda:
+              que coincidan es coincidencia, y esta ventana la mueve el cliente
+              cada semana mientras que la de la clase es dinero.
 
               · El ESTADO evita el botón que solo sabe dar error:
                 `complete_session` acepta `scheduled`/`in_progress` y nada
@@ -1124,8 +1132,8 @@ export function LiveRoom({
                 {human(opens - now)}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                La sala abre 7 días antes de la mentoría y sigue abierta 7 días
-                después.
+                La sala abre 10 minutos antes de la mentoría y sigue abierta 10
+                minutos después.
               </p>
             </div>
             <p className="text-sm text-muted-foreground">

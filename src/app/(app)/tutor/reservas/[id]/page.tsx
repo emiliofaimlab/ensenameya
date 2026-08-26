@@ -20,7 +20,7 @@ import { CompleteSessionButton } from "../booking-actions";
 import { studentName, studentOfTutor } from "../../students";
 import { StudentAvatar } from "../../student-avatar";
 import type { Database } from "@/lib/database.types";
-import { roomOpen } from "@/lib/room-window";
+import { classInProgress, roomOpen } from "@/lib/room-window";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -35,11 +35,12 @@ const BOOKING_PILL: Record<string, PillTone> = {
 };
 
 /**
- * MN-05 · Reservas cuya sala puede abrirse. `completed` entra porque el cron
- * cierra la reserva a los 10 min de acabar la clase mientras la sala sigue viva
- * 7 días. Misma lista, palabra por palabra, que la guarda de `join_session` y
- * que la del detalle del alumno: tres definiciones distintas de "hay sala"
- * acabarían discrepando.
+ * Reservas cuya sala puede abrirse. `completed` entra porque el cron cierra la
+ * reserva a los 10 min de acabar la clase, y con B-2 la sala vive exactamente
+ * hasta ese mismo instante: sin `completed` en la lista, el botón parpadearía
+ * en el último minuto según qué pasada del cron llegara antes. Misma lista,
+ * palabra por palabra, que la guarda de `join_session` y que la del detalle del
+ * alumno: tres definiciones distintas de "hay sala" acabarían discrepando.
  */
 const LIVE = new Set<BookingStatus>([
   "confirmed",
@@ -208,23 +209,41 @@ export default async function TutorBookingDetailPage({
                           {SESSION_STATUS_LABEL[s.status] ?? s.status}
                         </StatusPill>
                         {LIVE.has(booking.status) && roomOpen(s) ? (
-                          <>
-                            <Button
-                              asChild
-                              className="h-[43px] rounded-[8px] px-5 text-sm font-semibold"
-                            >
-                              <Link href={`/room/${s.id}`}>Entrar a la sala</Link>
-                            </Button>
-                            {/* "Marcar completada" sigue atado al ESTADO, no a
-                                la ventana: `complete_session` solo acepta
-                                `scheduled`/`in_progress`, así que ofrecerlo
-                                sobre una sesión ya cerrada sería un botón que
-                                solo sabe dar error. */}
-                            {s.status === "scheduled" ||
-                            s.status === "in_progress" ? (
-                              <CompleteSessionButton sessionId={s.id} />
-                            ) : null}
-                          </>
+                          <Button
+                            asChild
+                            className="h-[43px] rounded-[8px] px-5 text-sm font-semibold"
+                          >
+                            <Link href={`/room/${s.id}`}>Entrar a la sala</Link>
+                          </Button>
+                        ) : null}
+                        {/* ⚠️ B-2 · «MARCAR COMPLETADA» SALE DEL GATE DE ACCESO,
+                            y no es cosmético.
+
+                            Estaba anidado dentro de `roomOpen(s)`, o sea atado
+                            a la ventana de la SALA — un número que el cliente
+                            ha movido dos veces en una semana (10 min → 7 días
+                            → 10 min). Con los 7 días de MN-05 este botón salía
+                            una semana antes de la clase; al volver a 10 min se
+                            encogía de golpe. Y lo que fija es
+                            `bookings.completed_at`, el reloj del pago al tutor:
+                            no puede depender de una decisión de UI.
+
+                            Ahora lo gobierna la ventana de la CLASE
+                            (`classInProgress`, el `session_live_window` del
+                            lado del cliente), que sale de `start_at`/`end_at` y
+                            sobrevive al próximo cambio de la sala.
+
+                            🔴 Y el gate NO es decorativo: `complete_session`
+                            **no tiene guarda temporal** — acepta cualquier
+                            sesión propia en `scheduled`/`in_progress`, incluida
+                            la del mes que viene. Hasta que esa guarda exista en
+                            el servidor, esta condición es lo único que impide
+                            adelantar el reloj del cobro. No la quites. */}
+                        {LIVE.has(booking.status) &&
+                        classInProgress(s) &&
+                        (s.status === "scheduled" ||
+                          s.status === "in_progress") ? (
+                          <CompleteSessionButton sessionId={s.id} />
                         ) : null}
                         {/* US-1802 · disponible 30 días desde la clase. Con el
                             N.º de sesión pegado (N-27): una grabación se

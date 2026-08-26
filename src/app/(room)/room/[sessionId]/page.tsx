@@ -8,7 +8,7 @@ import { toHeaderUser } from "@/lib/auth/header-user";
 import { listNotices } from "@/lib/notifications-server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { LiveRoom } from "./live-room";
-import { ACCESS_WINDOW_DAYS, withDays } from "@/lib/room-window";
+import { ACCESS_WINDOW_MIN, withMinutes } from "@/lib/room-window";
 
 export const metadata = { title: "Sala en vivo · Enséñame Ya" };
 
@@ -109,8 +109,8 @@ export default async function RoomPage({
       // que llegara sin ventana. No debería existir —hay backfill y trigger—,
       // pero es la misma cautela que la RPC: aquí se cae a la fórmula, NUNCA a
       // "sin límite", que es lo que haría un rango construido con nulos.
-      opensAt={s.access_opens_at ?? withDays(s.start_at, -ACCESS_WINDOW_DAYS)}
-      closesAt={s.access_closes_at ?? withDays(s.end_at, ACCESS_WINDOW_DAYS)}
+      opensAt={s.access_opens_at ?? withMinutes(s.start_at, -ACCESS_WINDOW_MIN)}
+      closesAt={s.access_closes_at ?? withMinutes(s.end_at, ACCESS_WINDOW_MIN)}
       sessionStatus={s.status}
       bookingStatus={s.bookings?.status ?? "cancelled"}
       productTitle={s.bookings?.products?.title ?? "Mentoría"}

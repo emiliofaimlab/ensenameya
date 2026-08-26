@@ -11,6 +11,7 @@ import {
   BOOKING_STATUS_LABEL,
 } from "@/lib/booking";
 import type { TutorBalance } from "@/lib/payouts";
+import { roomOpen } from "@/lib/room-window";
 import { studentsOfTutor } from "./students";
 import { StudentLink } from "./student-link";
 import { formatPct, tutorTier } from "./tier";
@@ -84,7 +85,10 @@ export default async function TutorHomePage() {
     supabase
       .from("sessions")
       .select(
-        "id, start_at, status, booking_id, student_id, bookings(products(title))",
+        // B-2 · `end_at` y las dos columnas de ventana: sin ellas este panel
+        // no puede saber si la sala está abierta, y ofrecía "Ir a la sala"
+        // para clases de dentro de semanas.
+        "id, start_at, end_at, status, booking_id, student_id, access_opens_at, access_closes_at, bookings(products(title))",
       )
       .eq("tutor_id", userId)
       .in("status", ["scheduled", "in_progress"])
@@ -92,10 +96,12 @@ export default async function TutorHomePage() {
       // rato sigue en curso, y desaparecer del panel dejaría al tutor creyendo
       // que no tiene clase mientras el alumno espera en la sala.
       //
-      // MN-05 · Y se queda en `end_at`, NO en `access_closes_at`. La sala ahora
-      // sigue abierta 7 días, pero esto es "Próximas clases": arrastrar aquí
-      // una semana de clases ya dadas taparía justo lo que el tutor viene a
-      // mirar. La sala de una clase pasada se alcanza desde su reserva.
+      // Se queda en `end_at`, NO en `access_closes_at`. Con los 7 días de
+      // MN-05 arrastrar aquí una semana de clases ya dadas habría tapado justo
+      // lo que el tutor viene a mirar; con B-2 los dos casi coinciden, pero el
+      // criterio correcto sigue siendo el fin de la CLASE — esto es "Próximas
+      // clases", no "salas abiertas". La sala de una clase pasada se alcanza
+      // desde su reserva.
       .gte("end_at", new Date().toISOString())
       .order("start_at")
       .limit(3),
@@ -301,13 +307,20 @@ export default async function TutorHomePage() {
                     >
                       <Link href={`/chat/${s.booking_id}`}>Chat</Link>
                     </Button>
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
-                    >
-                      <Link href={`/room/${s.id}`}>Ir a la sala</Link>
-                    </Button>
+                    {/* ⚠️ B-2 · Este botón NO tenía gate ninguno: se pintaba
+                        para toda clase futura, así que el tutor veía "Ir a la
+                        sala" semanas antes y el servidor le decía que no.
+                        `roomOpen` es la misma comprobación que ya hacían las
+                        dos pantallas de detalle — aquí faltaba. */}
+                    {roomOpen(s) ? (
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+                      >
+                        <Link href={`/room/${s.id}`}>Ir a la sala</Link>
+                      </Button>
+                    ) : null}
                   </div>
                 </li>
               ))}

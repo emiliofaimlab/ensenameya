@@ -107,9 +107,10 @@ export async function POST(
       auth.room_name,
       roomClosesAt,
       allowed === true,
-      // MN-05 · con la sala viva 7 días, `eject_at_room_exp` dejó de ser el
-      // tope de nadie. Este es el que queda, y se cuenta desde que cada persona
-      // entra. Ver `participantEjectAfterSec`.
+      // Se cuenta desde que CADA persona entra, y sale de la clase
+      // (`start_at`/`end_at`), no de la ventana de acceso — por eso B-2 no lo
+      // toca. Nació cuando MN-05 dejó `eject_at_room_exp` sin efecto real;
+      // hoy vuelve a haber dos redes. Ver `participantEjectAfterSec`.
       participantEjectAfterSec(new Date(auth.starts_at), new Date(auth.ends_at)),
     );
     const token = await mintToken({

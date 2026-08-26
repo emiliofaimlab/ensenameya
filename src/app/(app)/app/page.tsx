@@ -4,6 +4,7 @@ import { CompassIcon } from "lucide-react";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
+import { roomOpen } from "@/lib/room-window";
 import { BookingRow } from "@/components/booking-row";
 import { ReferralCard } from "@/components/referral/referral-card";
 import {
@@ -64,7 +65,10 @@ export default async function AppHome() {
       supabase
         .from("bookings")
         .select(
-          "id, status, created_at, products(title, tutor_id), sessions(id, start_at, end_at, status)",
+          // B-2 · las columnas de ventana viajan con la sesión: sin ellas
+          // este panel no puede saber si la sala está abierta, y ofrecía
+          // "Entrar a sala" para clases de dentro de semanas.
+          "id, status, created_at, products(title, tutor_id), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
         )
         .eq("student_id", user.id)
         .in("status", OPEN)
@@ -190,14 +194,25 @@ export default async function AppHome() {
                       timeZone={tz}
                       status={BOOKING_STATUS_LABEL[b.status]}
                       note={
-                        // MN-05 · el botón de sala aparece 7 días antes; el
-                        // texto tiene que decir lo mismo que hace el botón.
+                        // El botón de sala y este texto tienen que decir lo
+                        // mismo. B-2 devolvió la ventana a 10 min (V-1).
                         ready
-                          ? "La sala abre 7 días antes"
+                          ? "La sala abre 10 min antes"
                           : "Reembolso 100 % si no acepta en 24 h"
                       }
                       action={
-                        ready && s ? (
+                        // ⚠️ B-2 · `roomOpen(s)` ADEMÁS del estado. Antes solo
+                        // se miraba `ROOM_READY.has(b.status)`, o sea el estado
+                        // de la RESERVA — que dice «esta reserva puede tener
+                        // sala algún día», no «ahora». Resultado: el botón
+                        // aparecía para una clase de dentro de tres semanas y
+                        // el servidor la rechazaba. Es, con diferencia, la
+                        // explicación más probable del «la sala está abierta
+                        // desde que compro» que reportó el cliente.
+                        //
+                        // Con la ventana en 7 días casi no se notaba; con 10
+                        // minutos sería un botón muerto casi siempre.
+                        ready && s && roomOpen(s) ? (
                           <Button
                             asChild
                             className="h-[38px] rounded-[8px] px-4 text-[13px] font-semibold"

@@ -18,10 +18,11 @@ const STEPS = [
   },
   {
     icon: VideoIcon,
-    // MN-05 · era "hasta 10 min antes", y desde la migración 20260820190000 la
-    // ventana son 7 días a cada lado. Un texto que promete diez minutos junto a
-    // un botón que aparece una semana antes es peor que no haber cambiado nada.
-    text: 'Entra a la sala desde "Mis reservas": abre 7 días antes de cada sesión y sigue abierta 7 días después.',
+    // ⚠️ Este texto ha cambiado DOS veces en una semana y las dos por el
+    // cliente: 10 min → 7 días (MN-05, `20260820190000`) → 10 min otra vez
+    // (B-2, `20260826130000`). Tiene que decir lo que hace el botón; un texto
+    // que promete una ventana distinta de la real es peor que no tocarlo.
+    text: 'Entra a la sala desde "Mis reservas": abre 10 minutos antes de cada sesión y sigue abierta 10 minutos después.',
   },
   {
     icon: MessageSquareIcon,
