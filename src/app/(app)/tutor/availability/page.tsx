@@ -1,5 +1,6 @@
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
+import { buildUsedBy } from "@/lib/availability";
 import { cn } from "@/lib/utils";
 import { PanelCard } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
@@ -46,14 +47,9 @@ export default async function TutorAvailabilityPage() {
       supabase.from("product_availability_rules").select("rule_id, product_id"),
     ]);
 
-  // rule_id → títulos de las mentorías que la usan.
-  const titleById = new Map((products ?? []).map((p) => [p.id, p.title]));
-  const usedBy: Record<string, string[]> = {};
-  for (const l of links ?? []) {
-    const title = titleById.get(l.product_id);
-    if (!title) continue; // producto de otro tutor: imposible por RLS, pero no se asume
-    (usedBy[l.rule_id] ??= []).push(title);
-  }
+  // rule_id → títulos de las mentorías que la usan. El paso 4 del asistente
+  // monta el mismo gestor y necesita el mismo mapa, así que vive en `lib`.
+  const usedBy = buildUsedBy(products ?? [], links ?? []);
 
   // Calendario del mes ACTUAL: azul = weekday con regla activa; ámbar = fecha
   // con excepción. Server-render puro: pinta el estado, no navega meses.
