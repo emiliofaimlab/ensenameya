@@ -88,13 +88,19 @@ export function SiteFooter() {
                 Y no lo hace privado: el domicilio **sigue publicado** en
                 `/contacto` y en el §39 de los Términos, en inglés y en español.
                 Por eso `COMPANY.address` y `COMPANY_ADDRESS_LINE` siguen en
-                `lib/company.ts` — borrarlos allí rompería el contrato. */}
+                `lib/company.ts` — borrarlos allí rompería el contrato.
+
+                ⚠️ **Y el EIN tampoco se pinta ya** (V-8, 24-ago). Misma
+                historia y misma frontera: el cliente lo quiere fuera **de la
+                web**, no del contrato. `COMPANY.taxIdLabel` y `COMPANY.taxId`
+                se quedan en `lib/company.ts` porque el §39 de
+                `terms-content.ts` los interpola en los dos idiomas; borrarlos
+                allí rompe por tipos el contrato ya firmado. Sacarlo del §39
+                está pendiente de Néstor, y sube `TERMS_VERSION`. */}
             <address className="mt-5 text-[12.5px] leading-relaxed not-italic text-muted-foreground">
               <span className="font-medium text-foreground">
                 {COMPANY.legalName}
               </span>
-              {" · "}
-              {COMPANY.taxIdLabel} {COMPANY.taxId}
             </address>
           </div>
 

@@ -60,7 +60,15 @@ export default function ContactoPage() {
 
             {/* DL-03 · identidad legal. Los mismos datos que constan en dLocal
                 Go: los comparan uno contra otro, así que no se tocan aquí sin
-                tocarlos allí. */}
+                tocarlos allí.
+
+                ⚠️ **El EIN ya no se pinta** (V-8, 24-ago): el cliente lo quiere
+                fuera de la web. Quedan la razón social y el domicilio, que es
+                lo que dLocal busca para identificar al prestador. `COMPANY.taxId`
+                sigue existiendo en `lib/company.ts` porque el §39 de
+                `terms-content.ts` lo interpola en inglés y en español —
+                sacarlo de ahí es otra cosa, espera a Néstor y sube
+                `TERMS_VERSION`. */}
             <div className="rounded-2xl border border-border bg-background p-6">
               <BuildingIcon className="size-5 text-brand" aria-hidden />
               <h2 className="mt-3 text-[16px] font-semibold">
@@ -70,8 +78,6 @@ export default function ContactoPage() {
                 <span className="font-medium text-foreground">
                   {COMPANY.legalName}
                 </span>
-                <br />
-                {COMPANY.taxIdLabel} {COMPANY.taxId}
                 <br />
                 {COMPANY_ADDRESS_LINE}
               </address>
