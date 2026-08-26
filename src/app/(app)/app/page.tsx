@@ -93,6 +93,19 @@ export default async function AppHome() {
   );
 
   /**
+   * V-6 · El «con Fulanito» de cada fila lleva ahora a su ficha pública — hasta
+   * hoy era texto muerto y, comprada la mentoría, no había forma de volver al
+   * tutor.
+   *
+   * ⚠️ Solo si es legible, y `names` YA es esa comprobación: `tutorNames` sale
+   * de `tutor_profiles`, que solo se lee con `approval_status = 'approved'`. A
+   * un tutor desaprobado no se le enlaza — su ficha daría un 404 desde el panel
+   * del propio alumno. Ver `tutorCards`.
+   */
+  const perfilDelTutor = (id: string | null | undefined) =>
+    id && names.has(id) ? `/tutors/${id}` : undefined;
+
+  /**
    * Sesión relevante de la reserva: la primera que aún no ha terminado.
    *
    * MN-05 · Sigue mirando `end_at` y NO la ventana de acceso, a propósito. Esto
@@ -171,6 +184,7 @@ export default async function AppHome() {
                       key={b.id}
                       href={`/reservas/${b.id}`}
                       tutor={names.get(b.products?.tutor_id ?? "")}
+                      tutorHref={perfilDelTutor(b.products?.tutor_id)}
                       title={b.products?.title ?? "Mentoría"}
                       when={s?.start_at ?? null}
                       timeZone={tz}
@@ -222,6 +236,7 @@ export default async function AppHome() {
                       key={b.id}
                       href={`/reservas/${b.id}`}
                       tutor={names.get(b.products?.tutor_id ?? "")}
+                      tutorHref={perfilDelTutor(b.products?.tutor_id)}
                       title={b.products?.title ?? "Mentoría"}
                       when={last?.start_at ?? null}
                       timeZone={tz}

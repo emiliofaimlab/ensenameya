@@ -50,6 +50,19 @@ export default async function ReservasPage() {
     bookings.map((b) => b.products?.tutor_id),
   );
 
+  /**
+   * V-6 · El «con Fulanito» de cada fila lleva ahora a su ficha pública — hasta
+   * hoy era texto muerto y, comprada la mentoría, no había forma de volver al
+   * tutor.
+   *
+   * ⚠️ Solo si es legible, y `names` YA es esa comprobación: `tutorNames` sale
+   * de `tutor_profiles`, que solo se lee con `approval_status = 'approved'`. A
+   * un tutor desaprobado no se le enlaza — su ficha daría un 404 desde el panel
+   * del propio alumno. Ver `tutorCards`.
+   */
+  const perfilDelTutor = (id: string | null | undefined) =>
+    id && names.has(id) ? `/tutors/${id}` : undefined;
+
   const open = bookings.filter((b) => OPEN.has(b.status));
   const closed = bookings.filter((b) => !OPEN.has(b.status));
 
@@ -77,6 +90,7 @@ export default async function ReservasPage() {
       key={b.id}
       href={`/reservas/${b.id}`}
       tutor={names.get(b.products?.tutor_id ?? "")}
+      tutorHref={perfilDelTutor(b.products?.tutor_id)}
       title={b.products?.title ?? "Mentoría"}
       when={when(b)}
       timeZone={tz}

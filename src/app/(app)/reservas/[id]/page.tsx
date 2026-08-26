@@ -8,7 +8,7 @@ import {
   BOOKING_STATUS_LABEL,
   SESSION_STATUS_LABEL,
   formatSessionTime,
-  tutorNames,
+  tutorCards,
 } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import {
@@ -19,6 +19,7 @@ import {
   StatusPill,
 } from "@/components/layout/panel-shell";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { TutorSummary } from "@/components/tutor-summary";
 import { RecordingLink } from "@/components/room/recording-link";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
@@ -92,8 +93,13 @@ export default async function BookingDetailPage({
   const payment = booking.payments;
   const chatOpen = CHAT_BOOKING.has(booking.status);
 
-  const names = await tutorNames(supabase, [booking.products?.tutor_id]);
-  const tutor = names.get(booking.products?.tutor_id ?? "");
+  // V-6 · aquí se pinta la ficha del tutor, no solo su nombre: esta es LA
+  // pantalla de la queja («tras reservar no hay forma de llegar al tutor»).
+  // `fichas` puede venir vacío si le retiraron la aprobación — `TutorSummary`
+  // sabe qué hacer con eso y no enlaza a un 404.
+  const fichas = await tutorCards(supabase, [booking.products?.tutor_id]);
+  const ficha = fichas.get(booking.products?.tutor_id ?? "");
+  const tutor = ficha?.displayName ?? undefined;
 
   // El hilo solo se carga si el chat aplica: para una reserva cancelada sería
   // una consulta a cambio de nada.
@@ -295,6 +301,12 @@ export default async function BookingDetailPage({
             </PanelCard>
           ) : null}
         </div>
+
+        {/* V-6 · Encima del chat y no debajo: quien abre esta pantalla para
+            escribirle primero quiere saber a quién. Sin `chatHref` — el hilo
+            está justo aquí abajo, y un botón «Escribirle» que baja tres
+            centímetros es ruido. */}
+        <TutorSummary tutor={ficha} />
 
         <PanelCard className="flex flex-col gap-3">
           <PanelCardTitle className="text-base">

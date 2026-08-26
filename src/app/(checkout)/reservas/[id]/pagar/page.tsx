@@ -5,10 +5,11 @@ import { ArrowLeftIcon } from "lucide-react";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime, tutorNames } from "@/lib/booking";
+import { formatSessionTime, tutorCards } from "@/lib/booking";
 import { ResumePayment } from "@/components/checkout/resume-payment";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
 import { SessionRef } from "@/components/room/session-ref";
+import { TutorSummary } from "@/components/tutor-summary";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 
 export const metadata = { title: "Confirmar pago · Enséñame Ya" };
@@ -55,8 +56,9 @@ export default async function PagarReservaPage({
   // mandarlo al detalle, que sí sabe contarle en qué estado está.
   if (booking.status !== "pending_payment") redirect(`/reservas/${id}`);
 
-  const names = await tutorNames(supabase, [booking.products?.tutor_id]);
-  const tutor = names.get(booking.products?.tutor_id ?? "");
+  const fichas = await tutorCards(supabase, [booking.products?.tutor_id]);
+  const ficha = fichas.get(booking.products?.tutor_id ?? "");
+  const tutor = ficha?.displayName ?? undefined;
   const sessions = [...(booking.sessions ?? [])].sort((a, b) =>
     a.start_at.localeCompare(b.start_at),
   );
@@ -99,6 +101,15 @@ export default async function PagarReservaPage({
               ? ` · ${booking.session_duration_min} min`
               : ""}
           </p>
+        </div>
+
+        {/* V-6 · Quién da la clase, con salida a su ficha. En variante `inline`
+            y no la tarjeta entera: esta pantalla se recortó a propósito (MN-01)
+            para que no haya nada entre el alumno y el formulario de pago, y una
+            ficha de tutor de 200px aquí sería deshacer eso. Lo que faltaba no
+            era presencia, era el enlace. */}
+        <div className="mt-3.5 border-t border-[#e0e0e0] pt-3.5">
+          <TutorSummary tutor={ficha} variant="inline" />
         </div>
 
         <ul className="mt-3.5 flex flex-col gap-2 border-t border-[#e0e0e0] pt-3.5">

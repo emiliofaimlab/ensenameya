@@ -24,7 +24,8 @@ import {
 } from "@/lib/checkout/hold";
 import type { SavedCard } from "@/lib/stripe";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime } from "@/lib/booking";
+import { formatSessionTime, type TutorCardData } from "@/lib/booking";
+import { TutorSummary } from "@/components/tutor-summary";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -144,6 +145,7 @@ export function CheckoutForm({
   currency,
   productTitle,
   tutorName,
+  tutor,
   packageLabel,
   incluye,
   precioPorSesion,
@@ -180,6 +182,15 @@ export function CheckoutForm({
   currency: string;
   productTitle: string;
   tutorName: string;
+  /**
+   * V-6 · El tutor con lo justo para reconocerle y llegar a su ficha. Viene de
+   * `getProductDetail`, o sea de la misma consulta que ya trae `tutorName` —
+   * esta prop NO añade un viaje, solo deja de tirar lo que ya venía.
+   *
+   * Opcional por firma, pero en esta pantalla siempre llega: `getProductDetail`
+   * devuelve `null` si el tutor no es legible y la página responde 404 antes.
+   */
+  tutor?: TutorCardData;
   packageLabel: string;
   /** "4 × 60 min" (`sessionsLabel`). Null si la mentoría no declara duración. */
   incluye: string | null;
@@ -600,6 +611,17 @@ export function CheckoutForm({
               {incluye ? ` · ${incluye}` : ""}
             </p>
           </div>
+
+          {/* V-6 · La salida hacia la ficha del tutor, que aquí no existía: se
+              compraba a nombre de alguien del que solo se leía el nombre. En
+              variante `inline` porque esta pantalla se recortó a propósito
+              (MN-01, «solo los inputs de la tarjeta») y una ficha entera sería
+              deshacerlo. */}
+          {tutor ? (
+            <div className="mt-3.5 border-t border-[#e0e0e0] pt-3.5">
+              <TutorSummary tutor={tutor} variant="inline" />
+            </div>
+          ) : null}
 
           {/* 🐛 RN-01/RN-02 · con la zona del alumno, no con la del servidor ni
               con la del navegador. Sin `timeZone` esta lista podía enseñar una

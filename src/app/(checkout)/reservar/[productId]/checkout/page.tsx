@@ -4,7 +4,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
-import { bookingTotal, tutorNames } from "@/lib/booking";
+import { bookingTotal } from "@/lib/booking";
 import { activeChargeProvider } from "@/lib/payments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isStripeConfigured, lastUsedCardId, listSavedCards } from "@/lib/stripe";
@@ -55,7 +55,6 @@ export default async function CheckoutPage({
   // Vercel— mientras el calendario que las eligió y `/reservas/[id]/pagar` sí la
   // usan. O sea que podía enseñar una hora distinta de la reservada.
   const tz = await getUserTimezone();
-  const names = await tutorNames(supabase, [product.tutor.id]);
   // La pantalla tiene que decir la verdad ANTES de que el alumno pulse.
   const simulado = (await activeChargeProvider()) === "simulated";
 
@@ -93,8 +92,16 @@ export default async function CheckoutPage({
   const tarjetas = ultimaId
     ? [...guardadas].sort((a, b) => Number(b.id === ultimaId) - Number(a.id === ultimaId))
     : guardadas;
+  // V-6 · AQUÍ SOBRABA UNA CONSULTA. `tutorNames()` volvía a `tutor_profiles` a
+  // por un nombre que `getProductDetail` ya había traído en la misma petición
+  // (`product.tutor.displayName`, del mismo `select` y con la misma RLS). Se
+  // quita: un viaje menos y una fuente menos de la que pueden discrepar.
+  //
+  // Y por lo mismo esta pantalla NO necesita el respaldo de tutor desaprobado
+  // que sí llevan las otras cuatro: `getProductDetail` devuelve `null` cuando el
+  // tutor no es legible, así que aquí ya se ha respondido 404 antes de llegar.
   const tutorName =
-    names.get(product.tutor.id) ?? product.tutor.headline ?? "tu tutor";
+    product.tutor.displayName ?? product.tutor.headline ?? "tu tutor";
 
   return (
     <div className="flex flex-col gap-6">
@@ -148,6 +155,7 @@ export default async function CheckoutPage({
         currency={product.currency}
         productTitle={product.title}
         tutorName={tutorName}
+        tutor={product.tutor}
         packageLabel={
           required > 1 ? `Paquete ${required} sesiones` : "Sesión suelta"
         }

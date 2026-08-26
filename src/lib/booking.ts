@@ -79,24 +79,84 @@ export function bookingTotal(p: {
 }
 
 /**
- * Nombres públicos de tutores por id (DD-01). Va en consulta aparte a
+ * Lo que el alumno puede saber de su tutor desde sus propias pantallas.
+ *
+ * V-6 · Es lo mismo que devolvía `tutorNames` con cuatro columnas más. El
+ * cliente pidió poder llegar al tutor DESPUÉS de reservar —hasta hoy, comprado
+ * el hilo, no había ni un enlace de vuelta a su ficha— y para eso hace falta
+ * algo más que el nombre.
+ */
+export type TutorCardData = {
+  id: string;
+  displayName: string | null;
+  avatarPath: string | null;
+  headline: string | null;
+  ratingAvg: number | null;
+  ratingCount: number;
+};
+
+/**
+ * Fichas públicas de tutores por id (DD-01). Va en consulta aparte a
  * propósito: `products.tutor_id` apunta a `profiles`, que es privado —el alumno
- * solo ve su propia fila—, así que el nombre hay que leerlo de la copia pública
- * de `tutor_profiles`. El Figma firma con el tutor en AL02, AL03 y AL04.
+ * solo ve su propia fila—, así que esto hay que leerlo de la copia pública de
+ * `tutor_profiles`. El Figma firma con el tutor en AL02, AL03 y AL04.
+ *
+ * ⚠️ **SIN MIGRACIÓN, Y ESO NO ES CASUALIDAD.** `tutor_profiles_select_public`
+ * (`20260706120000`) abre estas columnas a cualquiera con
+ * `approval_status = 'approved'`, así que las cuatro nuevas ya eran legibles;
+ * lo único que faltaba era pedirlas.
+ *
+ * ⚠️ **Y ESE `approved` ES LA TRAMPA DE ESTA FICHA.** Si a un tutor le retiran
+ * la aprobación, su fila deja de existir PARA EL ALUMNO: aquí no llega, y
+ * `/tutors/<id>` le devolvería un 404 desde su propio panel — por una reserva
+ * que sí pagó. Por eso esto devuelve un `Map` con huecos en vez de rellenar con
+ * un nombre inventado: quien pinte tiene que poder distinguir «este tutor» de
+ * «este tutor ya no está», y enseñar la ficha SIN enlace en el segundo caso.
+ * Ver `TutorSummary`.
+ *
+ * Y no hay de dónde sacar el nombre en ese caso: `bookings` congela el dinero
+ * (importe, moneda, reparto) pero no la identidad del tutor. Lo comprobado es
+ * que no hay columna que valga, no que no se haya buscado.
+ */
+export async function tutorCards(
+  supabase: SupabaseClient<Database>,
+  ids: (string | null | undefined)[],
+): Promise<Map<string, TutorCardData>> {
+  const unique = [...new Set(ids.filter(Boolean) as string[])];
+  if (unique.length === 0) return new Map();
+  const { data } = await supabase
+    .from("tutor_profiles")
+    .select("profile_id, display_name, avatar_path, headline, rating_avg, rating_count")
+    .in("profile_id", unique);
+  return new Map(
+    (data ?? []).map((r) => [
+      r.profile_id,
+      {
+        id: r.profile_id,
+        displayName: r.display_name,
+        avatarPath: r.avatar_path,
+        headline: r.headline,
+        ratingAvg: r.rating_avg,
+        ratingCount: r.rating_count,
+      },
+    ]),
+  );
+}
+
+/**
+ * Solo los nombres, para las cuatro pantallas que no pintan ficha (reseña,
+ * cancelar, confirmación y el paso de reserva). Sale de `tutorCards` en vez de
+ * tener su propia consulta: una sola forma de leer al tutor, y la trampa del
+ * `approved` documentada en un solo sitio.
  */
 export async function tutorNames(
   supabase: SupabaseClient<Database>,
   ids: (string | null | undefined)[],
 ): Promise<Map<string, string>> {
-  const unique = [...new Set(ids.filter(Boolean) as string[])];
-  if (unique.length === 0) return new Map();
-  const { data } = await supabase
-    .from("tutor_profiles")
-    .select("profile_id, display_name")
-    .in("profile_id", unique);
+  const fichas = await tutorCards(supabase, ids);
   return new Map(
-    (data ?? [])
-      .filter((r) => r.display_name)
-      .map((r) => [r.profile_id, r.display_name as string]),
+    [...fichas]
+      .filter(([, t]) => t.displayName)
+      .map(([id, t]) => [id, t.displayName as string]),
   );
 }
