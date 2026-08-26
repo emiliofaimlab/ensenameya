@@ -5,7 +5,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime, tutorCards } from "@/lib/booking";
+import { bookingFormatLabel, formatSessionTime, tutorCards } from "@/lib/booking";
 import { ResumePayment } from "@/components/checkout/resume-payment";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
 import { SessionRef } from "@/components/room/session-ref";
@@ -94,9 +94,7 @@ export default async function PagarReservaPage({
           </p>
           <p className="text-xs text-[#6b6b6b]">
             {tutor ? `con ${tutor} · ` : ""}
-            {booking.num_sessions === 1
-              ? "Sesión suelta"
-              : `Paquete ${booking.num_sessions} sesiones`}
+            {bookingFormatLabel(booking.num_sessions)}
             {booking.session_duration_min
               ? ` · ${booking.session_duration_min} min`
               : ""}

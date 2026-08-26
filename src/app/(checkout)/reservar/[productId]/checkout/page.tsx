@@ -4,7 +4,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
-import { bookingTotal } from "@/lib/booking";
+import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
 import { activeChargeProvider } from "@/lib/payments";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isStripeConfigured, lastUsedCardId, listSavedCards } from "@/lib/stripe";
@@ -156,9 +156,7 @@ export default async function CheckoutPage({
         productTitle={product.title}
         tutorName={tutorName}
         tutor={product.tutor}
-        packageLabel={
-          required > 1 ? `Paquete ${required} sesiones` : "Sesión suelta"
-        }
+        packageLabel={bookingFormatLabel(required)}
         // Las dos etiquetas ya existían en el catálogo y se reutilizan tal cual:
         // "4 × 60 min" y "Equivale a 24,00 US$ por sesión · 4 sesiones". Escribir
         // aquí otra versión de lo mismo es como acaban divergiendo la ficha y el

@@ -9,6 +9,7 @@ import {
   SESSION_STATUS_LABEL,
   formatSessionTime,
   tutorCards,
+  bookingFormatLabel,
 } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import {
@@ -137,9 +138,7 @@ export default async function BookingDetailPage({
         <div className="flex flex-wrap items-center gap-2.5">
           <StatusPill>{BOOKING_STATUS_LABEL[booking.status]}</StatusPill>
           <p className="text-[13px] text-[#6b6b6b]">
-            {booking.num_sessions === 1
-              ? "Sesión suelta"
-              : `Paquete de ${booking.num_sessions} sesiones`}
+            {bookingFormatLabel(booking.num_sessions)}
             {booking.session_duration_min
               ? ` · ${booking.session_duration_min} min`
               : ""}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { CategoryTag } from "@/lib/catalog/queries";
+import { SESION_INDIVIDUAL } from "@/lib/booking";
 
 export type ProductFilterState = {
   cat?: string;
@@ -28,7 +29,7 @@ export const SESSION_RANGES = [
 
 export const MODELS = [
   { id: "per_package", label: "Paquete" },
-  { id: "per_session", label: "Sesión suelta" },
+  { id: "per_session", label: SESION_INDIVIDUAL },
   { id: "per_hour", label: "Por hora" },
 ];
 

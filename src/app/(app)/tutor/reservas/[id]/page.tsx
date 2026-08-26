@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime, BOOKING_STATUS_LABEL, SESSION_STATUS_LABEL } from "@/lib/booking";
+import { bookingFormatLabel, formatSessionTime, BOOKING_STATUS_LABEL, SESSION_STATUS_LABEL } from "@/lib/booking";
 import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import {
   PanelCard,
@@ -162,9 +162,7 @@ export default async function TutorBookingDetailPage({
               <div>
                 <p className="text-xs text-[#6b6b6b]">Formato</p>
                 <p className="mt-0.5 text-[13px] font-medium text-[#404040]">
-                  {booking.num_sessions === 1
-                    ? "Sesión suelta"
-                    : `Paquete de ${booking.num_sessions} sesiones`}
+                  {bookingFormatLabel(booking.num_sessions)}
                 </p>
               </div>
               {booking.session_duration_min ? (

@@ -2,7 +2,7 @@
 // también `npm run check:email` con node a pelo (vía `email-templates.ts`),
 // y node no resuelve el alias `@/`. Mismo motivo por el que
 // `email-templates.ts` importa `./catalog/format.ts`.
-import { bookingTotal } from "../booking.ts";
+import { bookingTotal, SESION_INDIVIDUAL } from "../booking.ts";
 import type { Database } from "../database.types.ts";
 
 type PricingModel = Database["public"]["Enums"]["pricing_model"];
@@ -41,7 +41,8 @@ export function modelLabel(p: {
 }): string {
   switch (p.pricingModel) {
     case "per_session":
-      return "Sesión única";
+      // B1.3 · era "Sesión única", una de las cinco formas de decir lo mismo.
+      return SESION_INDIVIDUAL;
     case "per_hour":
       return "Por hora";
     case "per_package":

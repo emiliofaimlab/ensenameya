@@ -65,6 +65,42 @@ export function isUpcoming(iso: string): boolean {
 }
 
 /**
+ * B1.3 · CÓMO SE LLAMA UNA MENTORÍA DE UNA SOLA SESIÓN. En un sitio.
+ *
+ * El cliente contó que la misma cosa se llamaba de cinco maneras distintas por
+ * la plataforma, y tenía razón. Estaba escrita a mano en seis pantallas:
+ * «Sesión suelta» en cinco (filtro del catálogo, checkout, pago y los dos
+ * detalles de reserva) y «Sesión única» en la portada, vía `modelLabel`.
+ *
+ * ⚠️ Cambiar los seis literales no arregla nada por sí solo: así es como
+ * llegaron a ser seis. Lo que lo arregla es que solo haya un sitio donde
+ * decidirlo, y que las pantallas lo pidan.
+ *
+ * Vive en `lib/booking.ts` y no en `catalog/format.ts` a propósito:
+ * `format.ts` ya importa de aquí (`bookingTotal`), así que ponerlo allí y
+ * pedirlo desde aquí sería un import circular.
+ */
+export const SESION_INDIVIDUAL = "Sesión individual";
+
+/**
+ * El FORMATO de una reserva: una sesión o un paquete.
+ *
+ * ⚠️ Y de paso cierra una divergencia que no estaba en la ficha: de las cuatro
+ * pantallas que pintaban esto, dos decían «Paquete 4 sesiones» y dos «Paquete
+ * DE 4 sesiones». Nadie lo había visto porque no se ven juntas.
+ *
+ * ⚠️ Lo que NO entra aquí es el precio. «25,00 US$ / sesión» y el selector
+ * «Por sesión» del tutor hablan del MODELO DE COBRO, no del producto — un
+ * paquete también se cobra por sesión. La ficha lo dice explícitamente y por
+ * eso `priceLabel` no se toca.
+ */
+export function bookingFormatLabel(numSessions: number): string {
+  return numSessions === 1
+    ? SESION_INDIVIDUAL
+    : `Paquete de ${numSessions} sesiones`;
+}
+
+/**
  * Total de UNA reserva del producto. Es lo mismo que congela `create_booking`
  * en servidor; aquí solo se muestra (el servidor sigue mandando, S-15).
  */
