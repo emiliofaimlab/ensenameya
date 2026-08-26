@@ -3,8 +3,14 @@ import { CompassIcon } from "lucide-react";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
+import {
+  BOOKING_STATUS_LABEL,
+  isUpcoming,
+  tutorCards,
+  type TutorCardData,
+} from "@/lib/booking";
 import { roomOpen } from "@/lib/room-window";
+import { TutorSummary } from "@/components/tutor-summary";
 import { BookingRow } from "@/components/booking-row";
 import { ReferralCard } from "@/components/referral/referral-card";
 import {
@@ -77,7 +83,10 @@ export default async function AppHome() {
       supabase
         .from("bookings")
         .select(
-          "id, status, products(title, tutor_id), sessions(id, start_at, status), reviews(rating)",
+          // B1.10 · `created_at` entra aquí para poder ORDENAR los tutores
+          // recientes mezclando esta lista con la de arriba: sin él, «último»
+          // solo podría significar «de las abiertas», que no es lo mismo.
+          "id, status, created_at, products(title, tutor_id), sessions(id, start_at, status), reviews(rating)",
         )
         .eq("student_id", user.id)
         .eq("status", "completed")
@@ -91,23 +100,57 @@ export default async function AppHome() {
 
   const open = openRows ?? [];
   const completed = pastRows ?? [];
-  const names = await tutorNames(
+  // B1.10 · `tutorCards` en vez de `tutorNames`: es la MISMA consulta con
+  // cuatro columnas más (avatar, titular, valoración), así que el bloque de
+  // tutores recientes no añade ni un viaje. El nombre se saca de aquí.
+  const fichas = await tutorCards(
     supabase,
     [...open, ...completed].map((b) => b.products?.tutor_id),
   );
+  const nombreDelTutor = (id: string | null | undefined) =>
+    (id ? fichas.get(id)?.displayName : null) ?? undefined;
+
+  /**
+   * B1.10 · LOS ÚLTIMOS TUTORES DEL ALUMNO.
+   *
+   * Petición del cliente (D2): en el panel quiere ver primero sus sesiones y
+   * sus tutores. El orden de las sesiones ya estaba (N-30); esto es la otra
+   * mitad.
+   *
+   * Sale de las reservas que la pantalla YA cargó — de ahí que el Doc 22 lo
+   * diera por barato— pero mezclando las dos listas y ordenando por
+   * `created_at`: «último» tiene que significar el último de verdad, no el
+   * último de los abiertos. Por eso el `select` de arriba gana esa columna.
+   *
+   * Se deduplica por tutor y se corta a cuatro: es un recordatorio de con quién
+   * has dado clase, no un directorio. Y solo entran los legibles — un tutor al
+   * que le retiraron la aprobación no tiene ficha pública a la que enlazar (ver
+   * `tutorCards`), así que aquí sencillamente no aparece: en las pantallas de
+   * la reserva sí hay que explicarlo, porque el alumno pagó; en un bloque de
+   * descubrimiento, no.
+   */
+  const ultimosTutores = [...open, ...completed]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .map((b) => b.products?.tutor_id)
+    .filter((id, i, todos): id is string => Boolean(id) && todos.indexOf(id) === i)
+    .map((id) => fichas.get(id))
+    // Predicado tipado y no un `filter` a secas: sin él TypeScript deja
+    // `TutorCardData | undefined` y el `.map` de abajo se queja con razón.
+    .filter((t): t is TutorCardData => Boolean(t?.displayName))
+    .slice(0, 4);
 
   /**
    * V-6 · El «con Fulanito» de cada fila lleva ahora a su ficha pública — hasta
    * hoy era texto muerto y, comprada la mentoría, no había forma de volver al
    * tutor.
    *
-   * ⚠️ Solo si es legible, y `names` YA es esa comprobación: `tutorNames` sale
+   * ⚠️ Solo si es legible, y `fichas` YA es esa comprobación: `tutorCards` sale
    * de `tutor_profiles`, que solo se lee con `approval_status = 'approved'`. A
    * un tutor desaprobado no se le enlaza — su ficha daría un 404 desde el panel
    * del propio alumno. Ver `tutorCards`.
    */
   const perfilDelTutor = (id: string | null | undefined) =>
-    id && names.has(id) ? `/tutors/${id}` : undefined;
+    id && fichas.get(id)?.displayName ? `/tutors/${id}` : undefined;
 
   /**
    * Sesión relevante de la reserva: la primera que aún no ha terminado.
@@ -187,7 +230,7 @@ export default async function AppHome() {
                     <BookingRow
                       key={b.id}
                       href={`/reservas/${b.id}`}
-                      tutor={names.get(b.products?.tutor_id ?? "")}
+                      tutor={nombreDelTutor(b.products?.tutor_id)}
                       tutorHref={perfilDelTutor(b.products?.tutor_id)}
                       title={b.products?.title ?? "Mentoría"}
                       when={s?.start_at ?? null}
@@ -250,7 +293,7 @@ export default async function AppHome() {
                     <BookingRow
                       key={b.id}
                       href={`/reservas/${b.id}`}
-                      tutor={names.get(b.products?.tutor_id ?? "")}
+                      tutor={nombreDelTutor(b.products?.tutor_id)}
                       tutorHref={perfilDelTutor(b.products?.tutor_id)}
                       title={b.products?.title ?? "Mentoría"}
                       when={last?.start_at ?? null}
@@ -280,6 +323,34 @@ export default async function AppHome() {
           ) : null}
         </>
       )}
+
+      {/* B1.10 · Con quién has dado clase, encima de las sugerencias.
+          El cliente pidió (D2) ver primero sus sesiones y sus tutores; el orden
+          de las sesiones ya estaba (N-30) y esto lo completa. Va ANTES de las
+          sugerencias a propósito: volver con un tutor conocido es un camino más
+          corto que descubrir uno nuevo, y esta pantalla ordena por lo que el
+          alumno hará antes.
+
+          Se reutiliza `TutorSummary` en su variante compacta —la misma que
+          A-6 puso en el checkout y en el pago— para no estrenar una cuarta
+          forma de pintar un tutor. */}
+      {ultimosTutores.length > 0 ? (
+        <PanelCard>
+          <PanelCardTitle className="text-[22px]">
+            Tus últimos tutores
+          </PanelCardTitle>
+          <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
+            Vuelve a reservar con quien ya conoces.
+          </p>
+          <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+            {ultimosTutores.map((t) => (
+              <li key={t.id}>
+                <TutorSummary tutor={t} variant="inline" />
+              </li>
+            ))}
+          </ul>
+        </PanelCard>
+      ) : null}
 
       {/* N-30 · mentorías sugeridas por sus categorías de interés. Va justo
           debajo de las reservas —lo que el alumno vino a mirar— y encima de las
