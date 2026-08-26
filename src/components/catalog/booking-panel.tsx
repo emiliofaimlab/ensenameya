@@ -394,7 +394,14 @@ export async function BookingPanel({
             <div className="mt-5">
               <BookingSelect
                 id="reserva-mentoria"
-                label="Elige la sesión"
+                /* «Mentoría» y no «sesión»: lo que se elige aquí es CUÁL de
+                   las clases del tutor, no cuántas ni a qué hora. La etiqueta
+                   decía «sesión» mientras su propio placeholder decía
+                   «mentoría», que es además el término que manda en todo el
+                   producto desde el acuerdo del 17-ago. Y «sesión» ya
+                   significa otra cosa en esta misma pantalla: el encuentro
+                   concreto que se agenda abajo. */
+                label="Elige la mentoría"
                 placeholder="Elige una mentoría"
                 value={chosen?.id ?? ""}
                 options={dayProducts.map((p) => {
