@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
+import { asFaqsTable, parseFaqs, type Faq } from "@/lib/tutor-faqs";
 import { stripAccents } from "./format";
 
 /**
@@ -66,9 +67,17 @@ export type ProductCardData = {
 
 export type ProductDetail = ProductCardData & {
   description: string | null;
-  tutor: ProductTutor & { bio: string | null };
+  tutor: ProductTutor & {
+    bio: string | null;
+    /**
+     * EY-194 · FAQ del TUTOR, las mismas en todas sus mentorías. Llegan
+     * separadas de las de la mentoría a propósito: la ficha las pinta en orden
+     * (primero las de esta mentoría) y ese orden se pierde si se fusionan aquí.
+     */
+    faqs: Faq[];
+  };
   /** FAQ propias de la mentoría (R24-17); vacío = se muestran las genéricas. */
-  faqs: { q: string; a: string }[];
+  faqs: Faq[];
 };
 
 const PAGE_SIZE = 12;
@@ -486,6 +495,23 @@ export async function getProductDetail(
     .maybeSingle();
   if (!tutor) return null;
 
+  // EY-194 · las FAQ del tutor, en una consulta aparte y no en el `select` de
+  // arriba por una razón temporal: `tutor_profiles.faqs` todavía no está en
+  // `database.types.ts` y pedirla en ese `select` tipado tumbaría el tipo de
+  // TODAS las demás columnas. Va por la puerta de `lib/tutor-faqs.ts`.
+  //
+  // ⚠️ AL REGENERAR LOS TIPOS (`npm run db:types`): añade `faqs` al `select` de
+  // arriba, borra estas cinco líneas y la puerta entera. Es una consulta de
+  // más contra la misma fila que ya se acaba de leer.
+  //
+  // Sin `.eq('approval_status','approved')`: la fila ya se validó dos líneas
+  // más arriba, y esta consulta va con la misma sesión y la misma RLS.
+  const { data: tutorFaqs } = await asFaqsTable(supabase)
+    .from("tutor_profiles")
+    .select("faqs")
+    .eq("profile_id", p.tutor_id)
+    .maybeSingle();
+
   return {
     id: p.id,
     title: p.title,
@@ -500,12 +526,11 @@ export async function getProductDetail(
     level: p.level,
     language: p.language,
     categories: toCategoryTags(p.product_categories),
-    // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
-    faqs: Array.isArray(p.faqs)
-      ? (p.faqs as { q?: unknown; a?: unknown }[])
-          .filter((f) => typeof f?.q === "string" && typeof f?.a === "string")
-          .map((f) => ({ q: f.q as string, a: f.a as string }))
-      : [],
+    // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}. El parseo es
+    // el MISMO que el de las FAQ del tutor (EY-194) a propósito: las dos listas
+    // se concatenan al pintar y una diferencia de criterio se vería como
+    // preguntas que aparecen o desaparecen según de dónde vengan.
+    faqs: parseFaqs(p.faqs),
     tutor: {
       id: tutor.profile_id,
       displayName: tutor.display_name,
@@ -514,6 +539,7 @@ export async function getProductDetail(
       bio: tutor.bio,
       ratingAvg: tutor.rating_avg,
       ratingCount: tutor.rating_count,
+      faqs: parseFaqs(tutorFaqs?.faqs),
     },
   };
 }

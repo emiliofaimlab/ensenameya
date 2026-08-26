@@ -90,6 +90,31 @@ export default async function ProductPage({
   const tutorAvatar = storageUrl("avatars", product.tutor.avatarPath);
   const bullets = product.description ? toBullets(product.description) : null;
 
+  /**
+   * EY-194 · Las FAQ que se pintan: primero las de ESTA mentoría (R24-17) y
+   * debajo las del PERFIL del tutor, que él escribe una vez y valen para las
+   * cinco mentorías que tenga.
+   *
+   * El orden no es estético: lo específico contesta antes que lo general, y
+   * quien está mirando esta mentoría pregunta primero por ella.
+   *
+   * ⚠️ NO SE DEDUPLICA. Si el tutor escribe la misma pregunta en los dos
+   * sitios, salen las dos. Cualquier criterio de igualdad sobre texto escrito a
+   * mano (¿mayúsculas?, ¿tildes?, ¿signos?) acabaría borrando de la pantalla
+   * algo que el tutor puso a propósito —una respuesta más concreta para esta
+   * mentoría, por ejemplo—, y el tutor ve el duplicado en su propia ficha y lo
+   * arregla en dos clics. Falso positivo caro, duplicado barato.
+   *
+   * Las genéricas de plataforma siguen siendo el último recurso: solo si no hay
+   * ninguna de las dos. Ojo con lo que eso significa —y ya está anotado en el
+   * Doc 22 (G1)—: mientras el tutor no escriba nada, la ficha enseña cuatro
+   * preguntas nuestras firmadas visualmente como suyas.
+   */
+  const faqs =
+    product.faqs.length + product.tutor.faqs.length > 0
+      ? [...product.faqs, ...product.tutor.faqs]
+      : PRODUCT_FAQ;
+
   const chips = [
     reviews.length > 0 && product.tutor.ratingAvg
       ? `★ ${product.tutor.ratingAvg.toFixed(1)} · ${reviews.length} ${
@@ -291,8 +316,12 @@ export default async function ProductPage({
               </h2>
               {/* ponytail: `<details>` nativo, abiertos como en el resto del sitio. */}
               <div className="mt-2 divide-y divide-[#e6e6e6]">
-                {(product.faqs.length > 0 ? product.faqs : PRODUCT_FAQ).map(({ q, a }) => (
-                  <details key={q} open className="group py-4">
+                {faqs.map(({ q, a }, i) => (
+                  // ⚠️ La clave lleva el índice porque las dos listas NO se
+                  // deduplican: si el tutor repite la misma pregunta en su
+                  // perfil y en la mentoría, `key={q}` sería la misma clave dos
+                  // veces y React tira una de las dos.
+                  <details key={`${i}-${q}`} open className="group py-4">
                     <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-base font-semibold text-[#292929] marker:hidden">
                       {q}
                       <ChevronDownIcon className="size-4 shrink-0 text-brand transition-transform group-open:rotate-180" />

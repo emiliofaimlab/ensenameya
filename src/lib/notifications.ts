@@ -39,10 +39,20 @@ const TEXT: Record<string, string> = {
   payout_paid: "Se pagó tu liquidación",
   recording_ready: "La grabación de tu mentoría ya está disponible",
   payout_issue: "Una liquidación necesita atención",
+  // NTF-21 · el canal de este aviso es `email`, pero la campana pinta TODAS las
+  // filas de `notifications` sin mirar el canal, así que también sale aquí. Sin
+  // esta línea diría "Novedad en tu cuenta (NTF-21)".
+  new_message: "Tienes un mensaje nuevo",
 };
 
 /** A dónde lleva el aviso, según lo que el trigger dejó en el payload. */
 function hrefFor(payload: Record<string, unknown> | null): string | null {
+  // NTF-21 · primero el hilo: un mensaje puede ocurrir dentro de una reserva y
+  // el aviso tiene que abrir el chat, no la ficha (mismo orden que `rutaFor`
+  // en `email-templates.ts`, que es el otro sitio donde se decide esto).
+  const conversationId = payload?.conversation_id;
+  if (typeof conversationId === "string") return `/chat/${conversationId}`;
+
   const bookingId = payload?.booking_id;
   if (typeof bookingId === "string") return `/reservas/${bookingId}`;
   if (payload?.payout_id) return "/tutor/payouts";

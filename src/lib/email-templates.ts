@@ -95,6 +95,16 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
     cuerpo: `Tu liquidación${importe(p, "amount") && ` de ${importe(p, "amount")}`} se marcó como pagada. El detalle está en tu panel de cobros.`,
     cta: "Ver mis cobros",
   }),
+  // NTF-21 (EY-151). ⚠️ NI EL MENSAJE NI QUIÉN LO ESCRIBE: el payload que deja
+  // el trigger trae solo el id del hilo, a propósito (ver la migración
+  // `20260826160000`). Un correo se reenvía y se queda en bandejas ajenas; el
+  // chat tiene purga a 30 días dentro de la app y ninguna fuera de ella.
+  new_message: () => ({
+    asunto: "Tienes un mensaje nuevo",
+    cuerpo:
+      "Alguien te escribió por el chat de Enséñame Ya. Puedes leerlo y responder desde la plataforma.",
+    cta: "Abrir la conversación",
+  }),
   recording_ready: () => ({
     asunto: "La grabación de tu mentoría ya está disponible",
     cuerpo:
@@ -105,6 +115,13 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
 
 /** A dónde lleva el correo, según lo que el trigger dejó en el payload. */
 function rutaFor(template: string, payload: Payload): string {
+  // NTF-21 · el hilo, que es lo único que trae su payload. Va ANTES que la
+  // reserva porque un mensaje puede ocurrir dentro de una: el día que alguien
+  // añada `booking_id` a este payload, el enlace tiene que seguir llevando al
+  // chat y no a la ficha de la reserva.
+  const conversationId = payload?.conversation_id;
+  if (typeof conversationId === "string") return `/chat/${conversationId}`;
+
   const bookingId = payload?.booking_id;
   if (typeof bookingId === "string") return `/reservas/${bookingId}`;
   if (payload?.payout_id) return "/tutor/payouts";
