@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CopyIcon, PlusIcon, XIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { horasSemana, type Rule } from "@/lib/availability";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,30 +31,13 @@ export const WEEKDAYS = [
 const DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 const ENTRE_SEMANA = [1, 2, 3, 4, 5];
 
-export type Rule = {
-  id: string;
-  weekday: number;
-  start_time: string;
-  end_time: string;
-  is_active: boolean;
-};
+// EY-183 · `Rule` y `horasSemana` se mudaron a `lib/availability.ts` sin tocar
+// una coma de lo que hacen: el asistente de onboarding las necesita y no puede
+// importarlas de aquí (ver la cabecera de ese módulo). Se reexporta el tipo
+// para que nada de fuera tenga que enterarse de la mudanza.
+export type { Rule };
 
 const hhmm = (t: string) => t.slice(0, 5); // 'HH:MM:SS' → 'HH:MM'
-
-/** Minutos de una franja, para poder decir cuántas horas suma la semana. */
-function minutos(r: Rule): number {
-  const [h1, m1] = hhmm(r.start_time).split(":").map(Number);
-  const [h2, m2] = hhmm(r.end_time).split(":").map(Number);
-  return h2 * 60 + m2 - (h1 * 60 + m1);
-}
-
-function horasSemana(rules: Rule[]): string {
-  const total = rules.reduce((n, r) => n + minutos(r), 0);
-  if (total === 0) return "";
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return m ? `${h} h ${m} min` : `${h} h`;
-}
 
 /**
  * US-501 (SCR-TU05) — horario semanal del tutor.

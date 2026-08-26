@@ -9,6 +9,7 @@ import {
 
 import { storageUrl } from "@/lib/catalog/format";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import { buildUsedBy } from "@/lib/availability";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
 import { resolveStep, stepCookie } from "@/components/onboarding/wizard-step";
@@ -38,8 +39,15 @@ const WELCOME_POINTS = [
   { icon: BadgeCheckIcon, text: "Perfil y credenciales verificados" },
 ];
 
-/** Pasos del asistente de tutor; lo sabe la página para saturar `?paso=`. */
-const TOTAL_STEPS = 5;
+/**
+ * Pasos del asistente de tutor; lo sabe la página para saturar `?paso=`.
+ *
+ * EY-183 · pasó de 5 a 6 al entrar la disponibilidad como paso 4. `resolveStep`
+ * satura al rango [1, total], así que la cookie de quien dejó el asistente a
+ * medias con la numeración vieja sigue siendo válida — como mucho aterriza un
+ * paso antes de donde lo dejó, nunca en blanco.
+ */
+const TOTAL_STEPS = 6;
 
 export default async function TutorOnboardingPage({
   searchParams,
@@ -57,7 +65,9 @@ export default async function TutorOnboardingPage({
     { data: activeCats },
     { data: myCats },
     { data: docs },
-    { count: productCount },
+    { data: products },
+    { data: rules },
+    { data: ruleLinks },
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
@@ -87,11 +97,24 @@ export default async function TutorOnboardingPage({
       .select("doc_type, status, link_url")
       .eq("tutor_id", user.id),
     // EX-02: sin mentoría no se aprueba el perfil, pero el asistente sí se
-    // cierra. El número alimenta el paso 5 y el checklist de verificación.
+    // cierra. El número alimenta el último paso y el checklist de verificación.
+    // ⚠️ Ya no es un `head: true` con `count`: los TÍTULOS hacen falta para el
+    // mapa de N-04 de aquí abajo, y pedirlos aquí evita una consulta más.
+    supabase.from("products").select("id, title").eq("tutor_id", user.id),
+    // EY-183 · las franjas del paso 4. Mismo orden que el panel para que las
+    // dos pantallas pinten los mismos chips en el mismo sitio.
     supabase
-      .from("products")
-      .select("id", { count: "exact", head: true })
-      .eq("tutor_id", user.id),
+      .from("availability_rules")
+      .select("id, weekday, start_time, end_time, is_active")
+      .eq("tutor_id", user.id)
+      .order("weekday")
+      .order("start_time"),
+    // N-04 · qué mentorías cuelgan de cada franja → el gestor avisa antes de
+    // borrar una que sostiene una oferta. No es teórico dentro del asistente:
+    // al asistente se vuelve a entrar mientras el perfil no esté aprobado, y
+    // para entonces el tutor puede haber atado franjas a mentorías desde el
+    // panel. Sin `.eq()`: la RLS de `product_availability_rules` ya lo acota.
+    supabase.from("product_availability_rules").select("rule_id, product_id"),
   ]);
 
   // M-03 · Paso resuelto en servidor (URL → cookie → 1): el primer HTML ya sale
@@ -207,7 +230,9 @@ export default async function TutorOnboardingPage({
             docsByType={docsByType}
             identityStatus={tp?.identity_verification_status ?? "not_submitted"}
             socials={parseSocials(tp?.socials)}
-            productCount={productCount ?? 0}
+            productCount={(products ?? []).length}
+            rules={rules ?? []}
+            rulesUsedBy={buildUsedBy(products ?? [], ruleLinks ?? [])}
           />
         </div>
       </Container>
