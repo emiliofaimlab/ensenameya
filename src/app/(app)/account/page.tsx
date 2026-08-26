@@ -5,7 +5,6 @@ import { createClient } from "@/lib/supabase/server";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { ReferralCard } from "@/components/referral/referral-card";
 import { CalendarFeedCard } from "@/components/calendar/calendar-feed-card";
-import { asCalendarRpc } from "@/lib/calendar/rpc";
 import { AccountForm } from "./account-form";
 
 export const metadata = { title: "Mi cuenta · Enséñame Ya" };
@@ -31,7 +30,7 @@ export default async function AccountPage() {
   // EY-188 · ¿ya hay suscripción de calendario? Se LEE, no se crea: si esta
   // llamada emitiera el token, todo el que abre su cuenta acabaría con un
   // secreto vivo que nunca pidió. Crearlo es un clic explícito de la tarjeta.
-  const { data: feedToken } = await asCalendarRpc(supabase).rpc(
+  const { data: feedToken } = await supabase.rpc(
     "my_calendar_feed_token",
   );
 

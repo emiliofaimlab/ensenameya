@@ -247,6 +247,35 @@ export type Database = {
           },
         ]
       }
+      calendar_feed_tokens: {
+        Row: {
+          created_at: string
+          last_seen_at: string | null
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          last_seen_at?: string | null
+          token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          last_seen_at?: string | null
+          token?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_feed_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -1764,6 +1793,8 @@ export type Database = {
         }
         Returns: string
       }
+      calendar_feed: { Args: { p_token: string }; Returns: Json }
+      calendar_feed_token: { Args: never; Returns: string }
       cancel_booking: {
         Args: { p_booking_id: string; p_reason?: string }
         Returns: Json
@@ -1812,6 +1843,7 @@ export type Database = {
         Returns: Json
       }
       f_unaccent: { Args: { "": string }; Returns: string }
+      gen_calendar_feed_token: { Args: never; Returns: string }
       generar_referencia_reserva: { Args: never; Returns: string }
       get_available_slots: {
         Args: { p_from?: string; p_product_id: string; p_to?: string }
@@ -1849,6 +1881,7 @@ export type Database = {
         Returns: undefined
       }
       mask_person_name: { Args: { p_name: string }; Returns: string }
+      my_calendar_feed_token: { Args: never; Returns: string }
       my_conversations: {
         Args: never
         Returns: {
@@ -1929,6 +1962,7 @@ export type Database = {
         Args: { p_approve: boolean; p_reason?: string; p_tutor_id: string }
         Returns: string
       }
+      revoke_calendar_feed_token: { Args: never; Returns: boolean }
       run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
       search_product_ids_fuzzy: {
         Args: { p_limit?: number; p_q: string }

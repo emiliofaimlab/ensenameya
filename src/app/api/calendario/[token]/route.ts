@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { SUFIJO_ICS } from "@/lib/calendar/feed";
 import { construirIcs } from "@/lib/calendar/ics";
-import { asCalendarRpc, type RespuestaFeed } from "@/lib/calendar/rpc";
+import type { RespuestaFeed } from "@/lib/calendar/rpc";
 
 /**
  * EY-188 / B5.5 · El feed de calendario, **por suscripción**.
@@ -74,7 +74,7 @@ export async function GET(
     return textoPlano("Sincronización de calendario no configurada.", 503);
   }
 
-  const { data, error } = await asCalendarRpc(supabase).rpc("calendar_feed", {
+  const { data, error } = await supabase.rpc("calendar_feed", {
     p_token: token,
   });
 

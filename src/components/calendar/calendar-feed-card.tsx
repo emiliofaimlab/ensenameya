@@ -5,7 +5,6 @@ import { CalendarSyncIcon, CheckIcon, CopyIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
-import { asCalendarRpc } from "@/lib/calendar/rpc";
 import { feedUrl, googleAddUrl, webcalUrl } from "@/lib/calendar/feed";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +67,7 @@ export function CalendarFeedCard({
 
   async function activar() {
     setOcupado(true);
-    const { data, error } = await asCalendarRpc(createClient()).rpc(
+    const { data, error } = await createClient().rpc(
       "calendar_feed_token",
     );
     setOcupado(false);
@@ -82,7 +81,7 @@ export function CalendarFeedCard({
 
   async function desconectar() {
     setOcupado(true);
-    const { error } = await asCalendarRpc(createClient()).rpc(
+    const { error } = await createClient().rpc(
       "revoke_calendar_feed_token",
     );
     setOcupado(false);
