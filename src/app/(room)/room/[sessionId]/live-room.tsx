@@ -133,8 +133,36 @@ const VARS_CHAT_SALA = {
   "--input": SALA.border,
 } as React.CSSProperties;
 
-/** Ver `public/img/room-chat.svg`: por qué es absoluta y por qué es blanca. */
-const ICONO_CHAT = "/img/room-chat.svg";
+/**
+ * El icono del botón de chat de la barra de Daily, **incrustado como `data:`
+ * URI y no servido desde `/public`**.
+ *
+ * ⚠️ ANTES ERA `/img/room-chat.svg` Y SALÍA ROTO. Quien pide ese fichero no
+ * somos nosotros: es el IFRAME DE DAILY, que vive en `https://*.daily.co`. Se
+ * le pasaba la URL absoluta con `window.location.origin`, y en desarrollo eso
+ * es `http://localhost:3000` → **contenido mixto**, que el navegador bloquea
+ * sin decir nada visible: el bloqueo ocurre dentro del iframe ajeno, así que en
+ * nuestra consola no aparece. Solo se ve el icono roto en la barra.
+ *
+ * En producción, con la app en https, la petición sí habría salido. Pero
+ * arreglarlo con «pues ya funcionará en prod» deja el botón roto en local y en
+ * cualquier preview por http, que es donde se prueba. Con un `data:` URI **no
+ * hay petición**: ni cross-origin, ni mixed content, ni dependencia del
+ * protocolo. Se ve igual en los tres sitios.
+ *
+ * Y de paso desaparece la razón por la que `botonesTray()` solo se podía llamar
+ * desde efectos: ya no lee `window`.
+ *
+ * Sigue siendo blanco a mano y no `currentColor`: Daily lo pinta como IMAGEN,
+ * no lo inserta en su DOM, así que no hereda color. La barra es oscura siempre
+ * porque el `theme` que le pasamos fija `background`. 36×36 es lo que espera
+ * la barra de Prebuilt.
+ */
+const ICONO_CHAT = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">' +
+    '<path d="M10 10h16a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-8.7l-5.3 4v-4H10a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Z" ' +
+    'stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round"/></svg>',
+)}`;
 
 /**
  * MN-04 · El botón de chat que se inyecta EN LA BARRA DE DAILY.
@@ -148,21 +176,20 @@ const ICONO_CHAT = "/img/room-chat.svg";
  * paneles laterales (participantes, red): el botón se queda "encendido"
  * mientras el panel está abierto, igual que los suyos.
  *
- * ⚠️ Se llama SOLO desde efectos. Lee `window.location.origin`, así que en
- * render (o en el SSR de este componente de cliente) reventaría.
+ * (Ya NO depende de `window`: el icono es un `data:` URI de módulo. Antes leía
+ * `window.location.origin` y por eso solo podía llamarse desde efectos.)
  */
 function botonesTray(
   abierto: boolean,
   sinLeer: number,
 ): DailyCustomTrayButtons {
-  const icono = `${window.location.origin}${ICONO_CHAT}`;
   return {
     chat: {
-      iconPath: icono,
-      // Mismo fichero para los dos modos: nuestro `theme` fija `background`
-      // oscuro pase lo que pase, así que el icono blanco vale siempre. Si un
-      // día la sala tuviera modo claro, aquí va la variante oscura.
-      iconPathDarkMode: icono,
+      iconPath: ICONO_CHAT,
+      // El mismo para los dos modos: nuestro `theme` fija `background` oscuro
+      // pase lo que pase, así que el trazo blanco vale siempre. Si un día la
+      // sala tuviera modo claro, aquí va la variante oscura.
+      iconPathDarkMode: ICONO_CHAT,
       // V-2 · el contador va en el RÓTULO porque es lo único que hay.
       // `DailyCustomTrayButtons` expone `iconPath`, `label`, `tooltip` y
       // `visualState`: no hay insignia, y el icono es un SVG remoto que Daily
@@ -421,6 +448,33 @@ export function LiveRoom({
     setChatAbierto(false);
     setSinLeer(0);
   }, []);
+  const abrirChat = useCallback(() => {
+    setChatAbierto(true);
+    setSinLeer(0);
+  }, []);
+  /**
+   * V-2 · El aviso FLOTANTE, que es la otra mitad del «que avise».
+   *
+   * La insignia sirve si estás mirando la barra; durante una clase estás
+   * mirando el vídeo, o una pantalla compartida a pantalla completa, y un punto
+   * naranja de 16px arriba a la derecha no lo ve nadie. El toast se cruza por
+   * delante y trae el camino de vuelta.
+   *
+   * ⚠️ `id` fijo a propósito: sonner REEMPLAZA el toast que ya tenga ese id en
+   * vez de apilar otro. Tres mensajes seguidos en una conversación animada son
+   * tres avisos encima del vídeo, que es justo la clase de ruido que hace que la
+   * gente deje de mirarlos.
+   *
+   * Sin previsualizar el mensaje: esto puede estar proyectado en una pantalla
+   * compartida delante de la otra persona.
+   */
+  const avisarMensaje = useCallback(() => {
+    setSinLeer((n) => n + 1);
+    toast("Nuevo mensaje en el chat", {
+      id: "sala-mensaje-nuevo",
+      action: { label: "Abrir", onClick: abrirChat },
+    });
+  }, [abrirChat]);
   const frameRef = useRef<HTMLDivElement>(null);
   // Para devolver el foco al cerrar el panel desde su aspa: si no, el
   // `display:none` del `aside` deja el foco huérfano y el navegador lo manda
@@ -792,7 +846,11 @@ export function LiveRoom({
                   // `aria-hidden` en el punto y el número en texto para el
                   // lector: un círculo naranja no se puede leer en voz alta.
                   aria-hidden
-                  className="absolute -top-1.5 -right-1.5 flex min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] leading-4 font-bold text-white"
+                  // `primary` (#fe6a00) y no `brand` (#0080ff): la naranja es
+                  // el acento de la sala — el mismo `SALA.accent` que Daily usa
+                  // dentro del iframe para sus botones activos. Con el azul,
+                  // dos avisos a diez centímetros hablarían en dos colores.
+                  className="absolute -top-1.5 -right-1.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-4 font-bold text-primary-foreground"
                 >
                   {sinLeer > 9 ? "9+" : sinLeer}
                 </span>
@@ -993,7 +1051,7 @@ export function LiveRoom({
                 // (para no perder su Realtime) pero deja de marcar leído y
                 // avisa aquí, que es quien pinta el contador.
                 visible={chatAbierto}
-                onIncoming={() => setSinLeer((n) => n + 1)}
+                onIncoming={avisarMensaje}
               />
             </div>
           </aside>
