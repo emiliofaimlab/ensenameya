@@ -51,7 +51,19 @@ export async function GET() {
   const { data, error } = await ctx.admin.rpc("account_deletion_blockers", {
     p_user_id: ctx.user.id,
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // ⚠️ Se registra en el servidor ADEMÁS de devolverlo. Es una operación
+    // irreversible y con una sola oportunidad: si falla, el motivo tiene que
+    // quedar en algún sitio que se pueda leer después. Devolverlo solo al
+    // navegador significa que quien lo diagnostique dependa de que la persona
+    // afectada haya copiado el mensaje, y no lo va a hacer.
+    console.error("[EY-192] anonymize_account falló:", error.message, {
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   return NextResponse.json({
     email: ctx.user.email ?? null,
@@ -105,7 +117,19 @@ export async function POST(req: Request) {
   const { data, error } = await ctx.admin.rpc("anonymize_account", {
     p_user_id: ctx.user.id,
   });
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // ⚠️ Se registra en el servidor ADEMÁS de devolverlo. Es una operación
+    // irreversible y con una sola oportunidad: si falla, el motivo tiene que
+    // quedar en algún sitio que se pueda leer después. Devolverlo solo al
+    // navegador significa que quien lo diagnostique dependa de que la persona
+    // afectada haya copiado el mensaje, y no lo va a hacer.
+    console.error("[EY-192] anonymize_account falló:", error.message, {
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   // La sesión del navegador ya está muerta —`anonymize_account` borra las filas
   // de `auth.sessions` y `auth.refresh_tokens`—, pero la cookie sigue en el
