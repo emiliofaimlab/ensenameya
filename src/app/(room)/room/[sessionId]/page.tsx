@@ -54,7 +54,13 @@ export default async function RoomPage({
 
   // El panel de chat de LV01 es el hilo de EP-17, no una copia: se precarga el
   // mismo histórico que `/chat/<reserva>` y Realtime sigue desde ahí.
-  const [{ data: msgs }, { data: firstSession }, { data: consents }, notices] = await Promise.all([
+  const [
+    { data: msgs },
+    { data: firstSession },
+    { data: consents },
+    notices,
+    { data: conversationId },
+  ] = await Promise.all([
     supabase
       .from("messages")
       .select("id, sender_id, body, created_at, attachment_path, attachment_name, attachment_size")
@@ -76,6 +82,26 @@ export default async function RoomPage({
     // V-2 · la campana de la cabecera. Va en el mismo `Promise.all` para que no
     // añada un viaje en serie a una pantalla que ya hace tres.
     listNotices(),
+    // EY-189 · La conversación del par, para el botón de «Reportar conducta».
+    //
+    // Se resuelve AQUÍ y no en el cliente por dos motivos. Uno: la sala ya paga
+    // este viaje —`ChatThread` llama a la misma RPC al montarse (`chat-thread
+    // .tsx`, «Resolver la conversación desde la reserva»)—, y hacerlo en el
+    // servidor lo mete en el `Promise.all` que ya existe en vez de añadir un
+    // salto extra al arranque. Dos: el botón tiene que estar en la barra desde
+    // el primer pintado, y no aparecer medio segundo después.
+    //
+    // ⚠️ Y NO se le pasa este id a `ChatThread`: pasarle `conversationId` le
+    // apaga la recarga del histórico completo (mira `conversationIdProp` en sus
+    // dos efectos) y la sala perdería lo hablado antes de comprar, que es media
+    // promesa de M-12. Sigue entrando por `bookingId`, como hasta hoy.
+    //
+    // `conversation_of_booking` es INVOKER a propósito, así que corre con la
+    // RLS del participante: si esta página se pudo abrir, el hilo se puede
+    // resolver. Toda reserva tiene el suyo — lo garantiza el trigger
+    // `bookings_ensure_conversation` (`20260817210000`) —, pero se trata como
+    // opcional igual: sin id, el botón no se pinta en vez de reventar la sala.
+    supabase.rpc("conversation_of_booking", { p_booking_id: s.booking_id }),
   ]);
 
   const initialMessages: ChatMessage[] = (msgs ?? []).map((m) => ({
@@ -103,6 +129,7 @@ export default async function RoomPage({
       timeZone={await getUserTimezone()}
       sessionId={s.id}
       bookingId={s.booking_id}
+      conversationId={conversationId ?? null}
       startAt={s.start_at}
       endAt={s.end_at}
       // El respaldo replica la fórmula de `session_access_window` para una fila

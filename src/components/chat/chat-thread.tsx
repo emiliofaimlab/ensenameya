@@ -634,17 +634,31 @@ export function ChatThread({
         </form>
       )}
 
-      {esConsulta && listo ? (
+      {/* ⚠️ EY-189 · ESTA FRANJA YA NO CUELGA DE `esConsulta`, y ese era el bug.
+          Hasta hoy la condición era `esConsulta && listo`, así que el botón de
+          reportar SOLO existía en un hilo que nunca llegó a compra. En el chat
+          de una reserva pagada —y en el panel de la sala, que monta este mismo
+          componente con `hasBooking` en true— no aparecía.
+          Es justo del revés de lo que el propio `report-conversation.tsx` dice
+          defender: la desintermediación (§21 de los Términos) se propone sobre
+          todo DENTRO de una mentoría ya pagada, que es donde hay algo que
+          llevarse fuera. Y el acoso no espera a que se cierre el checkout.
+          Ahora la franja se pinta en cuanto hay conversación resuelta; lo que
+          sigue dependiendo de `esConsulta` es el aviso de los topes, que es el
+          único texto que de verdad solo aplica antes de pagar. */}
+      {listo ? (
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
           {/* Decir el límite ANTES de chocar con él. El servidor es quien lo
               impone (5 seguidos sin respuesta, 20 en total): esto solo evita
               que el alumno se entere por un error rojo.
               En un hilo cerrado no hay límite del que avisar —no se escribe—, y
-              el recuadro de arriba ya lo explica. */}
+              el recuadro de arriba ya lo explica. En uno de reserva tampoco:
+              ahí no hay topes. `<span>` vacío y no `null` para que el
+              `justify-between` siga empujando el botón a la derecha. */}
           <span>
-            {soloLectura
-              ? ""
-              : "Hasta que el pago esté confirmado no se pueden enviar archivos y el número de mensajes es limitado."}
+            {esConsulta && !soloLectura
+              ? "Hasta que el pago esté confirmado no se pueden enviar archivos y el número de mensajes es limitado."
+              : ""}
           </span>
           {/* ⚠️ Reportar sigue disponible en un hilo cerrado, y es deliberado:
               lo que hay que denunciar ya está escrito. */}
