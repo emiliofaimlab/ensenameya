@@ -13,6 +13,7 @@ import { roomOpen } from "@/lib/room-window";
 import { TutorSummary } from "@/components/tutor-summary";
 import { BookingRow } from "@/components/booking-row";
 import { ReferralCard } from "@/components/referral/referral-card";
+import { SupportCard } from "@/components/support/support-card";
 import {
   PanelCard,
   PanelCardTitle,
@@ -380,6 +381,11 @@ export default async function AppHome() {
           <Link href="/tutors">Explorar tutores</Link>
         </Button>
       </PanelCard>
+
+      {/* SUP-01 · la salida a soporte, al final y no arriba: quien entra al
+          panel viene a mirar sus mentorías, no a reportar un problema. Lleva a
+          `/contacto`, que es el único buzón que existe — ver `SupportCard`. */}
+      <SupportCard />
     </PanelShell>
   );
 }
