@@ -171,6 +171,21 @@ export const stripeProvider: PspProvider = {
         // aquí también apaga los métodos que se activen mañana en el panel sin
         // que nadie lo revise. Los locales (C-13) entran por aquí cuando se
         // decida el mercado.
+        //
+        // ⚠️ **PAYPAL NO CABE AQUÍ, Y NO ES CUESTIÓN DE ACTIVARLO** (V-7,
+        // comprobado el 26-ago-2026). PayPal por Stripe exige que la CUENTA
+        // DEL COMERCIO esté en uno de 30 países europeos; la nuestra es
+        // `country: US` —`Ensename Ya, LLC`, Florida, el mismo dato del §39
+        // que valida dLocal—, así que Stripe no se lo ofrece. La prueba no es
+        // el 400 de la API, que es genérico: en
+        // `/v1/payment_method_configurations` del sandbox aparecen 43 métodos
+        // marcados on/off y `paypal` **no figura en absoluto**. Está ausente,
+        // no apagado.
+        //
+        // La vía que sí existe es el *PayPal custom payment method*: adaptador
+        // alojado por nosotros, acceso en preview bajo petición y comisión de
+        // Stripe ADEMÁS de la de PayPal, a negociar. O sea una épica con parte
+        // comercial, no dos líneas. Si algún día se aprueba, entra por aquí.
         payment_method_types: ["card"],
         // M-01 · La app presupuesta y confirma «45,00 US$» en tres pantallas y la
         // pasarela cobraba «PAB 46,80», un 4 % más, con un tipo de 1,0400. El

@@ -133,12 +133,6 @@ const RETENCION_MIN = HOLD_POLICY.minutes;
  * v4 · 2026-08-26 — V-4a (A-3 del Doc 22 §22.9): el titular de la tarjeta pasa
  *   de `optional: true` a `false`. Es un parámetro de la Session como los
  *   anteriores y le aplica la misma trampa.
- *   ⚠️ **A-4 (PayPal) tiene que viajar en ESTE mismo bump.** Está pendiente
- *   solo de activar PayPal en el panel de Stripe (hoy la API lo rechaza con
- *   «payment method type "paypal" is invalid»), y en cuanto se active es
- *   añadirlo a `payment_method_types` del cobro. Si para entonces esto ya se
- *   ha desplegado a producción, hay que subir a v5: son parámetros distintos
- *   para la misma reserva otra vez.
  */
 const VERSION_PARAMS = "v4";
 
