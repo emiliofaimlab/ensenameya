@@ -129,6 +129,11 @@ export default async function ReservarPage({
         productId={productId}
         productTitle={product.title}
         tutorName={tutorName}
+        // EY-177 · para el «Agregar otra mentoría» del carrito: desde un
+        // paquete, «seguir comprando» es volver a la ficha del TUTOR, que es
+        // donde están sus otras clases. Sale de `getProductDetail`, que ya lo
+        // trajo: no añade consulta.
+        tutorId={product.tutor.id}
         slots={slots ?? []}
         preselected={elegido ?? null}
         required={required}

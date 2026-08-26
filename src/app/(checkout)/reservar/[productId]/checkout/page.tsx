@@ -10,6 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isStripeConfigured, lastUsedCardId, listSavedCards } from "@/lib/stripe";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
+import { CheckoutSteps } from "@/components/checkout/checkout-steps";
 
 export const metadata = { title: "Confirmar pago · Enséñame Ya" };
 
@@ -106,6 +107,20 @@ export default async function CheckoutPage({
   return (
     <div className="flex flex-col gap-6">
       <div>
+        {/* EY-177 · B3.2 · PASO 3 DE 3.
+
+            ⚠️ Esto es una marcha atrás CONSCIENTE sobre el aislamiento del
+            checkout que pidió el cliente («no debe tener más nada esa página»,
+            layout de `(checkout)`). El responsable la aceptó para que los tres
+            pasos se lean como tres pasos. Se paga lo mínimo: el indicador no
+            lleva enlaces —ningún paso anterior es pulsable desde aquí— y va en
+            ESTA página y no en el layout, que lo comparte con
+            `/reservas/[id]/pagar`, donde «paso 3 de 3 de un carrito» sería
+            mentira. El porqué completo está en `checkout-steps.tsx`.
+
+            La única salida sigue siendo «Cambiar horario», que además suelta el
+            hold: un «volver al carrito» aquí dejaría el horario retenido. */}
+        <CheckoutSteps current={3} className="mb-5" />
         {/* La ÚNICA salida de esta pantalla, y no es una salida del sitio: es
             parte de la misma compra. Aislar el checkout no puede significar
             dejar a alguien encerrado con un horario que ya no le sirve.

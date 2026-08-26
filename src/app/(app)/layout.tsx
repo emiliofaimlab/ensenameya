@@ -1,6 +1,7 @@
 import { requireUser } from "@/lib/auth/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
 import { listNotices } from "@/lib/notifications-server";
+import { cartCount } from "@/lib/cart/resolve";
 import { SiteHeader } from "@/components/layout/site-header";
 import { AppChrome } from "@/components/layout/app-chrome";
 import { ChatLauncher } from "@/components/chat/chat-launcher";
@@ -14,6 +15,10 @@ export default async function AppLayout({
   const { user, roles, fullName, avatarPath } = await requireUser();
   // US-1203: la campana se pinta ya en el servidor, sin ida y vuelta extra.
   const notices = await listNotices();
+  // EY-177 · el mismo contador que en lo público: el carrito es del navegador
+  // (cookie), no de la sesión, así que cruzar de `(public)` a `(app)` no lo
+  // pierde ni lo cambia.
+  const carrito = await cartCount();
 
   // El modo de la ruta (asistente AL01/TU01 con "Guardar y salir", admin con su
   // píldora y su pie) NO se decide aquí: este layout se renderiza una vez y se
@@ -25,6 +30,7 @@ export default async function AppLayout({
       <SiteHeader
         user={toHeaderUser(user, roles, { fullName, avatarPath })}
         notices={notices}
+        cartCount={carrito}
       />
       {/* Columna flexible: el fondo de cada pantalla lo pone ELLA, así que para
           que llegue hasta abajo tiene que poder estirarse. Sin esto, `main`

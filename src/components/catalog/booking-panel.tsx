@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { BookingSelect } from "@/components/catalog/booking-select";
+import { AddToCart } from "@/components/cart/add-to-cart";
 import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
 import { listProductSlots } from "@/lib/catalog/queries";
 import type { ProductCardData } from "@/lib/catalog/queries";
@@ -596,11 +597,59 @@ export async function BookingPanel({
         el precio del patrón «barra de compra fija» y se paga a sabiendas: la
         alternativa es devolver el CTA bajo el pliegue, que era la queja.
       */}
+      {/*
+        EY-177 · B3.2 · ⚠️ AQUÍ CAMBIA EL BOTÓN, Y ES LA MARCHA ATRÁS SOBRE N-33.
+
+        Petición del cliente, literal: «cuando ya seleccione el día y la fecha,
+        sale **1 botón que es agregar al carrito**. Si le doy, se oculta ese y se
+        muestran **dos botones**: […] seguir comprando y […] ir al carrito.
+        Esto porque si un tutor tiene dos clases, yo seleccioné la primera, día y
+        fecha, agregué al carrito, quiero repetir lo mismo con su segunda clase
+        […] **sin salirme de esa visual**».
+
+        O sea que el botón de una SESIÓN SUELTA deja de ir derecho al checkout y
+        pasa a añadir al carrito sin navegar. El coste está medido y escrito en
+        `add-to-cart.tsx`: vuelve a haber una pantalla en medio (la revisión),
+        que es una más que ayer. Lo que se conserva de N-33 —y era la queja de
+        verdad, «estás seleccionando dos veces algo»— es que **no se vuelve a
+        preguntar nada**: la revisión enseña lo elegido, no lo pide otra vez.
+
+        ⚠️ EL PAQUETE NO PASA POR EL CARRITO DESDE AQUÍ, y no es un olvido. Una
+        línea del carrito es una mentoría con TODOS sus horarios, y un
+        `per_package` de N sesiones exige elegir N (RN-12) que no caben en este
+        panel lateral — es exactamente la razón por la que `/reservar/<id>` no se
+        borró (ver la nota de `destinoDeLaHora`). Así que el paquete sigue yendo
+        a su selector múltiple con la primera hora ya marcada, y el «Agregar al
+        carrito» del paquete vive allí, en `slot-picker.tsx`, que es donde la
+        línea está completa. `destinoDeLaHora` se conserva intacto para eso.
+
+        ⚠️ Y el hueco de la derecha en móvil (`max-lg:pe-[72px]`) y el `lg:static`
+        siguen siendo los de B3.5: la burbuja de chat se pinta encima de esta
+        barra, y una barra `sticky` opaca en escritorio taparía los propios
+        selectores del panel. No se tocan.
+      */}
       <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 max-lg:pe-[72px] lg:static">
         {chosen && hora ? (
-          <Button asChild className="h-[51px] w-full text-[15px]">
-            <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
-          </Button>
+          sesionesPorReserva(chosen) > 1 ? (
+            <Button asChild className="h-[51px] w-full text-[15px]">
+              <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
+            </Button>
+          ) : (
+            <AddToCart
+              productId={chosen.id}
+              /* ⚠️ `hora`, no `selectedTime`: es el ISO CANÓNICO de la base, ya
+                 contrastado por instante contra los huecos reales unas líneas
+                 más arriba. Al carrito nunca llega texto crudo de la URL. */
+              slots={[Date.parse(hora)]}
+              /* «Seguir comprando» = esta misma pantalla con la selección en
+                 blanco. Se conserva el DÍA y se sueltan mentoría y hora, que es
+                 justo el gesto que describe el cliente: otra clase del mismo
+                 tutor, el mismo día, sin irse a ningún lado. Y como `hrefFor`
+                 lleva su `#reservar`, la vista aterriza en el panel en vez de
+                 volver al principio de la ficha. */
+              seguirHref={hrefFor({ d: day })}
+            />
+          )
         ) : (
           <Button
             disabled
@@ -613,7 +662,16 @@ export async function BookingPanel({
                   : "Elige primero una hora en el calendario"
             }
           >
-            {ctaLabel}
+            {/* ⚠️ EL RÓTULO BLOQUEADO TIENE QUE PROMETER LO MISMO QUE EL
+                DESBLOQUEADO. Sin esto el panel enseñaba «Reservar mentoría YA»
+                en gris y, al elegir la hora, el botón se convertía en «Agregar
+                al carrito»: dos promesas distintas en el mismo sitio y a un
+                segundo de distancia. Sin clase elegida no se sabe todavía si es
+                paquete o sesión suelta, así que se anuncia el caso mayoritario
+                —el carrito—, que además es el que el cliente pidió. */}
+            {chosen && sesionesPorReserva(chosen) > 1
+              ? ctaLabel
+              : "Agregar al carrito"}
           </Button>
         )}
       </div>

@@ -10,6 +10,7 @@ import { formatMoney } from "@/lib/catalog/format";
 import { HOLD_POLICY } from "@/lib/policy";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
+import { AddToCart } from "@/components/cart/add-to-cart";
 
 export type Slot = { slot_start: string; slot_end: string };
 
@@ -108,6 +109,7 @@ export function SlotPicker({
   productId,
   productTitle,
   tutorName,
+  tutorId,
   slots,
   preselected = null,
   required,
@@ -119,6 +121,8 @@ export function SlotPicker({
   productId: string;
   productTitle: string;
   tutorName?: string;
+  /** EY-177 · destino del «Agregar otra mentoría» tras añadir un paquete. */
+  tutorId: string;
   slots: Slot[];
   /**
    * M-10 · Horario que el alumno ya eligió en la ficha (`?slot=`), validado
@@ -437,6 +441,46 @@ export function SlotPicker({
           >
             Continuar al pago
           </Button>
+
+          {/*
+            EY-177 · B3.2 · POR DÓNDE ENTRA UN PAQUETE AL CARRITO.
+
+            Una línea del carrito es una mentoría con TODOS sus horarios, y un
+            `per_package` de N sesiones exige N (RN-12) que no caben en el panel
+            lateral de la ficha — que es la razón por la que esta pantalla no se
+            borró con N-33. Así que el «Agregar al carrito» del paquete tiene que
+            estar aquí: es el único sitio donde la línea llega a estar completa.
+            Sin esto, un paquete jamás podría convivir en el carrito con la
+            sesión suelta de al lado, y el carrito quedaría a medias.
+
+            ⚠️ Va DENTRO de la tarjeta y no en la barra fija de móvil, y es a
+            propósito: esa barra tiene el ancho, el hueco de la burbuja de chat
+            (`pe-[84px]`) y el contador medidos al píxel en B3.5, y meterle un
+            segundo botón es reabrir esa medición para un caso minoritario.
+            Aquí se ve en las dos anchuras — el `max-lg:hidden` es solo del botón
+            de arriba, no de la tarjeta.
+
+            ⚠️ Solo cuando la selección está COMPLETA. Añadir un paquete a medias
+            metería en la cookie una línea que `create_booking` rechazaría al
+            pagar («debes elegir N horario(s)»), y el error saldría dos pantallas
+            más tarde sin que nadie sepa de dónde vino.
+          */}
+          {selected.size === required ? (
+            <AddToCart
+              productId={productId}
+              /* Instantes, no ISO: la cookie guarda momentos. Ver
+                 `lib/cart/cookie.ts` para por qué el texto no vale como
+                 identidad de una hora. */
+              slots={[...selected].map((iso) => Date.parse(iso))}
+              /* Aquí «seguir comprando» no es volver a esta pantalla con la
+                 selección en blanco —sería recomponer el mismo paquete—, sino
+                 volver a la ficha del tutor, que es donde están sus otras
+                 mentorías. */
+              seguirHref={`/tutors/${tutorId}#reservar`}
+              className="mt-2.5"
+              buttonClassName="h-[45px] w-full rounded-[10px] text-sm font-semibold"
+            />
+          ) : null}
         </PanelCard>
       </div>
 
