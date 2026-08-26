@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { BookingPanel } from "@/components/catalog/booking-panel";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { ProductCover } from "@/components/catalog/product-cover";
+import { RegistrarVisita } from "@/components/catalog/registrar-visita";
 import { LEVELS, LANGUAGES } from "@/components/catalog/product-filters";
 import {
   ReviewsSummary,
@@ -144,6 +145,12 @@ export default async function ProductPage({
 
   return (
     <>
+      {/* EY-186 · la mitad «visitas a clases» de la señal: abrir la ficha de
+          una mentoría se anota al TUTOR que la imparte, con más peso que
+          aterrizar en su perfil. No pinta nada y solo escribe con sesión —esta
+          página no consulta Auth y no tiene por qué empezar a hacerlo—. */}
+      <RegistrarVisita tutorId={product.tutor.id} origen="clase" />
+
       {/* Hero sobre el degradado azul del Figma (el mismo asset que P01). */}
       <div className="bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% text-white">
         <Container className="py-9">

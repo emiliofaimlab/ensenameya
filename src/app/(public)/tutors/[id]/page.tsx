@@ -12,6 +12,7 @@ import { Section } from "@/components/layout/section";
 import { BookingPanel } from "@/components/catalog/booking-panel";
 import { ProductCard } from "@/components/catalog/product-card";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
+import { RegistrarVisita } from "@/components/catalog/registrar-visita";
 import {
   ReviewsSummary,
   TutorReviews,
@@ -107,6 +108,12 @@ export default async function TutorProfilePage({
 
   return (
     <>
+      {/* EY-186 · «tutores vistos». No pinta nada y no se le pasa la sesión a
+          propósito: la comprueba él con `getSession()`, que es lectura local.
+          Pasársela desde aquí obligaría a que la ficha de la mentoría —que hoy
+          no consulta la sesión— añadiera un viaje a Auth solo para esto. */}
+      <RegistrarVisita tutorId={tutor.id} origen="tutor" />
+
       {/* Hero sobre el degradado azul del Figma (el mismo asset que P01). */}
       <div className="bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% text-white">
         <Container className="py-9">
