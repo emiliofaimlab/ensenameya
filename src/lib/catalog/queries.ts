@@ -2,7 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
-import { asFaqsTable, parseFaqs, type Faq } from "@/lib/tutor-faqs";
+import { parseFaqs, type Faq } from "@/lib/tutor-faqs";
 import { stripAccents } from "./format";
 
 /**
@@ -387,7 +387,9 @@ export async function listFeaturedTutors(limit = 4): Promise<FeaturedTutor[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("tutor_profiles")
-    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
+    .select(
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, faqs",
+    )
     .eq("approval_status", "approved")
     .order("rating_avg", { ascending: false, nullsFirst: false })
     .limit(limit);
@@ -489,28 +491,13 @@ export async function getProductDetail(
   // El tutor debe estar aprobado (RLS ya lo exige para que el producto salga).
   const { data: tutor } = await supabase
     .from("tutor_profiles")
-    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
+    .select(
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, faqs",
+    )
     .eq("profile_id", p.tutor_id)
     .eq("approval_status", "approved")
     .maybeSingle();
   if (!tutor) return null;
-
-  // EY-194 · las FAQ del tutor, en una consulta aparte y no en el `select` de
-  // arriba por una razón temporal: `tutor_profiles.faqs` todavía no está en
-  // `database.types.ts` y pedirla en ese `select` tipado tumbaría el tipo de
-  // TODAS las demás columnas. Va por la puerta de `lib/tutor-faqs.ts`.
-  //
-  // ⚠️ AL REGENERAR LOS TIPOS (`npm run db:types`): añade `faqs` al `select` de
-  // arriba, borra estas cinco líneas y la puerta entera. Es una consulta de
-  // más contra la misma fila que ya se acaba de leer.
-  //
-  // Sin `.eq('approval_status','approved')`: la fila ya se validó dos líneas
-  // más arriba, y esta consulta va con la misma sesión y la misma RLS.
-  const { data: tutorFaqs } = await asFaqsTable(supabase)
-    .from("tutor_profiles")
-    .select("faqs")
-    .eq("profile_id", p.tutor_id)
-    .maybeSingle();
 
   return {
     id: p.id,
@@ -539,7 +526,7 @@ export async function getProductDetail(
       bio: tutor.bio,
       ratingAvg: tutor.rating_avg,
       ratingCount: tutor.rating_count,
-      faqs: parseFaqs(tutorFaqs?.faqs),
+      faqs: parseFaqs(tutor.faqs),
     },
   };
 }
@@ -707,7 +694,9 @@ export async function searchTutors(
 
   let query = supabase
     .from("tutor_profiles")
-    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
+    .select(
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, faqs",
+    )
     .eq("approval_status", "approved")
     .ilike("search_text", `%${term}%`);
   if (tutorIds) query = query.in("profile_id", tutorIds);

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
-import { asFaqsTable, parseFaqs } from "@/lib/tutor-faqs";
+import { parseFaqs } from "@/lib/tutor-faqs";
 import { PanelCard } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { TutorFaqsForm } from "./faqs-form";
@@ -30,10 +30,8 @@ export default async function TutorFaqsPage() {
 
   const supabase = await createClient();
 
-  // ⚠️ Puerta temporal: `tutor_profiles.faqs` no está en `database.types.ts`
-  // hasta que se aplique `20260826150000` y se corra `npm run db:types`.
   const [{ data: perfil }, { count: mentorias }] = await Promise.all([
-    asFaqsTable(supabase)
+    supabase
       .from("tutor_profiles")
       .select("faqs")
       .eq("profile_id", userId)

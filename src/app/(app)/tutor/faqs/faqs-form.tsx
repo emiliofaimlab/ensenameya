@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
-import { asFaqsTable, MAX_TUTOR_FAQS, type Faq } from "@/lib/tutor-faqs";
+import { MAX_TUTOR_FAQS, type Faq } from "@/lib/tutor-faqs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,10 +45,7 @@ export function TutorFaqsForm({
       .filter((f) => f.q && f.a);
 
     setSaving(true);
-    // ⚠️ `asFaqsTable` es temporal: `tutor_profiles.faqs` no está todavía en
-    // `database.types.ts` (la migración `20260826150000` está sin aplicar). Al
-    // correr `npm run db:types` esto vuelve a ser `supabase` a secas.
-    const { error } = await asFaqsTable(createClient())
+    const { error } = await createClient()
       .from("tutor_profiles")
       .update({ faqs: limpias })
       .eq("profile_id", userId);
