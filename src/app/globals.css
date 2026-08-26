@@ -152,6 +152,14 @@
       transform: translateX(-50%);
     }
   }
+  /* EY-178 · el acuse de «se ha añadido». Va DENTRO de `@theme` por la misma
+     razón que las de arriba: Tailwind v4 descarta los keyframes sueltos y la
+     animación saldría quieta sin avisar. */
+  @keyframes cart-bump {
+    50% {
+      transform: scale(1.45);
+    }
+  }
 }
 
 .animate-marquee {
@@ -160,9 +168,21 @@
 .animate-marquee-reverse {
   animation: marquee-reverse 60s linear infinite;
 }
+
+/* EY-178 · la insignia del carrito da un salto al subir el número.
+   Es la única señal de que «Agregar al carrito» hizo algo: el botón cambia
+   junto al dedo, pero el contador vive arriba del todo y el ojo no está ahí.
+   280 ms y una sola vez — no es decoración, es un acuse de recibo. */
+.animate-cart-bump {
+  animation: cart-bump 280ms ease-out;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-marquee,
-  .animate-marquee-reverse {
+  .animate-marquee-reverse,
+  /* ⚠️ Aquí NO se pierde información al apagarla: el número ya cambió y se
+     sigue leyendo. La animación solo dirige la mirada. */
+  .animate-cart-bump {
     animation: none;
   }
 }

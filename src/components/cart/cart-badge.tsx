@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ShoppingCartIcon } from "lucide-react";
 
@@ -43,6 +43,32 @@ export function CartBadge({ initial }: { initial: number }) {
     () => initial,
   );
 
+  /*
+   * EY-178 · el salto de la insignia al AÑADIR.
+   *
+   * ⚠️ Solo cuando el número SUBE. Al quitar una línea o al limpiarse la que ya
+   * se pagó, la insignia se queda quieta: un acuse de recibo que también salta
+   * al perder algo deja de significar «hecho» y pasa a significar «ha pasado
+   * algo», que no sirve para nada.
+   *
+   * Hace falta porque el botón de «Agregar al carrito» cambia justo debajo del
+   * dedo mientras el contador vive en la esquina de arriba: sin el salto, la
+   * mitad de la respuesta ocurre donde nadie está mirando.
+   *
+   * `previo` arranca en `initial` y no en 0 a propósito — si no, la insignia
+   * saltaría sola en cada carga de página con el carrito ya lleno.
+   */
+  const previo = useRef(initial);
+  const [saltando, setSaltando] = useState(false);
+  useEffect(() => {
+    const subio = n > previo.current;
+    previo.current = n;
+    if (!subio) return;
+    setSaltando(true);
+    const t = setTimeout(() => setSaltando(false), 300);
+    return () => clearTimeout(t);
+  }, [n]);
+
   return (
     <Button
       variant="ghost"
@@ -60,7 +86,7 @@ export function CartBadge({ initial }: { initial: number }) {
       >
         <ShoppingCartIcon className="size-[18px]" />
         {n > 0 ? (
-          <span className="absolute top-1 right-1 grid size-4 place-items-center rounded-full bg-primary text-[10px] font-bold text-white">
+          <span className={`absolute top-1 right-1 grid size-4 place-items-center rounded-full bg-primary text-[10px] font-bold text-white${saltando ? " animate-cart-bump" : ""}`}>
             {n > 9 ? "9+" : n}
           </span>
         ) : null}
