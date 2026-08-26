@@ -13,7 +13,7 @@ import { renderEmail } from "./email-templates.ts";
  */
 const BASE = "https://ensenameya.vercel.app";
 
-// Las 11 plantillas de correo del Doc 7 tienen que existir. Si alguien añade un
+// Las 12 plantillas de correo del Doc 7 tienen que existir. Si alguien añade un
 // `enqueue_notification` con una plantilla nueva y no la registra aquí, el
 // correo se marca fallido en silencio: esta lista es el contrato.
 const TEMPLATES = [
@@ -28,6 +28,7 @@ const TEMPLATES = [
   "identity_in_review",
   "payout_paid",
   "recording_ready",
+  "new_message",
 ];
 
 for (const template of TEMPLATES) {
@@ -71,8 +72,28 @@ const aReserva = renderEmail({
 });
 assert.ok(aReserva!.text.includes("/reservas/abc-123"), "el enlace no apunta a la reserva");
 
+// NTF-21 · el correo del mensaje nuevo lleva al HILO, no al panel.
+const aHilo = renderEmail({
+  template: "new_message",
+  payload: { conversation_id: "conv-9" },
+  nombre: "Ana",
+  baseUrl: BASE,
+});
+assert.ok(aHilo!.text.includes("/chat/conv-9"), "el aviso de mensaje no lleva al hilo");
+
+// …y NO lleva el contenido del mensaje ni quién lo escribió, pase lo que pase
+// en el payload. Es la razón de ser de la plantilla: un correo se reenvía.
+const fisgon = renderEmail({
+  template: "new_message",
+  payload: { conversation_id: "conv-9", body: "mi IBAN es ES12", from: "Marcos" },
+  nombre: "Ana",
+  baseUrl: BASE,
+});
+assert.ok(!fisgon!.text.includes("IBAN"), "el correo coló el cuerpo del mensaje");
+assert.ok(!fisgon!.text.includes("Marcos"), "el correo coló el nombre del remitente");
+
 // Sin nombre, saluda igual: `full_name` puede venir vacío de profiles.
 const anonimo = renderEmail({ template: "review_request", payload: {}, nombre: "", baseUrl: BASE });
 assert.ok(anonimo!.text.startsWith("Hola,"), "el saludo sin nombre queda roto");
 
-console.log(`OK · ${TEMPLATES.length} plantillas + 5 casos borde`);
+console.log(`OK · ${TEMPLATES.length} plantillas + 8 casos borde`);
