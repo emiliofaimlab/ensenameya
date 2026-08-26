@@ -3,14 +3,8 @@ import { CompassIcon } from "lucide-react";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import {
-  BOOKING_STATUS_LABEL,
-  isUpcoming,
-  tutorCards,
-  type TutorCardData,
-} from "@/lib/booking";
+import { BOOKING_STATUS_LABEL, isUpcoming, tutorCards } from "@/lib/booking";
 import { roomOpen } from "@/lib/room-window";
-import { TutorSummary } from "@/components/tutor-summary";
 import { BookingRow } from "@/components/booking-row";
 import { ReferralCard } from "@/components/referral/referral-card";
 import { SupportCard } from "@/components/support/support-card";
@@ -23,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { suggestedForStudent } from "./sugerencias";
 import { SugerenciasCard } from "./sugerencias-card";
+import { tutoresParaElAlumno } from "./tutores";
+import { TutoresCard } from "./tutores-card";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Mi panel · Enséñame Ya" };
@@ -64,81 +60,63 @@ export default async function AppHome() {
   const tz = await getUserTimezone();
   const supabase = await createClient();
 
-  const [{ data: profile }, { data: openRows }, { data: pastRows }, sugerencias] =
-    await Promise.all([
-      // El nombre sale del PERFIL, no de `user_metadata`: el metadata es un
-      // espejo que se queda viejo si el perfil cambia después.
-      supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
-      supabase
-        .from("bookings")
-        .select(
-          // B-2 · las columnas de ventana viajan con la sesión: sin ellas
-          // este panel no puede saber si la sala está abierta, y ofrecía
-          // "Entrar a sala" para clases de dentro de semanas.
-          "id, status, created_at, products(title, tutor_id), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
-        )
-        .eq("student_id", user.id)
-        .in("status", OPEN)
-        .order("created_at", { ascending: false })
-        .limit(6),
-      supabase
-        .from("bookings")
-        .select(
-          // B1.10 · `created_at` entra aquí para poder ORDENAR los tutores
-          // recientes mezclando esta lista con la de arriba: sin él, «último»
-          // solo podría significar «de las abiertas», que no es lo mismo.
-          "id, status, created_at, products(title, tutor_id), sessions(id, start_at, status), reviews(rating)",
-        )
-        .eq("student_id", user.id)
-        .eq("status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(3),
-      // N-30 · va DENTRO del mismo `Promise.all` a propósito: resuelve sus
-      // propias consultas (intereses, oferta y catálogo) y encadenarla después
-      // de las reservas sumaría su latencia a la de la pantalla para nada.
-      suggestedForStudent(user.id),
-    ]);
+  const [
+    { data: profile },
+    { data: openRows },
+    { data: pastRows },
+    sugerencias,
+    misTutores,
+  ] = await Promise.all([
+    // El nombre sale del PERFIL, no de `user_metadata`: el metadata es un
+    // espejo que se queda viejo si el perfil cambia después.
+    supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("bookings")
+      .select(
+        // B-2 · las columnas de ventana viajan con la sesión: sin ellas
+        // este panel no puede saber si la sala está abierta, y ofrecía
+        // "Entrar a sala" para clases de dentro de semanas.
+        "id, status, products(title, tutor_id), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
+      )
+      .eq("student_id", user.id)
+      .in("status", OPEN)
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabase
+      .from("bookings")
+      .select(
+        // EY-186 · aquí ya NO se pide `created_at`. B1.10 lo trajo para poder
+        // ordenar «Tus últimos tutores» mezclando esta lista con la de arriba;
+        // ese bloque lo sustituye ahora `TutoresCard`, que ordena en Postgres
+        // sobre el historial ENTERO y no sobre las tres filas que quepan aquí.
+        "id, status, products(title, tutor_id), sessions(id, start_at, status), reviews(rating)",
+      )
+      .eq("student_id", user.id)
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(3),
+    // N-30 · va DENTRO del mismo `Promise.all` a propósito: resuelve sus
+    // propias consultas (intereses, oferta y catálogo) y encadenarla después
+    // de las reservas sumaría su latencia a la de la pantalla para nada.
+    suggestedForStudent(user.id),
+    // EY-186 · lo mismo: es una RPC independiente de las reservas de arriba y
+    // encadenarla le sumaría su viaje a la pantalla para nada.
+    tutoresParaElAlumno(),
+  ]);
 
   const open = openRows ?? [];
   const completed = pastRows ?? [];
-  // B1.10 · `tutorCards` en vez de `tutorNames`: es la MISMA consulta con
-  // cuatro columnas más (avatar, titular, valoración), así que el bloque de
-  // tutores recientes no añade ni un viaje. El nombre se saca de aquí.
+  // `tutorCards` y no `tutorNames`: es la MISMA consulta con cuatro columnas
+  // más (avatar, titular, valoración). B1.10 las trajo para el bloque de
+  // tutores recientes; ese bloque ahora sale de `TutoresCard`, pero las fichas
+  // se siguen necesitando aquí para el «con Fulanito» de cada fila y su enlace
+  // (V-6), así que la consulta se queda tal cual.
   const fichas = await tutorCards(
     supabase,
     [...open, ...completed].map((b) => b.products?.tutor_id),
   );
   const nombreDelTutor = (id: string | null | undefined) =>
     (id ? fichas.get(id)?.displayName : null) ?? undefined;
-
-  /**
-   * B1.10 · LOS ÚLTIMOS TUTORES DEL ALUMNO.
-   *
-   * Petición del cliente (D2): en el panel quiere ver primero sus sesiones y
-   * sus tutores. El orden de las sesiones ya estaba (N-30); esto es la otra
-   * mitad.
-   *
-   * Sale de las reservas que la pantalla YA cargó — de ahí que el Doc 22 lo
-   * diera por barato— pero mezclando las dos listas y ordenando por
-   * `created_at`: «último» tiene que significar el último de verdad, no el
-   * último de los abiertos. Por eso el `select` de arriba gana esa columna.
-   *
-   * Se deduplica por tutor y se corta a cuatro: es un recordatorio de con quién
-   * has dado clase, no un directorio. Y solo entran los legibles — un tutor al
-   * que le retiraron la aprobación no tiene ficha pública a la que enlazar (ver
-   * `tutorCards`), así que aquí sencillamente no aparece: en las pantallas de
-   * la reserva sí hay que explicarlo, porque el alumno pagó; en un bloque de
-   * descubrimiento, no.
-   */
-  const ultimosTutores = [...open, ...completed]
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((b) => b.products?.tutor_id)
-    .filter((id, i, todos): id is string => Boolean(id) && todos.indexOf(id) === i)
-    .map((id) => fichas.get(id))
-    // Predicado tipado y no un `filter` a secas: sin él TypeScript deja
-    // `TutorCardData | undefined` y el `.map` de abajo se queja con razón.
-    .filter((t): t is TutorCardData => Boolean(t?.displayName))
-    .slice(0, 4);
 
   /**
    * V-6 · El «con Fulanito» de cada fila lleva ahora a su ficha pública — hasta
@@ -325,33 +303,18 @@ export default async function AppHome() {
         </>
       )}
 
-      {/* B1.10 · Con quién has dado clase, encima de las sugerencias.
-          El cliente pidió (D2) ver primero sus sesiones y sus tutores; el orden
-          de las sesiones ya estaba (N-30) y esto lo completa. Va ANTES de las
-          sugerencias a propósito: volver con un tutor conocido es un camino más
-          corto que descubrir uno nuevo, y esta pantalla ordena por lo que el
-          alumno hará antes.
+      {/* EY-186 · B5.3 · El carrusel de tutores, encima de las sugerencias.
 
-          Se reutiliza `TutorSummary` en su variante compacta —la misma que
-          A-6 puso en el checkout y en el pago— para no estrenar una cuarta
-          forma de pintar un tutor. */}
-      {ultimosTutores.length > 0 ? (
-        <PanelCard>
-          <PanelCardTitle className="text-[22px]">
-            Tus últimos tutores
-          </PanelCardTitle>
-          <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
-            Vuelve a reservar con quien ya conoces.
-          </p>
-          <ul className="mt-4 grid gap-4 sm:grid-cols-2">
-            {ultimosTutores.map((t) => (
-              <li key={t.id}>
-                <TutorSummary tutor={t} variant="inline" />
-              </li>
-            ))}
-          </ul>
-        </PanelCard>
-      ) : null}
+          Sustituye al bloque «Tus últimos tutores» de B1.10 (`4f56bb2`), que
+          salía gratis de las reservas ya cargadas pero NO era historial:
+          `.limit(3)` sobre las completadas y `.slice(0, 4)` encima. Aquí el
+          orden lo calcula Postgres sobre el historial entero más la navegación.
+
+          Sigue yendo ANTES de las sugerencias, y por el mismo motivo que
+          entonces: volver con un tutor conocido es un camino más corto que
+          descubrir uno nuevo, y esta pantalla ordena por lo que el alumno hará
+          antes. `null` = ni historial ni catálogo, y entonces no se monta. */}
+      {misTutores ? <TutoresCard data={misTutores} /> : null}
 
       {/* N-30 · mentorías sugeridas por sus categorías de interés. Va justo
           debajo de las reservas —lo que el alumno vino a mirar— y encima de las
