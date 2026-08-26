@@ -62,13 +62,38 @@ export default async function HomePage() {
     <>
       <HomeHero categories={categories} />
 
+      {/* B1.9 · Los tres puntos de esta sección pasan a ser CAJAS.
+          Petición del cliente («cajas en la 2.ª sección»). El componente ya
+          sabía pintarlas —es la variante con `desc`— pero solo la usaba P02
+          (`/about`); aquí eran filas de una línea. La diferencia es que una
+          fila nombra la ventaja y una caja la explica, y esta es la sección
+          donde se decide si la plataforma se entiende.
+
+          ⚠️ Las imágenes NO estaban bloqueadas por diseño: `home-live.jpg`
+          lleva en disco desde el 21-jul y ya se usaba. Lo que faltaba era esto.
+
+          Los textos son borrador de desarrollo: describen lo que la plataforma
+          hace de verdad (vídeo con pantalla compartida, la meta de la mentoría,
+          huecos reales del tutor), pero el tono es de Verónica. */}
       <FeatureSplit
         title="Mentorías en vivo 1 a 1: interactúa en tiempo real"
         text="Avanza con total confianza y cara a cara con tu tutor, dedicando cada minuto exclusivamente al objetivo que elegiste lograr."
         points={[
-          { icon: VideoIcon, text: "Video en vivo con alta calidad" },
-          { icon: TargetIcon, text: "Foco en tu meta concreta" },
-          { icon: CalendarSyncIcon, text: "Agenda flexible y a tu medida" },
+          {
+            icon: VideoIcon,
+            text: "Video en vivo con alta calidad",
+            desc: "Os veis y os escucháis sin cortes, y el tutor comparte su pantalla en la misma llamada.",
+          },
+          {
+            icon: TargetIcon,
+            text: "Foco en tu meta concreta",
+            desc: "Cada mentoría dice qué vas a conseguir, así que la sesión trabaja eso y no un temario general.",
+          },
+          {
+            icon: CalendarSyncIcon,
+            text: "Agenda flexible y a tu medida",
+            desc: "Eliges día y hora entre los huecos reales del tutor, en tu propia zona horaria.",
+          },
         ]}
         cta={{ href: "/tutors", label: "Explorar tutores YA" }}
         image={{
