@@ -20,6 +20,7 @@ import {
 } from "@/components/form/validation";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
+import { DeleteAccountDialog } from "./delete-account-dialog";
 
 /**
  * US-104 (SCR-G03) — "Mi cuenta" en módulos (24-jul): foto, información
@@ -140,6 +141,7 @@ export function AccountForm({
   }
 
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   return (
     <>
@@ -306,6 +308,32 @@ export function AccountForm({
           </Button>
         </div>
         <SignOutDialog open={signOutOpen} onOpenChange={setSignOutOpen} />
+      </PanelCard>
+
+      {/* EY-192 · baja de cuenta. Va la última y en su propio módulo: es la
+          única acción irreversible de la pantalla, y no debe compartir tarjeta
+          con «Cerrar sesión», que es justo la que se le parece y no lo es. */}
+      <PanelCard>
+        <PanelCardTitle>Eliminar mi cuenta</PanelCardTitle>
+        <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
+          Borramos tu nombre, tu foto y tus datos de contacto, y cerramos tu
+          acceso. Tus reservas y pagos se conservan por obligación legal, y tus
+          reseñas quedan publicadas sin tu nombre. No se puede deshacer.
+        </p>
+        <div className="mt-4">
+          <Button
+            variant="destructive"
+            onClick={() => setDeleteOpen(true)}
+            className="h-[45px] rounded-[8px] px-5"
+          >
+            Eliminar mi cuenta
+          </Button>
+        </div>
+        <DeleteAccountDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          email={email}
+        />
       </PanelCard>
     </>
   );
