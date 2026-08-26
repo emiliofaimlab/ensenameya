@@ -122,16 +122,35 @@ export default async function ProductPage({
       {/* Hero sobre el degradado azul del Figma (el mismo asset que P01). */}
       <div className="bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% text-white">
         <Container className="py-9">
-          <nav aria-label="Miga de pan" className="text-[13px] text-white/90">
-            <Link href="/" className="hover:underline">
+          {/* B1.4 · La miga en UNA línea, con recorte.
+              El título completo está tres centímetros más abajo, en el H1, así
+              que aquí repetirlo entero no informa de nada: en móvil la miga se
+              comía 2 líneas y el H1 otras 4 — seis líneas de la misma frase
+              antes del primer dato útil.
+
+              `flex` + `min-w-0` + `truncate` y no un corte por número de
+              caracteres: un tope fijo recorta igual en un móvil de 375 px que en
+              un monitor de 2560, así que o sobra texto o se pierde sin
+              necesidad. Así se recorta exactamente cuando no cabe.
+
+              El `title` deja el texto completo a un hover de distancia, y los
+              dos primeros niveles llevan `shrink-0` para que lo que ceda sea
+              siempre el nombre de la mentoría y nunca «Inicio / Mentorías». */}
+          <nav
+            aria-label="Miga de pan"
+            className="flex items-center gap-1.5 text-[13px] text-white/90"
+          >
+            <Link href="/" className="shrink-0 hover:underline">
               Inicio
             </Link>
-            {" / "}
-            <Link href="/classes" className="hover:underline">
+            <span className="shrink-0">/</span>
+            <Link href="/classes" className="shrink-0 hover:underline">
               Mentorías
             </Link>
-            {" / "}
-            <span>{product.title}</span>
+            <span className="shrink-0">/</span>
+            <span className="min-w-0 truncate" title={product.title}>
+              {product.title}
+            </span>
           </nav>
 
           <h1 className="mt-3.5 max-w-3xl text-2xl font-bold text-balance sm:text-3xl">

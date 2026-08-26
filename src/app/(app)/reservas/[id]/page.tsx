@@ -132,7 +132,31 @@ export default async function BookingDetailPage({
     <PanelShell back={{ href: "/app", label: "Volver al panel" }}>
       <div className="flex flex-col gap-1.5">
         {tutor ? <p className="text-[13px] text-[#6b6b6b]">con {tutor}</p> : null}
-        <h1 className="text-[26px] font-bold tracking-tight text-[#19191f]">
+        {/* B1.4 · El título, a dos líneas como mucho.
+            A 26 px y 375 px de ancho, uno de 38 caracteres ya ocupa dos líneas
+            y el más largo del catálogo —«Química Orgánica e Intermedia:
+            Descifra la Ciencia Detrás del Mundo Real»— ocupa cuatro. Cuatro
+            líneas de titular empujan las sesiones y el pago fuera de la
+            pantalla en la única vista donde el alumno viene a mirarlos.
+
+            `line-clamp-2` y no un tope de caracteres, aunque la ficha lo pida
+            así: un número fijo recorta igual a 375 px que a 2560, o sea que o
+            deja texto colgando o corta cuando sobraba sitio. El clamp corta
+            solo cuando de verdad no cabe.
+
+            ⚠️ Y ESTO ROZA UNA DECISIÓN ANTERIOR, así que va dicho: N-12 dejó
+            escrito en el detalle del TUTOR que «truncar el nombre de la
+            mentoría sería esconder justo el dato que se vino a mirar». Sigue
+            siendo verdad, y por eso el texto completo no desaparece: está en el
+            `title`, en el `<title>` de la pestaña y en la miga. Lo que se
+            recorta es cuánto ESPACIO ocupa, no el dato.
+
+            El del tutor NO se toca: allí es `text-base` (16 px) dentro de una
+            tarjeta y con `break-words`, así que no llega a hacer de muro. */}
+        <h1
+          className="line-clamp-2 text-[26px] font-bold tracking-tight text-[#19191f]"
+          title={booking.products?.title ?? undefined}
+        >
           {booking.products?.title ?? "Mentoría"}
         </h1>
         <div className="flex flex-wrap items-center gap-2.5">
