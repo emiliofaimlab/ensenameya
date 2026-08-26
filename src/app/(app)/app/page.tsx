@@ -361,6 +361,9 @@ export default async function AppHome() {
 
       {/* Las dos tarjetas del Figma. "Invita y gana" (US-1301) solo aparece con
           campaña configurada: el programa vive entero en Referral Factory. */}
+      {/* B1.11 · esta pantalla es el panel del ALUMNO, así que su programa es
+          el de alumnos siempre. Un tutor que además compra ve el suyo desde
+          `/account`, que sí mira el rol. */}
       <ReferralCard />
 
       <PanelCard>

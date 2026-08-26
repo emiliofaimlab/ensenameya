@@ -40,7 +40,8 @@ código; ausentes, la función se apaga sola en vez de romper:
 | Variable | Enciende | Si falta |
 | :-- | :-- | :-- |
 | `DAILY_API_KEY` | Sala de video real (EP-08) · borrado de grabaciones (§4) | Sala simulada; la purga responde `sin-daily` y no marca nada |
-| `NEXT_PUBLIC_REFERRAL_URL` | Bloque "Invita y gana" (US-1301) | El bloque **no se pinta** |
+| `NEXT_PUBLIC_REFERRAL_URL` | Bloque "Invita y gana" del **alumno** (US-1301) | El bloque **no se pinta** para alumnos |
+| `NEXT_PUBLIC_REFERRAL_URL_TUTOR` | Bloque "Invita y gana" del **tutor** (B1.11) — campaña DISTINTA en Referral Factory | El bloque **no se pinta** para tutores. ⚠️ **No se cae a la del alumno**: eso lo daría de alta en el programa equivocado |
 | `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | Monitoreo de errores (US-1501) | El SDK ni se inicializa |
 | `STRIPE_API_KEY` | Cobro real con Stripe (EP-20) · **reembolsos reales** (X-01, §4) | No se instancia el cliente, el checkout sigue por el camino simulado y la cola de reembolsos **no se toca** (queda `pending`) |
 | `RESEND_API_KEY` | Envío real de correo (US-1201) y del formulario de contacto (DL-01) | La cola se queda en `pending` (no `failed`) y el mensaje de contacto se guarda en `contact_messages` pero no sale |
@@ -76,6 +77,7 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
 | `CRON_SECRET` | sí | **falta** | **falta** | **falta** (secret) |
 | `RESEND_API_KEY` | **sí (17-ago)** | **sí (17-ago)** | **sí (17-ago)** | — |
 | `NEXT_PUBLIC_REFERRAL_URL` | sí | **falta** | **falta** | — |
+| `NEXT_PUBLIC_REFERRAL_URL_TUTOR` | **falta** | **falta** | **falta** | — |
 | `REFERRAL_FACTORY_API_KEY` | sí | **falta** | **falta** | — |
 | `APP_BASE_URL` | — | — | — | **falta** (variable, no secret) |
 | `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional (secret) — solo si `APP_BASE_URL` apunta a una preview |
@@ -190,9 +192,9 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
   mientras no haya dominio verificado.
 - [x] Scope **Production**: las dos de Stripe, 17-ago. ⚠️ Siguen siendo **de test mode** — ver el
   aviso de §1 sobre producción cobrando en sandbox.
-- [ ] Scope **Preview y Production**: faltan `CRON_SECRET`, `NEXT_PUBLIC_REFERRAL_URL` y
-  `REFERRAL_FACTORY_API_KEY` (ver la matriz de §1). Sin `CRON_SECRET` los **tres** crons responden
-  **503**.
+- [ ] Scope **Preview y Production**: faltan `CRON_SECRET`, `NEXT_PUBLIC_REFERRAL_URL`,
+  `NEXT_PUBLIC_REFERRAL_URL_TUTOR` y `REFERRAL_FACTORY_API_KEY` (ver la matriz de §1). Sin
+  `CRON_SECRET` los **tres** crons responden **503**.
 - [ ] Tras dar de alta cualquiera: **Redeploy**. Vercel no las aplica al despliegue ya construido (§1).
 
 ### D) GitHub — Environments (CI de migraciones) — [x] hecho, salvo branch protection y los dos crons
@@ -391,6 +393,8 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
   jobs programados responden 503 o ni se disparan (§4). ⚠️ Y antes de ponerlas, vaciar la cola vieja
   de notificaciones (`docs/QA-LANZAMIENTO.md` §4.6).
 - [ ] `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel — solo están en local.
+- [ ] `NEXT_PUBLIC_REFERRAL_URL_TUTOR` (B1.11) — **ni en local**: hace falta la URL de la segunda
+      campaña de Referral Factory, la de tutores. Sin ella el tutor no ve el bloque.
 - [ ] Mínimo de contraseña a 8 en el panel de Auth, dev y prod (§3B).
 
 **Ramas y despliegue al 17-ago — sigue faltando UN merge, y cada día pesa más.** `main` continúa en

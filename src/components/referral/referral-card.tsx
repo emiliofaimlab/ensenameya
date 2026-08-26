@@ -19,9 +19,17 @@ import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
  * se quiere el embebido, es cambiar el botón por el iframe.
  *
  * Sin campaña configurada no se pinta nada (ver `referralUrl`).
+ *
+ * ⚠️ B1.11 · CADA ROL VE SU PROGRAMA. Son dos campañas distintas en Referral
+ * Factory, con sus propias reglas y recompensas, así que cambian las DOS cosas:
+ * el enlace y el texto. Antes se repartía el mismo a todos y un tutor acababa
+ * dado de alta como alumno.
+ *
+ * El texto no promete de quién es la recompensa ni cuánto: eso lo decide la
+ * campaña, no nosotros (RN-21). Lo único que dice es a qué programa entra.
  */
-export function ReferralCard() {
-  const url = referralUrl();
+export function ReferralCard({ isTutor = false }: { isTutor?: boolean }) {
+  const url = referralUrl(isTutor);
   if (!url) return null;
 
   return (
@@ -31,8 +39,9 @@ export function ReferralCard() {
       </span>
       <PanelCardTitle className="mt-4 text-xl">Invita y gana</PanelCardTitle>
       <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
-        Comparte tu enlace: cuando alguien aprende contigo de por medio, ganas
-        tú también.
+        {isTutor
+          ? "Comparte tu enlace de tutor: es el programa de invitaciones para quienes enseñan, distinto al de los alumnos."
+          : "Comparte tu enlace: cuando alguien aprende contigo de por medio, ganas tú también."}
       </p>
       <Button asChild className="mt-4 h-10">
         {/* `noreferrer` además de `noopener`: la campaña no necesita saber desde

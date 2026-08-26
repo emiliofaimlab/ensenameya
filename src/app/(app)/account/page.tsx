@@ -47,7 +47,9 @@ export default async function AccountPage() {
       />
 
       {/* G03 · el otro punto de integración de referidos (Doc 4 §4.x). */}
-      <ReferralCard />
+      {/* B1.11 · el rol decide QUÉ programa se le ofrece. Esta pantalla la
+          comparten los dos, y `roles` ya estaba a mano dos líneas más arriba. */}
+      <ReferralCard isTutor={roles.includes("tutor")} />
     </PanelShell>
   );
 }
