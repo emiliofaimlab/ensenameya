@@ -785,15 +785,24 @@ export function ProductForm({
         />
       </PanelCard>
 
-      {/* FAQ de ESTA mentoría (R24-17). Si no pone ninguna, el detalle muestra
-          las genéricas de plataforma. */}
+      {/* FAQ de ESTA mentoría (R24-17). Desde EY-194 no son las únicas: debajo
+          se pintan también las del PERFIL del tutor, y las genéricas de
+          plataforma solo salen si no hay ni unas ni otras. */}
       <PanelCard className="flex flex-col gap-3">
         <h2 className="text-base font-semibold text-[#19191f]">
           Preguntas frecuentes
         </h2>
         <p className="text-[13px] text-[#6b6b6b]">
           Responde lo que suelen preguntarte sobre esta mentoría (nivel previo,
-          materiales, formato…). Si las dejas vacías se muestran las generales.
+          materiales, formato…). Lo que valga para todas va en{" "}
+          <Link
+            href="/tutor/faqs"
+            className="font-medium text-brand hover:underline"
+          >
+            tus preguntas de perfil
+          </Link>
+          , que se muestran debajo de estas. Si dejas ambas vacías se muestran
+          las generales.
         </p>
 
         {faqs.map((f, i) => (

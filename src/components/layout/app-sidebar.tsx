@@ -14,6 +14,7 @@ import {
   HomeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MessageCircleQuestionIcon,
   PercentIcon,
   ReceiptIcon,
   ShieldCheckIcon,
@@ -59,6 +60,15 @@ const STUDENT_ITEMS: Item[] = [
 export const TUTOR_ITEMS: Item[] = [
   { href: "/tutor", label: "Dashboard", icon: LayoutDashboardIcon, exact: true },
   { href: "/tutor/products", label: "Mis mentorías", icon: BookOpenIcon },
+  // EY-194 · va pegada a "Mis mentorías" porque es lo mismo visto desde el otro
+  // lado: contenido de la vitrina que se hereda en todas ellas.
+  //
+  // ⚠️ La etiqueta dice "Mis FAQ" y no "Preguntas frecuentes" por el hueco de
+  // la fila, que es `h-[41px]` FIJA y no envuelve: "Mentorías impartidas" (20
+  // caracteres, en el menú de admin) ya mide 155 px de los ~158 disponibles.
+  // "Preguntas frecuentes" tiene los mismos 20 y se saldría o quedaría al
+  // límite. El título de la pantalla sí es el largo.
+  { href: "/tutor/faqs", label: "Mis FAQ", icon: MessageCircleQuestionIcon },
   { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
   { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
   { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },
