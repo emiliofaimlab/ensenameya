@@ -276,8 +276,15 @@ function ChecklistStep({
  * dijera "sin enviar" a secas para quien lleva seis documentos subidos le haría
  * volver a subirlos.
  *
- * ⚠️ Este módulo está COMPARTIDO entre `/tutor/verification` y el paso 4 del
- * asistente: cualquier cambio de aquí se ve en las dos.
+ * ⚠️ Este módulo está COMPARTIDO entre `/tutor/verification` y el paso 5 del
+ * asistente (era el 4 hasta que EY-183 metió la disponibilidad delante):
+ * cualquier cambio de aquí se ve en las dos.
+ *
+ * ⚠️ La DISPONIBILIDAD no entra en este checklist a propósito. Lo que se lista
+ * aquí es lo que hace falta para APROBAR el perfil, y ninguna regla —ni de BD
+ * ni de negocio— exige franjas para aprobar a un tutor. Sin ellas el perfil se
+ * aprueba igual y lo que no ocurre es que alguien pueda reservar; ese aviso lo
+ * da el paso 4 y la pantalla de cierre del asistente, no esta lista.
  */
 export function VerificationForm({
   userId,

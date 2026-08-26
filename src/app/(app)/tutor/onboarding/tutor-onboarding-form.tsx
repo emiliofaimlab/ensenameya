@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { CheckIcon, TriangleAlertIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { horasSemana, type Rule } from "@/lib/availability";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,7 @@ import {
 } from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 import { FirstProductForm } from "@/components/onboarding/first-product-form";
+import { AvailabilityManager } from "../availability/availability-manager";
 import {
   VerificationForm,
   type DocState,
@@ -49,13 +51,31 @@ const LEVELS: { id: TeachingLevel; label: string }[] = [
 const E164 = /^\+[1-9]\d{6,14}$/;
 
 /**
- * US-202 / UX-202 (SCR-TU01) — asistente de 5 pasos: perfil, categorías,
- * contacto, **verificación de identidad** (penúltimo, 24-jul) y primera oferta.
- * Los materiales de clase salieron a la creación de la oferta (R24-16).
+ * US-202 / UX-202 (SCR-TU01) — asistente de 6 pasos: perfil, categorías,
+ * contacto, **disponibilidad** (EY-183), **verificación de identidad**
+ * (penúltimo, 24-jul) y primera mentoría (N-03). Los materiales de clase
+ * salieron a la creación de la oferta (R24-16).
  *
  * Cada paso persiste al avanzar, así que "Guardar y salir" no necesita lógica
  * propia: lo escrito ya está guardado. `approval_status` NO se toca aquí (fuera
  * del column-grant, US-1403): el perfil nace y queda `pending`.
+ *
+ * ⚠️ **EY-183 · por qué la disponibilidad va DESPUÉS de la zona horaria y no
+ * antes.** Las franjas se guardan como hora de pared (`time`), y quien las
+ * interpreta es `get_available_slots` usando `profiles.timezone` del tutor. La
+ * columna trae `'UTC'` por defecto y esa zona solo se fija en el paso 3: puesto
+ * antes, un tutor de Caracas escribiría «9:00–13:00» y publicaría 05:00–09:00
+ * de su hora sin que nada se lo dijera. Es exactamente RV-03c contado al revés,
+ * así que el orden que pidió el cliente resulta ser además el único correcto.
+ *
+ * ⚠️ **Y por qué NO puede encerrar a nadie (RN-44).** `requireUser()` rebota a
+ * `/onboarding` mientras `onboarding_complete` sea false, con `/onboarding` y
+ * `/tutor/onboarding` como únicas excepciones, comparando el pathname PELADO
+ * (`middleware.ts:rutaActual` quita la query justo para eso, así que `?paso=4`
+ * no rompe la igualdad). El flag lo pone el paso 3 — antes de estos dos pasos
+ * nuevos—, de modo que a partir de aquí el guarda ya no redirige a nadie, y
+ * antes de aquí estamos en una ruta exenta. Ninguno de los dos pasos nuevos
+ * escribe en `profiles`, así que tampoco puede volver a apagarlo.
  */
 export function TutorOnboardingForm({
   userId,
@@ -77,6 +97,8 @@ export function TutorOnboardingForm({
   identityStatus,
   socials,
   productCount: productCount0,
+  rules,
+  rulesUsedBy,
 }: {
   userId: string;
   exists: boolean;
@@ -103,6 +125,15 @@ export function TutorOnboardingForm({
   /** Mentorías ya creadas. EX-02: se puede posponer, pero sin ninguna el
    *  perfil no se aprueba — el asistente lo dice, no lo bloquea. */
   productCount: number;
+  /**
+   * EY-183 · franjas del paso 4. Llegan del servidor y NO suben a estado: el
+   * gestor guarda contra Supabase y llama a `router.refresh()`, que vuelve a
+   * pintar la página y baja esta prop ya actualizada. Duplicarlas en un
+   * `useState` daría dos verdades que se desincronizan al primer borrado.
+   */
+  rules: Rule[];
+  /** N-04 · `rule_id` → mentorías que la usan; el gestor avisa antes de borrar. */
+  rulesUsedBy: Record<string, string[]>;
 }) {
   const { step, setStep, finish } = useWizardStep("tutor", initialStep);
   const [busy, setBusy] = useState(false);
@@ -277,6 +308,10 @@ export function TutorOnboardingForm({
       if (await saveProfile()) return fail("No se pudo guardar.");
     }
 
+    // Los pasos 4 (disponibilidad) y 5 (verificación) no aparecen arriba a
+    // propósito, no por olvido: los dos montan módulos del panel que escriben
+    // por su cuenta al momento, así que aquí no hay nada que guardar ni nada
+    // que validar — «Continuar» solo avanza. Ver EY-183 y R24-15.
     setBusy(false);
 
     if (step === totalSteps) {
@@ -304,6 +339,25 @@ export function TutorOnboardingForm({
 
   // M-03 · Cierre del asistente de tutor.
   if (done) {
+    /*
+     * Lo que se pospuso, con SU consecuencia — que no es la misma en los dos
+     * casos y mezclarlas sería mentir:
+     *  · sin mentoría no hay aprobación (EX-02);
+     *  · sin franjas sí hay aprobación, pero nadie puede reservar
+     *    (`get_available_slots` no tiene de dónde sacar huecos).
+     * Un tutor aprobado, visible en el catálogo y con la agenda vacía es el
+     * peor de los dos finales, porque parece que todo fue bien.
+     */
+    const horas = horasSemana(rules);
+    const pendientes = [
+      productCount === 0
+        ? "Te falta tu primera mentoría. Puedes crearla cuando quieras desde «Mis mentorías», pero hasta que exista no podemos aprobar tu perfil."
+        : null,
+      rules.length === 0
+        ? "No has marcado ningún horario. Aunque aprobemos tu perfil, nadie podrá reservarte hasta que añadas al menos una franja en «Disponibilidad»."
+        : null,
+    ].filter((t) => t !== null);
+
     return (
       <WizardDone
         title="¡Listo! Tu perfil pasó a revisión"
@@ -315,22 +369,30 @@ export function TutorOnboardingForm({
             `Perfil público a nombre de ${fullName.trim()}`,
             `${cats.size} ${cats.size === 1 ? "categoría elegida" : "categorías elegidas"}`,
             `Zona horaria: ${timezone} — tus horarios se publican en esta hora`,
+            horas
+              ? `Abres ${horas} a la semana`
+              : "Sin horarios todavía",
             productCount > 0
               ? `${productCount} ${productCount === 1 ? "mentoría creada" : "mentorías creadas"} (en borrador hasta que te aprobemos)`
               : "Sin mentorías todavía",
           ]}
         />
-        {/* EX-02 · Se puede posponer la primera mentoría, pero sin ella el
-            perfil no se aprueba. Que el tutor lo sepa antes de irse, no
-            cuando se pregunte por qué su revisión no avanza. */}
-        {productCount === 0 ? (
+        {/* Los dos pasos opcionales se pueden posponer, y eso está bien; lo que
+            no puede es descubrirse semanas después, cuando el tutor se pregunte
+            por qué su revisión no avanza o por qué no le entra nadie. */}
+        {pendientes.length > 0 ? (
           <div className="flex w-full gap-3 rounded-[16px] border border-[#f0d9a8] bg-[#fdf6e7] p-5">
             <TriangleAlertIcon className="mt-0.5 size-4.5 shrink-0 text-[#9a6b00]" />
-            <p className="text-[12.5px] text-[#7a5600]">
-              <strong className="font-semibold">Perfil incompleto:</strong> te
-              falta tu primera mentoría. Puedes crearla cuando quieras desde «Mis
-              mentorías», pero hasta que exista no podemos aprobar tu perfil.
-            </p>
+            <div className="flex flex-col gap-2 text-[12.5px] text-[#7a5600]">
+              <strong className="font-semibold">
+                Antes de poder recibir alumnos:
+              </strong>
+              <ul className="flex list-disc flex-col gap-1.5 pl-4">
+                {pendientes.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            </div>
           </div>
         ) : null}
       </WizardDone>
@@ -474,14 +536,75 @@ export function TutorOnboardingForm({
     );
   }
 
-  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02
-  // (con su borrador / "enviar a revisión"). El asistente solo lleva a la
-  // siguiente pantalla; los documentos los guarda el propio módulo. Los
-  // materiales de clase salieron del onboarding a la oferta (R24-16).
+  /*
+   * EY-183 · Disponibilidad, justo después de la zona horaria.
+   *
+   * Monta el gestor del panel TAL CUAL (`/tutor/availability`), sin una
+   * variante «de onboarding». No es pereza: esa pantalla se rehízo entera el
+   * 7-ago por ser difícil de entender, y el acordeón —un solo día abierto— y el
+   * «copiar a lunes-viernes» son la respuesta a los dos problemas que se
+   * midieron allí. Una versión simplificada aquí volvería a tener los siete
+   * formularios abiertos que se quitaron, y encima en la pantalla donde el
+   * tutor ve esto por primera vez.
+   *
+   * Consecuencias de reusarlo, que hay que conocer:
+   *  · Guarda AL MOMENTO contra Supabase (no espera a «Continuar»), así que
+   *    este paso no valida ni persiste nada en `next()`.
+   *  · Refresca con `router.refresh()`. Aquí eso re-renderiza la página del
+   *    asistente, no la del panel; el estado del cliente (el paso, el nombre a
+   *    medio escribir) sobrevive porque `refresh` reconcilia, no remonta.
+   *
+   * Las EXCEPCIONES puntuales («la semana que viene no») se quedan fuera a
+   * propósito: son para cuando ya tienes agenda, no para montarla.
+   *
+   * OPCIONAL (misma decisión que EX-02 para la mentoría): «Continuar» nunca se
+   * bloquea. Un tutor que aún no ha decidido su horario semanal no puede
+   * quedarse encerrado en el alta por eso; lo que sí hace falta es que sepa qué
+   * pierde, y eso se dice aquí y otra vez en la pantalla de cierre.
+   */
   if (step === 4) {
     return (
       <WizardShell
         step={4}
+        total={totalSteps}
+        title="¿Cuándo puedes dar clase?"
+        description={`Marca las franjas en las que estás disponible cada semana. Se guardan en tu zona horaria (${timezone}) y se muestran a cada alumno en la suya.`}
+        onBack={back}
+        onNext={next}
+        busy={busy}
+        maxWidth={760}
+      >
+        <AvailabilityManager
+          userId={userId}
+          rules={rules}
+          usedBy={rulesUsedBy}
+        />
+
+        {rules.length === 0 ? (
+          <p className="text-[13px] text-[#4d4d4d]">
+            Puedes dejarlo para luego y pulsar «Continuar», pero ten en cuenta
+            que mientras no tengas ninguna franja nadie podrá reservarte, aunque
+            aprobemos tu perfil. Se cambia cuando quieras desde
+            «Disponibilidad».
+          </p>
+        ) : (
+          <p className="text-[13px] text-[#6b6b6b]">
+            Podrás afinarlo desde «Disponibilidad», donde además se marcan los
+            días sueltos que no puedes (vacaciones, un festivo…).
+          </p>
+        )}
+      </WizardShell>
+    );
+  }
+
+  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02
+  // (con su borrador / "enviar a revisión"). El asistente solo lleva a la
+  // siguiente pantalla; los documentos los guarda el propio módulo. Los
+  // materiales de clase salieron del onboarding a la oferta (R24-16).
+  if (step === 5) {
+    return (
+      <WizardShell
+        step={5}
         total={totalSteps}
         title="Verifica tu identidad"
         description="Sube tus documentos con el mismo módulo de tu panel. Guárdalos como borrador y continúa; puedes terminar cuando quieras."
