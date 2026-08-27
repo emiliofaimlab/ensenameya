@@ -45,6 +45,12 @@ export default async function AccountPage() {
       title="Mi cuenta"
       description="Gestiona tu información personal, tu contraseña y tu sesión."
     >
+      {/* ⚠️ EL MOSAICO LO ARMA `AccountForm`, y estas dos tarjetas entran por
+          props en vez de detrás. No es rebuscado: en dos columnas el ORDEN de
+          las tarjetas es el diseño (tarjetas altas emparejadas entre sí, el
+          calendario a ancho completo, la baja de cuenta sola al final), y
+          partirlo entre dos ficheros lo rompería el primer día. Aquí se decide
+          QUÉ tarjetas hay y con qué datos; allí, DÓNDE cae cada una. */}
       <AccountForm
         userId={user.id}
         email={user.email ?? ""}
@@ -52,18 +58,20 @@ export default async function AccountPage() {
         timezone={profile?.timezone ?? "UTC"}
         avatarUrl={avatarUrl}
         isTutor={roles.includes("tutor")}
+        /* EY-188 (B5.5) · la misma tarjeta para alumno y tutor: el feed
+           devuelve las sesiones en las que participas, sin mirar el rol. */
+        calendario={
+          <CalendarFeedCard
+            tokenInicial={typeof feedToken === "string" ? feedToken : null}
+          />
+        }
+        /* G03 · el otro punto de integración de referidos (Doc 4 §4.x).
+           B1.11 · el rol decide QUÉ programa se le ofrece. Esta pantalla la
+           comparten los dos, y `roles` ya estaba a mano más arriba.
+           ⚠️ Puede renderizar `null` (hoy, siempre para el tutor): el mosaico
+           cuenta con ello, ver `account-form.tsx`. */
+        referidos={<ReferralCard isTutor={roles.includes("tutor")} />}
       />
-
-      {/* EY-188 (B5.5) · la misma tarjeta para alumno y tutor: el feed devuelve
-          las sesiones en las que participas, sin mirar el rol. */}
-      <CalendarFeedCard
-        tokenInicial={typeof feedToken === "string" ? feedToken : null}
-      />
-
-      {/* G03 · el otro punto de integración de referidos (Doc 4 §4.x). */}
-      {/* B1.11 · el rol decide QUÉ programa se le ofrece. Esta pantalla la
-          comparten los dos, y `roles` ya estaba a mano dos líneas más arriba. */}
-      <ReferralCard isTutor={roles.includes("tutor")} />
     </PanelShell>
   );
 }

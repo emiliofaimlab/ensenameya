@@ -26,6 +26,10 @@ import { DeleteAccountDialog } from "./delete-account-dialog";
  * US-104 (SCR-G03) — "Mi cuenta" en módulos (24-jul): foto, información
  * personal (nombre, correo, zona horaria), contraseña, rol tutor y sesión.
  * Todo por RLS (`profiles_update_own` / auth propio); nada privilegiado.
+ *
+ * 27-ago · Mosaico de dos columnas. Las tarjetas eran ocho apiladas a todo el
+ * ancho y la pantalla se hacía interminable. Ver el comentario largo del
+ * `return`: el orden de las tarjetas ES el diseño.
  */
 export function AccountForm({
   userId,
@@ -34,6 +38,8 @@ export function AccountForm({
   timezone,
   avatarUrl,
   isTutor,
+  calendario,
+  referidos,
 }: {
   userId: string;
   email: string;
@@ -41,6 +47,11 @@ export function AccountForm({
   timezone: string;
   avatarUrl: string | null;
   isTutor: boolean;
+  /** Tarjetas que arma la página (servidor) y que este mosaico COLOCA.
+   *  Entran como props en vez de detrás del componente porque su sitio dentro
+   *  de la rejilla es una decisión de diseño, no un "y además". */
+  calendario: React.ReactNode;
+  referidos: React.ReactNode;
 }) {
   const router = useRouter();
   const [savingProfile, setSavingProfile] = useState(false);
@@ -144,24 +155,50 @@ export function AccountForm({
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   return (
-    <>
-      {/* Foto */}
-      <PanelCard>
-        <PanelCardTitle>Foto de perfil</PanelCardTitle>
-        <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
-          Se muestra en tu perfil y en tus reservas.
-        </p>
-        <div className="mt-4">
-          <AvatarUpload
-            userId={userId}
-            initialUrl={avatarUrl}
-            name={fullName}
-            large
-            onUploaded={onAvatarUploaded}
-          />
-        </div>
-      </PanelCard>
-
+    /* ── EL MOSAICO ─────────────────────────────────────────────────────────
+     *
+     * ⚠️ EL NÚMERO DE TARJETAS NO ES FIJO, así que NO hay reparto a mano en dos
+     * columnas. «Invita y gana» devuelve `null` cuando su campaña no está
+     * configurada —hoy SIEMPRE para el tutor, que no tiene
+     * `NEXT_PUBLIC_REFERRAL_URL_TUTOR` porque esa campaña no existe (ver
+     * `lib/referral.ts`)— de modo que esta misma pantalla se ve con 7 tarjetas y
+     * con 8. Con un reparto escrito a mano, la columna que perdiera la suya
+     * quedaría coja; con la rejilla, la siguiente sube sola a su hueco. Lo único
+     * atado son los dos `md:col-span-2`: son FILAS ENTERAS, y una fila entera da
+     * igual cuántas tarjetas la precedan.
+     *
+     * ⚠️ ALTURAS MUY DISPARES. Las dos tarjetas altas son formularios
+     * («Información personal» y «Contraseña») y el resto son cortas. En una
+     * rejilla la fila mide lo que su tarjeta más alta, así que una alta al lado
+     * de una corta deja un hueco enorme. Por eso el ORDEN del DOM empareja
+     * alta con alta y corta con corta — no es el orden viejo, es el diseño.
+     * Y por eso «Sincroniza tu calendario» va a ancho completo: es la única cuya
+     * altura CAMBIA (se dispara al activar el enlace) y la única que necesita
+     * sitio para una URL larga y tres botones.
+     *
+     * `items-start`: sin él cada tarjeta se estira hasta la altura de su fila y
+     * «Sesión» saldría con medio palmo de vacío DENTRO. Preferimos el hueco
+     * entre tarjetas al hueco dentro de una.
+     *
+     * `md:` y no `sm:`: a 640 px cada columna se quedaría en ~296 px, más
+     * estrecha que un móvil, y aquí hay formularios con campos de 45 px, no las
+     * cifras sueltas de `/admin`. Ojo con la intuición: la columna es MÁS
+     * estrecha en `lg` (~332 px) que en `md` (~348 px), porque en `lg` aparece
+     * el menú lateral de 232.
+     *
+     * ⚠️ `[&>*]:min-w-0` — un hijo de rejilla nace con `min-width:auto` y se
+     * niega a encoger por debajo del ancho intrínseco de su contenido: el mismo
+     * fallo que `panel-shell.tsx` documenta para la columna de contenido, un
+     * nivel más abajo. Sin esto, la URL del feed de calendario ensancharía su
+     * columna y volvería a estirar el panel entero.
+     *
+     * ⚠️ Nada de `columns-2` de CSS: parte una tarjeta entre dos columnas y
+     * descoloca el tabulador. Y nada de la utilidad `order`: mueve lo que se ve
+     * pero NO el orden de tabulación (WCAG 2.4.3). Orden del DOM = orden visual.
+     */
+    <div className="grid items-start gap-5 md:grid-cols-2 [&>*]:min-w-0">
+      {/* Fila 1 · las dos altas juntas: es lo que la gente viene a tocar y es
+          el único par que se equilibra solo. */}
       {/* Información personal */}
       <PanelCard>
         <PanelCardTitle>Información personal</PanelCardTitle>
@@ -271,6 +308,26 @@ export function AccountForm({
         </form>
       </PanelCard>
 
+      {/* Fila 2 · las dos cortas de identidad y rol. «Foto de perfil» baja
+          aquí desde el primer puesto: arriba iba emparejada con un formulario
+          alto y dejaba un agujero de media tarjeta debajo. */}
+      {/* Foto */}
+      <PanelCard>
+        <PanelCardTitle>Foto de perfil</PanelCardTitle>
+        <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
+          Se muestra en tu perfil y en tus reservas.
+        </p>
+        <div className="mt-4">
+          <AvatarUpload
+            userId={userId}
+            initialUrl={avatarUrl}
+            name={fullName}
+            large
+            onUploaded={onAvatarUploaded}
+          />
+        </div>
+      </PanelCard>
+
       {/* Rol tutor */}
       <PanelCard>
         <PanelCardTitle>Enseñar en Enséñame Ya</PanelCardTitle>
@@ -292,6 +349,22 @@ export function AccountForm({
         )}
       </PanelCard>
 
+      {/* Fila 3 · EY-188, a ancho completo y en medio del mosaico, no al final.
+          A ancho completo porque entrega una URL larga que hay que poder leer y
+          copiar, con «Copiar» al lado y dos botones de calendario: en una
+          columna de ~330 px eso se apelotona. Y porque es la ÚNICA tarjeta que
+          cambia de altura —al activar el enlace le salen input, tres botones y
+          el aviso—, así que dejarla en la rejilla metería un agujero variable
+          que no se puede compensar con el orden. En medio y no al final para
+          partir la columna de tarjetas pequeñas; el final es de la baja. */}
+      <div className="md:col-span-2">{calendario}</div>
+
+      {/* Fila 4 · ⚠️ `referidos` puede ser `null` (tutor, o campaña sin
+          configurar). Al no pintarse no deja hueco: «Sesión» sube a su sitio y
+          la fila queda con una sola tarjeta. Esto es justo lo que un reparto a
+          mano no sabría hacer. */}
+      {referidos}
+
       {/* Sesión */}
       <PanelCard>
         <PanelCardTitle>Sesión</PanelCardTitle>
@@ -312,19 +385,32 @@ export function AccountForm({
 
       {/* EY-192 · baja de cuenta. Va la última y en su propio módulo: es la
           única acción irreversible de la pantalla, y no debe compartir tarjeta
-          con «Cerrar sesión», que es justo la que se le parece y no lo es. */}
-      <PanelCard>
-        <PanelCardTitle>Eliminar mi cuenta</PanelCardTitle>
-        <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
-          Borramos tu nombre, tu foto y tus datos de contacto, y cerramos tu
-          acceso. Tus reservas y pagos se conservan por obligación legal, y tus
-          reseñas quedan publicadas sin tu nombre. No se puede deshacer.
-        </p>
-        <div className="mt-4">
+          con «Cerrar sesión», que es justo la que se le parece y no lo es.
+
+          ⚠️ EN UN MOSAICO ESO NO BASTA, Y POR ESO VA A ANCHO COMPLETO. Con dos
+          columnas, «ser la última» ya no garantiza estar sola: con 8 tarjetas
+          la fila anterior la dejaba pegada a «Cerrar sesión», y con 7 (tutor)
+          caía en la columna de al lado. Una fila entera al final es lo único
+          que no depende de cuántas tarjetas haya delante — que es exactamente
+          el problema de esta pantalla.
+
+          El tinte y el borde salen de `--destructive`, ya en uso para lo mismo
+          en el carrito; no es un lenguaje nuevo. Y el texto va a la izquierda
+          con el botón a la derecha para que la fila ancha no quede vacía. */}
+      <PanelCard className="border-destructive/30 bg-destructive/[0.03] md:col-span-2 md:mt-1">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-8">
+          <div className="md:max-w-[680px]">
+            <PanelCardTitle>Eliminar mi cuenta</PanelCardTitle>
+            <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
+              Borramos tu nombre, tu foto y tus datos de contacto, y cerramos tu
+              acceso. Tus reservas y pagos se conservan por obligación legal, y
+              tus reseñas quedan publicadas sin tu nombre. No se puede deshacer.
+            </p>
+          </div>
           <Button
             variant="destructive"
             onClick={() => setDeleteOpen(true)}
-            className="h-[45px] rounded-[8px] px-5"
+            className="h-[45px] shrink-0 self-start rounded-[8px] px-5 md:self-auto"
           >
             Eliminar mi cuenta
           </Button>
@@ -335,6 +421,6 @@ export function AccountForm({
           email={email}
         />
       </PanelCard>
-    </>
+    </div>
   );
 }
