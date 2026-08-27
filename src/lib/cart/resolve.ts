@@ -87,10 +87,15 @@ export type CartResolvedLine = {
 export type ResolvedCart = {
   lines: CartResolvedLine[];
   /**
-   * Suma de las líneas comprables, **informativa**. No existe ningún cobro que
-   * mueva esta cifra: hoy se paga mentoría a mentoría (ver §EY-176 en
-   * `lib/cart/cookie.ts`). Se enseña porque el alumno necesita saber en qué se
-   * está metiendo antes de empezar a pagar, no porque haya un botón que la cobre.
+   * Suma de las líneas comprables, **informativa**.
+   *
+   * ⚠️ SIGUE SIENDO INFORMATIVA AUNQUE DESDE EY-176 YA HAYA UN BOTÓN QUE COBRA
+   * el pedido entero. Esta cifra sale del precio de catálogo de HOY
+   * (`bookingTotal`); lo que se cobra es la suma de los `payments.gross_amount`
+   * que `create_booking_line` congela al crear el pedido, y entre esta pantalla
+   * y esa transacción el tutor puede haber cambiado el precio. Manda el
+   * congelado (regla de oro 2). Por eso la pantalla lo llama «Total estimado» y
+   * la de pago, ya con el pedido creado, lo llama «Total».
    */
   totalEstimado: number;
   /** Moneda común, o `null` si las líneas mezclan monedas. */

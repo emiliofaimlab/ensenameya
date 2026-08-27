@@ -6,6 +6,7 @@ import { isStripeConfigured, publishableKey, stripe } from "@/lib/stripe";
 import type {
   ChargeInput,
   ChargeResult,
+  CobroRef,
   PspProvider,
   RefundInput,
   RefundResult,
@@ -13,6 +14,56 @@ import type {
   WebhookInput,
   WebhookVerificacion,
 } from "./port";
+
+/**
+ * EY-176 · CÓMO VIAJA EL SUJETO DEL COBRO DENTRO DE STRIPE, Y POR QUÉ ASÍ.
+ *
+ * `client_reference_id` es un campo de texto libre y hasta hoy llevaba el uuid
+ * de la reserva pelado. Con los pedidos hay dos cosas que pueden ir ahí, y
+ * confundirlas sería acreditar el dinero al sujeto equivocado.
+ *
+ * ⚠️ LA RESERVA SIGUE VIAJANDO PELADA, A PROPÓSITO. Solo el pedido lleva
+ * prefijo (`order_<uuid>`). Así, cualquier Checkout Session que estuviera ya
+ * ABIERTA cuando se despliega esto —creada con el formato viejo— se sigue
+ * leyendo bien: sin prefijo = reserva, que es exactamente lo que era. Poner
+ * `booking_` también habría sido más simétrico y habría dejado esas Sessions
+ * sin sujeto reconocible durante las horas que viven.
+ */
+const PREFIJO_PEDIDO = "order_";
+
+/** Lo que se escribe en `client_reference_id`. */
+function referenciaExterna(ref: CobroRef): string {
+  return ref.tipo === "order" ? `${PREFIJO_PEDIDO}${ref.id}` : ref.id;
+}
+
+/**
+ * La copia en metadata. La de la Session NO baja al PaymentIntent, y los
+ * eventos de reembolso y disputa solo traen el PaymentIntent: sin esta segunda
+ * copia no habría forma de mapear un reembolso a lo que pagó.
+ *
+ * Se usan claves DISTINTAS (`booking_id` / `order_id`) en vez de una genérica
+ * para que un evento viejo y uno nuevo no se puedan malinterpretar entre sí, y
+ * para que el panel de Stripe siga siendo legible por una persona.
+ */
+function metadatosDeRef(ref: CobroRef): Record<string, string> {
+  return ref.tipo === "order" ? { order_id: ref.id } : { booking_id: ref.id };
+}
+
+/** El camino de vuelta: de lo que trae el evento, a nuestro vocabulario. */
+function refDeSesion(sesion: Stripe.Checkout.Session): CobroRef | null {
+  const externa = sesion.client_reference_id ?? null;
+  if (externa?.startsWith(PREFIJO_PEDIDO)) {
+    return { tipo: "order", id: externa.slice(PREFIJO_PEDIDO.length) };
+  }
+  // La metadata se mira ANTES de caer al `client_reference_id` pelado: los
+  // eventos que no son de Session no traen ese campo, y ahí la metadata es lo
+  // único que hay.
+  const pedido = sesion.metadata?.order_id;
+  if (pedido) return { tipo: "order", id: pedido };
+
+  const reserva = externa ?? sesion.metadata?.booking_id ?? null;
+  return reserva ? { tipo: "booking", id: reserva } : null;
+}
 
 /**
  * EL ADAPTADOR DE STRIPE — el único que hoy mueve dinero.
@@ -159,7 +210,7 @@ export const stripeProvider: PspProvider = {
       {
         mode: "payment",
         customer: input.customerRef,
-        client_reference_id: input.bookingId,
+        client_reference_id: referenciaExterna(input.ref),
         // X-02 · en segundos Unix, no en milisegundos: Stripe cuenta épocas en
         // segundos y pasarle `Date.now()` a secas daría un año del 57000 que
         // rebota con "no puede ser más de 24 horas". El razonamiento del valor
@@ -199,20 +250,30 @@ export const stripeProvider: PspProvider = {
         // sin que nadie lo note. El importe y la moneda vienen del puerto, que los
         // sacó de `payments`, así que una sola moneda de punta a punta.
         adaptive_pricing: { enabled: false },
-        line_items: [
-          {
-            price_data: {
-              currency: input.currency.toLowerCase(),
-              unit_amount: input.amountMinor,
-              product_data: { name: input.concepto },
-            },
-            quantity: 1,
+        // EY-176 · UNA LÍNEA POR MENTORÍA, y el total es su suma. Es la mitad
+        // de «un cobro con varias líneas dentro» (P-3): un solo PaymentIntent,
+        // un solo cargo en la tarjeta, y el desglose viaja dentro.
+        //
+        // ⚠️ Con `ui_mode: 'form'` el alumno NO ve estas líneas —Stripe pinta
+        // solo los campos de la tarjeta—, así que el desglose que se lee es el
+        // nuestro. Estas sirven para el importe, para el recibo de Stripe y
+        // para que el panel del PSP diga qué se vendió; ponerlas bien es lo que
+        // hace conciliable un cargo de tres mentorías.
+        //
+        // Para una reserva suelta esto produce EXACTAMENTE el mismo objeto que
+        // antes del refactor: una línea, mismo importe, mismo nombre.
+        line_items: input.lineas.map((l) => ({
+          price_data: {
+            currency: input.currency.toLowerCase(),
+            unit_amount: l.amountMinor,
+            product_data: { name: l.concepto },
           },
-        ],
+          quantity: 1,
+        })),
         // La metadata de la Session NO baja al PaymentIntent, y los eventos de
         // reembolso y disputa solo traen el PaymentIntent. Sin esta segunda copia
-        // no habría forma de mapear un reembolso a su reserva.
-        metadata: { booking_id: input.bookingId },
+        // no habría forma de mapear un reembolso a su reserva (o a su pedido).
+        metadata: metadatosDeRef(input.ref),
         // ── PAC-02 · GUARDAR LA TARJETA, Y POR QUÉ LA CASILLA CAMBIÓ DE DUEÑO ──
         //
         // `allow_redisplay_filters` es lo que hace que la pasarela OFREZCA las
@@ -263,7 +324,7 @@ export const stripeProvider: PspProvider = {
           payment_method_save: "enabled",
         },
         payment_intent_data: {
-          metadata: { booking_id: input.bookingId },
+          metadata: metadatosDeRef(input.ref),
           // SIN `setup_future_usage`: lee el bloque de arriba antes de añadirlo.
         },
         // MN-01 · `form`, no `embedded_page`. Los dos montan el formulario DENTRO
@@ -432,10 +493,10 @@ export const stripeProvider: PspProvider = {
         id: evento.id,
         rawType: evento.type,
         kind: traducirTipo(evento.type, sesion),
-        // El booking viaja en `client_reference_id` y, por si acaso, en
-        // metadata. Se comprueban los dos: el primero solo existe en los
-        // eventos de Session.
-        bookingId: sesion.client_reference_id ?? sesion.metadata?.booking_id ?? null,
+        // El sujeto del cobro viaja en `client_reference_id` y, por si acaso,
+        // en metadata. Se comprueban los dos: el primero solo existe en los
+        // eventos de Session. Ver `refDeSesion` para el formato.
+        ref: refDeSesion(sesion),
         chargeRef: idDePaymentIntent(sesion),
         objectRef: sesion.id ?? null,
         amountMinor: sesion.amount_total ?? null,

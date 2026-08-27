@@ -19,6 +19,7 @@ import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { CheckoutSteps } from "@/components/checkout/checkout-steps";
 import {
   ClearCart,
+  PagarPedido,
   PruneBought,
   RemoveLine,
 } from "@/components/cart/cart-actions";
@@ -167,35 +168,36 @@ export default async function CarritoPage() {
 }
 
 /**
- * ⚠️⚠️ EL BORDE DEL COBRO. AQUÍ SE PARA EY-177 Y EMPIEZA **EY-176**.
+ * ⚠️⚠️ EL BORDE DEL COBRO — y desde EY-176 ya se cruza.
  *
- * El motor de dinero de hoy compra **una mentoría por cobro**: `create_booking`
- * recibe UN producto con sus horarios y crea UNA reserva, UN `payments` con su
- * snapshot congelado y N `sessions`; `payments.booking_id` es `unique`; la
- * Session de Stripe lleva un solo `line_item` y el webhook confirma un solo
- * booking. No existe ninguna entidad de pedido: `grep` de `order_id`, `cart_id`
- * o `group_id` sobre las migraciones da cero.
+ * Hasta la ficha del motor, el carrito paraba aquí: se decía en la cara que
+ * cada mentoría se pagaba por separado, porque `create_booking` compraba UNA
+ * mentoría por cobro y no existía ninguna entidad de pedido. Eso lo resolvió
+ * EY-176 (`20260827150000`…`20260827170000`) con las tres decisiones que
+ * bloqueaban la ficha:
  *
- * Así que un carrito de N líneas **no se puede cobrar de una vez sin reescribir
- * ese motor**, y eso es EY-176 —costado en XL, con «NO INICIAR SIN REUNIÓN DE
- * DISEÑO» en su ficha y tres preguntas de producto sin contestar—. Lo que NO se
- * ha hecho aquí, a propósito, es inventarse la respuesta.
+ *  · **P-3 · un cobro, varias líneas.** `create_order` crea las N reservas y su
+ *    cabecera; la Session lleva un `line_item` por mentoría y un solo cargo.
+ *  · **P-1 · todo o nada.** Las N reservas nacen en UNA transacción: si una
+ *    pierde su hueco, no se crea ninguna y se dice cuál falló.
+ *  · **P-2 · el carrito NO retiene.** El reloj de 7 minutos sigue arrancando al
+ *    entrar al pago, y las N líneas comparten `created_at`, así que es UN
+ *    contador para todo el pedido. Lo dice el párrafo de abajo, y no en letra
+ *    pequeña.
  *
- * Lo que sí se hace es lo honesto:
+ * Los dos caminos, y la diferencia importa:
  *
- *  · **Una línea** → el botón lleva a la MISMA URL de siempre,
- *    `/reservar/<id>/checkout?slots=…`, sin un solo cambio en el checkout ni en
- *    el motor. Es literalmente la compra de hoy.
- *  · **Varias líneas** → se dice en la cara que hoy se paga una a una, y cada
- *    línea lleva su propio botón a ese mismo checkout. No se suma nada, no se
- *    crea ningún pedido, no se toca el webhook. Cada cobro sigue siendo lo que
- *    ya era: una reserva, un pago.
+ *  · **Una línea** → la MISMA URL de siempre, `/reservar/<id>/checkout?slots=…`.
+ *    Ni pedido, ni cabecera, ni una línea del motor viejo tocada. Es
+ *    literalmente la compra de hoy, y se deja así a propósito: es el camino que
+ *    también usan la ficha del tutor y el selector de horarios, y meterle un
+ *    pedido por medio sería arriesgar el flujo que ya funciona para no ganar
+ *    nada.
+ *  · **Varias líneas** → `POST /api/pedidos`, que relee el carrito EN SERVIDOR
+ *    (la cookie es entrada del usuario) y devuelve el `orderId`.
  *
- * ⚠️ Y el fallo que hay que arreglar ANTES de cobrar N líneas juntas está
- * escrito entero en `lib/cart/cookie.ts`: `payment_webhook_events.event_id` es
- * clave primaria, así que un solo evento para N reservas confirmaría UNA y
- * dejaría las demás muriendo de `expire_stale_bookings` a los 7 minutos —
- * cobradas y sin clase.
+ * ⚠️ El aspecto de esta pantalla lo cierra el responsable después; lo que hay
+ * aquí es el enchufe del motor, no el diseño.
  */
 function PasoAlPago({ comprables }: { comprables: CartResolvedLine[] }) {
   if (comprables.length === 0) {
@@ -216,20 +218,17 @@ function PasoAlPago({ comprables }: { comprables: CartResolvedLine[] }) {
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-warning/40 bg-warning-muted p-3.5">
-      <p className="flex items-start gap-2 text-[13px] leading-relaxed font-semibold text-warning">
-        <InfoIcon className="mt-px size-4 shrink-0" />
-        Por ahora cada mentoría se paga por separado
+    <>
+      <PagarPedido cuantas={comprables.length} />
+      <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-[#6b6b6b]">
+        <InfoIcon className="mt-px size-3.5 shrink-0" />
+        {/* La contrapartida de P-1, dicha antes de pulsar y no después de
+            fallar: un pedido se compra entero. Si entre esta pantalla y el pago
+            alguien se lleva uno de los huecos, no se compra «lo que quede». */}
+        Se cobran juntas en un solo pago. Si alguna pierde su horario, no se
+        cobra ninguna y te lo decimos.
       </p>
-      <p className="mt-1.5 text-xs leading-relaxed text-[#6b6b6b]">
-        Todavía no podemos cobrar varias mentorías en un solo pago. Paga la
-        primera con su botón y vuelve aquí: la que ya esté pagada desaparece del
-        carrito sola.
-      </p>
-      <Button asChild className="mt-3 h-[45px] w-full text-sm">
-        <Link href={hrefDePago(comprables[0]!)}>Pagar la primera</Link>
-      </Button>
-    </div>
+    </>
   );
 }
 

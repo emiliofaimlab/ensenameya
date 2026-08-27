@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { adapterFor } from "@/lib/payments";
+import type { CobroRef, LineaDeCobro } from "@/lib/payments/port";
 import { HOLD_POLICY } from "@/lib/policy";
 import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
+import { clienteDePedidos } from "@/lib/orders/tipos";
 
 /**
  * EP-20 / PAC-01 · abre el checkout de Stripe para una reserva y devuelve su
@@ -143,8 +145,16 @@ const RETENCION_MIN = HOLD_POLICY.minutes;
  * v4 · 2026-08-26 — V-4a (A-3 del Doc 22 §22.9): el titular de la tarjeta pasa
  *   de `optional: true` a `false`. Es un parámetro de la Session como los
  *   anteriores y le aplica la misma trampa.
+ * v5 · 2026-08-27 — EY-176: los `line_items` pasan a construirse desde una
+ *   LISTA (una por mentoría). Para una reserva suelta el objeto resultante es
+ *   —hasta donde se puede leer— IDÉNTICO al de v4: una línea, mismo importe,
+ *   mismo nombre, mismo `client_reference_id` pelado. Se sube igualmente, y a
+ *   propósito: acertar no ahorra nada (subirla solo hace que una reserva con el
+ *   checkout abierto abra una Session nueva, que es inofensivo) y equivocarse
+ *   cuesta un error de idempotencia opaco en producción el día del despliegue,
+ *   para todo el que estuviera pagando. La asimetría decide sola.
  */
-const VERSION_PARAMS = "v4";
+const VERSION_PARAMS = "v5";
 
 /** Hasta cuándo se le promete el horario al alumno, en ISO (o null si no
  *  hay `created_at` legible: mejor sin contador que con uno inventado). */
@@ -167,61 +177,190 @@ function caducidadSesion(creadaEn: string | null): number {
   return Math.max(Math.floor(nacimiento / 1000) + CADUCIDAD_MIN * 60, suelo);
 }
 
+/**
+ * EY-176 · LO QUE SE VA A COBRAR, VENGA DE UNA RESERVA O DE UN PEDIDO.
+ *
+ * A partir de aquí el resto del fichero no distingue: el Customer, la
+ * caducidad, la clave de idempotencia y el rescate del Customer perdido son los
+ * mismos para los dos. Lo único que cambia es de dónde salen estos campos.
+ */
+type Cobro = {
+  ref: CobroRef;
+  /** Una por mentoría, con su importe congelado. Nunca vacía. */
+  lineas: LineaDeCobro[];
+  currency: string;
+  /** El snapshot de `payments.provider`, no la regla activa de hoy. */
+  provider: string | null;
+  /** El nacimiento del hold: de aquí salen el contador y la caducidad. */
+  creadoEn: string | null;
+  /** A dónde devuelve la pasarela cuando el cobro sale bien. */
+  returnPath: string;
+  /** El prefijo de la clave de idempotencia. Ver `VERSION_PARAMS`. */
+  claveBase: string;
+};
+
+/** El error ya con su código HTTP, para no repetir `NextResponse` en cada rama. */
+type Fallo = { error: string; status: number };
+
 export async function POST(req: Request) {
-  // ⚠️ El cuerpo trae SOLO la reserva. Aquí llegaba también `guardarTarjeta`,
-  // la casilla de PAC-02, y desde D-3 (§20.14) la pinta Stripe dentro de su
-  // formulario: ver el bloque de `saved_payment_method_options` en
-  // `lib/payments/stripe-provider.ts` antes de volver a añadirla.
-  const { bookingId } = (await req.json().catch(() => ({}))) as {
+  // ⚠️ El cuerpo trae SOLO el sujeto del cobro: una reserva O un pedido. Aquí
+  // llegaba también `guardarTarjeta`, la casilla de PAC-02, y desde D-3
+  // (§20.14) la pinta Stripe dentro de su formulario: ver el bloque de
+  // `saved_payment_method_options` en `lib/payments/stripe-provider.ts` antes
+  // de volver a añadirla.
+  const { bookingId, orderId } = (await req.json().catch(() => ({}))) as {
     bookingId?: string;
+    orderId?: string;
   };
-  if (!bookingId) {
-    return NextResponse.json({ error: "falta bookingId" }, { status: 400 });
+  if (!bookingId && !orderId) {
+    return NextResponse.json({ error: "falta bookingId u orderId" }, { status: 400 });
+  }
+  if (bookingId && orderId) {
+    // Con los dos no se sabe a quién acreditar el dinero. Se para aquí en vez
+    // de elegir uno por orden de aparición.
+    return NextResponse.json(
+      { error: "bookingId y orderId son excluyentes" },
+      { status: 400 },
+    );
   }
 
-  // Cliente de cookies (ANON + RLS): si la reserva no es tuya, no la ves. La
-  // autorización es la RLS, no una comprobación nuestra.
+  // Cliente de cookies (ANON + RLS): si la reserva o el pedido no son tuyos, no
+  // los ves. La autorización es la RLS, no una comprobación nuestra.
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "no autenticado" }, { status: 401 });
 
-  // `created_at` no es decorativo: de ahí sale la caducidad de la Session
-  // (X-02). Es la marca de cuándo empezó a correr la ventana del hold.
-  const { data: booking } = await supabase
-    .from("bookings")
-    .select("id, status, product_id, created_at, products(title)")
-    .eq("id", bookingId)
-    .maybeSingle();
-
-  if (!booking) return NextResponse.json({ error: "reserva no encontrada" }, { status: 404 });
-  if (booking.status !== "pending_payment") {
-    // Ya pagada, ya cancelada o ya aceptada: no se abre un cobro nuevo.
-    return NextResponse.json(
-      { error: `la reserva está en ${booking.status}` },
-      { status: 409 },
-    );
-  }
-
   const admin = createAdminClient();
-  const { data: payment } = await admin
-    .from("payments")
-    .select("id, provider, gross_amount, currency")
-    .eq("booking_id", bookingId)
-    .maybeSingle();
 
-  if (!payment) {
-    return NextResponse.json({ error: "sin pago asociado" }, { status: 500 });
+  /** Una reserva suelta: el camino de siempre, sin un cambio de fondo. */
+  const cobroDeReserva = async (id: string): Promise<Cobro | Fallo> => {
+    // `created_at` no es decorativo: de ahí sale la caducidad de la Session
+    // (X-02). Es la marca de cuándo empezó a correr la ventana del hold.
+    const { data: booking } = await supabase
+      .from("bookings")
+      .select("id, status, product_id, created_at, products(title)")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (!booking) return { error: "reserva no encontrada", status: 404 };
+    if (booking.status !== "pending_payment") {
+      // Ya pagada, ya cancelada o ya aceptada: no se abre un cobro nuevo.
+      return { error: `la reserva está en ${booking.status}`, status: 409 };
+    }
+
+    const { data: payment } = await admin
+      .from("payments")
+      .select("id, provider, gross_amount, currency")
+      .eq("booking_id", id)
+      .maybeSingle();
+    if (!payment) return { error: "sin pago asociado", status: 500 };
+
+    return {
+      ref: { tipo: "booking", id },
+      // ⚠️ EL IMPORTE SALE DE `payments.gross_amount`, NUNCA DEL NAVEGADOR
+      // (regla de oro 2).
+      lineas: [
+        {
+          concepto: booking.products?.title ?? "Mentoría",
+          amountMinor: payment.gross_amount,
+        },
+      ],
+      currency: payment.currency,
+      provider: payment.provider,
+      creadoEn: booking.created_at,
+      returnPath: `/reservas/${id}/confirmacion`,
+      claveBase: `booking-${id}`,
+    };
+  };
+
+  /**
+   * Un pedido: N líneas, UN cargo (P-3).
+   *
+   * ⚠️ P-1 · TODO O NADA TAMBIÉN AL ABRIR EL COBRO. Si una sola línea ha dejado
+   * de esperar el pago —la venció `expire_stale_bookings` a los 7 minutos, o la
+   * canceló otro camino— no se abre nada. Abrir el cobro por las que quedan
+   * sería cobrar un pedido distinto del que el alumno revisó, y confirmar solo
+   * parte de él es exactamente el estado que esta ficha existe para impedir.
+   */
+  const cobroDePedido = async (id: string): Promise<Cobro | Fallo> => {
+    const conPedidos = clienteDePedidos(supabase);
+
+    const { data: order } = await conPedidos
+      .from("orders")
+      .select("id, status, currency, provider, created_at")
+      .eq("id", id)
+      .maybeSingle();
+    if (!order) return { error: "pedido no encontrado", status: 404 };
+    if (order.status !== "pending_payment") {
+      return { error: `el pedido está en ${order.status}`, status: 409 };
+    }
+
+    const { data: lineas } = await conPedidos
+      .from("bookings")
+      .select("id, status, products(title)")
+      .eq("order_id", id);
+
+    const filas = lineas ?? [];
+    if (filas.length === 0) return { error: "el pedido no tiene líneas", status: 409 };
+
+    const caida = filas.find((b) => b.status !== "pending_payment");
+    if (caida) {
+      return {
+        error: `una mentoría del pedido está en ${caida.status}`,
+        status: 409,
+      };
+    }
+
+    // Los importes, con `service_role` y en UNA consulta. Uno por línea, y cada
+    // uno es el que congeló `create_booking_line`: el total del cargo es su
+    // suma y no se calcula en ningún otro sitio (regla de oro 2).
+    const { data: pagos } = await admin
+      .from("payments")
+      .select("booking_id, provider, gross_amount, currency")
+      .in(
+        "booking_id",
+        filas.map((b) => b.id),
+      );
+
+    const porReserva = new Map((pagos ?? []).map((p) => [p.booking_id, p]));
+    if (porReserva.size !== filas.length) {
+      return { error: "alguna línea del pedido no tiene pago", status: 500 };
+    }
+
+    return {
+      ref: { tipo: "order", id },
+      lineas: filas.map((b) => ({
+        concepto: b.products?.title ?? "Mentoría",
+        amountMinor: porReserva.get(b.id)!.gross_amount,
+      })),
+      // La moneda y la pasarela del pedido, que `create_order` ya obligó a ser
+      // únicas entre las líneas: aquí solo se leen.
+      currency: order.currency,
+      provider: order.provider,
+      creadoEn: order.created_at,
+      returnPath: `/pedidos/${id}/confirmacion`,
+      claveBase: `order-${id}`,
+    };
+  };
+
+  const resuelto = orderId
+    ? await cobroDePedido(orderId)
+    : await cobroDeReserva(bookingId!);
+
+  if ("error" in resuelto) {
+    return NextResponse.json({ error: resuelto.error }, { status: resuelto.status });
   }
+  const cobrar = resuelto;
 
   // El ruteo manda, y manda el SNAPSHOT: `payments.provider` es lo que
   // `create_booking` congeló al reservar, no la regla activa de ahora mismo.
   // Mientras siga en 'simulated', el camino de hoy — y la pregunta va ANTES de
   // dar de alta al Customer porque al revés el camino simulado empezaría a
   // llamar a Stripe, que hoy no lo hace.
-  const proveedor = adapterFor(payment.provider);
-  const retencion = retencionHasta(booking.created_at);
+  const proveedor = adapterFor(cobrar.provider);
+  const retencion = retencionHasta(cobrar.creadoEn);
   if (!proveedor.opensRemoteCheckout) {
     // El contador viaja también por aquí: con el proveedor simulado no hay
     // formulario que montar, pero el horario se retiene exactamente igual y la
@@ -276,21 +415,20 @@ export async function POST(req: Request) {
   if (customer !== perfil?.stripe_customer_id) await guardarCustomer(customer);
 
   const base = siteUrl();
-  const caduca = caducidadSesion(booking.created_at);
+  const caduca = caducidadSesion(cobrar.creadoEn);
   const crearSesion = (cliente: string, claveIdem: string) =>
     proveedor.charge({
-      bookingId,
-      // ⚠️ EL IMPORTE Y LA MONEDA SALEN DE `payments`, NUNCA DEL NAVEGADOR
-      // (regla de oro 2). El puerto los transporta; no los calcula nadie por
-      // el camino.
-      amountMinor: payment.gross_amount,
-      currency: payment.currency,
-      concepto: booking.products?.title ?? "Mentoría",
+      ref: cobrar.ref,
+      // ⚠️ LOS IMPORTES Y LA MONEDA SALEN DE `payments`, NUNCA DEL NAVEGADOR
+      // (regla de oro 2). El puerto los transporta; no los calcula nadie por el
+      // camino, y el total del cargo es la SUMA de estas líneas y de nada más.
+      lineas: cobrar.lineas,
+      currency: cobrar.currency,
       customerRef: cliente,
       expiresAt: caduca,
       // Con el formulario en nuestra pantalla NO hay `cancel_url`: Stripe
       // devuelve aquí ya pagado, y cancelar es no rellenar el formulario.
-      returnUrl: `${base}/reservas/${bookingId}/confirmacion`,
+      returnUrl: `${base}${cobrar.returnPath}`,
       idempotencyKey: claveIdem,
     });
 
@@ -312,7 +450,14 @@ export async function POST(req: Request) {
   // si acabaran pagándose las dos, el webhook reembolsa la segunda.
   //
   // Y por lo mismo va la VERSIÓN de los parámetros: ver `VERSION_PARAMS` arriba.
-  const clave = `booking-${bookingId}-c${caduca}-${VERSION_PARAMS}`;
+  //
+  // ⚠️ EY-176 · LA CLAVE ES DEL SUJETO DEL COBRO, NO SIEMPRE DE UNA RESERVA.
+  // `claveBase` es `booking-<id>` o `order-<id>`, y esa distinción es lo que
+  // impide que un pedido y una de sus líneas se peleen por la misma Session.
+  // Sigue siendo DETERMINISTA por sujeto —la caducidad se calcula desde su
+  // `created_at`—, que es lo que sostiene el montaje del formulario al llegar
+  // (D-2): recargar la pantalla devuelve el cobro que ya estaba abierto.
+  const clave = `${cobrar.claveBase}-c${caduca}-${VERSION_PARAMS}`;
 
   let cobro;
   try {

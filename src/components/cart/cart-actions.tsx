@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { XIcon } from "lucide-react";
 
 import { removeCartLines } from "@/lib/cart/cookie";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -69,12 +70,11 @@ export function ClearCart({ keys }: { keys: string[] }) {
 /**
  * ⚠️ EL AUTOLIMPIADO DE LO YA COMPRADO. Sin esto el carrito miente.
  *
- * Hoy las líneas se pagan de una en una (ver la nota de EY-176 en
- * `lib/cart/cookie.ts`). Al volver de pagar la primera, esa línea sigue en la
- * cookie: la compra no la borra, porque el checkout no sabe que existe un
- * carrito —y no debe saberlo: es el mismo checkout de una reserva suelta de
- * siempre, y meterle dependencias del carrito es justo lo que este encargo NO
- * hace—.
+ * Al volver de pagar, las líneas compradas siguen en la cookie: la compra no las
+ * borra, porque el checkout no sabe que existe un carrito —y no debe saberlo: es
+ * el mismo checkout de una reserva suelta de siempre—. Vale igual para la compra
+ * de una línea y para el pedido entero de EY-176; la de pedido además se limpia
+ * desde `/pedidos/<id>/confirmacion`, que sí sabe qué líneas se acaban de pagar.
  *
  * Así que la limpieza se hace al volver a la revisión, y la decide el SERVIDOR:
  * `resolveCart()` busca reservas vivas del alumno que casen exactamente con
@@ -99,4 +99,74 @@ export function PruneBought({ keys }: { keys: string[] }) {
     removeCartLines(keys);
   }, [keys]);
   return null;
+}
+
+/**
+ * EY-176 · «Ir al pago» cuando hay VARIAS mentorías: crea el pedido y navega.
+ *
+ * ⚠️ NO MANDA LAS LÍNEAS. El cuerpo de la petición va vacío a propósito: el
+ * Route Handler relee la cookie `ey-cart` en servidor, la valida y comprueba
+ * hueco por hueco contra `get_available_slots` antes de crear nada. Mandar la
+ * lista desde aquí sería dejar que el navegador eligiera qué mentorías y qué
+ * horarios entran en un cobro, y la cookie se edita desde la consola en diez
+ * segundos.
+ *
+ * Es un botón y no un `<Link>` porque crear el pedido es una ESCRITURA —N
+ * reservas, N pagos y una cabecera, en una transacción—, y eso no puede colgar
+ * de una navegación que el navegador pueda precargar o repetir con el «atrás».
+ *
+ * ⚠️ El doble clic está cubierto en las dos orillas: aquí con `enviando`, y en
+ * la base con `find_open_order`, que devuelve el pedido abierto del mismo
+ * carrito en vez de crear un segundo que se bloquearía a sí mismo (sus propias
+ * reservas retienen esos huecos). La segunda es la que de verdad protege —
+ * esta solo ahorra la petición.
+ */
+export function PagarPedido({ cuantas }: { cuantas: number }) {
+  const router = useRouter();
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function crear() {
+    setEnviando(true);
+    setError(null);
+    const res = await fetch("/api/pedidos", { method: "POST" });
+    const salida = (await res.json().catch(() => ({}))) as {
+      orderId?: string;
+      error?: string;
+      linea?: number | null;
+    };
+
+    if (!res.ok || !salida.orderId) {
+      // El mensaje ya viene traducido por `mensajeDeApertura`: nunca es el
+      // texto crudo de Postgres, que puede traer dentro el nombre de un índice
+      // único o un fallo de configuración nuestro contado como culpa de quien
+      // iba a pagar. Lo que se añade aquí es CUÁL línea falló — el servidor la
+      // numera (P-1) y esto la cuenta.
+      setError(
+        salida.linea
+          ? `${salida.error ?? "No se pudo crear el pedido."} (mentoría ${salida.linea} de ${cuantas})`
+          : (salida.error ?? "No se pudo crear el pedido."),
+      );
+      setEnviando(false);
+      // El carrito cambió por debajo (un hueco que se fue): que el servidor lo
+      // vuelva a pintar con la verdad en vez de dejar la lista de antes.
+      router.refresh();
+      return;
+    }
+
+    router.push(`/pedidos/${salida.orderId}/pagar`);
+  }
+
+  return (
+    <>
+      <Button className="mt-4 h-[49px] w-full text-[15px]" disabled={enviando} onClick={crear}>
+        {enviando ? "Preparando tu pedido…" : `Pagar ${cuantas} mentorías juntas`}
+      </Button>
+      {error ? (
+        <p role="alert" className="mt-2 text-xs leading-relaxed text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </>
+  );
 }
