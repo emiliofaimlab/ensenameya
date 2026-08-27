@@ -77,6 +77,7 @@ const PRIVACY: Doc = {
         "Al registrarte: tu correo electrónico y tu nombre. Al completar el perfil: zona horaria, teléfono, y opcionalmente una foto, tus intereses y tu objetivo de aprendizaje.",
         "Si te registras como tutor, además: el nombre público que decidas mostrar, tu titular profesional, tu biografía, tus enlaces profesionales y la documentación de verificación (documento de identidad, titulación, certificados, diplomas, expediente académico y currículum).",
         "Del uso de la plataforma: tus reservas, los pagos asociados, los mensajes del chat de cada reserva y las reseñas que escribas. Si eres tutor, también tus liquidaciones.",
+        "Si has iniciado sesión, también registramos qué perfiles de tutor y qué mentorías consultas. No guardamos un historial página a página: de cada tutor conservamos únicamente cuántas veces has visto su perfil, cuántas veces alguna de sus mentorías, y las fechas de la primera y la última. Si navegas sin haber iniciado sesión, no se registra nada.",
         "Si tú y la otra parte aceptáis grabar una clase, la grabación de esa sesión —imagen y voz de ambos— pasa a ser un dato que tratamos. Sin las dos aceptaciones no existe grabación alguna.",
         "No almacenamos números de tarjeta. El pago se realiza en el entorno del proveedor de pagos; si eliges guardar un medio de pago para futuras compras, de él solo conservamos la marca (Visa, Mastercard…), los últimos cuatro dígitos y una referencia opaca del proveedor.",
       ],
@@ -86,6 +87,7 @@ const PRIVACY: Doc = {
       parrafos: [
         "Para prestarte el servicio: crear tu cuenta, mostrarte los horarios en tu hora local, gestionar reservas y pagos, abrir la sala de la clase, permitir el chat con la otra parte y liquidar a los tutores.",
         "Para verificar a los tutores antes de permitirles publicar, que es lo que sostiene la confianza del resto de usuarios.",
+        "Para ordenar el bloque «Tus tutores» de tu panel. Qué tutores te enseñamos primero, y en qué orden, sale de con quiénes has dado clase, a quiénes has reservado, qué has valorado y qué perfiles has consultado. No se usa para nada más.",
         "Para avisarte de lo que ocurre con tus reservas y pagos, y para atender incidencias.",
         "No usamos tus datos con fines publicitarios, ni los vendemos, ni los cedemos a terceros con fines comerciales.",
       ],
@@ -108,6 +110,7 @@ const PRIVACY: Doc = {
         "El perfil de un tutor aprobado es público: su nombre público, foto, titular, biografía, valoración y mentorías. Un tutor que no ha sido aprobado no aparece en ninguna parte del catálogo, y su documentación de verificación no es pública en ningún caso.",
         "El perfil de los alumnos es privado. Las reseñas del perfil de un tutor se publican sin identificar a su autor; en la página de inicio se muestra una selección de reseñas firmada con el nombre y la inicial del apellido.",
         "El chat de una reserva solo es accesible para sus dos participantes: ni siquiera el personal de administración puede leerlo. La grabación de una clase, cuando existe, sigue exactamente el mismo criterio.",
+        "Lo que registramos de tu navegación solo lo ves tú. Un tutor no puede saber quién ha mirado su perfil ni cuántas veces, y tampoco aparece en ninguna estadística que le mostremos.",
       ],
     },
     {
@@ -115,6 +118,7 @@ const PRIVACY: Doc = {
       parrafos: [
         "Los mensajes del chat y sus adjuntos se borran automáticamente a los 30 días de haberse enviado, mensaje y archivo. Puedes descargarte la conversación antes de que caduque.",
         "Las grabaciones de clase dejan de estar accesibles 30 días después de terminar la sesión. Con transparencia: hoy lo que hacemos al cumplirse el plazo es dejar de servir el acceso al archivo; su eliminación en los servidores del proveedor de videollamada todavía no está automatizada y está pendiente de implementarse.",
+        "Lo que registramos de tu navegación se borra automáticamente a los 90 días desde la última vez que consultaste a ese tutor. Y si das de baja tu cuenta, se borra entero en ese mismo momento, sin esperar al plazo.",
         "Los datos de tu cuenta, tus reservas y sus pagos se conservan mientras la cuenta esté activa, y después durante el plazo que exija la normativa fiscal y contable aplicable a las operaciones realizadas.",
       ],
     },
@@ -138,7 +142,7 @@ const PRIVACY: Doc = {
 const COOKIES: Doc = {
   title: "Política de cookies",
   intro:
-    "Qué cookies usamos y para qué. Todas son necesarias para que la plataforma funcione: no usamos cookies de publicidad ni de seguimiento de terceros.",
+    "Qué cookies usamos y para qué. Todas son necesarias para que la plataforma funcione: no usamos cookies de publicidad ni de seguimiento de terceros. Sí registramos, en nuestro propio servidor y solo si has iniciado sesión, qué tutores consultas — lo explica la política de privacidad.",
   secciones: [
     {
       titulo: "Cookies de sesión",
