@@ -166,7 +166,14 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const { href, label, icon: Icon } = item;
-          const active = matchLength(item, pathname) === mejorMatch;
+          // ⚠️ `mejorMatch >= 0` NO sobra. Sin él, en una ruta del área
+          // autenticada que no está en el menú —`/reservar/<id>`, por ejemplo—
+          // todos los ítems devuelven -1, `mejorMatch` es -1, y `-1 === -1`
+          // marcaba TODO el menú como activo: cinco botones azules a la vez.
+          // El comentario de arriba ya decía que en ese caso no debía marcarse
+          // nada; el código hacía lo contrario.
+          const active =
+            mejorMatch >= 0 && matchLength(item, pathname) === mejorMatch;
           return (
             <li key={href}>
               <Link
