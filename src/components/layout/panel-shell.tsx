@@ -49,7 +49,19 @@ export function PanelShell({
 
         <div className="grid items-start gap-6 lg:grid-cols-[232px_1fr]">
           <AppSidebar items={items} />
-          <div className="flex flex-col gap-5">
+          {/* ⚠️ `min-w-0` NO es decoración, y quitarlo rompe la página entera.
+              Un hijo de grid nace con `min-width: auto`, o sea que se niega a
+              encogerse por debajo del ancho INTRÍNSECO de su contenido. En
+              cuanto esta columna contiene algo naturalmente ancho —un carrusel
+              con scroll propio, una tabla, un bloque de código— la columna
+              crece en vez de dejar que ese hijo haga su scroll, y la barra
+              horizontal aparece en el DOCUMENTO: el panel entero se ve estirado
+              y desplazado.
+              Pasó el 26-ago al añadir el carrusel de tutores del alumno
+              (EY-186). Se arregla aquí y no en el carrusel porque el problema es
+              de la COLUMNA: cualquier contenido ancho que se añada mañana lo
+              reproduciría igual. */}
+          <div className="flex min-w-0 flex-col gap-5">
             {title ? (
               <div className="flex flex-wrap items-start gap-3">
                 <div>
