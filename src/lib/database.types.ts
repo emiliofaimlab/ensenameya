@@ -1482,6 +1482,33 @@ export type Database = {
           },
         ]
       }
+      storage_purge_queue: {
+        Row: {
+          attempts: number
+          bucket_id: string
+          enqueued_at: string
+          id: string
+          last_error: string | null
+          path: string
+        }
+        Insert: {
+          attempts?: number
+          bucket_id: string
+          enqueued_at?: string
+          id?: string
+          last_error?: string | null
+          path: string
+        }
+        Update: {
+          attempts?: number
+          bucket_id?: string
+          enqueued_at?: string
+          id?: string
+          last_error?: string | null
+          path?: string
+        }
+        Relationships: []
+      }
       student_interests: {
         Row: {
           category_id: string

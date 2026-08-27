@@ -50,10 +50,30 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "no autorizado" }, { status: 401 });
   }
 
+  /*
+   * ⚠️ EL BARRIDO DE STORAGE VA AQUÍ, ANTES DE LA PUERTA DE DAILY, Y NO ES
+   * CASUALIDAD: hoy Daily NO está configurado, así que la línea de abajo se
+   * lleva por delante todo lo que venga después. Puesto detrás, este barrido no
+   * correría ni un solo día.
+   *
+   * Qué hace: retira de Storage los ficheros que `purge_expired_messages`
+   * apuntó en la cola. Existe esa cola porque Supabase prohíbe
+   * `delete from storage.objects` desde SQL (42501) y esa función corre en
+   * pg_cron, dentro de Postgres, sin llamante HTTP a quien devolverle las rutas
+   * (ver `20260827190000`).
+   *
+   * POR QUÉ AQUÍ Y NO EN UN CRON PROPIO. Vercel Hobby limita los crons a uno al
+   * día y esa única plaza ya está ocupada por esta ruta. Añadir un endpoint
+   * nuevo significaría moverlo a GitHub Actions y configurar allí otro
+   * `CRON_SECRET` — un sitio más donde quedarse a medias. Los dos trabajos son
+   * lo mismo: borrar ficheros que cumplieron su retención.
+   */
+  const barrido = await barrerFicheros(createAdminClient());
+
   // Sin credenciales de Daily no hay nada que borrar en ninguna parte. No se
   // marca nada como purgado: sería mentir en la columna que sirve de prueba.
   if (!isDailyConfigured()) {
-    return NextResponse.json({ status: "sin-daily", purgadas: 0 });
+    return NextResponse.json({ status: "sin-daily", purgadas: 0, ...barrido });
   }
 
   const supabase = createAdminClient();
@@ -70,7 +90,7 @@ export async function GET(req: Request) {
     .limit(LOTE);
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message, ...barrido }, { status: 500 });
   }
 
   let borradas = 0;
@@ -110,5 +130,102 @@ export async function GET(req: Request) {
     sesionesFallidas: fallidas.length,
     // Si viene lleno, hay más esperando: el cron de mañana sigue por ahí.
     lote: LOTE,
+    ...barrido,
   });
+}
+
+/**
+ * Vacía `storage_purge_queue` con la Storage API, que es el ÚNICO camino que
+ * Supabase admite para retirar un fichero.
+ *
+ * ⚠️ La fila se borra SOLO si el `remove()` fue bien. Ese es todo el valor de
+ * la cola frente al `delete` que había antes: un fallo de red deja la fila viva
+ * y mañana se reintenta sola. Antes, un fallo dejaba el fichero huérfano y
+ * nadie se enteraba nunca.
+ *
+ * ⚠️ Y NO se aborta el lote entero si una ruta falla. Un fichero que ya no
+ * existe, o un bucket mal escrito, bloquearían la cola para siempre: se anota
+ * el error en su fila, sube su contador de intentos y el índice
+ * (`attempts, enqueued_at`) manda al final de la fila a los que fallan mucho,
+ * para que no ahoguen a los que sí se pueden borrar.
+ */
+const LOTE_FICHEROS = 500;
+
+async function barrerFicheros(
+  admin: ReturnType<typeof createAdminClient>,
+): Promise<{ ficherosBorrados: number; ficherosPendientes: number }> {
+  const { data: cola } = await admin
+    .from("storage_purge_queue")
+    .select("id, bucket_id, path")
+    .order("attempts", { ascending: true })
+    .order("enqueued_at", { ascending: true })
+    .limit(LOTE_FICHEROS);
+
+  if (!cola || cola.length === 0) {
+    return { ficherosBorrados: 0, ficherosPendientes: 0 };
+  }
+
+  // Agrupadas por bucket: `remove()` acepta una lista, así que son tantas
+  // llamadas como buckets y no como ficheros.
+  const porBucket = new Map<string, { id: string; path: string }[]>();
+  for (const f of cola) {
+    const ya = porBucket.get(f.bucket_id);
+    if (ya) ya.push({ id: f.id, path: f.path });
+    else porBucket.set(f.bucket_id, [{ id: f.id, path: f.path }]);
+  }
+
+  let borrados = 0;
+  let pendientes = 0;
+
+  for (const [bucket, filas] of porBucket) {
+    const { error } = await admin.storage
+      .from(bucket)
+      .remove(filas.map((f) => f.path));
+
+    if (error) {
+      pendientes += filas.length;
+      console.error("[purga-storage] no se pudo vaciar", bucket, error.message);
+      // Se marca el intento para que el índice (`attempts, enqueued_at`) los
+      // mande al final y no bloqueen a los demás en la siguiente pasada.
+      // ⚠️ El contador se lee y se reescribe desde aquí en vez de con un
+      // `attempts + 1` en SQL porque el cliente de PostgREST no expresa un
+      // incremento atómico. No importa: este job corre una vez al día y en un
+      // solo proceso, así que no hay dos escritores compitiendo.
+      for (const f of filas) {
+        const { data: fila } = await admin
+          .from("storage_purge_queue")
+          .select("attempts")
+          .eq("id", f.id)
+          .maybeSingle();
+        await admin
+          .from("storage_purge_queue")
+          .update({
+            attempts: (fila?.attempts ?? 0) + 1,
+            last_error: error.message.slice(0, 500),
+          })
+          .eq("id", f.id);
+      }
+      continue;
+    }
+
+    const { error: errBorrar } = await admin
+      .from("storage_purge_queue")
+      .delete()
+      .in(
+        "id",
+        filas.map((f) => f.id),
+      );
+
+    // Si el fichero se fue pero la fila no, mañana se reintenta un `remove()`
+    // sobre algo que ya no existe. Es idempotente y barato; el orden inverso
+    // —borrar la fila primero— sí perdería el fichero para siempre.
+    if (errBorrar) {
+      pendientes += filas.length;
+      console.error("[purga-storage] fichero borrado pero la fila sigue:", errBorrar.message);
+      continue;
+    }
+    borrados += filas.length;
+  }
+
+  return { ficherosBorrados: borrados, ficherosPendientes: pendientes };
 }
