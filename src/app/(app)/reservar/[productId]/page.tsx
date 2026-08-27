@@ -4,6 +4,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductDetail, rangoPublicado } from "@/lib/catalog/queries";
 import { bookingTotal, tutorNames } from "@/lib/booking";
+import { cartCount } from "@/lib/cart/resolve";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { SlotPicker } from "./slot-picker";
 
@@ -49,7 +50,7 @@ export default async function ReservarPage({
   if (!product) notFound();
 
   const supabase = await createClient();
-  const [{ data: slots }, names, tz] = await Promise.all([
+  const [{ data: slots }, names, tz, enCarrito] = await Promise.all([
     // ⚠️ El rango va EXPLÍCITO. Sin él la RPC caía a su default de 21 días
     // mientras la ficha pública pedía 60 y `create_booking` revalidaba contra
     // 30: tres ventanas para los mismos huecos. Aquí el síntoma era el
@@ -66,6 +67,12 @@ export default async function ReservarPage({
     // (UTC en Vercel) y el calendario del cliente por el del navegador: dos
     // rejillas distintas para los mismos datos (R24-12 / R24-22).
     getUserTimezone(),
+    // Cuántas mentorías hay ya apuntadas, para decidir si se pinta «Ir al
+    // carrito». Se resuelve en SERVIDOR por lo mismo que la insignia de la
+    // cabecera (`cart-badge.tsx`): así el botón sale en el primer render en
+    // lugar de aparecer de golpe tras la hidratación. No cuesta un viaje a la
+    // base — `cartCount()` solo lee la cookie.
+    cartCount(),
   ]);
 
   const tutorName = names.get(product.tutor.id) ?? product.tutor.headline ?? undefined;
@@ -94,7 +101,36 @@ export default async function ReservarPage({
   }
 
   return (
-    <PanelShell back={{ href: `/products/${productId}`, label: "Volver a la mentoría" }}>
+    /*
+     * ⚠️ SIN MENÚ LATERAL, Y ES UNA DECISIÓN, NO UN OLVIDO.
+     *
+     * Esta pantalla tiene UN trabajo: elegir N horarios. El menú del panel
+     * —Inicio, Mis reservas, Agendar, Métodos de pago, Cuenta— no ayuda a
+     * hacerlo y sí cuesta: 232 px + 24 de separación, o sea **el 21 % del ancho**
+     * en la única pantalla que necesita ancho para poner el día, la hora y la
+     * selección uno al lado del otro.
+     *
+     * Y no marcaba nada: ningún ítem casa con `/reservar/<id>`, así que
+     * `matchLength` devuelve -1 en los cinco y el menú se pinta entero apagado
+     * (ver la nota de `app-sidebar.tsx`, donde ese caso ya está documentado —
+     * antes se encendían los cinco a la vez). Un menú que no dice dónde estás
+     * solo ofrece cinco formas de abandonar la compra a medias.
+     *
+     * El precedente es N-37 (`src/app/(checkout)/layout.tsx`), pero NO se llega
+     * tan lejos a propósito: allí se quita todo —cabecera, pie, chat— porque se
+     * está cobrando. Aquí todavía se está eligiendo, así que la cabecera (con su
+     * insignia de carrito, que ahora importa) y el chat se quedan. La salida
+     * buena sigue siendo el «Volver a la mentoría» de arriba, que es la que
+     * lleva al sitio del que se vino.
+     *
+     * De paso, esto iguala las dos caras de la misma tarea: `/products/[id]`
+     * resuelve la sesión suelta en una pantalla pública SIN menú, y el paquete
+     * la resolvía con uno. Misma tarea, dos marcos.
+     */
+    <PanelShell
+      sidebar={false}
+      back={{ href: `/products/${productId}`, label: "Volver a la mentoría" }}
+    >
       <div className="flex flex-col gap-1.5">
         {tutorName ? (
           <p className="text-[13px] text-[#6b6b6b]">con {tutorName}</p>
@@ -129,11 +165,11 @@ export default async function ReservarPage({
         productId={productId}
         productTitle={product.title}
         tutorName={tutorName}
-        // EY-177 · para el «Agregar otra mentoría» del carrito: desde un
-        // paquete, «seguir comprando» es volver a la ficha del TUTOR, que es
-        // donde están sus otras clases. Sale de `getProductDetail`, que ya lo
-        // trajo: no añade consulta.
-        tutorId={product.tutor.id}
+        // ⚠️ Ya NO se pasa `tutorId`. Servía para el «Seguir comprando» de
+        // `AddToCart`, que navegaba a la ficha del tutor con la selección en
+        // blanco. Con el modelo de botones nuevo eso desaparece: al agregar, la
+        // selección se limpia SIN navegar y la pantalla queda lista para el
+        // paquete siguiente. Seguir comprando es quedarse.
         slots={slots ?? []}
         preselected={elegido ?? null}
         required={required}
@@ -141,6 +177,7 @@ export default async function ReservarPage({
         currency={product.currency}
         durationMin={product.sessionDurationMin}
         timeZone={tz}
+        enCarrito={enCarrito}
       />
     </PanelShell>
   );
