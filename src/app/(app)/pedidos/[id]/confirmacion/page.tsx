@@ -44,6 +44,7 @@ export default async function ConfirmacionPedidoPage({
 
   const sinResolver = pedido.order.status === "pending_payment";
   const tumbado = pedido.order.status === "cancelled";
+  const pagado = pedido.order.status === "paid";
 
   return (
     <Container>
@@ -55,7 +56,12 @@ export default async function ConfirmacionPedidoPage({
             ejecuta el navegador. La clave se rehace desde los instantes de las
             sesiones, no desde texto ISO: es la trampa de `…T08:00:00.000Z` vs
             `…T08:00:00+00:00` que documenta `lib/cart/cookie.ts`. */}
-        <PruneBought keys={sinResolver ? [] : clavesDelCarrito(pedido.lineas)} />
+        {/* ⚠️ SOLO SI SE PAGÓ. Si el cargo se cayó, los horarios volvieron a
+            estar libres y esas líneas siguen siendo comprables: vaciarle el
+            carrito a quien acaba de ver «el pago no se completó» le borraría
+            justo lo que tiene que reintentar. Y si todavía no se ha resuelto
+            tampoco se toca, porque aún no hay nada comprado. */}
+        <PruneBought keys={pagado ? clavesDelCarrito(pedido.lineas) : []} />
 
         <span
           className={`grid size-12 place-items-center rounded-full ${
