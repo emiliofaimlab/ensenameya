@@ -48,7 +48,17 @@ export function CheckoutSteps({
       // `aria-label` y no un encabezado: es orientación, no contenido. Y sin
       // `aria-current="step"` en los ya hechos — solo el actual lo lleva.
       aria-label="Pasos de la compra"
-      className={cn("flex flex-wrap items-center gap-x-2 gap-y-1", className)}
+      // `justify-center` en la BASE y no en cada llamante: los tres pasos son
+      // orientación, no contenido, y alineados a la izquierda competían con el
+      // título de la pantalla — dos cosas empezando en el mismo punto, y la
+      // menos importante primero. Centrados se leen como lo que son: una barra
+      // de progreso por encima de todo lo demás. Quien algún día lo quiera a la
+      // izquierda puede pasar `justify-start` por `className`, que gana por
+      // venir después en `cn`.
+      className={cn(
+        "flex flex-wrap items-center justify-center gap-x-2 gap-y-1",
+        className,
+      )}
     >
       {PASOS.map((label, i) => {
         const n = i + 1;
