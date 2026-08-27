@@ -15,7 +15,6 @@ import {
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { Button } from "@/components/ui/button";
 import { AcceptRejectButtons } from "./booking-actions";
-import { AutoAcceptToggle } from "./auto-accept-toggle";
 import { studentsOfTutor } from "../students";
 import { StudentLink } from "../student-link";
 import type { Database } from "@/lib/database.types";
@@ -71,11 +70,11 @@ export default async function TutorReservasPage({
   const filter = FILTERS.find((x) => x.id === f) ?? FILTERS[0];
 
   const supabase = await createClient();
-  const { data: tp } = await supabase
-    .from("tutor_profiles")
-    .select("auto_accept_bookings")
-    .eq("profile_id", userId)
-    .maybeSingle();
+  // M-02 · aquí había una consulta a `tutor_profiles.auto_accept_bookings` para
+  // pintar un interruptor global. Se fue con él: desde `20260817180000` esa
+  // columna no la lee nadie —el auto-aceptar vive en cada mentoría— y el
+  // interruptor escribía en el vacío. El ajuste está ahora en el formulario de
+  // la mentoría (`/tutor/products/<id>/edit`), que es donde se decide.
 
   let query = supabase
     .from("bookings")
@@ -114,13 +113,28 @@ export default async function TutorReservasPage({
   return (
     <TutorShell
       title="Reservas"
-      description="Todas las reservas de tus mentorías. Tienes 24 h para aceptar cada reserva pagada; si vence el plazo, se cancela y se reembolsa automáticamente (RN-38)."
+      description={
+        // M-02 · antes esta línea prometía las 24 h para TODAS las reservas
+        // pagadas, y ya no es cierto: una mentoría que se confirma sola nunca
+        // pasa por «Por aceptar», así que no hay plazo que se pueda vencer ni
+        // reembolso automático detrás. Se cuenta lo que aplica a cada caso y se
+        // dice dónde se decide, que es lo que perdió el tutor al retirarse el
+        // interruptor global.
+        <>
+          Todas las reservas de tus mentorías. Las que salen como «Por aceptar»
+          tienen 24 h: si se te pasa el plazo, se cancelan y se le reembolsan al
+          alumno automáticamente. Las mentorías que se confirman solas no
+          esperan respuesta y entran ya confirmadas — eso se ajusta en{" "}
+          <Link
+            href="/tutor/products"
+            className="font-medium text-brand underline underline-offset-2"
+          >
+            cada mentoría
+          </Link>
+          .
+        </>
+      }
     >
-      <AutoAcceptToggle
-        userId={userId}
-        initial={tp?.auto_accept_bookings ?? false}
-      />
-
       {/* Chips de filtro (197:43). Estado en la URL: server-render puro. */}
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((x) => {

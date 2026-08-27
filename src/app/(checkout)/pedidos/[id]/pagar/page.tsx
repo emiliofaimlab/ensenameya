@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { resolveOrder } from "@/lib/orders/queries";
+import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime } from "@/lib/booking";
 import { OrderPayment } from "@/components/checkout/order-payment";
@@ -64,6 +65,15 @@ export default async function PagarPedidoPage({
   // a fallar.
   const caida = pedido.lineas.find((l) => l.status !== "pending_payment");
 
+  // M-02 · ¿todas iguales, o hay de las dos? Se resuelve aquí y no dentro del
+  // `map` porque decide DOS cosas a la vez: la marca de cada línea y el texto
+  // único de la política de abajo. Con todas iguales no se marca nada —una
+  // etiqueta repetida en las tres líneas es ruido, y la frase de la política ya
+  // lo dice—; en cuanto se mezclan, hay que decir cuál es cuál.
+  const mezcla =
+    pedido.lineas.some((l) => l.aceptaSola) &&
+    pedido.lineas.some((l) => !l.aceptaSola);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -114,6 +124,17 @@ export default async function PagarPedidoPage({
                     </li>
                   ))}
                 </ul>
+                {/* M-02 · la marca por línea, solo cuando el pedido mezcla. Es
+                    el «lo tienes marcado en cada una» al que remite la política
+                    de abajo: sin esto, esa frase manda a mirar algo que no
+                    está. */}
+                {mezcla ? (
+                  <p className="mt-1.5 text-[11.5px] text-[#6b6b6b]">
+                    {l.aceptaSola
+                      ? "Queda confirmada al pagar."
+                      : `La confirma el tutor (hasta ${P.cutoffHours} h).`}
+                  </p>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -126,12 +147,17 @@ export default async function PagarPedidoPage({
           </div>
 
           {/* La política se cuenta entera, incluida la mitad mala (D-4).
-              ⚠️ `aceptaSola={false}` a propósito: en un pedido la aceptación es
-              POR MENTORÍA (M-02, `products.auto_accept_bookings`), así que unas
-              líneas pueden confirmarse solas y otras esperar al tutor. El texto
-              conservador —el que promete la ventana de 24 h de RN-38— es el
-              único que vale para todas a la vez: nunca promete de menos. */}
-          <PaymentPolicy aceptaSola={false} className="mt-4 border-t border-[#e0e0e0] pt-4" />
+              ⚠️ AQUÍ HABÍA UN `aceptaSola={false}` FIJO, con el argumento de que
+              era «el texto conservador, que nunca promete de menos». No lo era:
+              ese texto promete que si el tutor no contesta en 24 h se devuelve
+              el 100 % automáticamente, y para una línea que se confirma sola esa
+              devolución no existe (M-02 — sin `pending_acceptance` no hay
+              ventana de RN-38 que vencer). O sea que prometía de MÁS, y en la
+              dirección que vende. Ahora se dice lo que aplica a cada línea. */}
+          <PaymentPolicy
+            aceptaSola={mezcla ? "mixto" : (pedido.lineas[0]?.aceptaSola ?? false)}
+            className="mt-4 border-t border-[#e0e0e0] pt-4"
+          />
         </PanelCard>
 
         <PanelCard>

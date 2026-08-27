@@ -26,6 +26,18 @@ export type LineaResuelta = {
    */
   total: number;
   currency: string;
+  /**
+   * M-02 · `products.auto_accept_bookings` de ESTA línea. Va por línea porque
+   * la aceptación automática vive en la mentoría, no en el pedido ni en el
+   * tutor: un pedido de tres puede tener una que se confirma sola y dos que
+   * esperan respuesta, cada una con su ventana de 24 h (RN-38) o sin ella.
+   *
+   * ⚠️ Sirve para lo que se PROMETE ANTES de pagar, cuando las tres líneas
+   * están en `pending_payment` y el estado todavía no distingue nada. Después
+   * del cobro manda `status`, que ya lo dice: `confirmed` vs
+   * `pending_acceptance`.
+   */
+  aceptaSola: boolean;
 };
 
 export type PedidoResuelto = {
@@ -72,7 +84,7 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
   const { data: lineas } = await supabase
     .from("bookings")
     .select(
-      "id, status, product_id, session_duration_min, products(title, tutor_id), sessions(start_at, status), payments(gross_amount, currency)",
+      "id, status, product_id, session_duration_min, products(title, tutor_id, auto_accept_bookings), sessions(start_at, status), payments(gross_amount, currency)",
     )
     .eq("order_id", orderId);
 
@@ -109,6 +121,11 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
       durationMin: b.session_duration_min,
       total: pago?.gross_amount ?? 0,
       currency: pago?.currency ?? order.currency,
+      // Sin producto legible se asume que NO acepta sola. Es el mismo respaldo
+      // explícito que usa `confirm_payment` en SQL: sin dato, la reserva espera
+      // a un humano. Aquí además es lo que hace que la pantalla prometa la
+      // ventana de 24 h, que es lo que de verdad va a pasar en ese caso.
+      aceptaSola: b.products?.auto_accept_bookings ?? false,
     };
   });
 

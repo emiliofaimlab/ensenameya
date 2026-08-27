@@ -521,7 +521,7 @@ No consumen SP del sprint. Se filtran en Jira por label.
 | **R24-16** | ✅ | `3f6181d` | Materiales por **producto** (fuera del onboarding); wizard de 6 → 5 pasos |
 | **R24-17** | ✅ | `facf5a7` | `products.faqs`: FAQ por mentoría con editor en TU04; fallback a las genéricas |
 | **R24-18** | ✅ | `013e6e7` | Banner "perfil aprobado" hasta 5 sesiones dictadas |
-| **R24-19** | ✅ | `8fb18e4` | `auto_accept_bookings` + `confirm_payment` v3 (pagado → `confirmed`); toggle en TU07 |
+| **R24-19** | ✅ | `8fb18e4` | `auto_accept_bookings` + `confirm_payment` v3 (pagado → `confirmed`); toggle en TU07. ⚠️ **Superado por M-02**: el ajuste bajó a la mentoría (`products`), el toggle de TU07 se retiró y la columna `tutor_profiles.auto_accept_bookings` se borró (`20260827200000`) |
 | **R24-20** | ✅ | `40b5e8a` | Módulo `/pagos` propio + entrada en el menú; fuera de "Mi cuenta" |
 | **R24-21** | ✅ | `b09e518` | Bandeja flotante de chat **solo con sesión** (RN-41); reconcilia el FAB con la nota de diseño |
 | **R24-22** | ✅ | `f15df19` | Horarios públicos en la tz del visitante (cookie `ey-tz` + `getViewerTimezone`). 🐞 `TZ_COOKIE` en `"use client"` → todo salía en UTC |

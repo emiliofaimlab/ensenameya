@@ -18,6 +18,7 @@ import {
   type AvailabilityRule,
   type AvailabilityScope,
 } from "./availability-blocks";
+import { AcceptanceMode } from "./acceptance-mode";
 import {
   CoverImagePicker,
   MaterialsPicker,
@@ -91,6 +92,13 @@ export type ProductFormValues = {
   imagePath: string | null;
   /** FAQ propias de la mentoría (R24-17). */
   faqs: { q: string; a: string }[];
+  /**
+   * M-02 · `products.auto_accept_bookings` — si las reservas pagadas de ESTA
+   * mentoría se confirman solas. No es una preferencia de estilo: decide si la
+   * reserva pasa o no por `pending_acceptance`, y con ella la ventana de 24 h
+   * de RN-38. Ver `acceptance-mode.tsx`.
+   */
+  autoAccept: boolean;
   /**
    * N-04 · franjas de disponibilidad a las que pertenece ESTA mentoría.
    * Lista vacía = «toda mi disponibilidad», que es literalmente lo que
@@ -177,6 +185,13 @@ export function ProductForm({
   const [selectedRules, setSelectedRules] = useState<Set<string>>(
     new Set(product?.availabilityRuleIds ?? []),
   );
+  // M-02 · el alta arranca en `true` PORQUE ESE ES EL DEFAULT DE LA COLUMNA
+  // (`20260817180000`, petición literal del cliente). No es un descuido: si
+  // aquí se pusiera `false`, una mentoría creada desde el formulario y otra
+  // creada por SQL nacerían distintas, y además sería revertir por la puerta de
+  // atrás una decisión que la migración defiende por escrito. Lo que se hace en
+  // vez de cambiarlo es contarlo — ver el aviso de `AcceptanceMode`.
+  const [autoAccept, setAutoAccept] = useState(product?.autoAccept ?? true);
 
   const coverUrl = storageUrl("product-images", product?.imagePath);
 
@@ -318,6 +333,12 @@ export function ProductForm({
       faqs: faqs
         .map((f) => ({ q: f.q.trim(), a: f.a.trim() }))
         .filter((f) => f.q && f.a),
+      // M-02 · viaja en el mismo `row` que todo lo demás: el column-grant de
+      // `20260817180000` cubre insert Y update, así que el alta y la edición
+      // escriben por el mismo camino. Va explícito también en el insert —y no
+      // se deja al default de la columna— para que lo guardado sea lo que el
+      // tutor tenía en pantalla, incluso si algún día cambia ese default.
+      auto_accept_bookings: autoAccept,
       // `status` NO se toca en el insert: alta → 'draft' (default). Publicar es
       // un UPDATE aparte tras guardar; el guard RN-23 de BD sigue mandando.
     };
@@ -852,6 +873,25 @@ export function ProductForm({
         >
           + Añadir pregunta
         </Button>
+      </PanelCard>
+
+      {/* M-02 · va aquí, pegado a la política de cancelación y justo encima de
+          los botones: las dos tarjetas hablan de lo que pasa DESPUÉS de que el
+          alumno pague, y esta es la única de las dos que el tutor decide. En el
+          camino a «Publicar», no escondida entre los campos de contenido. */}
+      <PanelCard className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Cómo se confirman las reservas
+        </h2>
+        <p className="text-[13px] text-[#6b6b6b]">
+          Se decide en cada mentoría: puedes filtrar a mano quién entra en una y
+          dejar que otra se confirme sola.
+        </p>
+        <AcceptanceMode
+          value={autoAccept}
+          onChange={setAutoAccept}
+          disabled={loading}
+        />
       </PanelCard>
 
       {/* 193:30 — la política es única de plataforma, no se configura aquí. */}
