@@ -73,7 +73,14 @@ export default async function CarritoPage() {
 
   return (
     <Container>
-      <Section className="max-w-[900px] py-8 sm:py-10">
+      {/* ⚠️ 1280 y no 900. Nació copiando el ancho del checkout, que es
+          estrecho a propósito —allí la pantalla es un formulario de tarjeta y
+          estrechar AYUDA a no distraer—. Aquí el trabajo es el contrario:
+          comparar varias mentorías de un vistazo. Con 900 px en una pantalla
+          de 1860 sobraba media pantalla a la derecha mientras las tarjetas
+          quedaban apretadas. 1280 es el ancho ancho que ya usa el proyecto en
+          otras cinco pantallas; no se inventa uno nuevo. */}
+      <Section className="max-w-[1280px] py-8 sm:py-10">
         <CheckoutSteps current={2} className="mb-5" />
 
         <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">
@@ -107,7 +114,10 @@ export default async function CarritoPage() {
             </Button>
           </PanelCard>
         ) : (
-          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_330px] lg:items-start">
+          /* El resumen crece de 330 a 380: es la columna que lleva el total y
+             el botón de pagar, y con más ancho el aviso de «todo o nada» deja
+             de partirse en cinco líneas. */
+          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
             <div className="flex flex-col gap-5">
               {agruparPorTutor(lines).map((g) => (
                 <GrupoDeTutor key={g.clave} grupo={g} tz={tz} />

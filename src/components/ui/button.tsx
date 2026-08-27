@@ -11,7 +11,15 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
+          // ⚠️ `text-foreground` explícito, y no es redundante: sin él esta
+          // variante HEREDA el color del contenedor. Pone `bg-background`
+          // (claro) pero dejaba el texto al azar, así que sobre cualquier fondo
+          // que imponga texto blanco —el hero azul de la ficha del tutor, la
+          // sala oscura— salía BLANCO SOBRE BLANCO: el botón existía, se podía
+          // pulsar, y no se veía. Pasó con «Escribir a …» (26-ago) y antes con
+          // la cabecera de la sala. Un botón `outline` siempre tiene fondo
+          // claro, así que el color de primer plano es correcto SIEMPRE.
+          "border-border bg-background text-foreground hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
         secondary:
           "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
         ghost:
