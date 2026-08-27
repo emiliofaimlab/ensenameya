@@ -375,7 +375,16 @@ export function SlotPicker({
    */
   return (
     <div>
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+      {/* ⚠️ La columna de confirmar mide 320 y no 360, y los 40 px de diferencia
+          se los come la de horas EN EL PEOR ANCHO. A 1024 exactos la cuenta es:
+          944 de contenido − 24 de hueco − la columna derecha, menos el `p-5` de
+          la tarjeta, los 300 del calendario y sus 20+20 de hueco y sangrado.
+          Con 360 quedaban 179 px para los chips → DOS por fila; con 320 quedan
+          219 → tres, que es el mínimo para que un día de ocho horas no se lea
+          como una lista vertical. Arriba de 1280 sobra sitio en las dos
+          versiones. 320 sigue siendo el ancho de panel de la casa (el de la
+          ficha ronda los 330). */}
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/*
           ZONA 1 · ELEGIR — el día y la hora, en la MISMA tarjeta y uno al lado
           del otro.
