@@ -146,52 +146,51 @@ on conflict do nothing;
 -- `identity_verification_status` también aprobado para que el panel de admin
 -- sea coherente (RN-29 exige KYC aprobado antes de aprobar al tutor).
 
-with datos(profile_id, display_name, headline, bio, nivel, auto) as (values
+with datos(profile_id, display_name, headline, bio, nivel) as (values
   ('11111111-0000-4000-8000-000000000001'::uuid, 'Valentina Ríos',
    'Profesora de Matemáticas · 8 años preparando admisiones',
    'Licenciada en Matemáticas. Trabajo el razonamiento antes que la fórmula: si entiendes de dónde sale, no hay que memorizarla. He acompañado a más de 200 estudiantes a su examen de admisión.',
-   'avanzado'::public.teaching_level, true),
+   'avanzado'::public.teaching_level),
   ('11111111-0000-4000-8000-000000000002'::uuid, 'Mateo Herrera',
    'Desarrollador full-stack · React, Next.js y buenas prácticas',
    'Diez años construyendo producto, los últimos cuatro con React y Next.js. Damos clase sobre tu propio código: se aprende mucho más arreglando lo que ya escribiste que con ejercicios de juguete.',
-   'intermedio'::public.teaching_level, false),
+   'intermedio'::public.teaching_level),
   ('11111111-0000-4000-8000-000000000003'::uuid, 'Camila Duarte',
    'Coach de idiomas · Inglés de trabajo y portugués',
    'Traductora de formación y profesora por vocación. Mis clases son conversación desde el minuto uno: la gramática entra sola cuando tienes algo que contar.',
-   'basico'::public.teaching_level, true),
+   'basico'::public.teaching_level),
   ('11111111-0000-4000-8000-000000000004'::uuid, 'Diego Salazar',
    'Física y Química de bachillerato, sin sufrir',
    'Profesor de secundaria durante seis años. Me especializo en quienes llegan con la asignatura atragantada: empezamos por lo que falló, no por el temario.',
-   'intermedio'::public.teaching_level, false),
+   'intermedio'::public.teaching_level),
   ('11111111-0000-4000-8000-000000000005'::uuid, 'Lucía Ferrer',
    'Guitarra, piano y escritura creativa',
    'Música de conservatorio y escritora. Enseño desde cero y sin solfeo obligatorio: primero tocas algo que te guste, y la teoría llega cuando la necesitas.',
-   'basico'::public.teaching_level, true),
+   'basico'::public.teaching_level),
   ('11111111-0000-4000-8000-000000000006'::uuid, 'Andrés Peña',
    'IELTS y TOEFL · estrategia de examen, no solo inglés',
    'Examinador certificado. Un examen de idioma se aprueba con técnica tanto como con vocabulario, y la técnica se entrena. Media de mis alumnos: +1.5 bandas en tres meses.',
-   'avanzado'::public.teaching_level, false),
+   'avanzado'::public.teaching_level),
   ('11111111-0000-4000-8000-000000000007'::uuid, 'Sofía Marín',
    'Diseño UI e ilustración digital',
    'Diseñadora de producto. Trabajamos con Figma sobre casos reales y salimos con piezas de portafolio, no con ejercicios que no puedes enseñar a nadie.',
-   'intermedio'::public.teaching_level, true),
+   'intermedio'::public.teaching_level),
   ('11111111-0000-4000-8000-000000000008'::uuid, 'Tomás Aguilar',
    'Finanzas para emprendedores y oratoria',
    'Quince años entre banca y consultoría. Explico las finanzas de un negocio sin jerga, y entreno la presentación con la que hay que defenderlas delante de alguien.',
-   'avanzado'::public.teaching_level, false)
+   'avanzado'::public.teaching_level)
 )
 insert into public.tutor_profiles (
   profile_id, display_name, headline, bio, teaching_level,
   approval_status, identity_verification_status, approved_at,
-  tier_id, auto_accept_bookings
+  tier_id
 )
 select
   d.profile_id, d.display_name, d.headline, d.bio, d.nivel,
   'approved'::public.tutor_approval_status,
   'approved'::public.identity_verification_status,
   now() - interval '30 days',
-  (select id from public.tutor_tiers where is_default),   -- Tier 1 · 75 %
-  d.auto
+  (select id from public.tutor_tiers where is_default)    -- Tier 1 · 75 %
 from datos d
 on conflict (profile_id) do update set
   display_name                 = excluded.display_name,
@@ -201,8 +200,7 @@ on conflict (profile_id) do update set
   approval_status              = excluded.approval_status,
   identity_verification_status = excluded.identity_verification_status,
   approved_at                  = excluded.approved_at,
-  tier_id                      = coalesce(tutor_profiles.tier_id, excluded.tier_id),
-  auto_accept_bookings         = excluded.auto_accept_bookings;
+  tier_id                      = coalesce(tutor_profiles.tier_id, excluded.tier_id);
 
 
 -- ════════════════════════════════════════════════════════════════════════════
@@ -215,85 +213,96 @@ on conflict (profile_id) do update set
 -- `session_duration_min` NUNCA nulo: `get_available_slots` corta seco si lo es,
 -- sin error y sin slots. Es el fallo silencioso más fácil de meter aquí.
 
-with p(id, tutor, title, outcome, description, modelo, precio, dur, paquete, nivel, idioma) as (values
+-- ⚠️ `auto` (M-02, `products.auto_accept_bookings`) NO es decorado: sin él, las
+-- 14 mentorías nacen con el default `true` de la columna y en dev NO EXISTE
+-- ninguna reserva `pending_acceptance`. O sea: el filtro «Por aceptar» del
+-- panel del tutor, la cuenta atrás de 24 h, `expire_stale_bookings` y el aviso
+-- NTF-07 quedan sin datos con los que probarse. Se reparte a propósito, y a
+-- propósito hay tutores con las dos cosas —Valentina filtra a mano quién entra
+-- en su preparación de examen pero deja las clases sueltas automáticas—, que es
+-- literalmente el caso que pidió el cliente y el que hace que un carrito de
+-- varias mentorías se resuelva a medias.
+with p(id, tutor, title, outcome, description, modelo, precio, dur, paquete, nivel, idioma, auto) as (values
   ('22222222-0000-4000-8000-000000000001'::uuid, '11111111-0000-4000-8000-000000000001'::uuid,
    'Álgebra y Cálculo desde cero',
    'entiendes de dónde sale cada fórmula y dejas de memorizar',
    'Repasamos desde lo que falló: operaciones con fracciones, factorización, funciones y límites. Cada sesión sale de un ejercicio tuyo, no de un temario cerrado.',
-   'per_session'::public.pricing_model, 2500, 60, null::int, 'basico'::public.teaching_level, 'es'),
+   'per_session'::public.pricing_model, 2500, 60, null::int, 'basico'::public.teaching_level, 'es', true),
   ('22222222-0000-4000-8000-000000000002'::uuid, '11111111-0000-4000-8000-000000000001'::uuid,
    'Preparación para examen de admisión',
    'llegas al examen con el temario cerrado y cronometrado',
    'Cuatro sesiones: diagnóstico, los dos bloques que más pesan y un simulacro completo con corrección. Incluye plan de estudio entre sesiones.',
-   'per_package'::public.pricing_model, 9000, 60, 4, 'avanzado'::public.teaching_level, 'es'),
+   'per_package'::public.pricing_model, 9000, 60, 4, 'avanzado'::public.teaching_level, 'es', false),
   ('22222222-0000-4000-8000-000000000003'::uuid, '11111111-0000-4000-8000-000000000002'::uuid,
    'React y Next.js en proyectos reales',
    'publicas una app en producción y sabes por qué está montada así',
    'Componentes, estado, rutas y datos en el App Router. Trabajamos sobre tu proyecto: si no tienes uno, empezamos uno el primer día.',
-   'per_hour'::public.pricing_model, 3000, 90, null, 'intermedio'::public.teaching_level, 'es'),
+   'per_hour'::public.pricing_model, 3000, 90, null, 'intermedio'::public.teaching_level, 'es', true),
   ('22222222-0000-4000-8000-000000000004'::uuid, '11111111-0000-4000-8000-000000000002'::uuid,
    'Code review y arquitectura',
    'aprendes a leer código ajeno y a defender tus decisiones',
    'Traes un repositorio y lo revisamos juntos línea a línea: qué está bien, qué te va a doler en seis meses y qué se arregla hoy en veinte minutos.',
-   'per_session'::public.pricing_model, 4000, 60, null, 'avanzado'::public.teaching_level, 'en'),
+   'per_session'::public.pricing_model, 4000, 60, null, 'avanzado'::public.teaching_level, 'en', false),
   ('22222222-0000-4000-8000-000000000005'::uuid, '11111111-0000-4000-8000-000000000003'::uuid,
    'Inglés conversacional para el trabajo',
    'sostienes una reunión en inglés sin preparártela palabra por palabra',
    'Ocho sesiones centradas en situaciones reales: presentarte, discrepar, pedir aclaraciones, negociar un plazo. Con grabación y correcciones por escrito.',
-   'per_package'::public.pricing_model, 18000, 45, 8, 'basico'::public.teaching_level, 'en'),
+   'per_package'::public.pricing_model, 18000, 45, 8, 'basico'::public.teaching_level, 'en', true),
   ('22222222-0000-4000-8000-000000000006'::uuid, '11111111-0000-4000-8000-000000000003'::uuid,
    'Portugués para viajar',
    'te desenvuelves en Brasil o Portugal sin recurrir al inglés',
    'Lo imprescindible para moverte: aeropuerto, alojamiento, comida, imprevistos. Pronunciación desde el primer día, que es donde se atasca todo el mundo.',
-   'per_session'::public.pricing_model, 1800, 45, null, 'basico'::public.teaching_level, 'pt'),
+   'per_session'::public.pricing_model, 1800, 45, null, 'basico'::public.teaching_level, 'pt', true),
   ('22222222-0000-4000-8000-000000000007'::uuid, '11111111-0000-4000-8000-000000000004'::uuid,
    'Física y Química de bachillerato',
    'apruebas y además entiendes qué estabas calculando',
    'Cinemática, dinámica, energía, estequiometría y disoluciones. Empezamos por el examen que suspendiste: ahí está escrito exactamente qué falta.',
-   'per_session'::public.pricing_model, 2000, 45, null, 'intermedio'::public.teaching_level, 'es'),
+   'per_session'::public.pricing_model, 2000, 45, null, 'intermedio'::public.teaching_level, 'es', false),
   ('22222222-0000-4000-8000-000000000008'::uuid, '11111111-0000-4000-8000-000000000005'::uuid,
    'Guitarra: de cero a tu primera canción',
    'tocas una canción entera de principio a fin',
    'Sin solfeo. Postura, acordes básicos, ritmo y cambios limpios. Eliges tú la canción y la desmontamos hasta que salga.',
-   'per_session'::public.pricing_model, 2200, 60, null, 'basico'::public.teaching_level, 'es'),
+   'per_session'::public.pricing_model, 2200, 60, null, 'basico'::public.teaching_level, 'es', true),
   ('22222222-0000-4000-8000-000000000009'::uuid, '11111111-0000-4000-8000-000000000005'::uuid,
    'Escritura creativa',
    'terminas un relato y sabes por qué funciona',
    'Voz, punto de vista, estructura y diálogo. Escribes entre sesiones y en clase corregimos tu texto, no ejemplos de manual.',
-   'per_session'::public.pricing_model, 2400, 60, null, 'basico'::public.teaching_level, 'es'),
+   'per_session'::public.pricing_model, 2400, 60, null, 'basico'::public.teaching_level, 'es', true),
   ('22222222-0000-4000-8000-000000000010'::uuid, '11111111-0000-4000-8000-000000000006'::uuid,
    'IELTS y TOEFL: estrategia de examen',
    'subes de banda sin necesidad de subir de nivel de inglés',
    'Cómo puntúa cada sección y qué espera el examinador. Speaking y writing con rúbrica en mano y corrección inmediata.',
-   'per_hour'::public.pricing_model, 4000, 60, null, 'avanzado'::public.teaching_level, 'en'),
+   'per_hour'::public.pricing_model, 4000, 60, null, 'avanzado'::public.teaching_level, 'en', false),
   ('22222222-0000-4000-8000-000000000011'::uuid, '11111111-0000-4000-8000-000000000007'::uuid,
    'Diseño UI con Figma',
    'sales con tres pantallas de portafolio y un sistema de diseño propio',
    'Cuatro sesiones: fundamentos, componentes y variantes, prototipo y presentación. Trabajamos un caso real de principio a fin.',
-   'per_package'::public.pricing_model, 9500, 90, 4, 'intermedio'::public.teaching_level, 'es'),
+   'per_package'::public.pricing_model, 9500, 90, 4, 'intermedio'::public.teaching_level, 'es', true),
   ('22222222-0000-4000-8000-000000000012'::uuid, '11111111-0000-4000-8000-000000000008'::uuid,
    'Finanzas para emprendedores',
    'lees tus números y sabes cuánto te queda de caja',
    'Margen, punto de equilibrio, flujo de caja y precios. Sin jerga y con tu propia hoja de cálculo encima de la mesa.',
-   'per_hour'::public.pricing_model, 5500, 60, null, 'avanzado'::public.teaching_level, 'es'),
+   'per_hour'::public.pricing_model, 5500, 60, null, 'avanzado'::public.teaching_level, 'es', false),
   ('22222222-0000-4000-8000-000000000013'::uuid, '11111111-0000-4000-8000-000000000008'::uuid,
    'Comunicación y oratoria',
    'presentas sin leer las diapositivas y sin quedarte en blanco',
    'Estructura del mensaje, control de los nervios y manejo de preguntas difíciles. Grabamos y revisamos: verte es la mitad del trabajo.',
-   'per_session'::public.pricing_model, 3500, 45, null, 'intermedio'::public.teaching_level, 'es'),
+   'per_session'::public.pricing_model, 3500, 45, null, 'intermedio'::public.teaching_level, 'es', true),
   ('22222222-0000-4000-8000-000000000014'::uuid, '11111111-0000-4000-8000-000000000007'::uuid,
    'Ilustración digital: primeros trazos',
    'terminas tu primera ilustración completa y sabes repetir el proceso',
    'Boceto, línea, color y luz con tableta. Del garabato a la pieza acabada, explicando cada decisión.',
-   'per_session'::public.pricing_model, 2600, 60, null, 'basico'::public.teaching_level, 'es')
+   'per_session'::public.pricing_model, 2600, 60, null, 'basico'::public.teaching_level, 'es', true)
 )
 insert into public.products (
   id, tutor_id, title, outcome, description, pricing_model, price_amount,
-  currency, session_duration_min, package_num_sessions, status, level, language
+  currency, session_duration_min, package_num_sessions, status, level, language,
+  auto_accept_bookings
 )
 select
   p.id, p.tutor, p.title, p.outcome, p.description, p.modelo, p.precio,
-  'USD', p.dur, p.paquete, 'active'::public.product_status, p.nivel, p.idioma
+  'USD', p.dur, p.paquete, 'active'::public.product_status, p.nivel, p.idioma,
+  p.auto
 from p
 on conflict (id) do update set
   title                = excluded.title,
@@ -305,7 +314,8 @@ on conflict (id) do update set
   package_num_sessions = excluded.package_num_sessions,
   status               = excluded.status,
   level                = excluded.level,
-  language             = excluded.language;
+  language             = excluded.language,
+  auto_accept_bookings = excluded.auto_accept_bookings;
 
 
 -- ── 4b · Categorías, resueltas por slug (patrón de ep03-demo.sql) ────────────

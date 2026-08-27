@@ -27,7 +27,7 @@ export default async function EditProductPage({
       supabase
         .from("products")
         .select(
-          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, faqs, level, language, product_categories(category_id)",
+          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, faqs, level, language, auto_accept_bookings, product_categories(category_id)",
         )
         .eq("id", id)
         .eq("tutor_id", userId)
@@ -93,6 +93,10 @@ export default async function EditProductPage({
           ),
           imagePath: product.image_path,
           availabilityRuleIds: (ruleLinks ?? []).map((l) => l.rule_id),
+          // M-02 · la columna es `not null`, así que esto no puede ser nulo; el
+          // `??` es para el día que alguien quite el campo del `select` de
+          // arriba y no para un dato ausente de verdad.
+          autoAccept: product.auto_accept_bookings ?? true,
           // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
           faqs: Array.isArray(product.faqs)
             ? (product.faqs as { q?: unknown; a?: unknown }[])

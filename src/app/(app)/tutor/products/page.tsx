@@ -34,7 +34,7 @@ export default async function TutorProductsPage() {
   const { data: products } = await supabase
     .from("products")
     .select(
-      "id, title, status, outcome, image_path, pricing_model, price_amount, currency, package_num_sessions, session_duration_min, product_categories(categories(name))",
+      "id, title, status, outcome, image_path, pricing_model, price_amount, currency, package_num_sessions, session_duration_min, auto_accept_bookings, product_categories(categories(name))",
     )
     .eq("tutor_id", userId)
     .order("created_at", { ascending: false });
@@ -127,6 +127,16 @@ export default async function TutorProductsPage() {
                             ? ` · ${p.session_duration_min} min`
                             : ""}
                           {cats.length ? ` · ${cats.join(", ")}` : ""}
+                        </p>
+                        {/* M-02 · desde que se retiró el interruptor global,
+                            esto se decide mentoría a mentoría — y sin esta
+                            línea habría que abrir las cinco para saber cuál es
+                            cuál. Se enseña también en los borradores: es justo
+                            antes de publicar cuando conviene mirarlo. */}
+                        <p className="mt-0.5 text-xs text-[#6b6b6b]">
+                          {p.auto_accept_bookings
+                            ? "Las reservas se confirman solas"
+                            : "Las reservas las aceptas tú"}
                         </p>
                       </div>
                     </div>

@@ -40,8 +40,17 @@ export function PaymentPolicy({
    *
    * Cada pantalla lee el dato por su cuenta —una desde `products`, la otra
    * desde la reserva— y lo pasa; este componente no consulta nada.
+   *
+   * ⚠️ `"mixto"` ES EL CARRITO (EY-176), y no es un adorno del tipo. La
+   * aceptación vive en la MENTORÍA, así que un pedido de tres puede llevar unas
+   * líneas que se confirman solas y otras que esperan al tutor, y NINGUNO de
+   * los dos textos de arriba es cierto para todas. Antes esta pantalla pasaba
+   * `false` fijo por ser «lo conservador»: no lo era. Ese texto promete una
+   * devolución automática del 100 % si el tutor no contesta, y para una línea
+   * que se confirma sola esa devolución NO EXISTE — se prometía de más
+   * justamente en la dirección que vende, que es la peor.
    */
-  aceptaSola: boolean;
+  aceptaSola: boolean | "mixto";
   className?: string;
 }) {
   return (
@@ -58,9 +67,11 @@ export function PaymentPolicy({
             Cuándo queda confirmada
           </dt>
           <dd>
-            {aceptaSola
-              ? "En cuanto se acredite el pago: el horario es tuyo, sin esperar a nadie."
-              : `El tutor tiene ${P.cutoffHours} h para aceptarla. Si no responde a tiempo, se cancela sola y se te devuelve el ${P.refundPct.studentEarly} %.`}
+            {aceptaSola === "mixto"
+              ? `Depende de la mentoría, y lo tienes marcado en cada una: unas quedan confirmadas en cuanto se acredite el pago, y otras esperan al tutor, que tiene ${P.cutoffHours} h para aceptarlas. Si no responde a tiempo, esa mentoría —solo esa— se cancela sola y se te devuelve el ${P.refundPct.studentEarly} %.`
+              : aceptaSola
+                ? "En cuanto se acredite el pago: el horario es tuyo, sin esperar a nadie."
+                : `El tutor tiene ${P.cutoffHours} h para aceptarla. Si no responde a tiempo, se cancela sola y se te devuelve el ${P.refundPct.studentEarly} %.`}
           </dd>
         </div>
       </div>

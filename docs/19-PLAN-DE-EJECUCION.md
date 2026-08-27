@@ -672,6 +672,16 @@ el contador de M-11 deja de ser deseable y pasa a ser obligatorio.
 > dispara la ventana de 24 h de RN-38 con su cancelación y su reembolso automáticos. Esa red deja de
 > aplicarse a casi todas las reservas. **El cliente lo pidió así**, pero conviene que conste.
 >
+> 🟢 **La mitad de interfaz de M-02 se cerró el 27-ago.** El 17-ago solo bajó el backend: el ajuste
+> no estaba en el formulario de la mentoría y el interruptor de `/tutor/reservas` seguía escribiendo
+> `tutor_profiles.auto_accept_bookings`, que ya no lee nadie — un control que no cambiaba nada. Ahora
+> el ajuste vive en el alta y la edición de la mentoría (dos opciones, no un switch, con la
+> contrapartida del alumno escrita al lado), el interruptor global se retiró y la columna deprecada
+> se borra en `20260827200000`. **El default sigue siendo «se confirma sola»**: es la decisión del
+> cliente y no se revierte por la puerta de atrás; lo que se hizo fue explicarla. De paso se corrigió
+> lo que se le prometía al alumno en un **pedido con varias mentorías**: se cuenta por línea, porque
+> el texto único prometía la devolución automática también a las que se confirman solas.
+>
 > 🔴 **N-38 sigue sin hacer, y su choque con M-11 sigue vivo.** Como M-11 tampoco se hizo, hoy no hay
 > contador: si se hace N-38 antes que M-11, se bloquean horarios antes de que la persona decida y sin
 > avisarle de cuánto le queda.

@@ -46,6 +46,14 @@ export default async function ConfirmacionPedidoPage({
   const tumbado = pedido.order.status === "cancelled";
   const pagado = pedido.order.status === "paid";
 
+  // M-02 · ¿queda alguna esperando al tutor? Con el pago ya acreditado esto NO
+  // se pregunta a `products.auto_accept_bookings`, se lee del estado: la que se
+  // aceptó sola está en `confirmed` y la que espera, en `pending_acceptance`.
+  // El estado es el hecho consumado; la columna solo dice qué iba a pasar.
+  const esperando = pedido.lineas.filter(
+    (l) => l.status === "pending_acceptance",
+  ).length;
+
   return (
     <Container>
       <Section className="max-w-[760px] py-8 sm:py-10">
@@ -87,7 +95,15 @@ export default async function ConfirmacionPedidoPage({
             ? "Tu pago está en camino. En cuanto el proveedor lo confirme, verás aquí tus mentorías agendadas."
             : tumbado
               ? "No se cobró nada y los horarios se liberaron. Puedes volver a intentarlo desde el carrito."
-              : "Se cobró una sola vez por todas las mentorías. Cada tutor confirma la suya por separado: si alguno no responde en 24 horas, esa mentoría se te devuelve al 100 %."}
+              : // ⚠️ ESTA FRASE PROMETÍA LAS 24 h PARA TODAS. Decía «cada tutor
+                // confirma la suya: si alguno no responde en 24 horas, esa
+                // mentoría se te devuelve al 100 %», y en un pedido donde todas
+                // se aceptaron solas no hay ningún tutor del que esperar
+                // respuesta ni ninguna devolución que pueda dispararse: la
+                // ventana de RN-38 solo corre desde `pending_acceptance`. La
+                // lista de abajo ya decía la verdad línea a línea; el titular,
+                // no. Ahora se cuenta lo que hay.
+                resumenDelPedido(esperando, pedido.lineas.length)}
         </p>
 
         <PanelCard className="mt-6">
@@ -169,6 +185,23 @@ function clavesDelCarrito(lineas: LineaResuelta[]): string[] {
         slots: l.slotsIso.map((iso) => Date.parse(iso)).filter(Number.isFinite),
       }),
     );
+}
+
+/**
+ * M-02 · qué se le puede decir de un pedido YA COBRADO, según cuántas de sus
+ * mentorías esperan respuesta del tutor. Los tres casos son distintos de
+ * verdad, no matices de redacción: solo en dos de ellos existe la devolución
+ * automática por silencio, y solo sobre parte del pedido.
+ */
+function resumenDelPedido(esperando: number, total: number): string {
+  const cobro = "Se cobró una sola vez por todas las mentorías";
+  if (esperando === 0)
+    return `${cobro}, y todas quedaron confirmadas: los horarios ya están bloqueados en la agenda de cada tutor.`;
+  if (esperando === total)
+    return `${cobro}. Cada tutor confirma la suya por separado: si alguno no responde en 24 horas, esa mentoría se te devuelve al 100 %.`;
+  return `${cobro}, pero no todas quedan igual. Las confirmadas ya tienen su horario bloqueado; ${
+    esperando === 1 ? "la que espera al tutor tiene" : `las ${esperando} que esperan al tutor tienen`
+  } 24 horas, y si no responde se te devuelve el 100 % de esa mentoría — solo de esa.`;
 }
 
 /** El estado de una línea, en castellano y sin códigos internos (M-06). */
