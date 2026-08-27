@@ -2,7 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { asRpc, type ConversationRow } from "./rpc";
-import type { Conversation } from "./types";
+import { toConversation, type Conversation } from "./types";
 
 /**
  * M-12 · Las conversaciones del usuario, desde el servidor.
@@ -15,29 +15,12 @@ import type { Conversation } from "./types";
  * es `SECURITY DEFINER` está en la migración `20260817210000`.
  */
 
-function toConversation(r: ConversationRow): Conversation {
-  return {
-    id: r.id,
-    counterpartId: r.other_id,
-    // Cadena vacía = sin nombre. `full_name` es nulo si esa persona entró con
-    // Google y nunca lo puso, y `display_name` puede quedarse a medias en un
-    // alta de tutor sin terminar.
-    counterpart: r.other_name?.trim() || null,
-    counterpartRole: r.other_is_tutor ? "tutor" : "student",
-    avatarPath: r.other_avatar_path,
-    lastMessageAt: r.last_message_at,
-    hasBooking: r.has_booking,
-    // MN-06 · quién puede escribir lo dice la base de datos, no la pantalla.
-    canChat: r.can_chat,
-    // MN-08 · los dos recuentos vienen del MISMO agregado que `has_booking`
-    // (`pair_booking_stats`), así que no pueden contradecirlo: si aquí hay
-    // reserva, `productCount` es como mínimo 1.
-    productCount: r.product_count ?? 0,
-    blocked: r.blocked_at !== null,
-    bookingId: r.last_booking_id,
-    productTitle: r.last_product_title,
-  };
-}
+/*
+ * ⚠️ `toConversation` ya no vive aquí: se mudó a `./types`, que es neutro. La
+ * burbuja tiene que llamar a `my_conversations()` desde el NAVEGADOR para
+ * alcanzar un hilo que no venía en la lista del servidor, y este módulo es
+ * `server-only`. El porqué largo está en la cabecera de `types.ts`.
+ */
 
 /** La bandeja completa, ya ordenada por actividad (lo hace la función SQL). */
 export async function listConversations(): Promise<Conversation[]> {

@@ -6,7 +6,17 @@
  * cliente. Un `import type` se borra al compilar, sí, pero tener los tipos en
  * un módulo neutro evita que el día que alguien importe por descuido un VALOR
  * de allí se entere por un error de build en Vercel y no aquí.
+ *
+ * ⚠️ Y desde hoy también vive aquí `toConversation`, que es un VALOR. Se mudó
+ * de `conversations.ts` porque la burbuja necesita llamar a `my_conversations()`
+ * DESDE EL NAVEGADOR —para alcanzar un hilo que no viene en la lista del
+ * servidor, ver `chat-bubble.tsx`— y de allí no se puede importar nada: aquel
+ * módulo es `server-only` y arrastrarlo al cliente rompe el build. La
+ * alternativa era copiar el mapeo en la burbuja, o sea dos sitios donde traducir
+ * la misma fila y uno de ellos condenado a quedarse atrás.
  */
+
+import type { ConversationRow } from "./rpc";
 
 /** Qué es el OTRO en esta conversación. El respaldo se redacta a partir de aquí. */
 export type CounterpartRole = "tutor" | "student";
@@ -63,6 +73,40 @@ export type Conversation = {
   /** Título de la mentoría de esa reserva, para la línea pequeña. */
   productTitle: string | null;
 };
+
+/**
+ * Una fila de `my_conversations()` tal y como la pinta la bandeja.
+ *
+ * Lo llaman las dos orillas y a propósito: el servidor en `listConversations()`
+ * y el navegador en la burbuja, cuando tiene que resolver un hilo que no venía
+ * en la lista. Es la MISMA función SQL en los dos casos —acotada por
+ * participación y con la RLS delante—, así que traducirla de dos maneras
+ * distintas solo serviría para que la misma conversación se pintara distinta
+ * según por dónde hubiera entrado.
+ */
+export function toConversation(r: ConversationRow): Conversation {
+  return {
+    id: r.id,
+    counterpartId: r.other_id,
+    // Cadena vacía = sin nombre. `full_name` es nulo si esa persona entró con
+    // Google y nunca lo puso, y `display_name` puede quedarse a medias en un
+    // alta de tutor sin terminar.
+    counterpart: r.other_name?.trim() || null,
+    counterpartRole: r.other_is_tutor ? "tutor" : "student",
+    avatarPath: r.other_avatar_path,
+    lastMessageAt: r.last_message_at,
+    hasBooking: r.has_booking,
+    // MN-06 · quién puede escribir lo dice la base de datos, no la pantalla.
+    canChat: r.can_chat,
+    // MN-08 · los dos recuentos vienen del MISMO agregado que `has_booking`
+    // (`pair_booking_stats`), así que no pueden contradecirlo: si aquí hay
+    // reserva, `productCount` es como mínimo 1.
+    productCount: r.product_count ?? 0,
+    blocked: r.blocked_at !== null,
+    bookingId: r.last_booking_id,
+    productTitle: r.last_product_title,
+  };
+}
 
 /**
  * «con tu tutor» / «con tu alumno»: el respaldo cuando no hay nombre.
