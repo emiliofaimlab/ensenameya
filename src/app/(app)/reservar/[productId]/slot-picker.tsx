@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -20,13 +19,12 @@ import {
   StatusPill,
 } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
+import { GoToCart } from "@/components/cart/go-to-cart";
 import {
   CART_MAX_LINEAS,
   addCartLine,
-  cartCountSnapshot,
   cartHasKeySnapshot,
   cartLineKey,
-  subscribeCart,
 } from "@/lib/cart/cookie";
 
 export type Slot = { slot_start: string; slot_end: string };
@@ -198,23 +196,6 @@ export function SlotPicker({
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(preselected ? [preselected] : []),
-  );
-
-  /*
-   * ¿HAY ALGO EN EL CARRITO? Se le pregunta a la cookie, que es la verdad, y no
-   * se recuerda haber pulsado: quien vuelve con el botón atrás, recarga, o
-   * añadió desde otra pestaña tiene que ver «Ir al carrito» igual.
-   *
-   * ⚠️ `cartCountSnapshot` va SIN envolver en un `useCallback`: es una función
-   * de módulo, ya estable entre renders, y devuelve un NÚMERO — que es lo que
-   * exige `useSyncExternalStore`, que compara el resultado con `Object.is` en
-   * cada render (una lista nueva cada vez = bucle infinito). Mismo patrón, y
-   * por los mismos motivos, que la insignia de la cabecera.
-   */
-  const enCarrito = useSyncExternalStore(
-    subscribeCart,
-    cartCountSnapshot,
-    () => enCarritoInicial,
   );
 
   // Slots por día del alumno. El orden dentro de cada día ya viene por slot_start.
@@ -666,15 +647,10 @@ export function SlotPicker({
               Agregar al carrito
             </Button>
 
-            {enCarrito > 0 ? (
-              <Button
-                asChild
-                variant="outline"
-                className="h-[45px] w-full rounded-[10px] text-sm font-semibold"
-              >
-                <Link href="/carrito">Ir al carrito ({enCarrito})</Link>
-              </Button>
-            ) : null}
+            <GoToCart
+              initial={enCarritoInicial}
+              buttonClassName="h-[45px] w-full rounded-[10px] text-sm font-semibold"
+            />
 
             {/* Por qué está bloqueado, al lado del botón bloqueado. La píldora
                 de arriba dice cuánto llevas; esto dice cuánto falta, que es la
@@ -769,15 +745,10 @@ export function SlotPicker({
           </Button>
         </div>
 
-        {enCarrito > 0 ? (
-          <Button
-            asChild
-            variant="outline"
-            className="mt-2 h-[38px] w-full rounded-[10px] text-[13px] font-semibold"
-          >
-            <Link href="/carrito">Ir al carrito ({enCarrito})</Link>
-          </Button>
-        ) : null}
+        <GoToCart
+          initial={enCarritoInicial}
+          buttonClassName="mt-2 h-[38px] w-full rounded-[10px] text-[13px] font-semibold"
+        />
       </div>
     </div>
   );

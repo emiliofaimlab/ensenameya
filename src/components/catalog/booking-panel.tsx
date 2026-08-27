@@ -514,11 +514,19 @@ export async function BookingPanel({
                       era el número de pasos, era no saber en cuál estabas: «ya
                       estoy reservando, ¿a qué hora es que yo reservé?».
                       Baja DEBAJO del selector: encima quedaba entre la etiqueta
-                      y su propio control, separando los dos. */}
+                      y su propio control, separando los dos.
+
+                      ⚠️ EY-177 · decía «pasas directo al pago» y desde el modelo
+                      nuevo de botones ya no es cierto: el principal añade al
+                      carrito y el pago queda a un paso más. Es la MISMA clase de
+                      texto que la promesa de retención de `slot-picker`, que
+                      también sobrevivió a que le cambiaran el botón de debajo:
+                      una frase que describe el destino de un botón envejece cada
+                      vez que ese botón cambia, y nadie la relee. */}
                   <p className="mt-2 text-xs text-[#6b6b6b]">
                     {sesionesPorReserva(chosen) > 1
                       ? `Elige aquí la primera; las ${sesionesPorReserva(chosen) - 1} restantes en el siguiente paso.`
-                      : "Elige tu hora y confirma abajo: pasas directo al pago."}
+                      : "Elige tu hora y agrégala al carrito; pagas cuando termines de elegir."}
                   </p>
                 </>
               )}
