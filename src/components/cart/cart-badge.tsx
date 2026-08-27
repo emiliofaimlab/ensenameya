@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { ShoppingCartIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { cartCountSnapshot, subscribeCart } from "@/lib/cart/cookie";
+import { useCartBump, useCartCount } from "@/components/cart/use-cart";
 
 /**
  * EY-177 · el carrito en la cabecera, con su contador.
@@ -35,39 +34,21 @@ import { cartCountSnapshot, subscribeCart } from "@/lib/cart/cookie";
  * exigido subirlo al layout raíz solo para esto.
  */
 export function CartBadge({ initial }: { initial: number }) {
-  const n = useSyncExternalStore(
-    subscribeCart,
-    cartCountSnapshot,
-    // En el servidor no hay `document.cookie`: el número lo trae el layout, que
-    // sí la leyó con `cookies()`.
-    () => initial,
-  );
+  // En el servidor no hay `document.cookie`: el número lo trae el layout, que
+  // sí la leyó con `cookies()`.
+  const n = useCartCount(initial);
 
   /*
    * EY-178 · el salto de la insignia al AÑADIR.
    *
-   * ⚠️ Solo cuando el número SUBE. Al quitar una línea o al limpiarse la que ya
-   * se pagó, la insignia se queda quieta: un acuse de recibo que también salta
-   * al perder algo deja de significar «hecho» y pasa a significar «ha pasado
-   * algo», que no sirve para nada.
-   *
-   * Hace falta porque el botón de «Agregar al carrito» cambia justo debajo del
-   * dedo mientras el contador vive en la esquina de arriba: sin el salto, la
-   * mitad de la respuesta ocurre donde nadie está mirando.
-   *
-   * `previo` arranca en `initial` y no en 0 a propósito — si no, la insignia
-   * saltaría sola en cada carga de página con el carrito ya lleno.
+   * ⚠️ El gancho salió de aquí a `use-cart.ts` cuando el «Ir al carrito» del
+   * panel de reserva empezó a necesitar exactamente el mismo salto. El porqué
+   * de cada decisión (solo al subir, `previo` desde `initial`, los 300 ms) está
+   * allí. Aquí queda lo que es propio de la insignia: que sigue haciendo falta
+   * porque el botón de «Agregar al carrito» está bajo el dedo y este contador
+   * vive en la esquina de arriba.
    */
-  const previo = useRef(initial);
-  const [saltando, setSaltando] = useState(false);
-  useEffect(() => {
-    const subio = n > previo.current;
-    previo.current = n;
-    if (!subio) return;
-    setSaltando(true);
-    const t = setTimeout(() => setSaltando(false), 300);
-    return () => clearTimeout(t);
-  }, [n]);
+  const saltando = useCartBump(n, initial);
 
   return (
     <Button

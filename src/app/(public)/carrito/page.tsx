@@ -24,6 +24,7 @@ import {
   PagarPedido,
   PruneBought,
   RemoveLine,
+  type LineaDelPedido,
 } from "@/components/cart/cart-actions";
 
 export const metadata = { title: "Tu carrito · Enséñame Ya" };
@@ -56,9 +57,30 @@ export const metadata = { title: "Tu carrito · Enséñame Ya" };
  * importe que se cobra sigue saliendo de `payments.gross_amount`, que congela
  * `create_booking`; lo de aquí es informativo y se dice.
  */
-export default async function CarritoPage() {
-  const [carrito, tz] = await Promise.all([resolveCart(), getViewerTimezone()]);
+export default async function CarritoPage({
+  searchParams,
+}: {
+  /**
+   * `falla` = la clave (`cartLineKey`) de la línea que tumbó el último intento
+   * de pago. La escribe `PagarPedido` con `router.replace` y la lee esta
+   * pantalla para marcar la tarjeta culpable en la lista: el resumen vive en
+   * otra columna y esto es servidor, así que no hay estado de cliente que pueda
+   * cruzar de una a otra. Mismo criterio que el panel de reserva: el estado que
+   * hay que compartir entre servidor y cliente vive en la query.
+   *
+   * ⚠️ Es una PISTA, no una verdad: si la línea ya no está en el carrito, la
+   * clave no casa con ninguna y no se marca nada. Nunca decide si algo se puede
+   * comprar — eso lo dice `resolveCart()` contra la base.
+   */
+  searchParams: Promise<{ falla?: string }>;
+}) {
+  const [carrito, tz, sp] = await Promise.all([
+    resolveCart(),
+    getViewerTimezone(),
+    searchParams,
+  ]);
   const { lines, totalEstimado, currency, compradas } = carrito;
+  const falla = sp.falla ?? null;
 
   const comprables = lines.filter(
     (l) => l.estado.tipo === "ok" || l.estado.tipo === "pagando",
@@ -120,7 +142,7 @@ export default async function CarritoPage() {
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
             <div className="flex flex-col gap-5">
               {agruparPorTutor(lines).map((g) => (
-                <GrupoDeTutor key={g.clave} grupo={g} tz={tz} />
+                <GrupoDeTutor key={g.clave} grupo={g} tz={tz} falla={falla} />
               ))}
               {/* ⚠️ A la IZQUIERDA en móvil, y no es una preferencia estética.
                   Alineado a la derecha cae justo debajo de la burbuja de chat
@@ -195,7 +217,7 @@ export default async function CarritoPage() {
                 </p>
               ) : null}
 
-              <PasoAlPago comprables={comprables} />
+              <PasoAlPago comprables={comprables} tz={tz} />
 
               {/* El carrito NO retiene nada, y se dice aquí y no en letra
                   pequeña: es la contrapartida de la opción A (Doc 23 §23.3.5) y
@@ -252,7 +274,13 @@ export default async function CarritoPage() {
  * ⚠️ El aspecto de esta pantalla lo cierra el responsable después; lo que hay
  * aquí es el enchufe del motor, no el diseño.
  */
-function PasoAlPago({ comprables }: { comprables: CartResolvedLine[] }) {
+function PasoAlPago({
+  comprables,
+  tz,
+}: {
+  comprables: CartResolvedLine[];
+  tz: string;
+}) {
   if (comprables.length === 0) {
     return (
       <Button disabled className="mt-4 h-[49px] w-full text-[15px]">
@@ -272,7 +300,13 @@ function PasoAlPago({ comprables }: { comprables: CartResolvedLine[] }) {
 
   return (
     <>
-      <PagarPedido cuantas={comprables.length} />
+      {/* ⚠️ EL ORDEN IMPORTA Y ES EL MISMO QUE EL DEL SERVIDOR. `/api/pedidos`
+          relee la cookie y filtra con este mismo criterio (`ok` + `pagando`),
+          así que la línea número N que numera la base es la número N de esta
+          lista. `PagarPedido` no se fía solo de eso —cruza el índice con la
+          mentoría que manda el `hint`—, pero el emparejamiento normal sale de
+          aquí. Si algún día cambia el filtro, cambia en los dos sitios. */}
+      <PagarPedido lineas={comprables.map((l) => paraElError(l, tz))} />
       <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-[#6b6b6b]">
         <InfoIcon className="mt-px size-3.5 shrink-0" />
         {/* La contrapartida de P-1, dicha antes de pulsar y no después de
@@ -301,6 +335,39 @@ function PasoAlPago({ comprables }: { comprables: CartResolvedLine[] }) {
  */
 function hrefDePago(l: CartResolvedLine): string {
   return `/reservar/${l.line.productId}/checkout?slots=${encodeURIComponent(l.slotsIso.join(","))}`;
+}
+
+/**
+ * Cómo se NOMBRA una línea cuando el pedido falla: su título y su hora.
+ *
+ * La pregunta del responsable era literal —«¿cuál horario se ocupó? ¿qué clase?
+ * dame más detalles»—, y estas dos cosas son la respuesta. El resto (precio,
+ * tutor, duración) ya está en la tarjeta a la que apunta el enlace del aviso.
+ *
+ * ⚠️ SE FORMATEA AQUÍ, EN SERVIDOR, con `formatSessionTime(iso, tz)` y la zona
+ * de `getViewerTimezone()` — la misma que usan las fichas de hora de la lista
+ * (RN-01/RN-02). Dejarlo para el navegador daría la zona del NAVEGADOR, que no
+ * tiene por qué ser la del perfil: el mismo horario saldría escrito de dos
+ * formas en la misma pantalla, y la que estaría mal es justo la del error.
+ *
+ * ⚠️ Un paquete tiene VARIOS horarios y `create_booking_line` falla por la línea
+ * entera, no por uno de ellos: no hay forma de saber cuál se ocupó. Así que se
+ * nombra el primero y se dice cuántos más hay, en vez de escupir seis fechas
+ * dentro de un aviso de tres líneas o —peor— elegir una y presentarla como LA
+ * culpable.
+ */
+function paraElError(l: CartResolvedLine, tz: string): LineaDelPedido {
+  const [primero, ...resto] = l.slotsIso;
+  const cuando = primero ? formatSessionTime(primero, tz) : "sin horario";
+  return {
+    key: l.key,
+    productId: l.line.productId,
+    titulo: l.product?.title ?? "Mentoría",
+    cuando:
+      resto.length === 0
+        ? cuando
+        : `${cuando} y ${resto.length} ${resto.length === 1 ? "hora más" : "horas más"}`,
+  };
 }
 
 /**
@@ -363,7 +430,16 @@ function agruparPorTutor(lines: CartResolvedLine[]): GrupoTutor[] {
   return grupos;
 }
 
-function GrupoDeTutor({ grupo, tz }: { grupo: GrupoTutor; tz: string }) {
+function GrupoDeTutor({
+  grupo,
+  tz,
+  falla,
+}: {
+  grupo: GrupoTutor;
+  tz: string;
+  /** Clave de la línea que tumbó el último intento de pago, o `null`. */
+  falla: string | null;
+}) {
   const cuantas = grupo.lineas.length;
 
   return (
@@ -403,7 +479,12 @@ function GrupoDeTutor({ grupo, tz }: { grupo: GrupoTutor; tz: string }) {
 
       <div className="flex flex-col gap-2.5">
         {grupo.lineas.map((l) => (
-          <LineaDelCarrito key={l.key} l={l} tz={tz} />
+          <LineaDelCarrito
+            key={l.key}
+            l={l}
+            tz={tz}
+            señalada={l.key === falla}
+          />
         ))}
       </div>
     </section>
@@ -422,7 +503,24 @@ function GrupoDeTutor({ grupo, tz }: { grupo: GrupoTutor; tz: string }) {
  * Es la única cosa de esta pantalla que puede tumbar la compra entera (P-1:
  * todo o nada), así que no puede competir de tú a tú con el resto del ruido.
  */
-function LineaDelCarrito({ l, tz }: { l: CartResolvedLine; tz: string }) {
+function LineaDelCarrito({
+  l,
+  tz,
+  señalada,
+}: {
+  l: CartResolvedLine;
+  tz: string;
+  /**
+   * Es la línea que tumbó el último intento de pago (P-1: todo o nada).
+   *
+   * ⚠️ Es distinto de `roto`. `roto` es lo que dice la BASE ahora mismo; esto es
+   * lo que dijo `create_order` hace un segundo. Casi siempre coinciden —el hueco
+   * que se perdió sigue perdido al repintar—, pero no siempre: si quien ganó la
+   * carrera cancela entre medias, la línea vuelve a estar `ok` y sin esta marca
+   * el alumno leería un error en el resumen sin nada a lo que atribuirlo.
+   */
+  señalada: boolean;
+}) {
   const p = l.product;
   const titulo = p?.title ?? "Mentoría no disponible";
   const portada = storageUrl("product-images", p?.imagePath);
@@ -430,14 +528,18 @@ function LineaDelCarrito({ l, tz }: { l: CartResolvedLine; tz: string }) {
 
   return (
     <PanelCard
-      className={`overflow-hidden p-0 ${roto ? "border-destructive/50 bg-destructive/[0.03]" : ""}`}
+      /* El ancla del enlace del aviso: el resumen nombra la mentoría y desde
+         ahí se salta a su tarjeta. `scroll-mt-24` deja aire por arriba para que
+         no aterrice pegada al borde (y por debajo de la cabecera). */
+      id={`linea-${l.key}`}
+      className={`overflow-hidden p-0 scroll-mt-24 ${roto || señalada ? "border-destructive/50 bg-destructive/[0.03]" : ""} ${señalada ? "ring-2 ring-destructive/40" : ""}`}
     >
       <div className="flex">
         {/* La barra es el único elemento que se ve desde el rabillo del ojo al
             recorrer la lista: dice «esta es la que falla» sin leer nada. */}
         <span
           aria-hidden
-          className={`w-1 shrink-0 ${roto ? "bg-destructive" : "bg-transparent"}`}
+          className={`w-1 shrink-0 ${roto || señalada ? "bg-destructive" : "bg-transparent"}`}
         />
 
         <div className="min-w-0 flex-1 p-4 sm:p-5">
@@ -500,6 +602,15 @@ function LineaDelCarrito({ l, tz }: { l: CartResolvedLine; tz: string }) {
           </ul>
 
           <div className="mt-3.5 border-t border-[#e0e0e0] pt-3.5">
+            {/* Por qué esta tarjeta está marcada. El resumen ya lo dice, pero
+                el resumen está en la otra columna —y en móvil, debajo del
+                todo—: quien llega aquí siguiendo el enlace necesita leerlo
+                también aquí, o la marca roja no se explica sola. */}
+            {señalada ? (
+              <p className="mb-2 text-[12.5px] font-medium text-destructive">
+                Es la mentoría que impidió cobrar el pedido.
+              </p>
+            ) : null}
             <EstadoDeLinea l={l} />
           </div>
         </div>

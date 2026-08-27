@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { BookingSelect } from "@/components/catalog/booking-select";
 import { AddToCart } from "@/components/cart/add-to-cart";
+import { GoToCart } from "@/components/cart/go-to-cart";
+import { cartCount } from "@/lib/cart/resolve";
 import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
 import { listProductSlots } from "@/lib/catalog/queries";
 import type { ProductCardData } from "@/lib/catalog/queries";
@@ -127,6 +129,13 @@ export async function BookingPanel({
     );
   }
 
+  /* Cuántas mentorías hay ya apuntadas. Es solo leer la cookie (`cookies()`,
+     sin viaje a la base), y estas fichas ya son dinámicas porque resuelven la
+     zona horaria del visitante — así que no cambia el modo de render de nadie.
+     Sirve para que «Ir al carrito» se pinte YA en el SSR en vez de aparecer un
+     instante después de hidratar, moviendo la barra de abajo bajo el dedo. */
+  const enCarrito = await cartCount();
+
   // Huecos de TODAS las mentorías: el calendario es del tutor, no de una clase.
   const slotsByProduct = new Map<string, string[]>(
     await Promise.all(
@@ -219,6 +228,18 @@ export async function BookingPanel({
     "es",
     { month: "long", year: "numeric", timeZone: "UTC" },
   );
+
+  /* Qué falta para poder pulsar. Va como `title` del botón bloqueado, así que
+     tiene que nombrar los controles con LAS MISMAS PALABRAS que sus etiquetas:
+     el desplegable de arriba dice «Elige la mentoría» desde B3.4, y decir
+     «sesión» aquí mandaba a buscar un control que no existe con ese nombre —
+     «sesión» además ya significa otra cosa en esta pantalla (el encuentro que
+     se agenda). */
+  const motivoDelBloqueo = !chosen
+    ? "Elige primero una mentoría"
+    : allDays.length === 0
+      ? "Esta mentoría todavía no tiene horarios publicados"
+      : "Elige primero una hora en el calendario";
 
   /*
    * B3.5 · ⚠️ AQUÍ HUBO UN ARREGLO BASADO EN UNA PREMISA FALSA. NO LO REPONGAS.
@@ -601,11 +622,9 @@ export async function BookingPanel({
         EY-177 · B3.2 · ⚠️ AQUÍ CAMBIA EL BOTÓN, Y ES LA MARCHA ATRÁS SOBRE N-33.
 
         Petición del cliente, literal: «cuando ya seleccione el día y la fecha,
-        sale **1 botón que es agregar al carrito**. Si le doy, se oculta ese y se
-        muestran **dos botones**: […] seguir comprando y […] ir al carrito.
-        Esto porque si un tutor tiene dos clases, yo seleccioné la primera, día y
-        fecha, agregué al carrito, quiero repetir lo mismo con su segunda clase
-        […] **sin salirme de esa visual**».
+        sale **1 botón que es agregar al carrito**. […] si un tutor tiene dos
+        clases, yo seleccioné la primera, día y fecha, agregué al carrito, quiero
+        repetir lo mismo con su segunda clase […] **sin salirme de esa visual**».
 
         O sea que el botón de una SESIÓN SUELTA deja de ir derecho al checkout y
         pasa a añadir al carrito sin navegar. El coste está medido y escrito en
@@ -628,52 +647,97 @@ export async function BookingPanel({
         barra, y una barra `sticky` opaca en escritorio taparía los propios
         selectores del panel. No se tocan.
       */}
+      {/*
+        B3.6 · ⚠️ EL MODELO DE BOTONES CAMBIÓ, Y ESTE ES EL SITIO DONDE SE VE.
+        Decidido con el responsable; no se reabre.
+
+        Antes, la barra pintaba **una sola cosa a la vez** y esa cosa dependía de
+        lo que acabaras de hacer: botón bloqueado → botón activo → y, al pulsar,
+        el botón DESAPARECÍA y lo sustituían «Seguir comprando» + «Ir al
+        carrito». Perder la acción principal justo después de usarla obligaba a
+        deducir que «Seguir comprando» era lo que la devolvía.
+
+        Ahora hay dos controles con DOS CONDICIONES INDEPENDIENTES, apilados:
+
+          · arriba, la acción principal, que depende de la SELECCIÓN de esta
+            pantalla (mentoría + hora). Siempre visible, bloqueada mientras
+            falte algo. Es «Agregar al carrito» salvo en los paquetes, que
+            siguen yendo a su selector múltiple.
+          · abajo, «Ir al carrito», que depende del CARRITO y de nada más
+            (`go-to-cart.tsx`). Por eso sobrevive a la recarga y al botón atrás,
+            y por eso se pinta también bajo el CTA del paquete: el hecho «tengo
+            mentorías apuntadas» no cambia porque esta mentoría sea un paquete.
+
+        ⚠️ La altura de la barra ya NO depende del estado. Con el modelo viejo
+        pasaba de un botón a dos-en-fila y de ahí a un texto de confirmación
+        debajo; en móvil esta barra flota sobre el panel (B3.5), así que cada
+        cambio de alto movía el contenido bajo el dedo. Ahora solo hay un salto
+        posible —que aparezca «Ir al carrito» la primera vez— y encima ocurre
+        HACIA ABAJO, sin desplazar al botón principal.
+      */}
       <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 max-lg:pe-[72px] lg:static">
-        {chosen && hora ? (
-          sesionesPorReserva(chosen) > 1 ? (
+        {chosen && sesionesPorReserva(chosen) > 1 ? (
+          /* PAQUETE · no pasa por el carrito desde aquí (ver arriba). El botón
+             se queda igual que siempre: bloqueado sin hora, y con hora lleva al
+             selector múltiple con la primera ya marcada. */
+          hora ? (
             <Button asChild className="h-[51px] w-full text-[15px]">
               <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
             </Button>
           ) : (
-            <AddToCart
-              productId={chosen.id}
-              /* ⚠️ `hora`, no `selectedTime`: es el ISO CANÓNICO de la base, ya
-                 contrastado por instante contra los huecos reales unas líneas
-                 más arriba. Al carrito nunca llega texto crudo de la URL. */
-              slots={[Date.parse(hora)]}
-              /* «Seguir comprando» = esta misma pantalla con la selección en
-                 blanco. Se conserva el DÍA y se sueltan mentoría y hora, que es
-                 justo el gesto que describe el cliente: otra clase del mismo
-                 tutor, el mismo día, sin irse a ningún lado. Y como `hrefFor`
-                 lleva su `#reservar`, la vista aterriza en el panel en vez de
-                 volver al principio de la ficha. */
-              seguirHref={hrefFor({ d: day })}
-            />
+            <Button
+              disabled
+              className="h-[51px] w-full text-[15px]"
+              title={motivoDelBloqueo}
+            >
+              {ctaLabel}
+            </Button>
           )
         ) : (
-          <Button
-            disabled
-            className="h-[51px] w-full text-[15px]"
-            title={
-              !chosen
-                ? "Elige primero una sesión"
-                : allDays.length === 0
-                  ? "Esta mentoría todavía no tiene horarios publicados"
-                  : "Elige primero una hora en el calendario"
-            }
-          >
-            {/* ⚠️ EL RÓTULO BLOQUEADO TIENE QUE PROMETER LO MISMO QUE EL
-                DESBLOQUEADO. Sin esto el panel enseñaba «Reservar mentoría YA»
-                en gris y, al elegir la hora, el botón se convertía en «Agregar
-                al carrito»: dos promesas distintas en el mismo sitio y a un
-                segundo de distancia. Sin clase elegida no se sabe todavía si es
-                paquete o sesión suelta, así que se anuncia el caso mayoritario
-                —el carrito—, que además es el que el cliente pidió. */}
-            {chosen && sesionesPorReserva(chosen) > 1
-              ? ctaLabel
-              : "Agregar al carrito"}
-          </Button>
+          /*
+            SESIÓN SUELTA — y también el estado «todavía no he elegido nada»,
+            porque sin mentoría elegida no se sabe si será paquete o suelta.
+
+            ⚠️ EL RÓTULO BLOQUEADO TIENE QUE PROMETER LO MISMO QUE EL
+            DESBLOQUEADO, y por eso el botón vacío también es «Agregar al
+            carrito» (el rótulo por defecto de `AddToCart`). Antes el panel
+            enseñaba «Reservar mentoría YA» en gris y, al elegir la hora, el
+            botón se convertía en «Agregar al carrito»: dos promesas distintas
+            en el mismo sitio y a un segundo de distancia.
+          */
+          <AddToCart
+            /* `null` mientras no hay mentoría elegida: el botón se pinta igual,
+               bloqueado. Es la diferencia con el modelo viejo. */
+            productId={chosen?.id ?? null}
+            /* ⚠️ `hora`, no `selectedTime`: es el ISO CANÓNICO de la base, ya
+               contrastado por instante contra los huecos reales unas líneas más
+               arriba. Al carrito nunca llega texto crudo de la URL. */
+            slots={hora ? [Date.parse(hora)] : []}
+            /*
+              ⚠️ QUÉ SE LIMPIA EXACTAMENTE, Y POR QUÉ NO EL DÍA.
+              Se sueltan `p` (mentoría) y `h` (hora) y **se conserva `d`**.
+
+              El día no es una elección más: es el primer paso del embudo
+              (R24-13 · día → clase → horario), es lo que decide qué opciones
+              tiene el selector de mentorías, y es lo único que se elige con el
+              dedo sobre una rejilla de 30 casillas en vez de con un desplegable.
+              Tirarlo obligaría a volver al calendario y a buscar otra vez el
+              mismo número para hacer justo lo que el cliente describe: «otra
+              clase del mismo tutor». Además, sin `d` el panel recalcula el día
+              por defecto (`allDays[0]`), o sea que no dejaría la pantalla en
+              blanco: la dejaría en OTRO día, elegido por nosotros.
+
+              Y como `hrefFor` lleva su `#reservar`, la vista aterriza en el
+              panel en vez de volver al principio de la ficha.
+            */
+            limpiarHref={hrefFor({ d: day })}
+            motivo={motivoDelBloqueo}
+          />
         )}
+
+        {/* Y debajo, siempre que el carrito tenga algo. `initial` viene del
+            servidor para que no aparezca a destiempo. */}
+        <GoToCart initial={enCarrito} className="mt-2" />
       </div>
 
       {footer}

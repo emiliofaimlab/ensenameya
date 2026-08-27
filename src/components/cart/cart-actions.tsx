@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { XIcon } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { AlertTriangleIcon, XIcon } from "lucide-react";
 
 import { removeCartLines } from "@/lib/cart/cookie";
 import { Button } from "@/components/ui/button";
@@ -102,6 +102,23 @@ export function PruneBought({ keys }: { keys: string[] }) {
 }
 
 /**
+ * Una línea del pedido, **tal y como la va a nombrar el error**.
+ *
+ * ⚠️ `cuando` llega YA FORMATEADO desde el servidor, con `formatSessionTime` y
+ * la zona de `getViewerTimezone()`. No se formatea aquí: en el navegador la zona
+ * sería la del navegador, que casi siempre coincide con la del perfil pero no
+ * tiene por qué (RN-01/RN-02), y el carrito ya pinta las horas de sus tarjetas
+ * con la del perfil. Dos husos en la misma pantalla es peor que ninguno.
+ */
+export type LineaDelPedido = {
+  /** `cartLineKey`: identifica la tarjeta que hay que señalar en la lista. */
+  key: string;
+  productId: string;
+  titulo: string;
+  cuando: string;
+};
+
+/**
  * EY-176 · «Ir al pago» cuando hay VARIAS mentorías: crea el pedido y navega.
  *
  * ⚠️ NO MANDA LAS LÍNEAS. El cuerpo de la petición va vacío a propósito: el
@@ -109,7 +126,8 @@ export function PruneBought({ keys }: { keys: string[] }) {
  * hueco por hueco contra `get_available_slots` antes de crear nada. Mandar la
  * lista desde aquí sería dejar que el navegador eligiera qué mentorías y qué
  * horarios entran en un cobro, y la cookie se edita desde la consola en diez
- * segundos.
+ * segundos. `lineas` es **solo para escribir el error**: nada de lo que hay
+ * dentro viaja a la petición.
  *
  * Es un botón y no un `<Link>` porque crear el pedido es una ESCRITURA —N
  * reservas, N pagos y una cabecera, en una transacción—, y eso no puede colgar
@@ -121,10 +139,56 @@ export function PruneBought({ keys }: { keys: string[] }) {
  * reservas retienen esos huecos). La segunda es la que de verdad protege —
  * esta solo ahorra la petición.
  */
-export function PagarPedido({ cuantas }: { cuantas: number }) {
+export function PagarPedido({ lineas }: { lineas: LineaDelPedido[] }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [enviando, setEnviando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{
+    mensaje: string;
+    linea: LineaDelPedido | null;
+  } | null>(null);
+  const cuantas = lineas.length;
+
+  /**
+   * ⚠️ CUÁL MENTORÍA FALLÓ — y por qué no basta con el índice.
+   *
+   * El servidor numera la línea culpable (`detail`, 1-based) y además manda su
+   * mentoría (`hint`), y las dos cosas se refieren a la lista que ÉL releyó de
+   * la cookie. Esa lista se calculó con el mismo criterio que `lineas`, así que
+   * en el uso normal el índice casa. Pero entre el render de esta pantalla y el
+   * POST puede haber pasado algo —otra pestaña quitando una línea, el
+   * autolimpiado de lo ya pagado— y entonces el índice apunta a otra mentoría.
+   * Señalar la equivocada es peor que no señalar ninguna: manda a cambiar un
+   * horario que estaba perfectamente.
+   *
+   * Así que el índice solo vale si la mentoría CONCUERDA. Si no concuerda, se
+   * intenta por mentoría, y solo cuando identifica una sola línea (con dos
+   * horarios de la misma clase en el carrito no se puede saber cuál fue). Si
+   * nada casa, se devuelve `null` y el error se queda en la frase genérica —
+   * que es exactamente lo que se enseñaba antes de esto.
+   */
+  function culpable(indice: unknown, productId: unknown): LineaDelPedido | null {
+    // El `hint` solo se toma en serio si nombra una mentoría que está en esta
+    // pantalla: PostgREST también usa ese campo para sugerencias suyas, y un
+    // texto que no es un id nuestro no debe descartar un índice que sí sirve.
+    const mentoria =
+      typeof productId === "string" &&
+      lineas.some((l) => l.productId === productId)
+        ? productId
+        : null;
+
+    const porIndice =
+      typeof indice === "number" && Number.isSafeInteger(indice) && indice > 0
+        ? (lineas[indice - 1] ?? null)
+        : null;
+
+    if (porIndice && (mentoria === null || porIndice.productId === mentoria)) {
+      return porIndice;
+    }
+    if (mentoria === null) return null;
+    const candidatas = lineas.filter((l) => l.productId === mentoria);
+    return candidatas.length === 1 ? candidatas[0]! : null;
+  }
 
   async function crear() {
     setEnviando(true);
@@ -134,22 +198,41 @@ export function PagarPedido({ cuantas }: { cuantas: number }) {
       orderId?: string;
       error?: string;
       linea?: number | null;
+      productId?: string | null;
     };
 
     if (!res.ok || !salida.orderId) {
-      // El mensaje ya viene traducido por `mensajeDeApertura`: nunca es el
+      // ⚠️ El mensaje ya viene traducido por `mensajeDeApertura`: NUNCA es el
       // texto crudo de Postgres, que puede traer dentro el nombre de un índice
       // único o un fallo de configuración nuestro contado como culpa de quien
-      // iba a pagar. Lo que se añade aquí es CUÁL línea falló — el servidor la
-      // numera (P-1) y esto la cuenta.
-      setError(
-        salida.linea
-          ? `${salida.error ?? "No se pudo crear el pedido."} (mentoría ${salida.linea} de ${cuantas})`
-          : (salida.error ?? "No se pudo crear el pedido."),
-      );
+      // iba a pagar. Lo que se añade aquí es QUÉ mentoría y A QUÉ HORA.
+      const linea = culpable(salida.linea, salida.productId);
+      setError({
+        mensaje: salida.error ?? "No se pudo crear el pedido.",
+        linea,
+      });
       setEnviando(false);
-      // El carrito cambió por debajo (un hueco que se fue): que el servidor lo
-      // vuelva a pintar con la verdad en vez de dejar la lista de antes.
+
+      /*
+       * ⚠️ DOS NAVEGACIONES Y NINGUNA SOBRA.
+       *
+       * `replace` deja la línea culpable en la query (`?falla=<clave>`) para que
+       * el SERVIDOR pueda marcar su tarjeta en la lista: esta pantalla es un
+       * Server Component y el resumen vive en otra columna, así que no hay
+       * estado de cliente que pueda cruzar de una a otra. Es el mismo criterio
+       * que el panel de reserva —«el estado es la query»— y de paso el aviso
+       * sobrevive a la recarga. `scroll:false` porque el mensaje que se acaba de
+       * escribir está justo aquí y saltar arriba lo escondería.
+       *
+       * `refresh` es para los DATOS: el carrito cambió por debajo (un hueco que
+       * se fue) y hay que repintarlo con la verdad. Y hace falta aparte porque
+       * si el mismo fallo se repite dos veces la URL no cambia, así que el
+       * `replace` sería un no-op y la lista se quedaría con los datos viejos.
+       */
+      router.replace(
+        linea ? `${pathname}?falla=${encodeURIComponent(linea.key)}` : pathname,
+        { scroll: false },
+      );
       router.refresh();
       return;
     }
@@ -163,9 +246,38 @@ export function PagarPedido({ cuantas }: { cuantas: number }) {
         {enviando ? "Preparando tu pedido…" : `Pagar ${cuantas} mentorías juntas`}
       </Button>
       {error ? (
-        <p role="alert" className="mt-2 text-xs leading-relaxed text-destructive">
-          {error}
-        </p>
+        /*
+          ⚠️ QUÉ MENTORÍA Y A QUÉ HORA — la pregunta literal del responsable era
+          «¿cuál horario se ocupó? ¿qué clase? dame más detalles».
+
+          Antes esto decía «(mentoría 2 de 3)», que obliga a contar tarjetas
+          hacia abajo para averiguar de cuál habla — y en móvil el resumen está
+          DEBAJO de la lista, así que hay que contar hacia arriba y de memoria.
+          Un número ordinal no es un dato: es un acertijo con la respuesta en
+          otra parte de la pantalla.
+
+          El título y la hora van PRIMERO y el qué-ha-pasado después, porque la
+          pregunta que trae quien lee esto es «¿cuál?». Y es un enlace al ancla
+          de su tarjeta: nombrarla y que además se pueda saltar a ella cierra el
+          asunto en un gesto.
+        */
+        <div
+          role="alert"
+          className="mt-2 flex items-start gap-2 rounded-[10px] bg-destructive/[0.07] p-3 text-xs leading-relaxed text-destructive"
+        >
+          <AlertTriangleIcon className="mt-px size-4 shrink-0" />
+          <div className="min-w-0">
+            {error.linea ? (
+              <a
+                href={`#linea-${error.linea.key}`}
+                className="block font-semibold underline decoration-destructive/40 underline-offset-2"
+              >
+                «{error.linea.titulo}» · {error.linea.cuando}
+              </a>
+            ) : null}
+            <p className={error.linea ? "mt-1" : undefined}>{error.mensaje}</p>
+          </div>
+        </div>
       ) : null}
     </>
   );
