@@ -3,6 +3,8 @@ import Link from "next/link";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
+  CalendarIcon,
+  ClockIcon,
   InfoIcon,
   ShoppingCartIcon,
 } from "lucide-react";
@@ -62,6 +64,12 @@ export default async function CarritoPage() {
     (l) => l.estado.tipo === "ok" || l.estado.tipo === "pagando",
   );
   const conProblema = lines.length - comprables.length;
+  // Cuántas personas distintas hay detrás del pedido. Solo se enseña con más de
+  // una: es lo que convierte «3 mentorías» en «3 mentorías de 2 tutores», que es
+  // la información que el cliente pidió que quedara clara.
+  const tutoresDistintos = new Set(
+    comprables.map((l) => l.product?.tutorId).filter(Boolean),
+  ).size;
 
   return (
     <Container>
@@ -100,11 +108,20 @@ export default async function CarritoPage() {
           </PanelCard>
         ) : (
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_330px] lg:items-start">
-            <div className="flex flex-col gap-4">
-              {lines.map((l) => (
-                <LineaDelCarrito key={l.key} l={l} tz={tz} />
+            <div className="flex flex-col gap-5">
+              {agruparPorTutor(lines).map((g) => (
+                <GrupoDeTutor key={g.clave} grupo={g} tz={tz} />
               ))}
-              <div className="flex justify-end">
+              {/* ⚠️ A la IZQUIERDA en móvil, y no es una preferencia estética.
+                  Alineado a la derecha cae justo debajo de la burbuja de chat
+                  (`fixed right-5 bottom-5 z-50`) y **deja de recibir el clic**:
+                  medido, `elementFromPoint` sobre el centro del botón devolvía
+                  la burbuja. Aquí no se reserva hueco con un `pe-` como en la
+                  barra de reserva, porque esta pantalla la ven también los
+                  anónimos —que NO tienen burbuja— y les quedaría un vacío de
+                  84 px al lado del único botón de la fila. Moverlo no cuesta
+                  nada y vale para los dos casos. */}
+              <div className="flex justify-start lg:justify-end">
                 <ClearCart keys={lines.map((l) => l.key)} />
               </div>
             </div>
@@ -114,18 +131,41 @@ export default async function CarritoPage() {
 
               <dl className="mt-4 flex flex-col gap-2 border-t border-[#e0e0e0] pt-4 text-[13px]">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-[#6b6b6b]">Mentorías</dt>
-                  <dd className="text-[#333333]">{comprables.length}</dd>
+                  <dt className="text-[#6b6b6b]">
+                    {comprables.length === 1 ? "Mentoría" : "Mentorías"}
+                  </dt>
+                  <dd className="font-medium text-[#333333]">
+                    {comprables.length}
+                  </dd>
                 </div>
-                {conProblema > 0 ? (
+                {tutoresDistintos > 1 ? (
                   <div className="flex justify-between gap-4">
-                    <dt className="text-[#6b6b6b]">Sin disponibilidad</dt>
-                    <dd className="text-destructive">{conProblema}</dd>
+                    <dt className="text-[#6b6b6b]">Tutores</dt>
+                    <dd className="font-medium text-[#333333]">
+                      {tutoresDistintos}
+                    </dd>
                   </div>
                 ) : null}
               </dl>
 
-              <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-[#e0e0e0] pt-3">
+              {/* ⚠️ Las líneas rotas salen del bloque de arriba y se enseñan
+                  como AVISO, no como una fila más de la tabla. Antes eran un
+                  «Sin disponibilidad · 1» entre los recuentos, con el mismo
+                  peso visual que «Mentorías · 2» — y no es lo mismo: con P-1
+                  (todo o nada) esa fila es lo único que puede impedir la compra
+                  entera. Un dato y un obstáculo no se pintan igual. */}
+              {conProblema > 0 ? (
+                <div className="mt-3 flex items-start gap-2 rounded-[10px] bg-destructive/[0.07] p-3 text-[12.5px] leading-relaxed text-destructive">
+                  <AlertTriangleIcon className="mt-px size-4 shrink-0" />
+                  <span>
+                    {conProblema === 1
+                      ? "Una mentoría ha perdido su horario. Cámbiala o quítala para poder pagar."
+                      : `${conProblema} mentorías han perdido su horario. Cámbialas o quítalas para poder pagar.`}
+                  </span>
+                </div>
+              ) : null}
+
+              <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-[#e0e0e0] pt-4">
                 <span className="text-base font-semibold text-[#19191f]">
                   {/* «Estimado» no es un adorno defensivo: el importe que se
                       cobra lo congela `create_booking` al crear la reserva, y si
@@ -134,7 +174,7 @@ export default async function CarritoPage() {
                       prometer una cifra que no depende de nosotros. */}
                   Total estimado
                 </span>
-                <span className="text-[26px] leading-none font-bold text-brand">
+                <span className="text-[30px] leading-none font-bold text-brand">
                   {currency ? formatMoney(totalEstimado, currency) : "—"}
                 </span>
               </div>
@@ -153,11 +193,14 @@ export default async function CarritoPage() {
                   El plazo sale de `HOLD_POLICY`, que es la copia de
                   `p_payment_cutoff` de `expire_stale_bookings` — tecleado a mano
                   es como una de las dos acaba mintiendo. */}
-              <p className="mt-4 border-t border-[#e0e0e0] pt-4 text-xs leading-relaxed text-[#6b6b6b]">
-                Guardar una mentoría aquí no bloquea el horario: hasta que no
-                entras al pago, otro alumno puede llevárselo. Al pasar al pago te
-                lo reservamos {HOLD_POLICY.minutes} minutos para que lo
-                completes.
+              <p className="mt-4 flex items-start gap-1.5 border-t border-[#e0e0e0] pt-4 text-xs leading-relaxed text-[#6b6b6b]">
+                <ClockIcon className="mt-px size-3.5 shrink-0" />
+                <span>
+                  Guardar una mentoría aquí no bloquea el horario: hasta que no
+                  entras al pago, otro alumno puede llevárselo. Al pasar al pago
+                  te lo reservamos {HOLD_POLICY.minutes} minutos para que lo
+                  completes.
+                </span>
               </p>
             </PanelCard>
           </div>
@@ -250,80 +293,206 @@ function hrefDePago(l: CartResolvedLine): string {
   return `/reservar/${l.line.productId}/checkout?slots=${encodeURIComponent(l.slotsIso.join(","))}`;
 }
 
-/** Una línea: qué, con quién, cuándo y cuánto. Y qué le pasa, si le pasa algo. */
-function LineaDelCarrito({ l, tz }: { l: CartResolvedLine; tz: string }) {
-  const p = l.product;
-  const titulo = p?.title ?? "Mentoría no disponible";
-  const avatar = storageUrl("avatars", p?.tutorAvatarPath);
-  const roto = l.estado.tipo !== "ok" && l.estado.tipo !== "pagando";
+/**
+ * Las líneas, agrupadas por tutor.
+ *
+ * ⚠️ El agrupado NO es adorno: es la frase del cliente hecha pantalla —«esto es
+ * lo que voy a comprar, 2 mentorías, DEL MISMO TUTOR»—. Con tres líneas sueltas
+ * hay que leer tres veces el nombre para darse cuenta de que dos son de la
+ * misma persona; agrupadas se ve sin leer. Y como el pedido se cobra junto pero
+ * el dinero se reparte por tutor, que la pantalla enseñe esa misma estructura
+ * evita explicarla después.
+ *
+ * Se conserva el ORDEN en que se añadieron: el grupo aparece donde cayó su
+ * primera línea. Reordenar por nombre o por precio movería cosas de sitio entre
+ * una visita y otra sin que el alumno haya tocado nada.
+ *
+ * Las líneas sin tutor legible (`no_disponible`) van cada una en su propio
+ * grupo anónimo: no se pueden agrupar con nadie y son justo las que hay que
+ * mirar, así que no conviene esconderlas debajo de una cabecera ajena.
+ */
+type GrupoTutor = {
+  clave: string;
+  tutorId: string | null;
+  nombre: string | null;
+  avatar: string | null;
+  lineas: CartResolvedLine[];
+};
+
+function agruparPorTutor(lines: CartResolvedLine[]): GrupoTutor[] {
+  const grupos: GrupoTutor[] = [];
+  const porTutor = new Map<string, GrupoTutor>();
+
+  for (const l of lines) {
+    const p = l.product;
+    if (!p) {
+      grupos.push({
+        clave: `huerfana-${l.key}`,
+        tutorId: null,
+        nombre: null,
+        avatar: null,
+        lineas: [l],
+      });
+      continue;
+    }
+    const ya = porTutor.get(p.tutorId);
+    if (ya) {
+      ya.lineas.push(l);
+      continue;
+    }
+    const grupo: GrupoTutor = {
+      clave: p.tutorId,
+      tutorId: p.tutorId,
+      nombre: p.tutorName,
+      avatar: storageUrl("avatars", p.tutorAvatarPath),
+      lineas: [l],
+    };
+    porTutor.set(p.tutorId, grupo);
+    grupos.push(grupo);
+  }
+  return grupos;
+}
+
+function GrupoDeTutor({ grupo, tz }: { grupo: GrupoTutor; tz: string }) {
+  const cuantas = grupo.lineas.length;
 
   return (
-    <PanelCard className={roto ? "border-destructive/40" : undefined}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-base font-semibold text-balance text-[#19191f]">
-            {titulo}
-          </p>
-          {p ? (
-            <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
-              {bookingFormatLabel(l.slotsIso.length)}
-              {p.sessionDurationMin ? ` · ${p.sessionDurationMin} min` : ""}
-            </p>
-          ) : null}
-        </div>
-        <RemoveLine lineKey={l.key} etiqueta={titulo} className="shrink-0" />
-      </div>
-
-      {p ? (
-        <div className="mt-3.5 flex items-center gap-2.5 border-t border-[#e0e0e0] pt-3.5">
-          <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-[12px] font-semibold">
-            {avatar ? (
+    <section className="flex flex-col gap-2.5">
+      {grupo.tutorId ? (
+        <div className="flex items-center gap-2.5 px-1">
+          <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-[11px] font-semibold text-[#4b4b4b]">
+            {grupo.avatar ? (
               <Image
-                src={avatar}
+                src={grupo.avatar}
                 alt=""
-                width={36}
-                height={36}
-                className="size-9 object-cover"
+                width={32}
+                height={32}
+                className="size-8 object-cover"
                 unoptimized
               />
             ) : (
-              initialsFrom(p.tutorName)
+              initialsFrom(grupo.nombre)
             )}
           </span>
-          <div className="min-w-0">
-            <p className="truncate text-[13px] text-[#4b4b4b]">
-              con{" "}
-              <Link
-                href={`/tutors/${p.tutorId}`}
-                className="font-semibold text-[#19191f] hover:underline"
-              >
-                {p.tutorName ?? "tu tutor"}
-              </Link>
-            </p>
-          </div>
+          <p className="min-w-0 text-[13px] text-[#6b6b6b]">
+            con{" "}
+            <Link
+              href={`/tutors/${grupo.tutorId}`}
+              className="font-semibold text-[#19191f] hover:underline"
+            >
+              {grupo.nombre ?? "tu tutor"}
+            </Link>
+            {/* El recuento solo cuando hay más de una: con una sola línea
+                diría «1 mentoría» debajo de una tarjeta que ya se ve. */}
+            {cuantas > 1 ? (
+              <span className="text-[#6b6b6b]"> · {cuantas} mentorías</span>
+            ) : null}
+          </p>
         </div>
       ) : null}
 
-      {/* RN-01/RN-02 · en la hora del VISITANTE, con `getViewerTimezone`. Sin
-          `timeZone` explícito el SSR pinta la del servidor (UTC en Vercel) y
-          esta lista diría una hora distinta de la que se eligió en el
-          calendario, que sí usa la del perfil. Mismo helper que el checkout: la
-          lógica de zona vive en un sitio a propósito. */}
-      <ul className="mt-3.5 flex flex-col gap-1.5 border-t border-[#e0e0e0] pt-3.5 text-[13px] text-[#333333]">
-        {l.slotsIso.map((iso) => (
-          <li key={iso} className="first-letter:uppercase">
-            {formatSessionTime(iso, tz)}
-          </li>
+      <div className="flex flex-col gap-2.5">
+        {grupo.lineas.map((l) => (
+          <LineaDelCarrito key={l.key} l={l} tz={tz} />
         ))}
-      </ul>
+      </div>
+    </section>
+  );
+}
 
-      <div className="mt-3.5 flex flex-wrap items-center justify-between gap-3 border-t border-[#e0e0e0] pt-3.5">
-        <EstadoDeLinea l={l} />
-        {p ? (
-          <span className="text-[17px] font-bold text-[#19191f]">
-            {formatMoney(l.total, p.currency)}
-          </span>
-        ) : null}
+/**
+ * Una línea: qué, cuándo y cuánto. Y qué le pasa, si le pasa algo.
+ *
+ * El tutor ya no se repite aquí — lo dice la cabecera del grupo. Lo que gana
+ * su sitio es la MINIATURA: en una lista, una imagen se reconoce antes de que
+ * el ojo llegue a leer el título, y esta pantalla se mira con prisa.
+ *
+ * ⚠️ Una línea rota se marca por TRES vías a la vez —barra lateral roja, fondo
+ * teñido y el aviso con su icono— y no solo por el borde fino que tenía antes.
+ * Es la única cosa de esta pantalla que puede tumbar la compra entera (P-1:
+ * todo o nada), así que no puede competir de tú a tú con el resto del ruido.
+ */
+function LineaDelCarrito({ l, tz }: { l: CartResolvedLine; tz: string }) {
+  const p = l.product;
+  const titulo = p?.title ?? "Mentoría no disponible";
+  const portada = storageUrl("product-images", p?.imagePath);
+  const roto = l.estado.tipo !== "ok" && l.estado.tipo !== "pagando";
+
+  return (
+    <PanelCard
+      className={`overflow-hidden p-0 ${roto ? "border-destructive/50 bg-destructive/[0.03]" : ""}`}
+    >
+      <div className="flex">
+        {/* La barra es el único elemento que se ve desde el rabillo del ojo al
+            recorrer la lista: dice «esta es la que falla» sin leer nada. */}
+        <span
+          aria-hidden
+          className={`w-1 shrink-0 ${roto ? "bg-destructive" : "bg-transparent"}`}
+        />
+
+        <div className="min-w-0 flex-1 p-4 sm:p-5">
+          <div className="flex items-start gap-3.5">
+            <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-[12px] bg-gradient-to-br from-brand/15 to-primary/15 text-[15px] font-bold text-brand">
+              {portada ? (
+                <Image
+                  src={portada}
+                  alt=""
+                  width={56}
+                  height={56}
+                  className="size-14 object-cover"
+                  unoptimized
+                />
+              ) : (
+                initialsFrom(titulo)
+              )}
+            </span>
+
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] leading-snug font-semibold text-balance text-[#19191f]">
+                {titulo}
+              </p>
+              {p ? (
+                <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
+                  {bookingFormatLabel(l.slotsIso.length)}
+                  {p.sessionDurationMin ? ` · ${p.sessionDurationMin} min` : ""}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              {p ? (
+                <span className="text-[17px] leading-none font-bold text-[#19191f]">
+                  {formatMoney(l.total, p.currency)}
+                </span>
+              ) : null}
+              <RemoveLine lineKey={l.key} etiqueta={titulo} />
+            </div>
+          </div>
+
+          {/* RN-01/RN-02 · en la hora del VISITANTE, con `getViewerTimezone`.
+              Sin `timeZone` explícito el SSR pinta la del servidor (UTC en
+              Vercel) y esta lista diría una hora distinta de la que se eligió
+              en el calendario, que sí usa la del perfil. Mismo helper que el
+              checkout: la lógica de zona vive en un sitio a propósito.
+
+              Van como fichas y no como lista suelta porque el CUÁNDO es, tras
+              el precio, lo que más se vuelve a mirar en un carrito. */}
+          <ul className="mt-3 flex flex-wrap gap-1.5">
+            {l.slotsIso.map((iso) => (
+              <li
+                key={iso}
+                className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[12.5px] text-[#333333] first-letter:uppercase"
+              >
+                <CalendarIcon className="size-3.5 shrink-0 text-[#6b6b6b]" />
+                {formatSessionTime(iso, tz)}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-3.5 border-t border-[#e0e0e0] pt-3.5">
+            <EstadoDeLinea l={l} />
+          </div>
+        </div>
       </div>
     </PanelCard>
   );

@@ -43,6 +43,9 @@ export type CartProduct = {
   tutorId: string;
   tutorName: string | null;
   tutorAvatarPath: string | null;
+  /** Portada de la mentoría. En un carrito, la miniatura es lo que hace que
+   *  una lista de tres líneas se lea de un vistazo en vez de leerse entera. */
+  imagePath: string | null;
 };
 
 /** En qué estado está una línea del carrito **ahora mismo**. */
@@ -147,7 +150,7 @@ async function cartProducts(ids: string[]): Promise<Map<string, CartProduct>> {
   const { data: productos } = await supabase
     .from("products")
     .select(
-      "id, title, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, tutor_id",
+      "id, title, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, tutor_id, image_path",
     )
     .in("id", ids)
     .eq("status", "active");
@@ -179,6 +182,7 @@ async function cartProducts(ids: string[]): Promise<Map<string, CartProduct>> {
       tutorId: p.tutor_id,
       tutorName: t.display_name ?? t.headline,
       tutorAvatarPath: t.avatar_path,
+      imagePath: p.image_path,
     });
   }
   return out;
