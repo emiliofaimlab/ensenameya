@@ -95,14 +95,15 @@ export default async function CarritoPage({
 
   return (
     <Container>
-      {/* ⚠️ 1280 y no 900. Nació copiando el ancho del checkout, que es
-          estrecho a propósito —allí la pantalla es un formulario de tarjeta y
-          estrechar AYUDA a no distraer—. Aquí el trabajo es el contrario:
-          comparar varias mentorías de un vistazo. Con 900 px en una pantalla
-          de 1860 sobraba media pantalla a la derecha mientras las tarjetas
-          quedaban apretadas. 1280 es el ancho ancho que ya usa el proyecto en
-          otras cinco pantallas; no se inventa uno nuevo. */}
-      <Section className="max-w-[1280px] py-8 sm:py-10">
+      {/* ⚠️ Sin ancho propio: manda el `Container`, como en el resto de las
+          públicas (`products/[id]`, `tutors`, `classes`…). Antes había aquí un
+          `max-w-[1280px]` heredado del checkout —que es estrecho a propósito,
+          allí la pantalla es un formulario de tarjeta—, pero **sin `mx-auto`**:
+          en una pantalla de 1860 el carrito no se centraba, se quedaba pegado a
+          la izquierda dejando media pantalla vacía a la derecha. Aquí el trabajo
+          es comparar varias mentorías de un vistazo, así que se quita el tope y
+          la rejilla ocupa el ancho de la página. */}
+      <Section className="py-8 sm:py-10">
         <CheckoutSteps current={2} className="mb-5" />
 
         <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">

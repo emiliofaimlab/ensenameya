@@ -56,7 +56,7 @@ export default async function ConfirmacionPedidoPage({
 
   return (
     <Container>
-      <Section className="max-w-[760px] py-8 sm:py-10">
+      <Section className="py-8 sm:py-10">
         {/* ⚠️ EL CARRITO SE LIMPIA AQUÍ, y si no, miente hasta la próxima
             visita a `/carrito`. La cookie no la puede tocar el servidor desde
             un render, así que la decisión (qué líneas se compraron) la toma él

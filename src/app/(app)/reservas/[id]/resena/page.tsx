@@ -56,7 +56,7 @@ export default async function ReviewPage({
       description={`Tu opinión ayuda a otros estudiantes a elegir. Califica tu experiencia con ${tutor}.`}
     >
 
-      <PanelCard className="max-w-[944px]">
+      <PanelCard>
         <div className="flex items-center gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-full bg-muted text-sm font-semibold text-[#6b6b6b]">
             {initialsFrom(tutor)}
