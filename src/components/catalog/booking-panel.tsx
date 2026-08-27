@@ -608,6 +608,26 @@ export async function BookingPanel({
         botón y no se sube la burbuja porque la burbuja es de todas las
         pantallas y esta barra es de una.
 
+        ⚠️ Y SON 72, NO 84 COMO EN `slot-picker.tsx`. Parecen el mismo problema
+        y el mismo número mal copiado —de hecho ya se ha intentado «corregir»
+        una vez—, pero las dos barras no empiezan en el mismo sitio y por eso no
+        piden lo mismo. Allí el `-mx-4` la lleva al borde de la VENTANA, así que
+        tiene que cubrir la huella entera de la burbuja: `right-5` (20) +
+        `size-14` (56) = 76, y 84 le da 8 de aire. Aquí la barra vive dentro de
+        una tarjeta que el `Container` ya mete hacia dentro (`px-4`, y `px-6`
+        desde `sm`) más 1 px de borde del `<aside>`, así que su borde derecho
+        NO llega a la ventana: se queda a 17 px en móvil y a 25 px desde `sm`.
+        Lo que hay que tapar es solo el resto → 76 − 17 = **59 px** en móvil y
+        76 − 25 = 51 px desde `sm`. Con 72 sobran 13 px y 21 px.
+
+        Medido en el navegador, no a ojo, con la barra fijada abajo y solapando
+        la burbuja en vertical: a 375 px el botón acaba en x=286 y la burbuja
+        empieza en x=299, y `elementFromPoint` sobre la esquina de los dos
+        botones (6 puntos) devuelve la barra, nunca la burbuja. Lo que
+        invalidaría el número: que cambie `right-5`/`size-14` en la burbuja, el
+        `px` del `Container`, o que esta barra deje de estar dentro de la
+        tarjeta (un `-mx` que la saque a la ventana la volvería un caso de 84).
+
         El `-mx-6` la lleva de borde a borde del panel: así el contenido pasa
         por DEBAJO y no se lee a medias detrás del botón. Y el margen superior
         vive aquí y no en cada botón — antes las dos ramas usaban `mt-4` y
