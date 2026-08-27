@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { resolveCart } from "@/lib/cart/resolve";
 import { esCarreraDeHorario, mensajeDeApertura } from "@/lib/checkout/hold";
-import { rpcDePedidos, type LineaDePedido } from "@/lib/orders/tipos";
+import type { LineaDePedido } from "@/lib/orders/tipos";
 
 /**
  * EY-176 · B3.1 — DE UN CARRITO A UN PEDIDO.
@@ -68,7 +68,7 @@ export async function POST() {
     slots: l.slotsIso,
   }));
 
-  const rpc = rpcDePedidos(supabase);
+  const rpc = supabase;
   const { data, error } = await rpc.rpc("create_order", { p_lines: lineas });
 
   if (!error && typeof data === "string") {

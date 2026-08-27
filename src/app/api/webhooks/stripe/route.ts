@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripeProvider } from "@/lib/payments/stripe-provider";
-import { clienteDePedidos, rpcDePedidos, type OrderStatus } from "@/lib/orders/tipos";
+import type { OrderStatus } from "@/lib/orders/tipos";
 import type { Database } from "@/lib/database.types";
 
 /** El estado de la reserva tal y como lo declara el esquema, no un `string`
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
    */
   const llamar = async (exito: boolean) => {
     if (ref.tipo === "order") {
-      const { error } = await rpcDePedidos(admin).rpc("confirm_order_payment", {
+      const { error } = await admin.rpc("confirm_order_payment", {
         p_order_id: ref.id,
         p_success: exito,
         p_event_id: evento.id,
@@ -159,7 +159,7 @@ export async function POST(req: Request) {
    */
   const sellarReferencia = async (pi: string) => {
     if (ref.tipo === "order") {
-      const conPedidos = clienteDePedidos(admin);
+      const conPedidos = admin;
       const { data: lineas, error: eLineas } = await conPedidos
         .from("bookings")
         .select("id")
@@ -299,7 +299,7 @@ export async function POST(req: Request) {
     // Constancia. `upsert` ignorando duplicados y no `insert` a secas: dos
     // entregas simultáneas pueden llegar aquí las dos, y una violación de
     // unicidad devolvería 500 por algo que ya está bien resuelto.
-    const { error: errorInsert } = await clienteDePedidos(admin)
+    const { error: errorInsert } = await admin
       .from("late_payment_refunds")
       .upsert(
         {
@@ -354,7 +354,7 @@ export async function POST(req: Request) {
    */
   const cobroEntrante = async (): Promise<NextResponse> => {
     const pi = evento.chargeRef;
-    const conPedidos = clienteDePedidos(admin);
+    const conPedidos = admin;
 
     // ── Las líneas del sujeto y el estado del pedido, si lo hay ──────────────
     //

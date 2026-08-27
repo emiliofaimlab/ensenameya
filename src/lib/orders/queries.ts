@@ -3,7 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { tutorNames } from "@/lib/booking";
 import type { Database } from "@/lib/database.types";
-import { clienteDePedidos, type OrderRow } from "@/lib/orders/tipos";
+import type { OrderRow } from "@/lib/orders/tipos";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -55,7 +55,7 @@ export type PedidoResuelto = {
  */
 export async function resolveOrder(orderId: string): Promise<PedidoResuelto | null> {
   const base = await createClient();
-  const supabase = clienteDePedidos(base);
+  const supabase = base;
 
   const { data: order } = await supabase
     .from("orders")

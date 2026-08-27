@@ -9,7 +9,6 @@ import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/catalog/format";
-import { rpcDePedidos } from "@/lib/orders/tipos";
 
 /** Igual que en el checkout de una reserva: primero se abre el cobro, luego se pinta. */
 type Apertura =
@@ -118,7 +117,7 @@ export function OrderPayment({
    */
   async function confirmarSimulado(exito: boolean) {
     setPagando(true);
-    const { error } = await rpcDePedidos(createClient()).rpc(
+    const { error } = await createClient().rpc(
       "confirm_simulated_order_payment",
       { p_order_id: orderId, p_success: exito },
     );

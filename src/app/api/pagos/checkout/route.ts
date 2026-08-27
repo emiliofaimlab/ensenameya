@@ -6,7 +6,6 @@ import { adapterFor } from "@/lib/payments";
 import type { CobroRef, LineaDeCobro } from "@/lib/payments/port";
 import { HOLD_POLICY } from "@/lib/policy";
 import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
-import { clienteDePedidos } from "@/lib/orders/tipos";
 
 /**
  * EP-20 / PAC-01 · abre el checkout de Stripe para una reserva y devuelve su
@@ -285,7 +284,7 @@ export async function POST(req: Request) {
    * parte de él es exactamente el estado que esta ficha existe para impedir.
    */
   const cobroDePedido = async (id: string): Promise<Cobro | Fallo> => {
-    const conPedidos = clienteDePedidos(supabase);
+    const conPedidos = supabase;
 
     const { data: order } = await conPedidos
       .from("orders")

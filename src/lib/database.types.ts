@@ -193,6 +193,7 @@ export type Database = {
           currency: string
           id: string
           num_sessions: number
+          order_id: string | null
           payee_country: string | null
           payer_country: string | null
           pricing_model: Database["public"]["Enums"]["pricing_model"]
@@ -216,6 +217,7 @@ export type Database = {
           currency: string
           id?: string
           num_sessions: number
+          order_id?: string | null
           payee_country?: string | null
           payer_country?: string | null
           pricing_model: Database["public"]["Enums"]["pricing_model"]
@@ -239,6 +241,7 @@ export type Database = {
           currency?: string
           id?: string
           num_sessions?: number
+          order_id?: string | null
           payee_country?: string | null
           payer_country?: string | null
           pricing_model?: Database["public"]["Enums"]["pricing_model"]
@@ -253,6 +256,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bookings_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bookings_product_id_fkey"
             columns: ["product_id"]
@@ -533,12 +543,14 @@ export type Database = {
       late_payment_refunds: {
         Row: {
           amount: number
-          booking_id: string
-          booking_status: Database["public"]["Enums"]["booking_status"]
+          booking_id: string | null
+          booking_status: Database["public"]["Enums"]["booking_status"] | null
           created_at: string
           currency: string
           event_id: string | null
           id: string
+          order_id: string | null
+          order_status: Database["public"]["Enums"]["order_status"] | null
           provider: string
           provider_payment_id: string
           provider_refund_id: string | null
@@ -546,12 +558,14 @@ export type Database = {
         }
         Insert: {
           amount: number
-          booking_id: string
-          booking_status: Database["public"]["Enums"]["booking_status"]
+          booking_id?: string | null
+          booking_status?: Database["public"]["Enums"]["booking_status"] | null
           created_at?: string
           currency: string
           event_id?: string | null
           id?: string
+          order_id?: string | null
+          order_status?: Database["public"]["Enums"]["order_status"] | null
           provider?: string
           provider_payment_id: string
           provider_refund_id?: string | null
@@ -559,12 +573,14 @@ export type Database = {
         }
         Update: {
           amount?: number
-          booking_id?: string
-          booking_status?: Database["public"]["Enums"]["booking_status"]
+          booking_id?: string | null
+          booking_status?: Database["public"]["Enums"]["booking_status"] | null
           created_at?: string
           currency?: string
           event_id?: string | null
           id?: string
+          order_id?: string | null
+          order_status?: Database["public"]["Enums"]["order_status"] | null
           provider?: string
           provider_payment_id?: string
           provider_refund_id?: string | null
@@ -576,6 +592,13 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "late_payment_refunds_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -691,6 +714,50 @@ export type Database = {
           },
         ]
       }
+      orders: {
+        Row: {
+          created_at: string
+          currency: string
+          id: string
+          lines_fingerprint: string
+          provider: string
+          provider_payment_id: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          currency: string
+          id?: string
+          lines_fingerprint: string
+          provider: string
+          provider_payment_id?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          id?: string
+          lines_fingerprint?: string
+          provider?: string
+          provider_payment_id?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_methods: {
         Row: {
           brand: string | null
@@ -770,17 +837,17 @@ export type Database = {
       }
       payment_webhook_events: {
         Row: {
-          booking_id: string | null
+          booking_id: string
           event_id: string
           processed_at: string
         }
         Insert: {
-          booking_id?: string | null
+          booking_id: string
           event_id: string
           processed_at?: string
         }
         Update: {
-          booking_id?: string | null
+          booking_id?: string
           event_id?: string
           processed_at?: string
         }
@@ -1882,9 +1949,17 @@ export type Database = {
       }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
+      confirm_order_payment: {
+        Args: { p_event_id?: string; p_order_id: string; p_success?: boolean }
+        Returns: Json
+      }
       confirm_payment: {
         Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }
         Returns: string
+      }
+      confirm_simulated_order_payment: {
+        Args: { p_order_id: string; p_success?: boolean }
+        Returns: Json
       }
       confirm_simulated_payment: {
         Args: { p_booking_id: string; p_success?: boolean }
@@ -1899,6 +1974,11 @@ export type Database = {
         Args: { p_product_id: string; p_slots: string[] }
         Returns: string
       }
+      create_booking_line: {
+        Args: { p_product_id: string; p_slots: string[]; p_student: string }
+        Returns: string
+      }
+      create_order: { Args: { p_lines: Json }; Returns: string }
       enqueue_notification: {
         Args: {
           p_channel: string
@@ -1924,6 +2004,7 @@ export type Database = {
         Returns: Json
       }
       f_unaccent: { Args: { "": string }; Returns: string }
+      find_open_order: { Args: { p_lines: Json }; Returns: string }
       gen_calendar_feed_token: { Args: never; Returns: string }
       generar_referencia_reserva: { Args: never; Returns: string }
       get_available_slots: {
@@ -1982,6 +2063,7 @@ export type Database = {
         }[]
       }
       open_conversation: { Args: { p_tutor_id: string }; Returns: string }
+      order_lines_fingerprint: { Args: { p_lines: Json }; Returns: string }
       pair_booking_stats: {
         Args: { p_student_id: string; p_tutor_id: string }
         Returns: {
@@ -2177,6 +2259,7 @@ export type Database = {
         | "approved"
         | "rejected"
       notification_status: "pending" | "sent" | "failed"
+      order_status: "pending_payment" | "paid" | "cancelled"
       payment_status:
         | "pending"
         | "authorized"
@@ -2352,6 +2435,7 @@ export const Constants = {
         "rejected",
       ],
       notification_status: ["pending", "sent", "failed"],
+      order_status: ["pending_payment", "paid", "cancelled"],
       payment_status: [
         "pending",
         "authorized",
