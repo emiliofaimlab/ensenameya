@@ -25,8 +25,15 @@ export function FeaturedProducts({
       <Container>
         {/* El hueco de abajo es donde cabalga la tarjeta de cifras (ver HomeStats).
             Con `sm:` porque si no gana el `sm:py-16` de Section y las tarjetas
-            quedan tapadas. */}
-        <Section className="pb-[124px] sm:pb-[164px]">
+            quedan tapadas.
+
+            US-1601 · y por lo mismo hace falta `md:max-lg:`: Section estrenó
+            ritmo de tablet (`md:max-lg:py-10`) y ese `py` gana al `sm:pb` por
+            orden de variante, así que entre 768 y 1023 el hueco se quedaba en
+            40px y la tarjeta de cifras —que tira 99px hacia arriba y no
+            depende del ancho— tapaba 59px de la última mentoría (medido).
+            El 164 no es ritmo, es la holgura que necesita ese solape. */}
+        <Section className="pb-[124px] sm:pb-[164px] md:max-lg:pb-[164px]">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-2xl font-semibold">
               Mentorías destacadas listas para reservar

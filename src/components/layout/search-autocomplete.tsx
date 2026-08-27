@@ -76,6 +76,20 @@ export function SearchAutocomplete({
 
   const term = q.trim();
 
+  /**
+   * El panel se cuelga de la caja, no del layout: se mide el `<form>` y se
+   * pinta a esas coordenadas de viewport.
+   *
+   * US-1601 · esto ya no es solo cosa del hero. Desde el Figma «Mobile y
+   * Tablet» la caja del header CAMBIA de sitio y de ancho con el ancho de
+   * pantalla —a 390 y a 768 es una fila entera (350 y 704 de ancho, segunda
+   * línea de la cabecera) y a partir de 1024 vuelve a ser la columna central—,
+   * así que el `rect` de cada ancho es distinto. No hay nada que ajustar
+   * porque se mide en vivo (al enfocar, al teclear, al hacer scroll y al
+   * redimensionar), pero conviene saberlo antes de "optimizar" esta medición:
+   * cachearla deja el desplegable flotando donde estaba el buscador antes de
+   * girar el móvil.
+   */
   function measure() {
     const r = formRef.current?.getBoundingClientRect();
     if (r) setRect({ left: r.left, top: r.bottom + 6, width: r.width });
@@ -189,7 +203,14 @@ export function SearchAutocomplete({
           className={cn(
             // Placeholder en #595959, que es el del Figma para esta barra (el
             // token `muted-foreground` es #4d4d4d, un punto más oscuro).
-            "h-11 w-full rounded-lg border border-border bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-[#595959] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+            //
+            // ⚠️ `min-w-0` no es decorativo (US-1601): el input es un hijo flex
+            // del `<form>` y su `min-width:auto` vale el ancho intrínseco de un
+            // `<input>` (~170 px). Sin esto la caja del header no puede encoger
+            // por debajo de ese suelo, y el arreglo del solape del header —que
+            // consiste precisamente en que sea el buscador quien ceda ancho a
+            // la navegación entre 1024 y ~1409— deja de funcionar.
+            "h-11 w-full min-w-0 rounded-lg border border-border bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-[#595959] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
             inputClassName,
           )}
         />

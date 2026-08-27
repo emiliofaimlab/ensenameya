@@ -48,6 +48,10 @@ type Item = SidebarItem;
  * "Mensajes", "Reseñas" y "Ayuda", que no tienen pantalla — un menú que lleva
  * a 404 es peor que un menú corto. "Configuración de perfil" se omite por
  * duplicar "Cuenta" (`/account`).
+ *
+ * ⚠️ Sigue siendo así en móvil y tablet. El Figma nuevo repite esos mismos
+ * chips inexistentes en «AL02 — Dashboard — Mobile» (11 chips donde el menú
+ * real tiene 6) y en TU06/AD02; se pintan los reales, no los dibujados.
  */
 const STUDENT_ITEMS: Item[] = [
   { href: "/app", label: "Inicio", icon: HomeIcon, exact: true },
@@ -65,10 +69,15 @@ export const TUTOR_ITEMS: Item[] = [
   // lado: contenido de la vitrina que se hereda en todas ellas.
   //
   // ⚠️ La etiqueta dice "Mis FAQ" y no "Preguntas frecuentes" por el hueco de
-  // la fila, que es `h-[41px]` FIJA y no envuelve: "Mentorías impartidas" (20
-  // caracteres, en el menú de admin) ya mide 155 px de los ~158 disponibles.
-  // "Preguntas frecuentes" tiene los mismos 20 y se saldría o quedaría al
-  // límite. El título de la pantalla sí es el largo.
+  // la fila: "Mentorías impartidas" (20 caracteres, en el menú de admin) ya
+  // mide 154 px a 14/600 de los ~158 que deja la columna de 232. "Preguntas
+  // frecuentes" tiene los mismos 20 y quedaría al límite. El título de la
+  // pantalla sí es el largo.
+  //
+  // Desde US-1601 la fila es `min-h-[41px]`, o sea que una etiqueta larga
+  // ENVUELVE en vez de desbordar (antes era `h-[41px]` fija y se salía). Eso
+  // quita el riesgo de rotura, no la razón de la etiqueta corta: dos líneas en
+  // el menú siguen sin ser lo que se quiere.
   { href: "/tutor/faqs", label: "Mis FAQ", icon: MessageCircleQuestionIcon },
   { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
   { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
@@ -99,10 +108,10 @@ export const ADMIN_ITEMS: Item[] = [
   // mentorías impartidas, uso interno para segmentar la campaña de tutores.
   // Cuelga de /admin/tutores y por eso va detrás: son el mismo tema.
   // ⚠️ Es la etiqueta más larga del menú y va justa: en activo (semibold) mide
-  // 155px de los ~158 que deja la columna de 232px. Cabe en una línea —medido,
-  // no estimado—, pero la fila es `h-[41px]` FIJA: una etiqueta más larga no
-  // envolvería, desbordaría. Si hace falta un nombre mayor, antes hay que
-  // quitarle el alto fijo a la fila.
+  // 154 px a 14/600 de los ~158 que deja la columna de 232 px, y 143 px a
+  // 13/600 de los 146 que deja la de 196 px que US-1601 le da a tablet. Cabe en
+  // una línea en las dos —medido con `measureText`, no estimado—, y si algún
+  // día no cupiera envolvería: la fila ya no tiene alto fijo.
   {
     href: "/admin/tutores/actividad",
     label: "Mentorías impartidas",
@@ -161,9 +170,27 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
   return (
     <nav
       aria-label="Menú del panel"
-      className="h-fit rounded-[16px] border border-[#e0e0e0] bg-card p-3 lg:sticky lg:top-24"
+      className={cn(
+        // US-1601 · POR DEBAJO DE 768 ESTO NO ES UNA TARJETA, SON CHIPS.
+        //
+        // El Figma «Mobile y Tablet» no dibuja ni un cajón ni una pestaña con
+        // scroll en los 115 frames: a 390 el menú del panel es una fila de
+        // chips que ENVUELVE y está siempre a la vista (`sidebar-nav · row
+        // wrap gap8` en AL02 — Dashboard — Mobile, `nav-chips` en TU06 y AD02).
+        // Sin marco, sin fondo y sin padding: los chips se apoyan directamente
+        // sobre el #f9fafc de la página.
+        //
+        // De 768 en adelante vuelve a ser la tarjeta de siempre (r16, borde
+        // #e0e0e0, 12 de padding), que es lo que pintan AL02 y AD02 tablet y lo
+        // que ya había en escritorio: la restitución en `md:` deja ≥1024 igual.
+        "h-fit rounded-none border-0 bg-transparent p-0",
+        "md:rounded-[16px] md:border md:border-[#e0e0e0] md:bg-card md:p-3",
+        // El `lg:sticky` se queda tal cual: los chips no deben pegarse, y el
+        // `top-24` (96) sigue despejando la cabecera de 73.
+        "lg:sticky lg:top-24",
+      )}
     >
-      <ul className="flex flex-col gap-1">
+      <ul className="flex flex-row flex-wrap gap-2 md:flex-col md:flex-nowrap md:gap-1">
         {items.map((item) => {
           const { href, label, icon: Icon } = item;
           // ⚠️ `mejorMatch >= 0` NO sobra. Sin él, en una ruta del área
@@ -180,25 +207,64 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
                 href={href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-[41px] items-center gap-2.5 rounded-lg px-3 text-sm transition-colors",
+                  // CHIP (base, <768): 38 de alto = pad9/14 + texto 13/20. Aquí
+                  // son pad 8 + borde 1 para que el total sea 38 EXACTOS con
+                  // `box-sizing: border-box`, que es lo que Figma dibuja sin
+                  // contar el trazo. r14 y no r8 porque en el archivo nuevo el
+                  // nodo se llama literalmente `chip` en dos de las tres áreas
+                  // (TU06 y AD02) y r14 es el radio de chip del sistema; el r8
+                  // de AL02 es la fila del menú reaprovechada.
+                  "flex min-h-[38px] items-center gap-2.5 rounded-[14px] border px-3.5 py-2 text-[13px] leading-5 transition-colors",
+                  // COLUMNA (≥768): `nav-item` 148x41 / 172x41 del Figma tablet,
+                  // pad10/12 y r8. `min-h` en vez del `h-[41px]` de antes: la
+                  // altura sale igual (10+20+10 = 40 → 41 por el mínimo) pero
+                  // una etiqueta que no quepa envuelve en vez de desbordar, que
+                  // es justo lo que avisaban los comentarios de arriba y lo que
+                  // el propio Figma hace con "Configuración de perfil" (148x62).
+                  "md:min-h-[41px] md:w-full md:rounded-lg md:border-0 md:px-3 md:py-2.5",
+                  // 13px hasta 1023 y 14 a partir de ahí. El Figma pide 14/21 en
+                  // la columna de tablet, pero con 168 px de columna solo quedan
+                  // 120 para la etiqueta y "Métodos de pago" mide 123 a 14/400
+                  // (medido con `measureText` en Poppins): a 13 mide 115 y entra
+                  // en una línea. El escritorio se restituye con `lg:text-sm`.
+                  "lg:text-sm",
                   active
-                    ? "bg-brand font-semibold text-white"
-                    : "text-[#666666] hover:bg-muted hover:text-foreground",
+                    ? // El borde va del color del relleno para que activo e
+                      // inactivo midan lo mismo: el activo del Figma no tiene
+                      // trazo y sin esto la fila de chips bailaría 2 px.
+                      "border-brand bg-brand font-semibold text-white"
+                    : "border-[#e0e0e0] bg-card text-[#666666] hover:bg-muted hover:text-foreground",
                 )}
               >
-                <Icon className="size-4 shrink-0" />
+                {/* El Figma no pinta iconos en NINGÚN menú de panel, ni en los
+                    chips de 390 ni en la columna de 768; son de la maqueta de
+                    escritorio (EP-22). Se esconden hasta `lg:` porque además son
+                    los 26 px que le faltan a la columna de 168 para que las
+                    etiquetas quepan en una línea. */}
+                <Icon className="size-4 shrink-0 max-lg:hidden" />
                 {label}
               </Link>
             </li>
           );
         })}
-        <li className="mt-2 pt-1">
+        {/* El aire que separa "Salir" del resto es el `Frame 10x8` que el Figma
+            mete antes de él en la columna de tablet. En modo chip no hay tal
+            separación: allí "Salir" es un chip más de la fila que envuelve. */}
+        <li className="mt-0 pt-0 md:mt-2 md:pt-1">
           <button
             type="button"
             onClick={() => setSignOutOpen(true)}
-            className="flex h-[41px] w-full items-center gap-2.5 rounded-lg px-3 text-sm font-medium text-[#bf3333] transition-colors hover:bg-[#bf3333]/5"
+            className={cn(
+              // Mismo chip que los demás; solo cambia el color del texto
+              // (#bf3333, el rojo apagado del "Salir" del archivo — el #dc2626
+              // de TU06 es de la página «tutor» del Figma, que va con los grises
+              // por defecto de Tailwind y es otra sesión de trabajo).
+              "flex min-h-[38px] w-auto items-center gap-2.5 rounded-[14px] border border-[#e0e0e0] bg-card px-3.5 py-2 text-[13px] leading-5 font-medium text-[#bf3333] transition-colors hover:bg-[#bf3333]/5",
+              "md:min-h-[41px] md:w-full md:rounded-lg md:border-0 md:bg-transparent md:px-3 md:py-2.5",
+              "lg:text-sm",
+            )}
           >
-            <LogOutIcon className="size-4 shrink-0" />
+            <LogOutIcon className="size-4 shrink-0 max-lg:hidden" />
             Salir
           </button>
         </li>

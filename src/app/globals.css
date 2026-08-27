@@ -33,6 +33,7 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
+  --color-muted-foreground-weak: var(--muted-foreground-weak);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-secondary: var(--secondary);
@@ -52,8 +53,26 @@
   --color-warning: var(--warning);
   --color-warning-muted: var(--warning-muted);
   --color-destructive-muted: var(--destructive-muted);
-  /* Sombra de tarjeta del Figma (P01: tutor, producto y pasos comparten esta). */
+  /* Sombra de tarjeta del Figma (P01: tutor, producto y pasos comparten esta).
+     El Figma «Mobile y Tablet» la confirma al dígito: `drop_shadow 0,2 blur10
+     spread0 #000/0.06`, 16 nodos en P01. No se toca. */
   --shadow-card: 0 2px 10px rgb(0 0 0 / 0.06);
+  /* US-1601 · las otras TRES sombras que se repiten en el archivo móvil/tablet
+     y que hasta hoy cada pantalla se inventaba. De 14.957 nodos solo 91 llevan
+     sombra (0,6%) frente a 1.643 con borde: en este diseño la elevación la lleva
+     el `stroke`, no el `shadow`. Por eso son cuatro tokens y no una escala. */
+  --shadow-catalog: 0 8px 22px -4px rgb(0 0 0 / 0.06); /* tutor-card y product-card de P04/P05 (24 nodos) */
+  --shadow-menu: 0 4px 12px rgb(0 0 0 / 0.2); /* desplegables del panel admin (24 nodos, 24 frames) */
+  --shadow-auth: 0 16px 40px -8px rgb(0 0 0 / 0.1); /* tarjeta de AU01…AU04 y AD01 (12 nodos) */
+  /* US-1601 · el cuerpo del diseño es 13/400/lh20 y Tailwind no lo tiene:
+     text-xs=12 y text-sm=14, y el repo llevaba redondeando a ojo en las dos
+     direcciones (216 `text-xs` contra 189 `text-sm`). 13px es el tamaño más
+     frecuente de los DOS anchos (1.414 nodos a 390 y 1.245 a 768). Se fija aquí
+     una vez para que no salgan 50 criterios.
+     ⚠️ R1: úsalo aditivo — `text-body lg:text-sm` donde hoy hay `text-sm` — o
+     el escritorio, que no lo cubre este Figma, cambia de tamaño de letra. */
+  --text-body: 0.8125rem; /* 13px */
+  --text-body--line-height: 1.25rem; /* 20px — la razón 1,5 es sistemática en todo el archivo */
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -65,7 +84,27 @@
 
 /* Tokens derivados del Figma "Enseñame Ya - Diseño Final" (fileKey tKTiQF8adZ7SMfNipylz86).
    El archivo no publica variables ni estilos: los valores salen de contar los fills de las 6
-   páginas de diseño vía REST API. Ver docs/BACKLOG.md §4.2. */
+   páginas de diseño vía REST API. Ver docs/BACKLOG.md §4.2.
+
+   US-1601 · EL ARCHIVO MÓVIL/TABLET NO ARBITRA EL COLOR, Y MANDA EL DE ARRIBA.
+   19 de estos 20 tokens aparecen en el Figma «Mobile y Tablet» y muchos con
+   muchísimo uso (#0080ff 1.180 nodos, #e0e0e0 1.007, #14141a 747, #fe6a00 354),
+   así que la paleta del escritorio aguanta y NO se re-mapea nada. El único que
+   no sale ni una vez es --destructive-muted: se queda igualmente, porque el
+   archivo nuevo tampoco pinta ningún estado de error de formulario.
+   Lo que no se puede copiar del móvil son los grises, porque hay TRES dialectos
+   repartidos por página de Figma y ninguno coincide con este par:
+     · home            → titular #242424 / metadato #666666
+     · alumno + admin  → titular #19191f / metadato #6b6b6b
+     · tutor           → los grises por defecto de Tailwind (#1f2937 gray-800,
+                         #6b7280 gray-500, #e5e7eb gray-200; 1.558 nodos, CERO
+                         apariciones fuera de esa página — es otra sesión de
+                         trabajo, la misma que usa pad-x 28 en vez de 32)
+   Tres dialectos y ningún design system que decida entre ellos: el archivo no
+   arbitra. Al maquetar, los titulares van a --foreground y los bordes a
+   --border aunque el frame diga #1f2937 o #ebebeb; para el metadato hay dos
+   escalones, --muted-foreground (#4d4d4d) y --muted-foreground-weak (#6b6b6b).
+   Y las superficies #fafafa / #f3f4f6 van a --muted o --secondary. */
 :root {
   --background: #ffffff;
   --foreground: #14141a;
@@ -84,6 +123,12 @@
   --secondary-foreground: #14141a;
   --muted: #f9fafc;
   --muted-foreground: #4d4d4d; /* color de cuerpo de P01 (#666 solo en metadatos) */
+  /* US-1601 · el segundo gris de texto del Figma móvil/tablet: 894 nodos, casi
+     todos metadato y cuerpo secundario. Existía ya en el fichero, pero con el
+     nombre equivocado (--chart-5), que no es lo que es; y estaba escrito a mano
+     en panel-shell.tsx:64 como `text-[#6b6b6b]`. Es un escalón MÁS FLOJO que
+     --muted-foreground, no su sustituto: los dos conviven. */
+  --muted-foreground-weak: #6b6b6b;
   --accent: #f0f0f0;
   --accent-foreground: #14141a;
 

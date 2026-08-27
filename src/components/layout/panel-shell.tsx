@@ -10,6 +10,16 @@ import { AppSidebar, type SidebarItem } from "@/components/layout/app-sidebar";
  * lateral (contenido de 1200), menú de 232 y 24 de separación.
  *
  * `Container` no sirve aquí: las públicas usan 64 px de aire (contenido 1152).
+ *
+ * US-1601 · TRES BANDAS, NO UNA. El Figma «Mobile y Tablet» añade dos estados
+ * por debajo de 1024 y la rejilla los recoge así:
+ *
+ *   <768  una columna; el menú es una fila de chips que envuelve (`AppSidebar`).
+ *   768+  dos columnas de 168+contenido (AL02 tablet) o 196+contenido en admin
+ *         (AD02 tablet). Hasta ahora la rejilla solo se abría en `lg:`, así que
+ *         entre 768 y 1023 el menú salía apilado A TODO EL ANCHO encima del
+ *         contenido: 304 px de empujón en /app y 439 en /tutor, medidos.
+ *   1024+ los 232 px de siempre, intactos.
  */
 export type PanelShellProps = {
   items?: SidebarItem[];
@@ -54,6 +64,19 @@ export function PanelShell({
   actions,
   children,
 }: PanelShellProps) {
+  /**
+   * US-1601 · La columna de tablet mide 196 en admin y 168 en el resto, que es
+   * lo que dibuja el Figma (AD02 y AL02 tablet). La diferencia no es capricho:
+   * el menú de admin es el de las etiquetas largas —"Mentorías impartidas" mide
+   * 143 px a 13/600 y en 168 solo caben 120— y con 196 entra en una línea.
+   *
+   * Se DEDUCE del propio menú en vez de pasarse por prop porque `/pagos` y
+   * `/account` cambian de menú EN CALIENTE según el panel del que vengas
+   * (`panelItems`, `src/lib/auth/panel-items.ts`): quien las pinta no sabe cuál
+   * le va a tocar, así que un prop se equivocaría justo en esas dos.
+   */
+  const menuAncho = items?.[0]?.href === "/admin";
+
   return (
     <div className="flex-1 bg-muted py-8">
       <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-10">
@@ -74,7 +97,14 @@ export function PanelShell({
             // una y el contenido usa los 1200 px enteros. Con `lg:grid-cols`
             // puesto y el `<AppSidebar>` fuera, la primera pista de 232 px
             // seguiría existiendo vacía.
-            sidebar && "lg:grid-cols-[232px_1fr]",
+            sidebar &&
+              (menuAncho
+                ? // AD02 — Dashboard Admin — Tablet: `body · row gap24` con
+                  // lateral de 196 y contenido de 484 (medido: 705−196−24=485).
+                  "md:grid-cols-[196px_1fr] lg:grid-cols-[232px_1fr]"
+                : // AL02 — Dashboard — Tablet: `body-row · row gap16` con
+                  // lateral de 168 y contenido de 520 (medido: 705−168−16=521).
+                  "md:grid-cols-[168px_1fr] md:gap-4 lg:grid-cols-[232px_1fr] lg:gap-6"),
           )}
         >
           {sidebar ? <AppSidebar items={items} /> : null}

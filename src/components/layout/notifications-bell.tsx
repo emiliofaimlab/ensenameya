@@ -181,7 +181,20 @@ export function NotificationsBell({ initial }: { initial: AppNotice[] }) {
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-80">
+      {/*
+        US-1601 · hasta ahora esta campana solo existía por encima de 768 (vivía
+        dentro de un `hidden … md:flex` del header y no tenía copia en el cajón),
+        así que este desplegable nunca se había abierto en un móvil. Ahora sí, y
+        a 390 el disparador está a la IZQUIERDA de la fila del avatar, no pegado
+        al borde derecho: con `align="end"` a secas el panel de 320 px se salía
+        de la pantalla. `collisionPadding` lo mete dentro dejando aire, y el
+        `max-w-` lo acota para pantallas más estrechas que 320+24.
+      */}
+      <DropdownMenuContent
+        align="end"
+        collisionPadding={12}
+        className="w-80 max-w-[calc(100vw-24px)]"
+      >
         <DropdownMenuLabel className="flex items-center justify-between gap-3 font-normal">
           <span className="text-[13.5px] font-semibold">Avisos</span>
           {unread > 0 ? (

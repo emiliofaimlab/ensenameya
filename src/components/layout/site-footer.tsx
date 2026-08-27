@@ -54,15 +54,31 @@ const AÑO = new Date().getFullYear();
 export function SiteFooter() {
   return (
     <footer className="mt-auto bg-muted">
-      <Container className="py-10">
-        <div className="flex flex-col gap-8 md:flex-row md:justify-between">
+      {/* US-1601 · El aire vertical sale del `v3-footer` del Figma nuevo:
+          pad 32/28 a 390 y 40/28 a 768. `lg:pb-10` devuelve el `py-10` de
+          escritorio (EP-22, en producción desde el 22-jul) sin tocarlo — el
+          `pt-10` de `md:` ya sigue vigente ahí, así que ≥1024 vuelve a ser
+          40/40 exactos. Los 28 de abajo son los ~12 px que este pie se pasaba
+          del alto que pide el diseño en tablet. */}
+      <Container className="pt-8 pb-7 md:pt-10 lg:pb-10">
+        {/* gap-6 = los 24 px que el Figma pone entre los bloques del pie
+            móvil; `md:gap-8` restituye los 32 de tablet y escritorio. */}
+        <div className="flex flex-col gap-6 md:flex-row md:justify-between md:gap-8">
           <div className="max-w-[592px]">
+            {/* La marca. El Figma no dibuja este SVG: escribe a mano el
+                imagotipo «yä» (20/30) en móvil y el logotipo «Enséñame ya»
+                (700 18/27, azul) en tablet, porque Diana no tenía el asset.
+                Se queda el SVG —es la marca de verdad y coincide con la
+                versión móvil— pero baja a 40 px por debajo de `lg`: a 60 pesa
+                el doble que el bloque de marca del diseño (30 a 390, 27 a
+                768) y era la mitad del exceso de alto medido en tablet.
+                `lg:h-[60px]` deja el escritorio como estaba. */}
             <Image
               src="/img/logo-ya.svg"
               alt="Enséñame Ya"
               width={56}
               height={60}
-              className="h-[60px] w-auto"
+              className="h-10 w-auto lg:h-[60px]"
             />
             <p className="mt-2 text-[13px] text-muted-foreground">
               Conectamos el conocimiento y la pasión con mentorías en vivo 1 - 1
@@ -108,8 +124,15 @@ export function SiteFooter() {
               dejaba las tres columnas a ~18 px, así que "Privacidad" se salía
               de la pantalla y toda la página cogía scroll horizontal. Con
               `shrink-0` los enlaces conservan su ancho y lo que cede es el
-              párrafo, que para eso es texto fluido. */}
-          <div className="grid shrink-0 grid-cols-2 gap-8 sm:grid-cols-3">
+              párrafo, que para eso es texto fluido.
+
+              US-1601 (móvil) · La base pasa de 2 columnas a 1: el Figma apila
+              PRODUCTO / EMPRESA / LEGAL en TODOS los frames de 390
+              (`footer-cols · col gap20`), y con `grid-cols-2` la tercera
+              quedaba huérfana debajo de las otras dos. `sm:` restituye las 3
+              columnas y el gap-8 tal cual estaban de 640 en adelante, así que
+              tablet y escritorio no se mueven. */}
+          <div className="grid shrink-0 grid-cols-1 gap-5 sm:grid-cols-3 sm:gap-8">
             {columns.map((column) => (
               <nav key={column.title} aria-label={column.title}>
                 <p className="text-[11px] font-semibold tracking-wide text-brand">
@@ -132,9 +155,17 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <hr className="mt-8 border-t border-primary" />
+        {/* La divisoria naranja se queda: el Figma se contradice consigo mismo
+            —#fe6a00 en «P01 Tablet» y «AL02 Tablet», #e0e0e0 en AU01/TU06/AD02—
+            y el naranja es el que ya está en producción desde EP-22. Anotado
+            como divergencia razonada.
 
-        <div className="flex flex-col gap-2 pt-4 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            El Figma reparte 24 arriba y 24 abajo de la línea; el repo tenía
+            32/16. Misma suma, pero así la línea cae donde la dibuja el diseño.
+            `lg:` devuelve el 32/16 del escritorio. */}
+        <hr className="mt-6 border-t border-primary lg:mt-8" />
+
+        <div className="flex flex-col gap-2 pt-6 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:pt-4">
           <p>© {AÑO} {COMPANY.brand}</p>
 
           <div className="flex flex-wrap items-center gap-4">
