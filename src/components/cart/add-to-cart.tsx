@@ -1,130 +1,140 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckIcon, ShoppingCartIcon } from "lucide-react";
+import { ShoppingCartIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import {
   CART_MAX_LINEAS,
   addCartLine,
   cartHasKeySnapshot,
   cartLineKey,
-  subscribeCart,
 } from "@/lib/cart/cookie";
 
 /**
- * EY-177 · B3.2 · PASO 1 DE 3 — el botón de la ficha. Uno, y luego dos.
- *
- * Petición del cliente, literal: «cuando ya seleccione el día y la fecha, sale
- * **1 botón que es agregar al carrito**. Si le doy, se oculta ese y se muestran
- * **dos botones** ahora: el primero de agregar al carrito / seguir comprando y
- * el segundo de ir al carrito. Esto porque si un tutor tiene dos clases, yo
- * seleccioné la primera, día y fecha, agregué al carrito, quiero repetir lo
- * mismo con su segunda clase […] **sin salirme de esa visual**».
- *
- * «Sin salirme de esa visual» es el requisito de verdad, y es el que decide la
- * forma de este componente: añadir **no navega**. Escribe la cookie, llama a
- * `router.refresh()` para que el contador de la cabecera —que se pinta en
- * servidor— se entere, y cambia el par de botones en el sitio. «Seguir
- * comprando» sí navega, pero a la MISMA pantalla con la selección en blanco
- * (`seguirHref` = la URL de hoy sin `p` ni `h`), que es lo que el cliente
- * describe: elegir la segunda clase del mismo tutor sin irse a ningún lado.
+ * EY-177 · B3.6 · EL BOTÓN PRINCIPAL. **UNO, Y SIEMPRE EL MISMO.**
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * ⚠️ ESTO ES UNA MARCHA ATRÁS SOBRE **N-33**, Y HAY QUE SABERLO.
+ * ⚠️ ESTO SUSTITUYE AL MODELO «UNO Y LUEGO DOS». NO LO REPONGAS.
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * El 17-ago se QUITÓ una pantalla del camino de la sesión suelta porque el
- * cliente se quejó de lo contrario: «estás seleccionando dos veces algo», «me
- * mareó un poco que el calendario salga dos veces». Desde entonces el botón de
- * este panel iba DERECHO al checkout con la hora en la URL. Ahora vuelve a
- * haber una pantalla en medio (la revisión), o sea una más que ayer.
+ * Hasta hoy, pulsar «Agregar al carrito» OCULTABA el botón y lo cambiaba por
+ * «Seguir comprando» + «Ir al carrito». Se hizo así porque el cliente lo pidió
+ * con esas palabras, y el fallo se vio en cuanto estuvo en pantalla: al añadir
+ * desaparecía **la acción principal**, así que para apuntar una segunda mentoría
+ * había que deducir que «Seguir comprando» era lo que devolvía el botón. Un
+ * control que se esconde justo después de que aprendas a usarlo.
  *
- * Lo que sí se conserva —y era la queja real, no el número de pantallas— es que
- * **no se vuelve a preguntar lo mismo**: la revisión no repinta ningún
- * calendario, solo enseña lo que ya se eligió. La pantalla intermedia que N-33
- * mató era otro selector; ésta es un resumen. Si el cliente vuelve a quejarse
- * de pasos, la salida barata es un atajo «Comprar solo esta» aquí al lado — no
- * quitar la revisión, que es donde el carrito de varias líneas cobra sentido.
+ * El modelo nuevo, acordado con el responsable, separa las dos preguntas que el
+ * anterior mezclaba:
+ *
+ *   · **«Agregar al carrito» SIEMPRE está**, y depende de la SELECCIÓN:
+ *     bloqueado mientras no haya mentoría y hora, activo en cuanto las hay.
+ *   · **«Ir al carrito»** (`go-to-cart.tsx`, un componente aparte) depende del
+ *     CARRITO: sale si dentro hay algo, sin importar lo que acabes de hacer.
+ *
+ * Tras añadir, este botón **no cambia de forma**: se limpia la selección —o sea
+ * se navega a `limpiarHref`, ver abajo— y el propio botón vuelve solo a
+ * bloqueado, con la pantalla lista para la siguiente mentoría. Eso es lo que
+ * pedía el cliente («repetir lo mismo con su segunda clase sin salirme de esa
+ * visual») sin el efecto secundario de esconderle el botón.
+ *
+ * ⚠️ Y LA CONFIRMACIÓN ES UN AVISO QUE SE DESVANECE, no un cambio de estado.
+ * Antes, «Añadida al carrito» era un texto permanente bajo los dos botones: se
+ * quedaba ahí, y a los diez segundos ya no se sabía si hablaba de lo que
+ * acababas de hacer o de algo de hace un rato. Un `toast` dice «acaba de pasar»
+ * por el hecho de aparecer, y se va solo. El acuse persistente lo da el número
+ * del «Ir al carrito», que es un hecho, no un recuerdo.
  *
  * ⚠️ LOS PAQUETES NO PASAN POR AQUÍ. Una línea del carrito es una mentoría con
  * TODOS sus horarios, y un `per_package` de N sesiones necesita N horarios que
- * no caben en este panel lateral (RN-12). Ese caso sigue yendo al selector
- * múltiple de `/reservar/<id>`, que es donde se completa la línea y donde está
- * su propio «Agregar al carrito». `booking-panel.tsx` decide cuál de los dos
- * pinta; aquí solo llegan líneas completas.
+ * no caben en el panel lateral de la ficha (RN-12). Ese caso sigue yendo al
+ * selector múltiple de `/reservar/<id>`, que es donde se completa la línea y
+ * donde está su propio «Agregar al carrito». `booking-panel.tsx` decide cuál de
+ * los dos pinta; aquí solo llegan líneas completas.
  */
 export function AddToCart({
   productId,
   slots,
-  seguirHref,
+  limpiarHref,
+  motivo,
   ctaLabel = "Agregar al carrito",
   className,
   buttonClassName = "h-[51px] w-full text-[15px]",
 }: {
-  productId: string;
   /**
-   * Los horarios de la línea, en **instantes** (ms). Ya validados en servidor
-   * contra los huecos reales: `booking-panel` solo pasa el ISO canónico que
-   * casó por `Date.parse`, nunca el texto crudo de la URL. Ver `lib/cart/cookie.ts`
-   * para por qué se guardan como número y no como ISO.
+   * La mentoría elegida, o `null` mientras no hay ninguna. **Puede ser nulo a
+   * propósito**: el botón se pinta igual, bloqueado, porque la promesa de la
+   * pantalla no puede aparecer y desaparecer con la selección.
+   */
+  productId: string | null;
+  /**
+   * Los horarios de la línea, en **instantes** (ms), o vacío si aún no hay hora.
+   * Ya validados en servidor contra los huecos reales: `booking-panel` solo pasa
+   * el ISO canónico que casó por `Date.parse`, nunca el texto crudo de la URL.
+   * Ver `lib/cart/cookie.ts` para por qué se guardan como número y no como ISO.
    */
   slots: number[];
-  /** Misma pantalla, selección en blanco: el «seguir comprando» del cliente. */
-  seguirHref: string;
+  /**
+   * A dónde navegar TRAS AÑADIR para dejar la pantalla lista para la siguiente
+   * mentoría: la misma pantalla con la selección en blanco.
+   *
+   * ⚠️ ES UNA NAVEGACIÓN Y NO UN `setState`, y ésa es la trampa entera. El panel
+   * de reserva es un componente de **servidor** y su estado ES la query string
+   * (`?p=…&d=…&h=…`) — está argumentado en `booking-select.tsx`: «la verdad
+   * sigue estando en la query». Así que «limpiar los campos» solo puede
+   * significar ir a la misma URL sin esos parámetros y dejar que el servidor
+   * repinte. Un estado de cliente aquí sería una segunda verdad que la recarga y
+   * el botón atrás desmentirían.
+   *
+   * Sin este `href` no se navega: hay pantallas donde no hay nada que limpiar.
+   */
+  limpiarHref?: string;
+  /** Qué falta para poder añadir. Sale como `title` del botón bloqueado. */
+  motivo?: string;
   ctaLabel?: string;
-  /** Del contenedor, no de los botones: los tres miden lo mismo a propósito. */
+  /** Del contenedor, no del botón. */
   className?: string;
   /**
-   * La medida de los botones. Por defecto la del panel de la ficha (51 px de
-   * B3.5); el selector de paquetes pasa la suya (45 px) porque allí este botón
-   * convive con «Continuar al pago» y dos alturas distintas en la misma tarjeta
-   * se leen como dos importancias distintas.
+   * La medida del botón. Por defecto la del panel de la ficha (51 px de B3.5);
+   * el selector de paquetes pasa la suya (45 px) porque allí este botón convive
+   * con «Continuar al pago» y dos alturas distintas en la misma tarjeta se leen
+   * como dos importancias distintas.
    */
   buttonClassName?: string;
+  /**
+   * @deprecated ⚠️ PUENTE TEMPORAL, BÓRRALO EN CUANTO PUEDAS.
+   *
+   * Era el destino del botón «Seguir comprando» del modelo viejo. Hoy no se lee.
+   * Sigue declarado solo para que `reservar/[productId]/slot-picker.tsx` —que lo
+   * pasa y que está siendo rediseñado en paralelo— compile mientras tanto.
+   * Ignorarlo en vez de tratarlo como `limpiarHref` es deliberado: allí vale
+   * `/tutors/<id>`, y navegar solo a la ficha del tutor tras añadir un paquete
+   * se llevaría por delante el «Continuar al pago» que la tarjeta tiene al lado.
+   * Cuando esa pantalla pase al modelo nuevo, se quita de los dos sitios.
+   */
+  seguirHref?: string;
 }) {
   const router = useRouter();
-  const line = { productId, slots };
-  const key = cartLineKey(line);
-
-  /*
-   * ¿ESTÁ ESTA LÍNEA EN EL CARRITO? Se le PREGUNTA A LA COOKIE, no se recuerda
-   * haber pulsado. Son cosas distintas: quien recarga la ficha, vuelve con el
-   * botón atrás o abre un enlace compartido de un horario que ya tenía apuntado
-   * tiene que ver los dos botones sin haber pulsado nada en esta vida del
-   * componente.
-   *
-   * ⚠️ `useSyncExternalStore` Y NO `useState` + `useEffect`, por tres razones y
-   * las tres muerden:
-   *
-   *   1. La cookie ES un almacén externo. Con estado propio habría dos copias de
-   *      la verdad y la de React se quedaría vieja en cuanto otra pestaña —o la
-   *      pantalla de revisión, que limpia lo ya comprado— tocara el carrito.
-   *   2. Resuelve el SSR sin parpadeo ni desajuste de hidratación:
-   *      `getServerSnapshot` devuelve `false` (en el servidor no hay
-   *      `document.cookie`) y React vuelve a preguntar ya en el navegador. Un
-   *      `setState` dentro de un efecto para lo mismo es justo lo que prohíbe la
-   *      regla `react-hooks/set-state-in-effect`, y con razón: son renders en
-   *      cascada.
-   *   3. Cambiar de línea no necesita ningún reinicio manual. Al pulsar «Seguir
-   *      comprando» la pantalla no se desmonta —misma ruta, otra query—, así que
-   *      con estado propio React reutilizaría este componente y `dentro` se
-   *      quedaría en `true` sobre una línea nueva (el tropiezo que
-   *      `booking-select.tsx` resolvió con su `previo`). Aquí la respuesta
-   *      depende solo de `key`, y `key` ya cambió.
-   */
-  const dentro = useSyncExternalStore(
-    subscribeCart,
-    useCallback(() => cartHasKeySnapshot(key), [key]),
-    () => false,
-  );
+  const listo = productId !== null && slots.length > 0;
 
   function agregar() {
+    // La misma condición que `listo`, escrita otra vez para que TypeScript
+    // estreche `productId`. El botón ya está bloqueado; esto es el cinturón.
+    if (productId === null || slots.length === 0) return;
+
+    const line = { productId, slots };
+    /*
+     * ⚠️ SE PREGUNTA ANTES DE ESCRIBIR. `addCartLine` es idempotente y devuelve
+     * `null` tanto si añadió como si la línea YA estaba (que es lo que pasa con
+     * un doble clic, o al volver a un enlace compartido de un horario que ya se
+     * apuntó). Sin esta comprobación el aviso diría «Añadida» sin haber añadido
+     * nada, y encima el contador no saltaría — dos señales contradictorias.
+     */
+    const yaEstaba = cartHasKeySnapshot(cartLineKey(line));
     const fallo = addCartLine(line);
+
     if (fallo === "lleno") {
       toast.error(
         `El carrito admite ${CART_MAX_LINEAS} mentorías. Paga las que tienes o quita alguna.`,
@@ -135,63 +145,50 @@ export function AddToCart({
       toast.error("No se pudo agregar esta mentoría. Vuelve a elegir la hora.");
       return;
     }
-    // El botón se convierte en los dos botones SOLO: `addCartLine` dispara
-    // `CART_EVENT` al escribir y la suscripción de arriba lo recoge. No hay
-    // `setState` que sincronizar.
-    //
-    // El `refresh()` sí hace falta, y es por el SERVIDOR: el contador de la
-    // cabecera se pinta desde la cookie en el layout, y sin invalidar su render
-    // el número no cambiaría hasta la siguiente navegación completa. No navega
-    // a ningún sitio — repinta en el mismo, que es el «sin salirme de esa
-    // visual» del encargo.
-    router.refresh();
-  }
 
-  if (!dentro) {
-    return (
-      <div className={className}>
-        <Button onClick={agregar} className={buttonClassName}>
-          <ShoppingCartIcon className="size-4" />
-          {ctaLabel}
-        </Button>
-      </div>
+    /*
+     * ⚠️ ARRIBA, Y NO EN LA ESQUINA DE SIEMPRE. El `Toaster` del layout raíz no
+     * declara posición, así que sonner los pinta abajo a la derecha — que es
+     * exactamente donde vive la barra `sticky bottom-0` de las dos pantallas que
+     * usan este botón (la ficha, B3.5, y el selector de paquetes). El aviso
+     * taparía el «Ir al carrito» que acaba de aparecer y su salto: el acuse se
+     * comería al acuse. Es el único toast del proyecto que compite con una barra
+     * fija, y por eso es el único que mueve su sitio.
+     */
+    toast.success(
+      yaEstaba ? "Ya la tenías en el carrito" : "Añadida al carrito",
+      { position: "top-center" },
     );
+
+    /*
+     * Limpiar = navegar. Y no hace falta `router.refresh()`: `push` a otra query
+     * ya provoca un render nuevo del servidor (estas fichas son dinámicas —leen
+     * cookies para la zona horaria—, así que el router no las reutiliza de su
+     * caché), y el contador de la cabecera no depende de ese render: vive sobre
+     * la cookie y se entera por `CART_EVENT`, que acaba de dispararse solo.
+     */
+    if (limpiarHref) router.push(limpiarHref);
   }
 
   return (
     <div className={className}>
-      {/* El orden es el que pidió el cliente: primero seguir comprando,
-          después ir al carrito. Y el de ir al carrito es el que va relleno —
-          es el que cierra la compra; el otro es quedarse.
-
-          ⚠️ EN UNA FILA Y NO APILADOS, y no es gusto: en la ficha esta zona es
-          la barra `sticky bottom-0` de B3.5, que en móvil flota sobre el panel.
-          Dos botones apilados la subían de ~85 a ~150 px y agravaban el solape
-          transitorio que esa barra ya documenta como coste aceptado. En una
-          fila mide lo mismo que el botón único al que sustituye.
-
-          Y por eso las etiquetas son cortas —«Seguir comprando» es literal del
-          cliente—: con «Agregar otra mentoría» el texto se parte en dos líneas
-          dentro de un panel lateral de 330 px. */}
-      <div className="grid grid-cols-2 gap-2">
-        <Button
-          variant="outline"
-          asChild
-          className={cn(buttonClassName, "px-2 text-[13.5px]")}
-        >
-          <Link href={seguirHref}>Seguir comprando</Link>
-        </Button>
-        <Button asChild className={cn(buttonClassName, "px-2 text-[13.5px]")}>
-          <Link href="/carrito">Ir al carrito</Link>
-        </Button>
-      </div>
-      {/* Confirmación en texto, no solo en el cambio de botones: sin ella, en
-          móvil el pulgar tapa la zona justo al pulsar y el único indicio de que
-          pasó algo es que el botón cambió de sitio debajo del dedo. */}
-      <p className="mt-2 flex items-center justify-center gap-1.5 text-xs text-[#4b4b4b]">
-        <CheckIcon className="size-3.5 text-brand" />
-        Añadida al carrito
-      </p>
+      <Button
+        onClick={agregar}
+        disabled={!listo}
+        /* ⚠️ El `title` NO se ve al pasar el ratón: `Button` trae
+           `disabled:pointer-events-none`, así que un botón bloqueado no recibe
+           hover. Se conserva porque sí llega al árbol de accesibilidad como
+           descripción del control. Quien mira la pantalla se entera por el
+           TEXTO del panel («Elige una sesión para ver sus horarios y su
+           precio» / «Elige tu hora y confirma abajo»), que es donde tiene que
+           estar: la explicación de por qué algo está bloqueado no puede
+           depender de descubrir un tooltip. */
+        title={listo ? undefined : motivo}
+        className={buttonClassName}
+      >
+        <ShoppingCartIcon className="size-4" />
+        {ctaLabel}
+      </Button>
     </div>
   );
 }
