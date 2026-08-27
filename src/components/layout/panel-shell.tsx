@@ -13,6 +13,25 @@ import { AppSidebar, type SidebarItem } from "@/components/layout/app-sidebar";
  */
 export type PanelShellProps = {
   items?: SidebarItem[];
+  /**
+   * ⚠️ `false` = pantalla del área con sesión **sin menú lateral**, con el mismo
+   * ancho, el mismo aire y el mismo fondo que las demás.
+   *
+   * Existe por `/reservar/<id>`, y el precedente del razonamiento es N-37 (ver
+   * `src/app/(checkout)/layout.tsx`): una pantalla cuyo único trabajo es
+   * terminar una elección no gana nada llevando cinco salidas al lado. La
+   * diferencia con el checkout es de grado y por eso esto es una opción y no un
+   * grupo de rutas nuevo: allí se desnuda TODO (cabecera, pie, chat) porque se
+   * está cobrando; aquí solo sobra el menú, que además no marca ningún ítem en
+   * esa ruta —`matchLength` devuelve -1 en todos— y por tanto no dice dónde
+   * estás, que es lo único que un menú tiene que hacer.
+   *
+   * ⚠️ Y el contenedor NO se toca al quitarlo: el mismo `max-w`, el mismo
+   * `px-4 sm:px-6 lg:px-10`. Hay barras `sticky` que cancelan ese aire con
+   * `-mx-4 sm:-mx-6` contando SUS números (la de `slot-picker.tsx`, EY-180);
+   * cambiar aquí el padding las descuadra sin que se vea en ningún typecheck.
+   */
+  sidebar?: boolean;
   /** "← Volver al panel" del Figma, encima de la rejilla (159:17). */
   back?: { href: string; label: string };
   /** Cabecera de pantalla: antetítulo + título 24/700 + subtítulo + acción a
@@ -27,6 +46,7 @@ export type PanelShellProps = {
 
 export function PanelShell({
   items,
+  sidebar = true,
   back,
   title,
   eyebrow,
@@ -47,8 +67,17 @@ export function PanelShell({
           </Link>
         ) : null}
 
-        <div className="grid items-start gap-6 lg:grid-cols-[232px_1fr]">
-          <AppSidebar items={items} />
+        <div
+          className={cn(
+            "grid items-start gap-6",
+            // Sin menú no hay dos columnas que repartir: la rejilla se queda en
+            // una y el contenido usa los 1200 px enteros. Con `lg:grid-cols`
+            // puesto y el `<AppSidebar>` fuera, la primera pista de 232 px
+            // seguiría existiendo vacía.
+            sidebar && "lg:grid-cols-[232px_1fr]",
+          )}
+        >
+          {sidebar ? <AppSidebar items={items} /> : null}
           {/* ⚠️ `min-w-0` NO es decoración, y quitarlo rompe la página entera.
               Un hijo de grid nace con `min-width: auto`, o sea que se niega a
               encogerse por debajo del ancho INTRÍNSECO de su contenido. En
