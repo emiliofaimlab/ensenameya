@@ -1,7 +1,7 @@
 import type { User } from "@supabase/supabase-js";
 
 import type { HeaderUser } from "@/components/layout/site-header";
-import { avatarUrl } from "@/lib/avatar";
+import { storageUrl } from "@/lib/catalog/format";
 import { panelsFor, pickHome, type AppRole } from "./roles";
 
 /**
@@ -27,7 +27,7 @@ export function toHeaderUser(
   return {
     email: user.email ?? "",
     name: profile.fullName?.trim() || metaName?.trim() || null,
-    avatarUrl: avatarUrl(profile.avatarPath ?? null),
+    avatarUrl: storageUrl("avatars", profile.avatarPath),
     homeHref: pickHome(roles),
     panels: panelsFor(roles),
   };

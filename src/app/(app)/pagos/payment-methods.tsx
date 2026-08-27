@@ -1,95 +1,218 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { CreditCardIcon, LockIcon, PlusIcon } from "lucide-react";
 
-import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 
-export type Card = { id: string; brand: string | null; last4: string | null };
-
-const selectClasses =
-  "h-8 w-full rounded-lg border border-input bg-transparent px-2.5 py-1 text-base outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
+export type Card = {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+};
 
 /**
- * US-607 (RN-43) — card-on-file con PSP simulado. Solo marca + últimos 4 (display);
- * el PAN nunca se toca. El token lo emitiría el PSP; aquí es un stub reutilizable.
+ * PAC-02 · las tarjetas guardadas, tal como las tiene el proveedor.
+ *
+ * N-31 · desde el 17-ago SÍ se pueden añadir desde aquí. Antes esta pantalla
+ * solo sabía borrar y la única forma de guardar una tarjeta era empezar una
+ * compra y marcar la casilla del checkout — quien quería dejar el medio de pago
+ * listo antes de reservar no tenía manera.
+ *
+ * ⚠️ SIN CAMPOS DE TARJETA NUESTROS, que es lo que bloqueaba esto. El formulario
+ * que se monta al pulsar "Añadir tarjeta" es el MISMO de Stripe que el checkout
+ * (`StripeEmbed`), abierto en `mode: 'setup'`: el PAN vive en un iframe del
+ * proveedor y no toca nuestro DOM, así que el proyecto sigue en PCI-DSS SAQ A.
+ * Pintar aquí número/CVC propios nos llevaría a SAQ D, y por eso la versión
+ * anterior de este comentario decía que no había formulario.
+ *
+ * MN-01 · este es el TERCER punto de montaje del formulario de pago, y va con
+ * los otros dos: el 20-ago pasó a `ui_mode: 'form'` a la vez que el cobro y que
+ * el "Pagar ahora". Dejarlo atrás habría dejado dos formularios de pago con
+ * aspectos distintos en el mismo producto.
  */
-export function PaymentMethods({ userId, cards }: { userId: string; cards: Card[] }) {
+export function PaymentMethods({
+  cards,
+  puedeAnadir,
+  sesionVuelta,
+}: {
+  cards: Card[];
+  /** Stripe configurado (secreta + publicable). Sin las dos no hay formulario
+   *  que abrir, así que no se ofrece un botón que solo puede fallar. */
+  puedeAnadir: boolean;
+  /** `?tarjeta=cs_…` con el que Stripe nos devuelve tras guardar. */
+  sesionVuelta: string | null;
+}) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [brand, setBrand] = useState("Visa");
-  const [last4, setLast4] = useState("");
+  const [borrando, setBorrando] = useState<string | null>(null);
+  const [abriendo, setAbriendo] = useState(false);
+  const [embed, setEmbed] = useState<Embed | null>(null);
 
-  async function addCard(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!/^\d{4}$/.test(last4)) return toast.error("Ingresa los últimos 4 dígitos.");
+  // Al volver del formulario: confirmar contra Stripe (ver el PATCH del Route
+  // Handler), limpiar la query y repintar la lista con la tarjeta nueva.
+  //
+  // El `ref` es por el doble montaje de React en desarrollo: la llamada es
+  // idempotente, pero dos toasts seguidos parecen dos tarjetas guardadas.
+  const yaConfirmada = useRef(false);
+  useEffect(() => {
+    if (!sesionVuelta || yaConfirmada.current) return;
+    yaConfirmada.current = true;
 
-    setBusy(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("payment_methods").insert({
-      profile_id: userId,
-      provider: "simulated",
-      provider_token: `tok_sim_${crypto.randomUUID()}`, // el PSP real lo devuelve
-      brand,
-      last4,
+    (async () => {
+      const res = await fetch("/api/pagos/metodos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: sesionVuelta }),
+      });
+      const salida = (await res.json().catch(() => ({}))) as {
+        guardada?: boolean;
+      };
+      if (res.ok && salida.guardada) {
+        toast.success("Tarjeta guardada. Ya puedes usarla al pagar.");
+      }
+      // La query se quita siempre: dejarla haría que recargar la pantalla
+      // repitiese la confirmación de una Session que ya no significa nada.
+      router.replace("/pagos");
+      router.refresh();
+    })();
+  }, [sesionVuelta, router]);
+
+  async function anadir() {
+    setAbriendo(true);
+    const res = await fetch("/api/pagos/metodos", { method: "POST" });
+    const salida = (await res.json().catch(() => ({}))) as Partial<Embed> & {
+      error?: string;
+    };
+    setAbriendo(false);
+
+    if (!res.ok || !salida.clientSecret || !salida.publishableKey) {
+      return toast.error(salida.error ?? "No se pudo abrir el formulario.");
+    }
+    setEmbed({
+      clientSecret: salida.clientSecret,
+      publishableKey: salida.publishableKey,
     });
-    setBusy(false);
-    if (error) return toast.error("No se pudo guardar la tarjeta.");
-    toast.success("Tarjeta guardada.");
-    setLast4("");
+  }
+
+  async function quitar(id: string) {
+    setBorrando(id);
+    const res = await fetch("/api/pagos/metodos", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paymentMethodId: id }),
+    });
+    setBorrando(null);
+    if (!res.ok) {
+      const { error } = (await res.json().catch(() => ({}))) as { error?: string };
+      return toast.error(error ?? "No se pudo quitar la tarjeta.");
+    }
+    toast.success("Tarjeta eliminada.");
     router.refresh();
   }
 
-  async function removeCard(id: string) {
-    setBusy(true);
-    const supabase = createClient();
-    const { error } = await supabase.from("payment_methods").delete().eq("id", id);
-    setBusy(false);
-    if (error) return toast.error("No se pudo eliminar.");
-    router.refresh();
+  // Con el formulario montado manda Stripe: él redirige al `return_url` al
+  // terminar. Se oculta la lista para no dejar un "Quitar" al lado de un
+  // formulario abierto.
+  if (embed) {
+    return (
+      <div>
+        {/* PAC-02 · el consentimiento de card-on-file se pide en cada cobro con
+            una casilla que nace DESMARCADA. Aquí no hay casilla porque el acto
+            en sí ES la petición de guardar — pero se dice, no se da por hecho en
+            silencio: quien llega aquí tiene que leer qué está autorizando y qué
+            NO está autorizando (que le cobren ahora). */}
+        <div className="flex gap-3 rounded-xl border border-dashed border-[#e0e0e0] p-5">
+          <LockIcon className="mt-0.5 size-5 shrink-0 text-[#6b6b6b]" />
+          <div>
+            <p className="text-sm font-semibold text-[#19191f]">
+              Estás autorizando a guardar esta tarjeta
+            </p>
+            <p className="mt-1 text-[13px] text-[#6b6b6b]">
+              <strong>No se te cobra nada ahora.</strong> La tarjeta queda
+              guardada en nuestro proveedor de pagos para que puedas elegirla al
+              reservar; solo se cobra cuando tú confirmas una reserva. Los datos
+              de la tarjeta viajan directamente a él: nunca pasan por Enséñame
+              Ya. Puedes quitarla desde esta misma pantalla cuando quieras.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4">
+          <StripeEmbed {...embed} />
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      {cards.length > 0 ? (
-        <ul className="flex flex-col divide-y rounded-lg border">
+    <div>
+      {cards.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[#d8d8d8] px-5 py-8 text-center">
+          <CreditCardIcon className="mx-auto size-6 text-[#9a9a9a]" />
+          <p className="mt-3 text-sm font-medium text-[#19191f]">
+            No tienes tarjetas guardadas
+          </p>
+          <p className="mx-auto mt-1 max-w-[380px] text-[13px] text-[#6b6b6b]">
+            {puedeAnadir
+              ? "Añade una aquí y aparecerá al pagar tus reservas. También puedes guardarla en el momento del pago, marcando «Guardar esta tarjeta». Nunca escribes los datos de tu tarjeta en Enséñame Ya."
+              : "Al pagar una reserva puedes marcar «Guardar esta tarjeta» y aparecerá aquí para las siguientes. Nunca escribes los datos de tu tarjeta en Enséñame Ya."}
+          </p>
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-2.5">
           {cards.map((c) => (
-            <li key={c.id} className="flex items-center justify-between px-4 py-3 text-sm">
-              <span>
-                {c.brand ?? "Tarjeta"} •••• {c.last4}
+            <li
+              key={c.id}
+              className="flex items-center justify-between gap-4 rounded-xl border border-[#e0e0e0] px-4 py-3"
+            >
+              <span className="flex items-center gap-3">
+                <CreditCardIcon className="size-4 shrink-0 text-[#6b6b6b]" />
+                <span>
+                  <span className="block text-sm font-medium text-[#19191f] capitalize">
+                    {c.brand} •••• {c.last4}
+                  </span>
+                  <span className="block text-xs text-[#6b6b6b]">
+                    Vence {String(c.expMonth).padStart(2, "0")}/
+                    {String(c.expYear).slice(-2)}
+                  </span>
+                </span>
               </span>
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => removeCard(c.id)}>
-                Eliminar
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={borrando === c.id}
+                onClick={() => quitar(c.id)}
+              >
+                {borrando === c.id ? "Quitando…" : "Quitar"}
               </Button>
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="text-muted-foreground text-sm">No tienes tarjetas guardadas.</p>
       )}
 
-      <form onSubmit={addCard} className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <div className="grid gap-1.5">
-          <Label htmlFor="brand">Marca</Label>
-          <select id="brand" className={selectClasses} value={brand} onChange={(e) => setBrand(e.target.value)}>
-            <option>Visa</option>
-            <option>Mastercard</option>
-            <option>Amex</option>
-          </select>
+      {/* Sin las claves de Stripe no se ofrece: el botón daría un 503 y la
+          pantalla ya se enseña vacía en ese caso, que es la verdad. */}
+      {puedeAnadir ? (
+        <div className="mt-4">
+          <Button
+            variant="outline"
+            disabled={abriendo}
+            onClick={anadir}
+            className="h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
+          >
+            <PlusIcon className="size-4" />
+            {abriendo ? "Abriendo…" : "Añadir tarjeta"}
+          </Button>
+          <p className="mt-2 text-[13px] text-[#6b6b6b]">
+            No se te cobra nada al añadirla: queda guardada para que puedas
+            elegirla al pagar tus próximas reservas.
+          </p>
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="last4">Últimos 4 dígitos</Label>
-          <Input id="last4" inputMode="numeric" maxLength={4} value={last4} onChange={(e) => setLast4(e.target.value.replace(/\D/g, ""))} placeholder="4242" />
-        </div>
-        <Button type="submit" disabled={busy}>Guardar tarjeta</Button>
-      </form>
-      <p className="text-muted-foreground text-xs">
-        Pago simulado — no ingreses datos reales de tarjeta.
-      </p>
+      ) : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
+import { EmptyResults } from "@/components/catalog/empty-results";
 import { Pager } from "@/components/catalog/pager";
 import { ProductCard } from "@/components/catalog/product-card";
 import { TutorCard } from "@/components/catalog/tutor-card";
@@ -14,6 +15,8 @@ import {
   MODELS,
   PRICE_RANGES,
   SESSION_RANGES,
+  LEVELS,
+  LANGUAGES,
   type ProductFilterState,
 } from "@/components/catalog/product-filters";
 import {
@@ -22,6 +25,7 @@ import {
   listActiveProducts,
   listApprovedTutors,
   type ProductSort,
+  type TeachingLevel,
 } from "@/lib/catalog/queries";
 import type { Database } from "@/lib/database.types";
 
@@ -47,6 +51,8 @@ export type CategorySearchParams = {
   model?: string;
   price?: string;
   sessions?: string;
+  level?: string;
+  lang?: string;
   tema?: string;
   sort?: string;
 };
@@ -75,6 +81,8 @@ export async function CategoryExplorer({
     model: MODELS.some((m) => m.id === sp.model) ? sp.model : undefined,
     price: sp.price,
     sessions: sp.sessions,
+    level: LEVELS.some((l) => l.id === sp.level) ? sp.level : undefined,
+    lang: LANGUAGES.some((l) => l.id === sp.lang) ? sp.lang : undefined,
     tema: sp.tema,
   };
   const price = PRICE_RANGES.find((r) => r.id === active.price);
@@ -88,13 +96,15 @@ export async function CategoryExplorer({
     listActiveProducts({
       categorySlug: primary,
       // "Temas" cruza con otra categoría: `product_categories` es N–M, así que
-      // una tutoría de Matemáticas puede estar también en Preparación de exámenes.
+      // una mentoría de Matemáticas puede estar también en Preparación de exámenes.
       secondCategorySlug: secondary,
       model: active.model as PricingModel | undefined,
       minPriceMinor: price?.min,
       maxPriceMinor: price?.max,
       minSessions: sessions?.min,
       maxSessions: sessions?.max,
+      level: active.level as TeachingLevel | undefined,
+      language: active.lang,
       sort,
       page: tab === "productos" ? page : 1,
     }),
@@ -116,7 +126,7 @@ export async function CategoryExplorer({
   ) => {
     const p = new URLSearchParams();
     if (next.tab && next.tab !== "productos") p.set("tab", next.tab);
-    for (const key of ["model", "price", "sessions", "tema"] as const) {
+    for (const key of ["model", "price", "sessions", "level", "lang", "tema"] as const) {
       if (next[key]) p.set(key, next[key]!);
     }
     if (next.sort) p.set("sort", next.sort);
@@ -124,6 +134,18 @@ export async function CategoryExplorer({
     const q = p.toString();
     return q ? `${base}?${q}` : base;
   };
+
+  /** ¿hay filtro que quitar? El orden queda fuera: es preferencia de vista, y
+   *  quitarlo no devuelve ni un resultado más. */
+  const anyFilter = Object.values(active).some(Boolean);
+
+  /**
+   * RV-16 · irse a otra categoría no se lleva los filtros —son de ÉSTA— pero
+   * sí el orden: quien está mirando "de menor a mayor" lo sigue estando al
+   * cambiar de categoría. `buildHref` no sirve aquí porque va atado a `base`.
+   */
+  const categoryHref = (s: string) =>
+    sort ? `/categories/${s}?sort=${sort}` : `/categories/${s}`;
 
   const total = tab === "productos" ? products.total : tutors.total;
   const ratings = tutors.tutors
@@ -133,12 +155,12 @@ export async function CategoryExplorer({
     ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
     : null;
 
-  const title = category ? `Explorar ${category.name}` : "Explorar Categorías";
+  const title = category ? `Explorar ${category.name}` : "Explorar categorías";
   const description =
     category?.description ??
     (category
-      ? "Asegura los resultados que deseas de la mano de mentores validados, enfocados en lo que quieres conquistar."
-      : "Elige por dónde empezar. Cada categoría reúne tutorías con una meta concreta y tutores verificados listos para acompañarte en vivo.");
+      ? "Asegura los resultados que deseas de la mano de tutores validados, enfocados en lo que quieres conquistar."
+      : "Elige por dónde empezar. Cada categoría reúne mentorías con una meta concreta y tutores verificados listos para acompañarte en vivo.");
 
   /** Desplegables de filtro de la fila horizontal (386:1558). */
   const dropdowns = [
@@ -193,6 +215,33 @@ export async function CategoryExplorer({
           tab,
           sort,
           model: active.model === m.id ? undefined : m.id,
+        }),
+      })),
+    },
+    // DD-03 · los mismos dos que P05, aquí como desplegables de la fila.
+    {
+      label: "Nivel",
+      current: LEVELS.find((l) => l.id === active.level)?.label,
+      options: LEVELS.map((l) => ({
+        label: l.label,
+        href: buildHref({
+          ...active,
+          tab,
+          sort,
+          level: active.level === l.id ? undefined : l.id,
+        }),
+      })),
+    },
+    {
+      label: "Idioma",
+      current: LANGUAGES.find((l) => l.id === active.lang)?.label,
+      options: LANGUAGES.map((l) => ({
+        label: l.label,
+        href: buildHref({
+          ...active,
+          tab,
+          sort,
+          lang: active.lang === l.id ? undefined : l.id,
         }),
       })),
     },
@@ -303,7 +352,7 @@ export async function CategoryExplorer({
             className="mt-5 gap-3.5"
             categories={categories}
             activeSlug={slug}
-            hrefFor={(s) => `/categories/${s}`}
+            hrefFor={categoryHref}
             limit={0}
           />
         </Container>
@@ -394,7 +443,7 @@ export async function CategoryExplorer({
                   </ul>
                 </details>
               ))}
-              {Object.values(active).some(Boolean) ? (
+              {anyFilter ? (
                 <Link
                   href={buildHref({ tab, sort })}
                   className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
@@ -408,9 +457,22 @@ export async function CategoryExplorer({
           <div className="mt-6">
             {tab === "productos" ? (
               products.products.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  Aún no hay mentorías que encajen con este filtro.
-                </p>
+                // RV-11 · mismo estado vacío que el buscador (ver EmptyResults).
+                // Aquí las burbujas SÍ llevan al índice de categorías: estás
+                // dentro de una y la salida natural es cambiarte de categoría.
+                <EmptyResults
+                  message="Aún no hay mentorías que encajen con este filtro."
+                  action={
+                    anyFilter
+                      ? {
+                          href: buildHref({ tab, sort }),
+                          label: "Quitar los filtros",
+                        }
+                      : undefined
+                  }
+                  categories={categories}
+                  hrefFor={categoryHref}
+                />
               ) : (
                 <div className="grid gap-[25px] sm:grid-cols-2 lg:grid-cols-3">
                   {products.products.map((p) => (
@@ -419,9 +481,17 @@ export async function CategoryExplorer({
                 </div>
               )
             ) : tutors.tutors.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Aún no hay tutores que encajen con este filtro.
-              </p>
+              // La pestaña de tutores no lleva filtros propios: solo la
+              // categoría, así que la única salida útil son las burbujas.
+              <EmptyResults
+                message={
+                  category
+                    ? `Aún no hay tutores en ${category.name}.`
+                    : "Aún no hay tutores publicados."
+                }
+                categories={categories}
+                hrefFor={categoryHref}
+              />
             ) : (
               <div className="grid gap-[25px] sm:grid-cols-2 lg:grid-cols-3">
                 {tutors.tutors.map((t) => (

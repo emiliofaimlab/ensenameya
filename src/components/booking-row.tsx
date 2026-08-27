@@ -11,6 +11,7 @@ import { StatusPill } from "@/components/layout/panel-shell";
 export function BookingRow({
   href,
   tutor,
+  tutorHref,
   title,
   when,
   status,
@@ -20,6 +21,17 @@ export function BookingRow({
 }: {
   href: string;
   tutor?: string;
+  /**
+   * V-6 · La ficha pública del tutor, si se puede llegar a ella. Aquí no cabe
+   * la tarjeta entera de `TutorSummary` —esto es una fila de lista—, así que la
+   * vuelta al tutor es el propio «con Fulanito», que hasta hoy era texto muerto.
+   *
+   * ⚠️ Opcional, y no por comodidad: a un tutor se le puede retirar la
+   * aprobación, y entonces su ficha deja de ser legible para el alumno.
+   * Sin enlace se pinta el texto de siempre, que es lo correcto — enlazarlo
+   * daría un 404 desde el panel del propio alumno. Ver `tutorCards`.
+   */
+  tutorHref?: string;
   title: string;
   when: string | null;
   status: string;
@@ -35,7 +47,21 @@ export function BookingRow({
           <CalendarDaysIcon className="size-[18px]" />
         </span>
         <div className="min-w-0">
-          {tutor ? <p className="text-xs text-[#6b6b6b]">con {tutor}</p> : null}
+          {tutor ? (
+            <p className="text-xs text-[#6b6b6b]">
+              con{" "}
+              {tutorHref ? (
+                <Link
+                  href={tutorHref}
+                  className="font-medium text-brand hover:underline"
+                >
+                  {tutor}
+                </Link>
+              ) : (
+                tutor
+              )}
+            </p>
+          ) : null}
           <Link
             href={href}
             className="text-[13.5px] font-medium text-[#333333] hover:underline"

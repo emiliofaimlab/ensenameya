@@ -18,7 +18,7 @@ export default async function AdminCategoriasPage() {
   const { data } = await supabase
     .from("categories")
     // El count del puente N–M dice cuántos productos la usan (RN-09).
-    .select("id, name, slug, description, is_active, sort_order, product_categories(count)")
+    .select("id, name, slug, description, is_active, sort_order, icon, product_categories(count)")
     .order("sort_order")
     .order("name");
 
@@ -29,13 +29,14 @@ export default async function AdminCategoriasPage() {
     description: c.description,
     isActive: c.is_active,
     sortOrder: c.sort_order,
+    icon: c.icon,
     productCount: c.product_categories?.[0]?.count ?? 0,
   }));
 
   return (
     <AdminShell
           title="Categorías"
-          description="Las que ven alumnos y tutores al explorar y al clasificar sus clases."
+          description="Las que ven alumnos y tutores al explorar y al clasificar sus mentorías."
     >
         <CategoryManager categories={categories} />
     </AdminShell>

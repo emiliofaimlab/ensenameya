@@ -25,14 +25,14 @@ import { FinalCta } from "@/components/home/final-cta";
 export const metadata = {
   title: "¿Cómo funciona? · Enséñame Ya",
   description:
-    "Encuentras al tutor ideal, reservas con pago protegido y aseguras el éxito en vivo. Si vienes a enseñar, lanzas tus tutorías y cobras seguro.",
+    "Encuentras al tutor ideal, reservas con pago protegido y aseguras el éxito en vivo. Si vienes a enseñar, lanzas tus mentorías y cobras seguro.",
 };
 
 const STUDENT_STEPS = [
   {
     icon: SearchIcon,
     title: "Encuentra tu meta",
-    text: "Cuéntanos qué quieres lograr. Filtra por tutores o tutorías con un objetivo concreto. Cada mentor te asegura un resultado claro y un aprendizaje dinámico.",
+    text: "Cuéntanos qué quieres lograr. Filtra por tutores o mentorías con un objetivo concreto. Cada tutor te asegura un resultado claro y un aprendizaje dinámico.",
   },
   {
     icon: CalendarCheckIcon,
@@ -54,12 +54,12 @@ const TUTOR_STEPS = [
   },
   {
     icon: TagsIcon,
-    title: "Lanza tus tutorías",
+    title: "Lanza tus mentorías",
     text: "Diseña ofertas enfocadas en un resultado real. Tú pones las reglas: manejas tu propia disponibilidad y fijas tus precios por sesión con total libertad.",
   },
   {
     icon: CreditCardIcon,
-    title: "Imparte la clase y cobra seguro",
+    title: "Imparte la sesión y cobra seguro",
     text: "Aceptas la reserva en menos de 24 horas y das tu sesión en vivo 1 a 1. Retiras tus ganancias de forma rápida, transparente y garantizada.",
   },
 ];
@@ -121,15 +121,19 @@ export default function HowItWorksPage() {
 
         <Container>
           <Section className="lg:max-w-[561px] lg:py-[117px]">
+            {/* 386:699;205:1435 — el nombre de la capa en Figma ("Reserva tu
+                resultado…") está viejo; manda el texto, que rompe en tres
+                líneas fijas. Por debajo de lg fluye solo. */}
             <h1 className="text-3xl font-bold text-balance text-brand sm:text-[50px] sm:leading-[1.18]">
-              Elige tu <em className="font-light">meta,</em> y asegura tu
-              resultado de principio a fin
+              Elige tu <em className="font-light">meta</em>
+              <br className="hidden lg:inline" /> y avanza a tu ritmo
+              <br className="hidden lg:inline" /> de principio a fin
             </h1>
             <p className="mt-6 text-pretty text-[18.6px] text-[#525252]">
               Lo que ya sabes vale oro y lo que puedes aprender también. En
               Enséñame Ya encuentras al tutor ideal, reservas con pago protegido
               y aseguras el éxito en vivo. Si vienes a enseñar, lanzas tus
-              tutorías y cobras seguro.
+              mentorías y cobras seguro.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
               <Button
@@ -161,11 +165,11 @@ export default function HowItWorksPage() {
 
       <StepsBlock
         eyebrow="ESTUDIANTE"
-        title="Para quien Aprende: habilidades pro en 3 pasos"
+        title="Para quien aprende: habilidades pro en 3 pasos"
         steps={STUDENT_STEPS}
         image={{
           src: "/img/how-alumno.jpg",
-          alt: "Alumna en una clase por videollamada",
+          alt: "Alumna en una mentoría por videollamada",
         }}
         accent="brand"
         background="bg-[#e8f2ff]"
@@ -190,11 +194,11 @@ export default function HowItWorksPage() {
       <StepsBlock
         reverse
         eyebrow="TUTOR"
-        title="Para quien Enseña: emprende y factura en 3 pasos"
+        title="Para quien enseña: emprende y factura en 3 pasos"
         steps={TUTOR_STEPS}
         image={{
           src: "/img/how-tutor.jpg",
-          alt: "Tutora preparando su clase",
+          alt: "Tutora preparando su mentoría",
         }}
         accent="primary"
         background="bg-muted"
@@ -202,7 +206,7 @@ export default function HowItWorksPage() {
       />
 
       <TrustCards
-        title="Aprende y Enseña con la tranquilidad de siempre"
+        title="Aprende y enseña con la tranquilidad de siempre"
         points={TRUST_POINTS_COMO_FUNCIONA}
         tone="peach"
       />
@@ -212,6 +216,7 @@ export default function HowItWorksPage() {
         aside={{
           title: "Preguntas frecuentes",
           text: "¿Buscas una respuesta específica? Nuestro equipo te responderá en menos de 24 horas para que sigas avanzando.",
+          cta: { href: "/contacto", label: "Contactar a soporte" },
         }}
       />
 

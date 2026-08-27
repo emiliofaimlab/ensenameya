@@ -87,6 +87,20 @@ export default async function AdminTutoresPage({
     <AdminShell
       title="Tutores"
       description="Por aprobar y aprobados (misma vista, AD03/AD04)."
+      // MN-14a. La actividad no cabe en esta lista —son chips de APROBACIÓN, y
+      // mezclar «puede dar clase» con «da clase» confunde las dos preguntas—,
+      // pero se entra desde aquí porque es de quien habla. No hay entrada en el
+      // menú lateral: `ADMIN_ITEMS` vive en `app-sidebar.tsx`, que no es de esta
+      // ficha. Si esta pantalla se usa, merece su propio ítem.
+      actions={
+        <Button
+          asChild
+          variant="outline"
+          className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+        >
+          <Link href="/admin/tutores/actividad">Mentorías impartidas</Link>
+        </Button>
+      }
     >
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((x) => {
@@ -144,7 +158,7 @@ export default async function AdminTutoresPage({
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <StatusPill tone={pill.tone} className="h-7">
+                    <StatusPill tone={pill.tone}>
                       {pill.label}
                     </StatusPill>
                     <Button

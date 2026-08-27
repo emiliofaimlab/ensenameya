@@ -107,14 +107,9 @@ export default async function AdminTutorPage({
     <PanelShell
       items={ADMIN_ITEMS}
       back={{ href: "/admin/tutores", label: "Volver a tutores" }}
+      eyebrow="Tutores / Detalle"
+      title={tutor.profiles?.full_name ?? "Tutor sin nombre"}
     >
-      <div>
-        <p className="text-xs text-[#6b6b6b]">Tutores / Detalle</p>
-        <h1 className="mt-1 text-[24px] font-bold tracking-tight text-[#19191f]">
-          {tutor.profiles?.full_name ?? "Tutor sin nombre"}
-        </h1>
-      </div>
-
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex flex-col gap-5">
           {/* Perfil (214:53). */}
@@ -128,7 +123,7 @@ export default async function AdminTutorPage({
                   </p>
                 ) : null}
               </div>
-              <StatusPill tone={pill.tone} className="h-7">
+              <StatusPill tone={pill.tone}>
                 {pill.label}
               </StatusPill>
             </div>

@@ -5,11 +5,17 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { PlusIcon } from "lucide-react";
 
+import { stripAccents } from "@/lib/catalog/format";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  CATEGORY_ICONS,
+  CATEGORY_ICON_KEYS,
+  categoryIcon,
+} from "@/components/catalog/category-icons";
 import {
   Dialog,
   DialogContent,
@@ -25,18 +31,14 @@ export type CategoryRow = {
   description: string | null;
   isActive: boolean;
   sortOrder: number;
+  icon: string | null;
   productCount: number;
 };
 
-/**
- * Slug legible para URL: sin acentos, sin símbolos, separado por guiones.
- * `normalize("NFD")` + quitar diacríticos es el truco estándar del navegador —
- * "Programación" → "programacion". Sin dependencia.
- */
+/** Slug legible para URL: sin acentos, sin símbolos, separado por guiones.
+ *  "Programación" → "programacion". Sin dependencia. */
 function slugify(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+  return stripAccents(value)
     .toLowerCase()
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
@@ -49,6 +51,7 @@ type Draft = {
   slug: string;
   description: string;
   sortOrder: string;
+  icon: string;
   // El slug deja de auto-seguir al nombre en cuanto se toca a mano.
   slugTouched: boolean;
 };
@@ -59,6 +62,9 @@ const EMPTY: Draft = {
   slug: "",
   description: "",
   sortOrder: "0",
+  // Sin elegir, la categoría sale con el icono genérico: se ve, pero se nota
+  // que falta, que es mejor que asignar uno al azar.
+  icon: "",
   slugTouched: false,
 };
 
@@ -81,6 +87,7 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
       id: c.id,
       name: c.name,
       slug: c.slug,
+      icon: c.icon ?? "",
       description: c.description ?? "",
       sortOrder: String(c.sortOrder),
       // Al editar, el slug ya no sigue al nombre: cambiarlo rompe enlaces.
@@ -113,6 +120,7 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
       slug,
       description: draft.description.trim() || null,
       sort_order: sortOrder,
+      icon: draft.icon || null,
     };
 
     const { error } = editing
@@ -191,11 +199,21 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
       ) : (
         <div className="rounded-[16px] border border-[#e0e0e0] bg-card px-5 py-2">
           <ul className="divide-y divide-[#e0e0e0]">
-            {categories.map((c) => (
+            {categories.map((c) => {
+              const Icon = categoryIcon(c.icon);
+              return (
               <li
                 key={c.id}
                 className="flex flex-wrap items-center justify-between gap-3 py-3.5"
               >
+                {/* El icono, a la vista: es lo que sale en el catálogo y sin
+                    verlo aquí habría que abrir el modal para saber cuál es. */}
+                <span
+                  aria-hidden
+                  className="grid size-8 shrink-0 place-items-center rounded-[8px] bg-brand-muted text-brand"
+                >
+                  <Icon className="size-4" />
+                </span>
                 <div className="min-w-0 sm:w-64">
                   <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                     {c.name}
@@ -255,7 +273,8 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
                   </Button>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </div>
       )}
@@ -328,6 +347,48 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
                 setDraft((d) => ({ ...d, description: e.target.value }))
               }
             />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label>Icono</Label>
+            <p className="text-[12px] text-[#6b6b6b]">
+              Es el que sale en los chips del catálogo. Sin elegir, se usa uno
+              genérico.
+            </p>
+            {/* Rejilla de botones y no un <select>: aquí lo que se elige es un
+                dibujo, y en una lista de texto habría que adivinar cómo es. */}
+            <div
+              role="radiogroup"
+              aria-label="Icono de la categoría"
+              className="mt-1 flex flex-wrap gap-2"
+            >
+              {CATEGORY_ICON_KEYS.map((key) => {
+                const Icon = CATEGORY_ICONS[key];
+                const on = draft.icon === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    aria-label={key}
+                    title={key}
+                    onClick={() =>
+                      // Volver a pulsar el elegido lo quita: se puede dejar sin
+                      // icono, que es distinto de elegir el genérico a mano.
+                      setDraft((d) => ({ ...d, icon: on ? "" : key }))
+                    }
+                    className={`grid size-9 place-items-center rounded-[8px] border transition-colors ${
+                      on
+                        ? "border-brand bg-brand text-white"
+                        : "border-[#e0e0e0] bg-card text-[#6b6b6b] hover:border-brand hover:text-brand"
+                    }`}
+                  >
+                    <Icon className="size-4" />
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex flex-col gap-1.5 sm:max-w-[10rem]">

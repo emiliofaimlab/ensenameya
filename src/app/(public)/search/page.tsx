@@ -5,7 +5,7 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
 import { categoryIcon } from "@/components/catalog/category-icons";
-import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
+import { EmptyResults } from "@/components/catalog/empty-results";
 import { ProductCard } from "@/components/catalog/product-card";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import {
@@ -148,7 +148,8 @@ export default async function SearchPage({
             <>
               <div className="flex flex-wrap items-center gap-3">
                 <p className="text-base font-semibold text-[#292929]">
-                  Mostrando {total} {total === 1 ? "resultado" : "resultados"}{" "}
+                  Encontramos {total}{" "}
+                  {total === 1 ? "resultado exitoso" : "resultados exitosos"}{" "}
                   para &quot;{query}&quot;
                 </p>
                 {cat ? (
@@ -170,7 +171,10 @@ export default async function SearchPage({
                 <div
                   role="tablist"
                   aria-label="Tipo de resultado"
-                  className="flex gap-0.5 rounded-[10px] bg-[#ededed] p-1"
+                  // US-1601: a 360 px las cuatro pestañas suman más que la
+                  // pantalla y sacaban scroll horizontal a TODA la página.
+                  // Se deja que envuelvan; en desktop cabe en una fila igual.
+                  className="flex flex-wrap gap-0.5 rounded-[10px] bg-[#ededed] p-1"
                 >
                   {(
                     [
@@ -185,7 +189,7 @@ export default async function SearchPage({
                       role="tab"
                       aria-selected={tab === id}
                       href={hrefFor({ tab: id, sort })}
-                      className={`rounded-[8px] px-4.5 py-2 text-sm font-medium transition-colors ${
+                      className={`rounded-[8px] px-3 py-2 text-sm font-medium transition-colors sm:px-4.5 ${
                         tab === id
                           ? "bg-card text-[#19191f] shadow-[0_1px_3px_rgb(0_0_0/0.1)]"
                           : "text-[#5c5c5c] hover:text-foreground"
@@ -217,31 +221,26 @@ export default async function SearchPage({
                 </details>
               </div>
 
-              {total === 0 && cat ? (
-                <p className="mt-6 text-sm text-muted-foreground">
-                  Sin resultados para &quot;{query}&quot; dentro de {catName}.{" "}
-                  <Link
-                    href={hrefFor({ tab, sort, cat: null })}
-                    className="font-medium text-brand hover:underline"
-                  >
-                    Buscar en todas las categorías
-                  </Link>
-                  .
-                </p>
-              ) : null}
-
-              {total === 0 && !cat ? (
-                <div className="mt-6 flex flex-col gap-3">
-                  <p className="text-sm text-muted-foreground">
-                    Sin resultados para &quot;{query}&quot;. Prueba con otra
-                    palabra o explora por categoría:
-                  </p>
-                  <CategoryIconChips
-                    categories={categories}
-                    hrefFor={(slug) => `/categories/${slug}`}
-                    tone="light"
-                  />
-                </div>
+              {/* RV-11 · el estado vacío de esta pantalla es el bueno, y ahora
+                  vive en `EmptyResults`: lo comparten P04, P05 y P06. */}
+              {total === 0 ? (
+                <EmptyResults
+                  className="mt-6"
+                  message={
+                    cat
+                      ? `Sin resultados para "${query}" dentro de ${catName}.`
+                      : `Sin resultados para "${query}". Prueba con otra palabra.`
+                  }
+                  action={
+                    cat
+                      ? {
+                          href: hrefFor({ tab, sort, cat: null }),
+                          label: "Buscar en todas las categorías",
+                        }
+                      : undefined
+                  }
+                  categories={categories}
+                />
               ) : null}
 
               {show("productos") && products.length > 0 ? (
@@ -312,7 +311,7 @@ export default async function SearchPage({
           <h2 className="text-[23px] font-semibold">Explorar por categoría</h2>
           <ul className="mt-8 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {categories.slice(0, 6).map((c) => {
-              const Icon = categoryIcon(c.slug);
+              const Icon = categoryIcon(c.icon);
               return (
                 <li key={c.slug}>
                   <Link

@@ -17,12 +17,17 @@ export default async function EditProductPage({
   const { userId, approvalStatus } = await requireTutorProfile();
 
   const supabase = await createClient();
-  const [{ data: product }, { data: categories }, { data: materials }] =
-    await Promise.all([
+  const [
+    { data: product },
+    { data: categories },
+    { data: materials },
+    { data: rules },
+    { data: ruleLinks },
+  ] = await Promise.all([
       supabase
         .from("products")
         .select(
-          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, faqs, product_categories(category_id)",
+          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, faqs, level, language, product_categories(category_id)",
         )
         .eq("id", id)
         .eq("tutor_id", userId)
@@ -32,12 +37,30 @@ export default async function EditProductPage({
         .select("id, name")
         .eq("is_active", true)
         .order("sort_order"),
-      // Materiales de ESTA oferta (R24-16).
+      // Materiales de ESTA oferta (R24-16). `storage_path` va en el select
+      // porque quitar un material tiene que borrar TAMBIÉN el objeto del
+      // bucket: sin la ruta, la fila desaparecía y el archivo se quedaba
+      // ocupando cuota en un bucket privado para siempre.
       supabase
         .from("tutor_materials")
-        .select("id, file_name, size_bytes")
+        .select("id, file_name, size_bytes, storage_path")
         .eq("product_id", id)
         .order("created_at"),
+      // N-04 · franjas del tutor + las que YA usa esta mentoría. Son dos
+      // consultas y no un embed sobre `products` a propósito: `products` es el
+      // select del que cuelga toda la pantalla y no conviene arrastrarlo a una
+      // relación nueva. Si la segunda falla, el formulario abre en «toda mi
+      // disponibilidad» — que es exactamente lo que significa no tener filas.
+      supabase
+        .from("availability_rules")
+        .select("id, weekday, start_time, end_time, is_active")
+        .eq("tutor_id", userId)
+        .order("weekday")
+        .order("start_time"),
+      supabase
+        .from("product_availability_rules")
+        .select("rule_id")
+        .eq("product_id", id),
     ]);
 
   if (!product) notFound();
@@ -51,6 +74,7 @@ export default async function EditProductPage({
       <ProductForm
         userId={userId}
         categories={categories ?? []}
+        availabilityRules={rules ?? []}
         materials={materials ?? []}
         isApproved={approvalStatus === "approved"}
         product={{
@@ -62,10 +86,13 @@ export default async function EditProductPage({
           priceAmount: product.price_amount,
           sessionDurationMin: product.session_duration_min,
           packageNumSessions: product.package_num_sessions,
+          level: product.level,
+          language: product.language,
           categoryIds: (product.product_categories ?? []).map(
             (pc) => pc.category_id,
           ),
           imagePath: product.image_path,
+          availabilityRuleIds: (ruleLinks ?? []).map((l) => l.rule_id),
           // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
           faqs: Array.isArray(product.faqs)
             ? (product.faqs as { q?: unknown; a?: unknown }[])

@@ -1,25 +1,30 @@
 import { createClient } from "@/lib/supabase/client";
+import {
+  ATTACHMENT_HINT,
+  ATTACHMENT_MAX_BYTES,
+  ATTACHMENT_TYPES,
+  fileProblem,
+  humanSize,
+} from "@/components/tutor/upload-formats";
 
-/** Límites del bucket `chat-attachments` (los repite la migración). */
-export const ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
-
-export const ATTACHMENT_TYPES = [
-  "application/pdf",
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/msword",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.ms-excel",
-];
+/**
+ * MN-11a · Los límites del bucket `chat-attachments` ya no se declaran aquí:
+ * viven con los de los otros cuatro buckets en
+ * `components/tutor/upload-formats.ts`, que es también donde está apuntado qué
+ * hay que hacer en la BD el día que el número vuelva a cambiar.
+ *
+ * MN-11b (P-8) · El tope del chat son **25 MB** desde el 20-ago, y los pone el
+ * bucket: `20260820170000_chat_attachments_25mb.sql`. Cambiar la constante sin
+ * la migración —o al revés— deja a la UI mintiendo en una dirección o en la
+ * otra; el porqué está entero en la cabecera de `upload-formats.ts`.
+ *
+ * Se re-exportan porque el chat los pide a ESTE módulo desde antes
+ * (`chat-thread.tsx` y la descarga del hilo en `api/chat/[threadId]/download`);
+ * reapuntar esos imports no es de esta ficha, y el alias no cuesta nada.
+ */
+export { ATTACHMENT_MAX_BYTES, ATTACHMENT_TYPES, humanSize };
 
 export type Attachment = { path: string; name: string; size: number };
-
-export const humanSize = (b: number) =>
-  b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.round(b / 1024)} KB`;
 
 /**
  * Sube un documento al hilo de la reserva y lo publica como mensaje.
@@ -35,12 +40,14 @@ export async function uploadAttachment(
   bookingId: string,
   file: File,
 ): Promise<{ id: string; attachment: Attachment } | { error: string }> {
-  if (!ATTACHMENT_TYPES.includes(file.type)) {
-    return { error: "Formato no admitido. Usa PDF, imagen o documento de Office." };
-  }
-  if (file.size > ATTACHMENT_MAX_BYTES) {
-    return { error: "El archivo supera los 10 MB." };
-  }
+  // Mismo juez que el resto de subidas: el mensaje nombra el archivo y repite
+  // lo que SÍ vale, con el tope sacado de la constante y no escrito a mano.
+  const problema = fileProblem(file, {
+    types: ATTACHMENT_TYPES,
+    maxBytes: ATTACHMENT_MAX_BYTES,
+    hint: ATTACHMENT_HINT,
+  });
+  if (problema) return { error: problema };
 
   const supabase = createClient();
   // Prefijo aleatorio: dos archivos con el mismo nombre no se pisan.
@@ -61,7 +68,16 @@ export async function uploadAttachment(
 
   if (error) {
     // El objeto ya subió pero el mensaje no salió: sin la fila nadie lo ve, así
-    // que se retira para no dejar basura en el bucket.
+    // que se intenta retirar para no dejar basura en el bucket.
+    //
+    // ⚠️ Hoy este `remove` NO borra nada: `20260722180000` da a `authenticated`
+    // políticas de INSERT y SELECT sobre `chat-attachments` y **ninguna de
+    // DELETE**, a propósito («un adjunto ya enviado no se retira del hilo del
+    // otro»). Storage responde 403 y el objeto se queda huérfano — comprobado
+    // el 20-ago con la clave anon. Se deja la llamada porque no cuesta nada y
+    // empieza a funcionar sola el día que exista esa política o un Route
+    // Handler con `service_role`; lo que no se puede es dar por hecho que
+    // limpia. Y desde MN-11b cada huérfano pesa hasta 25 MB, no 10.
     await supabase.storage.from("chat-attachments").remove([path]);
     return { error: error.message || "No se pudo compartir el archivo." };
   }

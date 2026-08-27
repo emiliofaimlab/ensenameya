@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { listBookings } from "@/lib/admin/queries";
+import { countPendingReports } from "@/lib/admin/reports";
 import { formatMoney } from "@/lib/catalog/format";
 import {
   PanelCard,
@@ -53,7 +54,10 @@ export default async function AdminDashboardPage() {
     { data: statsData },
     { count: pendingTutors },
     { count: pendingPayments },
+    { count: pendingEmails },
+    { count: pendingRefunds },
     recent,
+    pendingReports,
   ] = await Promise.all([
     supabase.rpc("admin_stats", { p_from: last30().from }),
     supabase
@@ -64,7 +68,22 @@ export default async function AdminDashboardPage() {
       .from("payments")
       .select("id", { count: "exact", head: true })
       .in("status", ["pending", "authorized"]),
+    // RV-04b · las dos colas que hasta hoy solo se veían por SQL. Van aquí
+    // porque el dashboard es la única puerta que tienen: sus entradas de menú
+    // viven en `components/layout/app-sidebar.tsx`, que no es de este carril.
+    supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
+    supabase
+      .from("refund_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending"),
     listBookings({ page: 1 }),
+    // EY-189 · La sexta cola. Los reportes se guardaban desde M-12 y no los
+    // miraba nadie: sin este contador, la bandeja nueva sería una pantalla a la
+    // que solo se llega si ya sabes que existe.
+    countPendingReports(),
   ]);
 
   const stats = statsData as unknown as Stats;
@@ -91,6 +110,30 @@ export default async function AdminDashboardPage() {
       href: "/admin/alertas",
       cta: "Ver alertas",
     },
+    {
+      // Dinero ya prometido al alumno que todavía no ha salido de la cuenta
+      // (X-01). Es la cola más urgente de las cinco: las demás retrasan trabajo,
+      // esta incumple los Términos §13 mientras siga sin bajar.
+      label: "Reembolsos sin ejecutar",
+      value: pendingRefunds ?? 0,
+      href: "/admin/reembolsos?status=pending",
+      cta: "Ver reembolsos",
+    },
+    {
+      // Denuncias de conducta sin triar. No es la más urgente en dinero, pero
+      // sí la única que puede caducar sola: un reporte sobre un par que no
+      // compró vive lo que viva su conversación (ver `20260826200000`).
+      label: "Reportes sin atender",
+      value: pendingReports,
+      href: "/admin/reportes",
+      cta: "Ver reportes",
+    },
+    {
+      label: "Correos en cola",
+      value: pendingEmails ?? 0,
+      href: "/admin/notificaciones?status=pending",
+      cta: "Ver la cola",
+    },
   ];
 
   return (
@@ -109,8 +152,11 @@ export default async function AdminDashboardPage() {
         <Stat label="Tutores activos" value={String(stats.active_tutors)} />
       </div>
 
-      {/* Colas de trabajo (218:1786): lo que espera una acción del admin. */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* Colas de trabajo (218:1786): lo que espera una acción del admin.
+          Eran tres; con las dos de operaciones (reembolsos y correos) la
+          rejilla pasó a 2/3 columnas para que no quedara una fila coja, y con
+          la de reportes (EY-189) son seis: dos filas de tres justas. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {queues.map((q) => (
           <PanelCard key={q.label} className="p-5">
             <div className="flex items-start justify-between gap-2">
@@ -121,7 +167,7 @@ export default async function AdminDashboardPage() {
                 </p>
               </div>
               {q.value ? (
-                <StatusPill tone="amber" className="h-7">
+                <StatusPill tone="amber">
                   Cola
                 </StatusPill>
               ) : null}
@@ -135,6 +181,19 @@ export default async function AdminDashboardPage() {
           </PanelCard>
         ))}
       </div>
+
+      {/* RV-20: no es una cola, es una herramienta, y no tiene entrada de menú
+          propia. Sin este enlace no se llega a ella desde ninguna parte. */}
+      <p className="text-[13px] text-[#6b6b6b]">
+        ¿Comprobando el vencimiento de las 24 h de aceptación?{" "}
+        <Link
+          href="/admin/operaciones"
+          className="font-semibold text-brand hover:underline"
+        >
+          Vencer reservas caducadas
+        </Link>{" "}
+        lo dispara a mano, sin esperar al cron.
+      </p>
 
       {/* Reservas recientes (218:1814). */}
       <PanelCard>
@@ -165,7 +224,6 @@ export default async function AdminDashboardPage() {
                 <div className="flex items-center gap-3.5">
                   <StatusPill
                     tone={BOOKING_PILL[b.status] ?? "neutral"}
-                    className="h-7"
                   >
                     {BOOKING_BADGE[b.status].label}
                   </StatusPill>

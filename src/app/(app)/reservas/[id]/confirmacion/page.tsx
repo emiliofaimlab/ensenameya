@@ -6,6 +6,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
+import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
 
 export const metadata = { title: "Reserva confirmada · Enséñame Ya" };
@@ -17,7 +18,11 @@ const STEPS = [
   },
   {
     icon: VideoIcon,
-    text: 'Entra a la sala desde "Mis reservas" hasta 10 min antes de cada sesión.',
+    // ⚠️ Este texto ha cambiado DOS veces en una semana y las dos por el
+    // cliente: 10 min → 7 días (MN-05, `20260820190000`) → 10 min otra vez
+    // (B-2, `20260826130000`). Tiene que decir lo que hace el botón; un texto
+    // que promete una ventana distinta de la real es peor que no tocarlo.
+    text: 'Entra a la sala desde "Mis reservas": abre 10 minutos antes de cada sesión y sigue abierta 10 minutos después.',
   },
   {
     icon: MessageSquareIcon,
@@ -44,12 +49,21 @@ export default async function ConfirmationPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, total_amount, currency, products(title, tutor_id), sessions(start_at, end_at)",
+      // N-27 · `session_ref` es el "N.º de sesión" (`7K3M9Q-2`) que el cliente
+      // pidió para seguir una clase y su cobro. Esta pantalla es lo más
+      // parecido a un resguardo que ve el alumno: es donde lo va a copiar.
+      "id, status, total_amount, currency, products(title, tutor_id), sessions(start_at, end_at, session_ref)",
     )
     .eq("id", id)
     .maybeSingle();
 
   if (!booking) notFound();
+
+  // Con el checkout alojado se puede llegar aquí ANTES de que el webhook haya
+  // confirmado el cobro: Stripe redirige al alumno en cuanto paga, y su evento
+  // llega por otro camino y a su ritmo. Decir "reserva registrada" con el pago
+  // aún pendiente sería prometer algo que todavía no ha pasado.
+  const pagoPendiente = booking.status === "pending_payment";
 
   const names = await tutorNames(supabase, [booking.products?.tutor_id]);
   const tutor = names.get(booking.products?.tutor_id ?? "");
@@ -64,7 +78,7 @@ export default async function ConfirmationPage({
     )}`;
 
   return (
-    <div className="bg-muted py-14">
+    <div className="flex-1 bg-muted py-14">
       <div className="mx-auto flex w-full max-w-[600px] flex-col items-center gap-4 px-4">
         <span className="grid size-[120px] place-items-center rounded-full bg-brand/15">
           <span className="grid size-20 place-items-center rounded-full bg-brand text-white">
@@ -73,14 +87,39 @@ export default async function ConfirmationPage({
         </span>
 
         <h1 className="text-center text-[26px] font-bold text-[#19191f]">
-          ¡Reserva registrada!
+          {pagoPendiente ? "Estamos confirmando tu pago" : "¡Reserva registrada!"}
         </h1>
         <p className="text-center text-sm text-[#6b6b6b]">
-          {tutor
-            ? `Tu reserva con ${tutor} quedó agendada. `
-            : "Tu reserva quedó agendada. "}
-          Le avisamos al tutor: cuando la acepte (hasta 24 h) te confirmamos por
-          correo. Si no responde, se reembolsa el 100 %.
+          {pagoPendiente ? (
+            <>
+              Tu horario está reservado mientras el proveedor de pago nos
+              confirma el cobro; suele tardar unos segundos. Puedes cerrar esta
+              página: te avisamos por correo en cuanto esté, y desde{" "}
+              <span className="font-medium text-[#333333]">Mis reservas</span>{" "}
+              verás el estado actualizado.
+            </>
+          ) : booking.status === "confirmed" ? (
+            // M-02 · la mentoría acepta sola (`products.auto_accept_bookings`),
+            // así que la reserva NO pasa por `pending_acceptance` y no existe
+            // ninguna ventana de 24 h que contar. Repetir aquí el texto de
+            // "cuando la acepte… si no responde se reembolsa el 100 %" sería
+            // prometer un reembolso automático que ya no puede ocurrir.
+            <>
+              {tutor
+                ? `Tu reserva con ${tutor} está confirmada. `
+                : "Tu reserva está confirmada. "}
+              Ya le avisamos: el horario queda bloqueado en su agenda y te
+              esperamos en la sala.
+            </>
+          ) : (
+            <>
+              {tutor
+                ? `Tu reserva con ${tutor} quedó agendada. `
+                : "Tu reserva quedó agendada. "}
+              Le avisamos al tutor: cuando la acepte (hasta 24 h) te confirmamos
+              por correo. Si no responde, se reembolsa el 100 %.
+            </>
+          )}
         </p>
 
         <section className="mt-2 w-full rounded-[16px] border border-[#e0e0e0] bg-card p-5">
@@ -91,7 +130,7 @@ export default async function ConfirmationPage({
             <div className="flex justify-between gap-4">
               <dt className="text-[#6b6b6b]">Producto</dt>
               <dd className="text-right font-medium text-[#333333]">
-                {booking.products?.title ?? "Clase"}
+                {booking.products?.title ?? "Mentoría"}
               </dd>
             </div>
             {tutor ? (
@@ -109,10 +148,13 @@ export default async function ConfirmationPage({
             {sessions.map((s) => (
               <li
                 key={s.start_at}
-                className="flex items-center gap-2 text-[13px] text-[#404040]"
+                className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[13px] text-[#404040]"
               >
-                <CheckIcon className="size-3.5 shrink-0 text-brand" strokeWidth={3} />
-                <span className="first-letter:uppercase">{range(s)}</span>
+                <span className="flex items-center gap-2">
+                  <CheckIcon className="size-3.5 shrink-0 text-brand" strokeWidth={3} />
+                  <span className="first-letter:uppercase">{range(s)}</span>
+                </span>
+                <SessionRef nro={s.session_ref} />
               </li>
             ))}
           </ul>

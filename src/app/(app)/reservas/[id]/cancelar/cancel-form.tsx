@@ -21,9 +21,8 @@ const REASONS = [
  * `cancel_booking` en servidor según RN-37 (la estimación de la pantalla es
  * informativa); aquí solo se dispara y se redirige.
  *
- * ⚠️ El motivo NO se persiste: `bookings` no tiene columna para él (hueco de
- * EP-23). Se captura para no perder el paso de UX del Figma, pero hasta que
- * exista la columna no viaja a la BD. Sin inventar dónde guardarlo.
+ * El motivo se persiste en `bookings.cancel_reason` (decisión 23), y lo escribe
+ * la propia RPC: el cliente no tiene UPDATE sobre `bookings` (US-1402).
  */
 export function CancelForm({ bookingId }: { bookingId: string }) {
   const router = useRouter();
@@ -34,8 +33,13 @@ export function CancelForm({ bookingId }: { bookingId: string }) {
   async function confirm() {
     setBusy(true);
     const supabase = createClient();
+    // El motivo viaja compuesto: la opción elegida y, si escribió algo, su
+    // detalle. Una sola columna porque el selector es una lista de producto que
+    // va a cambiar, no un enum del que dependa nada.
+    const detailText = detail.trim();
     const { data, error } = await supabase.rpc("cancel_booking", {
       p_booking_id: bookingId,
+      p_reason: detailText ? `${reason} — ${detailText}` : reason,
     });
     if (error) {
       toast.error(error.message || "No se pudo cancelar la reserva.");

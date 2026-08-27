@@ -11,10 +11,17 @@ export function CallbackStatus({
   code,
   next,
   intent,
+  referralCode,
+  termsVersion,
+  termsLocale,
 }: {
   code: string | null;
   next: string | null;
   intent: "alumno" | "tutor" | null;
+  referralCode: string | null;
+  /** Versión de los términos aceptada en `/signup` antes de salir hacia Google. */
+  termsVersion: string | null;
+  termsLocale: string | null;
 }) {
   const router = useRouter();
   // Destino provisional por si el usuario pulsa el enlace antes de resolver.
@@ -39,14 +46,39 @@ export function CallbackStatus({
         return;
       }
 
+      // Constancia de la aceptación de términos. El metadata de un alta por
+      // Google lo trae Google, así que `handle_new_user` no ve nada nuestro:
+      // este es el único punto donde se puede dejar rastro. Va ANTES del resto
+      // porque es lo que no se puede perder — si el usuario cierra la pestaña
+      // mientras se resuelve el destino, la constancia ya está escrita.
+      //
+      // La RPC es idempotente por (usuario, versión): volver a entrar con
+      // Google no crea filas nuevas ni pisa la fecha de la primera vez.
+      if (termsVersion) {
+        await supabase.rpc("record_terms_acceptance", {
+          p_version: termsVersion,
+          p_locale: termsLocale ?? "en",
+        });
+      }
+
       // Alta por Google: la intención elegida en AU02 llega por query y solo se
       // graba si el usuario aún no tiene una (nunca pisa la del registro normal).
-      if (intent) {
+      if (intent || referralCode) {
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        if (user && !user.user_metadata?.intended_role) {
+        if (intent && user && !user.user_metadata?.intended_role) {
           await supabase.auth.updateUser({ data: { intended_role: intent } });
+        }
+        // US-1302: el metadata de Google no trae el código, así que el perfil
+        // lo crea sin él. `is("referral_code", null)` deja intacta cualquier
+        // atribución previa: se referencia una vez, no en cada login.
+        if (referralCode && user) {
+          await supabase
+            .from("profiles")
+            .update({ referral_code: referralCode })
+            .eq("id", user.id)
+            .is("referral_code", null);
         }
       }
 
@@ -62,7 +94,7 @@ export function CallbackStatus({
     }
 
     void run();
-  }, [code, next, intent, router]);
+  }, [code, next, intent, referralCode, termsVersion, termsLocale, router]);
 
   return (
     <div className="rounded-[20px] border bg-card p-9 text-center shadow-sm">

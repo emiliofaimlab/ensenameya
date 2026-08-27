@@ -1,15 +1,18 @@
 import Link from "next/link";
-import { ChevronDownIcon, SearchIcon } from "lucide-react";
+import { ArrowRightIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
+import { EmptyResults } from "@/components/catalog/empty-results";
 import { Pager } from "@/components/catalog/pager";
 import { ProductCard } from "@/components/catalog/product-card";
 import {
   MODELS,
   PRICE_RANGES,
   SESSION_RANGES,
+  LEVELS,
+  LANGUAGES,
   ProductFilters,
   type ProductFilterState,
 } from "@/components/catalog/product-filters";
@@ -17,6 +20,7 @@ import {
   listActiveProducts,
   listActiveCategories,
   type ProductSort,
+  type TeachingLevel,
 } from "@/lib/catalog/queries";
 import type { Database } from "@/lib/database.types";
 
@@ -40,6 +44,8 @@ export default async function ClassesPage({
     model?: string;
     price?: string;
     sessions?: string;
+    level?: string;
+    lang?: string;
     sort?: string;
     page?: string;
   }>;
@@ -52,6 +58,9 @@ export default async function ClassesPage({
     model: MODELS.some((m) => m.id === sp.model) ? sp.model : undefined,
     price: sp.price,
     sessions: sp.sessions,
+    // DD-03: valor que no está en la lista = filtro ignorado (query libre).
+    level: LEVELS.some((l) => l.id === sp.level) ? sp.level : undefined,
+    lang: LANGUAGES.some((l) => l.id === sp.lang) ? sp.lang : undefined,
   };
 
   const price = PRICE_RANGES.find((r) => r.id === active.price);
@@ -65,6 +74,8 @@ export default async function ClassesPage({
       maxPriceMinor: price?.max,
       minSessions: sessions?.min,
       maxSessions: sessions?.max,
+      level: active.level as TeachingLevel | undefined,
+      language: active.lang,
       sort,
       page,
     }),
@@ -76,7 +87,7 @@ export default async function ClassesPage({
     next: ProductFilterState & { sort?: ProductSort; page?: number },
   ) => {
     const p = new URLSearchParams();
-    for (const key of ["cat", "model", "price", "sessions"] as const) {
+    for (const key of ["cat", "model", "price", "sessions", "level", "lang"] as const) {
       if (next[key]) p.set(key, next[key]!);
     }
     if (next.sort) p.set("sort", next.sort);
@@ -85,6 +96,10 @@ export default async function ClassesPage({
     return q ? `/classes?${q}` : "/classes";
   };
 
+  /** ¿hay algo que quitar? El orden no cuenta: es una preferencia de vista, no
+   *  un filtro, y quitarlo no devuelve ni un resultado más. */
+  const anyFilter = Object.values(active).some(Boolean);
+
   return (
     <>
       {/* Hero sobre el degradado azul del Figma (el mismo asset que P01). */}
@@ -92,7 +107,7 @@ export default async function ClassesPage({
         <Container className="py-12">
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-2xl font-bold sm:text-3xl">
-              Explorar Mentorías
+              Explorar mentorías
             </h1>
             <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1.5 text-[12.5px] font-semibold">
               <span className="size-1.5 rounded-full bg-white" />
@@ -126,34 +141,64 @@ export default async function ClassesPage({
           </form>
 
           {/* Los chips del Figma ("Cursos", "Mentorías") no existen como dato:
-              aquí van los modelos de precio reales (RN-10) + categorías. */}
-          <ul className="mt-4 flex flex-wrap gap-2">
-            {MODELS.map((m) => (
-              <li key={m.id}>
-                <Link
-                  href={buildHref({
-                    ...active,
-                    model: active.model === m.id ? undefined : m.id,
-                  })}
-                  className={`inline-flex h-9 items-center rounded-full border px-4 text-[13px] transition-colors ${
-                    active.model === m.id
-                      ? "border-brand bg-brand text-white"
-                      : "border-[#b2d9ff] bg-card text-brand hover:bg-brand-muted"
-                  }`}
-                >
-                  {m.label}
-                </Link>
-              </li>
-            ))}
-            <li>
-              <Link
-                href="/categories"
-                className="inline-flex h-9 items-center rounded-full border border-[#b2d9ff] bg-card px-4 text-[13px] text-brand transition-colors hover:bg-brand-muted"
+              aquí van los modelos de precio reales (RN-10).
+
+              "Categorías" NO es uno más de la fila: los tres primeros FILTRAN
+              esta pantalla y aquél NAVEGA a otra. Con la misma píldora, el mismo
+              borde y la misma lista, no había forma de saberlo. Ahora los
+              filtros van rotulados y agrupados, y la navegación queda al otro
+              lado de un separador y con cara de enlace. */}
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                id="tipo-mentoria"
+                className="text-[13px] font-medium text-white/85"
               >
-                Categorías
-              </Link>
-            </li>
-          </ul>
+                Tipo de mentoría:
+              </span>
+              <ul
+                aria-labelledby="tipo-mentoria"
+                className="flex flex-wrap gap-2"
+              >
+                {MODELS.map((m) => {
+                  const on = active.model === m.id;
+                  return (
+                    <li key={m.id}>
+                      {/* RV-16 · `sort` viaja con el resto. Era el único enlace
+                          de la pantalla que lo dejaba caer: ordenabas por
+                          precio, tocabas "Paquete" y volvías a "Más
+                          relevantes" sin que nada lo dijera. */}
+                      <Link
+                        href={buildHref({
+                          ...active,
+                          sort,
+                          model: on ? undefined : m.id,
+                        })}
+                        aria-pressed={on}
+                        className={`inline-flex h-9 items-center rounded-full border px-4 text-[13px] transition-colors ${
+                          on
+                            ? "border-white bg-white font-semibold text-brand"
+                            : "border-white/60 bg-transparent text-white hover:bg-white/15"
+                        }`}
+                      >
+                        {m.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            <span aria-hidden className="hidden h-6 w-px bg-white/35 sm:block" />
+
+            <Link
+              href="/categories"
+              className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white underline-offset-4 hover:underline"
+            >
+              Explorar por categoría
+              <ArrowRightIcon className="size-3.5" />
+            </Link>
+          </div>
         </Container>
       </div>
 
@@ -169,14 +214,16 @@ export default async function ClassesPage({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[15px] font-medium text-[#666666]">
                 {total}{" "}
-                {total === 1 ? "mentoría disponible" : "mentorías disponibles"}
+                {total === 1
+                  ? "mentoría lista para reservar"
+                  : "mentorías listas para reservar"}
               </p>
 
               {/* ponytail: `<details>` nativo, igual que en P04. `name` lo marca
                   como desplegable: se cierra fuera/Escape/al elegir. */}
               <details name="orden" className="group relative">
                 <summary className="flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border border-[#d1d1d1] px-3.5 text-[13.5px] font-medium text-[#474747] marker:hidden">
-                  Ordenar:{" "}
+                  Ordenar por:{" "}
                   {SORTS.find((s) => s.value === (sort ?? "recent"))!.label}
                   <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
                 </summary>
@@ -196,10 +243,20 @@ export default async function ClassesPage({
             </div>
 
             {products.length === 0 ? (
-              <p className="mt-6 text-sm text-muted-foreground">
-                No hay mentorías para este filtro todavía. Prueba con otra
-                categoría.
-              </p>
+              // RV-11 · mismo estado vacío que el buscador. Las burbujas se
+              // quedan en ESTA pantalla (`?cat=`) en vez de mandar al índice
+              // de categorías: es un filtro más, no un cambio de sitio.
+              <EmptyResults
+                className="mt-6"
+                message="No hay mentorías para este filtro todavía."
+                action={
+                  anyFilter
+                    ? { href: buildHref({ sort }), label: "Quitar los filtros" }
+                    : undefined
+                }
+                categories={categories}
+                hrefFor={(slug) => buildHref({ cat: slug, sort })}
+              />
             ) : (
               <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
                 {products.map((p) => (

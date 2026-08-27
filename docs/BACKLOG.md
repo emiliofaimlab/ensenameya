@@ -10,12 +10,12 @@
 
 | Indicador | Valor |
 | :-- | :-- |
-| Épicas | **24** (EP-00 + EP-01…EP-23) |
-| Historias | **87** (incl. EP-00 diseño, EP-22 integración visual y EP-23 datos) + 1 bug (`EY-109`) |
+| Épicas | **25** (EP-00 + EP-01…EP-24). ⚠️ Jira tiene además `EY-152` — "EP-23 Soporte Técnico al Usuario (Post-MVP)", que **reusa el código EP-23** que ya lleva `EY-110`: duplicado real del tablero, hay que renumerarlo |
+| Historias | **87** (incl. EP-00 diseño, EP-22 integración visual y EP-23 datos) + 1 bug (`EY-109`). En Jira son hoy **135 tickets sin contar épicas**: 110 `Done` · 15 `In Review` · 10 `To Do` (sync 4-ago) |
 | Puntos estimados | 259 SP (backlog dev original EP-01…EP-18) |
 | Historias Must | 40 |
-| Sprints | 4 de dev (+ EP-00 pre-desarrollo, + 3 tracks paralelos) |
-| **Sprint activo** | **Sprint 4** (próximo) — S1, S2 y **S3 ✅ cerrados** (S3 en `Done`, mergeado a prod 2026-07-17) |
+| Sprints | 4 de dev en el docx original; **en Jira van 8** (S1…S5 + **6 AC · 7 · 8**) + EP-00 pre-desarrollo + los tracks paralelos |
+| **Sprint activo** | **6 AC · 7 · 8 abiertos a la vez** (sync Jira 4-ago) — S1–S5 cerrados. 6 AC venció el **31-jul** y sigue abierto; 7 venció el **4-ago**; 8 vence el **7-ago**. De los 20 tickets que quedaban el 29-jul, **15 están en `In Review`** (Sprint 7 entero + 4 del 8, todos en código) y **5 siguen `To Do`** (los de 6 AC, esperando claves). Con los 5 abiertos después son **10 `To Do`**. **Al 7-ago:** las 15 de `In Review` están ya **en `dev`** (PR #11 mergeado) y del Sprint 6 AC hay dos —`EY-93` PAC-01 y `EY-95` PAC-03— **hechas por la pata de Stripe**, aunque no cerrables (§4.5). Plan de ataque y estado en `docs/PLAN-DESARROLLO.md` |
 
 > **Jira es la fuente operativa** (proyecto `EY` en `faimlab.atlassian.net`). Jira añadió **EP-00 —
 > Diseño UX/UI y Contenido** (pre-desarrollo), que el docx original no traía. Este `.md` lo refleja.
@@ -34,7 +34,27 @@
 > existen** (`EY-110`, DD-01…08 / `EY-111`…`EY-118`): campos y relaciones que el Figma da por hechos
 > y que el modelo no tiene. También el bug **`EY-109`** (buscar sin tildes devuelve cero), colgado de
 > EP-03 porque es un defecto del buscador, no una carencia del diseño. Ver §4.3. — *`EY-109` ✅
-> corregido y en prod el 2026-07-22.*
+> corregido y en prod, pero **al segundo intento**: el arreglo del 21-jul no funcionaba; el bueno es
+> del **27-jul** (`b032cc5`, migraciones `20260727120000` + `20260727130000`). Ver §4.3.*
+>
+> **Sync 2026-08-04:** Jira añadió **EP-24 — Ajustes reunión 24-jul** (`EY-119`), que estos docs no
+> recogían, y **cinco tickets nuevos** posteriores al cierre de las 6 tandas: `EY-148` (RF-03, webhook
+> de calificación de referido), `EY-149` (RF-04), `EY-150` (RF-05), `EY-151` (NTF-21) y `EY-153`
+> (SUP-01) — los cuatro últimos **sin sprint asignado**. Todo lo ejecutado desde el 24-jul —plan
+> `R24-01…23`, `R29-01…04`, las **6 tandas** del 29-jul, la limpieza de código muerto y el **`DD-04`
+> rehecho**— se recoge en **§4.4**, sin tocar el histórico de §4.1–§4.3.
+>
+> **Sync 2026-08-07:** el **PR #11 ya se mergeó** (`1a36da2`, 5-ago) y encima entraron dos días más de
+> trabajo (5 y 6 de agosto): las páginas legales con texto redactado de verdad, el bug que hacía fallar
+> **siempre** `US-1802`, `confirm_payment` fuera del alcance del cliente, el correo enviando de verdad
+> (**C-11 resuelta: Resend**) y el **checkout de Stripe de punta a punta en test mode** — `PAC-01` y
+> `PAC-03` hechas por esa pata. Y un hallazgo que **cambia el alcance de EP-13**: el mecanismo de
+> `US-1302` no funciona con la campaña de referidos que hay montada. Todo en **§4.5**.
+>
+> ⚠️ **Sigue sin haber nada de esto en producción.** `main` sigue en `57edfa9` (29-jul); `dev`, en
+> `3529655`. Ya **no** hacen falta dos merges: queda **uno solo, `dev` → `main`**, y con él llegan
+> **20 migraciones que prod no tiene** (`20260729130000` … `20260806180000`) — eran 12 el 4-ago; se
+> sumaron 8 entre el 5 y el 6 de agosto.
 
 ---
 
@@ -66,6 +86,12 @@
 | EP-21 | UX Onboarding Continuo del Tutor · Jira EY-97 | S | — | Track UX (paralelo) |
 | EP-22 | Sprint Integración Visual — Look & Feel · Jira EY-102 | M | — | Track visual (paralelo, **dev**) |
 | EP-23 | Datos que el diseño necesita y no existen · Jira EY-110 | S | — | Derivada de EP-22 |
+| EP-24 | Ajustes reunión 24-jul · Jira EY-119 | M | — | `R24-01…23` — nació de la demo con el cliente. Ver §4.4 |
+
+> ⚠️ **`EY-152` es un duplicado del tablero:** se titula "EP-23 Soporte Técnico al Usuario (Post-MVP)"
+> y reusa el código **EP-23**, que ya es `EY-110` (datos del diseño). Son dos épicas distintas con el
+> mismo identificador. Aquí manda `EY-110`; a la de soporte le toca número nuevo en Jira (sería EP-25).
+> De ella cuelga `EY-153` (SUP-01, botón de soporte), hoy `To Do` y sin sprint.
 
 ---
 
@@ -141,6 +167,21 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 | US-704 | Reembolso manual (admin) | S | 3 | S3 | Reembolso total/parcial desde SCR-AD08; ejecuta `service_role`; NTF-10. | SCR-AD08, DP-03, M6 |
 | US-705 | Nuevos proveedores sin tocar el core | M | 3 | S2 | Alta de adaptador + fila en `payment_routing_rules`; sin migración ni cambio de negocio. | Doc 6, RN-16, DP-01 |
 
+> ⚠️ **`US-703` (`EY-56`) se cerró como `Done` con un criterio que no se cumplía.** Su AC dice
+> "verifico firma (RN-34)" y **no había ninguna firma que verificar**: el proveedor ruteado era
+> `simulated` y no existía endpoint de webhook. Lo que sí estaba hecho era la idempotencia (el evento
+> se procesa una vez). ✅ **Desde el 6-ago la firma existe de verdad** (`7b30768`):
+> `POST /api/webhooks/stripe` lee el **cuerpo crudo** (`req.text()`, no `req.json()` — un
+> parse+stringify reordena claves y rompe el HMAC), responde **400** si la firma no valida —nunca 500,
+> o Stripe reintenta tres días un payload que jamás va a validar— y **503** si falta
+> `STRIPE_WEBHOOK_SECRET`. Verificado con un evento entregado por Stripe de verdad, y reenviar el
+> **mismo `event id` no reprocesa**. Falta la mitad de DLocal. Ver §4.5.
+>
+> ℹ️ **`US-705` estrenó su promesa el 6-ago**: cambiar de proveedor **ya no es una migración**. Los
+> grants acotados de `20260806180000` dejan a `service_role` hacer `update` de
+> `charge_provider`/`payout_provider`/`is_active` en `payment_routing_rules` — sin `insert` ni
+> `delete`, así que inventar un corredor nuevo sigue exigiendo migración revisada.
+
 ### EP-08 — Sesión en Vivo (Daily) · S3
 | US | Historia | MoSCoW | SP | S | Criterio de aceptación | Refs |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
@@ -178,11 +219,69 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 | US-1202 | Registro idempotente de envíos | M | 5 | S3 | Tabla `notifications` con `event_key` único; estado queued/sent/failed/skipped; reintento. | Doc 7 §7.5 |
 | US-1203 | Avisos in-app | C | 3 | S4 | Banners/lista desde `notifications`; campo `read_at`. | SCR-AL02/TU06, S-48/50 |
 
+> **Sync 2026-08-04:** Jira sumó **NTF-21 (`EY-151`) — email de mensaje nuevo en el chat**, `To Do` y
+> **sin sprint**. Amplía el catálogo NTF-01..20 de §7 y toca EP-17 (RN-41): hoy el chat no avisa fuera
+> de la app.
+>
+> **Sync 2026-08-07 — `US-1201` pasa de encolar a enviar (`58fd62e`).** **C-11/DP-05 resuelta:
+> Resend**, elegido por un motivo operativo y no de gusto — es el único de los tres candidatos
+> (SendGrid, Mailgun, Resend) que deja **enviar y probar sin dominio verificado**, y el dominio propio
+> sigue bloqueado. El acoplamiento vive entero en `lib/email.ts`: cambiar de proveedor es reescribir
+> una función. 🔴 **El detalle que habría hecho inútil todo lo demás:** `process_notifications()`
+> marcaba la cola **entera** como `sent` cada 2 minutos sin enviar nada, así que cualquier remitente
+> externo habría llegado siempre a una cola vacía. Ahora esa función solo **informa** (mismo patrón que
+> la pausa de la purga del chat, `20260722200000`: no se borra ni se desprograma, "si se desprograma,
+> se olvida") y el envío real lo hace `/api/cron/notifications-send` cada 5 minutos **por GitHub
+> Actions** — Vercel Hobby limita los crons a **uno al día**, y un aviso de "tienes 24 h para aceptar"
+> que llega mañana no sirve. 🐞 **Y un defecto de catálogo encontrado al probarlo: NTF-07** ("tienes
+> una reserva nueva por aceptar") se encolaba al pasar a `confirmed`, o sea **después** de que el tutor
+> aceptara; ahora se encola en `pending_acceptance` (`20260806160000`), con la misma clave de
+> idempotencia, así que no duplica. **Falta la cuenta de Resend y su `RESEND_API_KEY`**: sin ella el
+> job no toca la cola (los avisos quedan `pending`, no `failed`).
+
 ### EP-13 — Referidos · S4
 | US | Historia | MoSCoW | SP | S | Criterio de aceptación | Refs |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
 | US-1301 | Widget de referidos | S | 3 | S4 | Widget Referral Factory en AL02/G03; sin lógica interna (RN-21); reglas 10%/25%. | FL-04, Doc 6 §6.12 |
 | US-1302 | Captura de código de referido | S | 2 | S4 | Capturo `?ref=` al registro → `profiles.referral_code`; sin lógica de comisión interna. | profiles.referral_code, S-18 |
+
+> **Sync 2026-08-04:** las dos de arriba están hechas y en `In Review` (Sprint 8), pero Jira sumó
+> **tres historias de integración real** que el docx v1.0 no traía: **RF-03 `EY-148`** (webhook de
+> calificación del referido — la primera que **toca nuestro backend**), **RF-04 `EY-149`** (alta
+> automática en Referral Factory) y **RF-05 `EY-150`** (aviso al referidor). Las tres `To Do`;
+> RF-04 y RF-05 **sin sprint**. Ojo: amplían RN-21 ("sin lógica interna") — un webhook propio ya es
+> lógica nuestra, aunque el programa siga viviendo en Referral Factory.
+
+> 🔴 **Sync 2026-08-07 — al mirar la campaña de verdad, EP-13 cambia de alcance. Léase entero antes de
+> tocar `EY-148`.**
+>
+> **1. `US-1302` (`EY-79`) está en `In Review` y su mecanismo NO FUNCIONA con esta campaña.** El AC
+> asume que el referido aterriza en **nuestra** app con un `?ref=` en la URL. No es lo que hace
+> Referral Factory: la campaña (`https://vercel.referral-factory.com/cXr65Wou/signup`) lleva al
+> referido a una **página de oferta alojada por RF**, donde deja nombre y correo, y **solo después**
+> lo redirige a
+> `https://ensenameya.vercel.app`. Encima, los **tres** parámetros de URL que RF ofrece pasar en esa
+> redirección (Nombre, Email, Referrer First Name) estaban **apagados**, así que el referido llegaba
+> sin nada. Y lo determinante: **RF no ofrece un parámetro de código de referido**. Toda la atribución
+> construida —cookie `ey-ref` + `profiles.referral_code`, migración `20260729130000` (`cefb805`,
+> `b01f26a`)— **no puede funcionar** tal cual. Se activó el parámetro **`ref_email`**: la atribución
+> tiene que pasar a ser **por correo contra la API de RF**, no por código propio. El ticket no está
+> "hecho a falta de mergear": está **hecho contra una premisa equivocada** y hay que rehacer su AC.
+>
+> **2. `RF-03` (`EY-148`) probablemente sobra.** La propia integración **Stripe ↔ Referral Factory**
+> de la herramienta ya califica al referido siguiendo el **gasto acumulado de UN Customer de Stripe**
+> y lo **descalifica al reembolsar** — exactamente lo que el webhook propio iba a hacer. Por eso el
+> checkout guarda `profiles.stripe_customer_id` y **reutiliza un Customer por persona** (`7b30768`):
+> con cinco fichas distintas, cinco compras de 20 USD no alcanzan ningún umbral y el referidor no cobra
+> nunca. **Hay que comprobarlo antes de escribir una línea de `EY-148`**; si se confirma, el ticket se
+> cierra sin código y RN-21 ("sin lógica interna") **sigue en pie**, que era lo que la reunión del
+> 17-jul quería.
+>
+> **3. Bloqueantes que no son código.** Los **términos que RF le enseña al referido** son **su
+> plantilla sin rellenar**, con corchetes tipo `[Insert link to Privacy Policy here]` — pendiente de
+> redactar, y ahora hay texto propio del que copiarlos (DD-06, §4.5). `NEXT_PUBLIC_REFERRAL_URL` y
+> `REFERRAL_FACTORY_API_KEY` están **en local pero no en Vercel**, así que en la preview el bloque
+> "Invita y gana" de `US-1301` **no se pinta**.
 
 ### EP-14 — Seguridad / RLS · [S1]
 | US | Historia | MoSCoW | SP | S | Criterio de aceptación | Refs |
@@ -211,11 +310,38 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 | US-1702 | Descargar conversación del chat | C | 3 | S4 | Exporto .txt/.json del hilo desde SCR-AL03/TU08. | Doc 6 §6.12b, S-57 |
 | US-1703 | Purga automática del chat | S | 2 | S3 | pg_cron borra mensajes con `expires_at` vencido (30 días); job diario. | messages.expires_at, RN-41 |
 
+> **Sync 2026-08-07:** `US-1702` (`EY-84`) y `US-1703` (`EY-76`) **ya están en `dev`** desde el merge
+> del PR #11 (`1a36da2`, 5-ago) — dejan de "esperar el merge". La purga vuelve a **borrar de verdad**
+> (30 días, mensaje **y adjunto**, `20260729180000`) y la descarga previa la cubre `US-1702`, que es lo
+> que pedía la decisión 22 del cliente. Siguen sin llegar a producción hasta el merge `dev` → `main`.
+
 ### EP-18 — Grabación de la Sesión (v3) · S4
 | US | Historia | MoSCoW | SP | S | Criterio de aceptación | Refs |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
 | US-1801 | Grabar sesión con consentimiento | S | 8 | S4 | Sin consentimiento de ambos no se graba (RN-42); consentimiento antes de entrar a la sala; add-on Daily de pago. | SCR-LV01, M9, RN-42 |
 | US-1802 | Ver y descargar grabación 30 días | S | 5 | S4 | Disponible 30 días desde `completed_at`; luego `expired` y purgada; NTF-19. | M9, SCR-AL03/TU08, NTF-19 |
+
+> 🐞 **Sync 2026-08-07 — `US-1802` (`EY-86`) no encontraba NINGUNA grabación** (`fffd4b5`).
+> `join_session` bautiza la sala `'ey-' || replace(id::text,'-','')`, **sin guiones**, y
+> `/api/recordings/[sessionId]` la buscaba como `ey-${sessionId}`, **con guiones**. Nunca coincidían:
+> `listRecordings` volvía vacío y la interfaz decía "Esta clase no se grabó" aunque Daily estuviera
+> bien configurado y los dos hubieran consentido. **Fallo del 100 % de las veces, en silencio.** El
+> arreglo no es replicar el `replace`: es **dejar de derivar el nombre por segunda vez** y leer
+> `sessions.daily_room_name`, que la BD ya guarda. Columna a `null` = nadie entró nunca a la sala, que
+> es un "no hay grabación" legítimo.
+>
+> ✅ **Y la retención de 30 días ya BORRA de verdad** (`0722b64`, RN-42). Hasta ahora se cumplía solo
+> "al servir" —410 pasada la fecha, fichero eterno en Daily—, un dato personal que no caducaba. Ahora
+> hay job diario `/api/cron/recordings-purge` (Vercel Cron, 04:00) + `sessions.recordings_purged_at`
+> (`20260806130000`), que evita repasar cada sesión vencida para siempre y deja constancia de **cuándo**
+> se borró. **No** es una Edge Function a propósito: el repo ya eligió Route Handlers en
+> `20260717120000` ("Postgres no puede llamar a la API de Daily"), y una función de Deno pediría su
+> propio cliente, su propia copia de la clave y un pipeline que no existe. **Falla cerrado**: sin
+> `CRON_SECRET` responde 503 y no corre.
+>
+> 🔒 **Ninguna de las dos desbloquea EP-18:** el **add-on de grabación de Daily sigue sin activar**
+> (falta el go de coste, `recordings_bucket` en `null`), así que hoy no hay grabaciones ni que servir
+> ni que borrar. Esto quita los bugs, no el bloqueo.
 
 ---
 
@@ -242,10 +368,22 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 - **S3:** US-704,801,802,803,901,902,1001,1002,1003,1004,1101,1102,1103,1104,1105,1201,1202,1701,1703.
 - **S4:** US-1203,1501,1502,1601,1602,1702,1801,1802. — **US-1301 (3 SP) y US-1302 (2 SP)**, los
   referidos de EP-13, **salen de S4** por decisión de la reunión del 17-jul (`00:59:03`): bajan a los
-  dos últimos sprints. S4 pasa de 10 historias / 39 SP a **8 / 34**. ⚠️ El movimiento **aún no está
-  hecho en Jira** — este `.md` es espejo, así que hay que replicarlo allí.
+  dos últimos sprints. S4 pasa de 10 historias / 39 SP a **8 / 34**. ✅ **Replicado en Jira**: US-1301
+  y US-1302 (`EY-78`/`EY-79`) acabaron en el **Sprint 8**, y las dos están hoy en `In Review`.
+  ⚠️ **`US-1302` no se puede cerrar desde ahí**: su mecanismo no sirve para la campaña de Referral
+  Factory que hay montada — ver el 🔴 de EP-13 en §2 y §4.5.
 
-**Estado (sync Jira 2026-07-17):** S1 ✅, S2 ✅ y **S3 ✅ cerrados** — las 19 historias de S3 en `Done` (+ US-203/EY-33, reabierta y cerrada con los 7 documentos), mergeadas a prod. Pendiente de S3: US-202 (EY-32, asistente de onboarding del tutor) sigue `To Do`. **S4 no iniciado.**
+**Estado (sync Jira 2026-08-04):** S1…S5 **cerrados**. Las historias de S4 no se quedaron sin hacer:
+se ejecutaron en las tandas 3–6 del plan del 29-jul (observabilidad `EY-80`/`EY-81`, avisos in-app
+`EY-77`, grabación `EY-85`/`EY-86`, responsive y QA `EY-82`/`EY-83`) y **están en `dev` desde el 5-ago**
+(PR #11 mergeado, `1a36da2`) — siguen en `In Review` en Jira y **ninguna llegó a producción**, que
+espera el merge `dev` → `main`. Ver §4.4 y §4.5. **US-202 (`EY-32`) ya no está pendiente**: el asistente del tutor tiene
+sus **5 pasos** (`tutor-onboarding-form.tsx`, pasos 1–5) desde IV-02, y el gate de UX-204 se añadió el
+27-jul (`66f70e0`). Lo único abierto de dev son los **5 tickets del Sprint 6 AC**, bloqueados por
+cuentas y claves de Stripe/DLocal — **no por la decisión**, que C-01 ya cerró. ⚠️ **Corrección del
+7-ago:** ese bloqueo era **medio bloqueo**. El *sandbox* de Stripe no exige KYC, así que `PAC-01`
+(`EY-93`) y `PAC-03` (`EY-95`) **están construidas y probadas en test mode**; lo que sigue parado es
+DLocal —cuenta **rechazada**— y los payouts. Ver §4.5.
 
 ### 4.1 Tracks paralelos (fuera de S1–S4)
 
@@ -254,10 +392,11 @@ No consumen SP de los sprints de dev. Se filtran en Jira por label.
 | Track | Épica | Jira | Estado | Nota |
 | :-- | :-- | :-- | :-- | :-- |
 | `Sprint-Diseño` | EP-19 | EY-88…91 (DS-01…04) | **In Review** (Diana Rivera) | Entregable Figma, no código. Precede al rediseño visual de pantallas ya construidas. |
-| `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) | 🔒 **Bloqueada** | C-01 **decidido: DLocal + Stripe**. Falta cuenta + API keys de ambos. El motor simulado ya está hecho y probado. |
-| `Sprint-Mejoras-UX` | EP-21 | EY-98…101 (UX-201…204) | To Do | ⚠️ **Redefine** US-201/202/203 (ya `Done`) — ver aviso abajo. |
-| `Sprint-Integracion-Visual` | EP-22 | EY-103…108 (IV-01…06) | **Las 6 IV `In Review`** · en prod 2026-07-22 | **Código.** Aplica el Figma sobre pantallas ya funcionales. Ver §4.2. |
-| — | EP-23 | EY-111…118 (DD-01…08) | To Do (infra parcial en IV-02) | Huecos de modelo destapados por EP-22. No bloquean el despliegue; bloquean la fidelidad al diseño. Ver §4.3. |
+| `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) + `EY-147` | 🟡 **A medias** (antes: 🔒 bloqueada) — hoy **Sprint 6 AC**, vencido el 31-jul y aún abierto | C-01 **decidido: DLocal + Stripe** (resuelta, no bloquea). "Con una cuenta Stripe en *test mode* la mitad es ejecutable" → **se ejecutó el 6-ago**: `PAC-01` y `PAC-03` funcionan de punta a punta contra Stripe. 🔒 Siguen bloqueados **DLocal entero** (cuenta **rechazada**) y los **payouts** (Connect exige KYC). Ver §4.5. |
+| `Sprint-Mejoras-UX` | EP-21 | EY-98…101 (UX-201…204) | ✅ **Done** (ninguna aparece ya entre los `To Do`/`In Review`) | Redefinía US-201/202/203 — **ya ejecutado**, ver aviso abajo. |
+| `Sprint-Integracion-Visual` | EP-22 | EY-103…108 (IV-01…06) | **Las 6 IV en `Done` desde el 27-jul** · en prod 2026-07-22 | **Código.** Aplica el Figma sobre pantallas ya funcionales. Ver §4.2. |
+| — | EP-23 | EY-111…118 (DD-01…08) | **Las 8 cerradas**: DD-01/02/07/08 en `Done`, DD-03/04/05/06 en `In Review` | Huecos de modelo destapados por EP-22. Ver §4.3 y §4.4. |
+| — | EP-24 | EY-119 (`R24-01…23`) | ✅ Ejecutada (12/12 + 11/11, 24→27-jul) | Ajustes de la reunión del 24-jul. Detalle en `docs/PLAN-DESARROLLO.md`; resumen en §4.4. |
 
 > ⚠️ **EP-21 no es documentación: es alcance nuevo sobre historias cerradas.**
 > - **UX-203** pide **7 documentos** de KYC (`id_document`, `degree`, `certificate`, `diploma`,
@@ -270,24 +409,34 @@ No consumen SP de los sprints de dev. Se filtran en Jira por label.
 > Las historias UX-2xx están redactadas como *requisitos de pantalla* (entregable: documento), pero su
 > AC implica **re-trabajo de código**. Antes de ejecutarlas hay que decidir si se abren historias de dev
 > derivadas o se reabren US-202/203.
+>
+> ✅ **Resuelto — el aviso de arriba ya es histórico.** No se abrieron historias derivadas: se ejecutó
+> en el código. **UX-203** → los 7 documentos ya están en el modelo (migración
+> `20260715130000_us203_seven_documents`, más `20260724130000`/`20260724130100` para el borrador de
+> TU02) y con ellos **C-14 queda cerrada**. **UX-202** → el asistente es secuencial de **5
+> pasos** desde IV-02 (`tutor-onboarding-form.tsx`), con la verificación metida dentro como penúltimo
+> paso (R24-15, `39b40d5`) y los materiales fuera (R24-16, `3f6181d`). **UX-204** → el gate existe desde
+> el **27-jul** (`66f70e0`): sin al menos una oferta creada, "Finalizar" sale deshabilitado con copy
+> bloqueante y CTA "Crear mi primera oferta".
 
 ### 4.2 EP-22 · Sprint Integración Visual (`Sprint-Integracion-Visual`)
 
 Aplicar el look & feel de Figma sobre el frontend **ya funcional**. No cambia lógica ni datos.
 
-**Las 6 en `In Review` y en producción desde el 2026-07-22** (PR #6→`dev`, PR #7→`main`).
+**Las 6 en producción desde el 2026-07-22** (PR #6→`dev`, PR #7→`main`) **y en `Done` desde el
+2026-07-27**.
 
 | ID | Jira | Alcance | Estado | Páginas Figma |
 | :-- | :-- | :-- | :-- | :-- |
-| IV-01 | EY-103 | Auth (login / registro / recuperar) | **In Review** · `95aacc6` | `AUTH` — AU01…AU04 |
-| IV-02 | EY-104 | Onboarding alumno y tutor + KYC | **In Review** · `b68b20c` + `1b0efb6` | `ALUMNO` AL01, `TUTOR` TU01 (5 pasos) |
-| IV-03 | EY-105 | Descubrimiento y páginas públicas | **In Review** · `8a186a7` + `676972f` | `HOME - Contenido` — P01…P09 |
-| IV-04 | EY-106 | Dashboard alumno (reservas, checkout, chat, reseñas) + **LV01 sala** | **In Review** · `dffa023`…`fa8bec9` | `ALUMNO` AL02…AL08, `CHAT`, `LV01` |
-| IV-05 | EY-107 | Dashboard tutor (catálogo, disponibilidad, reservas, payouts) | **In Review** · `036a346` | `TUTOR` TU03…TU09 |
-| IV-06 | EY-108 | Panel admin | **In Review** · `f521315` | `ADMIN` AD02…AD15 |
+| IV-01 | EY-103 | Auth (login / registro / recuperar) | **Done** (27-jul) · `95aacc6` | `AUTH` — AU01…AU04 |
+| IV-02 | EY-104 | Onboarding alumno y tutor + KYC | **Done** (27-jul) · `b68b20c` + `1b0efb6` | `ALUMNO` AL01, `TUTOR` TU01 (5 pasos) |
+| IV-03 | EY-105 | Descubrimiento y páginas públicas | **Done** (27-jul) · `8a186a7` + `676972f` | `HOME - Contenido` — P01…P09 |
+| IV-04 | EY-106 | Dashboard alumno (reservas, checkout, chat, reseñas) + **LV01 sala** | **Done** (27-jul) · `dffa023`…`fa8bec9` | `ALUMNO` AL02…AL08, `CHAT`, `LV01` |
+| IV-05 | EY-107 | Dashboard tutor (catálogo, disponibilidad, reservas, payouts) | **Done** (27-jul) · `036a346` | `TUTOR` TU03…TU09 |
+| IV-06 | EY-108 | Panel admin | **Done** (27-jul) · `f521315` | `ADMIN` AD02…AD15 |
 
 Rama `feat/iv01-auth-visual` (mergeada y **borrada** tras el release): 25 commits. Los tokens alcanzan
-a **toda** la app. **Ninguna a `Done`**: falta aprobación del cliente y contenido final.
+a **toda** la app.
 
 **Notas de ejecución (además de la maquetación de cada pantalla):**
 
@@ -310,6 +459,10 @@ a **toda** la app. **Ninguna a `Done`**: falta aprobación del cliente y conteni
 **Regla de la épica (de Jira):** ninguna IV pasa a `Done` sin aprobación del cliente y contenido
 final. **Estado máximo durante el sprint: `In Review`.** Textos con placeholders donde el copy no
 esté aprobado. Labels: `pendiente-contenido`, `sujeto-a-cambios`.
+
+⚠️ **La regla se saltó:** las 6 pasaron a `Done` el **27-jul** y la aprobación del cliente **nunca
+llegó** — el rediseño está en producción sin go formal (decisión de negocio de la reunión del 17-jul).
+El contenido con placeholders sigue igual: los textos legales y el copy final dependen del cliente.
 
 **AU04 · el spinner costó un cambio de arquitectura.** El Figma dibuja una pantalla de espera
 ("Verificando tu cuenta…"). `/auth/callback` era un **route handler de servidor**: intercambiaba el
@@ -339,10 +492,16 @@ verificado por API el 2026-07-20:
   iniciada**. Además su función es mensajería **alumno ↔ tutor(es) estilo LinkedIn** (bandeja con
   varias conversaciones), no el chat por reserva de US-1701 (`/chat/[bookingId]`), que es lo único
   construido. **No implementar el FAB tal como está dibujado**; la bandeja global es alcance nuevo
-  → **DD-07 (`EY-117`)**.
+  → **DD-07 (`EY-117`)**. ✅ **Resuelto el 27-jul** con **R24-21** (`b09e518`): burbuja flotante
+  **solo con sesión** (`chat-launcher.tsx` + `chat-bubble.tsx`), tipo bandeja, que lista los hilos por
+  reserva sin entrar a la sesión. `EY-117` en `Done`.
 - 🔗 **Enlaces sin destino.** El footer del diseño apunta a 5 rutas. `/about` y `/how-it-works` ✅
-  creadas en IV-03 (P02, P03); `/terms`, `/privacy` y `/cookies` **siguen en 404** — sin diseño y con
-  contenido legal que depende del cliente → **DD-06 (`EY-116`)**.
+  creadas en IV-03 (P02, P03); `/terms`, `/privacy` y `/cookies` estuvieron en 404 hasta el **29-jul**
+  → ✅ **creadas** (`8d8ddb2`, tanda 1 / **DD-06 `EY-116`**): las 3 responden 200 con el armazón
+  público. ~~Y **dicen en pantalla** que el texto legal está pendiente del cliente. Falta ese texto.~~
+  → **Ya no**: el **6-ago** las tres pasaron de "documento en preparación" a **texto redactado**
+  (`4cf2ca6` → `b957933`), ver §4.5. ⚠️ **En producción siguen siendo 404**: `main` no tiene ni
+  siquiera `8d8ddb2`.
 - Acceso: el MCP de Figma se agota con asiento *View*; usar `FIGMA_API_KEY` (`.env.local`) contra la
   REST API. El token es **personal de Diana Rivera** — si lo rota, se cae el acceso.
 
@@ -540,7 +699,9 @@ ilustrada es decorativa); "¡Reserva registrada!" en vez de "confirmada"; y los 
 ("Visa ···· 4242", "Ver recibo", "Ver grabación", "Invita y gana").
 
 **Componente huérfano:** `src/app/(app)/reservas/[id]/cancel-booking-button.tsx` — el detalle ya no
-lo usa (enlaza a la página de cancelación). Pendiente de borrar (el sandbox bloqueó el `rm`).
+lo usa (enlaza a la página de cancelación). ✅ **Borrado el 4-ago** (`63a7896`), junto con el otro
+huérfano que quedaba, `admin/timeline.tsx` (el `Timeline` de los "logs básicos" de US-1104 que nunca
+llegó a montarse). Ninguno de los dos generaba ruta ni entraba al bundle.
 
 #### Revisión nodo a nodo de TU01–TU09 (2026-07-24, nocturna autónoma)
 
@@ -587,7 +748,10 @@ mano por SQL y nunca pasó por la RPC del admin que concede el rol.)
 
 **Se mantuvo contra el Figma, con motivo:** "Calendario de la clase" y "Material de apoyo" POR
 PRODUCTO en TU04 (el modelo no los tiene: la agenda sale de la disponibilidad general y
-`tutor_materials` es por tutor → huecos de EP-23); la tarjeta "Grabación" de TU08 (US-1602, S4);
+`tutor_materials` es por tutor → huecos de EP-23; el **material por producto se cerró el 27-jul** con
+R24-16, migración `20260724150000`); la tarjeta "Grabación" de TU08 —que es **US-1802**, no US-1602, y
+ya está construida: `RecordingLink` se pinta en TU08 y en AL03 desde la tanda 4 (`bc35f9b`), a la
+espera de que se active el add-on de Daily—;
 "Cuenta de cobro" de TU09 (depende del PSP, EP-20); "Total ganado" bruto en TU06 (`tutor_balance`
 solo devuelve netos); el nombre del alumno en TU06/07/08 (`profiles` es RLS own-only — hueco ya
 documentado); y "Mis productos"→**"Mis mentorías"** por consistencia con el renombrado global.
@@ -622,6 +786,9 @@ responde 200 con los mismos patrones).
   `failed`/`on_hold` (Media/Alta) y cancelaciones (Baja), con chips de tipo y "Abrir" al detalle.
   **Sin "Marcar atendida"**: no hay tabla de incidencias donde persistir ese estado (hueco EP-23);
   la alerta desaparece cuando el dato subyacente se resuelve. Las "disputas" llegan con el PSP.
+  → ✅ **"Marcar atendida" existe desde el 29-jul** (decisión 29, migración `20260729170000`): la tabla
+  `alert_acks` guarda **el acuse, no una copia de la incidencia** — duplicar la alerta daría dos
+  versiones del mismo hecho. Atendidas se apartan de la lista, se pueden revisar y reabrir.
 - **AD11/AD12** reestiladas (filas con /slug + Orden + píldora Activa/Inactiva; tiers con split
   20/700, "Por defecto" azul y la nota del seed C-09). **AD06-07/AD09/AD15** con chips, cifras en
   tarjeta y filas de píldora + "Ver".
@@ -643,12 +810,15 @@ o alcance nuevo — no son trabajo visual.
 | :-- | :-- | :-- | :-- |
 | DD-01 | EY-111 | ✅ **Cerrada (23-jul, migración `20260723120000`)** — `tutor_profiles.display_name` + `avatar_path`: copias **públicas** que el tutor publica, en una tabla que ya solo expone tutores `approved`. `profiles` **sigue privado** (no se abre a `anon`). Volcado desde el onboarding y sembrado con lo que ya había | P01, P04, P05, P07, P08, P09 |
 | DD-02 | EY-112 | ✅ **Cerrada (23-jul, misma migración)** — `products.image_path` + bucket público `product-images` con RLS por carpeta del tutor, y campo de subida en el formulario de producto | P01, P05, P06, P09 |
-| DD-03 | EY-113 | Nivel e idioma **del producto**. ⚠️ Ojo con `tutor_profiles.teaching_level` (IV-02): ese es el nivel que enseña **el tutor**, no el de la mentoría — no sirve para estos filtros ni para el chip "Nivel Universitario" de P08 | P05, P06, P07, P08 |
-| DD-04 | EY-114 | Precio de entrada materializado en `tutor_profiles` → desbloquea el filtro de precio | P04 |
-| DD-05 | EY-115 | Subcategorías / "Temas" — hoy las categorías son **planas por decisión** (S-13). **Reducida el 23-jul:** los chips del hero de P06 no eran subcategorías sino el **selector de categoría**, y el filtro "Temas" se resolvió cruzando con una **segunda categoría** (`product_categories` es N–M). Lo que queda pendiente es la jerarquía real | P04, P06, P07 |
-| DD-06 | EY-116 | Páginas legales `/terms`, `/privacy`, `/cookies` (404 desde el footer y desde AU02) | todas |
-| DD-07 | EY-117 | Bandeja de mensajería alumno ↔ tutor (el FAB del diseño) | todas, con sesión |
-| DD-08 | EY-118 | 🐞 Seed de dev: ratings sembrados sin filas en `reviews` | dev/QA |
+| DD-03 | EY-113 | ✅ **Cerrada (29-jul, migración `20260729190000`, `31a9ddd`)** — nivel e idioma **por mentoría**. El nivel **reutiliza el enum `teaching_level`** (mismo vocabulario del filtro del Figma, un tipo menos); el idioma es texto con check porque la lista la mueve producto. Selects en TU04, grupos en P05, desplegables en P06 y chips en P08. El "Idioma del tutor" de P04 no necesitó columna: se deriva de las clases que publica | P05, P06, P07, P08 |
+| DD-04 | EY-114 | ✅ **Cerrada, y rehecha (4-ago, `cccb566` + `96f4e0b`)** — la primera versión (29-jul, `302ba82`) copiaba los **cuatro tramos fijos** del Figma; el comentario de Jose en `EY-114` pedía un **rango continuo**. Ahora es una **vista nueva `tutors_public`** (migración `20260804120000`) que expone el precio de la mentoría activa más barata por *lateral join*: el rango, la paginación y el `count` los hace Postgres, sin columna materializada que mantener. `security_invoker = true` **no es decorativo** — sin él la vista correría con los privilegios del dueño y habría publicado tutores no aprobados y borradores. El deslizador va en **escala logarítmica**: con un tutor a 120 US$ y ocho entre 10 y 25, en lineal el catálogo útil cabía en el primer 12 % del recorrido | P04 |
+| DD-05 | EY-115 | Subcategorías / "Temas" — hoy las categorías son **planas por decisión** (S-13). **Reducida el 23-jul:** los chips del hero de P06 no eran subcategorías sino el **selector de categoría**, y el filtro "Temas" se resolvió cruzando con una **segunda categoría** (`product_categories` es N–M). ✅ **Cerrada el 29-jul sin escribir código**: la decisión 26 del cliente mantiene las categorías planas y el cruce ya vivía en `category-explorer.tsx:83-90`. La jerarquía real queda **fuera del MVP** | P04, P06, P07 |
+| DD-06 | EY-116 | ✅ **Cerrada (29-jul, `8d8ddb2`) y completada (6-ago, `4cf2ca6`→`b957933`)** — `/terms`, `/privacy` y `/cookies` ya no dicen "documento en preparación": llevan **texto redactado que describe la plataforma que existe** (ventana de pago de 20 min, 24 h para aceptar, sala 10/10, chat desde 2 días antes, retención de 7 días y lote de los lunes, los 7 documentos de KYC), con los **% de reembolso importados de `lib/policy.ts`** para que no puedan divergir de lo que aplica `cancel_booking`. **Sin migración**: son páginas de contenido. 🔍 **Hallazgo:** el cliente **ya tenía** términos y privacidad publicados en `ensenameya.com` (GoDaddy, "Última actualización: Marzo 23, 2026") y nadie los había mirado — de ahí salen el buzón oficial **`info@ensenameya.com`** (sustituye al marcador `hola@`) y su **§8 de limitación de responsabilidad**, incorporada. **Dos divergencias deliberadas** con el texto del cliente, anotadas en la cabecera del componente: el suyo nombra "Stripe o Mercado Pago" (C-01) y deja los reembolsos en "puede variar según cada caso" cuando **RN-37 ya es código**. Mientras los dos sitios estén publicados hay **dos contratos vivos**: eso lo decide negocio, no dev | todas |
+| DD-07 | EY-117 | ✅ **Cerrada (27-jul, `b09e518` / R24-21)** — burbuja flotante **solo con sesión** (RN-41), tipo bandeja: los hilos por reserva sin entrar a la sesión. Reconcilia el FAB del Figma con el error de diseño documentado arriba | todas, con sesión |
+| DD-08 | EY-118 | ✅ **Cerrada en Jira** (`Done`) — 🐞 Seed de dev: ratings sembrados sin filas en `reviews`. Era dato de semilla, así que **no deja commit ni migración que citar** | dev/QA |
+
+**Dónde está cada una hoy (sync Jira 4-ago):** DD-01, DD-02, DD-07 y DD-08 en `Done`; DD-03, DD-04,
+DD-05 y DD-06 en `In Review`, esperando el merge del PR #11. **Ninguna sigue abierta.**
 
 **🐞 Sin ticket todavía — el catálogo público de productos devolvía CERO a quien no había iniciado
 sesión.** Detectado y corregido el **2026-07-23** (migración `20260723130000`), **pendiente de abrir en
@@ -658,14 +828,27 @@ no tiene grant sobre `bookings`, y **cualquier** `select` anónimo sobre `produc
 `permission denied for table bookings`. Home ("Tutorías destacadas"), `/classes`, `/search`,
 `/categories/[slug]` y el detalle de producto salían vacíos **sin sesión**; con sesión funcionaba, por
 eso pasó desapercibido en la revisión de IV-03. Arreglo: acotar esa política (y su gemela de
-`product_categories`) a `authenticated`, que es el único rol que puede tener reservas. **Está en prod
-en cuanto se mergee a `main`.** Verificado: `anon` pasa de 0 a 5 productos en dev.
+`product_categories`) a `authenticated`, que es el único rol que puede tener reservas. Verificado:
+`anon` pasa de 0 a 5 productos en dev. ✅ **En prod desde el 27-jul** (la migración `20260723130000`
+está en `main`). El ticket de Jira **sigue sin abrir**.
 
-**Aparte, en EP-03: `EY-109` — buscar sin tildes devolvía cero resultados.** ✅ **Corregido y en prod**
-(`In Review`, migraciones `20260721120000` + `20260721130000`). El primer intento estuvo mal —indexar
-sobre texto ya sin tildes rompía el stemmer español— y se corrigió indexando **las dos ramas** (con y
-sin tilde). `matematicas`/`Matemáticas`, `programacion`/`Programación`, `calculo`/`cálculo`,
-`ingles`/`inglés` devuelven ya el mismo conjunto.
+**Aparte, en EP-03: `EY-109` — buscar sin tildes devolvía cero resultados.** ✅ **Corregido y en prod,
+pero hizo falta arreglarlo DOS veces.**
+
+- **21-jul (`20260721120000` + `20260721130000`) — no funcionaba.** Se indexaron las dos ramas (con y
+  sin tilde) en `products.search_vector`, y estos docs lo dieron por bueno. Pero el fallo estaba del
+  **lado de la consulta**: el stemmer español de Snowball es sensible al acento, así que el documento
+  "Aprende a programar…" stemea a `program`, la consulta `programación` también → ✅, y `programacion`
+  stemea distinto → ❌. Medido antes del segundo arreglo: `programacion` devolvía **0** productos y
+  `Programación` 1.
+- **27-jul (`b032cc5`, migraciones `20260727120000` + `20260727130000`) — el bueno.** Dos caminos que
+  solo **añaden** (el `tsvector` sigue mandando en relevancia): columna generada `products.search_text`
+  sin acentos con índice GIN de trigramas, y `word_similarity` para el error de tecleo. `matematicas`/
+  `Matemáticas`, `programacion`/`Programación`, `calculo`/`cálculo`, `ingles`/`inglés` devuelven ya el
+  mismo conjunto.
+
+⚠️ Lección: "corregido" no es lo mismo que "verificado con la consulta que fallaba". La primera
+corrección se cerró sin reproducir el caso original.
 
 **Huecos NUEVOS que destapó la pasada P02–P09 (2026-07-23)** — sin ticket todavía, **pendientes de
 abrir en Jira bajo EP-23**:
@@ -675,13 +858,13 @@ abrir en Jira bajo EP-23**:
 | **Años de experiencia** del tutor | P07 | No existe en ninguna tabla |
 | **Tiempo de respuesta** ("Responde en ~2 h") | P07 | Ídem; exigiría medir respuestas del chat |
 | **"Qué incluye el paquete"** (segunda lista del producto) | P08 | `products` guarda un único texto libre. Las viñetas de "Qué vas a conquistar" se derivan de la `description` si viene en líneas |
-| **Canal de soporte** ("Contactar a soporte") | P03 | No hay ruta ni dirección. El canal que asume el diseño es DD-07 |
+| **Canal de soporte** ("Contactar a soporte") | P03 | No hay ruta ni dirección. El canal que asume el diseño es DD-07. **Ya tiene ticket: `EY-153` (SUP-01, botón de soporte)**, `To Do` y sin sprint, colgado de la épica de soporte post-MVP (`EY-152`, la del código duplicado) |
 | **Foto por categoría** | P06 | Resuelta **sin columna**: es un asset de diseño, vive en `public/img/categories/{slug}.jpg`. Si el cliente quiere que el admin las suba, pide migración + pantalla |
-| **Nombre del alumno en las reseñas** | P07, P08 | Las reseñas son anónimas por diseño de la consulta (US-902). Firmarlas sería DD-01 aplicado al **alumno**: otra decisión de privacidad |
-| **"Tu objetivo principal"** del alumno | AL01 p2 | El Figma pinta un `<select>` ("Prepararme para una entrevista") y `profiles` no tiene el campo. **El diseño tampoco da la lista de opciones**, así que no se inventó el enum. Migración de una columna + la lista que decida el cliente |
-| **Motivo de cancelación** del alumno | AL07 | El Figma pide un `<select>` de motivo + texto libre; `bookings` no tiene columna. Se captura en el cliente pero **no se persiste** hasta que exista. Migración de una columna (`bookings.cancel_reason`) + el enum de motivos que decida el cliente |
+| **Nombre del alumno en las reseñas** | P07, P08 | Las reseñas son anónimas por diseño de la consulta (US-902). Firmarlas sería DD-01 aplicado al **alumno**: otra decisión de privacidad. ✅ **Cerrado (decisión 18, migración `20260729150000`)**: `reviews.author_display` es una copia enmascarada que escribe `submit_review` **solo con consentimiento** — `profiles` sigue cerrado y la consulta pública deja de tocarlo. ⚠️ Efecto visible: los testimonios de la home firman "Alumno" hasta que alguien marque la casilla |
+| **"Tu objetivo principal"** del alumno | AL01 p2 | El Figma pinta un `<select>` ("Prepararme para una entrevista") y `profiles` no tiene el campo. **El diseño tampoco da la lista de opciones**, así que no se inventó el enum. ✅ **Cerrado (decisión 30, migración `20260729160000`)**: `profiles.primary_goal` con check de las **seis opciones que confirmó el cliente** + select en AL01 p2 |
+| **Motivo de cancelación** del alumno | AL07 | El Figma pide un `<select>` de motivo + texto libre; `bookings` no tiene columna. ✅ **Cerrado (decisión 23, migración `20260729140000`)**: `bookings.cancel_reason`, lo escribe `cancel_booking` con un parámetro opcional y sale en el log de AD10. **Sin enum**: la lista es de producto, no de esquema |
 | **Calendario de la clase** (fechas por producto) | TU04 | El Figma define fechas específicas por mentoría; la agenda real sale de la **disponibilidad general** del tutor (`get_available_slots`). Sería una tabla nueva `product_dates` + cruce en la función de slots |
-| **Material de apoyo por producto** | TU04 | `tutor_materials` es **por tutor** (TU01 p4); el Figma lo pide además por mentoría. Sería una FK opcional `product_id` en `tutor_materials` + el uploader en el form |
+| **Material de apoyo por producto** | TU04 | `tutor_materials` es **por tutor** (TU01 p4); el Figma lo pide además por mentoría. ✅ **Cerrado el 27-jul** con **R24-16** (`3f6181d`, migración `20260724150000`): los materiales salen del onboarding y pasan a la creación de la oferta; el asistente baja de 6 a 5 pasos |
 | **Cuenta de cobro del tutor** | TU09 | "Banco BBVA · ****1234 · Verificada" — no hay dónde guardarla; depende del PSP elegido (EP-20 / C-01). Con DLocal, la cuenta se registra en el proveedor, no en nuestra BD |
 | **Total ganado (bruto)** | TU06 | `tutor_balance` solo devuelve netos (`tutor_net_amount`); el bruto exigiría agregar `payments.gross_amount` en la RPC |
 
@@ -699,10 +882,207 @@ regla y la etiqueta dice "Teléfono". **Pendiente de confirmar con el cliente** 
   demo (los ficheros ya están en los buckets). Hay que ejecutarlo **a mano en el SQL Editor de dev**:
   los tutores de `ep03-demo.sql` no pueden iniciar sesión (`encrypted_password` null) y la RLS impide
   —con razón— que ni un admin escriba en el catálogo ajeno.
-- **Privacidad de los testimonios.** `home_testimonials()` publica *nombre + inicial* del alumno.
-  Es el patrón estándar y lo que dibuja el Figma, pero **es decisión del cliente**.
+- **Privacidad de los testimonios.** `home_testimonials()` publicaba *nombre + inicial* del alumno.
+  ✅ **Decidido (decisión 18, 24-jul; en código el 29-jul, `20260729150000`)**: solo se firma **con
+  consentimiento explícito** al reseñar; el resto sale como "Alumno". El enmascarado se comparte en
+  `mask_person_name()`.
 - **Países pendiente de C-13.** La cifra se deriva de la zona horaria; el campo real es
   `bookings.payee_country`, hoy hardcodeado a `'VE'` en `create_booking` y en `us1103_tutor_tiers`.
+
+### 4.4 Sincronización 2026-08-04 — lo posterior al 24-jul
+
+Este espejo se quedó en el 24-jul. Desde entonces hubo cuatro bloques de trabajo, todos en
+`docs/PLAN-DESARROLLO.md` con su detalle; aquí queda la correspondencia con el backlog y con Jira.
+
+**1) EP-24 · Plan de la reunión del 24-jul (`EY-119`, `R24-01…23`) — completo el 27-jul.**
+Fila 🅐 12/12 (`4bd2e51`→`bd3801c`) y fila 🅑 11/11 (`af02c7c`→`20554c1`), en `dev` y `main`. Lo que
+cambia el producto, no solo la pantalla: reserva **día → clase → horario** con precio dinámico
+(R24-13/14), verificación **dentro** del onboarding (R24-15), materiales (R24-16, `20260724150000`) y
+FAQ (R24-17, `20260724180000`) **por producto**, `auto_accept_bookings` (R24-19, `20260724160000`),
+módulo `/pagos` propio (R24-20), bandeja de chat con sesión (R24-21 → cierra DD-07), horarios en la tz
+del visitante (R24-22) y fotos alumno/tutor **independientes** (R24-23, `20260724170000`, que deshace
+el `coalesce` de DD-01). Con esto **UX-201…204 quedan cubiertas** y `C-14` cerrada.
+
+**2) Comentarios del 29-jul (`R29-01…04`) — aplicados.** Precio fuera del calendario (`7a81819`),
+redes + portafolio en un solo módulo (`643ee32`, migración `20260729120000`), y en un solo commit
+(`e7b96e6`, PR #8) las categorías en modal como los tiers y "Métodos de pago" **fuera del menú del
+tutor** —`/pagos` es la tarjeta con la que paga el **alumno** (RN-43); el tutor cobra, no paga—.
+`R29-03b` (cuenta de cobro del tutor) quedó **aplazado con EP-20**: depende del PSP; se entregó la
+mitad no bloqueada, "Información de pago" con estado real (`EY-147`, `d03dd86`).
+
+**3) Las 6 tandas del 29-jul — Sprint 7 y Sprint 8 enteros, en código.** De los 16 tickets que
+tocaron, **15 están en `In Review`** ~~esperando el merge del PR #11~~ → **el PR #11 se mergeó el
+5-ago** (`1a36da2`), así que están en `dev`; ninguno está en producción todavía. El 16.º es `EY-147`,
+que solo pudo entregarse a medias y **sigue `To Do`** con el Sprint 6 AC.
+
+| Tanda | Tickets | Cómo quedó |
+| :-- | :-- | :-- |
+| 1 · barrer lo barato | `EY-115` DD-05 · `EY-79` US-1302 · `EY-116` DD-06 · `EY-114` DD-04 · `EY-147` · `EY-80` US-1501 | `US-1302` **no estaba hecho, estaba a medias y fallaba en silencio**: con confirmación de correo el `update` del formulario nunca corría, y el alta por Google perdía el código. Ahora lo copia `handle_new_user` (`20260729130000`) + cookie `ey-ref` de respaldo (`cefb805`, `b01f26a`). 🔴 **Y aun así no sirve**: la campaña de RF no manda ningún código por URL — ver EP-13 en §2 y §4.5 |
+| 2 · cerrar el chat | `EY-84` US-1702 · `EY-76` US-1703 | La decisión 22 (**30 días + descarga**) sacó a las dos del limbo del 17-jul. Descarga por `GET /api/chat/[id]/download` apoyada **en la RLS**, no en comprobaciones a mano; purga destructiva **con adjuntos** (`20260729180000`) — borrar solo las filas dejaría el objeto huérfano en Storage, que es el dato personal que RN-41 quiere caducar |
+| 3 · datos y avisos | `EY-113` DD-03 · `EY-77` US-1203 · `EY-81` US-1502 | Avisos in-app con `read_at` (`20260729200000`), marcados por **RLS + grant de una columna**, no por RPC. Métricas de operación dentro de `admin_stats` (`20260729210000`): la "latencia de webhook" se mide con lo que hay y, sobre todo, cuenta los **cobros sin evento** |
+| 4 · grabación | `EY-85` US-1801 · `EY-86` US-1802 | Consentimiento como **fila** (`20260729220000`): retirar es borrarla, sin booleano que confunda "dijo que no" con "no ha contestado". El permiso **no se pide en la interfaz, se quita del proveedor** (`enable_recording` solo si `recording_allowed()`). Acceso por `/api/recordings/[sessionId]` sin copiar metadatos a tabla propia (`20260729230000`). 🐞 **Esa ruta buscaba la sala con un nombre que no existía** y no encontraba **ninguna** grabación: corregido el 6-ago (`fffd4b5`), ver EP-18 en §2 |
+| 5 · referidos | `EY-78` US-1301 | Cero lógica interna (RN-21): el bloque "Invita y gana" abre la campaña en pestaña nueva y **no le pasa el correo por la URL** |
+| 6 · cierre | `EY-82` US-1601 · `EY-83` US-1602 | Barrido de scroll horizontal en 17 rutas a 360/768 (dos fallos reales, uno **global**: el footer a 768) y matriz de RLS ejecutada — 12 tablas × 4 roles; `messages` devuelve 0 filas **también al admin**. Resultados en `docs/QA-LANZAMIENTO.md` |
+
+**Los 4 compromisos del 24-jul que no tenían ni ticket** (decisiones 18/23/29/30) se resolvieron
+**en código, no en Jira** (`0b710b1`, 29-jul): `bookings.cancel_reason`, `alert_acks`,
+`profiles.primary_goal` y reseñas firmadas con consentimiento. Ver las filas ya actualizadas en §4.3.
+
+**4) Limpieza y `DD-04` rehecho (3–4 ago).** `9e56afb` borró código muerto —`booking-list.tsx`,
+`review-dialog.tsx`, `reserve-button.tsx`, `category-chips.tsx`, `lib/avatar.ts`, `lib/routes.ts` y 6
+primitivos de shadcn sin usar— y fundió `AdminShell` + `TutorShell` en **`PanelShell`** (misma
+cabecera, 18 llamadas sin cambios). `63a7896` remató **los dos huérfanos** que aquel barrido no vio.
+`cccb566` + `96f4e0b` rehicieron **DD-04** sobre la vista `tutors_public` (`20260804120000`) con rango
+continuo y escala logarítmica — ver §4.3.
+
+**Tickets abiertos después del cierre de las 6 tandas** (los 5 que no existían el 29-jul):
+
+| Jira | Qué es | Épica | Sprint |
+| :-- | :-- | :-- | :-- |
+| `EY-148` | RF-03 · webhook de calificación de referido | EP-13 | en sprint, **sin empezar** — ⚠️ **probablemente sobra**, ver §4.5 |
+| `EY-149` | RF-04 · alta automática en Referral Factory | EP-13 | **sin sprint** |
+| `EY-150` | RF-05 · aviso al referidor | EP-13 | **sin sprint** |
+| `EY-151` | NTF-21 · email de mensaje nuevo en el chat | EP-12 | **sin sprint** |
+| `EY-153` | SUP-01 · botón de soporte | soporte post-MVP (`EY-152`, código duplicado) | **sin sprint** |
+
+> Los referidos, que la reunión del 17-jul dio por "widget y poco más" (RN-21), vuelven con tres
+> historias de integración real. `EY-148` es la primera que **toca nuestro backend**: un webhook que
+> Referral Factory llama para calificar al referido. — ⚠️ **Corregido el 7-ago:** al mirar la campaña
+> se vio que **la integración Stripe ↔ RF de la propia herramienta ya hace eso**, así que `EY-148`
+> apunta a caerse y RN-21 se sostiene. Lo que sí hay que rehacer es `EY-79` (`US-1302`). Ver EP-13 en
+> §2 y §4.5.
+
+**Interruptores por variable de entorno.** Cada vez más funciones quedan cableadas y **apagadas hasta
+que llegue su credencial** — sin ella no rompen, no se pintan (o fallan **cerrado**, con 503, si lo que
+hay detrás borra o cobra). Eran tres el 29-jul; al 7-ago son estas:
+
+| Variable | Enciende | Dónde falta |
+| :-- | :-- | :-- |
+| `DAILY_API_KEY` | sala real de Daily (sin ella, sala simulada) | — |
+| `NEXT_PUBLIC_REFERRAL_URL` | bloque "Invita y gana" (`EY-78`) | **Vercel** (está en local) |
+| `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` | monitoreo de errores (`EY-80`) | — |
+| `CRON_SECRET` | cron de purga de grabaciones (`EY-86`) — **sin ella responde 503 y no corre** | **Vercel** y **secret de GitHub** |
+| `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET` | checkout y webhook de Stripe (`EY-93`/`EY-95`) | ✅ ya en Vercel, scope **Preview** |
+| `RESEND_API_KEY` | envío real de correo (`US-1201`) — sin ella la cola se queda `pending`, no `failed` | **todas** (falta la cuenta) |
+| `REFERRAL_FACTORY_API_KEY` | atribución de referidos contra la API de RF | **Vercel** (está en local) |
+| `APP_BASE_URL` (variable de repo en GitHub) | el workflow de notificaciones cada 5 min | **GitHub** — sin ella el job sale **en rojo cada 5 minutos** |
+
+**Decisiones del cliente (`C-xx`) al 7-ago.** **Resueltas:** C-01 (proveedor → **DLocal + Stripe**; lo
+que bloquea el Sprint 6 AC son las **cuentas y claves**, no la decisión), C-03 (RN-37), **C-14** (los
+7 documentos de KYC, cerrada por UX-203) y **C-11/DP-05** (proveedor de correo → **Resend**, resuelta
+el 6-ago; ver EP-12 en §2). **Siguen abiertas:** C-02, C-04, C-05, C-06, C-07, C-09, C-10, C-12,
+**C-13** y C-15.
+
+**Camino a producción.** ~~`main` y `origin/dev` están en el mismo commit (`57edfa9`) y hacen falta dos
+merges.~~ → **Corregido el 7-ago:** el **PR #11 se mergeó** (`1a36da2`, 5-ago), así que todo lo de esta
+sección está en `dev` (hoy `3529655`). Queda **un solo merge, `dev` → `main`**, y con él llegan **20
+migraciones que prod no tiene** (`20260729130000` … `20260806180000`) — 12 de esta sección más las **8**
+del 5–6 de agosto, ver §4.5.
+
+### 4.5 Sincronización 2026-08-07 — el PR #11 ya está en `dev`, y dos días más encima
+
+**El PR #11 se mergeó** (`1a36da2`, 5-ago). Todo lo que §4.4 daba por "esperando merge" vive ya en
+`dev`. Encima entraron el **5 y el 6 de agosto** dos jornadas de trabajo que **mueven el estado de
+nueve historias**, resuelven **C-11** y **cambian el alcance de EP-13**. Detalle commit a commit en
+`docs/PLAN-DESARROLLO.md`; aquí queda la correspondencia con el backlog.
+
+**Estado de las historias tocadas**
+
+| Jira | Historia | Cómo queda |
+| :-- | :-- | :-- |
+| `EY-116` | DD-06 · páginas legales | ✅ **Completada**: de "documento en preparación" a texto redactado (`4cf2ca6`→`b957933`). Ver la fila de DD-06 en §4.3 |
+| `EY-86` | US-1802 · ver y descargar grabación | 🐞 **Bug que la hacía fallar SIEMPRE, corregido** (`fffd4b5`) + la retención de 30 días ya borra de verdad (`0722b64`). Sigue **bloqueada por el add-on de Daily**. Ver EP-18 en §2 |
+| `EY-76` | US-1703 · purga del chat | **En `dev`** desde el merge. Sin cambios de alcance |
+| `EY-77` | US-1203 · avisos in-app | **En `dev`** desde el merge. Sin cambios de alcance |
+| `EY-80` | US-1501 · Sentry | **En `dev`** desde el merge; se declara en la política de privacidad (`sendDefaultPii: false`). Sigue apagado sin DSN |
+| `EY-81` | US-1502 · métricas de pago/payout/webhook | **En `dev`** desde el merge. Con Stripe real, la métrica de "cobros sin evento" deja de ser teórica |
+| `EY-93` | PAC-01 · checkout del proveedor | 🟡 **Hecha por la pata de Stripe**, en test mode. **No cerrable** |
+| `EY-95` | PAC-03 · webhooks del proveedor | 🟡 **Hecha por la pata de Stripe**, con firma verificada. **No cerrable** |
+| `EY-56` | US-703 · webhooks idempotentes | Se cerró `Done` con un criterio que no existía; **ahora sí existe**. Ver EP-07 en §2 |
+| `EY-79` | US-1302 · captura de código de referido | 🔴 **`In Review`, pero su mecanismo NO FUNCIONA** con la campaña montada. Ver abajo |
+| `EY-148` | RF-03 · webhook de calificación | 🔴 **Probablemente sobra.** Ver abajo |
+
+> ⚠️ **Por qué `EY-93` y `EY-95` no se pueden cerrar aunque el código funcione.** Cada ticket está
+> redactado como **"Stripe **y** DLocal" en uno solo**, así que la mitad hecha no cierra el ticket:
+> `PAC-01` y `PAC-03` se quedan a medias por definición hasta que exista cuenta de DLocal. Si se
+> quieren cerrar, hay que **partirlos por proveedor** en Jira; si no, cuentan como no hechos y el
+> Sprint 6 AC sigue con sus 5 `To Do`.
+
+**1) Páginas legales (`EY-116` / DD-06).** Ver §4.3 para el detalle. Lo que importa al backlog: el
+texto sale de **lo que el código hace** (plazos leídos de las migraciones, reembolsos importados de
+`lib/policy.ts`), apareció que **el cliente ya tenía términos publicados** en `ensenameya.com` desde
+el 23-mar-2026 —de ahí el buzón `info@ensenameya.com` y su §8—, y se dejaron **dos divergencias
+deliberadas** con ese texto (proveedor de pago y reembolsos). El texto se reescribió además **contra
+`dev` y no contra `main`** (`b957933`): redactado sobre producción decía "la plataforma no graba las
+clases" y "el borrado del chat está en pausa", dos frases que pasaban de cautas a **falsas** en el
+mismo merge. **En producción las tres rutas siguen dando 404.**
+
+**2) Seguridad — `confirm_payment` sale del alcance del cliente** (`ab0b1bf`, `20260806120000`, **S-15
+/ RN-26**, toca `US-1402`). Estaba concedida a `authenticated` con un único control —"eres el dueño de
+la reserva"—, así que **cualquier alumno con sesión podía marcarse el pago como cobrado desde la
+consola del navegador**. Hoy no robaba nada porque el proveedor ruteado era `simulated`; el agujero se
+abría **justo el día que entrase Stripe**. Y tenía un problema de fondo: comprobaba `auth.uid()`, y un
+webhook no tiene usuario — la función que existe para que la llame el proveedor **era imposible de
+llamar por el proveedor**. Se parte en dos: `confirm_payment` **solo `service_role`** y
+`confirm_simulated_payment` para `authenticated`, que exige ser dueño **y** que `payments.provider` sea
+`'simulated'`. Lo bueno del diseño: **el camino del cliente se desarma solo** cuando el ruteo deje de
+ser simulado; no hay que acordarse de revocar nada el día del lanzamiento.
+
+**3) Stripe — `PAC-01` y `PAC-03` en test mode** (`7b30768` + `3529655`, `20260806170000` +
+`20260806180000`). ⚠️ **Premisa corregida:** la épica `EY-92` decía "no iniciar hasta tener **ambas**
+cuentas". **No hacía falta** — con solo registrar el correo, el sandbox de Stripe da Sessions,
+webhooks **firmados de verdad**, rechazos, expiraciones y reembolsos; el KYC solo bloquea *live mode*.
+Construido: `lib/stripe.ts` (singleton perezoso, versión de API **fijada** a `2026-07-29.dahlia`),
+`POST /api/pagos/checkout` (el importe sale de **`payments.gross_amount`**, el snapshot que congeló
+`create_booking`, **nunca del navegador**), `POST /api/webhooks/stripe` y `profiles.stripe_customer_id`
+(**un Customer por persona**, o Referral Factory no alcanza nunca el umbral de gasto).
+✅ **Verificado de punta a punta contra la preview, con Stripe entregando el evento de verdad:** Session
+creada desde la preview → expirada desde la API de Stripe → webhook entregado a través del *Protection
+Bypass* de Vercel → reserva `cancelled`, pago `failed`, `pending_webhooks=0`. La regla de
+`payment_routing_rules` en **dev** está ya en `'stripe'`, y cambiarla **ya no es una migración**: es un
+`update` (ver la nota de `US-705` en §2).
+
+- **Config nueva en Vercel (scope Preview):** `STRIPE_API_KEY`, `STRIPE_WEBHOOK_SECRET`. Endpoint
+  registrado en Stripe (`ensenameya-vercel`, 4 eventos de `checkout.session`) apuntando a la preview
+  **con `?x-vercel-protection-bypass=…`**, porque Deployment Protection devuelve 302 **antes** de que
+  corra nuestro código.
+- **Anotado por si acaso:** el endpoint quedó con API version `2026-06-24.dahlia` y el código fija
+  `2026-07-29.dahlia`. Irrelevante para los campos que se leen.
+- **Fuera de alcance a propósito:** reembolsos por webhook (`US-704`). `refund_payment` arrastra el
+  mismo bug de `has_role('admin')` que tenía `confirm_payment`, y arreglarlo bien exige decidir quién
+  es la fuente de verdad del reembolso.
+- 🔒 **Sigue bloqueado:** **DLocal entero** (sin cuenta) y los **payouts** de EP-10 (Connect exige KYC).
+
+**4) Referidos — el hallazgo que cambia el alcance de EP-13.** Está contado entero en el 🔴 de EP-13
+(§2). Resumen para el tablero: **`EY-79` (`US-1302`) hay que rehacerlo** —la atribución pasa a ser por
+**correo** contra la API de RF, no por código propio, porque **RF no ofrece parámetro de código**— y
+**`EY-148` (RF-03) hay que comprobar si sobra** antes de escribirlo, porque la integración Stripe ↔ RF
+de la herramienta ya califica y descalifica al referido sola. Pendiente además, y no es código:
+**redactar los términos que RF le enseña al referido**, hoy la plantilla de RF sin rellenar.
+
+**5) Lección que mordió tres veces: `service_role` se salta la RLS, pero NO los grants de tabla.**
+Este proyecto tiene *auto-expose new tables* **OFF** (ver el patrón RLS del `CLAUDE.md`), así que una
+tabla sin `grant` explícito devuelve `permission denied` **en tiempo de ejecución**, no en el build.
+Pasó tres veces en dos días: `sessions` (`20260806140000`), `payments`/`profiles`
+(`20260806170000`) y `payment_routing_rules` (`20260806180000`). **Cualquier trabajo nuevo con
+`service_role` sobre una tabla nueva se va a estrellar igual hasta que declare sus grants** — y los
+tres grants se conceden **acotados** (columna a columna donde se puede), no en bloque.
+
+**6) Arreglos de interfaz del 5-ago** (posteriores al merge, ninguno con ticket propio): el modal de
+cerrar sesión se quedaba clavado en "Cerrando…" (`836a573`); testimonios y FAQ del home con anchos
+fijos heredados del Figma de 1280 que sobrevivieron al full-width de R24-01 (`b8e6709`); el pomo
+derecho del deslizador de precio de P04 **invertía el filtro** —regresión de `DD-04`— (`e3e2cf9`);
+filtros y navegación mezclados en la misma píldora del hero de `/classes` (`54f8abc`); y en
+`794d0c7`, **dos de fondo**: un **admin veía en el sitio público las categorías desactivadas** (el
+filtro se apoyaba en la RLS, y `categories_select_admin` deja al admin verlas todas — lo que se enseña
+no puede depender de quién mira) y el **icono de categoría deja de vivir en el código** y pasa a ser
+`categories.icon` (`20260805120000`), elegible desde el modal del panel, con la paleta de
+`category-icons.ts` como **lista blanca y menú a la vez**. Toca `US-1102`.
+
+**7) dLocal rechazó la cuenta.** Sin saber qué URL presentó el cliente. El problema de fondo **no lo
+arregla ningún merge**: `ensenameya.com` es una landing de GoDaddy que **no enlaza a la app**, que vive
+en `ensenameya.vercel.app`. Son **dos webs de la misma marca sin conectar, con dos juegos de términos**
+(§4.3, DD-06). Es DNS y negocio, y **bloquea el PSP**.
 
 ---
 
@@ -740,4 +1120,25 @@ Código en PR revisado · pruebas de **RLS por rol** · **webhooks idempotentes*
 
 ---
 
-*Espejo del backlog v1.0 (Faim Lab, 2026-06-24). Se sincroniza con Jira. Última edición: 2026-07-24 (revisión nodo a nodo **COMPLETA del Figma**: P01–P09 + `/categories`, AL01–AL08, TU01–TU09 y **AD01–AD15** (panel admin: AD02 y AD14 son pantallas nuevas, migración `admin_charts` en dev); **DD-01 y DD-02 cerradas** y **DD-05 reducida**; cifras, testimonios y calendario público servidos con datos reales; 4 migraciones nuevas; 🐞 catálogo público vacío para `anon` corregido y 🐞 `searchProducts` sin tutor — **faltan abrir sus tickets en Jira**, y los huecos nuevos de P07/P08 bajo EP-23).*
+*Espejo del backlog v1.0 (Faim Lab, 2026-06-24). Se sincroniza con Jira. Última edición: **2026-08-07**
+(**§4.5 nueva — el PR #11 mergeado (`1a36da2`, 5-ago) y el trabajo del 5–6 de agosto**. Corregido lo que
+había quedado desfasado: ya **no** hacen falta dos merges sino **uno** (`dev` → `main`), y no son 12
+migraciones sin aplicar en prod sino **20**; `main` sigue en `57edfa9` y `dev` en `3529655`. Historias
+movidas: **DD-06 `EY-116`** completada con texto legal redactado —y el hallazgo de que el cliente ya
+tenía términos publicados en `ensenameya.com`—; **`EY-86` US-1802** con el bug del nombre de sala que la
+hacía fallar el 100 % de las veces y la purga de grabaciones que ahora borra de verdad; `EY-76`, `EY-77`,
+`EY-80` y `EY-81` ya en `dev`; **`EY-93` PAC-01 y `EY-95` PAC-03 hechas por la pata de Stripe pero NO
+cerrables**, porque cada ticket pide Stripe *y* DLocal en uno solo; **`EY-56` US-703**, cerrada `Done`
+con el criterio "verifico firma" cuando no había firma que verificar, y que **ahora sí** la verifica.
+🔴 **Alcance de EP-13 cambiado**: `EY-79` US-1302 está en `In Review` y su mecanismo **no funciona** con
+la campaña de Referral Factory, y `EY-148` RF-03 **probablemente sobra**. Resueltas además **C-11**
+(correo → Resend) y el reparto de `confirm_payment` (S-15). Previo: **2026-08-04**
+(**§4.4 — sincronización de todo lo posterior al 24-jul**: EP-24 / `R24-01…23`, `R29-01…04`, las 6
+tandas del 29-jul —Sprint 7 y 8 enteros, hoy en `In Review`—, los 4 compromisos del 24-jul resueltos en
+código, la limpieza de código muerto y **`DD-04` rehecho** sobre la vista `tutors_public`. Corregido:
+las 6 IV están en `Done` desde el 27-jul y no en `In Review`; `EY-109` hizo falta arreglarlo **dos
+veces** (el bueno es del 27-jul); US-202 y UX-204 ya no están pendientes; las páginas legales ya no dan
+404; **las 8 DD cerradas**; la tarjeta "Grabación" de TU08 es **US-1802** y está construida. Añadidos
+EP-24 y el duplicado `EY-152`, los 5 tickets nuevos (`EY-148…151`, `EY-153`) y los interruptores por
+variable. ⚠️ Nada de esto está en producción: `main` = `dev` = `57edfa9` y todo espera en el **PR #11**,
+con 12 migraciones sin aplicar —*superado por la edición del 7-ago*. Previo: 2026-07-24 (revisión nodo a nodo **COMPLETA del Figma**: P01–P09 + `/categories`, AL01–AL08, TU01–TU09 y **AD01–AD15** (panel admin: AD02 y AD14 son pantallas nuevas, migración `admin_charts` en dev); **DD-01 y DD-02 cerradas** y **DD-05 reducida**; cifras, testimonios y calendario público servidos con datos reales; 4 migraciones nuevas; 🐞 catálogo público vacío para `anon` corregido y 🐞 `searchProducts` sin tutor — **faltan abrir sus tickets en Jira**, y los huecos nuevos de P07/P08 bajo EP-23))).*

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import {
   BadgeCheckIcon,
   GraduationCapIcon,
@@ -6,9 +7,12 @@ import {
   TagIcon,
 } from "lucide-react";
 
-import { requireUser } from "@/lib/auth/server";
+import { storageUrl } from "@/lib/catalog/format";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import { buildUsedBy } from "@/lib/availability";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
+import { resolveStep, stepCookie } from "@/components/onboarding/wizard-step";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
@@ -35,26 +39,41 @@ const WELCOME_POINTS = [
   { icon: BadgeCheckIcon, text: "Perfil y credenciales verificados" },
 ];
 
+/**
+ * Pasos del asistente de tutor; lo sabe la página para saturar `?paso=`.
+ *
+ * EY-183 · pasó de 5 a 6 al entrar la disponibilidad como paso 4. `resolveStep`
+ * satura al rango [1, total], así que la cookie de quien dejó el asistente a
+ * medias con la numeración vieja sigue siendo válida — como mucho aterriza un
+ * paso antes de donde lo dejó, nunca en blanco.
+ */
+const TOTAL_STEPS = 6;
+
 export default async function TutorOnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ start?: string }>;
+  searchParams: Promise<{ start?: string; paso?: string }>;
 }) {
   const { user } = await requireUser();
-  const { start } = await searchParams;
+  const { start, paso } = await searchParams;
 
   const supabase = await createClient();
   const [
     { data: tp },
     { data: prof },
     { data: cats },
+    { data: activeCats },
     { data: myCats },
     { data: docs },
-    { count: productCount },
+    { data: products },
+    { data: rules },
+    { data: ruleLinks },
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
-      .select("headline, bio, socials, approval_status, teaching_level, avatar_path")
+      .select(
+        "headline, bio, socials, approval_status, identity_verification_status, teaching_level, avatar_path",
+      )
       .eq("profile_id", user.id)
       .maybeSingle(),
     supabase
@@ -63,17 +82,48 @@ export default async function TutorOnboardingPage({
       .eq("id", user.id)
       .maybeSingle(),
     supabase.from("categories").select("id, name").order("sort_order"),
+    // N-03 · Las categorías que puede llevar una MENTORÍA son solo las activas
+    // (mismo filtro que `/tutor/products/new`). Las de arriba, sin filtrar, son
+    // las que el tutor declara enseñar: filtrar ahí escondería las que ya tiene
+    // elegidas de antes.
+    supabase
+      .from("categories")
+      .select("id, name")
+      .eq("is_active", true)
+      .order("sort_order"),
     supabase.from("tutor_categories").select("category_id").eq("tutor_id", user.id),
     supabase
       .from("verification_documents")
       .select("doc_type, status, link_url")
       .eq("tutor_id", user.id),
-    // UX-204: el asistente no se cierra sin al menos una oferta creada.
+    // EX-02: sin mentoría no se aprueba el perfil, pero el asistente sí se
+    // cierra. El número alimenta el último paso y el checklist de verificación.
+    // ⚠️ Ya no es un `head: true` con `count`: los TÍTULOS hacen falta para el
+    // mapa de N-04 de aquí abajo, y pedirlos aquí evita una consulta más.
+    supabase.from("products").select("id, title").eq("tutor_id", user.id),
+    // EY-183 · las franjas del paso 4. Mismo orden que el panel para que las
+    // dos pantallas pinten los mismos chips en el mismo sitio.
     supabase
-      .from("products")
-      .select("id", { count: "exact", head: true })
-      .eq("tutor_id", user.id),
+      .from("availability_rules")
+      .select("id, weekday, start_time, end_time, is_active")
+      .eq("tutor_id", user.id)
+      .order("weekday")
+      .order("start_time"),
+    // N-04 · qué mentorías cuelgan de cada franja → el gestor avisa antes de
+    // borrar una que sostiene una oferta. No es teórico dentro del asistente:
+    // al asistente se vuelve a entrar mientras el perfil no esté aprobado, y
+    // para entonces el tutor puede haber atado franjas a mentorías desde el
+    // panel. Sin `.eq()`: la RLS de `product_availability_rules` ya lo acota.
+    supabase.from("product_availability_rules").select("rule_id, product_id"),
   ]);
+
+  // M-03 · Paso resuelto en servidor (URL → cookie → 1): el primer HTML ya sale
+  // con el paso bueno y no parpadea un "Paso 1 de 5" que no es.
+  const initialStep = resolveStep({
+    param: paso,
+    cookie: (await cookies()).get(stepCookie("tutor"))?.value,
+    total: TOTAL_STEPS,
+  });
 
   // Estado de los documentos KYC → el paso de verificación reusa el módulo TU02.
   const docsByType: Record<string, DocState> = Object.fromEntries(
@@ -82,9 +132,7 @@ export default async function TutorOnboardingPage({
 
   // La foto del asistente es la PÚBLICA del tutor (tutor_profiles), no la
   // personal de `profiles`: son independientes (R24-23).
-  const avatarUrl = tp?.avatar_path
-    ? supabase.storage.from("avatars").getPublicUrl(tp.avatar_path).data.publicUrl
-    : null;
+  const avatarUrl = storageUrl("avatars", tp?.avatar_path);
 
   if (tp?.approval_status === "approved") {
     return (
@@ -114,7 +162,7 @@ export default async function TutorOnboardingPage({
   // asistente. `?start=1` entra ya al formulario.
   if (!tp && !start) {
     return (
-      <div className="bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
+      <div className="flex-1 bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
         <Container>
           <div className="mx-auto flex max-w-xl flex-col items-center text-center">
             <span className="grid size-14 place-items-center rounded-full bg-brand/10 text-brand">
@@ -160,25 +208,31 @@ export default async function TutorOnboardingPage({
 
   return (
     // TU01: cuerpo sobre #f9fafc con ~105 px de aire arriba (185:13 y=178).
-    <div className="bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
+    <div className="flex-1 bg-muted pt-14 pb-10 sm:pt-[105px] sm:pb-[120px]">
       <Container>
         <div>
           <TutorOnboardingForm
             userId={user.id}
             exists={!!tp}
+            initialStep={initialStep}
+            totalSteps={TOTAL_STEPS}
             headline={tp?.headline ?? ""}
             bio={tp?.bio ?? ""}
             fullName={prof?.full_name ?? ""}
             avatarPath={tp?.avatar_path ?? null}
             avatarUrl={avatarUrl}
-            timezone={prof?.timezone ?? "UTC"}
+            timezone={await getUserTimezone()}
             phone={prof?.phone ?? ""}
             level={tp?.teaching_level ?? null}
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
+            productCategories={activeCats ?? []}
             selectedCategories={(myCats ?? []).map((r) => r.category_id)}
             docsByType={docsByType}
+            identityStatus={tp?.identity_verification_status ?? "not_submitted"}
             socials={parseSocials(tp?.socials)}
-            hasProduct={(productCount ?? 0) > 0}
+            productCount={(products ?? []).length}
+            rules={rules ?? []}
+            rulesUsedBy={buildUsedBy(products ?? [], ruleLinks ?? [])}
           />
         </div>
       </Container>

@@ -11,7 +11,12 @@ import {
   BOOKING_STATUS_LABEL,
 } from "@/lib/booking";
 import type { TutorBalance } from "@/lib/payouts";
+import { roomOpen } from "@/lib/room-window";
+import { studentsOfTutor } from "./students";
+import { StudentLink } from "./student-link";
+import { formatPct, tutorTier } from "./tier";
 import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
+import { SupportCard } from "@/components/support/support-card";
 import {
   PanelCard,
   PanelShell,
@@ -67,6 +72,8 @@ export default async function TutorHomePage() {
     { count: pendingCount },
     { data: bookings },
     { count: deliveredCount },
+    students,
+    tier,
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
@@ -78,13 +85,24 @@ export default async function TutorHomePage() {
     supabase.rpc("tutor_balance"),
     supabase
       .from("sessions")
-      .select("id, start_at, status, booking_id, bookings(products(title))")
+      .select(
+        // B-2 · `end_at` y las dos columnas de ventana: sin ellas este panel
+        // no puede saber si la sala está abierta, y ofrecía "Ir a la sala"
+        // para clases de dentro de semanas.
+        "id, start_at, end_at, status, booking_id, student_id, access_opens_at, access_closes_at, bookings(products(title))",
+      )
       .eq("tutor_id", userId)
       .in("status", ["scheduled", "in_progress"])
       // Se filtra por el FIN, no por el inicio: una clase que empezó hace un
-      // rato sigue entrable (la ventana cierra 10 min después de acabar), y
-      // desaparecer del panel dejaría al tutor creyendo que no tiene clase
-      // mientras el alumno espera en la sala.
+      // rato sigue en curso, y desaparecer del panel dejaría al tutor creyendo
+      // que no tiene clase mientras el alumno espera en la sala.
+      //
+      // Se queda en `end_at`, NO en `access_closes_at`. Con los 7 días de
+      // MN-05 arrastrar aquí una semana de clases ya dadas habría tapado justo
+      // lo que el tutor viene a mirar; con B-2 los dos casi coinciden, pero el
+      // criterio correcto sigue siendo el fin de la CLASE — esto es "Próximas
+      // clases", no "salas abiertas". La sala de una clase pasada se alcanza
+      // desde su reserva.
       .gte("end_at", new Date().toISOString())
       .order("start_at")
       .limit(3),
@@ -95,10 +113,13 @@ export default async function TutorHomePage() {
       .eq("status", "pending_acceptance"),
     supabase
       .from("bookings")
-      // Sin fecha, varias clases del mismo producto se ven como una fila
-      // repetida. El nombre del alumno distinguiría mejor, pero `profiles`
-      // es RLS own-only: el tutor no puede leer el perfil de su alumno.
-      .select("id, status, total_amount, currency, created_at, products(title)")
+      // Con el nombre del alumno (N-13) dos clases del mismo producto dejan de
+      // verse como la misma fila repetida. `student_id` es solo la clave: el
+      // nombre lo resuelve `studentsOfTutor` contra la RPC, porque `profiles`
+      // sigue siendo own-only por RLS.
+      .select(
+        "id, status, total_amount, currency, created_at, student_id, products(title)",
+      )
       .eq("tutor_id", userId)
       .order("created_at", { ascending: false })
       .limit(3),
@@ -108,6 +129,12 @@ export default async function TutorHomePage() {
       .select("id", { count: "exact", head: true })
       .eq("tutor_id", userId)
       .eq("status", "completed"),
+    // N-13: los nombres de TODOS sus alumnos de una vez (la RPC ya filtra por
+    // `auth.uid()`), no una consulta por reserva.
+    studentsOfTutor(supabase),
+    // N-16: el nivel y el reparto. Sin migración: `tutor_tiers_select_own` ya
+    // existía; lo que faltaba era enseñárselo al tutor.
+    tutorTier(supabase, userId),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -118,15 +145,11 @@ export default async function TutorHomePage() {
   const firstName = profile?.profiles?.full_name?.split(" ")[0];
 
   return (
-    <PanelShell items={TUTOR_ITEMS}>
-      <div>
-        <h1 className="text-[24px] font-bold tracking-tight text-[#19191f]">
-          {firstName ? `Hola, ${firstName}` : "Tu panel"}
-        </h1>
-        <p className="mt-1 text-[13px] text-[#6b6b6b]">
-          Resumen de tu actividad como tutor.
-        </p>
-      </div>
+    <PanelShell
+      items={TUTOR_ITEMS}
+      title={firstName ? `Hola, ${firstName}` : "Tu panel"}
+      description="Resumen de tu actividad como tutor."
+    >
 
       {/* Estado de aprobación (195:42): lo primero que necesita saber. */}
       {approvalStatus === "pending" ? (
@@ -153,7 +176,7 @@ export default async function TutorHomePage() {
               ) : null}
             </p>
           </div>
-          <StatusPill tone="blue" className="h-7">
+          <StatusPill tone="blue">
             En revisión
           </StatusPill>
         </PanelCard>
@@ -170,7 +193,7 @@ export default async function TutorHomePage() {
               Puedes actualizar tus datos y volver a enviarlo.
             </p>
           </div>
-          <StatusPill tone={approval.tone} className="h-7">
+          <StatusPill tone={approval.tone}>
             {approval.label}
           </StatusPill>
         </PanelCard>
@@ -187,10 +210,33 @@ export default async function TutorHomePage() {
               desaparece cuando dictes tus primeras 5 sesiones.
             </p>
           </div>
-          <StatusPill tone="green" className="h-7">
+          <StatusPill tone="green">
             Aprobado
           </StatusPill>
         </PanelCard>
+      ) : null}
+
+      {/* N-16 — nivel y reparto, en el panel PRIVADO. Va pegado a las cifras de
+          dinero porque es lo que las explica: "saldo disponible" es el neto
+          después de este split. Etiqueta, no control: el tier lo mueve el admin
+          (`assign_tutor_tier`), y el tutor no tiene grant sobre `tier_id`.
+          Ojo: esto NO sube al catálogo — la insignia se dejó fuera de
+          `TutorCard` a propósito, publicar el tramo filtra margen. */}
+      {tier ? (
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <StatusPill tone="blue">
+            {tier.name}
+          </StatusPill>
+          <p className="text-[12.5px] text-[#6b6b6b]">
+            Te quedas con el{" "}
+            <span className="font-semibold text-[#19191f]">
+              {formatPct(tier.splitPct)}
+            </span>{" "}
+            de cada reserva; la comisión de Enséñame Ya es el{" "}
+            {formatPct(tier.commissionPct)}. Tu nivel lo asigna el equipo y solo
+            aplica a reservas nuevas.
+          </p>
+        </div>
       ) : null}
 
       {/* Ganancias (EP-10, 195:49). El detalle vive en /tutor/payouts.
@@ -227,7 +273,7 @@ export default async function TutorHomePage() {
           </div>
           {(nextSessions ?? []).length === 0 ? (
             <p className="mt-4 text-[13px] text-[#6b6b6b]">
-              No tienes clases agendadas.
+              No tienes mentorías agendadas.
             </p>
           ) : (
             <ul className="mt-2 divide-y divide-[#e0e0e0]">
@@ -238,7 +284,17 @@ export default async function TutorHomePage() {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
-                      {s.bookings?.products?.title ?? "Clase"}
+                      {s.bookings?.products?.title ?? "Mentoría"}
+                    </p>
+                    {/* N-13: con quién es la llamada. Es el dato que faltaba —
+                        el tutor entraba a la sala sin saber a quién iba a
+                        encontrarse. */}
+                    <p className="truncate text-[12.5px] text-[#404040]">
+                      con{" "}
+                      <StudentLink
+                        student={students.get(s.student_id)}
+                        className="font-medium"
+                      />
                     </p>
                     <p className="text-xs text-[#6b6b6b] first-letter:uppercase">
                       {formatSessionTime(s.start_at, tz)} · tu hora local
@@ -252,13 +308,20 @@ export default async function TutorHomePage() {
                     >
                       <Link href={`/chat/${s.booking_id}`}>Chat</Link>
                     </Button>
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
-                    >
-                      <Link href={`/room/${s.id}`}>Ir a la sala</Link>
-                    </Button>
+                    {/* ⚠️ B-2 · Este botón NO tenía gate ninguno: se pintaba
+                        para toda clase futura, así que el tutor veía "Ir a la
+                        sala" semanas antes y el servidor le decía que no.
+                        `roomOpen` es la misma comprobación que ya hacían las
+                        dos pantallas de detalle — aquí faltaba. */}
+                    {roomOpen(s) ? (
+                      <Button
+                        asChild
+                        variant="outline"
+                        className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+                      >
+                        <Link href={`/room/${s.id}`}>Ir a la sala</Link>
+                      </Button>
+                    ) : null}
                   </div>
                 </li>
               ))}
@@ -269,9 +332,20 @@ export default async function TutorHomePage() {
         <div className="flex flex-col gap-5">
           {/* Reservas recientes (196:28). */}
           <PanelCard>
-            <h2 className="text-base font-semibold text-[#19191f]">
-              Reservas recientes
-            </h2>
+            {/* N-11: la lista corta a 3, así que sin "Ver todas" el panel era
+                un callejón sin salida — el mismo remate que ya tenían las
+                próximas sesiones. */}
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold text-[#19191f]">
+                Reservas recientes
+              </h2>
+              <Link
+                href="/tutor/reservas"
+                className="text-[12.5px] font-medium text-brand hover:underline"
+              >
+                Ver todas
+              </Link>
+            </div>
             {(bookings ?? []).length === 0 ? (
               <p className="mt-4 text-[13px] text-[#6b6b6b]">
                 Aún no tienes reservas.
@@ -285,7 +359,13 @@ export default async function TutorHomePage() {
                   >
                     <div className="min-w-0">
                       <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
-                        {b.products?.title ?? "Clase"}
+                        {b.products?.title ?? "Mentoría"}
+                      </p>
+                      <p className="truncate text-[12.5px] text-[#404040]">
+                        <StudentLink
+                          student={students.get(b.student_id)}
+                          className="font-medium"
+                        />
                       </p>
                       <p className="text-xs text-[#6b6b6b]">
                         {formatMoney(b.total_amount, b.currency)} ·{" "}
@@ -294,7 +374,6 @@ export default async function TutorHomePage() {
                     </div>
                     <StatusPill
                       tone={BOOKING_PILL[b.status] ?? "neutral"}
-                      className="h-7"
                     >
                       {BOOKING_STATUS_LABEL[b.status as BookingStatus]}
                     </StatusPill>
@@ -329,6 +408,14 @@ export default async function TutorHomePage() {
               ))}
             </ul>
           </PanelCard>
+
+          {/* SUP-01 · soporte, debajo de los accesos rápidos y como TARJETA con
+              botón, no como una fila más de la lista de arriba. La lista son
+              atajos a pantallas suyas —sus mentorías, sus payouts— y soporte no
+              es eso: es la salida de cuando algo se ha roto. Mezclarlas la
+              esconde justo el día que hace falta. Es la misma tarjeta que ve el
+              alumno: un solo componente, un solo buzón. */}
+          <SupportCard />
         </div>
       </div>
     </PanelShell>

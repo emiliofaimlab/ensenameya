@@ -1,12 +1,18 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { requireUser } from "@/lib/auth/server";
+import { storageUrl } from "@/lib/catalog/format";
+import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/roles";
 import { Container } from "@/components/layout/container";
+import { resolveStep, stepCookie } from "@/components/onboarding/wizard-step";
 import { OnboardingForm } from "./onboarding-form";
 
 export const metadata = { title: "Completa tu perfil · Enséñame Ya" };
+
+/** Pasos del asistente de alumno; lo sabe la página para saturar `?paso=`. */
+const TOTAL_STEPS = 3;
 
 /**
  * US-201 (SCR-AL01) — Onboarding del alumno. Nombre, `timezone` (RN-01) y
@@ -16,15 +22,25 @@ export const metadata = { title: "Completa tu perfil · Enséñame Ya" };
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; paso?: string }>;
 }) {
-  const { next } = await searchParams;
+  const { next, paso } = await searchParams;
   const { user } = await requireUser();
+
+  // M-03 · El paso se resuelve en el SERVIDOR (URL → cookie → 1) para que el
+  // primer HTML ya venga con el paso correcto. Resolverlo al hidratar pintaría
+  // "Paso 1 de 3" durante un instante, que es justo la impresión que hay que
+  // quitar.
+  const initialStep = resolveStep({
+    param: paso,
+    cookie: (await cookies()).get(stepCookie("alumno"))?.value,
+    total: TOTAL_STEPS,
+  });
 
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, timezone, phone, avatar_path, onboarding_complete")
+    .select("full_name, timezone, phone, avatar_path, onboarding_complete, primary_goal")
     .eq("id", user.id)
     .single();
 
@@ -35,9 +51,7 @@ export default async function OnboardingPage({
     supabase.from("student_interests").select("category_id").eq("student_id", user.id),
   ]);
 
-  const avatarUrl = profile?.avatar_path
-    ? supabase.storage.from("avatars").getPublicUrl(profile.avatar_path).data.publicUrl
-    : null;
+  const avatarUrl = storageUrl("avatars", profile?.avatar_path);
 
   return (
     // AL01: el cuerpo va sobre #f9fafc con ~148 px de aire arriba y ~108 abajo
@@ -48,16 +62,19 @@ export default async function OnboardingPage({
           <OnboardingForm
             userId={user.id}
             next={next ?? null}
+            initialStep={initialStep}
+            totalSteps={TOTAL_STEPS}
             intendedRole={
               (user.user_metadata?.intended_role as string | undefined) ?? null
             }
             fullName={profile?.full_name ?? ""}
-            timezone={profile?.timezone ?? "UTC"}
+            timezone={await getUserTimezone()}
             phone={profile?.phone ?? ""}
             avatarPath={profile?.avatar_path ?? null}
             avatarUrl={avatarUrl}
             categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
             selectedInterests={(mine ?? []).map((r) => r.category_id)}
+            primaryGoal={profile?.primary_goal ?? null}
           />
         </div>
       </Container>

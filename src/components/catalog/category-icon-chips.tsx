@@ -48,7 +48,7 @@ export function CategoryIconChips({
   return (
     <ul className={cn("flex flex-wrap gap-2", className)}>
       {shown.map((c) => {
-        const Icon = categoryIcon(c.slug);
+        const Icon = categoryIcon(c.icon);
         const active = c.slug === activeSlug;
         return (
           <li key={c.slug}>

@@ -1,5 +1,6 @@
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
+import { buildUsedBy } from "@/lib/availability";
 import { cn } from "@/lib/utils";
 import { PanelCard } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
@@ -20,20 +21,35 @@ export default async function TutorAvailabilityPage() {
   const { userId, approvalStatus } = await requireTutorProfile();
 
   const supabase = await createClient();
-  const [{ data: rules }, { data: exceptions }] = await Promise.all([
-    supabase
-      .from("availability_rules")
-      .select("id, weekday, start_time, end_time, is_active")
-      .eq("tutor_id", userId)
-      .order("weekday")
-      .order("start_time"),
-    supabase
-      .from("availability_exceptions")
-      .select("id, date, type, start_time, end_time, reason")
-      .eq("tutor_id", userId)
-      .gte("date", new Date().toISOString().slice(0, 10))
-      .order("date"),
-  ]);
+  const [{ data: rules }, { data: exceptions }, { data: products }, { data: links }] =
+    await Promise.all([
+      supabase
+        .from("availability_rules")
+        .select("id, weekday, start_time, end_time, is_active")
+        .eq("tutor_id", userId)
+        .order("weekday")
+        .order("start_time"),
+      supabase
+        .from("availability_exceptions")
+        .select("id, date, type, start_time, end_time, reason")
+        .eq("tutor_id", userId)
+        .gte("date", new Date().toISOString().slice(0, 10))
+        .order("date"),
+      // N-04 · qué mentorías cuelgan de cada franja. Hace falta para avisar
+      // ANTES de borrar: al desaparecer la franja desaparece su enlace (FK on
+      // delete cascade), y si era el único de esa mentoría, la mentoría vuelve
+      // a ofrecerse en TODA la disponibilidad del tutor. Borrar un horario
+      // puede abrir una oferta en vez de cerrarla, y eso no se adivina.
+      supabase.from("products").select("id, title").eq("tutor_id", userId),
+      // Sin `.eq()`: la RLS de `product_availability_rules` ya lo acota a los
+      // productos del propio tutor (política `..._write_own`, que al ser `for
+      // all` cubre también el select).
+      supabase.from("product_availability_rules").select("rule_id, product_id"),
+    ]);
+
+  // rule_id → títulos de las mentorías que la usan. El paso 4 del asistente
+  // monta el mismo gestor y necesita el mismo mapa, así que vive en `lib`.
+  const usedBy = buildUsedBy(products ?? [], links ?? []);
 
   // Calendario del mes ACTUAL: azul = weekday con regla activa; ámbar = fecha
   // con excepción. Server-render puro: pinta el estado, no navega meses.
@@ -79,8 +95,15 @@ export default async function TutorAvailabilityPage() {
           <h2 className="text-base font-semibold text-[#19191f]">
             Reglas recurrentes
           </h2>
+          <p className="mt-1 text-xs text-[#6b6b6b]">
+            Define aquí tus franjas; al crear cada mentoría eliges cuáles usa.
+          </p>
           <div className="mt-4">
-            <AvailabilityManager userId={userId} rules={rules ?? []} />
+            <AvailabilityManager
+              userId={userId}
+              rules={rules ?? []}
+              usedBy={usedBy}
+            />
           </div>
         </PanelCard>
 

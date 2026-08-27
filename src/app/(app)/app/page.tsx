@@ -3,8 +3,11 @@ import { CompassIcon } from "lucide-react";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
+import { BOOKING_STATUS_LABEL, isUpcoming, tutorCards } from "@/lib/booking";
+import { roomOpen } from "@/lib/room-window";
 import { BookingRow } from "@/components/booking-row";
+import { ReferralCard } from "@/components/referral/referral-card";
+import { SupportCard } from "@/components/support/support-card";
 import {
   PanelCard,
   PanelCardTitle,
@@ -12,6 +15,10 @@ import {
   StatusPill,
 } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
+import { suggestedForStudent } from "./sugerencias";
+import { SugerenciasCard } from "./sugerencias-card";
+import { tutoresParaElAlumno } from "./tutores";
+import { TutoresCard } from "./tutores-card";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Mi panel · Enséñame Ya" };
@@ -29,7 +36,7 @@ function summary(upcoming: number, awaiting: number): string {
   const parts: string[] = [];
   if (upcoming > 0) {
     parts.push(
-      `${upcoming} ${upcoming === 1 ? "clase próxima" : "clases próximas"}`,
+      `${upcoming} ${upcoming === 1 ? "mentoría próxima" : "mentorías próximas"}`,
     );
   }
   if (awaiting > 0) {
@@ -37,7 +44,7 @@ function summary(upcoming: number, awaiting: number): string {
       `${awaiting} ${awaiting === 1 ? "esperando aceptación del tutor" : "esperando aceptación de los tutores"}`,
     );
   }
-  if (parts.length === 0) return "Aquí verás tus próximas clases y tus reservas.";
+  if (parts.length === 0) return "Aquí verás tus próximas mentorías y tus reservas.";
   return `Tienes ${parts.join(" y ")}.`;
 }
 
@@ -53,39 +60,86 @@ export default async function AppHome() {
   const tz = await getUserTimezone();
   const supabase = await createClient();
 
-  const [{ data: profile }, { data: openRows }, { data: pastRows }] =
-    await Promise.all([
-      // El nombre sale del PERFIL, no de `user_metadata`: el metadata es un
-      // espejo que se queda viejo si el perfil cambia después.
-      supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
-      supabase
-        .from("bookings")
-        .select(
-          "id, status, created_at, products(title, tutor_id), sessions(id, start_at, end_at, status)",
-        )
-        .eq("student_id", user.id)
-        .in("status", OPEN)
-        .order("created_at", { ascending: false })
-        .limit(6),
-      supabase
-        .from("bookings")
-        .select(
-          "id, status, products(title, tutor_id), sessions(id, start_at, status), reviews(rating)",
-        )
-        .eq("student_id", user.id)
-        .eq("status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(3),
-    ]);
+  const [
+    { data: profile },
+    { data: openRows },
+    { data: pastRows },
+    sugerencias,
+    misTutores,
+  ] = await Promise.all([
+    // El nombre sale del PERFIL, no de `user_metadata`: el metadata es un
+    // espejo que se queda viejo si el perfil cambia después.
+    supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+    supabase
+      .from("bookings")
+      .select(
+        // B-2 · las columnas de ventana viajan con la sesión: sin ellas
+        // este panel no puede saber si la sala está abierta, y ofrecía
+        // "Entrar a sala" para clases de dentro de semanas.
+        "id, status, products(title, tutor_id), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
+      )
+      .eq("student_id", user.id)
+      .in("status", OPEN)
+      .order("created_at", { ascending: false })
+      .limit(6),
+    supabase
+      .from("bookings")
+      .select(
+        // EY-186 · aquí ya NO se pide `created_at`. B1.10 lo trajo para poder
+        // ordenar «Tus últimos tutores» mezclando esta lista con la de arriba;
+        // ese bloque lo sustituye ahora `TutoresCard`, que ordena en Postgres
+        // sobre el historial ENTERO y no sobre las tres filas que quepan aquí.
+        "id, status, products(title, tutor_id), sessions(id, start_at, status), reviews(rating)",
+      )
+      .eq("student_id", user.id)
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(3),
+    // N-30 · va DENTRO del mismo `Promise.all` a propósito: resuelve sus
+    // propias consultas (intereses, oferta y catálogo) y encadenarla después
+    // de las reservas sumaría su latencia a la de la pantalla para nada.
+    suggestedForStudent(user.id),
+    // EY-186 · lo mismo: es una RPC independiente de las reservas de arriba y
+    // encadenarla le sumaría su viaje a la pantalla para nada.
+    tutoresParaElAlumno(),
+  ]);
 
   const open = openRows ?? [];
   const completed = pastRows ?? [];
-  const names = await tutorNames(
+  // `tutorCards` y no `tutorNames`: es la MISMA consulta con cuatro columnas
+  // más (avatar, titular, valoración). B1.10 las trajo para el bloque de
+  // tutores recientes; ese bloque ahora sale de `TutoresCard`, pero las fichas
+  // se siguen necesitando aquí para el «con Fulanito» de cada fila y su enlace
+  // (V-6), así que la consulta se queda tal cual.
+  const fichas = await tutorCards(
     supabase,
     [...open, ...completed].map((b) => b.products?.tutor_id),
   );
+  const nombreDelTutor = (id: string | null | undefined) =>
+    (id ? fichas.get(id)?.displayName : null) ?? undefined;
 
-  /** Sesión relevante de la reserva: la primera que aún no ha terminado. */
+  /**
+   * V-6 · El «con Fulanito» de cada fila lleva ahora a su ficha pública — hasta
+   * hoy era texto muerto y, comprada la mentoría, no había forma de volver al
+   * tutor.
+   *
+   * ⚠️ Solo si es legible, y `fichas` YA es esa comprobación: `tutorCards` sale
+   * de `tutor_profiles`, que solo se lee con `approval_status = 'approved'`. A
+   * un tutor desaprobado no se le enlaza — su ficha daría un 404 desde el panel
+   * del propio alumno. Ver `tutorCards`.
+   */
+  const perfilDelTutor = (id: string | null | undefined) =>
+    id && fichas.get(id)?.displayName ? `/tutors/${id}` : undefined;
+
+  /**
+   * Sesión relevante de la reserva: la primera que aún no ha terminado.
+   *
+   * MN-05 · Sigue mirando `end_at` y NO la ventana de acceso, a propósito. Esto
+   * es "Próximas sesiones": una clase de hace cuatro días cuya sala sigue
+   * abierta no es próxima, y meterla aquí llenaría el panel de pasado. A su
+   * sala se llega igual desde el detalle de la reserva, que es donde vive la
+   * lista completa.
+   */
   const nextSession = (b: (typeof open)[number]) =>
     [...(b.sessions ?? [])]
       .filter((s) => s.status === "scheduled" || s.status === "in_progress")
@@ -112,10 +166,10 @@ export default async function AppHome() {
       {!hasActivity ? (
         <PanelCard>
           <PanelCardTitle className="text-[22px]">
-            Aún no tienes clases reservadas
+            Aún no tienes mentorías reservadas
           </PanelCardTitle>
           <p className="mt-2 text-[13px] text-[#6b6b6b]">
-            Descubre tutores y reserva tu primera clase 1 a 1 en vivo.
+            Descubre tutores y reserva tu primera mentoría 1 a 1 en vivo.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Button asChild className="h-10">
@@ -133,8 +187,18 @@ export default async function AppHome() {
               Próximas sesiones
             </PanelCardTitle>
             {open.length === 0 ? (
+              // RV-11 · aquí solo se llega con reservas ya terminadas: sin una
+              // salida, el alumno que acabó su mentoría se queda mirando una
+              // frase gris en la pantalla que debería reengancharlo.
               <p className="mt-4 text-[13px] text-[#6b6b6b]">
-                No tienes clases agendadas.
+                No tienes mentorías agendadas.{" "}
+                <Link
+                  href="/classes"
+                  className="font-medium text-brand hover:underline"
+                >
+                  Reserva la siguiente
+                </Link>
+                .
               </p>
             ) : (
               <ul className="mt-4 divide-y divide-[#e0e0e0]">
@@ -145,18 +209,32 @@ export default async function AppHome() {
                     <BookingRow
                       key={b.id}
                       href={`/reservas/${b.id}`}
-                      tutor={names.get(b.products?.tutor_id ?? "")}
-                      title={b.products?.title ?? "Clase"}
+                      tutor={nombreDelTutor(b.products?.tutor_id)}
+                      tutorHref={perfilDelTutor(b.products?.tutor_id)}
+                      title={b.products?.title ?? "Mentoría"}
                       when={s?.start_at ?? null}
                       timeZone={tz}
                       status={BOOKING_STATUS_LABEL[b.status]}
                       note={
+                        // El botón de sala y este texto tienen que decir lo
+                        // mismo. B-2 devolvió la ventana a 10 min (V-1).
                         ready
-                          ? "Disponible 10 min antes"
+                          ? "La sala abre 10 min antes"
                           : "Reembolso 100 % si no acepta en 24 h"
                       }
                       action={
-                        ready && s ? (
+                        // ⚠️ B-2 · `roomOpen(s)` ADEMÁS del estado. Antes solo
+                        // se miraba `ROOM_READY.has(b.status)`, o sea el estado
+                        // de la RESERVA — que dice «esta reserva puede tener
+                        // sala algún día», no «ahora». Resultado: el botón
+                        // aparecía para una clase de dentro de tres semanas y
+                        // el servidor la rechazaba. Es, con diferencia, la
+                        // explicación más probable del «la sala está abierta
+                        // desde que compro» que reportó el cliente.
+                        //
+                        // Con la ventana en 7 días casi no se notaba; con 10
+                        // minutos sería un botón muerto casi siempre.
+                        ready && s && roomOpen(s) ? (
                           <Button
                             asChild
                             className="h-[38px] rounded-[8px] px-4 text-[13px] font-semibold"
@@ -194,8 +272,9 @@ export default async function AppHome() {
                     <BookingRow
                       key={b.id}
                       href={`/reservas/${b.id}`}
-                      tutor={names.get(b.products?.tutor_id ?? "")}
-                      title={b.products?.title ?? "Clase"}
+                      tutor={nombreDelTutor(b.products?.tutor_id)}
+                      tutorHref={perfilDelTutor(b.products?.tutor_id)}
+                      title={b.products?.title ?? "Mentoría"}
                       when={last?.start_at ?? null}
                       timeZone={tz}
                       status={BOOKING_STATUS_LABEL[b.status]}
@@ -224,8 +303,33 @@ export default async function AppHome() {
         </>
       )}
 
-      {/* El Figma pone aquí dos tarjetas; "Invita y gana" es US-1301
-          (referidos, S4, bloqueada por C-10) y no existe todavía. */}
+      {/* EY-186 · B5.3 · El carrusel de tutores, encima de las sugerencias.
+
+          Sustituye al bloque «Tus últimos tutores» de B1.10 (`4f56bb2`), que
+          salía gratis de las reservas ya cargadas pero NO era historial:
+          `.limit(3)` sobre las completadas y `.slice(0, 4)` encima. Aquí el
+          orden lo calcula Postgres sobre el historial entero más la navegación.
+
+          Sigue yendo ANTES de las sugerencias, y por el mismo motivo que
+          entonces: volver con un tutor conocido es un camino más corto que
+          descubrir uno nuevo, y esta pantalla ordena por lo que el alumno hará
+          antes. `null` = ni historial ni catálogo, y entonces no se monta. */}
+      {misTutores ? <TutoresCard data={misTutores} /> : null}
+
+      {/* N-30 · mentorías sugeridas por sus categorías de interés. Va justo
+          debajo de las reservas —lo que el alumno vino a mirar— y encima de las
+          tarjetas fijas del Figma. `null` = no hay nada honesto que sugerir
+          (catálogo vacío), y entonces no se monta: un carrusel vacío es peor
+          que no ponerlo. */}
+      {sugerencias ? <SugerenciasCard data={sugerencias} /> : null}
+
+      {/* Las dos tarjetas del Figma. "Invita y gana" (US-1301) solo aparece con
+          campaña configurada: el programa vive entero en Referral Factory. */}
+      {/* B1.11 · esta pantalla es el panel del ALUMNO, así que su programa es
+          el de alumnos siempre. Un tutor que además compra ve el suyo desde
+          `/account`, que sí mira el rol. */}
+      <ReferralCard />
+
       <PanelCard>
         <span className="grid size-10 place-items-center rounded-full bg-brand-muted text-brand">
           <CompassIcon className="size-5" />
@@ -240,6 +344,11 @@ export default async function AppHome() {
           <Link href="/tutors">Explorar tutores</Link>
         </Button>
       </PanelCard>
+
+      {/* SUP-01 · la salida a soporte, al final y no arriba: quien entra al
+          panel viene a mirar sus mentorías, no a reportar un problema. Lleva a
+          `/contacto`, que es el único buzón que existe — ver `SupportCard`. */}
+      <SupportCard />
     </PanelShell>
   );
 }

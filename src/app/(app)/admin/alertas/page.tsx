@@ -11,12 +11,16 @@ import {
 } from "@/components/layout/panel-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
 import { Button } from "@/components/ui/button";
+import { AckButton } from "./ack-button";
 
 export const metadata = { title: "Alertas · Enséñame Ya" };
 
 type Severity = "alta" | "media" | "baja";
+type AlertKind = "pago" | "payout" | "cancelacion";
 type Alert = {
-  kind: "pago" | "payout" | "cancelacion";
+  kind: AlertKind;
+  /** La entidad de la que sale: con `kind` forma la clave del acuse. */
+  entityId: string;
   severity: Severity;
   title: string;
   detail: string;
@@ -39,27 +43,33 @@ const FILTERS = [
 
 /**
  * SCR-AD14 — alertas/incidencias, DERIVADAS de los datos reales: pagos
- * fallidos, payouts en problema y cancelaciones recientes. No hay tabla de
- * incidencias, así que el "Marcar atendida" del Figma no existe todavía — la
- * alerta desaparece cuando el dato subyacente se resuelve (reintento, release,
- * etc.). Las "disputas" del Figma llegan con el PSP real (EP-20).
+ * fallidos, payouts en problema y cancelaciones recientes. Las "disputas" del
+ * Figma llegan con el PSP real (EP-20).
+ *
+ * "Marcar atendida" (decisión 29) escribe un acuse en `alert_acks` referido a
+ * la entidad de origen. No se copia la alerta a una tabla: el título y el
+ * importe salen del pago o la reserva, y duplicarlos crearía dos versiones del
+ * mismo hecho. Las atendidas salen de la lista pero se pueden revisar y
+ * reabrir; una alerta también desaparece sola si el dato de abajo se resuelve.
  */
 export default async function AdminAlertasPage({
   searchParams,
 }: {
-  searchParams: Promise<{ f?: string }>;
+  searchParams: Promise<{ f?: string; atendidas?: string }>;
 }) {
   await requireRole("admin");
-  const { f } = await searchParams;
+  const { f, atendidas } = await searchParams;
   const filter = FILTERS.find((x) => x.id === f)?.id ?? "todas";
+  const showAcked = atendidas === "1";
 
   const since = new Date();
   since.setUTCDate(since.getUTCDate() - 30);
   const sinceIso = since.toISOString();
 
   const supabase = await createClient();
-  const [{ data: failedPayments }, { data: problemPayouts }, { data: cancelled }] =
+  const [{ data: acks }, { data: failedPayments }, { data: problemPayouts }, { data: cancelled }] =
     await Promise.all([
+      supabase.from("alert_acks").select("kind, entity_id"),
       supabase
         .from("payments")
         .select("id, gross_amount, currency, failed_at, created_at")
@@ -82,10 +92,13 @@ export default async function AdminAlertasPage({
         .limit(20),
     ]);
 
+  const ackedKeys = new Set((acks ?? []).map((a) => `${a.kind}:${a.entity_id}`));
+
   const alerts: Alert[] = [
     ...(failedPayments ?? []).map(
       (p): Alert => ({
         kind: "pago",
+        entityId: p.id,
         severity: "alta",
         title: `Falla de pago en #${p.id.slice(0, 8)}`,
         detail: `El cobro de ${formatMoney(p.gross_amount, p.currency)} no prosperó`,
@@ -96,6 +109,7 @@ export default async function AdminAlertasPage({
     ...(problemPayouts ?? []).map(
       (p): Alert => ({
         kind: "payout",
+        entityId: p.id,
         severity: p.status === "on_hold" ? "alta" : "media",
         title: `Payout ${p.status === "on_hold" ? "en on_hold" : "fallido"} #${p.id.slice(0, 8)}`,
         detail:
@@ -108,9 +122,10 @@ export default async function AdminAlertasPage({
     ...(cancelled ?? []).map(
       (b): Alert => ({
         kind: "cancelacion",
+        entityId: b.id,
         severity: "baja",
         title: `Cancelación #${b.id.slice(0, 8)}`,
-        detail: `${b.products?.title ?? "Clase"} · ${formatMoney(b.total_amount, b.currency)}`,
+        detail: `${b.products?.title ?? "Mentoría"} · ${formatMoney(b.total_amount, b.currency)}`,
         href: `/admin/bookings/${b.id}`,
         at: b.cancelled_at ?? "",
       }),
@@ -118,6 +133,10 @@ export default async function AdminAlertasPage({
   ]
     .sort((a, z) => z.at.localeCompare(a.at))
     .filter((a) => filter === "todas" || a.kind === filter);
+
+  const isAcked = (a: Alert) => ackedKeys.has(`${a.kind}:${a.entityId}`);
+  const ackedCount = alerts.filter(isAcked).length;
+  const visible = alerts.filter((a) => (showAcked ? isAcked(a) : !isAcked(a)));
 
   return (
     <AdminShell
@@ -144,17 +163,45 @@ export default async function AdminAlertasPage({
         })}
       </div>
 
-      {alerts.length === 0 ? (
+      {/* Las atendidas no se borran: se apartan y se pueden revisar. */}
+      {ackedCount > 0 || showAcked ? (
+        <p className="text-[13px] text-[#6b6b6b]">
+          {showAcked ? (
+            <>
+              Viendo las atendidas.{" "}
+              <Link
+                href={filter === "todas" ? "/admin/alertas" : `/admin/alertas?f=${filter}`}
+                className="font-semibold text-brand hover:underline"
+              >
+                Volver a las abiertas
+              </Link>
+            </>
+          ) : (
+            <>
+              {ackedCount} {ackedCount === 1 ? "atendida" : "atendidas"}.{" "}
+              <Link
+                href={`/admin/alertas?atendidas=1${filter === "todas" ? "" : `&f=${filter}`}`}
+                className="font-semibold text-brand hover:underline"
+              >
+                Verlas
+              </Link>
+            </>
+          )}
+        </p>
+      ) : null}
+
+      {visible.length === 0 ? (
         <PanelCard>
           <p className="text-[13px] text-[#6b6b6b]">
-            Sin incidencias {filter === "todas" ? "" : "de este tipo "}en los
-            últimos 30 días. 🎉
+            {showAcked
+              ? "Ninguna alerta atendida de este tipo."
+              : `Sin incidencias ${filter === "todas" ? "" : "de este tipo "}en los últimos 30 días. 🎉`}
           </p>
         </PanelCard>
       ) : (
         <PanelCard className="py-2">
           <ul className="divide-y divide-[#e0e0e0]">
-            {alerts.map((a, i) => {
+            {visible.map((a, i) => {
               const pill = SEVERITY_PILL[a.severity];
               return (
                 <li
@@ -162,7 +209,7 @@ export default async function AdminAlertasPage({
                   className="flex flex-wrap items-center justify-between gap-3 py-4"
                 >
                   <div className="flex min-w-0 items-center gap-3.5">
-                    <StatusPill tone={pill.tone} className="h-7 shrink-0">
+                    <StatusPill tone={pill.tone} className="shrink-0">
                       {pill.label}
                     </StatusPill>
                     <div className="min-w-0">
@@ -180,13 +227,20 @@ export default async function AdminAlertasPage({
                       </p>
                     </div>
                   </div>
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
-                  >
-                    <Link href={a.href}>Abrir</Link>
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      asChild
+                      variant="outline"
+                      className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+                    >
+                      <Link href={a.href}>Abrir</Link>
+                    </Button>
+                    <AckButton
+                      kind={a.kind}
+                      entityId={a.entityId}
+                      acked={showAcked}
+                    />
+                  </div>
                 </li>
               );
             })}

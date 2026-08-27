@@ -7,7 +7,7 @@ const STEPS = [
   {
     n: "01",
     title: "Elige tu meta",
-    text: "Cuéntanos qué quieres lograr. Encuentra tutorías diseñadas específicamente para alcanzar un objetivo real.",
+    text: "Cuéntanos qué quieres lograr. Encuentra mentorías diseñadas específicamente para alcanzar un objetivo real.",
     img: "/img/step-1.png",
   },
   {
@@ -30,7 +30,7 @@ export function ThreeSteps() {
       <Section>
         <div className="rounded-[17px] bg-primary px-6 py-10 sm:px-10">
           <h2 className="text-center text-[26px] font-semibold text-primary-foreground">
-            Tu resultado asegurado en 3 simples pasos
+            Avanza hacia tu meta en 3 simples pasos
           </h2>
 
           <ol className="mt-8 grid gap-6 lg:grid-cols-3">

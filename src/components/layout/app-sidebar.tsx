@@ -4,8 +4,10 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ActivityIcon,
   BarChart3Icon,
   BellIcon,
+  FlagIcon,
   BookOpenIcon,
   CalendarPlusIcon,
   CreditCardIcon,
@@ -13,6 +15,7 @@ import {
   HomeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MessageCircleQuestionIcon,
   PercentIcon,
   ReceiptIcon,
   ShieldCheckIcon,
@@ -58,6 +61,15 @@ const STUDENT_ITEMS: Item[] = [
 export const TUTOR_ITEMS: Item[] = [
   { href: "/tutor", label: "Dashboard", icon: LayoutDashboardIcon, exact: true },
   { href: "/tutor/products", label: "Mis mentorías", icon: BookOpenIcon },
+  // EY-194 · va pegada a "Mis mentorías" porque es lo mismo visto desde el otro
+  // lado: contenido de la vitrina que se hereda en todas ellas.
+  //
+  // ⚠️ La etiqueta dice "Mis FAQ" y no "Preguntas frecuentes" por el hueco de
+  // la fila, que es `h-[41px]` FIJA y no envuelve: "Mentorías impartidas" (20
+  // caracteres, en el menú de admin) ya mide 155 px de los ~158 disponibles.
+  // "Preguntas frecuentes" tiene los mismos 20 y se saldría o quedaría al
+  // límite. El título de la pantalla sí es el largo.
+  { href: "/tutor/faqs", label: "Mis FAQ", icon: MessageCircleQuestionIcon },
   { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
   { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
   { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },
@@ -83,17 +95,66 @@ export const TUTOR_ITEMS: Item[] = [
 export const ADMIN_ITEMS: Item[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboardIcon, exact: true },
   { href: "/admin/tutores", label: "Tutores", icon: UsersIcon },
+  // MN-14a · no está en el Figma porque la pantalla tampoco: es el registro de
+  // mentorías impartidas, uso interno para segmentar la campaña de tutores.
+  // Cuelga de /admin/tutores y por eso va detrás: son el mismo tema.
+  // ⚠️ Es la etiqueta más larga del menú y va justa: en activo (semibold) mide
+  // 155px de los ~158 que deja la columna de 232px. Cabe en una línea —medido,
+  // no estimado—, pero la fila es `h-[41px]` FIJA: una etiqueta más larga no
+  // envolvería, desbordaría. Si hace falta un nombre mayor, antes hay que
+  // quitarle el alto fijo a la fila.
+  {
+    href: "/admin/tutores/actividad",
+    label: "Mentorías impartidas",
+    icon: ActivityIcon,
+  },
   { href: "/admin/payments", label: "Pagos", icon: ReceiptIcon },
   { href: "/admin/bookings", label: "Reservas", icon: TicketIcon },
   { href: "/admin/categorias", label: "Categorías", icon: FolderTreeIcon },
   { href: "/admin/tiers", label: "Tiers", icon: PercentIcon },
   { href: "/admin/stats", label: "Estadísticas", icon: BarChart3Icon },
   { href: "/admin/alertas", label: "Alertas", icon: BellIcon },
+  // EY-189 · La cola de moderación. Va pegada a Alertas porque es lo
+  // mismo que ellas —trabajo que pide una decisión— y porque el Figma no
+  // la dibujó: la pantalla nació después.
+  { href: "/admin/reportes", label: "Reportes", icon: FlagIcon },
   { href: "/admin/payouts", label: "Payouts", icon: WalletIcon },
 ];
 
+/**
+ * Cuánto de la ruta actual cubre este ítem, o `-1` si no la cubre.
+ *
+ * Existe porque el menú marca por PREFIJO y hay rutas que cuelgan de otras:
+ * `/admin/tutores/actividad` empieza por `/admin/tutores`, así que con un
+ * `startsWith` a secas se encendían las dos entradas a la vez. Hasta ahora el
+ * único choque era el "inicio" de cada panel (`/app`, `/tutor`, `/admin`), que
+ * es prefijo de todo lo suyo, y se resolvió con `exact`. Ese apaño no sirve
+ * aquí: `/admin/tutores` TIENE que seguir marcada en el detalle
+ * `/admin/tutores/<id>`, así que no puede ser exacta.
+ *
+ * La regla general —gana el prefijo más largo— cubre los dos casos y el
+ * siguiente que aparezca. No cambia nada de lo que ya había: donde solo casa
+ * un ítem, ese ítem sigue siendo el activo.
+ */
+function matchLength(item: Item, pathname: string): number {
+  const porHref = item.exact
+    ? pathname === item.href
+      ? item.href.length
+      : -1
+    : pathname.startsWith(item.href)
+      ? item.href.length
+      : -1;
+  const porAlias =
+    item.alsoMatch && pathname.startsWith(item.alsoMatch) ? item.alsoMatch.length : -1;
+  return Math.max(porHref, porAlias);
+}
+
 export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
   const pathname = usePathname();
+
+  // El ítem más específico que casa con la ruta. `-1` = ninguno (rutas del área
+  // autenticada que no están en el menú); entonces no se marca nada, como antes.
+  const mejorMatch = Math.max(...items.map((item) => matchLength(item, pathname)));
 
   const [signOutOpen, setSignOutOpen] = useState(false);
 
@@ -105,9 +166,7 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
       <ul className="flex flex-col gap-1">
         {items.map((item) => {
           const { href, label, icon: Icon } = item;
-          const active =
-            (item.exact ? pathname === href : pathname.startsWith(href)) ||
-            (item.alsoMatch ? pathname.startsWith(item.alsoMatch) : false);
+          const active = matchLength(item, pathname) === mejorMatch;
           return (
             <li key={href}>
               <Link

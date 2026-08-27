@@ -40,6 +40,9 @@ export function GoogleButton({
   label,
   className,
   intent,
+  referralCode,
+  terms,
+  onTermsMissing,
 }: {
   next: string | null;
   label: string;
@@ -47,15 +50,52 @@ export function GoogleButton({
   /** AU02: el selector "quiero aprender/enseñar" está encima de este botón, así
    *  que la intención tiene que viajar también por OAuth (la lee AU04). */
   intent?: "alumno" | "tutor";
+  /** US-1302: el `?ref=` no sobrevive al viaje a Google; se lo pasamos al
+   *  callback por la URL de vuelta, igual que la intención. */
+  referralCode?: string | null;
+  /**
+   * Solo en el REGISTRO. Cierra un agujero que estuvo abierto hasta el 17-ago:
+   * este botón se pinta ANTES del `<form>` y su `onClick` no leía la casilla de
+   * términos, así que quien pulsaba "Registrarme con Google" creaba cuenta sin
+   * haber aceptado nada — y era el camino que la propia pantalla ofrece
+   * primero. Con esto el clic se bloquea igual que el submit del formulario.
+   *
+   * La versión viaja por la URL de vuelta y la graba AU04, porque el metadata
+   * de un alta por Google lo trae Google: no pasa por `handle_new_user` con
+   * nada nuestro dentro. Mismo camino que `intent` y `ref`.
+   *
+   * En el LOGIN no se pasa: quien ya tiene cuenta ya aceptó, y volver a pedirlo
+   * para entrar sería pedir dos veces lo mismo.
+   */
+  terms?: { aceptado: boolean; version: string; locale: string };
+  /**
+   * RV-14 · Qué hacer cuando falta la casilla de términos. La pantalla de
+   * registro lo usa para encender su error bajo la casilla —que es donde hay
+   * que mirar—; sin él queda el aviso flotante de siempre.
+   */
+  onTermsMissing?: () => void;
 }) {
   const [loading, setLoading] = useState(false);
 
   async function onClick() {
+    // Mismo mensaje y mismo momento que el submit por correo, para que los dos
+    // caminos de alta se comporten igual.
+    if (terms && !terms.aceptado) {
+      if (onTermsMissing) onTermsMissing();
+      else toast.error("Debes aceptar los términos para continuar.");
+      return;
+    }
+
     setLoading(true);
     const supabase = createClient();
     const params = new URLSearchParams();
     if (next) params.set("next", next);
     if (intent) params.set("intent", intent);
+    if (referralCode) params.set("ref", referralCode);
+    if (terms?.aceptado) {
+      params.set("terms", terms.version);
+      params.set("terms_locale", terms.locale);
+    }
     const query = params.toString();
     const redirectTo = `${window.location.origin}/auth/callback${
       query ? `?${query}` : ""

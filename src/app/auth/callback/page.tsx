@@ -14,9 +14,16 @@ export const metadata = { title: "Verificando… · Enséñame Ya" };
 export default async function AuthCallbackPage({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string; next?: string; intent?: string }>;
+  searchParams: Promise<{
+    code?: string;
+    next?: string;
+    intent?: string;
+    ref?: string;
+    terms?: string;
+    terms_locale?: string;
+  }>;
 }) {
-  const { code, next, intent } = await searchParams;
+  const { code, next, intent, ref, terms, terms_locale } = await searchParams;
 
   return (
     <AuthShell className="max-w-[420px]">
@@ -24,6 +31,13 @@ export default async function AuthCallbackPage({
         code={code ?? null}
         next={next ?? null}
         intent={intent === "alumno" || intent === "tutor" ? intent : null}
+        referralCode={ref?.trim() || null}
+        // Solo llega desde `/signup`: al iniciar sesión no se pide aceptar de
+        // nuevo, así que en ese camino viene vacío y no se graba nada.
+        termsVersion={terms?.trim() || null}
+        termsLocale={
+          terms_locale === "en" || terms_locale === "es" ? terms_locale : null
+        }
       />
     </AuthShell>
   );

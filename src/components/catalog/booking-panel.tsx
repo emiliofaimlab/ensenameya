@@ -2,11 +2,9 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
-import {
-  formatMoney,
-  perSessionLabel,
-  priceUnitLabel,
-} from "@/lib/catalog/format";
+import { BookingSelect } from "@/components/catalog/booking-select";
+import { AddToCart } from "@/components/cart/add-to-cart";
+import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
 import { listProductSlots } from "@/lib/catalog/queries";
 import type { ProductCardData } from "@/lib/catalog/queries";
 
@@ -36,6 +34,40 @@ const slotTime = (iso: string, timeZone: string) =>
     timeZone,
   });
 
+/** Horarios que hay que elegir para reservar esta mentoría (RN-12). */
+const sesionesPorReserva = (p: ProductCardData) =>
+  p.pricingModel === "per_package" ? (p.packageNumSessions ?? 1) : 1;
+
+/**
+ * N-33 + N-32 · a dónde lleva CONFIRMAR una hora. Del calendario al pago, sin
+ * volver a preguntar lo mismo.
+ *
+ * El cliente lo dijo con estas palabras: «estás seleccionando dos veces algo»
+ * y «me mareó un poco que el calendario salga dos veces […] yo selecciono el 14
+ * a las 8 de la mañana y después me salta, y como salta en otra forma, yo digo
+ * "ya estoy reservando, ¿a qué hora es que yo reservé?"». Elegir la hora AQUÍ
+ * ya es elegir; `/reservar/<id>` repintaba otro calendario —con otra forma y
+ * otro día de inicio de semana— para preguntar exactamente lo mismo.
+ *
+ * ⚠️ POR QUÉ LA PANTALLA INTERMEDIA NO SE BORRA. Parece vacía y no lo está: es
+ * la única que resuelve la selección MÚLTIPLE de los paquetes (`per_package`
+ * con N sesiones exige elegir N horarios, RN-12) y no hay sitio en este panel
+ * lateral para eso. Así que:
+ *
+ *   · sesión suelta  → derecho al checkout, con el horario ya en la URL;
+ *   · paquete        → a `/reservar/<id>?slot=…`, que preselecciona esa primera
+ *                      hora (M-10) y pide las que faltan.
+ *
+ * Y `/reservar/<id>` sigue existiendo además como respaldo para quien llega sin
+ * hora elegida: un enlace guardado, un marcador, un hueco que se ocupó entre
+ * medias. Ya NO se llega ahí desde el botón grande de este panel — ver la nota
+ * del CTA.
+ */
+const destinoDeLaHora = (p: ProductCardData, iso: string) =>
+  sesionesPorReserva(p) > 1
+    ? `/reservar/${p.id}?slot=${encodeURIComponent(iso)}`
+    : `/reservar/${p.id}/checkout?slots=${encodeURIComponent(iso)}`;
+
 /**
  * Panel de reserva de P07/P08 — flujo **día → clase → horario** (R24-13).
  *
@@ -57,8 +89,9 @@ export async function BookingPanel({
   products,
   selectedId,
   selectedDay,
+  selectedTime,
   hrefFor,
-  ctaLabel = "Reservar clase YA",
+  ctaLabel = "Reservar mentoría YA",
   note = "Pago protegido · Cancela con 24h y recibe el 100%.",
   details = false,
   footer,
@@ -67,10 +100,16 @@ export async function BookingPanel({
   products: ProductCardData[];
   selectedId?: string;
   selectedDay?: string;
+  /**
+   * MN-16 · la hora elegida, en ISO, tal cual viaja por la URL. Llega SIN
+   * validar: es texto de la barra de direcciones. Se contrasta abajo contra los
+   * huecos reales y solo entonces pinta o desbloquea nada.
+   */
+  selectedTime?: string;
   /** Zona del visitante (`getViewerTimezone`): con sesión, la suya; sin sesión,
    *  la del navegador. Sin ella el SSR pintaría la hora del servidor (R24-22). */
   timeZone: string;
-  hrefFor: (next: { p?: string; d?: string }) => string;
+  hrefFor: (next: { p?: string; d?: string; h?: string }) => string;
   ctaLabel?: string;
   note?: string;
   /** P08 añade equivalencia por sesión y duración bajo el precio. */
@@ -114,14 +153,51 @@ export async function BookingPanel({
   const chosen =
     single ?? products.find((p) => p.id === selectedId) ?? undefined;
 
+  /**
+   * MN-16 · la hora elegida, ya contrastada contra los huecos REALES de la clase
+   * elegida. Lo que se queda es el ISO **canónico** de la BD, no el de la URL.
+   *
+   * ⚠️ Se compara por INSTANTE, nunca con `===`. La cadena de la URL la produjo
+   * un render anterior y basta con que Postgres devuelva el mismo momento con
+   * otro formato (`+00:00` frente a `Z`), o con que un `+` del ISO se lea como
+   * espacio al decodificar, para que la igualdad de texto no case jamás — y el
+   * síntoma sería "pulso la hora y no se marca", sin error en ningún sitio. Es
+   * la misma trampa que ya documenta `/reservar/<id>` al validar su `?slot=`.
+   *
+   * Si no casa —hueco ocupado entre medias, URL vieja, clase cambiada— vale
+   * `undefined` y el panel se comporta como si no hubiera hora: ninguna
+   * seleccionada, botón bloqueado. Nunca se hereda una hora que no existe.
+   */
+  const hora =
+    chosen && selectedTime
+      ? (slotsByProduct.get(chosen.id) ?? []).find(
+          (iso) => Date.parse(iso) === Date.parse(selectedTime),
+        )
+      : undefined;
+
   const allDays = [...productsByDay.keys()].sort();
-  const day =
-    selectedDay && productsByDay.has(selectedDay)
+  // La hora MANDA sobre el día: si las dos vienen en la URL y se contradicen
+  // (enlace editado a mano, marcador viejo), gana la hora, que es la elección
+  // concreta y la que va a viajar al pago. Los chips emiten siempre las dos a
+  // la vez, así que en el uso normal esto no se nota.
+  const day = hora
+    ? slotDay(hora, timeZone)
+    : selectedDay && productsByDay.has(selectedDay)
       ? selectedDay
       : (allDays[0] ?? slotDay(new Date().toISOString(), timeZone));
 
   /** Clases con hueco el día elegido (las que ofrece el selector). */
   const dayProducts = products.filter((p) => productsByDay.get(day)?.has(p.id));
+  // RV-08 · el precio de la clase elegida, ya resuelto a "lo que se cobra".
+  // El rótulo cambia con el modelo: en un paquete el importe es del paquete
+  // entero, no de una sesión, y llamarlo igual sería otra media verdad.
+  const precio = chosen ? priceDisplay(chosen) : null;
+  const totalLabel = !precio?.isTotal
+    ? "Precio"
+    : chosen?.pricingModel === "per_package"
+      ? "Total del paquete"
+      : "Total de la sesión";
+
   /** Horarios de la clase elegida ESE día. */
   const times = chosen
     ? (slotsByProduct.get(chosen.id) ?? []).filter(
@@ -144,29 +220,96 @@ export async function BookingPanel({
     { month: "long", year: "numeric", timeZone: "UTC" },
   );
 
+  /*
+   * B3.5 · ⚠️ AQUÍ HUBO UN ARREGLO BASADO EN UNA PREMISA FALSA. NO LO REPONGAS.
+   *
+   * El 26-ago se añadió `lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto`
+   * argumentando que «el panel es sticky top-24, así que con el contenido largo
+   * el CTA cae fuera de la ventana y no hay forma de llegar a él». Suena bien y
+   * es mentira: **`lg:sticky` no tiene recorrido en este panel**.
+   *
+   * Un elemento `sticky` solo se despega dentro de su bloque contenedor, y aquí
+   * el hijo del grid no es este `<aside>` sino el `<div id="reservar">` que lo
+   * envuelve — un div sin clases, que por tanto mide EXACTAMENTE lo mismo que
+   * el aside. Recorrido disponible: 0 px. Medido en dev el 26-ago:
+   * `parentElement.height - aside.height === 0`. O sea que el panel nunca se ha
+   * quedado clavado, siempre ha bajado con la página, y el CTA siempre se ha
+   * alcanzado haciendo scroll normal.
+   *
+   * Lo que sí hacía el arreglo era convertir el aside en contenedor de scroll,
+   * y eso rompía la pantalla de verdad: la barra `sticky bottom-0` del final
+   * dejaba de anclarse al pie de la VENTANA y pasaba a anclarse al pie del
+   * PANEL, opaca y por encima de sus propios chips de hora. Medido: **11 de 15
+   * chips dejaban de recibir el clic**, y para destaparlos había que descubrir
+   * un scroll anidado que nadie busca.
+   *
+   * Si algún día se quiere de verdad un panel que acompañe al scroll, lo que
+   * hay que tocar es la ESTRUCTURA —que el hijo del grid sea el que tenga la
+   * altura de la columna—, no meterle un scroll propio al aside.
+   */
   return (
     <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
       {/* R29-01: arriba del calendario va el TÍTULO de la clase; el precio baja
           junto al CTA. Sigue valiendo R24-14 (nada de importe fijo por delante):
-          sin clase elegida no hay precio en ninguna de las dos posiciones. */}
-      {chosen ? (
+          sin clase elegida no hay precio en ninguna de las dos posiciones.
+          V-5 · el plural «Reserva estas mentorías» va SOLO en la ficha del
+          tutor CON VARIAS mentorías: es el único sitio donde hay varias entre
+          las que elegir. En `/products/[id]` llega un único producto, así que
+          `single` lo fija y esa rama nunca se pinta. */}
+      {/*
+        B3.4 · ⚠️ EL ENCABEZADO YA NO DEPENDE DE `chosen`. Petición literal del
+        cliente: «Y no cambies el título de arriba cuando selecciones».
+
+        Antes esta rama era `chosen ? … : …`, o sea que en la ficha del TUTOR el
+        panel se abría con «Reserva estas mentorías» + su línea de ayuda y, en
+        cuanto se elegía una mentoría, el bloque entero se sustituía por el
+        título de esa mentoría — de una a cuatro líneas según lo largo que fuera
+        («Química Orgánica e Intermedia: Descifra la Ciencia Detrás del Mundo
+        Real»). El calendario subía o bajaba con cada selección.
+
+        Ahora la condición es `single`, que **no cambia nunca durante la vida de
+        la pantalla**: es una propiedad de cuántos productos recibe el panel, no
+        de lo que el visitante haya pulsado. Las tres combinaciones quedan así:
+
+          · `/products/[id]` (P08) → siempre `single` → «Reserva esta mentoría».
+            Igual que antes; ahí el título nunca cambió.
+          · ficha del tutor con UNA mentoría → `single` la fija → su título,
+            estable. Igual que antes.
+          · ficha del tutor con VARIAS → el plural, SIEMPRE. Aquí está el
+            cambio.
+
+        Y lo que V-5b defendía —«sin el título no se sabría cuál de sus
+        mentorías se está reservando»— ya no se pierde: la mentoría elegida se
+        lee en el `<select>` de abajo, que la enseña de forma permanente. Antes
+        eso lo decía el color de una tarjeta; ahora lo dice el propio control.
+      */}
+      {single ? (
         <>
+          {/* V-5b · En la ficha de la mentoría el título NO se repite. Ahí ya
+              es el H1 de la página, a dos dedos de aquí, y volver a escribirlo
+              no informa de nada y empuja el calendario hacia abajo.
+
+              `details` es la señal exacta y no hace falta inventar otra: lo
+              pasa SOLO `/products/[id]` (P08), que es justamente la pantalla
+              donde el título ya está arriba. En la ficha del TUTOR con una
+              sola mentoría no llega, y ahí el título sí hace falta: el H1 es el
+              nombre del tutor. */}
           <p className="text-[22px] font-bold text-balance text-[#19191f]">
-            {chosen.title}
+            {details ? "Reserva esta mentoría" : single.title}
           </p>
-          {details && chosen.sessionDurationMin ? (
+          {details && single.sessionDurationMin ? (
             <p className="mt-1.5 text-sm text-[#595959]">
-              En vivo 1 a 1 · {chosen.sessionDurationMin} min por sesión
+              En vivo 1 a 1 · {single.sessionDurationMin} min por sesión
             </p>
           ) : null}
         </>
       ) : (
         <>
           <p className="text-[22px] font-bold text-[#19191f]">
-            Reserva con este tutor
+            Reserva estas mentorías
           </p>
           <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
-            Elige el día y la clase; el precio depende de la mentoría que
+            Elige el día y la sesión; el precio depende de la mentoría que
             escojas.
           </p>
         </>
@@ -211,6 +354,9 @@ export async function BookingPanel({
                   key={i}
                   // Cambiar de día conserva la clase solo si sigue teniendo
                   // hueco; si no, se vuelve a elegir (evita un combo imposible).
+                  // La hora NO se conserva —no se pasa `h`— porque pertenece a
+                  // un día concreto: arrastrarla al día siguiente sería marcar
+                  // como elegido un hueco que el alumno no ha visto.
                   href={hrefFor({
                     p:
                       chosen && productsByDay.get(key)?.has(chosen.id)
@@ -232,75 +378,133 @@ export async function BookingPanel({
           </div>
 
           {/* Paso 2 (R24-13): elegir la clase de ESE día. Con una sola mentoría
-              (P08) no hay nada que elegir y se salta. */}
+              (P08) no hay nada que elegir y se salta.
+
+              B3.4 · era una lista de tarjetas-enlace y ahora es un `<select>`,
+              por petición del cliente: «El selector de mentoría son dos
+              tarjetas, porque tiene dos mentorías; esto se migra a un selector
+              de mentorías, un select normal».
+
+              ⚠️ RV-08 SIGUE VIVO dentro del `<option>`. Aquí se COMPARAN precios
+              entre clases —si una se anuncia por hora y otra por sesión, la
+              comparación solo es honesta si las dos enseñan el cobro de la
+              reserva—, y un `<option>` no admite dos líneas como la tarjeta.
+              Así que el precio va en la MISMA línea, detrás del título. Quitarlo
+              sería perder la comparación, no simplificar. */}
           {single ? null : (
             <div className="mt-5">
-              <p className="text-[13px] font-medium">Elige la clase</p>
-              <ul className="mt-2 flex flex-col gap-2">
-                {dayProducts.map((p) => {
-                  const on = p.id === chosen?.id;
-                  return (
-                    <li key={p.id}>
-                      <Link
-                        href={hrefFor({ p: p.id, d: day })}
-                        aria-current={on ? "true" : undefined}
-                        className={`flex items-center justify-between gap-3 rounded-[10px] border px-3.5 py-2.5 text-left transition-colors ${
-                          on
-                            ? "border-brand bg-brand-muted"
-                            : "border-[#e0e0e0] hover:border-brand"
-                        }`}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-[13.5px] font-medium text-[#212121]">
-                            {p.title}
-                          </span>
-                          <span className="block text-xs text-[#6b6b6b]">
-                            {formatMoney(p.priceAmount, p.currency)} ·{" "}
-                            {priceUnitLabel(p)}
-                          </span>
-                        </span>
-                      </Link>
-                    </li>
-                  );
+              <BookingSelect
+                id="reserva-mentoria"
+                /* «Mentoría» y no «sesión»: lo que se elige aquí es CUÁL de
+                   las clases del tutor, no cuántas ni a qué hora. La etiqueta
+                   decía «sesión» mientras su propio placeholder decía
+                   «mentoría», que es además el término que manda en todo el
+                   producto desde el acuerdo del 17-ago. Y «sesión» ya
+                   significa otra cosa en esta misma pantalla: el encuentro
+                   concreto que se agenda abajo. */
+                label="Elige la mentoría"
+                placeholder="Elige una mentoría"
+                value={chosen?.id ?? ""}
+                options={dayProducts.map((p) => {
+                  const precioClase = priceDisplay(p);
+                  return {
+                    value: p.id,
+                    label: `${p.title} · ${precioClase.amount} · ${precioClase.note}`,
+                    // Igual que con el día: cambiar de clase suelta la hora.
+                    // Los huecos son de la mentoría, no del tutor. Es EL MISMO
+                    // destino que tenía la tarjeta que esto sustituye.
+                    href: hrefFor({ p: p.id, d: day }),
+                  };
                 })}
-              </ul>
+              />
             </div>
           )}
 
           {/* Paso 3: horarios de la clase elegida ese día. */}
           {chosen ? (
             <>
-              <p className="mt-5 text-[13px] font-medium">
-                Horarios disponibles{" "}
-                <span className="font-normal text-[#6b6b6b]">
-                  · en tu hora local
-                </span>
-              </p>
+              {/* B3.4 · la etiqueta ya no es un `<p>` suelto: viaja dentro de
+                  `BookingSelect` como `<label htmlFor>` de verdad, asociada al
+                  control. Solo se pinta aquí cuando NO hay horarios, porque
+                  entonces no hay control al que asociarla. */}
               {times.length === 0 ? (
-                <p className="mt-2 text-[13px] text-muted-foreground">
-                  Esta clase no tiene horarios ese día. Prueba con otro día.
-                </p>
+                <>
+                  <p className="mt-5 text-[13px] font-medium">
+                    Horarios disponibles
+                  </p>
+                  <p className="mt-2 text-[13px] text-muted-foreground">
+                    Esta sesión no tiene horarios ese día. Prueba con otro día.
+                  </p>
+                </>
               ) : (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {times.map((iso, i) => (
-                    <Link
-                      key={iso}
-                      href={`/reservar/${chosen.id}?slot=${encodeURIComponent(iso)}`}
-                      className={`rounded-[8px] px-3 py-2 text-[13px] transition-colors ${
-                        i === 0
-                          ? "bg-brand text-white hover:bg-brand-foreground"
-                          : "border border-[#cccccc] text-[#333333] hover:bg-muted"
-                      }`}
-                    >
-                      {slotTime(iso, timeZone)}
-                    </Link>
-                  ))}
-                </div>
+                <>
+                  {/*
+                    B3.4 · ESTO ERAN CHIPS Y AHORA ES UN `<select>`. Palabras del
+                    cliente: «ahorita despliegas unos cuadritos con las horas, se
+                    va a migrar a un selector y ya». Aplica a las DOS pantallas
+                    —ficha del tutor y ficha de mentoría—, y en las dos el
+                    destino de cada opción es EXACTAMENTE el mismo `hrefFor` que
+                    tenía su chip. No se inventa ninguna ruta nueva.
+
+                    ⚠️ Lo que MN-16 dejó escrito sigue en pie y no se ha tocado:
+                    elegir la hora SELECCIONA, no navega al pago. Antes de MN-16
+                    cada chip era un enlace al checkout y el primero se pintaba
+                    naranja solo (`i === 0`), así que el alumno leía «08:00 ya
+                    está elegido» sin haber elegido nada. Hoy la hora vive en la
+                    query (`?h=`) y el botón grande de abajo es quien lleva al
+                    pago. El `<select>` conserva esa separación tal cual: cambiar
+                    de opción solo cambia la URL.
+
+                    ⚠️ Y desaparece de paso la nota de `aria-current` frente a
+                    `aria-pressed` que hacía falta con enlaces: un `<option>`
+                    seleccionado ya se anuncia solo, sin ARIA que ponerle.
+
+                    De propina, la fuente de salto de altura más grande de
+                    §23.4: los chips ocupaban de una a cuatro filas según cuántas
+                    horas tuviera el día. El `<select>` mide lo mismo siempre.
+                  */}
+                  <div className="mt-5">
+                    <BookingSelect
+                      id="reserva-horario"
+                      label="Horarios disponibles"
+                      hint="· en tu hora local"
+                      placeholder="Elige una hora"
+                      /*
+                       * ⚠️ `hora`, NO `selectedTime`. `hora` es el ISO CANÓNICO
+                       * de la BD, ya contrastado contra los huecos reales por
+                       * instante (`Date.parse`), y es la misma cadena exacta que
+                       * viaja en `times` — así que el `defaultValue` casa con su
+                       * `<option>` por igualdad de texto, que es lo único que
+                       * entiende un `<select>`. Con `selectedTime` (el texto
+                       * crudo de la URL) no casaría: basta con que Postgres
+                       * devuelva `+00:00` donde la URL trae `Z` para que ninguna
+                       * opción salga marcada, sin error en ningún sitio. Es la
+                       * misma trampa que documenta el cálculo de `hora` arriba.
+                       */
+                      value={hora ?? ""}
+                      options={times.map((iso) => ({
+                        value: iso,
+                        label: slotTime(iso, timeZone),
+                        href: hrefFor({ p: chosen.id, d: day, h: iso }),
+                      }))}
+                    />
+                  </div>
+                  {/* N-32 · se dice ANTES de pulsar qué hace pulsar. La queja no
+                      era el número de pasos, era no saber en cuál estabas: «ya
+                      estoy reservando, ¿a qué hora es que yo reservé?».
+                      Baja DEBAJO del selector: encima quedaba entre la etiqueta
+                      y su propio control, separando los dos. */}
+                  <p className="mt-2 text-xs text-[#6b6b6b]">
+                    {sesionesPorReserva(chosen) > 1
+                      ? `Elige aquí la primera; las ${sesionesPorReserva(chosen) - 1} restantes en el siguiente paso.`
+                      : "Elige tu hora y confirma abajo: pasas directo al pago."}
+                  </p>
+                </>
               )}
             </>
           ) : (
             <p className="mt-4 text-[13px] text-muted-foreground">
-              Elige una clase para ver sus horarios y su precio.
+              Elige una sesión para ver sus horarios y su precio.
             </p>
           )}
         </>
@@ -309,42 +513,168 @@ export async function BookingPanel({
       {/* R29-01 — el precio, al final: lo último antes de decidir, no lo primero
           que tapa el calendario. Sale del `chosen` de la URL, así que cambiar de
           clase lo cambia sin estado de cliente. */}
-      {chosen ? (
+      {chosen && precio ? (
         <>
           <hr className="mt-5 border-[#e0e0e0]" />
+          {/* RV-08 · este es el último número antes del botón de pagar: tiene
+              que ser EL que se cobra. Antes ponía la tarifa ("30 US$ / hora")
+              y el checkout pedía 45 en una clase de 90 min. Ahora manda el
+              total y la tarifa queda debajo, explicando de dónde sale. */}
           <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <span className="text-[15px] text-[#6b6b6b]">Precio</span>
-            <span className="flex items-baseline gap-1.5">
-              <span className="text-[30px] font-bold text-[#19191f]">
-                {formatMoney(chosen.priceAmount, chosen.currency)}
-              </span>
-              <span className="text-[15px] text-[#6b6b6b]">
-                / {priceUnitLabel(chosen)}
-              </span>
+            <span className="text-[15px] text-[#6b6b6b]">{totalLabel}</span>
+            <span className="text-[30px] font-bold text-[#19191f]">
+              {precio.amount}
             </span>
           </div>
-          {/* El desglose por sesión solo en P08, donde hay sitio para detalle. */}
-          {details && perSessionLabel(chosen) ? (
-            <p className="mt-1 text-[13px] text-[#6b6b6b]">
-              {perSessionLabel(chosen)}
-            </p>
-          ) : null}
+          {/* De dónde sale la cifra. En P08 el desglose por sesión de un
+              paquete dice ya todo lo que diría la nota ("paquete · 6
+              sesiones"), así que sustituye — no se apilan las dos. */}
+          <p className="text-right text-[13px] text-[#6b6b6b]">
+            {(details ? perSessionLabel(chosen) : null) ?? precio.note}
+          </p>
         </>
       ) : null}
 
-      {chosen ? (
-        <Button asChild className="mt-4 h-[51px] w-full text-[15px]">
-          <Link href={`/reservar/${chosen.id}`}>{ctaLabel}</Link>
-        </Button>
-      ) : (
-        <Button
-          disabled
-          className="mt-5 h-[51px] w-full text-[15px]"
-          title="Elige primero una clase"
-        >
-          {ctaLabel}
-        </Button>
-      )}
+      {/*
+        MN-16 · el botón grande usa EL MISMO destino que la hora elegida
+        (`destinoDeLaHora`), que es quien sabe distinguir paquete de sesión
+        suelta. Con eso hay un solo calendario en los dos casos: la suelta va
+        derecha al pago y el paquete al selector con su primera hora ya marcada.
+
+        Antes iba a `/reservar/<id>` PELADO y ese era el bug entero: sin `?slot=`
+        la pantalla intermedia no puede saltarse, así que el alumno veía el
+        segundo calendario. Y llegaba ahí creyendo que ya había elegido hora,
+        porque el primer chip se pintaba naranja solo.
+
+        Sin hora se queda bloqueado, no se manda a elegirla a otra pantalla:
+        elegirla está a dos centímetros, y el `title` dice qué falta. Elegirla
+        por él —coger la primera y tirar— es exactamente lo que se está
+        arreglando. Quien tenga guardado un `/reservar/<id>` sin hora sigue
+        entrando por ahí sin problema; esa puerta no se cierra.
+      */}
+      {/*
+        B3.5 · LA BARRA. El botón se queda a la vista en TODOS los pasos —día,
+        mentoría y hora—, sin inventarse un CTA por paso.
+
+        El problema era medible y de móvil: el panel es lo último de la página,
+        cada chip navega y aterriza en `#reservar` (el ancla de B2, que existe
+        para que la pulsación no devuelva la vista al principio de la ficha), y
+        desde ahí el botón cae a ~700 px del borde superior. En un teléfono eso
+        es bajo el pliegue en los tres pasos: se elige el día, se elige la hora,
+        y la pantalla nunca enseña a dónde lleva eso. Con `sticky bottom-0` el
+        botón se despega y queda clavado abajo mientras el panel esté a la
+        vista, y vuelve a su sitio al llegar al final.
+
+        ⚠️ Lo que NO se ha hecho, a propósito: un CTA distinto por paso. Eso
+        reabre §20.14 —«la queja no era el número de pasos, era no saber en cuál
+        estabas»—, que ya se respondió con TEXTO (la línea de «Elige tu hora y
+        confirma abajo»). Aquí solo se cambia DÓNDE se ve el mismo botón, que
+        sigue bloqueado hasta que hay hora.
+
+        ⚠️ Y el hueco de la derecha en móvil (`max-lg:pe-[72px]`) no es un
+        descuido de maquetación: la burbuja de chat es `fixed right-5 bottom-5`
+        con `z-50` (`chat-bubble.tsx`), o sea que se pinta ENCIMA de esta barra
+        y se come los últimos ~36 px del botón. Sin ese hueco, tocar el final de
+        «Reservar mentoría YA» abre el chat en vez de ir al pago. Se aparta el
+        botón y no se sube la burbuja porque la burbuja es de todas las
+        pantallas y esta barra es de una.
+
+        El `-mx-6` la lleva de borde a borde del panel: así el contenido pasa
+        por DEBAJO y no se lee a medias detrás del botón. Y el margen superior
+        vive aquí y no en cada botón — antes las dos ramas usaban `mt-4` y
+        `mt-5`, y el panel daba un salto de 4 px al elegir la hora.
+
+        ⚠️ `lg:static` NO sobra. En escritorio el panel entra entero en pantalla
+        y no hay nada que despegar, pero una barra `sticky` opaca sí tiene algo
+        que tapar: sus propios chips de hora. Dejarla pegada en `lg` es el fallo
+        que se corrigió el 26-ago (ver el comentario del `<aside>`).
+
+        ⚠️ Y en MÓVIL queda un solape TRANSITORIO conocido, medido y aceptado:
+        mientras se baja hacia el panel —la banda de unos 200 px anterior a que
+        asiente— la barra flota sobre los chips y se come su clic (8 de 8 en el
+        peor punto). Se resuelve solo en cuanto se sigue bajando, y quien llega
+        pulsando un día aterriza en `#reservar`, donde el solape ya es CERO. Es
+        el precio del patrón «barra de compra fija» y se paga a sabiendas: la
+        alternativa es devolver el CTA bajo el pliegue, que era la queja.
+      */}
+      {/*
+        EY-177 · B3.2 · ⚠️ AQUÍ CAMBIA EL BOTÓN, Y ES LA MARCHA ATRÁS SOBRE N-33.
+
+        Petición del cliente, literal: «cuando ya seleccione el día y la fecha,
+        sale **1 botón que es agregar al carrito**. Si le doy, se oculta ese y se
+        muestran **dos botones**: […] seguir comprando y […] ir al carrito.
+        Esto porque si un tutor tiene dos clases, yo seleccioné la primera, día y
+        fecha, agregué al carrito, quiero repetir lo mismo con su segunda clase
+        […] **sin salirme de esa visual**».
+
+        O sea que el botón de una SESIÓN SUELTA deja de ir derecho al checkout y
+        pasa a añadir al carrito sin navegar. El coste está medido y escrito en
+        `add-to-cart.tsx`: vuelve a haber una pantalla en medio (la revisión),
+        que es una más que ayer. Lo que se conserva de N-33 —y era la queja de
+        verdad, «estás seleccionando dos veces algo»— es que **no se vuelve a
+        preguntar nada**: la revisión enseña lo elegido, no lo pide otra vez.
+
+        ⚠️ EL PAQUETE NO PASA POR EL CARRITO DESDE AQUÍ, y no es un olvido. Una
+        línea del carrito es una mentoría con TODOS sus horarios, y un
+        `per_package` de N sesiones exige elegir N (RN-12) que no caben en este
+        panel lateral — es exactamente la razón por la que `/reservar/<id>` no se
+        borró (ver la nota de `destinoDeLaHora`). Así que el paquete sigue yendo
+        a su selector múltiple con la primera hora ya marcada, y el «Agregar al
+        carrito» del paquete vive allí, en `slot-picker.tsx`, que es donde la
+        línea está completa. `destinoDeLaHora` se conserva intacto para eso.
+
+        ⚠️ Y el hueco de la derecha en móvil (`max-lg:pe-[72px]`) y el `lg:static`
+        siguen siendo los de B3.5: la burbuja de chat se pinta encima de esta
+        barra, y una barra `sticky` opaca en escritorio taparía los propios
+        selectores del panel. No se tocan.
+      */}
+      <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 max-lg:pe-[72px] lg:static">
+        {chosen && hora ? (
+          sesionesPorReserva(chosen) > 1 ? (
+            <Button asChild className="h-[51px] w-full text-[15px]">
+              <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
+            </Button>
+          ) : (
+            <AddToCart
+              productId={chosen.id}
+              /* ⚠️ `hora`, no `selectedTime`: es el ISO CANÓNICO de la base, ya
+                 contrastado por instante contra los huecos reales unas líneas
+                 más arriba. Al carrito nunca llega texto crudo de la URL. */
+              slots={[Date.parse(hora)]}
+              /* «Seguir comprando» = esta misma pantalla con la selección en
+                 blanco. Se conserva el DÍA y se sueltan mentoría y hora, que es
+                 justo el gesto que describe el cliente: otra clase del mismo
+                 tutor, el mismo día, sin irse a ningún lado. Y como `hrefFor`
+                 lleva su `#reservar`, la vista aterriza en el panel en vez de
+                 volver al principio de la ficha. */
+              seguirHref={hrefFor({ d: day })}
+            />
+          )
+        ) : (
+          <Button
+            disabled
+            className="h-[51px] w-full text-[15px]"
+            title={
+              !chosen
+                ? "Elige primero una sesión"
+                : allDays.length === 0
+                  ? "Esta mentoría todavía no tiene horarios publicados"
+                  : "Elige primero una hora en el calendario"
+            }
+          >
+            {/* ⚠️ EL RÓTULO BLOQUEADO TIENE QUE PROMETER LO MISMO QUE EL
+                DESBLOQUEADO. Sin esto el panel enseñaba «Reservar mentoría YA»
+                en gris y, al elegir la hora, el botón se convertía en «Agregar
+                al carrito»: dos promesas distintas en el mismo sitio y a un
+                segundo de distancia. Sin clase elegida no se sabe todavía si es
+                paquete o sesión suelta, así que se anuncia el caso mayoritario
+                —el carrito—, que además es el que el cliente pidió. */}
+            {chosen && sesionesPorReserva(chosen) > 1
+              ? ctaLabel
+              : "Agregar al carrito"}
+          </Button>
+        )}
+      </div>
 
       {footer}
 

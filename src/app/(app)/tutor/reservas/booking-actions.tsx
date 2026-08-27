@@ -6,22 +6,96 @@ import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
+/**
+ * N-34 · confirmación en un diálogo de la app, no en `window.confirm()`.
+ *
+ * El nativo tiene una trampa que no se ve venir: tras varios seguidos en la
+ * misma pestaña, el navegador ofrece «impedir que esta página cree más
+ * diálogos» y desde ese momento `confirm()` devuelve false SIN preguntar. La
+ * acción se abandona en silencio y el tutor jura que la confirmó. En una
+ * reserva `pending_acceptance` eso no se queda en nada: vence el plazo de 24 h
+ * (RN-38) y el job la cancela y reembolsa. Visto desde fuera, «se canceló
+ * sola».
+ *
+ * Las cancelaciones de reserva no usan esto sino pantalla propia
+ * (`/tutor/reservas/[id]/cancelar`), como el alumno: ahí hay importe, política
+ * y motivo que enseñar, y no caben en un modal.
+ */
+function ConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  confirmLabel,
+  busyLabel,
+  destructive,
+  busy,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: React.ReactNode;
+  confirmLabel: string;
+  busyLabel: string;
+  destructive?: boolean;
+  busy: boolean;
+  onConfirm: () => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={busy ? undefined : onOpenChange}>
+      <DialogContent className="sm:max-w-[440px]">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => onOpenChange(false)}
+          >
+            No, volver
+          </Button>
+          <Button
+            disabled={busy}
+            onClick={onConfirm}
+            className={
+              destructive
+                ? "bg-[#bf3333] font-semibold text-white hover:bg-[#a82c2c]"
+                : undefined
+            }
+          >
+            {busy ? busyLabel : confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 /**
  * US-606 (SCR-TU07b) — Aceptar naranja 102×43 / Rechazar outline (200:62).
  * `respond_booking` agenda las sesiones al aceptar y reembolsa al rechazar.
+ *
+ * Aceptar no pregunta (es la acción esperada y se puede cancelar después);
+ * rechazar sí, porque devuelve el 100 % y no tiene vuelta atrás.
  */
 export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   async function respond(accept: boolean) {
-    if (
-      !accept &&
-      !window.confirm("¿Rechazar la reserva? Se reembolsa el 100 % al alumno.")
-    ) {
-      return;
-    }
     setBusy(true);
     const supabase = createClient();
     const { error } = await supabase.rpc("respond_booking", {
@@ -31,6 +105,7 @@ export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
     setBusy(false);
     if (error)
       return toast.error(error.message || "No se pudo actualizar la reserva.");
+    setConfirming(false);
     toast.success(accept ? "Reserva confirmada." : "Reserva rechazada y reembolsada.");
     router.refresh();
   }
@@ -47,11 +122,23 @@ export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
       <Button
         variant="outline"
         disabled={busy}
-        onClick={() => respond(false)}
+        onClick={() => setConfirming(true)}
         className="h-[43px] rounded-[8px] px-6 text-[#4d4d4d]"
       >
         Rechazar
       </Button>
+
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="¿Rechazar esta reserva?"
+        description="El alumno recibe el 100 % de lo que pagó y las sesiones agendadas se liberan. No podrás volver a aceptarla: tendría que reservarla otra vez."
+        confirmLabel="Sí, rechazar"
+        busyLabel="Rechazando…"
+        destructive
+        busy={busy}
+        onConfirm={() => respond(false)}
+      />
     </div>
   );
 }
@@ -60,9 +147,9 @@ export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
 export function CompleteSessionButton({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   async function complete() {
-    if (!window.confirm("¿Marcar esta sesión como completada?")) return;
     setBusy(true);
     const supabase = createClient();
     const { error } = await supabase.rpc("complete_session", {
@@ -71,55 +158,32 @@ export function CompleteSessionButton({ sessionId }: { sessionId: string }) {
     setBusy(false);
     if (error)
       return toast.error(error.message || "No se pudo completar la sesión.");
+    setConfirming(false);
     toast.success("Sesión marcada como completada.");
     router.refresh();
   }
 
   return (
-    <Button
-      variant="outline"
-      disabled={busy}
-      onClick={complete}
-      className="h-[43px] rounded-[8px] px-4 text-sm text-[#4d4d4d]"
-    >
-      {busy ? "Guardando…" : "Marcar completada"}
-    </Button>
-  );
-}
+    <>
+      <Button
+        variant="outline"
+        disabled={busy}
+        onClick={() => setConfirming(true)}
+        className="h-[43px] rounded-[8px] px-4 text-sm text-[#4d4d4d]"
+      >
+        {busy ? "Guardando…" : "Marcar completada"}
+      </Button>
 
-/** US-604 — cancelar como tutor (reembolso 100 % al alumno, RN-37). */
-export function TutorCancelButton({ bookingId }: { bookingId: string }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-
-  async function cancel() {
-    if (
-      !window.confirm(
-        "¿Cancelar la reserva? Al cancelar tú, el alumno recibe el 100 % de reembolso.",
-      )
-    ) {
-      return;
-    }
-    setBusy(true);
-    const supabase = createClient();
-    const { error } = await supabase.rpc("cancel_booking", {
-      p_booking_id: bookingId,
-    });
-    setBusy(false);
-    if (error)
-      return toast.error(error.message || "No se pudo cancelar la reserva.");
-    toast.success("Reserva cancelada. El alumno recibe el 100 %.");
-    router.refresh();
-  }
-
-  return (
-    <Button
-      variant="outline"
-      disabled={busy}
-      onClick={cancel}
-      className="h-[43px] rounded-[8px] px-4 text-sm text-[#4d4d4d]"
-    >
-      Cancelar
-    </Button>
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="¿Marcar la sesión como completada?"
+        description="La mentoría queda como dictada y se cierra su sala. Cuando a la reserva no le queden sesiones abiertas pasará a completada: es eso lo que arranca la retención de tu pago y la invitación al alumno para que te reseñe. No se puede reabrir."
+        confirmLabel="Sí, completar"
+        busyLabel="Guardando…"
+        busy={busy}
+        onConfirm={complete}
+      />
+    </>
   );
 }

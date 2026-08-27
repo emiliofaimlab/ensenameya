@@ -90,7 +90,8 @@ export function ReviewsSummary({ reviews }: { reviews: TutorReview[] }) {
   );
 }
 
-/** US-902 — lista de reseñas en el perfil del tutor. Anónimas (ver query). */
+/** US-902 — reseñas del perfil del tutor. Firmadas solo con consentimiento
+ *  (decisión 18); el resto salen como "Alumno". */
 export function TutorReviews({ reviews }: { reviews: TutorReview[] }) {
   if (reviews.length === 0) {
     return (
@@ -105,12 +106,15 @@ export function TutorReviews({ reviews }: { reviews: TutorReview[] }) {
       {reviews.map((r) => (
         <li key={r.id} className="flex flex-col gap-2 py-5 first:pt-0">
           <div className="flex items-center gap-2.5">
-            {/* Sin nombre de autor: las reseñas son anónimas por diseño de la
-                consulta (US-902). El Figma firma con nombre — sería DD-01 sobre
-                el ALUMNO, otra decisión de privacidad. */}
-            <span className="size-9 shrink-0 rounded-full bg-muted" />
+            {/* El nombre sale de la copia enmascarada que el alumno consintió
+                publicar; `profiles` sigue cerrado (decisión 18). */}
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold text-[#666666]">
+              {r.author ? r.author.slice(0, 1) : null}
+            </span>
             <div>
-              <p className="text-sm font-bold text-[#242424]">Alumno</p>
+              <p className="text-sm font-bold text-[#242424]">
+                {r.author ?? "Alumno"}
+              </p>
               <p className="flex items-center gap-1.5 text-xs text-[#666666]">
                 {/* UTC → hora local del que mira (RN-02). */}
                 <time dateTime={r.createdAt}>{relativeDate(r.createdAt)}</time>·

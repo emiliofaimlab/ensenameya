@@ -11,18 +11,31 @@ import { AppSidebar, type SidebarItem } from "@/components/layout/app-sidebar";
  *
  * `Container` no sirve aquí: las públicas usan 64 px de aire (contenido 1152).
  */
-export function PanelShell({
-  items,
-  back,
-  children,
-}: {
+export type PanelShellProps = {
   items?: SidebarItem[];
   /** "← Volver al panel" del Figma, encima de la rejilla (159:17). */
   back?: { href: string; label: string };
+  /** Cabecera de pantalla: antetítulo + título 24/700 + subtítulo + acción a
+   *  la derecha (191:39, 214:45). Sin `title` no se pinta nada. */
+  title?: React.ReactNode;
+  /** "Reservas / Detalle" (214:45): miga de pan sobre el título. */
+  eyebrow?: React.ReactNode;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
   children: React.ReactNode;
-}) {
+};
+
+export function PanelShell({
+  items,
+  back,
+  title,
+  eyebrow,
+  description,
+  actions,
+  children,
+}: PanelShellProps) {
   return (
-    <div className="bg-muted py-8">
+    <div className="flex-1 bg-muted py-8">
       <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6 lg:px-10">
         {back ? (
           <Link
@@ -36,7 +49,32 @@ export function PanelShell({
 
         <div className="grid items-start gap-6 lg:grid-cols-[232px_1fr]">
           <AppSidebar items={items} />
-          <div className="flex flex-col gap-5">{children}</div>
+          <div className="flex flex-col gap-5">
+            {title ? (
+              <div className="flex flex-wrap items-start gap-3">
+                <div>
+                  {eyebrow ? (
+                    <p className="text-xs text-[#6b6b6b]">{eyebrow}</p>
+                  ) : null}
+                  <h1
+                    className={cn(
+                      "text-[24px] font-bold tracking-tight text-[#19191f]",
+                      eyebrow && "mt-1",
+                    )}
+                  >
+                    {title}
+                  </h1>
+                  {description ? (
+                    <p className="mt-1 text-[13px] text-[#6b6b6b]">
+                      {description}
+                    </p>
+                  ) : null}
+                </div>
+                {actions ? <div className="ml-auto">{actions}</div> : null}
+              </div>
+            ) : null}
+            {children}
+          </div>
         </div>
       </div>
     </div>
@@ -76,6 +114,17 @@ export function PanelCardTitle({
  * Píldora de estado del Figma. La gris (157:11) es la del panel del alumno;
  * el panel del tutor colorea por estado (190:23, 191:60, 196:34…): verde
  * aprobado/activo, azul en revisión, ámbar pausado, rojo rechazado.
+ *
+ * ⚠️ N-15 · LA ALTURA LA DECIDE ESTE COMPONENTE, no quien lo llama.
+ *
+ * Hasta el 17-ago dieciocho llamadas la pisaban con `h-7` (28 px) mientras el
+ * componente declaraba 26, así que las mismas etiquetas salían de dos tamaños
+ * según la pantalla — y en una tarjeta con varias juntas se notaba. Como `cn()`
+ * fusiona con tailwind-merge, la clase del llamador GANA siempre: el descuadre
+ * no se veía en el componente, se veía en producción.
+ *
+ * Si hace falta otro tamaño, se añade una variante aquí. Pasarle una clase de
+ * altura por `className` vuelve a romper la consistencia en silencio.
  */
 const PILL_TONE = {
   gray: "bg-[#f0f0f0] text-[#595959]",

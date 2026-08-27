@@ -9,9 +9,15 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { initialsFrom } from "@/lib/catalog/format";
 import { Button } from "@/components/ui/button";
-
-const MAX_BYTES = 5 * 1024 * 1024; // 5 MB, como dice el Figma
-const TYPES = ["image/png", "image/jpeg", "image/webp"];
+// MN-11a · El tope y los formatos del bucket `avatars` no se escriben aquí:
+// salen de la fuente única, que es también donde está apuntado qué hay que
+// hacer en la BD si el número cambia (P-8).
+import {
+  AVATAR_HINT,
+  AVATAR_MAX_BYTES,
+  AVATAR_TYPES,
+  fileProblem,
+} from "@/components/tutor/upload-formats";
 
 /**
  * Foto de perfil (AL01 p1 / TU01 p1). Sube al bucket público `avatars` en la
@@ -42,12 +48,13 @@ export function AvatarUpload({
   const [busy, setBusy] = useState(false);
 
   async function pick(file: File) {
-    if (!TYPES.includes(file.type)) {
-      toast.error("Solo JPG, PNG o WebP.");
-      return;
-    }
-    if (file.size > MAX_BYTES) {
-      toast.error("La imagen supera los 5 MB.");
+    const problema = fileProblem(file, {
+      types: AVATAR_TYPES,
+      maxBytes: AVATAR_MAX_BYTES,
+      hint: AVATAR_HINT,
+    });
+    if (problema) {
+      toast.error(problema);
       return;
     }
 
@@ -101,7 +108,7 @@ export function AvatarUpload({
         <input
           ref={inputRef}
           type="file"
-          accept={TYPES.join(",")}
+          accept={AVATAR_TYPES.join(",")}
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -117,7 +124,9 @@ export function AvatarUpload({
         >
           {busy ? "Subiendo…" : url ? "Cambiar foto" : "Subir foto"}
         </Button>
-        <p className="mt-1.5 text-xs text-[#6b6b6b]">JPG o PNG · máx 5 MB</p>
+        {/* La frase la genera la fuente única: decía "JPG o PNG" mientras el
+            `accept` y el bucket admitían también WebP. */}
+        <p className="mt-1.5 text-xs text-[#6b6b6b]">{AVATAR_HINT}</p>
       </div>
     </div>
   );

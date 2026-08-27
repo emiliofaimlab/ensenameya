@@ -1,12 +1,16 @@
 import Link from "next/link";
 
 import type { CategoryTag } from "@/lib/catalog/queries";
+import { SESION_INDIVIDUAL } from "@/lib/booking";
 
 export type ProductFilterState = {
   cat?: string;
   model?: string;
   price?: string;
   sessions?: string;
+  /** DD-03 — nivel e idioma DE LA MENTORÍA. */
+  level?: string;
+  lang?: string;
 };
 
 /** Rangos en unidades menores (céntimos), como `products.price_amount`. */
@@ -25,18 +29,30 @@ export const SESSION_RANGES = [
 
 export const MODELS = [
   { id: "per_package", label: "Paquete" },
-  { id: "per_session", label: "Sesión suelta" },
+  { id: "per_session", label: SESION_INDIVIDUAL },
   { id: "per_hour", label: "Por hora" },
 ];
 
+/** DD-03 · etiquetas del Figma (386:1196). El valor es el de la columna. */
+export const LEVELS = [
+  { id: "basico", label: "Básico" },
+  { id: "intermedio", label: "Intermedio" },
+  { id: "avanzado", label: "Avanzado" },
+];
+
+export const LANGUAGES = [
+  { id: "es", label: "Español" },
+  { id: "en", label: "Inglés" },
+  { id: "pt", label: "Portugués" },
+];
+
 /**
- * Filtros de P05. Todo va por URL (sin JS) y todo se filtra en la BD: precio y
- * sesiones son columnas de `products`.
+ * Filtros de P05. Todo va por URL (sin JS) y todo se filtra en la BD: precio,
+ * sesiones, nivel e idioma son columnas de `products`.
  *
- * Faltan "Nivel" e "Idioma" del Figma: son **DD-03 (`EY-113`)**, que sigue
- * abierta. Ojo con confundirlos con `tutor_profiles.teaching_level` (IV-02):
- * ese es el nivel que enseña el TUTOR, no el del producto. Se montan cuando
- * existan las columnas; un filtro que no filtra es peor que ninguno.
+ * Nivel e idioma son los de LA MENTORÍA (DD-03), no los del tutor: un tutor de
+ * nivel avanzado (`tutor_profiles.teaching_level`, IV-02) puede publicar una
+ * clase básica.
  */
 export function ProductFilters({
   categories,
@@ -54,6 +70,8 @@ export function ProductFilters({
       options: categories.map((c) => ({ id: c.slug, label: c.name })),
     },
     { title: "Tipo de mentoría", key: "model" as const, options: MODELS },
+    { title: "Nivel", key: "level" as const, options: LEVELS },
+    { title: "Idioma", key: "lang" as const, options: LANGUAGES },
     { title: "Precio", key: "price" as const, options: PRICE_RANGES },
     { title: "Duración", key: "sessions" as const, options: SESSION_RANGES },
   ];

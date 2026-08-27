@@ -1,22 +1,38 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { InfoIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { bookingTotal } from "@/lib/booking";
+import { formatMoney, storageUrl } from "@/lib/catalog/format";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 import { PanelCard } from "@/components/layout/panel-shell";
-import { MaterialsUpload } from "@/components/onboarding/materials-upload";
+import {
+  AvailabilityBlocks,
+  type AvailabilityRule,
+  type AvailabilityScope,
+} from "./availability-blocks";
+import {
+  CoverImagePicker,
+  MaterialsPicker,
+  stage,
+  type SavedMaterial,
+  type StagedFile,
+} from "@/components/tutor/product-uploads";
+import { PRODUCT_IMAGE_HINT } from "@/components/tutor/upload-formats";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
 type PricingModel = Database["public"]["Enums"]["pricing_model"];
+type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
 
 // ponytail: MVP en una sola moneda (USD). Multi-moneda por geografía llega con
 // C-13 / EP-07 (routing de cobro); cuando exista, sale de aquí a config del tutor.
@@ -32,6 +48,33 @@ const PRICING: { id: PricingModel; label: string }[] = [
   { id: "per_package", label: "Paquete" },
 ];
 
+/**
+ * N-07 · topes de los campos de texto. El `maxLength` del input corta sin
+ * avisar —el tutor escribe y las letras dejan de aparecer—, así que el número
+ * sale del mismo sitio que el atributo y se escribe debajo del campo.
+ */
+const MAX_TITULO = 120;
+const MAX_OUTCOME = 160;
+
+/** "las categorías y los materiales" — enumeración con «y» al final. */
+function enumerar(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} y ${items.at(-1)}`;
+}
+
+/** DD-03 — mismas etiquetas que el filtro del Figma (386:1196). */
+export const PRODUCT_LEVELS = [
+  { value: "basico", label: "Básico" },
+  { value: "intermedio", label: "Intermedio" },
+  { value: "avanzado", label: "Avanzado" },
+];
+
+export const PRODUCT_LANGUAGES = [
+  { value: "es", label: "Español" },
+  { value: "en", label: "Inglés" },
+  { value: "pt", label: "Portugués" },
+];
+
 export type ProductFormValues = {
   id: string;
   title: string;
@@ -41,10 +84,19 @@ export type ProductFormValues = {
   priceAmount: number; // unidades menores
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
+  /** DD-03 — nivel e idioma de ESTA mentoría, no del tutor. */
+  level: TeachingLevel | null;
+  language: string | null;
   categoryIds: string[];
   imagePath: string | null;
   /** FAQ propias de la mentoría (R24-17). */
   faqs: { q: string; a: string }[];
+  /**
+   * N-04 · franjas de disponibilidad a las que pertenece ESTA mentoría.
+   * Lista vacía = «toda mi disponibilidad», que es literalmente lo que
+   * significa no tener filas en `product_availability_rules`.
+   */
+  availabilityRuleIds: string[];
 };
 
 /**
@@ -52,23 +104,35 @@ export type ProductFormValues = {
  * tarjetas "Detalles" y "Precio y formato", chips para modelo y categorías,
  * la nota de política única (193:30) y doble acción Publicar/Guardar borrador.
  *
- * El Figma pide además "Calendario de la clase" (fechas por producto) y
- * "Material de apoyo" (archivos por producto): el modelo no tiene ninguna de
- * las dos — la agenda sale de la disponibilidad general del tutor y
- * `tutor_materials` es por tutor. Quedan como huecos de EP-23, no se fingen.
+ * El Figma pide además "Calendario de la clase" (fechas por producto): el
+ * modelo no lo tiene — la agenda sale de la disponibilidad general del tutor.
+ * Queda como hueco de EP-23, no se finge.
+ *
+ * N-05/N-06 · portada y materiales se eligen aquí y suben al pulsar guardar.
+ * No es una preferencia de estilo: en el ALTA todavía no hay `product_id` al
+ * que colgar los archivos, así que o se difiere la subida o se obliga a
+ * guardar y volver a entrar (que es justo lo que se reportó).
+ *
+ * N-04 · el hueco del "Calendario de la clase" ya no está del todo vacío: la
+ * mentoría elige a QUÉ franjas de la disponibilidad del tutor pertenece. No son
+ * fechas propias del producto (eso sigue sin existir en el modelo), sino un
+ * subconjunto del horario semanal del tutor.
  */
 export function ProductForm({
   userId,
   categories,
+  availabilityRules = [],
   product,
   materials = [],
   isApproved = false,
 }: {
   userId: string;
   categories: { id: string; name: string }[];
+  /** N-04 · franjas semanales del tutor (US-501), para elegir entre ellas. */
+  availabilityRules?: AvailabilityRule[];
   product?: ProductFormValues;
-  /** Materiales de ESTA oferta (R24-16); solo se adjuntan al editar. */
-  materials?: { id: string; file_name: string; size_bytes: number }[];
+  /** Materiales YA guardados de esta oferta (R24-16); solo existen al editar. */
+  materials?: SavedMaterial[];
   /** Habilita "Publicar" al guardar (RN-23: solo tutor aprobado). */
   isApproved?: boolean;
 }) {
@@ -77,6 +141,13 @@ export function ProductForm({
   const [loading, setLoading] = useState(false);
   const [pricingModel, setPricingModel] = useState<PricingModel>(
     product?.pricingModel ?? "per_session",
+  );
+  // Controlados solo para poder decir en vivo lo que acabará pagando el alumno.
+  const [precio, setPrecio] = useState(
+    product ? String(product.priceAmount / 100) : "",
+  );
+  const [duracion, setDuracion] = useState(
+    String(product?.sessionDurationMin ?? 60),
   );
   const [selected, setSelected] = useState<Set<string>>(
     new Set(product?.categoryIds ?? []),
@@ -87,6 +158,42 @@ export function ProductForm({
   const [faqs, setFaqs] = useState<{ q: string; a: string }[]>(
     product?.faqs ?? [],
   );
+  // N-06: la portada dejó de viajar en el `FormData` y vive aquí. Sigue
+  // valiendo la regla de antes — `null` significa "no eligió ninguna nueva",
+  // y entonces al editar se conserva la que ya estaba.
+  const [cover, setCover] = useState<File | null>(null);
+  // N-05: los materiales elegidos esperan en memoria hasta el guardado. Los
+  // que ya estaban en la BD se listan aparte porque se borran en el acto.
+  const [savedMaterials, setSavedMaterials] =
+    useState<SavedMaterial[]>(materials);
+  const [stagedMaterials, setStagedMaterials] = useState<StagedFile[]>([]);
+  // N-04 · el modo se DEDUCE de lo guardado porque en la BD no hay más que eso:
+  // con enlaces, «solo estas franjas»; sin enlaces, «toda mi disponibilidad».
+  // Así una mentoría anterior a N-04 abre en el modo que describe lo que hace
+  // hoy, en vez de estrenarse en un modo que nadie eligió.
+  const [scope, setScope] = useState<AvailabilityScope>(
+    product?.availabilityRuleIds.length ? "blocks" : "all",
+  );
+  const [selectedRules, setSelectedRules] = useState<Set<string>>(
+    new Set(product?.availabilityRuleIds ?? []),
+  );
+
+  const coverUrl = storageUrl("product-images", product?.imagePath);
+
+  const cobroPorSesion = bookingTotal({
+    pricingModel,
+    priceAmount: Math.round((Number(precio) || 0) * 100),
+    sessionDurationMin: Number(duracion) || 60,
+  });
+
+  function toggleRule(id: string) {
+    setSelectedRules((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   function toggleCategory(id: string) {
     setSelected((prev) => {
@@ -126,25 +233,73 @@ export function ProductForm({
     if (selected.size === 0)
       return toast.error("Elige al menos una categoría.");
 
+    // N-04 · «solo estas franjas» con ninguna marcada no se puede guardar tal
+    // cual: sin filas, la BD lo lee como «toda mi disponibilidad» y el tutor se
+    // quedaría convencido de haber limitado la mentoría a nada. Se le pide que
+    // elija, o que diga «toda» a propósito.
+    if (scope === "blocks" && selectedRules.size === 0)
+      return toast.error(
+        "Marca al menos una franja, o elige «Toda mi disponibilidad».",
+      );
+
     setLoading(true);
     const supabase = createClient();
+
+    // ── Fase 1 · Storage ─────────────────────────────────────────────────
+    // Todo lo que va a disco sube ANTES de tocar la BD, a propósito: si el
+    // bucket falla no hay ningún producto a medias que explicar, y lo ya
+    // subido se puede retirar. Al revés (producto primero) el fallo dejaría
+    // una mentoría publicada prometiendo unos materiales que no existen.
+    const subidos: string[] = []; // rutas en `tutor-materials`
+    let nuevaPortada: string | null = null;
+
+    /** Retira del bucket lo subido en este intento. Best-effort: si el borrado
+     *  falla no hay nada mejor que hacer, el objeto queda huérfano pero no lo
+     *  referencia ninguna fila y nadie lo ve. */
+    async function retirar() {
+      if (nuevaPortada)
+        await supabase.storage.from("product-images").remove([nuevaPortada]);
+      if (subidos.length)
+        await supabase.storage.from("tutor-materials").remove(subidos);
+    }
 
     // Imagen del producto (DD-02). Solo se sube si el tutor eligió una nueva;
     // al editar sin tocarla, se conserva la que ya estaba.
     let imagePath = product?.imagePath ?? null;
-    const file = form.get("image");
-    if (file instanceof File && file.size > 0) {
-      if (file.size > 5 * 1024 * 1024) return fail("La imagen supera los 5 MB.");
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    if (cover) {
+      const ext = cover.name.split(".").pop()?.toLowerCase() ?? "jpg";
       // La RLS de Storage exige que el primer segmento sea el uid del tutor.
       const path = `${userId}/${crypto.randomUUID()}.${ext}`;
       const { error } = await supabase.storage
         .from("product-images")
-        .upload(path, file, { contentType: file.type });
-      if (error) return fail("No se pudo subir la imagen.");
+        .upload(path, cover, { contentType: cover.type });
+      if (error)
+        return fail(
+          "No se pudo subir la imagen de portada, así que no se guardó nada. Tus datos siguen en el formulario: vuelve a intentarlo.",
+        );
+      nuevaPortada = path;
       imagePath = path;
     }
 
+    // Materiales, uno a uno: Storage no tiene subida en lote. Si uno falla se
+    // dice CUÁL y se deshace lo demás — dejarlo a medias sería peor, porque el
+    // tutor no tendría forma de saber cuáles repetir.
+    for (const { file } of stagedMaterials) {
+      // Prefijo aleatorio: dos archivos con el mismo nombre no se pisan.
+      const path = `${userId}/${crypto.randomUUID()}-${file.name}`;
+      const { error } = await supabase.storage
+        .from("tutor-materials")
+        .upload(path, file, { contentType: file.type });
+      if (error) {
+        await retirar();
+        return fail(
+          `No se pudo subir «${file.name}», así que no se guardó nada${subidos.length ? ` (tampoco los ${subidos.length} archivos anteriores)` : ""}. Tus datos siguen en el formulario: vuelve a intentarlo.`,
+        );
+      }
+      subidos.push(path);
+    }
+
+    // ── Fase 2 · Base de datos ───────────────────────────────────────────
     const row = {
       title,
       image_path: imagePath,
@@ -155,6 +310,10 @@ export function ProductForm({
       currency: CURRENCY,
       session_duration_min: duration,
       package_num_sessions: packageNum,
+      // DD-03: opcionales — vacío se guarda como nulo, que es lo que espera el
+      // check, y las mentorías viejas siguen válidas sin el dato.
+      level: (String(form.get("level") ?? "") || null) as TeachingLevel | null,
+      language: String(form.get("language") ?? "") || null,
       // FAQ de ESTA mentoría (R24-17). Se descartan las filas a medio escribir.
       faqs: faqs
         .map((f) => ({ q: f.q.trim(), a: f.a.trim() }))
@@ -164,18 +323,31 @@ export function ProductForm({
     };
 
     // ponytail: catálogo, no dinero → escritura directa bajo RLS (regla 2 aplica a
-    // payments/bookings). Producto + categorías van en 2 pasos no atómicos; si el
-    // 2º falla queda un borrador sin categorías y el tutor reintenta al editar.
+    // payments/bookings). Producto, categorías y materiales son escrituras
+    // separadas y no atómicas: no hay transacción de cliente. Mientras el
+    // producto no exista se puede abortar limpio (se retira lo del bucket);
+    // en cuanto existe, ya no — de ahí lo de abajo.
     let productId = product?.id;
     if (isEdit) {
       const { error } = await supabase
         .from("products")
         .update(row)
         .eq("id", productId!);
-      if (error) return fail(error.message);
+      if (error) {
+        await retirar();
+        return fail(error.message);
+      }
       // Reconciliar categorías: borrar todas y reinsertar las elegidas.
       await supabase
         .from("product_categories")
+        .delete()
+        .eq("product_id", productId!);
+      // N-04 · mismo criterio con las franjas, y el borrado va SIEMPRE, también
+      // al volver a «toda mi disponibilidad»: en ese modo lo correcto es cero
+      // filas, así que el borrado no es la primera mitad de una reconciliación
+      // sino la operación entera.
+      await supabase
+        .from("product_availability_rules")
         .delete()
         .eq("product_id", productId!);
     } else {
@@ -184,27 +356,90 @@ export function ProductForm({
         .insert({ tutor_id: userId, ...row })
         .select("id")
         .single();
-      if (error || !data) return fail(error?.message);
+      if (error || !data) {
+        await retirar();
+        return fail(error?.message);
+      }
       productId = data.id;
     }
+
+    // A partir de aquí el producto EXISTE, así que ya no se aborta: cada fallo
+    // se anota por su nombre y se cuenta al final. Un "no se pudo guardar" a
+    // secas dejaba al tutor sin saber si repetir el alta entera o solo volver a
+    // adjuntar — que es lo que N-05 pide evitar.
+    const aMedias: string[] = [];
 
     const { error: catErr } = await supabase
       .from("product_categories")
       .insert([...selected].map((category_id) => ({ product_id: productId!, category_id })));
-    if (catErr) return fail(catErr.message);
+    if (catErr) aMedias.push("las categorías");
+
+    // N-04 · las franjas elegidas. En modo «toda mi disponibilidad» no hay nada
+    // que insertar: la ausencia de filas ES el dato.
+    if (scope === "blocks" && selectedRules.size > 0) {
+      const { error: rulesErr } = await supabase
+        .from("product_availability_rules")
+        .insert(
+          [...selectedRules].map((rule_id) => ({
+            product_id: productId!,
+            rule_id,
+          })),
+        );
+      // Se nombra el efecto, no la tabla: si esto falla la mentoría queda «en
+      // toda tu disponibilidad», que es lo que el tutor va a ver y lo que tiene
+      // que poder corregir.
+      if (rulesErr)
+        aMedias.push("los horarios elegidos (queda en toda tu disponibilidad)");
+    }
+
+    if (subidos.length > 0) {
+      // Las N filas en UN insert: Postgres lo resuelve en una transacción, así
+      // que o quedan todas o ninguna. Con un insert por archivo podía quedar
+      // "3 de 5 adjuntos" y ni el tutor ni nosotros sabríamos cuáles.
+      const { error: matErr } = await supabase.from("tutor_materials").insert(
+        subidos.map((storage_path, i) => ({
+          tutor_id: userId,
+          product_id: productId!,
+          storage_path,
+          file_name: stagedMaterials[i].file.name,
+          size_bytes: stagedMaterials[i].file.size,
+        })),
+      );
+      if (matErr) {
+        // Los archivos están en el bucket pero no los referencia ninguna fila:
+        // se retiran para que no cuenten en la cuota ni reaparezcan luego.
+        await supabase.storage.from("tutor-materials").remove(subidos);
+        aMedias.push(
+          subidos.length === 1
+            ? "el material adjunto"
+            : `los ${subidos.length} materiales`,
+        );
+      } else {
+        // Ya no están pendientes. La lista definitiva la trae el servidor en
+        // el `router.refresh()` de más abajo, con los ids reales.
+        setStagedMaterials([]);
+      }
+    }
 
     if (publishAfter) {
       const { error: pubErr } = await supabase
         .from("products")
         .update({ status: "active" })
         .eq("id", productId!);
-      if (pubErr) {
-        // Guardado sí, publicado no (p. ej. el guard RN-23): se dice tal cual.
-        toast.error("Se guardó como borrador, pero no se pudo publicar.");
-        router.push("/tutor/products");
-        router.refresh();
-        return;
-      }
+      // Guardado sí, publicado no (p. ej. el guard RN-23 de BD): se dice tal cual.
+      if (pubErr) aMedias.push("la publicación (sigue como borrador)");
+    }
+
+    if (aMedias.length > 0) {
+      // Se dice qué quedó guardado y qué no, y se abre la edición de ESTA
+      // mentoría: lo que falta se remata ahí sin reescribir el formulario.
+      toast.error(
+        `La mentoría se guardó, pero faltó ${enumerar(aMedias)}. Complétalo desde aquí.`,
+        { duration: 12_000 },
+      );
+      router.push(`/tutor/products/${productId}/edit`);
+      router.refresh();
+      return;
     }
 
     toast.success(
@@ -223,6 +458,28 @@ export function ProductForm({
     }
   }
 
+  /**
+   * Quita un material YA guardado. Aquí no se difiere nada: el producto existe
+   * y la fila es suya. Se borra primero la fila (es la que ve la ficha) y
+   * después el objeto; si lo segundo falla queda un archivo huérfano en un
+   * bucket privado, que es preferible a una fila apuntando a un archivo que ya
+   * no está.
+   */
+  async function removeSavedMaterial(id: string) {
+    const material = savedMaterials.find((m) => m.id === id);
+    if (!material) return;
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("tutor_materials")
+      .delete()
+      .eq("id", id);
+    if (error) return toast.error("No se pudo quitar el material.");
+    await supabase.storage
+      .from("tutor-materials")
+      .remove([material.storage_path]);
+    setSavedMaterials((prev) => prev.filter((m) => m.id !== id));
+  }
+
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-5">
       <PanelCard className="flex flex-col gap-4">
@@ -239,10 +496,13 @@ export function ProductForm({
             name="title"
             defaultValue={product?.title}
             required
-            maxLength={120}
+            maxLength={MAX_TITULO}
             placeholder="Ej: Inglés para entrevistas tech"
             className={FIELD}
           />
+          <p className="text-xs text-[#6b6b6b]">
+            Máx. {MAX_TITULO} caracteres.
+          </p>
         </div>
 
         <div className="grid gap-1.5">
@@ -253,10 +513,14 @@ export function ProductForm({
             id="outcome"
             name="outcome"
             defaultValue={product?.outcome}
-            maxLength={160}
+            maxLength={MAX_OUTCOME}
             placeholder="Ej: apruebas tu entrevista técnica en inglés"
             className={FIELD}
           />
+          <p className="text-xs text-[#6b6b6b]">
+            Máx. {MAX_OUTCOME} caracteres. Es la línea que se lee bajo el título
+            en el catálogo.
+          </p>
         </div>
 
         <div className="grid gap-1.5">
@@ -268,26 +532,23 @@ export function ProductForm({
             name="description"
             defaultValue={product?.description}
             rows={4}
-            placeholder="Explica la metodología y qué incluye la clase…"
+            placeholder="Explica la metodología y qué incluye la mentoría…"
             className="rounded-[8px] px-3.5 placeholder:text-[#8c8c8c]"
           />
         </div>
 
         <div className="grid gap-1.5">
-          <Label htmlFor="image" className={LABEL}>
-            Imagen de portada (opcional)
-          </Label>
-          <Input
-            id="image"
-            name="image"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="h-[45px] rounded-[8px] pt-2.5"
-          />
+          <p className={LABEL}>Imagen de portada (opcional)</p>
           <p className="text-xs text-[#6b6b6b]">
-            Es la miniatura de la tarjeta en el catálogo. JPG, PNG o WebP · máx 5 MB.
-            {product?.imagePath ? " Ya tienes una: sube otra para reemplazarla." : ""}
+            Es la miniatura de la tarjeta en el catálogo. {PRODUCT_IMAGE_HINT}.
           </p>
+          <CoverImagePicker
+            currentUrl={coverUrl}
+            file={cover}
+            onPick={setCover}
+            onClear={() => setCover(null)}
+            disabled={loading}
+          />
         </div>
 
         <fieldset className="grid gap-2">
@@ -367,7 +628,8 @@ export function ProductForm({
               min={0}
               step="0.01"
               required
-              defaultValue={product ? product.priceAmount / 100 : ""}
+              value={precio}
+              onChange={(e) => setPrecio(e.target.value)}
               placeholder="40"
               className={FIELD}
             />
@@ -391,9 +653,65 @@ export function ProductForm({
               min={30}
               step={5}
               required
-              defaultValue={product?.sessionDurationMin ?? 60}
+              value={duracion}
+              onChange={(e) => setDuracion(e.target.value)}
               className={FIELD}
             />
+            {/* Con «por hora» el precio NO es lo que paga el alumno: el servidor
+                multiplica por la duración (RN-10, `create_booking`). Sin decirlo
+                aquí, el tutor pone 40 y 90 min y descubre el cobro de 60 cuando
+                ya se ha hecho. Mismo cálculo que el servidor: `bookingTotal`. */}
+            {/* Con el campo a medio escribir (vacío, o un «9» suelto) la frase
+                se leería «cada sesión de min se cobra…». Callarse es mejor. */}
+            {pricingModel === "per_hour" &&
+            cobroPorSesion > 0 &&
+            Number(duracion) >= 30 ? (
+              <p className="text-xs text-[#6b6b6b]">
+                Cada sesión de {duracion} min se cobra{" "}
+                <strong className="font-semibold text-[#333333]">
+                  {formatMoney(cobroPorSesion, CURRENCY)}
+                </strong>
+                .
+              </p>
+            ) : null}
+          </div>
+          {/* DD-03 — de la mentoría, no del tutor: un tutor avanzado puede
+              publicar una clase básica. Alimentan los filtros de P05/P06. */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="level" className={LABEL}>
+              Nivel de la mentoría (opcional)
+            </Label>
+            <select
+              id="level"
+              name="level"
+              defaultValue={product?.level ?? ""}
+              className={`${FIELD} border bg-transparent`}
+            >
+              <option value="">Sin especificar</option>
+              {PRODUCT_LEVELS.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="language" className={LABEL}>
+              Idioma en que la impartes (opcional)
+            </Label>
+            <select
+              id="language"
+              name="language"
+              defaultValue={product?.language ?? ""}
+              className={`${FIELD} border bg-transparent`}
+            >
+              <option value="">Sin especificar</option>
+              {PRODUCT_LANGUAGES.map((l) => (
+                <option key={l.value} value={l.value}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
           </div>
           {pricingModel === "per_package" ? (
             <div className="grid gap-1.5">
@@ -415,34 +733,76 @@ export function ProductForm({
         </div>
       </PanelCard>
 
-      {/* Materiales de clase de ESTA oferta (R24-16): se movieron aquí desde el
-          onboarding. Solo al editar (el producto ya existe y tiene id). */}
+      {/* N-04 · a qué franjas de tu disponibilidad pertenece esta mentoría.
+          Va después del formato porque depende de la duración: las franjas se
+          trocean en huecos del tamaño de la sesión. */}
       <PanelCard className="flex flex-col gap-3">
         <h2 className="text-base font-semibold text-[#19191f]">
-          Materiales de clase
+          Horarios de esta mentoría
         </h2>
-        {isEdit && product ? (
-          <MaterialsUpload
-            userId={userId}
-            productId={product.id}
-            initial={materials}
-          />
-        ) : (
-          <p className="text-[13px] text-[#6b6b6b]">
-            Guarda la oferta primero y podrás adjuntar sus materiales al editarla.
-          </p>
-        )}
+        <p className="text-[13px] text-[#6b6b6b]">
+          Tus horarios se definen una vez en{" "}
+          <Link
+            href="/tutor/availability"
+            className="font-medium text-brand underline underline-offset-2"
+          >
+            Disponibilidad
+          </Link>
+          . Aquí eliges cuáles usa esta mentoría.
+        </p>
+        <AvailabilityBlocks
+          rules={availabilityRules}
+          scope={scope}
+          onScopeChange={setScope}
+          selected={selectedRules}
+          onToggle={toggleRule}
+          disabled={loading}
+        />
       </PanelCard>
 
-      {/* FAQ de ESTA mentoría (R24-17). Si no pone ninguna, el detalle muestra
-          las genéricas de plataforma. */}
+      {/* Materiales de clase de ESTA oferta (R24-16): se movieron aquí desde el
+          onboarding. N-05 — ya no hace falta guardar y volver a entrar: se
+          eligen ahora y suben con el resto del formulario. */}
+      <PanelCard className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Materiales de la mentoría
+        </h2>
+        <p className="text-[13px] text-[#6b6b6b]">
+          Guías, plantillas o ejercicios que tus alumnos usarán en clase. Se
+          suben al guardar la mentoría.
+        </p>
+        <MaterialsPicker
+          saved={savedMaterials}
+          staged={stagedMaterials}
+          onAdd={(files) =>
+            setStagedMaterials((prev) => [...prev, ...files.map(stage)])
+          }
+          onRemoveStaged={(key) =>
+            setStagedMaterials((prev) => prev.filter((s) => s.key !== key))
+          }
+          onRemoveSaved={removeSavedMaterial}
+          disabled={loading}
+        />
+      </PanelCard>
+
+      {/* FAQ de ESTA mentoría (R24-17). Desde EY-194 no son las únicas: debajo
+          se pintan también las del PERFIL del tutor, y las genéricas de
+          plataforma solo salen si no hay ni unas ni otras. */}
       <PanelCard className="flex flex-col gap-3">
         <h2 className="text-base font-semibold text-[#19191f]">
           Preguntas frecuentes
         </h2>
         <p className="text-[13px] text-[#6b6b6b]">
           Responde lo que suelen preguntarte sobre esta mentoría (nivel previo,
-          materiales, formato…). Si las dejas vacías se muestran las generales.
+          materiales, formato…). Lo que valga para todas va en{" "}
+          <Link
+            href="/tutor/faqs"
+            className="font-medium text-brand hover:underline"
+          >
+            tus preguntas de perfil
+          </Link>
+          , que se muestran debajo de estas. Si dejas ambas vacías se muestran
+          las generales.
         </p>
 
         {faqs.map((f, i) => (

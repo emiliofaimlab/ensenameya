@@ -1,0 +1,725 @@
+# DOC 20 — Plan de acción sobre la minuta del 17 de agosto
+
+> **Qué es esto.** Los **14 puntos** de la minuta de Verónica (reunión con el cliente del lunes
+> 17-ago, correo del 19-ago), **contrastados uno a uno contra el código de `dev`** y reordenados en
+> **lotes ejecutables por agentes**. No es una lista de deseos traducida a tickets: la mitad de los
+> puntos choca con algo que ya existe, y eso hay que decirlo antes de programar.
+
+| Campo | Valor |
+| :-- | :-- |
+| **Documento** | 20 — Plan de acción sobre la minuta del 17-ago |
+| **Fecha** | 2026-08-20 |
+| **Autor** | Jose Mora (desarrollo) |
+| **Base** | `docs/19-PLAN-DE-EJECUCION.md` (17-ago, al cierre) |
+| **Fuente nueva** | Minuta `[MINUTA ENSÉÑAME YA] DESARROLLO`, Verónica, 19-ago — 14 puntos en 6 módulos |
+| **Verificación** | Auditoría sobre `dev` @ `2c55ef0`: 6 agentes por módulo + 3 pasadas de contraste (conflictos · viabilidad · esquema/RLS). **Todo estado de este documento está comprobado contra el código, no contra la documentación** — que en dos puntos se ha demostrado falsa (§20.6) |
+| **Fecha objetivo del equipo** | 28–29 de agosto de 2026 |
+
+---
+
+## 20.0 · La conclusión, en cinco frases
+
+1. **El problema de fondo de esta minuta no es técnico: es que el cliente está mirando `main`.**
+   `main` sigue en el commit del **29-jul**, con **94 commits y ~30 migraciones** de retraso. Varios
+   puntos piden cosas que ya están hechas en `dev` desde el 17-ago y que nadie ha podido ver.
+2. **Tres puntos deshacen trabajo entregado hace tres días** — el chat post-reserva revierte M-12,
+   la dirección del pie deshace DL-03, y el Typeform delante del dominio es exactamente lo que ya
+   tumbó el alta de dLocal.
+3. **Dos puntos son XL disfrazados de ajuste**: la llamada tipo Google Meet (la UI de vídeo **no es
+   nuestra**, vive en un iframe de Daily) y dLocal como respaldo (**no hay cuenta**, y la dependencia
+   va al revés de lo que asume la minuta).
+4. **Un punto ya está hecho** (el límite de subida: 10 MB impuestos por el bucket, server-side) y lo
+   único que falta es que el cliente diga si quiere **otro número**.
+5. **Nada de pagos se puede enseñar ni validar hoy fuera de local**: falta `STRIPE_PUBLISHABLE_KEY`
+   en Vercel y el endpoint devuelve **503** sin ella.
+
+> **El único trabajo que desbloquea a la vez la minuta y a dLocal es el mismo que lleva tres días
+> pendiente: el merge `dev` → `main`.** Va primero, con su ventana propia. Todo lo demás va detrás.
+
+---
+
+## 20.1 · Los seis bloqueantes — leer antes de abrir un solo ticket
+
+| # | Bloqueante | Evidencia | Qué hacer |
+| :-- | :-- | :-- | :-- |
+| **B-1** | **La minuta describe producción, no el producto.** Ya están hechos y sin desplegar: identidad legal y redes muertas fuera del pie (`1fca00f`), `/contacto` (`dc89ddd`), los Términos EN+ES (`d2fa263`), reembolsos reales (`f49b88e`), cobro tardío (`dd559b0`), el 4 % de recargo apagado (`3b6fb88`), las horas (`acd3f3f`), el precio anunciado ≠ cobrado (`56523eb`), chat pre-compra (`9305c1c`), disponibilidad por mentoría (`949926f`), «mentoría» al 100 % (`2c55ef0`) | `git rev-list --count main..dev` → **94** | Merge `dev`→`main` **y re-validar la minuta contra producción** antes de planificar |
+| **B-2** | **MN-06 revierte M-12**, mergeado el 17-ago a las 19:28 — el mismo día de la reunión. M-12 son 1.154 líneas de migración, 16 ficheros y un renombrado de rutas. Y **no está en producción**, o sea que el cliente no ha podido ver lo que pide deshacer | `9305c1c`, `20260817210000_conversaciones_previas.sql` | Preguntar si es marcha atrás consciente **antes de tocar nada** |
+| **B-3** | **MN-10 deshace DL-03.** La dirección del pie no es decoración: es el requisito de validación de dLocal, metido el 17-ago con esa justificación explícita. `lib/company.ts` avisa: «dLocal valida el sitio a mano y comprueba que estos datos coincidan exactamente con los de su panel» | `1fca00f`, `src/lib/company.ts`, `19-PLAN §19.4` | Preguntar si la molestia es **visual** o es **no publicar el domicilio**. Son dos respuestas distintas |
+| **B-4** | **MN-13 (Typeform delante del dominio) es la vía rápida a un segundo rechazo de dLocal.** Su requisito DL-07 es literalmente «sitio completo, sin información faltante». Un gate delante esconde el flujo de compra, `/contacto`, el pie legal y las tres páginas legales — DL-01, DL-02, DL-03 y DL-05 de una vez | `19-PLAN §19.4`, CLAUDE.md (dos dominios sin conectar) | **No ejecutarlo antes de la aprobación.** Y pedir por fin el dato: ¿qué URL exacta se presentó a dLocal? |
+| **B-5** | **MN-03 va al revés.** No hay ni una línea de dLocal en el repo y no la va a haber: dLocal Go espera a que **el sitio** pase su revisión, que depende del merge. dLocal no es el respaldo de Stripe; dLocal es **quien está bloqueado por nosotros** | `grep -ri dlocal src/` → solo comentarios | Orden real: merge → revisión → credenciales de sandbox → adaptador |
+| **B-6** | **Ningún punto de pagos se puede ver fuera de local.** `/api/pagos/checkout` devuelve **503** sin `STRIPE_PUBLISHABLE_KEY`, y esa clave solo está en `.env.local`. `docs/ENTORNOS.md:83` afirma lo contrario y **es falso** | `src/app/api/pagos/checkout/route.ts:146-156`, `docs/ENTORNOS.md:75` | Dar de alta la variable en Vercel **antes** de comprometer fecha para MN-01 y MN-02 |
+
+---
+
+## 20.2 · Los 14 puntos, traducidos
+
+Códigos **MN-xx** = punto de minuta. La columna «Veredicto» dice lo único que importa: si es código
+nuevo, código que ya existe, o algo que no es código.
+
+### Pagos e Integraciones
+
+| | Punto | Veredicto | Esfuerzo |
+| :-- | :-- | :-- | :-- |
+| **MN-01** | Rediseño de UI de Stripe (quitar «lo alargado») | 🟠 **Son dos peticiones distintas y hoy se presupuestan como una.** El checkout es **Embedded Checkout** (`ui_mode:"embedded_page"`): el interior del recuadro es cromo de Stripe y **no se puede reestilizar** — los tipos del SDK no exponen `appearance` ni `layout`. Si «lo alargado» es **nuestro** contenedor (rejilla 360\|resto a ~650px, `max-w-[1120px]`), es CSS: **XS**. Si es **el resumen del pedido que Stripe pinta dentro del iframe** —que además duplica nuestro «Resumen del pedido»— obliga a cambiar de `ui_mode` a `'form'`: **M/L** | XS **o** M/L |
+| **MN-02** | Campo «Nombre en la tarjeta» | 🟠 **Sí, pero dentro del recuadro de Stripe.** `name_collection: { individual: { enabled: true } }` existe en la versión de API fijada (`2026-07-29.dahlia`). ⚠️ La **etiqueta la escribe Stripe** (con `locale:'es'` será «Nombre», no el literal pedido). ⚠️ Dibujarlo nosotros **saca el proyecto de PCI-DSS SAQ A y lo mete en SAQ D** — se descartó a propósito, y está razonado en el código, en el backlog y en el Doc 2 | S |
+| **MN-03** | DLocal como pasarela de respaldo | 🔴 **Bloqueado y mal planteado.** Mezcla dos cosas de coste muy distinto: **enrutado por geografía** (el dato ya lo soporta: `payments.provider` es `text` y existe `payment_routing_rules` → S/M **cuando haya cuenta**) y **failover en caliente** (no existe, no está diseñado, y hoy es **imposible sin migración**: `service_role` no puede reetiquetar `payments.provider`) | XL |
+
+### Videollamadas y Clases
+
+| | Punto | Veredicto | Esfuerzo |
+| :-- | :-- | :-- | :-- |
+| **MN-04** | Rediseño de la llamada tipo Google Meet | 🔴 **«Reutilizando el código existente» aplica al backend, no a la interfaz. La interfaz de vídeo no es nuestra.** Único punto de montaje: `DailyIframe.createFrame` (`live-room.tsx:168`) — **Daily Prebuilt**. Tiles, barra de micro/cámara/compartir, selector de dispositivos, indicador de red y **la reconexión automática que es el criterio de aceptación de US-803** viven dentro de un iframe cross-origin. Rediseñar = reescribir la capa de vídeo con `createCallObject` y reimplementar todo eso a mano. Ya diagnosticado como **N-25, XL, fuera de ventana**. Y **no hay pantalla en Figma**: el diseño hay que producirlo antes | XL |
+| **MN-05** | Ventana de acceso de días (antes/después) | 🟠 **Implementable, pero no es cambiar una constante — y choca con el contrato firmado.** La ventana (10 min/10 min) está duplicada en **cinco sitios**, y el que manda no es `session_access_window()` sino **`close_expired_sessions()`**, con el umbral escrito a mano, que pasa la reserva a `completed` y fija `completed_at` — **el reloj del que cuelga el dinero del tutor**. Ampliarla sin desacoplar retrasa **todos los payouts**, contra el §12 del contrato (7–14 días). Y abre un agujero: el alumno podría cancelar **después** de la clase y cobrar el 50 % que el §17 le niega. 🟢 Dato bueno: `sessions.access_opens_at` / `access_closes_at` **ya existen en el esquema y están muertas** — el hueco estaba previsto | L |
+
+### Chat y Reservas
+
+| | Punto | Veredicto | Esfuerzo |
+| :-- | :-- | :-- | :-- |
+| **MN-06** | Chat solo tras reserva completada | 🔴 **Revierte M-12 (B-2).** ⚠️ Y un dato técnico que ahorra trabajo muerto: **ninguna política RLS puede imponer esto.** `conversations` no tiene política de INSERT para nadie y los dos caminos de creación son `SECURITY DEFINER`, que se saltan la RLS. La barrera va **dentro de `open_conversation`**, donde ya viven los otros tres frenos anti-spam | M |
+| **MN-07** | Enlace de reserva enviable desde el chat | 🟠 **Viable, y recomendado como enlace estructurado** (el tutor elige una de sus mentorías y se envía como tarjeta con `messages.product_id`), no como URL en texto libre. ⚠️ **Tira en dirección contraria a MN-06**: el valor de mandar el enlace es máximo justo en la conversación **pre-compra** que MN-06 quiere cerrar | M |
+| **MN-08** | Contador de mentorías por conversación | 🟢 **Sí, y sin columna nueva**: se amplía `my_conversations()`, que ya cruza conversación y reservas. ⚠️ **«Mentoría» admite tres cuentas incompatibles** (títulos distintos / reservas / clases) y las tres dan números distintos. El filtro de estado debe ser **exactamente** el de `pair_has_booking`, o el mismo par dirá dos cosas en dos pantallas | S |
+
+### Frontend y UX
+
+| | Punto | Veredicto | Esfuerzo |
+| :-- | :-- | :-- | :-- |
+| **MN-09** | Placeholder de imágenes | 🟢 **Sí.** Hoy hay **tres conductas distintas** y ninguna usa un asset: dos bandas grises y un `null`. 🟢 **Sin depender de Diana**: reutilizar el **icono de categoría** que ya existe en BD (`20260805120000`) sobre fondo de marca — cero arte nueva | S |
+| **MN-10** | Quitar la dirección del pie | 🔴 **Deshace DL-03 (B-3).** Matiz útil para negociar: el domicilio **no desaparece del sitio** si se quita del pie — sigue en `/contacto` y en el §39 de los Términos. ⚠️ **No tocar `lib/company.ts`**: arrastraría el §39 de los Términos en los dos idiomas | XS |
+| **MN-15** | *(añadido el 20-ago)* El titular del hero salta a 3 líneas con «emprendimiento» | 🟢 **Diagnosticado y medido.** De las 8 palabras rotativas **solo «emprendimiento»** rompe: a 910px son 3 líneas, las otras siete 2. Quitar `text-balance` **no** lo arregla (sigue en 3). **Desde 940px entra en 2**, y a 960px el corte de las otras siete **no se mueve** — o sea que es cambiar un número, no rediseñar. ⚠️ En móvil el titular nunca son 2 líneas y **también baila** (3 ó 4 según la palabra): eso no lo arregla el ancho | XS |
+| **MN-11** | Límite de subida en el chat | 🟢 **Ya está hecho: 10 MB, impuestos por el bucket, server-side.** Las subidas van directas navegador→Storage, así que el bucket es el único punto de aplicación real. Falta **el número que quiere el cliente**. ⚠️ **Trampa verificada:** los cinco buckets se crearon con `on conflict (id) do nothing` y **no hay ni un `update storage.buckets` en el repo** — copiar ese patrón para cambiar el tope es un **no-op silencioso** que pasa el `db:push` en verde | S |
+
+### Infraestructura, Dominios y Referidos
+
+| | Punto | Veredicto | Esfuerzo |
+| :-- | :-- | :-- | :-- |
+| **MN-12** | Referral Factory por embed | 🟠 **Nada nuestro lo bloquea** (`next.config.ts` está vacío, no hay CSP). Lo bloquea **RF**: si sirve la campaña con `X-Frame-Options: DENY`, no hay implementación posible. **Comprobación de 5 minutos que decide el punto entero.** Si la sirve, es **XS**: sustituir un `<Link target="_blank">` por un `<iframe>` | XS **o** imposible |
+| **MN-13** | Typeform en el dominio + app a subdominio | 🔴 **El gate: no (B-4).** 🟢 **El subdominio: casi gratis** — `NEXT_PUBLIC_SITE_URL` en Vercel y ya. Lo caro no es el código: es reconfigurar OAuth de Google, allow-list de Supabase, webhook de Stripe y los enlaces de los correos | S (subdominio) / XL (gate) |
+
+### Estrategia
+
+| | Punto | Veredicto | Esfuerzo |
+| :-- | :-- | :-- | :-- |
+| **MN-14** | Campaña de tutores con beneficios bilaterales | 🔴 **No existe NADA de promociones**: ni tabla, ni columna, ni función, en 35 tablas. Y no es «un descuento en el checkout»: entra en **`create_booking`, el snapshot financiero congelado** (regla de oro 2). Antes de escribir SQL hay que responder **quién paga el descuento** —plataforma o tutor—, porque es lo que decide si `tutor_net_amount` cambia. 🟢 **La mitad barata sí se entrega ya**: el «registro de las últimas clases impartidas» es una RPC de segmentación (**S**) y sirve aunque la campaña no se apruebe. ⚠️ Y la campaña **exige** tocar la privacidad publicada y añadir consentimiento de marketing: sin eso es una infracción de un texto vivo | XL (+ S aprovechable) |
+
+---
+
+## 20.3 · Las nueve preguntas al cliente — un solo mensaje, listo para enviar
+
+Sin estas respuestas, siete de los catorce puntos no se pueden empezar. Van con la consecuencia
+puesta, no en abstracto.
+
+| # | Pregunta | Bloquea |
+| :-- | :-- | :-- |
+| **P-1** | **¿La minuta se escribió sabiendo que el chat pre-compra entró el 17-ago a las 19:28?** La reunión y el commit son del mismo día. Si es marcha atrás consciente, se hace; si no, quizá ya está resuelto | MN-06, MN-07 |
+| **P-2** | **La dirección del pie: ¿molesta cómo se ve, o no queréis publicar el domicilio?** Si es lo primero se resuelve maquetando. Si es lo segundo, avisamos por escrito de que debilita el requisito que dLocal revisa a mano, justo antes de la revisión | MN-10 |
+| **P-3** | **¿Qué URL exacta se presentó a dLocal Go, y cuál se va a presentar ahora?** Lleva sin respuesta desde el 17-ago y es el único punto que ningún merge arregla | MN-13, MN-03 |
+| **P-4** | **La captura de «el diseño alargado» del checkout.** Si es nuestro contenedor son minutos; si es el resumen que pinta Stripe dentro de su recuadro, es cambiar de modo de checkout. Son dos presupuestos distintos | MN-01 |
+| **P-5** | **El campo del titular: ¿obligatorio u opcional? ¿También al guardar una tarjeta desde el perfil?** (Si no, las tarjetas guardadas seguirán sin nombre.) Y: la etiqueta la escribe Stripe en español — ¿se acepta «Nombre»? | MN-02 |
+| **P-6** | **La sala abierta: ¿cuántos días antes y cuántos después?** Y la que de verdad importa: **¿aceptáis que el tutor cobre esos mismos días más tarde**, o desacoplamos «puedo entrar» de «la clase terminó»? Recomendamos desacoplar. *(Y una previa: si es para coordinarse antes de la clase, eso ya es el chat.)* | MN-05 |
+| **P-7** | **El contador: «3 mentorías» ¿son tres títulos distintos, tres compras o tres clases?** Los tres números son distintos sobre las mismas filas | MN-08 |
+| **P-8** | **El límite de subida: ¿qué número?** Hoy son 10 MB y funcionan. Para referencia: portadas 5 MB, materiales 10 MB, KYC 10 MB | MN-11 |
+| **P-9** | **La campaña: ¿quién absorbe el descuento, la plataforma o el tutor?** Sin esa respuesta el esquema no se puede escribir. Y ¿es un caso de Referral Factory —que ya está contratado— o un motor propio? | MN-14 |
+| **P-10** | **A Referral Factory (no al cliente): ¿cuál es vuestro snippet de embed/widget?** Su página de campaña responde `SAMEORIGIN`, así que el iframe está descartado — pero `embed.referral-factory.com` sale en su propia CSP, o sea que producto de embed tienen | MN-12 |
+
+---
+
+## 20.4 · Los lotes ejecutables
+
+Cada **ficha** está escrita para que un agente la ejecute sin más contexto que el repo. Dentro de un
+lote las fichas son **independientes y paralelizables**; entre lotes hay **barrera**.
+
+### 🔴 Lote 0 · Desbloqueo — va primero y no es negociable
+
+No es paralelo con nada: es la barrera de todo lo demás.
+
+| Ficha | Qué | Quién | Agente |
+| :-- | :-- | :-- | :-- |
+| **L0-1** | **Merge `dev` → `main`** con ventana propia. Antes: Google en prod (credenciales propias) y decidir qué se hace con la fila de `payment_routing_rules` de producción, que hoy convive con una `STRIPE_API_KEY` de *test mode*. Arrastra ~30 migraciones de una tacada | Jose | ❌ humano |
+| **L0-2** | `STRIPE_PUBLISHABLE_KEY` en Vercel (Preview **y** Production). Sin ella el checkout es 503 fuera de local | Jose (panel) | ❌ humano |
+| **L0-3** | `NEXT_PUBLIC_REFERRAL_URL` en Vercel. Sin ella el bloque de referidos ni se pinta | Jose (panel) | ❌ humano |
+| **L0-4** | ~~Comprobar `X-Frame-Options` de la campaña de RF.~~ 🟢 **Hecho el 20-ago: `SAMEORIGIN`, no se puede embeber.** Sustituida por **P-10**: pedir a RF su snippet de widget | — | ✅ hecha |
+| **L0-5** | Leer en el panel de Supabase (dev **y** prod) el `file_size_limit` vigente de los cinco buckets. Si alguno se creó desde el dashboard, **el repo no es fuente de verdad** ahí | Jose | ❌ humano |
+| **L0-6** | Enviar las nueve preguntas de §20.3 | Verónica | ❌ humano |
+| **L0-7** | **Corregir la documentación que miente** (§20.6). Dos correcciones, con `grep` de respaldo en el commit | — | ✅ sí |
+
+---
+
+### 🟢 Lote 1 · Sin decisión de cliente — se puede lanzar en paralelo hoy
+
+Seis fichas independientes. Ninguna espera respuesta de nadie.
+
+**L1-1 · MN-09 · Placeholder de portada de mentoría** · `S` · sin migración
+> **Objetivo:** que una mentoría sin foto deje de dejar un hueco. Hoy hay **tres** conductas
+> distintas: banda gris en `product-card.tsx`, banda gris en `featured-products.tsx` y `null` en la
+> ficha de detalle.
+> **Cómo:** reutilizar el **icono de categoría** que ya existe (`categories.icon`, migración
+> `20260805120000`, mapa en `src/components/catalog/category-icons.ts`) sobre un fondo de marca, y
+> unificar las tres conductas en un único componente. **Cero arte nueva → no bloquea con Diana.**
+> **Ficheros:** `src/components/catalog/product-card.tsx`, `src/components/home/featured-products.tsx`,
+> `src/app/(public)/products/[id]/page.tsx`, `src/lib/catalog/format.ts`, `src/lib/catalog/queries.ts`
+> (añadir `icon` a los selects).
+> **Trampa:** `unoptimized` hoy es incondicional porque las URLs de Supabase no están en
+> `next.config.ts`. Un asset local **sí** debe optimizarse.
+> **Aceptación:** las tres superficies pintan lo mismo; una mentoría sin `image_path` no deja hueco
+> en portada, catálogo ni ficha.
+
+**L1-2 · MN-08 · Contador de mentorías por conversación** · `S` · **con migración**
+> **Objetivo:** que la conversación sepa cuántas mentorías hay detrás. Hoy `my_conversations()`
+> devuelve `has_booking boolean` y el último título — un sí/no, nunca un recuento.
+> **Cómo:** **no** una columna materializada. `create or replace function public.my_conversations()`
+> añadiendo al `returns table` **dos** enteros: `product_count` (`count(distinct b.product_id)`, la
+> lectura literal de «mentorías») **y** `session_count`. Entregar los dos **elimina la dependencia de
+> P-7**: el cliente solo decide cuál se pinta.
+> ⚠️ **El filtro de estado debe ser exactamente el de `pair_has_booking`.** La migración de M-12 ya
+> dice por qué: «dos definiciones distintas de "es mi alumno" acabarían discrepando». Si es viable,
+> extraer `pair_booking_stats(student, tutor)` y que `pair_has_booking` lea de él.
+> **Orden obligatorio:** `db:push` → `db:types` → desplegar frontend. Cambia la **firma** de la RPC;
+> si el front llega antes, lee una columna que no existe.
+> **Aceptación:** la bandeja pinta el número; `npm run typecheck` pasa con los tipos regenerados.
+
+**L1-3 · MN-05a · Desacoplar el `exp` del token del `exp` de la sala** · `XS`
+> **Objetivo:** cerrar el **único riesgo de seguridad real** de MN-05, sin esperar a P-6.
+> Hoy el `exp` del *meeting token* se hereda del de la sala. Si mañana la ventana pasa a días, se
+> estarían firmando credenciales válidas **durante días**, contra el criterio declarado de que el
+> token es efímero.
+> **Cómo:** firmar el token corto (duración de la sesión + margen) aunque la sala viva más.
+> **Ficheros:** `src/app/api/room/[sessionId]/route.ts:62`, `src/lib/daily.ts:54-57` y `:115`.
+> **Refutación útil que va en el commit:** Daily **no factura por sala abierta**, sino por
+> minuto-participante. El coste **no** es un argumento contra MN-05; el token sí lo era.
+
+**L1-4 · Purga de hilos vacíos inmortales** · `XS` · **con migración**
+> **Objetivo:** tapar una fuga que existe **hoy**, independientemente de MN-06. La purga de 30 días
+> mira `last_message_at`, que es `null` en un hilo sin mensajes: esos hilos **no se purgan nunca**.
+> **Cómo:** `coalesce(c.last_message_at, c.created_at) < now() - interval '30 days'`. Una línea.
+> **Aceptación:** un hilo abierto y nunca usado desaparece a los 30 días.
+
+**L1-5 · MN-11a · Una sola fuente de verdad para los topes de subida** · `S`
+> **Objetivo:** dejar el terreno listo para P-8 y quitar una trampa conocida. El número está
+> duplicado en **seis** sitios de cliente (`ATTACHMENT_MAX_BYTES`, dos en `upload-formats.ts`, y
+> `MAX_BYTES` en `avatar-upload`, `materials-upload` y `verification-form`), más los literales
+> «máx 10 MB» escritos a mano en siete líneas del formulario de verificación.
+> **Cómo:** que todos importen de `src/components/tutor/upload-formats.ts` —que ya lo pide en su
+> propia nota— y que los literales se generen del valor, no se escriban.
+> ⚠️ **No cambiar todavía ningún número**: eso es P-8, y cuando llegue va como
+> `update storage.buckets set file_size_limit = …`, **nunca** como un `insert … on conflict do
+> nothing` — el repo no tiene ni un `update storage.buckets` y copiar el patrón existente sería un
+> no-op silencioso.
+> **Aceptación:** cambiar el valor en un sitio cambia todos los mensajes de la UI.
+
+**L1-6 · Cierre de C-01 y N-18** · `XS`
+> Dos renglones sueltos que llevan pendientes desde la semana pasada y no dependen de nadie:
+> · `site-footer.tsx:72` dice **«tutorías en vivo 1 - 1»** — se escapó del barrido de vocabulario del
+> 18-ago (`2c55ef0`). Es cadena nuestra, y se cambia. *(El contrato dice «clase» 23 veces: eso **no
+> se toca**, es el documento del cliente — ver §20.6.)*
+> · **N-18**: `enable_prejoin_ui: false` en las propiedades de sala (`src/lib/daily.ts`), que quedó
+> fuera del bloque 0 del Doc 19. ⚠️ **Si MN-04 se aprueba, esto queda absorbido** por el prejoin
+> propio y no debe hacerse dos veces.
+
+---
+
+### 🟠 Lote 2 · Una respuesta → un ticket
+
+Cada ficha se lanza **en cuanto llegue su respuesta**, no cuando lleguen todas. No hay barrera entre
+ellas.
+
+| Ficha | Punto | Espera | Trabajo, ya diseñado |
+| :-- | :-- | :-- | :-- |
+| **L2-1** | **MN-01** | P-4 + L0-2 | Si es nuestro contenedor: `max-w-[420..480px] mx-auto` alrededor de `<StripeEmbed/>` y unificar con los **560px** de `/reservas/[id]/pagar` — hoy el mismo iframe se ve con dos anchos según por dónde entres. Si es el resumen de Stripe: `ui_mode:'form'` + `<CheckoutForm/>` de `@stripe/react-stripe-js/checkout`, que **sí acepta `appearance`**, sobre la **misma** Checkout Session — webhook, idempotencia y X-02 no cambian. En los dos casos: `branding_settings` en la Session (naranja #fe6a00) y quitar la duplicación de «Resumen del pedido» |
+| **L2-2** | **MN-02** | P-5 + L0-2 | `name_collection: { individual: { enabled: true, optional: … } }` en **los dos** sitios que crean Session (el cobro y el alta de tarjeta). ⚠️ **Versionar la clave de idempotencia**: se compone por reserva, y al desplegar las Sessions ya abiertas chocarían |
+| **L2-3** | **MN-06** | **P-1** | `create or replace function public.open_conversation(uuid)` con `if not public.pair_has_booking(...) then raise` **después** de la comprobación de tutor aprobado. **No** escribir políticas RLS: no las evalúa nadie. **No** revertir `9305c1c` ni editar `20260817210000` (regla de oro 5). ⚠️ **No cerrar `send_conversation_message` a secas**: `send_message` delega en ella cuando el par no ha comprado, y cerrarla rompe el chat de un checkout a medias — el alumno vería «no tienes mentoría con este tutor» en la pantalla de su propia reserva. Y decidir por escrito qué pasa con los hilos existentes (§20.6) |
+| **L2-4** | **MN-07** | P-1 | Enlace **estructurado**: `messages.product_id` con `on delete set null`, el tutor elige una de sus mentorías, se pinta como tarjeta. La descarga del chat (`.txt`/`.json`) tiene que decir algo del mensaje-enlace: hoy solo vuelca `body` |
+| **L2-5** | **MN-05** | **P-6** | Poblar `sessions.access_opens_at` / `access_closes_at` al confirmar la reserva y que `join_session` **lea** esas columnas en vez de recalcular. **Y desacoplar `close_expired_sessions()`**, que hoy comparte el `+10 minutes` por accidente. En la misma pasada: cerrar el agujero de `cancel_booking` al 50 % después de la clase, que contradice el §17 del contrato |
+| **L2-6** | **MN-11b** | P-8 + L0-5 | `update storage.buckets set file_size_limit = …` + los espejos que L1-5 dejó unificados. Verificar con **una subida real**, no con `tsc` |
+| **L2-7** | **MN-10** | **P-2** | Si se confirma: quitar **solo** la línea del pie (`site-footer.tsx:89-90`). **No tocar `lib/company.ts`** ni `/contacto` ni los Términos. Y **nunca antes del merge**: hoy el revisor sigue viendo el pie viejo, sin identidad y con tres redes muertas |
+| **L2-8** | **MN-12** | ~~L0-4~~ → **RF** | 🔴 **Comprobado el 20-ago: RF NO permite embeber.** `https://vercel.referral-factory.com/cXr65Wou/signup` responde `x-frame-options: SAMEORIGIN`, así que un `<iframe>` desde nuestro dominio se queda en blanco. **El punto, tal como lo pide la minuta, no es implementable y no es cosa nuestra.** ⚠️ Pero no es un «no» seco: la propia CSP de RF declara `embed.referral-factory.com` y `js.referral-factory.com`, o sea que **sí tienen producto de embed** — solo que no es la URL de la campaña. La petición a RF es **su snippet de widget**, no permiso para el iframe. ⚠️ El embed **no toca la atribución** en ningún caso — ver §20.6 |
+
+---
+
+### 🔵 Lote 3 · Épicas — requieren aprobación de alcance, no un ticket
+
+| Ficha | Punto | Postura |
+| :-- | :-- | :-- |
+| **L3-1** | **MN-04** (llamada tipo Meet) | **Recomendación: no en esta ventana.** Ofrecer la alternativa barata: quedarse en Prebuilt y pulir **lo que sí es nuestro** — barra de sesión, modo teatro, panel de chat y un prejoin propio **previo** al iframe. Si aun así se aprueba, el alcance **debe** incluir explícitamente: reconexión de red (US-803), selector de dispositivos, compartir pantalla, casos borde de permisos y responsive móvil — y **antes**, diseño de Diana, que no existe. ⚠️ Reescribir el componente resucita dos bugs ya cerrados: el React #418 de RV-18 (`771ab09`, pantalla en blanco **en producción**) y el botón duplicado que se quitó en N-24 |
+| **L3-2** | **MN-03** (dLocal) | **Trabajo aprovechable hoy, sin cuenta:** extraer el puerto `PaymentProvider` que el Doc 6 ya especifica, y generalizar el webhook y el job de reembolsos. Quita la mayor parte del coste de después y **no depende de dLocal**. El adaptador, cuando haya sandbox. ⚠️ Antes de nada, preguntar qué significa «falla»: si es «tarjeta rechazada», choca con la decisión ya tomada de **no** cancelar en `payment_intent.payment_failed` — y reintentar un rechazo en otro PSP es reintentar un rechazo |
+| **L3-3** | **MN-14a** (registro de clases impartidas) | **Se entrega ya, y sirve aunque la campaña no se apruebe.** RPC `tutor_teaching_record` `SECURITY DEFINER` con `impartidas`, `no_shows`, `ultima_clase`, `alumnos_distintos`, más índice parcial. ⚠️ Decidir si es métrica **interna** o **pública**: si va al perfil, toca `tutors_public` y cambia la superficie expuesta |
+| **L3-4** | **MN-14b** (motor de promociones) | **Épica nueva, no ticket.** Bloqueada por **P-9**. Diseño mínimo defendible: `promotions` + `promotion_redemptions` con RLS default-deny, `bookings.discount_amount` (backfill trivial: hoy `subtotal_amount = total_amount` en todas las filas), y `create_booking` validando la promoción **dentro** de la función. ⚠️ **Y no es opcional:** la privacidad publicada declara hoy una finalidad que una campaña promocional infringe — hay que reescribir esa sección y añadir consentimiento de marketing con baja, **y `npm run check:terms` tiene que seguir pasando** |
+| **L3-5** | **MN-13** (dominio) | Partir en dos: **el subdominio** es configuración (`NEXT_PUBLIC_SITE_URL` en Vercel; el código ya lo lee) más una lista de reconfiguraciones externas — OAuth de Google, allow-list de Supabase, webhook de Stripe, enlaces de los correos. **El gate de Typeform: después de la aprobación de dLocal, nunca antes**, y viviendo en una ruta propia, no delante de la aplicación |
+
+---
+
+## 20.5 · Lo que NO se va a hacer, y por qué — dicho para poder enseñarlo
+
+- **No se reestiliza el interior del recuadro de Stripe.** No es una decisión de estilo: los tipos
+  del SDK instalado no exponen `appearance` ni `layout` en Embedded Checkout. Hay iframe de por medio.
+- **No se dibuja el formulario de tarjeta con campos propios.** Saca el proyecto de PCI-DSS **SAQ A**
+  y lo mete en **SAQ D**. El Figma lo dibuja; se descartó a propósito y está razonado en tres sitios.
+- **No se pone un Typeform delante de la plataforma antes de que dLocal apruebe.** Esconde a la vez
+  DL-01, DL-02, DL-03 y DL-05.
+- **No se quita la dirección del pie antes del merge.** Hoy el revisor todavía ve el pie viejo: se
+  estaría retirando algo que **aún no ha cumplido su función**.
+- **No se escriben políticas RLS para MN-06.** No las evaluaría nadie: los dos caminos de creación son
+  `SECURITY DEFINER`.
+- **No se revierte `9305c1c` ni se edita `20260817210000`.** Migración aplicada = inmutable
+  (regla de oro 5). La marcha atrás, si la hay, es una migración **nueva** con `create or replace`.
+- **No se escribe el adaptador de dLocal sin sandbox.** Es el patrón que ya produjo
+  `process_notifications()` marcando correos como enviados sin enviar ninguno.
+- **No se da por bueno ningún cambio de Stripe con `tsc`.** La unión de `ui_mode` acaba en
+  `OtherString` y traga cualquier cadena: `embedded_page` vs `embedded` compilaba y devolvía **400**
+  contra la API real. Se ejercita contra *test mode* o no está hecho.
+
+---
+
+## 20.6 · Cuatro trampas verificadas — y dos documentos que mienten
+
+**1. `ref_email` no existe.** `CLAUDE.md`, `BACKLOG.md`, `PLAN-DESARROLLO.md` y `QA-LANZAMIENTO.md`
+afirman los cuatro que «se activó `ref_email`» y que «la atribución va por email contra su API, no
+por la cookie». **`grep -rn ref_email src/ supabase/` devuelve cero.** Lo implementado es exactamente
+el mecanismo que esos documentos declaran inviable: cookie `ey-ref` → `profiles.referral_code`.
+`REFERRAL_FACTORY_API_KEY` tampoco se lee en ninguna línea de código. → **Consecuencia para la
+minuta:** hoy no hay atribución por email que un embed pueda romper. **El embed y la atribución son
+dos temas separados**, y el segundo está entero por hacer. *(Ficha L0-7.)*
+
+**2. `docs/ENTORNOS.md:83` dice que `STRIPE_PUBLISHABLE_KEY` «no la lee nadie».** Quedó obsoleto
+cuando el checkout pasó a Embedded: la lee `publishableKey()` y su ausencia es un **503**.
+*(Ficha L0-7.)*
+
+**3. Los hilos existentes de MN-06 no se quedan huérfanos solos: hay tres poblaciones.**
+· **A** — los del *backfill* de M-12, cuyo `group by` **no filtra por estado**: creó un hilo por cada
+par con **cualquier** reserva, incluidos los `pending_payment` de un checkout abandonado.
+· **B** — los abiertos desde la ficha pública desde el 17-ago. **Solo existen en dev.** Es el
+argumento más fuerte de que la marcha atrás es barata: **en producción no hay nada que migrar.**
+· **C** — los de pares que sí compraron. No les afecta nada.
+A y B seguirían **visibles y escribibles** si solo se cierra `open_conversation`. Hay que decidirlo y
+escribirlo en la migración: o solo-lectura hasta que la purga se los lleve, o borrar **únicamente los
+vacíos** (`not exists (select 1 from messages …)`). Borrar hilos **con** mensajes destruye datos de
+usuario y no se hace en una migración sin decisión escrita del cliente.
+
+**4. El vocabulario diverge a propósito, y conviene cerrarlo.** El contrato publicado el 17-ago dice
+«clase» **23 veces** (incluidos dos títulos de sección) mientras el producto pasó a «mentoría» el
+18-ago. El barrido dejó fuera el contrato **a conciencia**: es el documento que redactó el cliente y
+`check:terms` vigila que sus porcentajes sigan coincidiendo con `lib/policy.ts`. → **Pregunta de una
+línea para Néstor:** ¿actualizamos el contrato, o asumimos que el producto dice mentoría y el
+contrato clase? **`terms-content.ts` no se toca desde desarrollo bajo ningún concepto.**
+
+---
+
+## 20.7 · Qué cabe antes del 28–29 de agosto
+
+Siete días hábiles, y la mitad de la minuta espera respuesta.
+
+**Cabe:** el Lote 0 entero, el Lote 1 entero, y del Lote 2 lo que llegue con respuesta — MN-01 en su
+variante barata, MN-02, MN-11b, MN-10 y MN-12 son todos S o menos.
+**Cabe con la respuesta puesta pronto:** MN-05 (L) y MN-06 (M). Los dos arrastran migración.
+**No cabe:** MN-04 y MN-14b. Son épicas, y decirlo el 20 vale más que decirlo el 28.
+**No depende de nosotros:** MN-03 y MN-13, que esperan a dLocal — **que a su vez espera al merge.**
+
+> Y una advertencia que ya estaba escrita en el Doc 19 y sigue siendo la misma: **lo que no está
+> ejercitado no está hecho.** Los reembolsos siguen sin mover un euro, el cobro tardío no se ha
+> probado con un pago real y nadie ha visto llegar un correo. Esa lista pesa más que los catorce
+> puntos de esta minuta, porque es dinero.
+
+---
+
+## 20.8 · Cierre del Lote 1 — qué quedó hecho y qué NO
+
+Ejecutado el **20-ago** por cuatro agentes en paralelo con ficheros disjuntos (uno solo dueño de la
+base de datos, para que no hubiera dos `db:push` a la vez), más tres revisores adversariales sobre el
+diff combinado. **`npm run lint`, `npm run typecheck`, `npm run check:terms` y `npm run build`: los
+cuatro en verde.** Todo en `dev`, sin desplegar.
+
+### Lo cerrado
+
+| Ficha | Qué quedó |
+| :-- | :-- |
+| **L1-1 · MN-09** | `ProductCover`: las cuatro superficies públicas pintan lo mismo ante una mentoría sin foto — icono de categoría sobre fondo de marca, cero arte nueva. **Eran cuatro, no tres**: `ProductCard` lo pintan además `/tutors/[id]` y el panel del alumno |
+| **L1-2 · MN-08** | `my_conversations()` devuelve `product_count` y `session_count`. Se extrajo `pair_booking_stats`, y `pair_has_booking` **lee de ella**: la lista de estados de «este par compró» existe ahora una sola vez |
+| **L1-3 · MN-05a** | El *meeting-token* de Daily dejó de heredar el `exp` de la sala. El parámetro pasó de `expiresAt` a `endsAt` **para que el `exp` de la sala no pueda volver a colarse** |
+| **L1-4** | La purga cubre los hilos que se abrieron y nunca se usaron (`coalesce(last_message_at, created_at)`) |
+| **L1-5 · MN-11a** | Los seis espejos del tope de subida importan de `upload-formats.ts`, y las frases se generan del número. **Ningún número cambió** — eso es P-8 |
+| **L1-6 · N-18** | `enable_prejoin_ui: false`, comentado como propiedad exclusiva de Prebuilt para que el rediseño de MN-04 sepa que la absorbe |
+| **L1-6 · C-01** | El pie, el `<h2>` de la portada y cuatro comentarios. **`grep -i tutoría src/` fuera de los legales: 0** |
+
+### 🔴 Lo que encontró la revisión — y no era cosmético
+
+| # | Hallazgo | Estado |
+| :-- | :-- | :-- |
+| 1 | **`pair_booking_stats` nació con `grant execute … to authenticated`.** Es `SECURITY DEFINER`, recibe el par **por parámetro** y no mira `auth.uid()`: PostgREST la publicaba como RPC y cualquier autenticado podía preguntar por **dos uuid elegidos por él**. El grant además no hacía falta — sus dos consumidores son `DEFINER` y la llaman como su dueña | 🟢 **Cerrado** y **verificado contra dev con una sesión real**: la RPC devuelve `42501 permission denied` y `my_conversations` sigue funcionando |
+| 2 | **`npm run lint` en rojo** por `react-hooks/static-components` en el componente nuevo. CI corre lint en cada push: el lote no se podía mergear | 🟢 Resuelto con `createElement` y el porqué escrito al lado |
+| 3 | **La purga borraba también los hilos bloqueados.** `blocked_at` vive **solo** en esa fila, así que borrarla desbloqueaba al par en silencio: `open_conversation` devolvía un hilo nuevo, sin bloqueo y con los contadores anti-spam a cero | 🟢 `and c.blocked_at is null` |
+| 4 | **La purga se fiaba de un backfill que corre después que ella.** Riesgo real aunque estrecho (el cron es diario a las 04:00), y el borrado arrastra mensajes por cascada | 🟢 Resuelto sin renumerar migraciones aplicadas: una guarda que mira los mensajes de verdad, y que **solo puede impedir borrados, nunca provocarlos** |
+
+Las cuatro correcciones van en `20260820150000_correcciones_revision_lote1.sql`.
+
+### 🔴 Lo que NO está hecho, aunque lo parezca
+
+| # | Qué | Por qué importa |
+| :-- | :-- | :-- |
+| 1 | ~~Nadie ha visto el placeholder con los ojos.~~ 🟢 **Verificado el 20-ago** (ver §20.9): el icono cambia por categoría, cae al genérico sin categoría, y la proporción sale 0,40 del alto en tarjeta y 0,30 en ficha. ⚠️ Hizo falta una página temporal para verlo: **las 15 mentorías de dev tienen foto**, así que la rama del placeholder es inalcanzable con los datos actuales | Un cambio visual que `tsc` no juzga — y que el sembrado de dev no ejercita |
+| 2 | **Salió una migración de más que no estaba en ninguna ficha:** `20260820140000`, un `update` que rellena `last_message_at` en las conversaciones sembradas por M-12. Está justificada —sin ella la purga nueva podía llevarse hilos con mensajes reales— pero es **escritura de DATOS**, no DDL | Va a ejecutarse contra producción en la ventana de L0-1 junto a las ~30 atrasadas. **Quien haga ese merge tiene que saber que ahí dentro hay un `update`**, no solo esquema |
+| 3 | **`pair_has_booking` conserva su `grant … to authenticated`** (viene de M-12) y filtra el mismo par en versión booleana | Es un agujero **preexistente y más pequeño**, no lo abrió este lote. Cerrarlo cambia comportamiento existente y **merece su propia ficha**, no ir de polizón en una corrección |
+| 4 | **`queries.ts:190` (`withProductFacts`) sigue sin `icon`**, así que las burbujas de categoría de las tarjetas de **tutor** pintan siempre el genérico | Preexistente. Ticket de una línea, pero toca `tutor-card.tsx`, que no era de ninguna ficha |
+| 5 | **El panel del tutor sigue con conducta propia** para la portada sin foto (miniatura 64×64 con iniciales) | Queda fuera **a propósito** —no es superficie pública— y está anotado en el componente |
+
+> **Nada de esto cambia la barrera:** el Lote 1 vive en `dev`, y `dev` sigue sin llegar a `main`.
+> **L0-1 sigue siendo lo primero.**
+
+---
+
+## 20.9 · Cierre del Lote 3 (parte aprovechable) — 20 de agosto
+
+Las dos fichas del Lote 3 que **no dependen de nadie**: L3-3 (el registro de mentorías impartidas) y
+L3-2 (el puerto de pagos). Dos agentes con ficheros disjuntos, tres revisores adversariales.
+`lint`, `typecheck`, `check:terms` y `build`: los cuatro en verde.
+
+### Lo cerrado
+
+| Ficha | Qué quedó | Commit |
+| :-- | :-- | :-- |
+| **L3-3 · MN-14a** | RPC `tutor_teaching_record` + pantalla en `/admin/tutores/actividad`. **Interna**, no toca `tutors_public` | `694a44c` |
+| **L3-2** | El puerto del Doc 6 §6.2 con Stripe dentro, **y el simulado como segundo adaptador de verdad** | `653a1e0` |
+| — | El vault de tarjetas, en commit aparte por ser fuera de alcance | `6da49eb` |
+
+### 🟢 El camino del dinero, ejercitado de punta a punta
+
+No es un detalle de proceso: §20.5 dice que **ningún cambio de Stripe se da por bueno con `tsc`**,
+porque la unión de `ui_mode` acaba en `OtherString` y ya dejó pasar un 400. La revisión encontró que
+**nadie lo había ejercitado**. Hecho después, contra *test mode*:
+
+| Paso | Resultado |
+| :-- | :-- |
+| `POST /api/pagos/checkout` sobre una reserva `pending_payment` | 200 con `cs_test_…` real |
+| Session expirada desde la API de Stripe | `status: expired` |
+| Webhook **firmado** | 200, tipo y reserva correctos → reserva `cancelled` (X-02 intacto) |
+| Webhook con firma **falsa** | **400** — la firma se sigue verificando sobre el cuerpo crudo, que es lo que este refactor rompe cuando sale mal |
+| Job de reembolsos en simulacro | 200, ve la solicitud pendiente, `stripeConfigurado: true` |
+| El mismo job **sin `CRON_SECRET`** | 401 — sigue fallando cerrado |
+| `POST /api/pagos/metodos` (alta de tarjeta) | 200 con `cs_test_…` en `mode:'setup'` |
+
+### Lo que encontró la revisión
+
+| # | Hallazgo | Estado |
+| :-- | :-- | :-- |
+| 1 | **La pantalla nueva reintroducía «clase» en 12 cadenas visibles**, justo después de que el Lote 1 dejara `grep -i tutoría src/` en 0. El «clases» del nombre de la ficha se coló a la interfaz | 🟢 Corregido. `home-stats.tsx` ya llamaba a este mismo dato «Mentorías impartidas» |
+| 2 | **Nadie había ejercitado el puerto contra la API real** | 🟢 Hecho, tabla de arriba |
+| 3 | **El vault de tarjetas se refactorizó sin estar en la ficha** | 🟠 Se conserva —verificado línea a línea y ahora ejercitado— pero **en commit aparte**, para poder revertirlo solo |
+| 4 | Un comentario nombraba `missingConfig()`, un método que no existe | 🟢 Corregido, y dicho de quién es la responsabilidad de llamarlo |
+
+### 🔴 Lo que NO está hecho
+
+| # | Qué | Por qué importa |
+| :-- | :-- | :-- |
+| 1 | ~~La pantalla de admin no tiene entrada en el menú lateral.~~ 🟢 **Hecha** (`3fbf2ca`). No fue una línea: el menú marca por prefijo y `/admin/tutores/actividad` encendía también «Tutores». Ahora gana el prefijo más largo, que además retira el apaño de `exact` para el siguiente caso | El detalle `/admin/tutores/<id>` sigue marcando «Tutores», que es lo que `exact` habría roto |
+| 2 | **El sembrado de dev no ejercita el placeholder:** las 15 mentorías tienen foto | Cualquier regresión futura en esa rama **no la va a ver nadie**. Merece una mentoría sin foto en el seed |
+| 3 | **`admin_gmv_weekly` y `admin_bookings_by_category` no revocan `execute` de `PUBLIC`** antes de su grant | **No es fuga** —la guarda `has_role('admin')` las corta— pero están a una guarda de serlo. Preexistente; su propia ficha, como `pair_has_booking` |
+| 4 | **El reembolso real sigue sin moverse.** El job se ejercitó en *simulacro*, no contra la fila real | Es el punto 2 de §19.10 y sigue abierto: encolar no es haber devuelto |
+| 5 | **La pantalla de admin no se ha mirado en el navegador**, solo servida y comprobadas sus cadenas | La fila usa `flex-wrap` con anchos fijos |
+
+---
+
+## 20.10 · Respuestas del cliente — 20 de agosto
+
+Ocho de las nueve preguntas de §20.3, contestadas. Con esto **el Lote 2 deja de estar bloqueado**.
+
+| # | Respuesta | Qué desbloquea |
+| :-- | :-- | :-- |
+| **P-1** | **Sí, el chat solo tras reservar. «La minuta manda.»** | **MN-06.** Marcha atrás consciente sobre M-12. Se hace con migración nueva sobre `open_conversation` — **no** revirtiendo `9305c1c` ni editando `20260817210000` |
+| **P-2** | **No quieren que el domicilio sea público.** No es un problema visual | **MN-10**, con reservas: ver el aviso de abajo |
+| **P-3** | **No se sabe qué URL se presentó a dLocal** | Nada. Sigue abierta y sigue siendo la pregunta que ningún merge arregla |
+| **P-4** | Hoy se pinta el **embed completo de Stripe**; solo quieren **los campos de la tarjeta** | **MN-01**, y confirma el escenario caro: es el resumen que Stripe pinta DENTRO del iframe → hay que cambiar de `ui_mode` |
+| **P-5** | Titular **opcional**, y **también** al guardar tarjeta | **MN-02** |
+| **P-6** | **7 días antes y 7 después.** Y **NO** aceptan que el tutor cobre más tarde | **MN-05**, y confirma el desacople: la ventana de acceso se amplía, el cierre de la sesión NO se mueve |
+| **P-7** | **Mentorías distintas** (quien compró dos veces la misma ve un 1). Contestada el 20-ago con el ejemplo de las tres cuentas | 🟢 **Cerrada.** Era la que ya se pintaba; se retiró el mapeo de `session_count`, que no lo leía nadie |
+| **P-8** | **25 MB** | **MN-11b** |
+| **P-9** | **Contestada el 20-ago:** la campaña se monta sobre **Referral Factory** (ya se está pagando) y **el descuento lo absorbe la plataforma** | Ver §20.12 |
+
+### ⚠️ Tres consecuencias que hay que decir antes de ejecutar
+
+**1 · P-2 no se cumple quitando la línea del pie.** El domicilio está en **tres** sitios: el pie,
+`/contacto` y el **§39 de los Términos**, en inglés y en español. Quitarlo del pie deja los otros dos.
+Y los Términos son el documento que redactó y firmó el cliente: no se tocan desde desarrollo.
+Además el domicilio es **DL-03**, uno de los datos que dLocal comprueba a mano contra su panel, y
+`lib/company.ts` avisa de que tienen que coincidir. **Hace falta una decisión explícita antes de
+tocar nada.**
+
+**2 · P-1 le quita casi todo el sentido a MN-07.** El valor de que el tutor mande el enlace de
+reserva por el chat es máximo **en la conversación previa a la compra**, que es justo la que P-1
+cierra. Con el chat post-reserva, el alumno ya reservó. Conviene confirmarlo antes de construirlo.
+
+**3 · P-6 encaja con lo ya hecho, y eso es una buena noticia.** Que el cierre de la sesión no se
+mueva evita de un plumazo el choque con el §12 del contrato (payouts a 7-14 días) y el agujero del
+§17 (cancelar al 50 % después de la clase). Y la sala abierta 7 días **no cuesta nada** en Daily
+—se factura por minuto-participante— ni firma credenciales largas, porque **MN-05a ya desacopló el
+token** (`05d1286`).
+
+---
+
+## 20.11 · Ruta de desarrollo — el orden previsto tras las respuestas del 20-ago
+
+Tres tandas. **Dentro de una tanda las fichas van en paralelo; entre tandas hay barrera.** El
+criterio de agrupación no es la prioridad: es **quién toca qué fichero** y **quién toca la base de
+datos**, porque una sola cosa puede ser dueña del esquema a la vez.
+
+### Tanda A · Lo de minutos — abre y cierra el mismo día
+
+| Ficha | Qué | Notas |
+| :-- | :-- | :-- |
+| **MN-15** | El titular del hero, `max-w-[910px]` → `960px` | Medido: las 8 palabras en 2 líneas y el corte de las otras siete **no se mueve**. ⚠️ El baile en móvil (3↔4 líneas) es otro problema y **no** lo arregla esto — decidir si se ataca ahora o se anota |
+| **MN-11b** | El tope del chat a **25 MB** | ⚠️ **Antes**: mirar en el panel de Supabase el tope global del proyecto. Si es menor que 25 MB, la migración pasa en verde y las subidas siguen fallando. Y el `update storage.buckets`, nunca el `insert … on conflict` |
+
+### Tanda B · Pagos — la más delicada, y la que el cliente quiere ver
+
+**MN-01 y MN-02 van juntos, en la misma pasada y del mismo agente.** No es una preferencia: los dos
+tocan los tres puntos de montaje del checkout, y `name_collection` (MN-02) hay que verificarlo
+**dentro** del `ui_mode` nuevo (MN-01) — hacerlos por separado obliga a ejercitar el camino del
+dinero dos veces.
+
+· **MN-01** — de `ui_mode: 'embedded_page'` a **`'form'`** con `<CheckoutForm/>` de
+  `@stripe/react-stripe-js/checkout`, que **ya está instalado**. Stripe pinta solo el formulario de
+  la tarjeta, sin su resumen del pedido, y acepta `appearance`. **Misma Checkout Session**, así que
+  webhook, idempotencia y X-02 no cambian. Se sigue en PCI SAQ A.
+· **MN-02** — `name_collection: { individual: { enabled: true, optional: true } }` en **los dos**
+  sitios que crean Session. ⚠️ Con la clave de idempotencia versionada, o al desplegar chocan los
+  checkouts ya abiertos.
+
+⚠️ **Se ejercita contra *test mode* de punta a punta, como L3-2** (§20.9): Session real → expirar →
+webhook firmado → webhook con firma falsa → alta de tarjeta. `tsc` no vale aquí y ya dejó pasar un
+400 una vez.
+⚠️ **Para que Jose pueda REVISARLO** hace falta `STRIPE_PUBLISHABLE_KEY` en Vercel. Sin ella se
+construye y se verifica en local, pero fuera de local el checkout es un 503.
+
+### Tanda C · Esquema — un solo dueño de la base de datos, y en este orden
+
+| Ficha | Qué | Notas |
+| :-- | :-- | :-- |
+| **MN-06** | El chat, solo tras reservar | Migración nueva con `create or replace` sobre `open_conversation`. **No** se revierte `9305c1c` ni se edita `20260817210000`. ⚠️ **No cerrar `send_conversation_message` a secas**: `send_message` delega en ella cuando el par no ha comprado, y cerrarla rompe el chat de un checkout a medias. ⚠️ **Falta una sub-decisión** (abajo) |
+| **MN-05** | La sala, 7 días antes y 7 después | Poblar `access_opens_at`/`access_closes_at` —que existen y están muertas— y **desacoplar `close_expired_sessions()`**, que NO se mueve: el cliente dijo que no acepta cobrar más tarde. Eso además evita el choque con el §12 y el agujero del §17 |
+
+Van las dos en la misma tanda y **secuenciadas**, no en paralelo: las dos escriben migración, y el
+orden `db:push` → `db:types` → frontend no admite dos manos.
+
+### Por qué este orden y no otro
+
+**A primero** porque son minutos y despeja el tablero. **B antes que C** porque el checkout es lo que
+el cliente ha señalado con una captura y lo que va a querer ver, y porque es la única tanda que se
+puede ejercitar entera hoy. **C al final** porque es la de superficie más irreversible —una purga con
+cascada y un cambio de ventana que toca el reloj del dinero— y porque le falta una respuesta.
+
+### Lo que sigue esperando, y a quién
+
+| Qué | A quién | Bloquea |
+| :-- | :-- | :-- |
+| **La sub-decisión de MN-06:** los hilos pre-compra que ya existen, ¿se quedan **visibles en solo lectura** hasta que la purga se los lleve a los 30 días, o se **borran los vacíos** en la propia migración? *(Los que tienen mensajes no se tocan: son datos de usuario.)* 🟢 Dato que la abarata: **en producción no hay ninguno** — M-12 nunca llegó a `main` | Jose / cliente | Tanda C |
+| **MN-07** — el enlace de reserva en el chat pierde casi todo el sentido con el chat post-reserva | Jose / cliente | MN-07 |
+| **MN-10** — el domicilio está en **tres** sitios; quitarlo del pie no lo hace privado, y es lo que dLocal comprueba a mano | Jose / Néstor | MN-10 |
+| **P-9** — quién absorbe el descuento | Cliente, vía Verónica | MN-14b |
+| **P-10** — el snippet de widget de Referral Factory | RF | MN-12 |
+| **P-3** — qué URL se presentó a dLocal | Cliente | MN-13, MN-03 |
+| `STRIPE_PUBLISHABLE_KEY`, `CRON_SECRET` y `APP_BASE_URL` | Jose (paneles) | Revisar la tanda B · que un reembolso mueva un euro |
+
+---
+
+## 20.12 · La campaña, tras la respuesta de P-9
+
+Dos respuestas, y la primera **cambia el tamaño del trabajo por un orden de magnitud**.
+
+**«Usamos Referral Factory, que ya lo pagamos».** Es el camino barato: el programa entero
+—invitaciones, seguimiento, calificación de referidos— vive en RF y el código del repo es **cero o
+casi cero**. Se acabó la épica del motor de promociones… **si el premio lo entrega RF** (efectivo,
+tarjeta regalo, lo que su panel permita).
+
+**«El descuento lo asume la plataforma».** Buena noticia técnica: significa que
+`bookings.tutor_net_amount` **no se toca**. El descuento sale de `platform_fee_amount`, así que el
+tutor cobra exactamente lo mismo con promoción que sin ella y **no hay que tocar el reparto de
+`create_booking`** — que era la parte cara y la que congela el snapshot financiero.
+
+### ⚠️ Pero queda una pregunta, y de ella depende que haya código o no
+
+**¿En qué consiste el premio?**
+
+- **Si RF lo entrega** (efectivo, tarjeta regalo, transferencia): **no hay nada que programar**. Se
+  configura la campaña en su panel, se rellena la plantilla de términos —hoy en blanco— y se dan de
+  alta `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel.
+- **Si el premio es un descuento en una mentoría de la plataforma**, RF **no puede aplicarlo**: no
+  llega a `create_booking`. Hay que construir el mínimo —código de promoción, canje y el descuento
+  saliendo de la comisión— aunque sea la versión barata por absorberlo la plataforma.
+
+### ⚠️ Y un límite aritmético que conviene decir antes de prometer un porcentaje
+
+Si la plataforma absorbe el descuento, **el descuento máximo sin perder dinero es su propia
+comisión**. Con los tiers actuales (75/85/90 para el tutor) la comisión es del **25 %, 15 % o 10 %**.
+Con un tutor al 85 %, un descuento del 20 % sobre una mentoría de 100 $ deja a la plataforma
+poniendo **5 $ de su bolsillo** en cada reserva, porque el tutor sigue cobrando sus 85 $.
+**Es sostenible solo si se decide a propósito.**
+
+### Lo que sigue sin resolverse de referidos
+
+- **P-10 · el embed sigue descartado.** Comprobado el 20-ago: la página de campaña de RF responde
+  `x-frame-options: SAMEORIGIN`. Que se pague RF no cambia su cabecera. Sigue haciendo falta pedirles
+  **su snippet de widget**.
+- ⚠️ **La atribución NO va por email**, pase lo que pase con la campaña. Cuatro documentos del repo
+  dicen que sí y **es falso** (§20.6): lo implementado es la cookie `ey-ref`, y
+  `REFERRAL_FACTORY_API_KEY` no se lee en ninguna línea de código. Si la campaña depende de atribuir
+  bien, ese trabajo **está entero por hacer** y no lo arregla pagar la suscripción.
+
+---
+
+## 20.13 · Cierre de la minuta — 20 de agosto
+
+**Los 6 puntos que se podían hacer sin esperar a nadie están hechos.** Todo en `dev`.
+`lint`, `typecheck`, `check:terms` y `build` en verde.
+
+| Punto | Commit |
+| :-- | :-- |
+| **MN-15** el titular no salta con «emprendimiento» | `7da1492` |
+| **MN-11b** adjuntos hasta 25 MB | `5ecd0aa` |
+| **MN-01 + MN-02** solo los campos de la tarjeta, titular opcional | `94f5d21` |
+| **MN-06** el chat exige haber reservado | `b786e38` |
+| **MN-05** la sala abre 7 días antes y después | `40156e8` |
+| **MN-10** el domicilio fuera del pie | `2703811` |
+
+### Lo que las revisiones evitaron, que es la parte útil
+
+| Qué | Dónde iba a doler |
+| :-- | :-- |
+| **«Lo alargado» reaparecía**: con el modo nuevo los campos se estiran, y en `/pagos` salían a **903px** | Es literalmente lo que MN-01 venía a quitar, en otra pantalla. Ahora 528 |
+| **El hero se rompía otra vez entre 1024 y 1065px** (iPad apaisado), y al revés de lo esperable: a 1023 dos líneas, a 1024 tres | Ensanchar la ventana empeoraba el titular |
+| **«Marcar completada» venía con la sala**: el tutor podía entrar 6 días antes, pulsar, y fijar `completed_at` | Es **el reloj de su propio payout**, justo lo que MN-05 existe para no mover |
+| **`exp` a 7 días desactivaba el tope de coste de Daily** | Una pestaña olvidada = ~10.000 minutos-participante facturados |
+| **El «7» estaba copiado en cuatro sitios** mientras la migración afirmaba ser el único | Cambiarlo dejaría la pantalla ofreciendo un botón que el servidor rechaza |
+
+### 🔴 Lo que NO está hecho
+
+| # | Qué | Por qué importa |
+| :-- | :-- | :-- |
+| 1 | **El alta de tarjeta no se ejercitó entera.** La URL de vuelta usa un placeholder que en el modo viejo sustituía Stripe; con el modo nuevo redirige el navegador y nadie ha comprobado que se siga sustituyendo | Si no, no sale el aviso «Tarjeta guardada» y la tarjeta no se marca reutilizable. **Un minuto**: guardar una tarjeta con `4242…` y mirar |
+| 2 | **Los hilos pre-compra caducan a los 30 días** aunque el cliente los quisiera visibles (ver MN-06) | Coincide con la retención publicada, así que es **decisión de producto**, no fallo |
+| 3 | **El domicilio sigue en `/contacto` y en el §39 de los Términos** | El cliente dijo «no público». Quitarlo del pie no lo hace privado — falta decidir los otros dos |
+| 4 | **El reembolso real sigue sin mover un euro** | Sigue siendo el punto 2 de §19.10, y pesa más que todo lo demás porque es dinero |
+| 5 | **Nada de esto está en producción** | `main` sigue en el commit del 29-jul |
+
+### Lo que queda de la minuta, y no depende de desarrollo
+
+**MN-04** (llamada tipo Meet, XL sin diseño) · **MN-03** y **MN-13** (esperan a dLocal, que espera
+al merge) · **MN-12** (RF no deja embeber: hace falta su snippet, P-10) · **MN-07** (el enlace en el
+chat perdió sentido al cerrar el chat pre-compra) · **MN-14b** (depende de qué sea el premio, §20.12).
+
+---
+
+## 20.14 · Los cuatro cambios del flujo reserva → checkout (21-ago)
+
+Cuatro peticiones con capturas delante. **Dos tienen un diagnóstico distinto al que parecía**, y una
+no se puede hacer como se pide.
+
+### 1 · «La segunda pantalla sobra» — tiene razón en el síntoma, no en la causa
+
+🔴 **La pantalla intermedia YA se salta para sesión suelta desde el 17-ago (N-33).** Lo que falla es
+que **hay dos caminos en la ficha del tutor y solo uno lleva la hora**:
+
+- **Pulsar un chip de hora** → va derecho al checkout. Funciona, un solo calendario.
+- **Pulsar «Reservar mentoría YA»** → va a `/reservar/<id>` **pelado, sin hora** → segundo calendario.
+
+Y hay un detalle de interfaz que empuja justo al camino malo: **el primer chip se pinta naranja de
+marca**, idéntico al estado «seleccionado» del resto de la app. El alumno ve «08:00» resaltado, cree
+que ya eligió, y baja al botón grande. Además los chips **son enlaces**, no controles de selección:
+elegir la hora y *luego* pulsar el botón es literalmente imposible.
+
+**Arreglo:** los chips pasan a seleccionar dentro de la ficha (la hora viaja en la URL como el día y
+la mentoría), el naranja solo marca la hora real elegida, y el botón grande lleva esa hora — con lo
+que sesión suelta va al checkout y paquete al selector, con la primera hora ya marcada.
+
+⚠️ **La pantalla NO se borra.** Es donde se eligen las N sesiones de un paquete, y el seed de dev
+tiene tres productos de 4, 8 y 4 sesiones. `create_booking` exige exactamente N horarios.
+
+🐛 **Y salió un bug que no veníamos a buscar: tres horizontes de fechas distintos** para los mismos
+huecos — la ficha publica **60 días**, el selector pide **21** y `create_booking` acepta **30**. Hoy
+la ficha ofrece horarios que la reserva rechaza, y el mensaje de error miente: dice «ya no está
+libre» cuando sí lo está.
+
+### 2 · El formulario de Stripe al llegar, sin perder la casilla
+
+**El nudo no es el botón, es la casilla:** «Guardar esta tarjeta» acaba en `setup_future_usage`, un
+parámetro que se fija **al crear la sesión de pago**. Si el formulario se monta al llegar, la sesión
+ya existe cuando el alumno marca la casilla.
+
+**Salida:** que la casilla la pinte **Stripe dentro de su formulario**
+(`saved_payment_method_options.payment_method_save`), que su documentación describe para
+exactamente nuestro modo. El consentimiento se mueve del momento «crear sesión» al momento
+«confirmar», que es donde tiene que estar.
+
+⚠️ **Pero esto arrastra algo grande, y hay que decirlo:** montar el formulario al llegar **obliga a
+crear la reserva al llegar**, y eso significa que **el horario del tutor se retiene por visita, no
+por intención**. Quien abra el checkout y se lo piense bloquea el hueco. El Doc 19 ya avisó de este
+choque (N-38 contra M-11): si se hace, **el contador visible de tiempo deja de ser deseable y pasa a
+ser obligatorio**.
+
+⚠️ Y un fallo que no caza el typecheck: **recargar la pantalla rompería la reserva**, porque
+`create_booking` comprueba que el hueco siga libre y **tu propia reserva te lo bloquea a ti mismo**.
+
+### 3 · La tarjeta rellenándose en vivo — se puede la mitad, y no la que parecía
+
+Los tipos instalados son taxativos. El evento existe (`CheckoutFormProps.onChange`), pero su payload
+trae `complete`, `empty` y `status.payment` — **y no trae `brand`, `last4`, ni la caducidad** del
+número que se está tecleando.
+
+- ❌ Los **dígitos**: imposible, y es la razón de ser de la arquitectura de pago (PCI-DSS SAQ A).
+- ❌ **La marca tampoco.** El logo de Mastercard que se ve en la captura lo pinta Stripe **dentro de
+  su iframe**; no nos llega.
+- ✅ **Sí se puede:** que la tarjeta reaccione —se ilumine al empezar a escribir, se marque completa
+  al terminar—, y que se rellene de verdad cuando el alumno usa una **tarjeta guardada**, porque
+  esos datos sí los tenemos (`last4`, marca y caducidad, del lado servidor).
+
+### 4 · Más detalle en el resumen — pero primero, un fallo
+
+🐛 **El checkout no usa la zona horaria del alumno** en las horas que pinta, mientras la pantalla
+hermana (`/reservas/[id]/pagar`) sí. O sea que puede estar enseñando **una hora distinta a la que se
+eligió**. Eso no es «más detalle»: es que el dato sea correcto, y va primero.
+
+Después, las líneas que de verdad quitan dudas antes de pagar: **hora de fin y duración**, **qué
+incluye el paquete y el precio por sesión**, **cuándo queda confirmada** (auto-aceptación o las 24 h
+de RN-38) y la política de cancelación **completa**.
+
+⚠️ Con dos frenos: los códigos internos (RN-xx) no se enseñan —se quitaron a propósito en M-06— y
+**el reparto con el tutor no se enseña jamás**: es información interna.
+
+### Las cuatro decisiones — **contestadas por el cliente el 20-ago, las cuatro que sí**
+
+| # | Pregunta | Bloquea |
+| :-- | :-- | :-- |
+| **D-1** | ✅ **Sí.** La tarjeta reacciona (se ilumina al escribir, se marca completa al terminar) y se rellena de verdad solo con tarjetas **guardadas**. Los dígitos y la marca de una tarjeta nueva **no aparecen nunca** | Punto 3 |
+| **D-2** | ✅ **Sí.** El horario se retiene al abrir el checkout, con contador visible. ⚠️ Efecto que salió después y conviene tener presente: **también se da de alta el Customer en Stripe por visita**, no por intención de pagar | Punto 2 |
+| **D-3** | ✅ **Sí.** La casilla la pinta y la redacta Stripe dentro de su formulario (`payment_method_save`) | Punto 2 |
+| **D-4** | ✅ **Sí.** El resumen cuenta la política entera: 100 % con 24 h o más, **50 % con menos** | Punto 4 |
+
+### Cierre — hecho y verificado en navegador (20-ago)
+
+| Qué | Commit |
+| :-- | :-- |
+| **Punto 1** · la hora elegida deja de perderse + los tres horizontes unificados | `d8d164b` |
+| **Puntos 2, 3 y 4** · formulario al llegar, tarjeta reactiva, resumen con detalle | `ab0705b` |
+
+**La revisión encontró siete cosas y tres eran serias.** Las tres nacieron del mismo sitio: al crear
+la reserva **al llegar**, el hold propio empezó a estorbar al propio alumno.
+
+| Hallazgo | Estado |
+| :-- | :-- |
+| **«Cambiar horario» era un callejón sin salida** — ibas al calendario y tu hora ya no estaba, porque la retenías tú | 🟢 Salir suelta el hold. Verificado: reserva `cancelled` con motivo, y el hueco reaparece en la RPC |
+| **La tarjeta ilustrada mentía** — seguía enseñando «•••• 4242» y su caducidad mientras tecleabas OTRO número | 🟢 Vuelve a genérica con rótulo «TARJETA NUEVA» |
+| **El selector prometía lo contrario** («el horario queda reservado al confirmar el pago») | 🟢 «Al continuar te guardamos el horario 20 minutos…», con el número desde `policy.ts` |
+| Volver atrás tras pagar acusaba de «horario no disponible» una reserva **ya pagada** | 🟢 |
+| D-4 solo en una de las dos pantallas de pago | 🟢 Política compartida |
+| Dos pestañas → mensaje crudo del índice de Postgres | 🟢 |
+| El Customer de Stripe se crea **por visita**, no por intención | 🟠 Consecuencia aceptada de D-2, anotada en el código |
+
+**Verificado en el navegador, no en el build:**
+· elegir la **segunda** hora → ese chip queda marcado y el CTA va directo al checkout · dos
+recargas → **una sola reserva, la misma** · «Cambiar horario» → hueco libre otra vez · contador
+corriendo (19:46 → 19:02) · el resumen con duración, rango horario y el 50 % · la hora en **zona del
+alumno** (Bogotá), la misma que se eligió.
+
+⚠️ **Lo que NO se ejercitó:** pagar de verdad con `4242…` hasta la confirmación, el caso de un alumno
+**con tarjeta guardada** (la tarjeta ilustrada tiene ahí su caso más delicado) y un **paquete** de
+punta a punta.
+
+---
+
+*Faim Lab · Doc 20 · Plan de acción sobre la minuta del 17-ago · 20 de agosto de 2026.*

@@ -1,12 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckIcon } from "lucide-react";
+import { CheckIcon, TriangleAlertIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { horasSemana, type Rule } from "@/lib/availability";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,16 +17,27 @@ import {
 import { TimezoneSelect } from "@/components/form/timezone-select";
 import {
   WizardShell,
+  WizardDone,
+  DoneChecklist,
   ChipGroup,
   Field,
   FIELD_CLASS,
+  useWizardStep,
+  useSaveOnExit,
 } from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
-import { VerificationForm, type DocState } from "../verification/verification-form";
+import { FirstProductForm } from "@/components/onboarding/first-product-form";
+import { AvailabilityManager } from "../availability/availability-manager";
+import {
+  VerificationForm,
+  type DocState,
+  type IdentityStatus,
+} from "../verification/verification-form";
 import type { SocialLink } from "@/lib/socials";
 import type { Database } from "@/lib/database.types";
 
 type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
+type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
 
 const LEVELS: { id: TeachingLevel; label: string }[] = [
   { id: "basico", label: "Básico" },
@@ -35,34 +45,66 @@ const LEVELS: { id: TeachingLevel; label: string }[] = [
   { id: "avanzado", label: "Avanzado" },
 ];
 
+// E.164: '+' + 7–15 dígitos, el primero no cero (RN-44). Es el mismo CHECK que
+// tiene `profiles.phone`; comprobarlo aquí cambia un "no se pudo guardar" seco
+// por un aviso que dice qué falta.
+const E164 = /^\+[1-9]\d{6,14}$/;
+
 /**
- * US-202 / UX-202 (SCR-TU01) — asistente de 5 pasos: perfil, categorías,
- * contacto, **verificación de identidad** (penúltimo, 24-jul) y primera oferta.
- * Los materiales de clase salieron a la creación de la oferta (R24-16).
+ * US-202 / UX-202 (SCR-TU01) — asistente de 6 pasos: perfil, categorías,
+ * contacto, **disponibilidad** (EY-183), **verificación de identidad**
+ * (penúltimo, 24-jul) y primera mentoría (N-03). Los materiales de clase
+ * salieron a la creación de la oferta (R24-16).
  *
  * Cada paso persiste al avanzar, así que "Guardar y salir" no necesita lógica
  * propia: lo escrito ya está guardado. `approval_status` NO se toca aquí (fuera
  * del column-grant, US-1403): el perfil nace y queda `pending`.
+ *
+ * ⚠️ **EY-183 · por qué la disponibilidad va DESPUÉS de la zona horaria y no
+ * antes.** Las franjas se guardan como hora de pared (`time`), y quien las
+ * interpreta es `get_available_slots` usando `profiles.timezone` del tutor. La
+ * columna trae `'UTC'` por defecto y esa zona solo se fija en el paso 3: puesto
+ * antes, un tutor de Caracas escribiría «9:00–13:00» y publicaría 05:00–09:00
+ * de su hora sin que nada se lo dijera. Es exactamente RV-03c contado al revés,
+ * así que el orden que pidió el cliente resulta ser además el único correcto.
+ *
+ * ⚠️ **Y por qué NO puede encerrar a nadie (RN-44).** `requireUser()` rebota a
+ * `/onboarding` mientras `onboarding_complete` sea false, con `/onboarding` y
+ * `/tutor/onboarding` como únicas excepciones, comparando el pathname PELADO
+ * (`middleware.ts:rutaActual` quita la query justo para eso, así que `?paso=4`
+ * no rompe la igualdad). El flag lo pone el paso 3 — antes de estos dos pasos
+ * nuevos—, de modo que a partir de aquí el guarda ya no redirige a nadie, y
+ * antes de aquí estamos en una ruta exenta. Ninguno de los dos pasos nuevos
+ * escribe en `profiles`, así que tampoco puede volver a apagarlo.
  */
 export function TutorOnboardingForm({
   userId,
   exists,
+  initialStep,
+  totalSteps,
   headline: headline0,
   bio: bio0,
-  fullName,
+  fullName: name0,
   avatarPath,
   avatarUrl,
   timezone: tz0,
   phone: phone0,
   level: level0,
   categories,
+  productCategories,
   selectedCategories,
   docsByType,
+  identityStatus,
   socials,
-  hasProduct,
+  productCount: productCount0,
+  rules,
+  rulesUsedBy,
 }: {
   userId: string;
   exists: boolean;
+  /** M-03: paso ya resuelto en servidor (URL → cookie → 1). */
+  initialStep: number;
+  totalSteps: number;
   headline: string;
   bio: string;
   fullName: string;
@@ -72,20 +114,47 @@ export function TutorOnboardingForm({
   phone: string;
   level: TeachingLevel | null;
   categories: { id: string; label: string }[];
+  /** Categorías ACTIVAS, que son las que puede llevar una mentoría (N-03). */
+  productCategories: { id: string; name: string }[];
   selectedCategories: string[];
   docsByType: Record<string, DocState>;
-  /** R29-02: redes/portafolio ya guardados; los edita el módulo del paso 4. */
+  /** Estado global de la verificación → checklist del paso 5 (N-10). */
+  identityStatus: IdentityStatus;
+  /** R29-02: redes/portafolio ya guardados; los edita el módulo del paso 5. */
   socials: SocialLink[];
-  /** UX-204: sin al menos una oferta creada, el asistente no se puede cerrar. */
-  hasProduct: boolean;
+  /** Mentorías ya creadas. EX-02: se puede posponer, pero sin ninguna el
+   *  perfil no se aprueba — el asistente lo dice, no lo bloquea. */
+  productCount: number;
+  /**
+   * EY-183 · franjas del paso 4. Llegan del servidor y NO suben a estado: el
+   * gestor guarda contra Supabase y llama a `router.refresh()`, que vuelve a
+   * pintar la página y baja esta prop ya actualizada. Duplicarlas en un
+   * `useState` daría dos verdades que se desincronizan al primer borrado.
+   */
+  rules: Rule[];
+  /** N-04 · `rule_id` → mentorías que la usan; el gestor avisa antes de borrar. */
+  rulesUsedBy: Record<string, string[]>;
 }) {
-  const router = useRouter();
-  const [step, setStep] = useState(1);
+  const { step, setStep, finish } = useWizardStep("tutor", initialStep);
   const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
   // `exists` viene del server y no se entera del INSERT del paso 1: sin este
   // estado, el paso 2 reintenta insertar la misma fila y choca contra la PK.
   const [hasProfile, setHasProfile] = useState(exists);
+  /**
+   * N-03 · El número de mentorías llegaba del servidor y era inmutable, así que
+   * al crear la oferta desde aquí el último paso seguía diciendo que no había
+   * ninguna. Sube a estado: es el asistente quien la crea.
+   */
+  const [productCount, setProductCount] = useState(productCount0);
+  /** "Añadir otra" reabre el formulario embebido sin salir del asistente. */
+  const [addingProduct, setAddingProduct] = useState(false);
 
+  // M-05 · El nombre viaja del alta al onboarding. Aquí faltaba: quien elige
+  // "quiero enseñar" al registrarse salta DIRECTO a este asistente sin pasar
+  // por el de alumno, así que sin este campo el tutor se quedaba sin nombre —
+  // y `display_name` (la vitrina pública, DD-01) sin nada que copiar.
+  const [fullName, setFullName] = useState(name0);
   const [headline, setHeadline] = useState(headline0);
   const [bio, setBio] = useState(bio0);
   const [avatar, setAvatar] = useState<string | null>(avatarPath);
@@ -98,6 +167,23 @@ export function TutorOnboardingForm({
   // que el cambio se aplica remontando el campo (`key`), que estando vacío no
   // pierde nada.
   const [country, setCountry] = useState(() => countryFromTimezone(tz0));
+
+  /*
+   * RV-03c · Este asistente NO proponía zona horaria y el de alumno sí, así que
+   * un tutor que no tocara el selector se guardaba con el `'UTC'` que trae por
+   * defecto la columna. Es la vía más probable por la que hay perfiles en
+   * `'UTC'` en la base, y de ahí salían las horas desplazadas de RV-03.
+   *
+   * Y aquí importa más que en el de alumno: `profiles.timezone` del tutor no es
+   * decorativa — `get_available_slots` interpreta en esa zona sus reglas de
+   * disponibilidad, así que un tutor guardado como UTC publica sus horas
+   * corridas. (Comprobado el 17-ago: ningún tutor APROBADO estaba así, o sea
+   * que nadie tiene hoy la agenda torcida. Esto evita que vuelva a pasar.)
+   *
+   * Se resuelve en la página con `getUserTimezone()` y llega ya en `tz0`, en
+   * vez de detectarla aquí: leer `Intl` durante el render daría un valor en el
+   * servidor y otro en el cliente, que es el desajuste de hidratación de RV-18.
+   */
   function pickTimezone(tz: string) {
     setTimezone(tz);
     if (!phone.trim()) setCountry(countryFromTimezone(tz) ?? country);
@@ -108,7 +194,7 @@ export function TutorOnboardingForm({
   /**
    * Perfil de vitrina: se reescribe entero en cada paso que lo toca.
    * `socials` NO se toca aquí (R29-02): lo escribe el módulo de verificación
-   * del paso 4, y pisarlo con `{}` desde el paso 1 borraría lo ya guardado.
+   * del paso 5, y pisarlo con `{}` desde el paso 1 borraría lo ya guardado.
    */
   async function saveProfile() {
     const payload = {
@@ -128,13 +214,64 @@ export function TutorOnboardingForm({
     return error;
   }
 
+  // ¿Las categorías elegidas difieren de las que trajo el servidor? El guardado
+  // las reemplaza en bloque (delete + insert), así que solo se toca si cambió.
+  const catsChanged =
+    cats.size !== selectedCategories.length ||
+    selectedCategories.some((id) => !cats.has(id));
+
+  /**
+   * M-03 · Lo que guarda "Guardar y salir" (ver `useSaveOnExit`): lo que haya
+   * en pantalla, sin exigir que el paso esté completo y sin avisos —el usuario
+   * ya se fue—. Descarta lo que rompería la base (`profiles.phone` tiene CHECK
+   * E.164).
+   */
+  async function guardarBorrador() {
+    if (done) return; // ya terminó: no hay borrador, hay perfil enviado
+
+    const patch: ProfileUpdate = { timezone };
+    if (fullName.trim()) patch.full_name = fullName.trim();
+    if (E164.test(phone.trim())) patch.phone = phone.trim();
+    await supabase.from("profiles").update(patch).eq("id", userId);
+
+    /*
+     * ⚠️ La fila de `tutor_profiles` NO se crea con el paso 1 en blanco. Es la
+     * que decide si sales de aquí siendo tutor: la pantalla de bienvenida solo
+     * aparece mientras no existe (`!tp`), y `pickHome({esTutor})` manda al
+     * panel de tutor a quien la tenga. Crearla porque alguien pulsó "Comenzar
+     * registro" y se arrepintió lo convertiría en tutor a medias sin haber
+     * escrito una línea.
+     */
+    if (hasProfile || headline.trim() || bio.trim() || avatar) {
+      await saveProfile();
+      if (catsChanged) {
+        await supabase.from("tutor_categories").delete().eq("tutor_id", userId);
+        const rows = [...cats].map((category_id) => ({ tutor_id: userId, category_id }));
+        if (rows.length > 0) await supabase.from("tutor_categories").insert(rows);
+      }
+    }
+  }
+
+  useSaveOnExit(guardarBorrador);
+
   async function next() {
     setBusy(true);
 
     if (step === 1) {
+      // M-05: el nombre es del USUARIO → va a `profiles`; `saveProfile` lo
+      // copia a `tutor_profiles.display_name`, que es lo que ve el catálogo.
+      if (!fullName.trim()) return fail("Escribe tu nombre.");
       if (!headline.trim()) return fail("Escribe un titular para tu perfil.");
       if (!avatar) return fail("La foto de perfil es obligatoria.");
       if (!bio.trim()) return fail("Escribe tu biografía.");
+      const { error } = await supabase
+        .from("profiles")
+        .update({ full_name: fullName.trim() })
+        .eq("id", userId); // RLS profiles_update_own limita a la fila propia.
+      if (error) return fail("No se pudo guardar tu nombre.");
+      // Espeja el nombre en el metadata de Auth → header/saludo sin query
+      // extra, igual que hace el asistente de alumno al terminar.
+      await supabase.auth.updateUser({ data: { full_name: fullName.trim() } });
       // La foto va SOLO a tutor_profiles (dentro de saveProfile): la foto de
       // tutor es independiente de la personal de `profiles` (R24-23).
       if (await saveProfile()) return fail("No se pudo guardar tu perfil.");
@@ -151,21 +288,37 @@ export function TutorOnboardingForm({
     }
 
     if (step === 3) {
-      if (!phone.trim()) return fail("El teléfono es obligatorio (RN-44).");
+      if (!E164.test(phone.trim())) {
+        return fail("Escribe tu teléfono completo, sin el código de país.");
+      }
       const { error } = await supabase
         .from("profiles")
-        .update({ timezone, phone: phone.trim() })
+        .update({
+          timezone,
+          phone: phone.trim(),
+          // Con esto el asistente de tutor cierra también el onboarding de
+          // CUENTA: son los mismos básicos que pedía el de alumno (RN-44), y
+          // sin marcarlo `requireUser` devolvería al tutor a /onboarding en
+          // cuanto saliera de aquí. La FOTO no se toca: la del alumno es
+          // independiente de la del tutor y se edita desde Mi cuenta.
+          onboarding_complete: true,
+        })
         .eq("id", userId);
       if (error) return fail("No se pudo guardar tu contacto.");
       if (await saveProfile()) return fail("No se pudo guardar.");
     }
 
+    // Los pasos 4 (disponibilidad) y 5 (verificación) no aparecen arriba a
+    // propósito, no por olvido: los dos montan módulos del panel que escriben
+    // por su cuenta al momento, así que aquí no hay nada que guardar ni nada
+    // que validar — «Continuar» solo avanza. Ver EY-183 y R24-15.
     setBusy(false);
 
-    if (step === 5) {
-      toast.success("¡Listo! Tu perfil pasó a revisión.");
-      router.push("/tutor");
-      router.refresh();
+    if (step === totalSteps) {
+      // M-03 · El asistente TERMINA aquí. Antes hacía `router.push("/tutor")`
+      // y el tutor aterrizaba en el menú sin señal de haber acabado.
+      finish(); // olvida el paso: volver a entrar ya no reabre el asistente
+      setDone(true);
       return;
     }
     setStep((s) => s + 1);
@@ -184,16 +337,95 @@ export function TutorOnboardingForm({
     return n;
   };
 
+  // M-03 · Cierre del asistente de tutor.
+  if (done) {
+    /*
+     * Lo que se pospuso, con SU consecuencia — que no es la misma en los dos
+     * casos y mezclarlas sería mentir:
+     *  · sin mentoría no hay aprobación (EX-02);
+     *  · sin franjas sí hay aprobación, pero nadie puede reservar
+     *    (`get_available_slots` no tiene de dónde sacar huecos).
+     * Un tutor aprobado, visible en el catálogo y con la agenda vacía es el
+     * peor de los dos finales, porque parece que todo fue bien.
+     */
+    const horas = horasSemana(rules);
+    const pendientes = [
+      productCount === 0
+        ? "Te falta tu primera mentoría. Puedes crearla cuando quieras desde «Mis mentorías», pero hasta que exista no podemos aprobar tu perfil."
+        : null,
+      rules.length === 0
+        ? "No has marcado ningún horario. Aunque aprobemos tu perfil, nadie podrá reservarte hasta que añadas al menos una franja en «Disponibilidad»."
+        : null,
+    ].filter((t) => t !== null);
+
+    return (
+      <WizardDone
+        title="¡Listo! Tu perfil pasó a revisión"
+        description="Revisamos tu expediente y te avisamos por correo. Mientras tanto puedes seguir preparando tus mentorías desde tu panel."
+        href="/tutor"
+      >
+        <DoneChecklist
+          items={[
+            `Perfil público a nombre de ${fullName.trim()}`,
+            `${cats.size} ${cats.size === 1 ? "categoría elegida" : "categorías elegidas"}`,
+            `Zona horaria: ${timezone} — tus horarios se publican en esta hora`,
+            horas
+              ? `Abres ${horas} a la semana`
+              : "Sin horarios todavía",
+            productCount > 0
+              ? `${productCount} ${productCount === 1 ? "mentoría creada" : "mentorías creadas"} (en borrador hasta que te aprobemos)`
+              : "Sin mentorías todavía",
+          ]}
+        />
+        {/* Los dos pasos opcionales se pueden posponer, y eso está bien; lo que
+            no puede es descubrirse semanas después, cuando el tutor se pregunte
+            por qué su revisión no avanza o por qué no le entra nadie. */}
+        {pendientes.length > 0 ? (
+          <div className="flex w-full gap-3 rounded-[16px] border border-[#f0d9a8] bg-[#fdf6e7] p-5">
+            <TriangleAlertIcon className="mt-0.5 size-4.5 shrink-0 text-[#9a6b00]" />
+            <div className="flex flex-col gap-2 text-[12.5px] text-[#7a5600]">
+              <strong className="font-semibold">
+                Antes de poder recibir alumnos:
+              </strong>
+              <ul className="flex list-disc flex-col gap-1.5 pl-4">
+                {pendientes.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : null}
+      </WizardDone>
+    );
+  }
+
   if (step === 1) {
     return (
       <WizardShell
         step={1}
-        total={5}
+        total={totalSteps}
         title="Crea tu perfil de tutor"
         description="Empecemos por lo básico. Esta info es parte de tu entrevista de ingreso."
         onNext={next}
         busy={busy}
       >
+        {/* M-05 · Va el primero: es el nombre con el que apareces en el
+            catálogo, y quien llegó aquí desde el alta como tutor no lo dio en
+            ningún otro sitio. */}
+        <Field
+          label="¿Cómo te llamas? (obligatorio)"
+          htmlFor="full_name"
+          hint="Es el nombre con el que te verán los alumnos."
+        >
+          <Input
+            id="full_name"
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            autoComplete="name"
+            placeholder="Ej: María Fernández"
+            className={FIELD_CLASS}
+          />
+        </Field>
         <Field label="Foto de perfil (obligatoria)">
           <AvatarUpload
             userId={userId}
@@ -231,7 +463,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={2}
-        total={5}
+        total={totalSteps}
         title="¿Qué enseñas?"
         description="Elige al menos una categoría. Podrás ajustarlas luego."
         onBack={back}
@@ -275,9 +507,9 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={3}
-        total={5}
+        total={totalSteps}
         title="Zona horaria y contacto"
-        description="Usamos tu zona horaria para mostrar tus horarios correctamente (RN-44)."
+        description="Usamos tu zona horaria para mostrar tus horarios correctamente."
         onBack={back}
         onNext={next}
         busy={busy}
@@ -304,15 +536,76 @@ export function TutorOnboardingForm({
     );
   }
 
-  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02
-  // (con su borrador / "enviar a revisión"). El asistente solo lleva a la
-  // siguiente pantalla; los documentos los guarda el propio módulo. Los
-  // materiales de clase salieron del onboarding a la oferta (R24-16).
+  /*
+   * EY-183 · Disponibilidad, justo después de la zona horaria.
+   *
+   * Monta el gestor del panel TAL CUAL (`/tutor/availability`), sin una
+   * variante «de onboarding». No es pereza: esa pantalla se rehízo entera el
+   * 7-ago por ser difícil de entender, y el acordeón —un solo día abierto— y el
+   * «copiar a lunes-viernes» son la respuesta a los dos problemas que se
+   * midieron allí. Una versión simplificada aquí volvería a tener los siete
+   * formularios abiertos que se quitaron, y encima en la pantalla donde el
+   * tutor ve esto por primera vez.
+   *
+   * Consecuencias de reusarlo, que hay que conocer:
+   *  · Guarda AL MOMENTO contra Supabase (no espera a «Continuar»), así que
+   *    este paso no valida ni persiste nada en `next()`.
+   *  · Refresca con `router.refresh()`. Aquí eso re-renderiza la página del
+   *    asistente, no la del panel; el estado del cliente (el paso, el nombre a
+   *    medio escribir) sobrevive porque `refresh` reconcilia, no remonta.
+   *
+   * Las EXCEPCIONES puntuales («la semana que viene no») se quedan fuera a
+   * propósito: son para cuando ya tienes agenda, no para montarla.
+   *
+   * OPCIONAL (misma decisión que EX-02 para la mentoría): «Continuar» nunca se
+   * bloquea. Un tutor que aún no ha decidido su horario semanal no puede
+   * quedarse encerrado en el alta por eso; lo que sí hace falta es que sepa qué
+   * pierde, y eso se dice aquí y otra vez en la pantalla de cierre.
+   */
   if (step === 4) {
     return (
       <WizardShell
         step={4}
-        total={5}
+        total={totalSteps}
+        title="¿Cuándo puedes dar clase?"
+        description={`Marca las franjas en las que estás disponible cada semana. Se guardan en tu zona horaria (${timezone}) y se muestran a cada alumno en la suya.`}
+        onBack={back}
+        onNext={next}
+        busy={busy}
+        maxWidth={760}
+      >
+        <AvailabilityManager
+          userId={userId}
+          rules={rules}
+          usedBy={rulesUsedBy}
+        />
+
+        {rules.length === 0 ? (
+          <p className="text-[13px] text-[#4d4d4d]">
+            Puedes dejarlo para luego y pulsar «Continuar», pero ten en cuenta
+            que mientras no tengas ninguna franja nadie podrá reservarte, aunque
+            aprobemos tu perfil. Se cambia cuando quieras desde
+            «Disponibilidad».
+          </p>
+        ) : (
+          <p className="text-[13px] text-[#6b6b6b]">
+            Podrás afinarlo desde «Disponibilidad», donde además se marcan los
+            días sueltos que no puedes (vacaciones, un festivo…).
+          </p>
+        )}
+      </WizardShell>
+    );
+  }
+
+  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02
+  // (con su borrador / "enviar a revisión"). El asistente solo lleva a la
+  // siguiente pantalla; los documentos los guarda el propio módulo. Los
+  // materiales de clase salieron del onboarding a la oferta (R24-16).
+  if (step === 5) {
+    return (
+      <WizardShell
+        step={5}
+        total={totalSteps}
         title="Verifica tu identidad"
         description="Sube tus documentos con el mismo módulo de tu panel. Guárdalos como borrador y continúa; puedes terminar cuando quieras."
         onBack={back}
@@ -325,65 +618,85 @@ export function TutorOnboardingForm({
           userId={userId}
           docsByType={docsByType}
           socials={socials}
+          identityStatus={identityStatus}
+          hasAvatar={!!avatar}
+          productCount={productCount}
+          // La mentoría es el paso SIGUIENTE de este mismo asistente: el
+          // checklist muestra su estado pero no manda a crearla fuera, que es
+          // exactamente el salto que hay que evitar aquí (N-03).
+          inWizard
         />
       </WizardShell>
     );
   }
 
-  // UX-204: no se cierra el asistente sin una oferta. El CTA deja de ser
-  // opcional y "Finalizar" queda bloqueado hasta que exista al menos una.
+  /*
+   * N-03 · La primera mentoría se crea AQUÍ DENTRO.
+   *
+   * Antes esto eran dos `<Link>` a `/tutor/products/new`: el tutor salía del
+   * asistente y aterrizaba en el panel del tutor, donde ya no había ni rastro
+   * del asistente ni de "vuelve a terminar" — "quien se sale ahí no vuelve".
+   *
+   * Y "Finalizar" ya NO se bloquea (EX-02): el tutor puede posponer su primera
+   * mentoría; lo que no puede es que le aprueben el perfil sin ella. Eso se
+   * dice —aquí y en la pantalla de cierre— en vez de dejarle un botón muerto
+   * cuya causa no se ve.
+   */
+  const mostrarFormulario = productCount === 0 || addingProduct;
   return (
     <WizardShell
-      step={5}
-      total={5}
-      title="Tu primera oferta"
+      step={totalSteps}
+      total={totalSteps}
+      title="Tu primera mentoría"
       description={
-        hasProduct
+        productCount > 0
           ? "Ya tienes tu primera mentoría creada. Puedes finalizar tu registro."
-          : "Necesitas al menos una mentoría publicable para enviar tu perfil a revisión."
+          : "Créala sin salir de aquí. Lo básico basta: podrás completarla y publicarla desde tu panel."
       }
       onBack={back}
       onNext={next}
       nextLabel="Finalizar"
-      nextDisabled={!hasProduct}
       busy={busy}
     >
-      {/* 186:119 — texto, CTA azul a lo ancho y la nota de revisión. */}
-      {hasProduct ? (
+      {productCount > 0 ? (
         <>
           <p className="flex items-center gap-2 text-[13px] font-medium text-success">
             <CheckIcon className="size-4" />
-            Tienes una oferta creada.
+            {productCount === 1
+              ? "Tienes una mentoría creada."
+              : `Tienes ${productCount} mentorías creadas.`}
           </p>
-          <Button
-            asChild
-            variant="outline"
-            className="h-[45px] w-full rounded-[8px] text-sm"
-          >
-            <Link href="/tutor/products/new">Crear otra oferta</Link>
-          </Button>
+          {!addingProduct ? (
+            <Button
+              variant="outline"
+              onClick={() => setAddingProduct(true)}
+              className="h-[45px] w-full rounded-[8px] text-sm"
+            >
+              Añadir otra mentoría
+            </Button>
+          ) : null}
         </>
       ) : (
-        <>
-          <p className="text-[13px] text-[#4d4d4d]">
-            Crea una oferta con su resultado, precio y disponibilidad. Sin ella
-            tu perfil no puede pasar a revisión.
-          </p>
-          <Button
-            asChild
-            className="h-[45px] w-full rounded-[8px] bg-brand text-sm font-semibold hover:bg-brand/90"
-          >
-            <Link href="/tutor/products/new">
-              Crear mi primera oferta
-            </Link>
-          </Button>
-          {/* Al volver de crearla, el asistente arranca de nuevo: los datos ya
-              están guardados, así que es avanzar hasta aquí. */}
-          <p className="text-xs text-[#6b6b6b]">
-            Cuando la guardes, vuelve a este asistente para finalizar.
-          </p>
-        </>
+        // EX-02: la salida por arriba existe y se nombra, para que posponer sea
+        // una decisión y no un abandono.
+        <p className="text-[13px] text-[#4d4d4d]">
+          Sin al menos una mentoría no podemos aprobar tu perfil. Si prefieres
+          dejarlo para luego, pulsa «Finalizar»: tu perfil se envía igual y
+          quedará marcado como incompleto hasta que la crees.
+        </p>
       )}
+
+      {mostrarFormulario ? (
+        <FirstProductForm
+          userId={userId}
+          categories={productCategories}
+          onCreated={() => {
+            setProductCount((n) => n + 1);
+            setAddingProduct(false);
+          }}
+        />
+      ) : null}
+
       <p className="text-xs text-[#6b6b6b]">
         Al finalizar, tu perfil pasa a revisión.
       </p>

@@ -6,8 +6,10 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import {
   BOOKING_STATUS_LABEL,
+  SESSION_STATUS_LABEL,
   formatSessionTime,
-  tutorNames,
+  tutorCards,
+  bookingFormatLabel,
 } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import {
@@ -18,25 +20,32 @@ import {
   StatusPill,
 } from "@/components/layout/panel-shell";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { TutorSummary } from "@/components/tutor-summary";
+import { RecordingLink } from "@/components/room/recording-link";
+import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/lib/database.types";
+import { roomOpen } from "@/lib/room-window";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
-const SESSION_LABEL: Record<string, string> = {
-  scheduled: "Programada",
-  in_progress: "En curso",
-  completed: "Completada",
-  cancelled: "Cancelada",
-  no_show: "No asistió",
-};
-
-const ROOM_BOOKING = new Set<BookingStatus>(["confirmed", "in_progress"]);
+/**
+ * MN-05 · Reservas cuya sala puede abrirse. `completed` entra porque el cron
+ * cierra la reserva a los 10 min de acabar la clase y la sala sigue viva 7 días:
+ * sin ella, el botón desaparecería justo cuando MN-05 dice que tiene que estar.
+ * Misma lista, palabra por palabra, que la guarda de `join_session`.
+ */
+const ROOM_BOOKING = new Set<BookingStatus>([
+  "confirmed",
+  "in_progress",
+  "completed",
+]);
 const CHAT_BOOKING = new Set<BookingStatus>([
   "confirmed",
   "in_progress",
   "completed",
 ]);
+
 const CANCELLABLE = new Set<BookingStatus>([
   "pending_payment",
   "pending_acceptance",
@@ -64,7 +73,14 @@ export default async function BookingDetailPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id), sessions(id, start_at, status), payments(status, gross_amount, currency, paid_at, refunded_amount)",
+      // N-27 · `session_ref` es el "N.º de sesión" visible (`7K3M9Q-2`). Se pide
+      // aquí y no se deriva: se calcula en la BD al insertar la sesión
+      // (`20260817140000`) y componerlo otra vez en el cliente es la forma de
+      // que un día deje de coincidir con el que el alumno tiene apuntado.
+      // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
+      // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
+      // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
+      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at), payments(status, gross_amount, currency, paid_at, refunded_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -78,8 +94,13 @@ export default async function BookingDetailPage({
   const payment = booking.payments;
   const chatOpen = CHAT_BOOKING.has(booking.status);
 
-  const names = await tutorNames(supabase, [booking.products?.tutor_id]);
-  const tutor = names.get(booking.products?.tutor_id ?? "");
+  // V-6 · aquí se pinta la ficha del tutor, no solo su nombre: esta es LA
+  // pantalla de la queja («tras reservar no hay forma de llegar al tutor»).
+  // `fichas` puede venir vacío si le retiraron la aprobación — `TutorSummary`
+  // sabe qué hacer con eso y no enlaza a un 404.
+  const fichas = await tutorCards(supabase, [booking.products?.tutor_id]);
+  const ficha = fichas.get(booking.products?.tutor_id ?? "");
+  const tutor = ficha?.displayName ?? undefined;
 
   // El hilo solo se carga si el chat aplica: para una reserva cancelada sería
   // una consulta a cambio de nada.
@@ -111,15 +132,37 @@ export default async function BookingDetailPage({
     <PanelShell back={{ href: "/app", label: "Volver al panel" }}>
       <div className="flex flex-col gap-1.5">
         {tutor ? <p className="text-[13px] text-[#6b6b6b]">con {tutor}</p> : null}
-        <h1 className="text-[26px] font-bold tracking-tight text-[#19191f]">
-          {booking.products?.title ?? "Clase"}
+        {/* B1.4 · El título, a dos líneas como mucho.
+            A 26 px y 375 px de ancho, uno de 38 caracteres ya ocupa dos líneas
+            y el más largo del catálogo —«Química Orgánica e Intermedia:
+            Descifra la Ciencia Detrás del Mundo Real»— ocupa cuatro. Cuatro
+            líneas de titular empujan las sesiones y el pago fuera de la
+            pantalla en la única vista donde el alumno viene a mirarlos.
+
+            `line-clamp-2` y no un tope de caracteres, aunque la ficha lo pida
+            así: un número fijo recorta igual a 375 px que a 2560, o sea que o
+            deja texto colgando o corta cuando sobraba sitio. El clamp corta
+            solo cuando de verdad no cabe.
+
+            ⚠️ Y ESTO ROZA UNA DECISIÓN ANTERIOR, así que va dicho: N-12 dejó
+            escrito en el detalle del TUTOR que «truncar el nombre de la
+            mentoría sería esconder justo el dato que se vino a mirar». Sigue
+            siendo verdad, y por eso el texto completo no desaparece: está en el
+            `title`, en el `<title>` de la pestaña y en la miga. Lo que se
+            recorta es cuánto ESPACIO ocupa, no el dato.
+
+            El del tutor NO se toca: allí es `text-base` (16 px) dentro de una
+            tarjeta y con `break-words`, así que no llega a hacer de muro. */}
+        <h1
+          className="line-clamp-2 text-[26px] font-bold tracking-tight text-[#19191f]"
+          title={booking.products?.title ?? undefined}
+        >
+          {booking.products?.title ?? "Mentoría"}
         </h1>
         <div className="flex flex-wrap items-center gap-2.5">
           <StatusPill>{BOOKING_STATUS_LABEL[booking.status]}</StatusPill>
           <p className="text-[13px] text-[#6b6b6b]">
-            {booking.num_sessions === 1
-              ? "Sesión suelta"
-              : `Paquete de ${booking.num_sessions} sesiones`}
+            {bookingFormatLabel(booking.num_sessions)}
             {booking.session_duration_min
               ? ` · ${booking.session_duration_min} min`
               : ""}
@@ -150,22 +193,37 @@ export default async function BookingDetailPage({
                       <p className="text-[13px] text-[#6b6b6b] first-letter:uppercase">
                         {formatSessionTime(s.start_at, tz)} · tu hora local
                       </p>
+                      {/* N-27 · el número que se dicta por teléfono. NO es un
+                          código interno de los que barre M-06: los `RN-xx` y
+                          `US-xx` no significan nada para un alumno, este lo pidió
+                          el cliente para poder seguir una clase y su cobro. El
+                          "Sesión 1 · 2 · 3" de arriba se queda porque es el
+                          ordinal dentro del paquete y sigue valiendo para las
+                          reservas anteriores a la migración, que no tienen
+                          número (`SessionRef` devuelve null y no pinta nada). */}
+                      <SessionRef nro={s.session_ref} className="mt-1" />
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <StatusPill>
-                        {SESSION_LABEL[s.status] ?? s.status}
+                        {SESSION_STATUS_LABEL[s.status] ?? s.status}
                       </StatusPill>
                       {/* El gate real de la ventana (RN-18) lo pone el server;
-                          la sala muestra la cuenta regresiva. */}
-                      {ROOM_BOOKING.has(booking.status) &&
-                      (s.status === "scheduled" ||
-                        s.status === "in_progress") ? (
+                          la sala muestra la cuenta regresiva. Aquí solo se
+                          decide si enseñar el botón. */}
+                      {ROOM_BOOKING.has(booking.status) && roomOpen(s) ? (
                         <Button
                           asChild
                           className="h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
                         >
                           <Link href={`/room/${s.id}`}>Entrar a sala</Link>
                         </Button>
+                      ) : null}
+                      {/* US-1802 · la grabación vive 30 días desde la clase. El
+                          nº de sesión viaja con el botón: una grabación se
+                          reclama por correo ("la de la 7K3M9Q-2") y el uuid de
+                          la URL no sirve para eso. */}
+                      {s.status === "completed" ? (
+                        <RecordingLink sessionId={s.id} nroSesion={s.session_ref} />
                       ) : null}
                     </div>
                   </li>
@@ -205,6 +263,31 @@ export default async function BookingDetailPage({
                 PSP real. */}
           </PanelCard>
 
+          {/* La reserva existe pero nunca se cobró: sin esto el horario se
+              quedaba retenido y lo único ofrecido era cancelarla (12-ago).
+
+              N-37 · el formulario de Stripe ya NO se monta aquí dentro. Cobrar
+              en mitad de la ficha —con cabecera, menú lateral, pie y chat
+              alrededor— era la segunda experiencia de pago del producto, y el
+              cliente pidió justo lo contrario: «el checkout tiene que estar lo
+              más aislado posible». El botón lleva a `/reservas/<id>/pagar`, que
+              comparte layout con el checkout de una reserva nueva. */}
+          {booking.status === "pending_payment" ? (
+            <PanelCard>
+              <PanelCardTitle>Termina tu pago</PanelCardTitle>
+              <p className="mt-3.5 text-sm text-[#6b6b6b]">
+                Tu horario está reservado, pero el pago quedó a medias. La
+                reserva se libera sola si no se completa.
+              </p>
+              <Button
+                asChild
+                className="mt-3.5 h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
+              >
+                <Link href={`/reservas/${booking.id}/pagar`}>Pagar ahora</Link>
+              </Button>
+            </PanelCard>
+          ) : null}
+
           <PanelCard>
             <PanelCardTitle>Política de cancelación</PanelCardTitle>
             <p className="mt-3.5 text-sm text-[#6b6b6b]">
@@ -241,6 +324,12 @@ export default async function BookingDetailPage({
             </PanelCard>
           ) : null}
         </div>
+
+        {/* V-6 · Encima del chat y no debajo: quien abre esta pantalla para
+            escribirle primero quiere saber a quién. Sin `chatHref` — el hilo
+            está justo aquí abajo, y un botón «Escribirle» que baja tres
+            centímetros es ruido. */}
+        <TutorSummary tutor={ficha} />
 
         <PanelCard className="flex flex-col gap-3">
           <PanelCardTitle className="text-base">

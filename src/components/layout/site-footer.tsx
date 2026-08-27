@@ -2,8 +2,15 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
+import { COMPANY, COMPANY_SOCIALS } from "@/lib/company";
 
-/** Columnas de v3-footer. Los enlaces sin página propia todavía dan 404 (ver docs/BACKLOG.md §4.2). */
+/**
+ * Columnas de v3-footer.
+ *
+ * ⚠️ Los tres enlaces de LEGAL existen en `dev` pero **todavía no en `main`**:
+ * hasta que se mergee, el pie de producción los enlaza y devuelven 404. Es lo
+ * primero que ve un revisor de dLocal.
+ */
 const columns = [
   {
     title: "PRODUCTO",
@@ -18,6 +25,7 @@ const columns = [
     links: [
       { href: "/about", label: "Sobre nosotros" },
       { href: "/how-it-works", label: "¿Cómo funciona?" },
+      { href: "/contacto", label: "Contacto" },
     ],
   },
   {
@@ -30,11 +38,18 @@ const columns = [
   },
 ];
 
-const social = [
-  { href: "https://instagram.com/ensenameya", label: "Instagram" },
-  { href: "https://linkedin.com/company/ensenameya", label: "LinkedIn" },
-  { href: "https://x.com/ensenameya", label: "X" },
-];
+/**
+ * RV-18 · El año se calcula UNA vez al cargar el módulo, no en cada render.
+ *
+ * Parece un componente de servidor —lo es en el layout público— pero en `(app)`
+ * lo monta `app-chrome.tsx`, que es `"use client"`, y un módulo importado desde
+ * un módulo de cliente entra al bundle de cliente. O sea que ese `new Date()`
+ * corría en el SSR y otra vez al hidratar: desajuste garantizado en el cambio
+ * de año, y el patrón exacto que produce el React #418 que se ve en `/app`.
+ *
+ * A nivel de módulo se congela por proceso, que para un año es de sobra.
+ */
+const AÑO = new Date().getFullYear();
 
 export function SiteFooter() {
   return (
@@ -50,13 +65,51 @@ export function SiteFooter() {
               className="h-[60px] w-auto"
             />
             <p className="mt-2 text-[13px] text-muted-foreground">
-              Conectamos el conocimiento y la pasión con tutorías en vivo 1 - 1
+              Conectamos el conocimiento y la pasión con mentorías en vivo 1 - 1
               con expertos verificados. El espacio donde lo que YA sabes vale
               oro, y lo que quieres aprender se logra YA.
             </p>
+
+            {/* DL-02 y DL-03 · dLocal Go revisa el sitio a mano y busca dos
+                cosas en el pie: quién es el prestador y cómo se le escribe.
+                Hasta hoy el único dato de contacto del sitio entero vivía
+                dentro de los términos, en el §11, como texto sin enlazar: para
+                verlo había que entrar y bajar. Los datos salen del §39 del
+                contrato — ver `lib/company.ts`.
+
+                ⚠️ **El domicilio ya no se pinta aquí** (MN-10). Estaba, junto a
+                la razón social y el EIN, porque es DL-03; se quitó el 20-ago
+                por **decisión expresa del cliente** (P-2): preguntado si la
+                molestia era cómo se veía o publicar el domicilio, respondió que
+                lo segundo, y que se retirara **solo del pie**. O sea que no es
+                un descuido de maquetación: si vuelves a ponerlo «porque lo pide
+                dLocal», estás deshaciendo la decisión.
+
+                Y no lo hace privado: el domicilio **sigue publicado** en
+                `/contacto` y en el §39 de los Términos, en inglés y en español.
+                Por eso `COMPANY.address` y `COMPANY_ADDRESS_LINE` siguen en
+                `lib/company.ts` — borrarlos allí rompería el contrato.
+
+                ⚠️ **Y el EIN tampoco se pinta ya** (V-8, 24-ago). Misma
+                historia y misma frontera: el cliente lo quiere fuera **de la
+                web**, no del contrato. `COMPANY.taxIdLabel` y `COMPANY.taxId`
+                se quedan en `lib/company.ts` porque el §39 de
+                `terms-content.ts` los interpola en los dos idiomas; borrarlos
+                allí rompe por tipos el contrato ya firmado. Sacarlo del §39
+                está pendiente de Néstor, y sube `TERMS_VERSION`. */}
+            <address className="mt-5 text-[12.5px] leading-relaxed not-italic text-muted-foreground">
+              <span className="font-medium text-foreground">
+                {COMPANY.legalName}
+              </span>
+            </address>
           </div>
 
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
+          {/* US-1601: en tablet el bloque de texto se quedaba con sus 592 px y
+              dejaba las tres columnas a ~18 px, así que "Privacidad" se salía
+              de la pantalla y toda la página cogía scroll horizontal. Con
+              `shrink-0` los enlaces conservan su ancho y lo que cede es el
+              párrafo, que para eso es texto fluido. */}
+          <div className="grid shrink-0 grid-cols-2 gap-8 sm:grid-cols-3">
             {columns.map((column) => (
               <nav key={column.title} aria-label={column.title}>
                 <p className="text-[11px] font-semibold tracking-wide text-brand">
@@ -82,20 +135,39 @@ export function SiteFooter() {
         <hr className="mt-8 border-t border-primary" />
 
         <div className="flex flex-col gap-2 pt-4 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} Enséñame Ya</p>
-          <nav className="flex gap-4" aria-label="Redes sociales">
-            {social.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                target="_blank"
-                rel="noreferrer"
-                className="transition-colors hover:text-brand"
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
+          <p>© {AÑO} {COMPANY.brand}</p>
+
+          <div className="flex flex-wrap items-center gap-4">
+            {/* `mailto:` y no texto plano: en móvil un correo que no se puede
+                pulsar es medio canal, y dLocal comprueba que el contacto sea
+                accesible de verdad. */}
+            <a
+              href={`mailto:${COMPANY.email}`}
+              className="font-medium text-foreground transition-colors hover:text-brand"
+            >
+              {COMPANY.email}
+            </a>
+
+            {/* Hoy `COMPANY_SOCIALS` está vacío a propósito: los tres enlaces
+                que había se dedujeron del nombre de la marca y no llevaban a
+                ningún perfil. Ver la nota en `lib/company.ts`. En cuanto el
+                cliente mande las URL reales, esto se pinta solo. */}
+            {COMPANY_SOCIALS.length > 0 && (
+              <nav className="flex gap-4" aria-label="Redes sociales">
+                {COMPANY_SOCIALS.map((item) => (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="transition-colors hover:text-brand"
+                  >
+                    {item.label}
+                  </a>
+                ))}
+              </nav>
+            )}
+          </div>
         </div>
       </Container>
     </footer>

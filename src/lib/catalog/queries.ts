@@ -2,6 +2,8 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
+import { parseFaqs, type Faq } from "@/lib/tutor-faqs";
+import { stripAccents } from "./format";
 
 /**
  * Consultas del catálogo público (EP-03). Todo pasa por el cliente ANON + RLS:
@@ -11,8 +13,15 @@ import type { Database } from "@/lib/database.types";
  */
 
 type PricingModel = Database["public"]["Enums"]["pricing_model"];
+/** DD-03 · el nivel de la mentoría reusa el enum del nivel del tutor. */
+export type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
 
-export type CategoryTag = { slug: string; name: string };
+export type CategoryTag = {
+  slug: string;
+  name: string;
+  /** Clave del icono en la paleta del frontend; nulo = genérico. */
+  icon?: string | null;
+};
 
 export type TutorCardData = {
   id: string;
@@ -49,15 +58,26 @@ export type ProductCardData = {
   /** Ruta en el bucket público `product-images` (DD-02). */
   imagePath: string | null;
   categories: CategoryTag[];
+  /** DD-03 — de la mentoría; `null` en las que se publicaron antes del campo. */
+  level: string | null;
+  language: string | null;
   /** Solo lo rellena el listado de P05; `null` donde no se consultó. */
   tutor?: ProductTutor | null;
 };
 
 export type ProductDetail = ProductCardData & {
   description: string | null;
-  tutor: ProductTutor & { bio: string | null };
+  tutor: ProductTutor & {
+    bio: string | null;
+    /**
+     * EY-194 · FAQ del TUTOR, las mismas en todas sus mentorías. Llegan
+     * separadas de las de la mentoría a propósito: la ficha las pinta en orden
+     * (primero las de esta mentoría) y ese orden se pierde si se fusionan aquí.
+     */
+    faqs: Faq[];
+  };
   /** FAQ propias de la mentoría (R24-17); vacío = se muestran las genéricas. */
-  faqs: { q: string; a: string }[];
+  faqs: Faq[];
 };
 
 const PAGE_SIZE = 12;
@@ -83,6 +103,8 @@ function mapProductCard(r: {
   session_duration_min: number | null;
   package_num_sessions: number | null;
   image_path: string | null;
+  level?: string | null;
+  language?: string | null;
   product_categories: { categories: CategoryTag | null }[] | null;
 }): ProductCardData {
   return {
@@ -95,6 +117,8 @@ function mapProductCard(r: {
     sessionDurationMin: r.session_duration_min,
     packageNumSessions: r.package_num_sessions,
     imagePath: r.image_path,
+    level: r.level ?? null,
+    language: r.language ?? null,
     categories: toCategoryTags(r.product_categories),
   };
 }
@@ -134,7 +158,12 @@ export async function listActiveCategories(): Promise<CategoryTag[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("categories")
-    .select("slug, name")
+    .select("slug, name, icon")
+    // `is_active` explícito y no sólo por RLS: la política pública filtra por
+    // él, pero `categories_select_admin` deja al admin verlas TODAS — así que
+    // un admin navegando el catálogo público veía también las desactivadas,
+    // y el resto del mundo no. Lo que se enseña no puede depender de quién mira.
+    .eq("is_active", true)
     .order("sort_order");
   return data ?? [];
 }
@@ -212,11 +241,54 @@ export type AvailabilityFilter = "today" | "week" | "weekend";
  *  tutor, y ordenar por él rompería la paginación (pide DD-04 / `EY-114`). */
 export type TutorSort = "rating" | "reviews";
 
+/**
+ * DD-04 · "Inversión por clase" de P04: **rango continuo**, no tramos fijos
+ * (decisión de Jose en EY-114). Los extremos que ofrece el deslizador salen de
+ * los datos, no de una constante — ver `tutorPriceBounds`.
+ *
+ * Filtra por el **precio de entrada**, que es el mismo "Desde $18" que enseña
+ * la tarjeta: la mentoría activa más barata del tutor. Lo calcula la vista
+ * `tutors_public` en Postgres, así que aquí es un `gte`/`lte` normal y el
+ * rango, la paginación y el `count` los resuelve el motor.
+ *
+ * Los tutores sin producto activo tienen `price_from` nulo y quedan fuera en
+ * cuanto se toca el filtro: no tienen precio de entrada que comparar.
+ */
+export async function tutorPriceBounds(): Promise<{ min: number; max: number } | null> {
+  const supabase = await createClient();
+  // Dos consultas de UNA fila (order + limit 1); PostgREST no agrega sin RPC y
+  // montar una función para esto sería más pieza que problema.
+  const [{ data: barato }, { data: caro }] = await Promise.all([
+    supabase
+      .from("tutors_public")
+      .select("price_from")
+      .not("price_from", "is", null)
+      .order("price_from", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("tutors_public")
+      .select("price_from")
+      .not("price_from", "is", null)
+      .order("price_from", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  if (barato?.price_from == null || caro?.price_from == null) return null;
+  return { min: barato.price_from, max: caro.price_from };
+}
+
 /** US-301 — tutores aprobados, filtrables por categoría y rating, paginados. */
 export async function listApprovedTutors(opts: {
   categorySlug?: string;
   minRating?: number;
   availability?: AvailabilityFilter;
+  /** DD-04 · extremos del rango en unidades menores (inclusivos). */
+  minPrice?: number;
+  maxPrice?: number;
+  /** DD-03 · "Idioma del tutor" (386:1006): el de las clases que publica. */
+  language?: string;
   sort?: TutorSort;
   page: number;
 }): Promise<{ tutors: FeaturedTutor[]; hasMore: boolean; total: number }> {
@@ -256,21 +328,48 @@ export async function listApprovedTutors(opts: {
     if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
   }
 
+  // DD-03 · "Idioma del tutor" del Figma. No hay columna de idioma en el
+  // tutor: se deriva de las clases que publica, que es lo que el alumno
+  // pregunta de verdad ("¿da clases en inglés?").
+  if (opts.language) {
+    const { data } = await supabase
+      .from("products")
+      .select("tutor_id")
+      .eq("status", "active")
+      .eq("language", opts.language);
+    const speak = [...new Set((data ?? []).map((r) => r.tutor_id))];
+    tutorIds = tutorIds ? tutorIds.filter((id) => speak.includes(id)) : speak;
+    if (tutorIds.length === 0) return { tutors: [], hasMore: false, total: 0 };
+  }
+
+  // La vista trae el precio de entrada ya resuelto por Postgres (DD-04), así
+  // que el filtro de precio es un `gte`/`lte` más: nada que reducir en memoria,
+  // y el `count` sigue siendo el del conjunto filtrado.
   let base = supabase
-    .from("tutor_profiles")
+    .from("tutors_public")
     .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count", {
       count: "exact",
     })
     .eq("approval_status", "approved");
   if (tutorIds) base = base.in("profile_id", tutorIds);
   if (opts.minRating) base = base.gte("rating_avg", opts.minRating);
+  // Los extremos son inclusivos: el deslizador enseña el número que el usuario
+  // ve, y un tutor que cueste exactamente el tope tiene que entrar.
+  if (opts.minPrice != null) base = base.gte("price_from", opts.minPrice);
+  if (opts.maxPrice != null) base = base.lte("price_from", opts.maxPrice);
 
   const orderBy = opts.sort === "reviews" ? "rating_count" : "rating_avg";
   const { data, count } = await base
     .order(orderBy, { ascending: false, nullsFirst: false })
     .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 
-  const rows = data ?? [];
+  // Postgres no declara NOT NULL en las columnas de una vista, así que los
+  // tipos generados las dan todas nullable aunque vengan de columnas que no lo
+  // son. Se estrecha aquí, en el borde, en vez de esparcir el `| null` por toda
+  // la UI: `profile_id` es la PK de `tutor_profiles` y el `from` de la vista.
+  const rows = (data ?? [])
+    .filter((r): r is typeof r & { profile_id: string } => r.profile_id !== null)
+    .map((r) => ({ ...r, rating_count: r.rating_count ?? 0 }));
   const hasMore = rows.length > PAGE_SIZE;
   return {
     tutors: await withProductFacts(rows.slice(0, PAGE_SIZE)),
@@ -288,7 +387,9 @@ export async function listFeaturedTutors(limit = 4): Promise<FeaturedTutor[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("tutor_profiles")
-    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
+    .select(
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
+    )
     .eq("approval_status", "approved")
     .order("rating_avg", { ascending: false, nullsFirst: false })
     .limit(limit);
@@ -315,7 +416,7 @@ export async function getTutorDetail(
   const { data: prods } = await supabase
     .from("products")
     .select(
-      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))",
+      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name, icon))",
     )
     .eq("tutor_id", id)
     .eq("status", "active")
@@ -343,19 +444,21 @@ export type TutorReview = {
   rating: number;
   comment: string | null;
   createdAt: string;
+  /** Firma del alumno si consintió publicarla (decisión 18); si no, null. */
+  author: string | null;
 };
 
 /**
- * US-902 — reseñas públicas del tutor. Se muestran sin nombre del alumno: el
- * perfil es público (cliente anon) y `profiles.full_name` está protegido por
- * RLS, así que atribuirlas a un nombre no es posible sin romper esa barrera.
- * Anónimas es, además, una elección razonable de privacidad para el MVP.
+ * US-902 — reseñas públicas del tutor. Van **anónimas salvo consentimiento**:
+ * el perfil es público (cliente anon) y `profiles` está cerrado por RLS, así
+ * que el nombre no se lee de ahí — es la copia enmascarada que `submit_review`
+ * guarda en la propia reseña cuando el alumno acepta firmarla (decisión 18).
  */
 export async function listTutorReviews(tutorId: string): Promise<TutorReview[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("reviews")
-    .select("id, rating, comment, created_at")
+    .select("id, rating, comment, created_at, author_display")
     .eq("tutor_id", tutorId)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -365,6 +468,7 @@ export async function listTutorReviews(tutorId: string): Promise<TutorReview[]> 
     rating: r.rating,
     comment: r.comment,
     createdAt: r.created_at,
+    author: r.author_display,
   }));
 }
 
@@ -377,7 +481,7 @@ export async function getProductDetail(
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, tutor_id, product_categories(categories(slug, name))",
+      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, level, language, tutor_id, product_categories(categories(slug, name, icon))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -387,7 +491,19 @@ export async function getProductDetail(
   // El tutor debe estar aprobado (RLS ya lo exige para que el producto salga).
   const { data: tutor } = await supabase
     .from("tutor_profiles")
-    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
+    // ⚠️ `faqs` va SOLO aquí, y esa exclusividad es deliberada. Este mismo
+    // `select` aparece en `listFeaturedTutors` y en `searchTutors`, y en los
+    // dos la fila acaba en `withProductFacts`, que mapea campo a campo y NUNCA
+    // lee la columna: pedirla allí sería bajar un jsonb sin tope de tamaño —la
+    // migración `20260826150000` solo comprueba que sea una lista— para tirarlo.
+    // Y `searchTutors` cuelga del typeahead, que dispara con cada pulsación de
+    // cualquier visitante anónimo. El typecheck no protege de esto: las
+    // propiedades de más se admiten al pasar la variable, así que si se añade
+    // una columna a un `select` de listado nadie se entera. Este comentario es
+    // la única barrera.
+    .select(
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, faqs",
+    )
     .eq("profile_id", p.tutor_id)
     .eq("approval_status", "approved")
     .maybeSingle();
@@ -404,13 +520,14 @@ export async function getProductDetail(
     sessionDurationMin: p.session_duration_min,
     packageNumSessions: p.package_num_sessions,
     imagePath: p.image_path,
+    level: p.level,
+    language: p.language,
     categories: toCategoryTags(p.product_categories),
-    // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
-    faqs: Array.isArray(p.faqs)
-      ? (p.faqs as { q?: unknown; a?: unknown }[])
-          .filter((f) => typeof f?.q === "string" && typeof f?.a === "string")
-          .map((f) => ({ q: f.q as string, a: f.a as string }))
-      : [],
+    // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}. El parseo es
+    // el MISMO que el de las FAQ del tutor (EY-194) a propósito: las dos listas
+    // se concatenan al pintar y una diferencia de criterio se vería como
+    // preguntas que aparecen o desaparecen según de dónde vengan.
+    faqs: parseFaqs(p.faqs),
     tutor: {
       id: tutor.profile_id,
       displayName: tutor.display_name,
@@ -419,6 +536,7 @@ export async function getProductDetail(
       bio: tutor.bio,
       ratingAvg: tutor.rating_avg,
       ratingCount: tutor.rating_count,
+      faqs: parseFaqs(tutor.faqs),
     },
   };
 }
@@ -456,6 +574,9 @@ export async function listActiveProducts(opts: {
   maxPriceMinor?: number;
   minSessions?: number;
   maxSessions?: number;
+  /** DD-03 · nivel e idioma DE LA MENTORÍA (filtros de P05/P06). */
+  level?: TeachingLevel;
+  language?: string;
   sort?: ProductSort;
   page: number;
 }): Promise<{
@@ -485,7 +606,7 @@ export async function listActiveProducts(opts: {
   let base = supabase
     .from("products")
     .select(
-      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))",
+      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, level, language, product_categories(categories(slug, name, icon))",
       { count: "exact" },
     )
     .eq("status", "active");
@@ -499,6 +620,10 @@ export async function listActiveProducts(opts: {
   if (opts.maxSessions) {
     base = base.lte("package_num_sessions", opts.maxSessions);
   }
+  // DD-03: quien no lo rellenó no aparece bajo ningún nivel ni idioma. Es lo
+  // correcto — un filtro no debe colar lo que no sabe si encaja.
+  if (opts.level) base = base.eq("level", opts.level);
+  if (opts.language) base = base.eq("language", opts.language);
 
   const { data, count } =
     opts.sort === "price_asc" || opts.sort === "price_desc"
@@ -543,15 +668,6 @@ export async function listActiveProducts(opts: {
 }
 
 /**
- * Quita tildes y diacríticos (EY-109). El lado almacenado ya viene sin ellos
- * (`f_unaccent` en la migración `20260721120000`), así que normalizar aquí el
- * término hace que "matematicas" y "Matemáticas" busquen lo mismo.
- */
-function stripAccents(q: string): string {
-  return q.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
-
-/**
  * Deja el término apto para un patrón `ilike`: fuera los comodines `%`/`_`,
  * para que el usuario no controle el patrón, y sin acentos.
  */
@@ -588,7 +704,9 @@ export async function searchTutors(
 
   let query = supabase
     .from("tutor_profiles")
-    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count")
+    .select(
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
+    )
     .eq("approval_status", "approved")
     .ilike("search_text", `%${term}%`);
   if (tutorIds) query = query.in("profile_id", tutorIds);
@@ -640,7 +758,30 @@ export async function suggestSearch(q: string): Promise<SearchSuggestions> {
 }
 
 const PRODUCT_CARD_SELECT =
-  "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name))";
+  "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name, icon))";
+
+/**
+ * RV-17 · cuánto pesa que el término esté en el TÍTULO.
+ *
+ * Las tres ramas de `searchProducts` buscan contra `search_vector`/`search_text`,
+ * que son título **y** descripción pegados: `?q=calculo` devolvía "Álgebra y
+ * Cálculo desde cero" (bien) al mismo nivel que "Finanzas para emprendedores",
+ * que solo menciona "cálculo" de pasada en su cuerpo. No es un falso positivo
+ * —el alumno puede querer encontrarla— pero no puede salir por delante de la
+ * que lo lleva en el nombre.
+ *
+ * 3 = el término entero en el título · 2 = todas sus palabras · 1 = alguna ·
+ * 0 = solo casa por el cuerpo.
+ */
+function tituloScore(title: string, termino: string, palabras: string[]): number {
+  const t = stripAccents(title).toLowerCase();
+  if (termino && t.includes(termino)) return 3;
+  // Con `palabras` vacío (término de 1-2 letras) `every` daría `true` sobre la
+  // lista vacía y TODO puntuaría 2: el guard evita ese empate falso.
+  if (palabras.length === 0) return 0;
+  if (palabras.every((w) => t.includes(w))) return 2;
+  return palabras.some((w) => t.includes(w)) ? 1 : 0;
+}
 
 /**
  * US-303 — búsqueda por texto en productos (título+descripción, RN-20).
@@ -743,8 +884,30 @@ export async function searchProducts(
       }
     }
   }
+
+  // RV-17 · el título por delante del cuerpo. Se reordena AQUÍ y no en SQL a
+  // propósito: llevar el ranking a Postgres es tocar `search_vector` /
+  // `search_text`, y ese arreglo (EY-109, migraciones `20260727120000` y
+  // `20260727130000`) costó dos intentos — no se mueve por una cuestión de
+  // orden. Son ≤4 ramas de PAGE_SIZE filas, ya traídas.
+  //
+  // El desempate es el índice de llegada, explícito y no confiando en que
+  // `sort` sea estable: dentro del mismo peso sigue mandando la relevancia del
+  // tsvector, y la rama sin acentos y la difusa quedan detrás, que es el orden
+  // en que llegaron.
+  const termino = plain.toLowerCase();
+  const palabras = [
+    ...new Set(termino.split(/\s+/).filter((w) => w.length >= 3)),
+  ];
+  const ordenados = [...seen.values()]
+    .map((p, i) => ({ p, i, peso: tituloScore(p.title, termino, palabras) }))
+    .sort((a, b) => b.peso - a.peso || a.i - b.i)
+    .map((x) => x.p);
+
+  // El corte va DESPUÉS de ordenar: cortando antes, una coincidencia de título
+  // que llegó por la rama difusa se perdía sin llegar a subir.
   // La tarjeta de P09 firma con el tutor: hay que traerlo.
-  return withTutors([...seen.values()].slice(0, PAGE_SIZE));
+  return withTutors(ordenados.slice(0, PAGE_SIZE));
 }
 
 /** Cifras de la home (P01). La RPC agrega en vivo; los países se derivan de la
@@ -791,7 +954,7 @@ export async function listTestimonials(limit = 7): Promise<Testimonial[]> {
   }));
 }
 
-/** Índice de categorías: cada una con cuántas tutorías activas tiene.
+/** Índice de categorías: cada una con cuántas mentorías activas tiene.
  *  Una sola consulta al puente + recuento en memoria; con ~10 categorías y el
  *  volumen del MVP no hace falta agregación en BD. */
 export async function listCategoriesWithCounts(): Promise<
@@ -821,20 +984,63 @@ export async function listCategoriesWithCounts(): Promise<
   }));
 }
 
+/**
+ * Hasta dónde llega la agenda que se PUBLICA. **Un solo número para todo el
+ * cliente**, y no es una preferencia estética: los mismos huecos se pintaban con
+ * tres ventanas distintas y eso era un bug con cara de mentira.
+ *
+ *   · la ficha pública pedía **60 días**;
+ *   · el selector de `/reservar/<id>` no pasaba rango y caía al default de la
+ *     RPC, **21 días**;
+ *   · `create_booking` revalida contra `current_date + 30` antes de escribir.
+ *
+ * Resultado: la vitrina ofrecía horarios del día +45 que la reserva rechazaba, y
+ * el error mentía —«algún horario ya no está disponible»— cuando el hueco estaba
+ * libre y el problema era la fecha. Y por el otro lado, un hueco del día +25 era
+ * reservable pero invisible en el selector.
+ *
+ * Se elige **30 = el límite que la base de datos YA acepta**, no un número nuevo:
+ * bajar la vitrina no necesita migración y ninguna reserva que hoy funciona deja
+ * de funcionar. Subir el tope de `create_booking` habría sido tocar dinero y
+ * disponibilidad para enseñar tres semanas más de agenda que casi nadie reserva.
+ *
+ * ⚠️ El default de la RPC sigue siendo 21 y **no se toca** (regla de oro 5: la
+ * migración está aplicada). Se neutraliza por el otro lado: **todo llamador pasa
+ * el rango explícito**, así que ese default no se alcanza desde el cliente. Si
+ * añades una llamada a `get_available_slots`, pásale `rangoPublicado()` — si la
+ * dejas sin rango vuelves a tener dos verdades, y esta vez en silencio.
+ *
+ * Y si algún día hay que subirlo: se cambia AQUÍ **y** en `create_booking`, con
+ * migración nueva. Cambiar solo uno reabre exactamente este bug.
+ */
+export const HORIZONTE_RESERVA_DIAS = 30;
+
+/**
+ * Rango `date` que espera `get_available_slots`, en el mismo huso en el que
+ * Postgres evalúa `current_date` (UTC en Supabase) — por eso el corte se hace
+ * con `toISOString()` y no con la fecha local del servidor de Next: un `new
+ * Date().getDate()` en Vercel y el `current_date` de la BD no siempre son el
+ * mismo día, y ahí se cuela el hueco fantasma del borde.
+ */
+export function rangoPublicado(days = HORIZONTE_RESERVA_DIAS) {
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const hoy = new Date();
+  return {
+    p_from: iso(hoy),
+    p_to: iso(new Date(hoy.getTime() + days * 86400000)),
+  };
+}
+
 /** P07 · huecos libres de un producto para pintar el calendario público.
  *  `get_available_slots` ya descuenta reglas, excepciones y sesiones ocupadas. */
 export async function listProductSlots(
   productId: string,
-  days = 60,
+  days = HORIZONTE_RESERVA_DIAS,
 ): Promise<{ start: string; end: string }[]> {
   const supabase = await createClient();
-  const today = new Date();
-  const to = new Date(today.getTime() + days * 86400000);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
   const { data } = await supabase.rpc("get_available_slots", {
     p_product_id: productId,
-    p_from: iso(today),
-    p_to: iso(to),
+    ...rangoPublicado(days),
   });
   return (data ?? []).map((s) => ({ start: s.slot_start, end: s.slot_end }));
 }

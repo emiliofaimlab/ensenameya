@@ -5,12 +5,14 @@ import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
 import { BookingRow } from "@/components/booking-row";
+import { EmptyResults } from "@/components/catalog/empty-results";
 import {
   PanelCard,
   PanelCardTitle,
   PanelShell,
 } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
+import { categoriesWithOffer } from "../app/sugerencias";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Mis reservas · Enséñame Ya" };
@@ -48,8 +50,27 @@ export default async function ReservasPage() {
     bookings.map((b) => b.products?.tutor_id),
   );
 
+  /**
+   * V-6 · El «con Fulanito» de cada fila lleva ahora a su ficha pública — hasta
+   * hoy era texto muerto y, comprada la mentoría, no había forma de volver al
+   * tutor.
+   *
+   * ⚠️ Solo si es legible, y `names` YA es esa comprobación: `tutorNames` sale
+   * de `tutor_profiles`, que solo se lee con `approval_status = 'approved'`. A
+   * un tutor desaprobado no se le enlaza — su ficha daría un 404 desde el panel
+   * del propio alumno. Ver `tutorCards`.
+   */
+  const perfilDelTutor = (id: string | null | undefined) =>
+    id && names.has(id) ? `/tutors/${id}` : undefined;
+
   const open = bookings.filter((b) => OPEN.has(b.status));
   const closed = bookings.filter((b) => !OPEN.has(b.status));
+
+  // RV-11 · las burbujas del estado vacío. Se piden SOLO cuando no hay ninguna
+  // reserva: son dos consultas más, y en la pantalla que sí tiene reservas
+  // nadie las vería. Van con oferta filtrada porque mandar al alumno a una
+  // categoría sin mentorías es el mismo callejón del que se le quiere sacar.
+  const conOferta = bookings.length === 0 ? await categoriesWithOffer() : [];
 
   /** La sesión que representa a la reserva: la próxima viva, o la última. */
   const when = (b: (typeof bookings)[number]) => {
@@ -69,7 +90,8 @@ export default async function ReservasPage() {
       key={b.id}
       href={`/reservas/${b.id}`}
       tutor={names.get(b.products?.tutor_id ?? "")}
-      title={b.products?.title ?? "Clase"}
+      tutorHref={perfilDelTutor(b.products?.tutor_id)}
+      title={b.products?.title ?? "Mentoría"}
       when={when(b)}
       timeZone={tz}
       status={BOOKING_STATUS_LABEL[b.status]}
@@ -93,18 +115,25 @@ export default async function ReservasPage() {
           Mis reservas
         </h1>
         <p className="mt-1 text-[13px] text-[#6b6b6b]">
-          El estado de tus clases y sus horarios.
+          El estado de tus mentorías y sus horarios.
         </p>
       </div>
 
       {bookings.length === 0 ? (
+        // RV-11 · el mismo estado vacío del catálogo, no otro inventado aquí:
+        // frase + salida + categorías reales. Antes era un párrafo y un botón a
+        // /tutors, o sea "busca tú" — que en una lista vacía es justo el hueco
+        // que hay que evitar.
         <PanelCard>
-          <p className="text-[13px] text-[#6b6b6b]">
-            Aún no tienes reservas. Explora tutores y reserva tu primera clase.
-          </p>
-          <Button asChild className="mt-4 h-10">
-            <Link href="/tutors">Explorar tutores</Link>
-          </Button>
+          <PanelCardTitle className="text-[22px]">
+            Aún no tienes reservas
+          </PanelCardTitle>
+          <EmptyResults
+            className="mt-3"
+            message="Cuando reserves una mentoría, aquí verás su estado, su horario y su total."
+            action={{ href: "/classes", label: "Ver las mentorías disponibles" }}
+            categories={conOferta}
+          />
         </PanelCard>
       ) : null}
 

@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { DropdownDismiss } from "@/components/layout/dropdown-dismiss";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { TimezoneSync } from "@/components/layout/timezone-sync";
 
 // Única familia del diseño: Poppins en los 4 pesos que usan las 3.691 capas de texto del Figma.
 const poppins = Poppins({
@@ -20,7 +21,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Enséñame Ya",
-  description: "Marketplace de tutorías 1:1 en vivo entre alumnos y tutores.",
+  description: "Marketplace de mentorías 1:1 en vivo entre alumnos y tutores.",
 };
 
 export default function RootLayout({
@@ -44,6 +45,14 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+          {/* RV-03 · Deja la zona del navegador en la cookie `ey-tz` para que el
+              servidor pinte los horarios en la hora de quien mira (R24-22).
+              Vive AQUÍ y no en el layout público —donde estaba— porque las
+              pantallas con horarios que más importan están en `(app)`:
+              /reservas, /reservas/[id] y los dos onboardings. Montado solo en lo
+              público, quien iniciaba sesión y entraba directo a su panel no
+              dejaba nunca la cookie, y el servidor caía a UTC. */}
+          <TimezoneSync />
           <DropdownDismiss />
           <Toaster />
         </ThemeProvider>

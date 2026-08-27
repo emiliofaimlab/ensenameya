@@ -22,7 +22,7 @@ import { getHomeStats, listTestimonials } from "@/lib/catalog/queries";
 export const metadata = {
   title: "Sobre nosotros · Enséñame Ya",
   description:
-    "Conectamos a quien quiere aprender con quien sabe enseñar: tutorías 1:1 en vivo, con tutores verificados y enfoque en el resultado.",
+    "Conectamos a quien quiere aprender con quien sabe enseñar: mentorías 1:1 en vivo, con tutores verificados y enfoque en el resultado.",
 };
 
 /** Las 4 tarjetas de "En qué creemos". Las fotos salen del propio Figma; el
@@ -58,37 +58,54 @@ export default async function AboutPage() {
 
   return (
     <>
-      {/* Hero de P02: degradado azul (el mismo asset que la banda de P01), ola
-          clara al pie y la alumna recortada encima. */}
-      <section className="relative isolate overflow-hidden bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% text-white sm:h-[846px]">
+      {/* Hero de P02 (386:404, 1280×846): degradado azul, ola clara y la alumna
+          recortada por el borde inferior. */}
+      <section className="relative isolate overflow-hidden bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% text-white lg:h-[846px]">
+        {/* Capa decorativa anclada a la rejilla de 1280 del Figma, igual que en
+            P03. La ola NO es del ancho del hero: mide 1712 y arranca 113px por
+            fuera del borde izquierdo (386:405), así que estirarla a 1280 le
+            cambiaba la curva. */}
         <div
           aria-hidden
-          className="absolute inset-x-0 bottom-0 -z-10 h-[58%] bg-[url('/img/about-wave.svg')] bg-cover bg-bottom bg-no-repeat"
-        />
-        <Container className="flex flex-col items-center pt-16 text-center sm:pt-20">
-          <h1 className="max-w-[842px] text-3xl font-semibold text-balance sm:text-[64px] sm:leading-[1.05]">
-            {/* "Conectamos" va en Poppins Light Italic, como "talento" en P01. */}
+          className="pointer-events-none absolute inset-0 -z-10 mx-auto hidden max-w-[1280px] lg:block"
+        >
+          <Image
+            src="/img/about-wave.svg"
+            alt=""
+            width={1672}
+            height={525}
+            className="absolute top-[359px] -left-[113px] w-[1712px] max-w-none"
+          />
+        </div>
+
+        <Container className="flex flex-col items-center pt-16 text-center lg:pt-[76px]">
+          {/* "Conectamos" va en Poppins Light Italic, como "talento" en P01.
+              Interlineado 60 sobre 64 (386:407): más apretado que el normal. */}
+          <h1 className="max-w-[842px] text-3xl font-semibold text-balance sm:text-[64px] sm:leading-[0.94]">
             <em className="font-light">Conectamos</em> a quien quiere aprender
             con quien sabe enseñar
           </h1>
-          <p className="mt-6 max-w-[700px] text-pretty text-[17px] font-medium text-white/90">
+          <p className="mt-[30px] max-w-[700px] text-pretty text-[17px] leading-6 font-medium text-white/90">
             Enséñame Ya nació para garantizar que dominar un nuevo idioma,
             materia o habilidad sea una experiencia emocionante y efectiva.
-            Consigue resultados reales de la mano de expertos que potencian tu
+            Aprende de forma práctica de la mano de expertos que potencian tu
             talento.
           </p>
         </Container>
 
-        {/* En el Figma la foto empieza a 268px del techo del hero y el borde
-            inferior la recorta: por eso el hero tiene alto fijo. */}
-        <Image
-          src="/img/about-hero-alumna.png"
-          alt=""
-          width={651}
-          height={816}
-          priority
-          className="mx-auto mt-2 h-auto w-[420px] max-w-full sm:absolute sm:top-[268px] sm:left-1/2 sm:mt-0 sm:w-[560px] sm:-translate-x-1/2"
-        />
+        {/* 386:406 — 651×816 a x=339 del borde izquierdo de la rejilla: NO va
+            centrada, cae 24px a la derecha del eje. El borde inferior del hero
+            la recorta, que es para lo que el hero tiene alto fijo. */}
+        <div className="pointer-events-none mx-auto max-w-[1280px] lg:absolute lg:inset-0">
+          <Image
+            src="/img/about-hero-alumna.png"
+            alt=""
+            width={651}
+            height={816}
+            priority
+            className="mx-auto mt-2 h-auto w-[420px] max-w-full lg:absolute lg:top-[268px] lg:left-[339px] lg:mx-0 lg:mt-0 lg:w-[651px] lg:max-w-none"
+          />
+        </div>
       </section>
 
       <TrustCards title="Reserva con tranquilidad garantizada" />
@@ -100,7 +117,7 @@ export default async function AboutPage() {
           {
             icon: UserIcon,
             text: "Mentoría 1 a 1",
-            desc: "Clases totalmente personalizadas y adaptadas a tu propio ritmo de aprendizaje.",
+            desc: "Mentorías totalmente personalizadas y adaptadas a tu propio ritmo de aprendizaje.",
           },
           {
             icon: TargetIcon,
@@ -113,16 +130,16 @@ export default async function AboutPage() {
             desc: "Tú decides cuándo y con quién conectarte con total libertad y flexibilidad.",
           },
         ]}
-        cta={{ href: "/tutors", label: "Explorar tutorías", variant: "outline" }}
+        cta={{ href: "/tutors", label: "Explorar mentorías", variant: "outline" }}
         image={{
           src: "/img/about-mission.jpg",
-          alt: "Alumna tomando una clase en vivo",
+          alt: "Alumna tomando una mentoría en vivo",
         }}
         badge={
           stats
             ? {
                 value: compactCount(stats.sessions),
-                label: "clases impartidas",
+                label: "mentorías impartidas",
                 position: "bottom-left",
               }
             : undefined
@@ -137,7 +154,7 @@ export default async function AboutPage() {
           {
             icon: TargetIcon,
             text: "Resultados asegurados",
-            desc: "Cada tutoría detalla con precisión la meta real que vas a conquistar.",
+            desc: "Cada mentoría detalla con precisión la meta real que vas a conquistar.",
           },
           {
             icon: ShieldCheckIcon,
