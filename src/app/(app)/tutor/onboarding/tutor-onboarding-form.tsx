@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { CheckIcon, TriangleAlertIcon } from "lucide-react";
 
@@ -32,6 +32,7 @@ import {
   VerificationForm,
   type DocState,
   type IdentityStatus,
+  type VerificationSave,
 } from "../verification/verification-form";
 import type { SocialLink } from "@/lib/socials";
 import type { Database } from "@/lib/database.types";
@@ -59,6 +60,15 @@ const E164 = /^\+[1-9]\d{6,14}$/;
  * Cada paso persiste al avanzar, así que "Guardar y salir" no necesita lógica
  * propia: lo escrito ya está guardado. `approval_status` NO se toca aquí (fuera
  * del column-grant, US-1403): el perfil nace y queda `pending`.
+ *
+ * ⚠️ **Un solo par de botones manda: «Atrás» y «Continuar».** Los pasos montan
+ * módulos del panel (disponibilidad, verificación) y el de verificación traía
+ * los suyos —«Guardar borrador» y «Guardar y enviar a revisión»—, así que el
+ * paso 5 llegó a tener CUATRO controles y ninguno decía cuál avanzaba. Dentro
+ * del asistente manda el paso: si un módulo nuevo trae botón de guardar, se
+ * apaga aquí dentro y lo dispara «Continuar» (patrón: `saveRef`). Los botones
+ * que CREAN algo —«Añadir franja», «Crear mi primera mentoría»— sí se quedan:
+ * no son la misma intención que avanzar, y «Continuar» nunca los exige.
  *
  * ⚠️ **EY-183 · por qué la disponibilidad va DESPUÉS de la zona horaria y no
  * antes.** Las franjas se guardan como hora de pared (`time`), y quien las
@@ -149,6 +159,23 @@ export function TutorOnboardingForm({
   const [productCount, setProductCount] = useState(productCount0);
   /** "Añadir otra" reabre el formulario embebido sin salir del asistente. */
   const [addingProduct, setAddingProduct] = useState(false);
+
+  /**
+   * Guardado del paso 5, en manos del asistente. El módulo de verificación ya
+   * no pinta sus dos botones aquí dentro (ver `verification-form.tsx`), así que
+   * lo registra y quien lo dispara es «Continuar».
+   */
+  const guardarVerificacion = useRef<VerificationSave | null>(null);
+
+  /*
+   * Cuánto expediente hay, para la pantalla de cierre. `null` = "todavía manda
+   * el servidor": entre guardar el paso 5 y pulsar «Finalizar» no hay otra
+   * petición a la página, así que las props dirían "cero documentos" a quien
+   * acaba de subir seis. Se guarda el DELTA en vez de sembrar un `useState` con
+   * el valor del servidor, que se quedaría fijo aunque las props se refresquen.
+   */
+  const [docsSubidos, setDocsSubidos] = useState<number | null>(null);
+  const [enlacesGuardados, setEnlacesGuardados] = useState<number | null>(null);
 
   // M-05 · El nombre viaja del alta al onboarding. Aquí faltaba: quien elige
   // "quiero enseñar" al registrarse salta DIRECTO a este asistente sin pasar
@@ -308,19 +335,65 @@ export function TutorOnboardingForm({
       if (await saveProfile()) return fail("No se pudo guardar.");
     }
 
-    // Los pasos 4 (disponibilidad) y 5 (verificación) no aparecen arriba a
-    // propósito, no por olvido: los dos montan módulos del panel que escriben
-    // por su cuenta al momento, así que aquí no hay nada que guardar ni nada
-    // que validar — «Continuar» solo avanza. Ver EY-183 y R24-15.
-    setBusy(false);
+    // El paso 4 (disponibilidad) no aparece arriba a propósito, no por olvido:
+    // monta el gestor del panel, que escribe por su cuenta al momento, así que
+    // aquí no hay nada que guardar ni nada que validar. Ver EY-183.
+
+    /*
+     * Paso 5 · verificación. Este SÍ guarda desde aquí: el módulo traía dentro
+     * «Guardar borrador» y «Guardar y enviar a revisión», que dentro del
+     * asistente eran dos botones más peleándose con «Atrás» y «Continuar» sin
+     * que nadie dijera cuál avanzaba. Ahora manda el paso y «Continuar» guarda
+     * —siempre como BORRADOR, ver el cierre de abajo—.
+     */
+    if (step === 5) {
+      const guardado = await guardarVerificacion.current?.();
+      // OPCIONAL como el 4 y el 6 (EX-02): sin nada elegido no hay nada que
+      // guardar y se avanza. Lo que sí frena es un guardado FALLIDO —un enlace
+      // inválido, una subida caída—: el paso siguiente desmonta el módulo y con
+      // él los archivos elegidos, que hasta guardarse viven solo en memoria.
+      // El QUÉ falló ya lo dijo `persist` con su propio toast.
+      if (guardado && !guardado.ok) {
+        setBusy(false);
+        return;
+      }
+      if (guardado) {
+        setDocsSubidos(guardado.docs);
+        setEnlacesGuardados(guardado.socials);
+      }
+    }
 
     if (step === totalSteps) {
+      /*
+       * ⚠️ Aquí —y solo aquí— el expediente pasa a revisión.
+       *
+       * Antes «Finalizar» se limitaba a cerrar el asistente, y la pantalla de
+       * cierre decía "Tu perfil pasó a revisión" sin que nadie lo hubiera
+       * enviado: quien hubiese usado «Guardar borrador» en el paso 5 terminaba
+       * con los seis documentos en `draft`, la identidad en `not_submitted` —o
+       * sea, invisible para el admin— y la sensación de haber acabado.
+       *
+       * Este es además el único momento en que el envío es honesto: manda
+       * documentos Y enlaces a la vez, y el propio checklist del paso 5 cuenta
+       * la primera mentoría, que es el paso 6. Enviar desde el 5 era enviar
+       * antes de terminar.
+       *
+       * La RPC solo pasa `draft` → `pending`: sin borradores es un no-op, así
+       * que llamarla siempre es seguro (y no toca lo ya aprobado o rechazado).
+       */
+      const { error } = await supabase.rpc("submit_documents_for_review");
+      if (error) {
+        return fail("No pudimos enviar tu expediente a revisión. Inténtalo otra vez.");
+      }
       // M-03 · El asistente TERMINA aquí. Antes hacía `router.push("/tutor")`
       // y el tutor aterrizaba en el menú sin señal de haber acabado.
       finish(); // olvida el paso: volver a entrar ya no reabre el asistente
+      setBusy(false);
       setDone(true);
       return;
     }
+
+    setBusy(false);
     setStep((s) => s + 1);
   }
 
@@ -350,6 +423,19 @@ export function TutorOnboardingForm({
      */
     const horas = horasSemana(rules);
     const pendientes = [
+      // El expediente de identidad ya salió hacia el admin (lo manda
+      // «Finalizar»), pero puede haber salido VACÍO: sin documentos no hay nada
+      // que verificar, y eso el tutor tiene que oírlo aquí y no tres semanas
+      // después preguntándose por qué su revisión no avanza.
+      (docsSubidos ?? Object.keys(docsByType).length) === 0
+        ? "No subiste ningún documento. Sin ellos no podemos verificar tu identidad, y sin verificarla no aprobamos el perfil. Se añaden desde «Verificación»."
+        : null,
+      // R29-02 · fuera del asistente este enlace es obligatorio para poder
+      // enviar a revisión; aquí no se bloquea —ningún paso del asistente
+      // bloquea— pero sí se dice, y allí seguirá esperándole el mismo aviso.
+      (enlacesGuardados ?? socials.length) === 0
+        ? "No dejaste ninguna red social ni portafolio. Forma parte de lo que revisamos; se añade desde «Verificación»."
+        : null,
       productCount === 0
         ? "Te falta tu primera mentoría. Puedes crearla cuando quieras desde «Mis mentorías», pero hasta que exista no podemos aprobar tu perfil."
         : null,
@@ -597,17 +683,17 @@ export function TutorOnboardingForm({
     );
   }
 
-  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02
-  // (con su borrador / "enviar a revisión"). El asistente solo lleva a la
-  // siguiente pantalla; los documentos los guarda el propio módulo. Los
-  // materiales de clase salieron del onboarding a la oferta (R24-16).
+  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02,
+  // pero SIN sus dos botones: aquí guarda «Continuar» (ver `next()`) y el envío
+  // a revisión es de «Finalizar». Los materiales de clase salieron del
+  // onboarding a la oferta (R24-16).
   if (step === 5) {
     return (
       <WizardShell
         step={5}
         total={totalSteps}
         title="Verifica tu identidad"
-        description="Sube tus documentos con el mismo módulo de tu panel. Guárdalos como borrador y continúa; puedes terminar cuando quieras."
+        description="Sube lo que tengas a mano y pulsa «Continuar»: se guarda solo, y lo que falte lo puedes completar después. Nada llega a revisión hasta que termines el registro."
         onBack={back}
         onNext={next}
         busy={busy}
@@ -623,8 +709,10 @@ export function TutorOnboardingForm({
           productCount={productCount}
           // La mentoría es el paso SIGUIENTE de este mismo asistente: el
           // checklist muestra su estado pero no manda a crearla fuera, que es
-          // exactamente el salto que hay que evitar aquí (N-03).
+          // exactamente el salto que hay que evitar aquí (N-03). `inWizard`
+          // apaga además sus dos botones de guardar: aquí manda el paso.
           inWizard
+          saveRef={guardarVerificacion}
         />
       </WizardShell>
     );
@@ -656,6 +744,8 @@ export function TutorOnboardingForm({
       onBack={back}
       onNext={next}
       nextLabel="Finalizar"
+      // No es "Guardando…": lo que hace este botón es ENVIAR el expediente.
+      busyLabel="Enviando…"
       busy={busy}
     >
       {productCount > 0 ? (
@@ -698,7 +788,9 @@ export function TutorOnboardingForm({
       ) : null}
 
       <p className="text-xs text-[#6b6b6b]">
-        Al finalizar, tu perfil pasa a revisión.
+        Al finalizar enviamos a revisión tu perfil y los documentos del paso
+        anterior. Es el único botón que los envía: hasta aquí todo queda en
+        borrador.
       </p>
     </WizardShell>
   );

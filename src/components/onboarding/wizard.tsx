@@ -17,6 +17,13 @@ import { forgetStep, rememberStep, type WizardId } from "./wizard-step";
  * El BOTÓN "Guardar y salir" vive en el header (`SiteHeader onboarding`), no
  * aquí; el GUARDADO que promete sí es de aquí (`useSaveOnExit`).
  *
+ * ⚠️ Esta botonera —«Atrás» / «Continuar»— es la ÚNICA del paso. Los módulos
+ * del panel que se reusan dentro (verificación, disponibilidad) apagan sus
+ * propios botones de guardar y dejan que «Continuar» los dispare: cuatro
+ * controles en la misma pantalla y ninguno diciendo cuál avanza fue justo la
+ * queja que trajo esto. Lo que sí puede convivir es un botón que CREA algo
+ * («Añadir franja», «Crear mi primera mentoría»): no compite con avanzar.
+ *
  * ⚠️ El paso YA NO vive solo en `useState`. Lo decía este comentario —"recargar
  * no pierde datos"— y era verdad a medias: los datos sí sobrevivían, el PASO
  * no, así que quien salía volvía a "Paso 1 de 3" y leía eso como haberlo
@@ -163,6 +170,7 @@ export function WizardShell({
   onBack,
   onNext,
   nextLabel = "Continuar",
+  busyLabel = "Guardando…",
   nextDisabled,
   busy,
   bare = false,
@@ -176,6 +184,8 @@ export function WizardShell({
   onBack?: () => void;
   onNext: () => void;
   nextLabel?: string;
+  /** Qué se lee mientras trabaja. El último paso ENVÍA, no guarda. */
+  busyLabel?: string;
   nextDisabled?: boolean;
   busy?: boolean;
   /** El contenido trae sus propias tarjetas (p. ej. el módulo de verificación):
@@ -250,7 +260,7 @@ export function WizardShell({
           disabled={nextDisabled || busy}
           className={cn(BUTTON_CLASS, "font-semibold")}
         >
-          {busy ? "Guardando…" : nextLabel}
+          {busy ? busyLabel : nextLabel}
         </Button>
       </div>
     </div>

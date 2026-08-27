@@ -1,6 +1,12 @@
 "use client";
 
-import { useRef, useState, type ChangeEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type RefObject,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -21,6 +27,9 @@ import {
   type SocialLink,
 } from "@/lib/socials";
 import { PanelCard, StatusPill, type PillTone } from "@/components/layout/panel-shell";
+// El asistente vive en la otra dirección (importa este módulo), pero el hook de
+// "guardar al salir" es suyo y no se duplica: ver `useSaveOnExit` allí.
+import { useSaveOnExit } from "@/components/onboarding/wizard";
 // MN-11a · El tope y los formatos del bucket `kyc-documents` no se escriben
 // aquí: salen de la fuente única, que es también donde está apuntado qué hay
 // que hacer en la BD si el número cambia (P-8).
@@ -67,6 +76,24 @@ const KYC_DOCS = [
 ] as const;
 
 export type DocState = { status: DocStatus; linkUrl: string | null };
+
+/**
+ * Lo que el asistente recibe de vuelta al guardar su paso 5.
+ *
+ * Los contadores salen de aquí y no de las props del servidor porque entre
+ * guardar y pulsar «Finalizar» el asistente no vuelve a pedir la página: su
+ * pantalla de cierre leería los números de antes de subir nada y diría "no
+ * subiste ningún documento" a quien acaba de subir seis.
+ */
+export type VerificationSaveResult = {
+  ok: boolean;
+  /** Documentos con archivo guardado (los de antes más los de esta llamada). */
+  docs: number;
+  /** Enlaces de redes o portafolio guardados. */
+  socials: number;
+};
+
+export type VerificationSave = () => Promise<VerificationSaveResult>;
 
 /** Píldoras del Figma (190:23/37/65/93): color por estado del documento. */
 const DOC_PILL: Record<DocStatus | "none", { label: string; tone: PillTone }> = {
@@ -280,6 +307,14 @@ function ChecklistStep({
  * asistente (era el 4 hasta que EY-183 metió la disponibilidad delante):
  * cualquier cambio de aquí se ve en las dos.
  *
+ * ⚠️ …pero los DOS BOTONES de arriba son solo del panel (`inWizard === false`).
+ * En el panel son la única acción de la pantalla y están bien; dentro del
+ * asistente quedaban cuatro controles compitiendo —«Guardar borrador»,
+ * «Guardar y enviar a revisión», «Atrás» y «Continuar»— sin que ninguno dijera
+ * cuál avanzaba. Allí manda el paso: el módulo se guarda solo (`saveRef` y el
+ * desmontaje), siempre como BORRADOR, y el envío a revisión es del final del
+ * asistente. Ver `tutor-onboarding-form.tsx`.
+ *
  * ⚠️ La DISPONIBILIDAD no entra en este checklist a propósito. Lo que se lista
  * aquí es lo que hace falta para APROBAR el perfil, y ninguna regla —ni de BD
  * ni de negocio— exige franjas para aprobar a un tutor. Sin ellas el perfil se
@@ -294,6 +329,7 @@ export function VerificationForm({
   hasAvatar,
   productCount,
   inWizard = false,
+  saveRef,
 }: {
   userId: string;
   docsByType: Record<string, DocState>;
@@ -307,6 +343,13 @@ export function VerificationForm({
   productCount: number;
   /** Dentro del asistente la mentoría es el paso siguiente: no se manda fuera. */
   inWizard?: boolean;
+  /**
+   * Solo en el asistente: sin botones propios, «Continuar» necesita disparar el
+   * guardado y ESPERAR su resultado (un enlace inválido no puede avanzar de
+   * paso, porque el paso siguiente desmonta este módulo y con él los archivos
+   * elegidos, que hasta guardarlos viven solo en memoria).
+   */
+  saveRef?: RefObject<VerificationSave | null>;
 }) {
   const router = useRouter();
   const [staged, setStaged] = useState<Record<string, File>>({});
@@ -474,6 +517,76 @@ export function VerificationForm({
     return true;
   }
 
+  /** Marca de "el paso 5 ya se guardó"; su porqué, dentro de `guardarPaso`. */
+  const yaGuardado = useRef(false);
+
+  /**
+   * Guardado del paso 5 del asistente. Siempre BORRADOR: el envío a revisión
+   * manda documentos Y enlaces a la vez, y aquí todavía falta la primera
+   * mentoría (paso 6), así que enviarlo desde aquí sería enviar a medias.
+   *
+   * No avisa de nada al terminar bien: quien lo dispara es «Continuar», y el
+   * cambio de paso ya es el acuse de recibo. Los fallos sí hablan (los toasts
+   * los pone `persist`).
+   */
+  async function guardarPaso(): Promise<VerificationSaveResult> {
+    setBusy("draft");
+    const ok = await persist(true);
+    setBusy(null);
+    if (ok) {
+      // ⚠️ La marca va aquí y no en `hasNew`: el desmontaje que viene detrás de
+      // «Continuar» se cierra sobre el `staged` de ANTES de guardar —React
+      // agrupa el vaciado y el cambio de paso en el mismo commit—, así que sin
+      // ella el guardado de salida volvería a subir los mismos seis archivos.
+      yaGuardado.current = true;
+      router.refresh();
+    }
+    return {
+      ok,
+      // Lo que ya había en la BD más lo que acaba de subir esta llamada:
+      // `docsByType` es una prop del servidor y no se entera del upload.
+      docs: new Set([...Object.keys(docsByType), ...(ok ? stagedTypes : [])]).size,
+      // Si `persist` falló, los enlaces no llegaron a escribirse: aborta antes.
+      socials: ok && linksDirty ? filled.length : socials.length,
+    };
+  }
+
+  /*
+   * Se re-registra en CADA render a propósito: `guardarPaso` se cierra sobre
+   * `staged` y `links`, y un registro con `[]` dejaría al asistente guardando
+   * lo que hubiera en el primer render (mismo motivo que el ref de
+   * `useSaveOnExit`).
+   */
+  useEffect(() => {
+    if (saveRef) saveRef.current = guardarPaso;
+  });
+
+  /**
+   * ⚠️ …y se BORRA al desmontar. Sin esto el asistente se quedaría con un cierre
+   * sobre el `staged` del paso 5 y, al salir desde el paso 6, volvería a subir
+   * como `draft` los documentos que «Finalizar» acaba de pasar a `pending`.
+   */
+  useEffect(() => {
+    if (!saveRef) return;
+    return () => {
+      saveRef.current = null;
+    };
+  }, [saveRef]);
+
+  /**
+   * Salir del paso 5 por cualquier otra puerta —«Atrás», «Guardar y salir» del
+   * header, el botón del navegador— también guarda. Sin los dos botones de
+   * antes, este desmontaje es lo único que queda entre el tutor y perder los
+   * archivos que eligió, que hasta aquí solo existen en memoria.
+   *
+   * Fuera del asistente NO se activa: allí mandan los dos botones, y un
+   * guardado silencioso al abandonar la pantalla contradiría el "nada se sube
+   * hasta que pulses" que promete el pie.
+   */
+  useSaveOnExit(() => {
+    if (inWizard && hasNew && !yaGuardado.current) void guardarPaso();
+  });
+
   async function saveDraft() {
     setBusy("draft");
     const ok = await persist(true);
@@ -517,9 +630,13 @@ export function VerificationForm({
             Tu expediente de tutor
           </p>
           <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
-            {completos === pasos.length
-              ? "Está todo. Envía tus documentos a revisión cuando quieras."
-              : "Completa los cuatro pasos y envíalo todo junto: así lo revisamos de una vez."}
+            {inWizard
+              ? completos === pasos.length
+                ? "Está todo. Lo enviamos a revisión cuando termines el registro."
+                : "Lo que dejes aquí se guarda al pulsar «Continuar»; nada llega a revisión hasta que termines el registro."
+              : completos === pasos.length
+                ? "Está todo. Envía tus documentos a revisión cuando quieras."
+                : "Completa los cuatro pasos y envíalo todo junto: así lo revisamos de una vez."}
           </p>
         </div>
         <StatusPill tone={completos === pasos.length ? "green" : "neutral"}>
@@ -727,30 +844,38 @@ export function VerificationForm({
       {/* El envío es en bloque (Figma: "Enviar a revisión / Guardar borrador"):
           nada llega al admin hasta "Guardar y enviar a revisión". Vive fuera de
           los pasos a propósito: manda documentos Y enlaces a la vez, así que
-          colgarlo de uno solo mentiría sobre su alcance. */}
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <Button
-          variant="outline"
-          disabled={busy !== null || !hasNew}
-          onClick={saveDraft}
-          className="h-[45px] rounded-[8px] px-5 text-[13.5px] text-[#4d4d4d]"
-        >
-          {busy === "draft" ? "Guardando…" : "Guardar borrador"}
-        </Button>
-        <Button
-          disabled={busy !== null || !(hasNew || hasDrafts)}
-          onClick={submitReview}
-          className="h-[45px] rounded-[8px] bg-brand px-5 text-[13.5px] font-semibold hover:bg-brand/90"
-        >
-          {busy === "review" ? "Enviando…" : "Guardar y enviar a revisión"}
-        </Button>
-      </div>
+          colgarlo de uno solo mentiría sobre su alcance.
+
+          ⚠️ Y por eso mismo NO se pintan dentro del asistente: allí «enviar a
+          revisión» tampoco puede colgar del paso 5, porque el paso 6 —la primera
+          mentoría, que este mismo checklist cuenta— viene después. El guardado
+          lo lleva «Continuar» y el envío, «Finalizar». */}
+      {!inWizard ? (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Button
+            variant="outline"
+            disabled={busy !== null || !hasNew}
+            onClick={saveDraft}
+            className="h-[45px] rounded-[8px] px-5 text-[13.5px] text-[#4d4d4d]"
+          >
+            {busy === "draft" ? "Guardando…" : "Guardar borrador"}
+          </Button>
+          <Button
+            disabled={busy !== null || !(hasNew || hasDrafts)}
+            onClick={submitReview}
+            className="h-[45px] rounded-[8px] bg-brand px-5 text-[13.5px] font-semibold hover:bg-brand/90"
+          >
+            {busy === "review" ? "Enviando…" : "Guardar y enviar a revisión"}
+          </Button>
+        </div>
+      ) : null}
 
       <p className="text-xs text-[#6b6b6b]">
-        Formatos: {KYC_HINT}. Tus documentos son privados;
-        solo el equipo de revisión los ve. Elige tus archivos y guárdalos como
-        borrador para seguir más tarde: nada llega a revisión hasta que pulses
-        «Guardar y enviar a revisión».
+        Formatos: {KYC_HINT}. Tus documentos son privados; solo el equipo de
+        revisión los ve.{" "}
+        {inWizard
+          ? "Elige tus archivos y pulsa «Continuar»: se guardan como borrador y se envían a revisión al finalizar tu registro."
+          : "Elige tus archivos y guárdalos como borrador para seguir más tarde: nada llega a revisión hasta que pulses «Guardar y enviar a revisión»."}
       </p>
     </>
   );
