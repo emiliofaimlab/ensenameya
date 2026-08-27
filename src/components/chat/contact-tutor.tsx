@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { MessageCircleIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { SignupDialog } from "@/components/auth/signup-dialog";
+import { pedirAbrirHilo } from "./open-thread";
 import { asRpc } from "./rpc";
 
 /**
@@ -35,6 +35,36 @@ import { asRpc } from "./rpc";
  * No se intenta "abrir la conversación y luego pedir cuenta": la conversación
  * necesita un alumno con id, y fingir que se puede escribir antes de tenerlo
  * solo sirve para perder lo escrito.
+ *
+ * ── CON SESIÓN, EL DESTINO YA NO ES UNA PÁGINA (27-ago) ─────────────────────
+ * Hasta hoy esto hacía `router.push('/chat/<id>')` y **te sacaba de la ficha
+ * del tutor**: quien estaba comparando precio, horarios y reseñas perdía de
+ * vista todo eso justo en el momento de preguntar, y volver era el botón atrás.
+ * Es exactamente lo que el cliente pidió quitar («no debe abrir una página
+ * nueva, que abra directo en la burbuja de chat»). Ahora se le pide a la burbuja
+ * —que en `(public)` ya está montada, ver `ChatLauncher`— que se abra en ese
+ * hilo, y la ficha se queda debajo, intacta.
+ *
+ * ⚠️ La conversación que devuelve `open_conversation` desde aquí puede ser **un
+ * hilo sin mensajes y sin reserva**, y ese es justo el que `ChatLauncher` filtra
+ * fuera de la bandeja (`lastMessageAt !== null || hasBooking`). O sea: la
+ * burbuja tiene que saber abrir un hilo que NO está en su lista. Eso es trabajo
+ * de la burbuja, no de aquí, pero si algún día «Escribir a X» deja de abrir
+ * nada, ese filtro es el primer sitio donde mirar.
+ *
+ * ── POR QUÉ SE RECUERDA EL ID EN VEZ DE VOLVER A PREGUNTAR ──────────────────
+ * Sin navegación, el botón se queda donde está y se puede volver a pulsar. La
+ * duda razonable es si cada intento gasta uno de los 10 hilos nuevos por alumno
+ * y día de `open_conversation`. **No los gasta**, y conviene dejarlo escrito
+ * porque es contraintuitivo: en `20260820180000` la función devuelve el hilo
+ * existente ANTES de contar los creados en 24 h, así que reintentar con el mismo
+ * tutor no incrementa nada; el tope solo puede saltar la primerísima vez, y
+ * entonces salta con su mensaje redactado.
+ *
+ * Aun así se guarda el id: el reintento es entonces **instantáneo y sin red**,
+ * que es lo que hace falta cuando alguien pulsa porque "no ha pasado nada". La
+ * protección de verdad sigue estando en SQL — este `useState` es comodidad, no
+ * un candado, y se pierde al recargar como debe ser.
  */
 export function ContactTutor({
   tutorId,
@@ -47,8 +77,9 @@ export function ContactTutor({
   /** Lo decide el servidor: sin sesión, el botón abre el alta. */
   anonimo: boolean;
 }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
+  /** El hilo con este tutor, una vez que la RPC nos lo ha dicho. */
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   // El nombre de pila basta y cabe mejor. Si viene vacío, "al tutor".
   const nombreCorto = tutorName.trim().split(/\s+/)[0] || "al tutor";
@@ -68,6 +99,12 @@ export function ContactTutor({
   }
 
   async function escribir() {
+    // Ya sabemos cuál es el hilo: se vuelve a pedir la apertura y se acabó.
+    if (conversationId) {
+      pedirAbrirHilo({ conversationId });
+      return;
+    }
+
     setBusy(true);
     // `open_conversation` devuelve SIEMPRE la misma conversación con este tutor
     // —la crea la primera vez y la recupera las demás—, así que volver a pulsar
@@ -85,7 +122,8 @@ export function ContactTutor({
       toast.error(error?.message || "No se pudo abrir la conversación.");
       return;
     }
-    router.push(`/chat/${data}`);
+    setConversationId(data);
+    pedirAbrirHilo({ conversationId: data });
   }
 
   return (

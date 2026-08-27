@@ -13,6 +13,7 @@ import {
 import type { TutorBalance } from "@/lib/payouts";
 import { roomOpen } from "@/lib/room-window";
 import { studentsOfTutor } from "./students";
+import { ChatDeReservaButton } from "./chat-button";
 import { StudentLink } from "./student-link";
 import { formatPct, tutorTier } from "./tier";
 import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
@@ -301,13 +302,14 @@ export default async function TutorHomePage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button
-                      asChild
-                      variant="ghost"
-                      className="h-9 rounded-[8px] px-3 text-[13px] text-[#595959]"
-                    >
-                      <Link href={`/chat/${s.booking_id}`}>Chat</Link>
-                    </Button>
+                    {/* Abre el hilo EN LA BURBUJA, sin sacar al tutor de su
+                        panel. Era un `<Link href={'/chat/' + booking_id}>` y
+                        dejó de serlo el 27-ago: escribirle dos líneas al alumno
+                        no debería costar perder de vista las clases de hoy, el
+                        saldo y las reservas por aceptar, y menos con el botón
+                        «Ir a la sala» al lado. El porqué del componente aparte
+                        (esta página es de servidor) está en `chat-button.tsx`. */}
+                    <ChatDeReservaButton bookingId={s.booking_id} />
                     {/* ⚠️ B-2 · Este botón NO tenía gate ninguno: se pintaba
                         para toda clase futura, así que el tutor veía "Ir a la
                         sala" semanas antes y el servidor le decía que no.
