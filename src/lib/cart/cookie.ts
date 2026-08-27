@@ -63,38 +63,41 @@
  * expresar: corta por `bookings.created_at`, que es de la reserva entera.
  *
  * ─────────────────────────────────────────────────────────────────────────────
- * ⚠️⚠️ PARA QUIEN RETOME **EY-176** (el motor de cobro multi-línea): EL FALLO
- *      QUE HAY QUE RESOLVER EL PRIMER DÍA, ANTES DE COBRAR N LÍNEAS JUNTAS.
+ * ✅ **EY-176 YA ESTÁ** (27-ago). Los dos fallos que este bloque anunciaba
+ *    están CERRADOS, y aquí queda el porqué para que nadie los reabra.
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * `payment_webhook_events.event_id` es **la clave primaria** de la tabla
- * (`20260709210000_us703_webhook_idempotency.sql:10`), y `confirm_payment` la
- * usa como candado de idempotencia: inserta `(event_id, booking_id)` con
- * `on conflict (event_id) do nothing` y, si no insertó, **devuelve sin hacer
- * nada** (`20260817180000:148-157`).
+ * 1. `payment_webhook_events.event_id` era **la clave primaria** de la tabla, y
+ *    `confirm_payment` la usa como candado: inserta `(event_id, booking_id)` con
+ *    `on conflict (event_id) do nothing` y, si no insertó, devuelve sin hacer
+ *    nada. Con UN cobro para N reservas el webhook recibe **un solo evento**, así
+ *    que la línea 1 se confirmaba y las 2..N salían en no-op SILENCIOSO, se
+ *    quedaban en `pending_payment` y `expire_stale_bookings` las cancelaba a los
+ *    7 minutos — cobradas, sin clase y sin reembolso, porque la rama 1 del cron
+ *    da por hecho que nunca se llegó a cobrar.
+ *    → La clave es ahora `(event_id, booking_id)` (`20260827160000`), y el
+ *    webhook llama a `confirm_order_payment`, que recorre TODAS las líneas del
+ *    pedido en una transacción. **Nunca acredites una línea de un pedido por
+ *    separado.**
  *
- * Con UN cobro para N reservas el webhook recibe **un solo evento**. Si se le
- * llama N veces con ese mismo `p_event_id`:
+ * 2. `late_payment_refunds.provider_payment_id` es `not null unique`, así que un
+ *    cobro tardío sobre el PaymentIntent de N líneas se anotaba una vez y el
+ *    handler devolvía el cargo ENTERO por culpa de una sola.
+ *    → Ahora eso ES la regla, no el fallo: el criterio pasó a ser «¿siguen
+ *    esperando el cobro TODAS las líneas?» (P-1), así que un cobro tardío de
+ *    pedido se devuelve entero y no se acredita ninguna. Un cargo, una fila
+ *    (`20260827170000`).
  *
- *   · la línea 1 se confirma;
- *   · las líneas 2..N entran por el `do nothing` y salen en **no-op silencioso**;
- *   · se quedan en `pending_payment` y `expire_stale_bookings` las cancela a los
- *     7 minutos (`20260826120000`);
- *   · y **no se reembolsan**, porque la rama 1 del cron da por hecho que nunca
- *     se llegó a cobrar.
+ * ── LO QUE SIGUE SIENDO VERDAD DE ESTE FICHERO ─────────────────────────────
  *
- * Resultado: el alumno paga tres mentorías, recibe una, y las otras dos ni
- * vuelven. La corrección es que la clave primaria pase a ser
- * `(event_id, booking_id)` — barato de escribir, carísimo de descubrir tarde.
- * Y no es el único punto: `late_payment_refunds.provider_payment_id` es
- * `not null unique` (`20260817160000:69`), así que un cobro tardío sobre un
- * PaymentIntent de N líneas se anota una vez y el handler devuelve el cargo
- * ENTERO. El inventario completo está en `docs/23-EVALUACION-EPICAS-PENDIENTES.md`
- * §23.3.2 y §23.3.3.
+ * El carrito **sigue sin retener el horario** (P-2, ver arriba) y **sigue sin
+ * saber nada de dinero**: aquí dentro no hay ni un importe. Lo que cambió está
+ * fuera — `POST /api/pedidos` relee esta cookie EN SERVIDOR, llama a
+ * `create_order` y devuelve un `orderId`; de ahí en adelante manda `orders`.
  *
- * **Nada de este fichero toca ese camino.** El carrito de EY-177 llega hasta la
- * pantalla de revisión y de ahí entrega **una línea** al checkout de siempre,
- * que es un `booking` y un `payment`, exactamente como hoy.
+ * Y el paso a pago de **una sola línea** no se tocó: sigue siendo la URL de
+ * siempre, `/reservar/<id>/checkout?slots=…`, con un `booking` y un `payment`
+ * exactamente como el primer día.
  */
 
 /** Nombre de la cookie. Mismo prefijo `ey-` que el resto de las nuestras. */

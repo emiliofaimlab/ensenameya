@@ -56,11 +56,45 @@ export type ChargeFallido = { ok: false; error: string };
 export type ChargeResult = ChargeEmbebido | ChargeFallido;
 
 /**
+ * EY-176 · A QUÉ APUNTA UN COBRO.
+ *
+ * Hasta la ficha del carrito solo había una respuesta posible —una reserva— y
+ * por eso el puerto llevaba un `bookingId: string` pelado. Con el pedido hay
+ * dos, y la diferencia NO es cosmética: de ella depende a quién se acredita el
+ * dinero cuando vuelve el webhook. Un `string` con dos significados posibles es
+ * como se acaba confirmando una reserva con el id de un pedido.
+ *
+ * Va como unión discriminada y no como dos campos opcionales para que el
+ * compilador obligue a decidir: no existe un cobro sin sujeto ni uno con los
+ * dos.
+ */
+export type CobroRef =
+  | { tipo: "booking"; id: string }
+  | { tipo: "order"; id: string };
+
+/**
+ * Una línea del cobro: qué se compra y cuánto cuesta ESA parte.
+ *
+ * ⚠️ `amountMinor` SIEMPRE viene de `payments.gross_amount` (regla de oro 2),
+ * y con un pedido eso es una fila de `payments` POR LÍNEA — el snapshot que
+ * `create_booking_line` congeló para cada mentoría. El puerto no suma, no
+ * prorratea y no mira el navegador.
+ */
+export type LineaDeCobro = {
+  /** Lo que verá la persona como concepto de esta línea. */
+  concepto: string;
+  /** En unidades menores, como en la BD. */
+  amountMinor: number;
+};
+
+/**
  * Lo que hace falta para abrir un cobro.
  *
- * ⚠️ `amountMinor` SIEMPRE viene de `payments.gross_amount` (regla de oro 2).
- * El puerto no calcula importes, no aplica políticas y no mira el navegador:
- * recibe el número que `create_booking` congeló y lo manda tal cual.
+ * ⚠️ NO HAY UN `amountMinor` TOTAL, Y ES DELIBERADO. El total del cargo es la
+ * suma de `lineas` y de nada más. Llevar además un total aparte serían dos
+ * fuentes de verdad para el importe de un cobro, que es justo la clase de
+ * redundancia que la regla de oro 2 existe para evitar: el día que discreparan,
+ * una de las dos sería la que cobra y la otra la que se enseña.
  *
  * ⚠️ AQUÍ HABÍA UN `guardarMedioDePago: boolean`, LA CASILLA DE PAC-02, Y NO
  * VUELVE (D-3 del §20.14). Se traducía en `setup_future_usage`, un parámetro
@@ -76,13 +110,19 @@ export type ChargeResult = ChargeEmbebido | ChargeFallido;
  * clave de idempotencia dejaría de ser determinista por reserva.
  */
 export type ChargeInput = {
-  bookingId: string;
-  /** En unidades menores, como en la BD. */
-  amountMinor: number;
-  /** ISO-4217 tal como está en `payments.currency`. */
+  /** La reserva suelta o el pedido que se está cobrando. */
+  ref: CobroRef;
+  /**
+   * Las líneas del cobro, en el orden en que se enseñan. Una para una reserva
+   * suelta; N para un pedido. Nunca vacía.
+   */
+  lineas: LineaDeCobro[];
+  /**
+   * ISO-4217 tal como está en `payments.currency`. Una sola para todo el cobro:
+   * `create_order` se niega a mezclar monedas en un pedido, porque sumarlas
+   * sería inventarse un tipo de cambio.
+   */
   currency: string;
-  /** Lo que verá la persona como concepto del cobro. */
-  concepto: string;
   /** El cliente ya dado de alta en el proveedor. */
   customerRef: string;
   /**
@@ -162,8 +202,13 @@ export type WebhookEvent = {
   rawType: string;
   /** El mismo evento, en vocabulario nuestro. */
   kind: "cobro-confirmado" | "cobro-en-curso" | "cobro-fallido" | "otro";
-  /** La reserva a la que pertenece, si el evento la trae. */
-  bookingId: string | null;
+  /**
+   * A qué apunta el cobro —una reserva suelta o un pedido—, si el evento lo
+   * trae. Es lo que decide si el webhook acredita UNA línea o TODAS: ver
+   * `confirm_order_payment` y el porqué en
+   * `20260827160000_ey176_webhook_confirma_todas_las_lineas.sql`.
+   */
+  ref: CobroRef | null;
   /** La referencia del cargo (`pi_…`): la que traen los eventos de reembolso. */
   chargeRef: string | null;
   /** El id del objeto que disparó el evento. Solo para el log. */

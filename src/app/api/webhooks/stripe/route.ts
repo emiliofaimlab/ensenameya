@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { stripeProvider } from "@/lib/payments/stripe-provider";
+import { clienteDePedidos, rpcDePedidos, type OrderStatus } from "@/lib/orders/tipos";
 import type { Database } from "@/lib/database.types";
 
 /** El estado de la reserva tal y como lo declara el esquema, no un `string`
@@ -35,11 +36,35 @@ type EstadoReserva = Database["public"]["Enums"]["booking_status"];
  *    bloque de `cobroEntrante` más abajo; es la parte de este archivo donde de
  *    verdad se mueve dinero fuera y la que hay que leer entera antes de
  *    tocarla.
+ * 5. ⚠️ EY-176 · **un evento puede acreditar N reservas.** Ver el bloque de
+ *    abajo; es la trampa más cara del fichero y la que costó la ficha entera.
  *
  * Lo que este archivo YA NO sabe, desde el puerto de pagos: cómo se llaman los
  * eventos de Stripe, cómo se firma un webhook y cómo se pide un reembolso. Todo
  * eso es del adaptador. Lo que queda aquí es la lógica —X-02, la idempotencia,
  * el sello del `pi_`— y no tiene nada de Stripe dentro.
+ *
+ * ── ⚠️⚠️ EY-176 · UN CARGO, N LÍNEAS: LO QUE HAY QUE ENTENDER ANTES DE TOCAR ──
+ *
+ * Desde el carrito, un cobro puede apuntar a **una reserva suelta** o a **un
+ * pedido de N reservas**. Lo dice `evento.ref.tipo`, que el adaptador saca del
+ * `client_reference_id`.
+ *
+ * Con un pedido hay UN cargo y por tanto UN evento para N reservas. El fallo
+ * que eso abría —y que estaba escrito en el esquema, no supuesto— era que
+ * `payment_webhook_events.event_id` fuese clave primaria: llamar N veces a
+ * `confirm_payment` con el mismo evento confirmaba la primera línea y devolvía
+ * un no-op SILENCIOSO en las demás, que se quedaban en `pending_payment` hasta
+ * que el cron las cancelaba siete minutos después. Cobradas y sin clase.
+ * La clave pasó a ser `(event_id, booking_id)` en `20260827160000`, y por eso
+ * aquí se llama a `confirm_order_payment`, que las recorre TODAS en una
+ * transacción. **Nunca acredites una línea de un pedido por separado.**
+ *
+ * Y la otra mitad, X-02 para pedidos: `late_payment_refunds.provider_payment_id`
+ * es `not null unique`, o sea una fila por cargo. Encaja porque el criterio de
+ * «¿sigue esperándose este cobro?» pasa a ser **de todas las líneas a la vez**
+ * (P-1): si una sola ha dejado de esperarlo, el pedido no se puede entregar
+ * entero y se devuelve el cargo ENTERO sin acreditar nada.
  */
 
 /** Node, no edge: la verificación de firma usa crypto de Node. Es el runtime por defecto. */
@@ -72,28 +97,97 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
 
-  // El booking lo trae el evento ya extraído (`client_reference_id` o, por si
-  // acaso, la metadata: el adaptador mira los dos).
-  const bookingId = evento.bookingId;
+  // El sujeto del cobro lo trae el evento ya extraído (`client_reference_id` o,
+  // por si acaso, la metadata: el adaptador mira los dos) y ya clasificado en
+  // reserva suelta o pedido.
+  const ref = evento.ref;
 
-  if (!bookingId) {
-    // No es nuestro, o es un evento que no lleva reserva. 200 para que Stripe
+  if (!ref) {
+    // No es nuestro, o es un evento que no lleva sujeto. 200 para que Stripe
     // no reintente: no hay nada que arreglar reintentando.
     return NextResponse.json({ status: "ignorado", tipo: evento.rawType });
   }
 
+  /** Para los registros: `booking <uuid>` o `pedido <uuid>`. */
+  const etiqueta = ref.tipo === "order" ? `pedido ${ref.id}` : `booking ${ref.id}`;
+
   /**
    * `confirm_payment` ya es idempotente por tres vías: descarta el `event_id`
-   * repetido (US-703), no reprocesa un pago que ya esté resuelto y desde X-02
-   * cuenta 'failed' como resuelto. Por eso aquí no hace falta una tabla de
-   * deduplicación aparte — se le pasa el id del evento y él decide.
+   * repetido para ESA reserva (US-703 + EY-176), no reprocesa un pago que ya
+   * esté resuelto y desde X-02 cuenta 'failed' como resuelto. Por eso aquí no
+   * hace falta una tabla de deduplicación aparte — se le pasa el id del evento
+   * y él decide.
+   *
+   * ⚠️ Y CON UN PEDIDO SE LLAMA A `confirm_order_payment`, NO N VECES A
+   * `confirm_payment`. Las dos cosas funcionarían desde que la clave primaria
+   * es compuesta, pero solo la primera es ATÓMICA: si la petición se cortara
+   * entre la línea 2 y la 3, quedarían dos acreditadas y una muriendo. Dentro
+   * de la función, o entran las N o no entra ninguna, y el reintento de Stripe
+   * encuentra el trabajo entero por hacer.
    */
   const llamar = async (exito: boolean) => {
+    if (ref.tipo === "order") {
+      const { error } = await rpcDePedidos(admin).rpc("confirm_order_payment", {
+        p_order_id: ref.id,
+        p_success: exito,
+        p_event_id: evento.id,
+      });
+      if (error) throw new Error(error.message);
+      return;
+    }
     const { error } = await admin.rpc("confirm_payment", {
-      p_booking_id: bookingId,
+      p_booking_id: ref.id,
       p_success: exito,
       p_event_id: evento.id,
     });
+    if (error) throw new Error(error.message);
+  };
+
+  /**
+   * ⚠️ EL SELLO DEL `pi_`, Y CON UN PEDIDO VA EN **TODAS** LAS LÍNEAS.
+   *
+   * No es cosmético y no es opcional: `enqueue_refund` (X-01) COPIA
+   * `payments.provider_payment_id` a la fila de la cola en el momento de
+   * encolar. Una línea sin sellar se encolaría sin referencia y el job la
+   * marcaría `failed` con «sin provider_payment_id» — o sea, un reembolso de
+   * política que nunca se paga. Sellar solo la primera línea de un pedido
+   * dejaría a las demás sin poder devolver el dinero nunca.
+   *
+   * Se escribe ANTES de confirmar, igual que en la compra suelta, para que la
+   * comparación de `yaAcreditado` sea fiable ante una reentrega que llegue en
+   * medio.
+   */
+  const sellarReferencia = async (pi: string) => {
+    if (ref.tipo === "order") {
+      const conPedidos = clienteDePedidos(admin);
+      const { data: lineas, error: eLineas } = await conPedidos
+        .from("bookings")
+        .select("id")
+        .eq("order_id", ref.id);
+      if (eLineas) throw new Error(eLineas.message);
+
+      const { error } = await admin
+        .from("payments")
+        .update({ provider_payment_id: pi })
+        .in(
+          "booking_id",
+          (lineas ?? []).map((b) => b.id),
+        );
+      if (error) throw new Error(error.message);
+
+      // Y la cabecera, que es por donde se localiza el cargo desde el panel.
+      const { error: eOrden } = await conPedidos
+        .from("orders")
+        .update({ provider_payment_id: pi })
+        .eq("id", ref.id);
+      if (eOrden) throw new Error(eOrden.message);
+      return;
+    }
+
+    const { error } = await admin
+      .from("payments")
+      .update({ provider_payment_id: pi })
+      .eq("booking_id", ref.id);
     if (error) throw new Error(error.message);
   };
 
@@ -123,20 +217,28 @@ export async function POST(req: Request) {
    */
   const reembolsarCobroHuerfano = async (
     pi: string | null,
-    estadoReserva: EstadoReserva,
+    /**
+     * En qué estado estaba lo que el cobro decía pagar. Con una reserva es su
+     * `booking_status`; con un pedido, su `order_status` — y en ese caso la
+     * reserva es `null`, porque un pedido de tres puede tener sus líneas en
+     * tres estados distintos y elegir una sería inventarse el motivo.
+     */
+    estado: { reserva: EstadoReserva; pedido: null } | { reserva: null; pedido: OrderStatus },
   ): Promise<NextResponse> => {
+    const descripcion = estado.reserva ?? estado.pedido;
+
     if (!pi) {
       // Sin referencia no hay nada que devolver. Pasa de forma legítima con
       // Sessions de importe 0 (no crean PaymentIntent), donde tampoco hay
       // dinero que devolver. Cualquier otro caso es un cobro que existe y que
-      // no sabemos localizar: se grita en el log y NO se confirma la reserva.
+      // no sabemos localizar: se grita en el log y NO se confirma nada.
       console.error("[X-02] cobro huérfano sin PaymentIntent", {
-        booking: bookingId,
+        sujeto: etiqueta,
         session: evento.objectRef,
         evento: evento.id,
-        estadoReserva,
+        estado: descripcion,
       });
-      return NextResponse.json({ status: "huerfano-sin-referencia", booking: bookingId });
+      return NextResponse.json({ status: "huerfano-sin-referencia", sujeto: etiqueta });
     }
 
     const { data: previo } = await admin
@@ -147,7 +249,7 @@ export async function POST(req: Request) {
     if (previo) {
       return NextResponse.json({
         status: "ya-reembolsado",
-        booking: bookingId,
+        sujeto: etiqueta,
         reembolso: previo.provider_refund_id,
       });
     }
@@ -156,9 +258,18 @@ export async function POST(req: Request) {
     // que no existe no se retiene ni en parte, y la política de cancelación
     // (RN-37) aquí no pinta nada — no hubo cancelación, hubo un cobro que no
     // debió pasar.
+    //
+    // ⚠️ CON UN PEDIDO, «ENTERO» SIGNIFICA LAS N LÍNEAS, Y ES LA DECISIÓN P-1.
+    // No se devuelve la línea que se cayó y se acreditan las demás: el alumno
+    // compró un pedido, no un surtido. Devolver el cargo entero es además lo
+    // único que cabe en `late_payment_refunds`, cuyo `provider_payment_id` es
+    // `unique` — una fila por cargo. Las dos cosas apuntan al mismo sitio.
     const salida = await stripeProvider.refund({
       chargeRef: pi,
-      metadata: { booking_id: bookingId, motivo: "x02_cobro_tardio" },
+      metadata: {
+        ...(ref.tipo === "order" ? { order_id: ref.id } : { booking_id: ref.id }),
+        motivo: "x02_cobro_tardio",
+      },
       idempotencyKey: `x02-reembolso-${pi}`,
     });
 
@@ -172,7 +283,7 @@ export async function POST(req: Request) {
       // Ya lo devolvió otra mano (panel de Stripe, reembolso de plataforma).
       // Se anota igual para que quede la constancia y no se reintente eternamente.
       console.error("[X-02] el cargo ya estaba reembolsado en el PSP", {
-        booking: bookingId,
+        sujeto: etiqueta,
         pi,
       });
     }
@@ -188,40 +299,49 @@ export async function POST(req: Request) {
     // Constancia. `upsert` ignorando duplicados y no `insert` a secas: dos
     // entregas simultáneas pueden llegar aquí las dos, y una violación de
     // unicidad devolvería 500 por algo que ya está bien resuelto.
-    const { error: errorInsert } = await admin.from("late_payment_refunds").upsert(
-      {
-        booking_id: bookingId,
-        provider: "stripe",
-        provider_payment_id: pi,
-        provider_refund_id: reembolso?.refundId ?? null,
-        event_id: evento.id,
-        // Del objeto de reembolso, no de `payments.gross_amount`: lo que vale
-        // es lo que se movió de verdad. Si Stripe dijo que ya estaba devuelto,
-        // se cae al importe de la Session, que es lo único que tenemos.
-        amount: reembolso?.amountMinor ?? evento.amountMinor ?? 0,
-        currency: (reembolso?.currency ?? evento.currency ?? "usd").toUpperCase(),
-        booking_status: estadoReserva,
-        reason: `cobro recibido con la reserva en '${estadoReserva}'`,
-      },
-      { onConflict: "provider_payment_id", ignoreDuplicates: true },
-    );
+    const { error: errorInsert } = await clienteDePedidos(admin)
+      .from("late_payment_refunds")
+      .upsert(
+        {
+          // Excluyentes por `check` en la tabla: una fila habla de una reserva
+          // suelta o de un pedido, nunca de las dos (20260827170000).
+          booking_id: estado.reserva ? ref.id : null,
+          order_id: estado.pedido ? ref.id : null,
+          provider: "stripe",
+          provider_payment_id: pi,
+          provider_refund_id: reembolso?.refundId ?? null,
+          event_id: evento.id,
+          // Del objeto de reembolso, no de `payments.gross_amount`: lo que vale
+          // es lo que se movió de verdad. Si Stripe dijo que ya estaba devuelto,
+          // se cae al importe de la Session, que es lo único que tenemos.
+          amount: reembolso?.amountMinor ?? evento.amountMinor ?? 0,
+          currency: (reembolso?.currency ?? evento.currency ?? "usd").toUpperCase(),
+          booking_status: estado.reserva,
+          order_status: estado.pedido,
+          reason:
+            estado.pedido !== null
+              ? `cobro de un pedido de ${etiqueta.slice(7)} recibido con el pedido en '${estado.pedido}'`
+              : `cobro recibido con la reserva en '${estado.reserva}'`,
+        },
+        { onConflict: "provider_payment_id", ignoreDuplicates: true },
+      );
     if (errorInsert) throw new Error(errorInsert.message);
 
     // A ojos de operaciones esto es un incidente, no un trámite: alguien pagó
     // por una clase que ya no existía. Se registra como error a propósito.
     console.error("[X-02] cobro tardío reembolsado", {
-      booking: bookingId,
-      estadoReserva,
+      sujeto: etiqueta,
+      estado: descripcion,
       pi,
       reembolso: reembolso?.refundId ?? "(ya estaba)",
     });
 
-    // La reserva NO se toca y `payments` tampoco: ese cobro no era suyo. La
-    // reserva sigue cancelada (o sigue pagada por el cobro bueno, si esto era
-    // un duplicado) y su fila de `payments` conserva su propio estado.
+    // Ni la reserva ni el pedido se tocan, y `payments` tampoco: ese cobro no
+    // era suyo. Siguen cancelados (o siguen pagados por el cobro bueno, si esto
+    // era un duplicado) y sus filas de `payments` conservan su propio estado.
     return NextResponse.json({
       status: "reembolsado",
-      booking: bookingId,
+      sujeto: etiqueta,
       reembolso: reembolso?.refundId ?? null,
     });
   };
@@ -234,65 +354,112 @@ export async function POST(req: Request) {
    */
   const cobroEntrante = async (): Promise<NextResponse> => {
     const pi = evento.chargeRef;
+    const conPedidos = clienteDePedidos(admin);
 
-    const [{ data: reserva, error: eReserva }, { data: pago, error: ePago }] = await Promise.all([
-      admin.from("bookings").select("status").eq("id", bookingId).maybeSingle(),
-      admin
-        .from("payments")
-        .select("status, provider_payment_id")
-        .eq("booking_id", bookingId)
-        .maybeSingle(),
-    ]);
-    if (eReserva) throw new Error(eReserva.message);
-    if (ePago) throw new Error(ePago.message);
+    // ── Las líneas del sujeto y el estado del pedido, si lo hay ──────────────
+    //
+    // ⚠️ CON UN PEDIDO ESTO SON N RESERVAS, y todo lo de abajo razona sobre el
+    // conjunto. Una reserva suelta es el mismo código con una lista de uno: se
+    // unifica a propósito, porque dos versiones de la comprobación «¿sigue
+    // esperándose este cobro?» es como una de las dos se queda atrás.
+    //
+    // ⚠️ EL ERROR DE LECTURA SE RELANZA, NO SE TRATA COMO «NO EXISTE». Si a
+    // `service_role` le faltara un grant sobre `orders` (regla de oro 9: se
+    // salta la RLS pero NO los grants, y eso muerde en TIEMPO DE EJECUCIÓN),
+    // `data` llegaría null igual que si el pedido fuera de otro entorno. Darlo
+    // por «ajeno» devolvería 200, Stripe dejaría de reintentar y el cobro se
+    // quedaría cobrado y sin acreditar PARA SIEMPRE. Un 500 lo arregla solo en
+    // cuanto se ponga el grant.
+    let pedido: { id: string; status: OrderStatus } | null = null;
+    if (ref.tipo === "order") {
+      const { data, error } = await conPedidos
+        .from("orders")
+        .select("id, status")
+        .eq("id", ref.id)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      pedido = data;
+    }
 
-    // La reserva no está en ESTA base de datos. Pasa de verdad: la cuenta de
+    const { data: reservas, error: eReservas } =
+      ref.tipo === "order"
+        ? await conPedidos.from("bookings").select("id, status").eq("order_id", ref.id)
+        : await admin.from("bookings").select("id, status").eq("id", ref.id);
+    if (eReservas) throw new Error(eReservas.message);
+
+    const lineas = reservas ?? [];
+
+    // El sujeto no está en ESTA base de datos. Pasa de verdad: la cuenta de
     // Stripe en *test mode* es una sola y la comparten dev, los previews y el
     // `stripe listen` de quien esté probando en local. Un evento de otro
     // entorno no es nuestro y sobre todo NO se reembolsa: allí puede estar
     // perfectamente confirmado. 200 para que Stripe deje de reintentar.
-    if (!reserva) {
-      return NextResponse.json({ status: "ajeno", booking: bookingId });
+    if (lineas.length === 0 || (ref.tipo === "order" && !pedido)) {
+      return NextResponse.json({ status: "ajeno", sujeto: etiqueta });
     }
 
+    const { data: pagos, error: ePagos } = await admin
+      .from("payments")
+      .select("booking_id, status, provider_payment_id")
+      .in(
+        "booking_id",
+        lineas.map((b) => b.id),
+      );
+    if (ePagos) throw new Error(ePagos.message);
+
     // Reentrega del cobro que YA acreditamos. Es el caso que hay que distinguir
-    // con cuidado, porque se parece al huérfano: la reserva tampoco está en
-    // `pending_payment` (la movimos nosotros al cobrarla). La diferencia es que
-    // este `pi_…` es EL de esta reserva y su pago está contabilizado. Sin esta
-    // comprobación, un simple reintento de Stripe reembolsaría el cobro bueno.
+    // con cuidado, porque se parece al huérfano: las reservas tampoco están en
+    // `pending_payment` (las movimos nosotros al cobrarlas). La diferencia es
+    // que este `pi_…` es EL de este cobro y sus pagos están contabilizados. Sin
+    // esta comprobación, un simple reintento de Stripe reembolsaría el cobro
+    // bueno.
     //
     // El sello de `provider_payment_id` se escribe ANTES de confirmar (abajo)
     // justamente para que esta comparación sea fiable: si se sellara después,
     // una reentrega que llegara en medio no encontraría el `pi_` y trataría el
     // pago legítimo como huérfano.
+    //
+    // ⚠️ `every` Y NO `some`: con un pedido hace falta que TODAS las líneas
+    // estén selladas y contabilizadas. Bastaría con que una no lo estuviera
+    // para que esto no fuese una reentrega limpia sino un estado a medias, y
+    // darlo por acreditado dejaría esa línea sin cobrar y sin devolver.
+    const cobros = pagos ?? [];
     const yaAcreditado =
       pi !== null &&
-      pago?.provider_payment_id === pi &&
-      YA_CONTABILIZADO.includes(pago?.status ?? "");
+      cobros.length === lineas.length &&
+      cobros.every(
+        (p) => p.provider_payment_id === pi && YA_CONTABILIZADO.includes(p.status),
+      );
 
-    if (reserva.status !== "pending_payment" && !yaAcreditado) {
-      // El horario ya se liberó (lo canceló el cron o el propio alumno), o la
-      // reserva ya estaba pagada y esto es un segundo cobro. En los dos casos
-      // el dinero se devuelve: no hay clase que dar a cambio.
-      return await reembolsarCobroHuerfano(pi, reserva.status);
+    // ⚠️ P-1 · TODO O NADA. Con un pedido no vale «alguna sigue esperando»:
+    // hace falta que lo hagan TODAS. Si el cron venció una a los 7 minutos, ese
+    // pedido ya no se puede entregar completo, así que no se acredita ninguna
+    // línea y el cargo vuelve entero.
+    const esperaCobro = lineas.every((b) => b.status === "pending_payment");
+
+    if (!esperaCobro && !yaAcreditado) {
+      // El horario ya se liberó (lo canceló el cron o el propio alumno), o ya
+      // estaba pagado y esto es un segundo cobro. En los dos casos el dinero se
+      // devuelve: no hay clase que dar a cambio.
+      return await reembolsarCobroHuerfano(
+        pi,
+        pedido
+          ? { reserva: null, pedido: pedido.status }
+          : { reserva: lineas[0]!.status, pedido: null },
+      );
     }
 
     // Camino normal. Se guarda el PaymentIntent y no la Session porque es el
     // que traen los eventos de reembolso y disputa.
-    if (pi) {
-      const { error } = await admin
-        .from("payments")
-        .update({ provider_payment_id: pi })
-        .eq("booking_id", bookingId);
-      // Antes este fallo no tumbaba el webhook. Ahora sí: el sello es lo que
-      // distingue nuestro cobro de uno huérfano, y confirmar sin él dejaría la
-      // reserva pagada y sin referencia — la siguiente reentrega la vería como
-      // un cobro tardío y la reembolsaría. Mejor 500 y que Stripe reintente.
-      if (error) throw new Error(error.message);
-    }
+    //
+    // Antes este fallo no tumbaba el webhook. Ahora sí: el sello es lo que
+    // distingue nuestro cobro de uno huérfano —y lo que `enqueue_refund` copia
+    // a la cola de reembolsos—, así que confirmar sin él dejaría el cobro
+    // pagado y sin referencia. Mejor 500 y que Stripe reintente.
+    if (pi) await sellarReferencia(pi);
 
     await llamar(true);
-    return NextResponse.json({ status: "ok", tipo: evento.rawType, booking: bookingId });
+    return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto: etiqueta });
   };
 
   // El `switch` es sobre NUESTRO vocabulario, no sobre el de Stripe: qué evento
@@ -326,11 +493,18 @@ export async function POST(req: Request) {
   // conciliación futura. (En `expired` no hay PaymentIntent siquiera.)
   const pi = evento.chargeRef;
   if (pi) {
-    await admin
-      .from("payments")
-      .update({ provider_payment_id: pi })
-      .eq("booking_id", bookingId);
+    // Se traga el error a propósito, que es lo que hacía antes: aquí no hay
+    // dinero que proteger. En el camino BUENO no se traga — ver `cobroEntrante`.
+    try {
+      await sellarReferencia(pi);
+    } catch (e) {
+      console.error("[webhook] no se pudo sellar el pi_ de un cobro fallido", {
+        sujeto: etiqueta,
+        pi,
+        error: e instanceof Error ? e.message : e,
+      });
+    }
   }
 
-  return NextResponse.json({ status: "ok", tipo: evento.rawType, booking: bookingId });
+  return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto: etiqueta });
 }
