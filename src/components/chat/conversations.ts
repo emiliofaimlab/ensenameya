@@ -43,10 +43,18 @@ export async function getConversation(
 }
 
 /**
- * El hilo de una reserva. Los enlaces viejos (`/chat/<reserva>`, el panel del
- * tutor, la sala) siguen entrando por aquí y tienen que seguir funcionando.
+ * El hilo de una reserva. Todo lo que solo tiene un `booking_id` entra por aquí
+ * y tiene que seguir funcionando: la sala, los correos antiguos y cualquier
+ * `/chat/<reserva>` que ande suelto.
  * `conversation_of_booking` es SECURITY INVOKER: si la reserva no es tuya, la
  * RLS devuelve null y esto acaba en un 404.
+ *
+ * ⚠️ 27-ago: aquí también se nombraba «el panel del tutor». Su botón «Chat» ya
+ * no navega a `/chat/<reserva>` — le pide a la burbuja que abra ese hilo (ver
+ * `app/(app)/tutor/chat-button.tsx`). Sigue viajando un id de RESERVA, así que
+ * la traducción hace la misma falta que antes; lo que cambió es quién la pide y
+ * desde qué lado. Este módulo es `server-only`: desde el navegador hay que
+ * llamar a la RPC directamente.
  */
 export async function conversationIdOfBooking(
   bookingId: string,

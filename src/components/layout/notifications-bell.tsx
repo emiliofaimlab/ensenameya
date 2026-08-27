@@ -12,6 +12,11 @@ import {
   type AppNotice,
   type NotificationRow,
 } from "@/lib/notifications";
+import {
+  consumirPeticion,
+  pedirAbrirHilo,
+  peticionSnapshot,
+} from "@/components/chat/open-thread";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,9 +38,26 @@ import {
  * al segundo; se refrescan al cargar la página y al abrir la campana. Si algún
  * día hace falta al instante, `messages` ya enseñó cómo (EP-17).
  */
+
+/**
+ * Cuánto se espera a que la burbuja atienda antes de irse a la página.
+ *
+ * No es un "tiempo de carga": la burbuja ya está montada o no lo está, y
+ * atenderla es un render. 400 ms es holgura para ese render (incluido el caso en
+ * que la burbuja tenga que traducir una reserva a conversación con una consulta
+ * corta) sin que la espera se note delante de una navegación, que cuesta más que
+ * eso ella sola. Mientras tanto el desplegable ya se ha cerrado, así que el clic
+ * no se queda mudo.
+ */
+const ESPERA_BURBUJA_MS = 400;
+
 export function NotificationsBell({ initial }: { initial: AppNotice[] }) {
   const router = useRouter();
   const [notices, setNotices] = useState<AppNotice[]>(initial);
+  // Controlado (antes no lo era) para poder cerrarlo A MANO: cuando el aviso
+  // abre la burbuja no hay navegación, y sin cerrar esto el desplegable se
+  // quedaba abierto tapando el hilo que el usuario acaba de pedir.
+  const [abierta, setAbierta] = useState(false);
 
   async function load() {
     const { data } = await createClient()
@@ -59,9 +81,85 @@ export function NotificationsBell({ initial }: { initial: AppNotice[] }) {
     router.refresh();
   }
 
+  /**
+   * NTF-21 · Un aviso de mensaje nuevo tiene que abrir el hilo EN LA BURBUJA,
+   * no llevarse al usuario a otra pantalla. Pero la campana no está siempre
+   * donde está la burbuja, así que hace falta un criterio.
+   *
+   * ── EL CRITERIO: PREGUNTAR POR EL RESULTADO, NO POR LA RUTA ────────────────
+   * Se pide la apertura y se mira si ALGUIEN LA HA ATENDIDO. Si a los
+   * `ESPERA_BURBUJA_MS` la petición sigue pendiente —misma referencia, que es
+   * justo lo que garantiza `peticionSnapshot()`— es que no había burbuja, y
+   * entonces se navega a `/chat/<id>` como toda la vida.
+   *
+   * Lo alternativo era mirar `pathname`, y se descartó por tres motivos:
+   *
+   *  1. **Sería la CUARTA copia de "dónde hay burbuja".** Hoy eso lo deciden
+   *     tres sitios distintos y ninguno es este: los layouts `(app)` y
+   *     `(public)` (que son los únicos que montan `ChatLauncher`), `AppChrome`
+   *     (la apaga en `/admin/*`) y la propia burbuja (se esconde sola en
+   *     `/chat/*` y `/room/*`). Una cuarta copia aquí es una lista que se queda
+   *     mintiendo en cuanto alguien mueva una ruta de grupo — y ninguna de las
+   *     tres está en un fichero que la campana importe, así que nadie se
+   *     enteraría hasta que un usuario se quedara con el clic muerto.
+   *  2. **La ruta no es la pregunta.** La pregunta es "¿va a ver este hilo?", y
+   *     hay una burbuja perfectamente montada que aun así no puede abrirlo: la
+   *     bandeja del servidor viene cortada a 30 conversaciones
+   *     (`ChatLauncher`), y un aviso puede señalar a la 31ª. Con el pathname
+   *     nos tragaríamos el clic y no pasaría nada. Preguntando por el resultado,
+   *     esa apertura fallida cae sola en la página, que sí sabe abrirla.
+   *  3. Es la sala la que lo obliga: `/room/[sessionId]` monta este mismo
+   *     `SiteHeader` (y por tanto esta campana) y **no** monta la burbuja, por
+   *     la decisión MN-04 de no tapar el vídeo. O sea que el caso "campana sin
+   *     burbuja" no es teórico, es una pantalla en producción.
+   *
+   * ⚠️ QUÉ ROMPERÍA ESTO, para que quede escrito: que la burbuja llame a
+   * `consumirPeticion()` MÁS TARDE de esos 400 ms (por ejemplo, si algún día
+   * espera a tener los mensajes cargados en vez de consumir en cuanto se hace
+   * cargo). Entonces navegaríamos igualmente y el usuario vería la página. No es
+   * una avería —es el comportamiento de antes de este cambio— pero sí es la
+   * primera cosa que mirar si alguien reporta "la campana me saca de la
+   * pantalla".
+   */
+  function abrirHiloEnBurbuja(
+    e: React.MouseEvent<HTMLAnchorElement>,
+    href: string,
+  ) {
+    // Se deja pasar todo lo que NO es un clic izquierdo a secas: ctrl/cmd+clic,
+    // "abrir en pestaña nueva", clic central. Ahí el usuario ha pedido una
+    // página a propósito, y la página sigue existiendo para dársela. Es también
+    // el motivo de que esto siga siendo un `<a>` y no un `<button>`.
+    if (e.defaultPrevented) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+      return;
+    }
+
+    const conversationId = href.slice("/chat/".length);
+    if (!conversationId) return;
+
+    e.preventDefault();
+    setAbierta(false);
+    pedirAbrirHilo({ conversationId });
+
+    // La referencia de ESTA petición. Si dentro de un momento el almacén sigue
+    // devolviendo exactamente este objeto, nadie la ha tocado.
+    const mia = peticionSnapshot();
+
+    window.setTimeout(() => {
+      if (peticionSnapshot() !== mia) return; // atendida (o pisada por otra)
+      // Se retira antes de irse: dejarla colgada haría que la burbuja se
+      // abriera sola, con este hilo, la próxima vez que el usuario pisara una
+      // pantalla que sí la monta — minutos después y sin haberlo pedido.
+      consumirPeticion();
+      router.push(href);
+    }, ESPERA_BURBUJA_MS);
+  }
+
   return (
     <DropdownMenu
+      open={abierta}
       onOpenChange={(open) => {
+        setAbierta(open);
         if (open) void load();
       }}
     >
@@ -133,10 +231,22 @@ export function NotificationsBell({ initial }: { initial: AppNotice[] }) {
                   </time>
                 </>
               );
+              // Solo los avisos de chat cambian de destino. Los demás
+              // (`/reservas/<id>`, `/tutor/payouts`…) siguen siendo enlaces y
+              // punto: no hay burbuja de reservas.
+              const alHilo = n.href?.startsWith("/chat/") ?? false;
               return (
                 <li key={n.id} className="px-2 py-2 text-[13px]">
                   {n.href ? (
-                    <Link href={n.href} className="block hover:underline">
+                    <Link
+                      href={n.href}
+                      className="block hover:underline"
+                      onClick={
+                        alHilo
+                          ? (e) => abrirHiloEnBurbuja(e, n.href as string)
+                          : undefined
+                      }
+                    >
                       {inner}
                     </Link>
                   ) : (
