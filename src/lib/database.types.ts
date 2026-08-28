@@ -110,20 +110,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "account_suspensions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "account_suspensions_suspended_by_fkey"
-            columns: ["suspended_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "account_suspensions_lifted_by_fkey"
             columns: ["lifted_by"]
             isOneToOne: false
@@ -135,6 +121,20 @@ export type Database = {
             columns: ["report_id"]
             isOneToOne: false
             referencedRelation: "conversation_reports"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_suspensions_suspended_by_fkey"
+            columns: ["suspended_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_suspensions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -2030,6 +2030,10 @@ export type Database = {
         Args: { p_from?: string; p_to?: string }
         Returns: Json
       }
+      admin_contact_user: {
+        Args: { p_message: string; p_report_id?: string; p_user_id: string }
+        Returns: string
+      }
       admin_conversation_reports: {
         Args: { p_limit?: number; p_pendientes?: boolean }
         Returns: {
@@ -2051,10 +2055,6 @@ export type Database = {
           reporter_is_tutor: boolean
           reporter_name: string
         }[]
-      }
-      admin_contact_user: {
-        Args: { p_message: string; p_report_id?: string; p_user_id: string }
-        Returns: string
       }
       admin_gmv_weekly: { Args: { p_weeks?: number }; Returns: Json }
       admin_report_thread: {
@@ -2234,6 +2234,7 @@ export type Database = {
           type: string
         }[]
       }
+      pre_booking_message_cap: { Args: never; Returns: number }
       process_notifications: { Args: never; Returns: Json }
       process_scheduled_payouts: { Args: never; Returns: Json }
       purge_contact_messages: { Args: never; Returns: number }
