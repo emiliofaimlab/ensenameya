@@ -23,8 +23,15 @@ import {
   type ChatMessage,
   type MessageRow,
 } from "@/lib/chat/messages";
+import {
+  cupoConsulta,
+  quedanLabel,
+  TOPE_SEGUIDOS,
+  TOPE_TOTAL,
+} from "@/lib/chat/limits";
 import { asRpc } from "./rpc";
 import { ReportConversation } from "./report-conversation";
+import type { CounterpartRole } from "./types";
 import { markConversationRead, useOpenThread } from "./unread";
 
 export type { ChatMessage } from "@/lib/chat/messages";
@@ -116,6 +123,23 @@ function AttachmentLink({ a, mine }: { a: Attachment; mine: boolean }) {
  * que `canChat` lo dice el servidor (`pair_can_chat`, la misma función que
  * rechaza el envío). Un cuadro de texto que traga lo escrito para devolver un
  * error rojo es peor que uno que no está.
+ *
+ * ── 28-AGO · Y EL TOPE SE DICE EN NÚMEROS, Y SE CUENTA ──────────────────────
+ * Hasta hoy la pantalla decía «el número de mensajes es limitado» y no decía
+ * cuál. El cliente pidió lo contrario: «dejar claro cuál es el límite». Ahora la
+ * línea de abajo del hilo lleva el número y, cuando se sabe de qué lado se mira
+ * (`counterpartRole`), lo que queda; y al agotarse, el cuadro de texto se
+ * cambia por la explicación de cómo se sigue, que es reservar.
+ *
+ * ⚠️ **Los topes son DOS y son solo del alumno**, no «5 de cada lado» —ver
+ * `@/lib/chat/limits`, que es donde están los números y el porqué de cada uno—.
+ * Al tutor no se le cuenta nada, así que a él se le dice la regla del otro lado
+ * y nunca un contador.
+ *
+ * ⚠️ **La cuenta sale del hilo ya cargado, sin una sola consulta más.** Es una
+ * comodidad, no un candado: quien impide el mensaje número 21 sigue siendo
+ * `send_conversation_message`, y el `toast` con su mensaje sigue ahí para
+ * cuando la cuenta de aquí se quede corta.
  */
 export function ChatThread({
   conversationId: conversationIdProp,
@@ -125,6 +149,7 @@ export function ChatThread({
   fill,
   hasBooking,
   canChat,
+  counterpartRole,
   reservarHref,
   blocked,
   visible = true,
@@ -160,6 +185,23 @@ export function ChatThread({
    * que lo viera ningún typecheck.
    */
   canChat?: boolean;
+  /**
+   * Qué es el OTRO en este hilo, y por tanto qué soy yo: `"tutor"` significa
+   * que quien mira es el alumno.
+   *
+   * ⚠️ Hace falta porque **los topes de la consulta previa son solo del
+   * alumno** (`send_conversation_message` los aplica dentro de
+   * `if v_uid = v_c.student_id`). Sin saber de qué lado se mira, el contador le
+   * diría al tutor que le quedan 3 mensajes cuando en realidad no tiene tope
+   * ninguno — que es la versión con números del mismo texto vago que había
+   * antes, y peor, porque un número se cree.
+   *
+   * `undefined` = «no me lo han dicho»: entonces no se cuenta nada, no se
+   * bloquea nada y el aviso se queda en la regla general. Lo pasan las dos
+   * pantallas que alcanzan un hilo sin compra (la bandeja y `/chat/[id]`); las
+   * otras tres solo montan hilos de reservas confirmadas, donde no hay topes.
+   */
+  counterpartRole?: CounterpartRole;
   /**
    * A dónde mandar a quien no puede escribir todavía. Solo tiene sentido cuando
    * el otro es el TUTOR (el alumno no vende nada): las pantallas que lo saben lo
@@ -225,6 +267,72 @@ export function ChatThread({
   // «no me lo han dicho», y ahí manda el comportamiento de siempre (ver la nota
   // de la prop).
   const soloLectura = canChat === false;
+  // ¿Quien mira es el alumno del par? Solo entonces hay topes que contar. Con
+  // el rol sin pasar esto es `false` y todo lo de abajo se queda en la regla
+  // general: nunca se inventa un contador que no se sabe de quién es.
+  const soyAlumno = counterpartRole === "tutor";
+
+  // ── El cupo de la consulta previa, en vivo ─────────────────────────────────
+  // Se calcula sobre `messages`, o sea sobre lo que ya está pintado: ni una
+  // consulta más. Se recalcula solo en cada render porque `messages` cambia con
+  // Realtime y con el envío propio, que es justo cuando el número tiene que
+  // moverse. Sin `useMemo` a propósito: es un recorrido de una lista que la
+  // purga deja en 30 días de conversación, y memorizarlo costaría más
+  // vigilancia que cálculo.
+  //
+  // `null` cuando no aplica —hilo de cliente, de solo lectura, bloqueado, o
+  // visto desde el lado del tutor— y de ahí cuelga TODO lo de abajo: es la
+  // única condición que hay que leer para saber si esta pantalla cuenta algo.
+  const cupo =
+    esConsulta && !soloLectura && !blocked && soyAlumno
+      ? cupoConsulta(messages, currentUserId)
+      : null;
+  // Se acabó el turno. En los dos casos el cuadro de texto se cambia por una
+  // explicación: el servidor rechazaría el envío igual, y enterarse por un
+  // error rojo después de escribir el párrafo es la peor manera posible.
+  //
+  // ⚠️ Los dos textos dicen QUÉ HACER, no qué ha fallado, y no dicen lo mismo
+  // porque no se sale igual de los dos sitios: de la espera se sale sola (en
+  // cuanto el tutor contesta, Realtime mete su mensaje, la racha se reinicia y
+  // el formulario vuelve solo), y del tope duro no se sale sin reservar.
+  //
+  // `null` = hay cupo, o esta pantalla no cuenta nada. Es también lo que
+  // silencia el contador de abajo: si el recuadro ya lo explica, la línea
+  // pequeña repitiéndolo solo estorba.
+  const textoSinCupo =
+    cupo === null
+      ? null
+      : cupo.agotado
+        ? `Has usado los ${TOPE_TOTAL} mensajes que puedes escribir antes de reservar. Para seguir hablando con este tutor, reserva una de sus mentorías: entonces el chat se abre sin tope de mensajes y con archivos.`
+        : cupo.esperando
+          ? `Llevas ${TOPE_SEGUIDOS} mensajes seguidos sin respuesta, que es el máximo antes de reservar. En cuanto el tutor conteste podrás escribir otros ${TOPE_SEGUIDOS} (te quedan ${cupo.quedanTotal} de ${TOPE_TOTAL} en total). Si prefieres no esperar, reservar una mentoría abre el chat sin topes.`
+          : null;
+
+  // ── La línea pequeña de los topes ──────────────────────────────────────────
+  // Tres redacciones, y las tres dicen la verdad de QUIEN LAS LEE, que es lo
+  // que el texto anterior no hacía: decía «el número de mensajes es limitado»
+  // igual al alumno (que tiene dos topes) que al tutor (que no tiene ninguno).
+  //
+  // Cadena vacía y no `null`: el `<span>` tiene que seguir existiendo para que
+  // el `justify-between` empuje «Reportar» a la derecha.
+  const avisoTopes =
+    !esConsulta || soloLectura || blocked
+      ? ""
+      : // El recuadro de arriba ya lo está explicando entero: repetirlo aquí
+        // en 11 px solo compite con él.
+        textoSinCupo
+        ? ""
+        : cupo
+          ? `Consulta previa: ${quedanLabel(cupo.quedanSeguidos, TOPE_SEGUIDOS)} mensajes seguidos, y ${cupo.quedanTotal} de ${TOPE_TOTAL} antes de reservar. Aún no se pueden enviar archivos.`
+          : counterpartRole === "student"
+            ? // Al tutor NO se le cuenta nada (el bloque de topes del SQL entra
+              // solo `if v_uid = v_c.student_id`), así que decirle «te quedan
+              // N» sería mentirle con un número, que se cree más que una frase
+              // vaga. Se le dice lo que sí le afecta: el ritmo del otro lado.
+              `Es una consulta previa a la reserva: todavía no se pueden enviar archivos. Tú respondes sin tope, pero quien pregunta solo puede escribir ${TOPE_SEGUIDOS} mensajes seguidos sin respuesta y ${TOPE_TOTAL} en total hasta que reserve.`
+            : // Sin saber de qué lado se mira: la regla, con sus números, y sin
+              // contador. Un contador que no se sabe de quién es no vale nada.
+              `Hasta que la reserva esté pagada no se pueden enviar archivos, y antes de reservar el alumno puede escribir ${TOPE_SEGUIDOS} mensajes seguidos sin respuesta y ${TOPE_TOTAL} en total.`;
 
   // N-23 · tener el hilo delante ES leerlo: se marca al abrirlo y, mientras
   // siga DELANTE, la burbuja no cuenta como pendiente lo que entra aquí.
@@ -440,6 +548,13 @@ export function ChatThread({
       senderId: currentUserId,
       body,
       createdAt: new Date().toISOString(),
+      // ⚠️ La MISMA regla que el servidor, no la que se ve desde aquí: aunque
+      // se haya llamado con `p_booking_id`, `send_message` deja el mensaje sin
+      // etiquetar si el par no ha comprado (delega en la vía de consulta). Si
+      // aquí se pusiera la reserva a secas, el mensaje recién enviado no
+      // contaría para el tope de 20 y el contador iría un número por delante
+      // del real hasta la siguiente recarga.
+      bookingId: hasBooking === false ? null : (bookingId ?? null),
       attachment: null,
     });
   }
@@ -458,6 +573,9 @@ export function ChatThread({
       senderId: currentUserId,
       body: "",
       createdAt: new Date().toISOString(),
+      // Un adjunto solo existe con la reserva pagada detrás (el `check` de la
+      // tabla ata las dos cosas), así que aquí la etiqueta es siempre la suya.
+      bookingId,
       attachment: res.attachment,
     });
     toast.success("Documento compartido.");
@@ -510,11 +628,22 @@ export function ChatThread({
             {soloLectura
               ? "En esta conversación no llegó a escribirse nada."
               : esConsulta
-                ? // Checkout en curso: quien mira ya está reservando, así que
-                  // el texto de M-12 («pregúntale antes de reservar») ya no
-                  // describe dónde está. Sin «le» ni «terminas»: el hilo lo
-                  // puede abrir cualquiera de los dos.
-                  "Aún no hay mensajes. Puedes escribir mientras se completa la reserva."
+                ? soyAlumno
+                  ? // EY-194 · el texto de al lado («mientras se completa la
+                    // reserva») describía el checkout, que era el único hilo
+                    // sin compra que quedaba vivo bajo MN-06. Desde el 26-ago
+                    // el caso normal es el contrario: preguntar ANTES de
+                    // reservar, sin nada empezado.
+                    // Sin números aquí a propósito: los dice la línea de abajo,
+                    // que además los cuenta. Repetirlos en las dos superficies
+                    // es tener dos sitios que se pueden desincronizar por una
+                    // frase de más.
+                    "Aún no hay mensajes. Pregúntale lo que necesites antes de reservar."
+                  : // Checkout en curso: quien mira ya está reservando, así que
+                    // el texto de M-12 («pregúntale antes de reservar») ya no
+                    // describe dónde está. Sin «le» ni «terminas»: el hilo lo
+                    // puede abrir cualquiera de los dos.
+                    "Aún no hay mensajes. Puedes escribir mientras se completa la reserva."
                 : "Aún no hay mensajes. Escribe el primero."}
           </p>
         ) : (
@@ -586,6 +715,29 @@ export function ChatThread({
             </Link>
           ) : null}
         </div>
+      ) : textoSinCupo ? (
+        // El tope, alcanzado. Mismo recuadro que el de solo lectura y a
+        // propósito: para quien mira son la misma situación —«aquí ya no puedo
+        // escribir»— y darles dos formas distintas solo serviría para que la
+        // segunda pareciera un fallo. Lo que cambia es la salida, que aquí
+        // siempre existe: reservar.
+        //
+        // ⚠️ Esto NO es la barrera. La barrera está en
+        // `send_conversation_message` y sigue estándolo; esto solo evita que se
+        // llegue a ella. Por eso se pinta con lo que el hilo ya tiene cargado y
+        // no se le pregunta nada al servidor: si la cuenta de aquí se quedara
+        // corta, lo peor que pasa es el `toast` de antes.
+        <div className="rounded-lg border border-dashed p-4 text-center text-[13px] text-muted-foreground">
+          <p>{textoSinCupo}</p>
+          {reservarHref ? (
+            <Link
+              href={reservarHref}
+              className="mt-2 inline-block font-semibold text-brand hover:underline"
+            >
+              Ver sus mentorías
+            </Link>
+          ) : null}
+        </div>
       ) : (
         <form
           className="flex gap-2"
@@ -648,18 +800,19 @@ export function ChatThread({
           único texto que de verdad solo aplica antes de pagar. */}
       {listo ? (
         <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-          {/* Decir el límite ANTES de chocar con él. El servidor es quien lo
-              impone (5 seguidos sin respuesta, 20 en total): esto solo evita
-              que el alumno se entere por un error rojo.
+          {/* ⚠️ AQUÍ PONÍA «el número de mensajes es limitado» Y NO DECÍA
+              CUÁNTOS. Un límite que no se puede contar no se puede repartir: el
+              alumno gastaba sus mensajes en «hola», «¿me lees?», «una duda» y
+              se enteraba del tope al chocar con él, en un error rojo escrito
+              por una excepción de Postgres.
+              Ahora la línea dice el número, y cuando se sabe de qué lado se
+              mira dice además cuántos quedan — la cuenta sale de los mensajes
+              ya cargados (`cupoConsulta`), sin una consulta más.
               En un hilo cerrado no hay límite del que avisar —no se escribe—, y
-              el recuadro de arriba ya lo explica. En uno de reserva tampoco:
-              ahí no hay topes. `<span>` vacío y no `null` para que el
-              `justify-between` siga empujando el botón a la derecha. */}
-          <span>
-            {esConsulta && !soloLectura
-              ? "Hasta que el pago esté confirmado no se pueden enviar archivos y el número de mensajes es limitado."
-              : ""}
-          </span>
+              en uno de reserva tampoco: ahí no hay topes. `<span>` vacío y no
+              `null` para que el `justify-between` siga empujando el botón a la
+              derecha. */}
+          <span>{avisoTopes}</span>
           {/* ⚠️ Reportar sigue disponible en un hilo cerrado, y es deliberado:
               lo que hay que denunciar ya está escrito. */}
           <ReportConversation conversationId={conversationId} />

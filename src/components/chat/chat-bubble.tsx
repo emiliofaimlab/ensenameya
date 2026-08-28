@@ -543,6 +543,9 @@ export function ChatBubble({
                   // el cierre del chat previo dejó en solo lectura (P-1b: se
                   // ven, no se escriben).
                   canChat={abierta.canChat}
+                  // De qué lado se mira: es lo que permite contar los topes de
+                  // la consulta previa, que son solo del alumno.
+                  counterpartRole={abierta.counterpartRole}
                   reservarHref={
                     abierta.counterpartRole === "tutor"
                       ? `/tutors/${abierta.counterpartId}`

@@ -146,6 +146,11 @@ export default async function ChatPage({
           // ⚠️ 27-ago: aquí ponía «y de la bandeja». Dejó de ser verdad — la
           // bandeja abre el hilo DENTRO de la burbuja y ya no pasa por aquí.
           canChat={conversation.canChat}
+          // De qué lado se mira. Decide el contador de la consulta previa: los
+          // topes son solo del alumno, así que sin esto el hilo no puede decir
+          // «te quedan N» sin arriesgarse a decírselo al tutor, que no tiene
+          // ninguno.
+          counterpartRole={conversation.counterpartRole}
           // Solo cuando el otro es el tutor: es el único que tiene mentorías
           // que reservar.
           reservarHref={
