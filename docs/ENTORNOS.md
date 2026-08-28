@@ -42,6 +42,7 @@ código; ausentes, la función se apaga sola en vez de romper:
 | `DAILY_API_KEY` | Sala de video real (EP-08) · borrado de grabaciones (§4) | Sala simulada; la purga responde `sin-daily` y no marca nada |
 | `NEXT_PUBLIC_REFERRAL_URL` | Bloque "Invita y gana" del **alumno** (US-1301) | El bloque **no se pinta** para alumnos |
 | `NEXT_PUBLIC_REFERRAL_URL_TUTOR` | Bloque "Invita y gana" del **tutor** (B1.11) — campaña DISTINTA en Referral Factory | El bloque **no se pinta** para tutores. ⚠️ **No se cae a la del alumno**: eso lo daría de alta en el programa equivocado |
+| `NEXT_PUBLIC_REFERRAL_EMBED_URL` · `..._TUTOR` | El widget de Referral Factory **embebido** en `/referidos` (28-ago), en vez de mandar al usuario fuera. Es el `src` del `<iframe>` que da RF en *Share / Embed*, que **no tiene por qué ser** la URL pública de la campaña | `/referidos` sigue existiendo y cae al enlace externo de arriba con un aviso discreto — nunca un iframe vacío. Falla cerrado por rol igual que las dos de arriba |
 | `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | Monitoreo de errores (US-1501) | El SDK ni se inicializa |
 | `STRIPE_API_KEY` | Cobro real con Stripe (EP-20) · **reembolsos reales** (X-01, §4) | No se instancia el cliente, el checkout sigue por el camino simulado y la cola de reembolsos **no se toca** (queda `pending`) |
 | `RESEND_API_KEY` | Envío real de correo (US-1201) y del formulario de contacto (DL-01) | La cola se queda en `pending` (no `failed`) y el mensaje de contacto se guarda en `contact_messages` pero no sale |
@@ -78,6 +79,7 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
 | `RESEND_API_KEY` | **sí (17-ago)** | **sí (17-ago)** | **sí (17-ago)** | — |
 | `NEXT_PUBLIC_REFERRAL_URL` | sí | **falta** | **falta** | — |
 | `NEXT_PUBLIC_REFERRAL_URL_TUTOR` | **falta** | **falta** | **falta** | — |
+| `NEXT_PUBLIC_REFERRAL_EMBED_URL` · `..._TUTOR` | **falta** | **falta** | **falta** | — (pendiente: el cliente tiene que dar el snippet de embed de RF) |
 | `REFERRAL_FACTORY_API_KEY` | sí | **falta** | **falta** | — |
 | `APP_BASE_URL` | — | — | — | **falta** (variable, no secret) |
 | `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional (secret) — solo si `APP_BASE_URL` apunta a una preview |
