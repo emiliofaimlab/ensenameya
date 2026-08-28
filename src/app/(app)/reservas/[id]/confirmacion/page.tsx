@@ -6,6 +6,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
+import { parseRequirements } from "@/lib/product-requirements";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
 
@@ -52,7 +53,7 @@ export default async function ConfirmationPage({
       // N-27 · `session_ref` es el "N.º de sesión" (`7K3M9Q-2`) que el cliente
       // pidió para seguir una clase y su cobro. Esta pantalla es lo más
       // parecido a un resguardo que ve el alumno: es donde lo va a copiar.
-      "id, status, total_amount, currency, products(title, tutor_id), sessions(start_at, end_at, session_ref)",
+      "id, status, total_amount, currency, products(title, tutor_id, requirements), sessions(start_at, end_at, session_ref)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -64,6 +65,11 @@ export default async function ConfirmationPage({
   // llega por otro camino y a su ritmo. Decir "reserva registrada" con el pago
   // aún pendiente sería prometer algo que todavía no ha pasado.
   const pagoPendiente = booking.status === "pending_payment";
+
+  // Lo que hay que traer a clase. Esta pantalla es la primera —y muchas veces
+  // la única— que el alumno lee entero después de pagar, así que es donde el
+  // aviso llega más lejos; el detalle de la reserva lo repite para quien vuelva.
+  const requisitos = parseRequirements(booking.products?.requirements);
 
   const names = await tutorNames(supabase, [booking.products?.tutor_id]);
   const tutor = names.get(booking.products?.tutor_id ?? "");
@@ -166,6 +172,32 @@ export default async function ConfirmationPage({
             </span>
           </div>
         </section>
+
+        {/* Requerimientos de sesión — antes de "Próximos pasos" a propósito:
+            los pasos cuentan qué va a pasar (correo, sala, chat), y esto cuenta
+            qué tiene que hacer el alumno HOY. Lo accionable primero.
+
+            Sin requisitos no se pinta: una tarjeta que dijera "no necesitas
+            nada" solo alarga la pantalla del recibo. */}
+        {requisitos.length > 0 ? (
+          <section className="w-full rounded-[16px] border border-[#e0e0e0] bg-card p-5">
+            <h2 className="text-base font-semibold text-[#19191f]">
+              Qué necesitas para la sesión
+            </h2>
+            <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
+              Tu tutor lo pide para esta mentoría. Tenlo listo antes de la
+              primera clase.
+            </p>
+            <ul className="mt-3.5 flex flex-col gap-2.5">
+              {requisitos.map((r, i) => (
+                <li key={`${i}-${r}`} className="flex items-start gap-2.5">
+                  <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-brand" />
+                  <span className="text-[13px] text-[#404040]">{r}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         <section className="w-full rounded-[16px] border border-[#e0e0e0] bg-card p-5">
           <h2 className="text-base font-semibold text-[#19191f]">

@@ -135,6 +135,33 @@ export default async function PagarPedidoPage({
                       : `La confirma el tutor (hasta ${P.cutoffHours} h).`}
                   </p>
                 ) : null}
+                {/* Qué tiene que traer el alumno a ESTA mentoría.
+
+                    Esta es la última pantalla en la que todavía puede echarse
+                    atrás sin haber pagado nada, así que si una de las tres pide
+                    portátil y no lo tiene, es aquí donde le sirve enterarse. En
+                    la ficha ya salía —con más sitio y más detalle—, pero al
+                    carrito se llega desde el calendario y no siempre pasando
+                    por ella.
+
+                    Va al final de la línea y en un cuerpo más pequeño: informa,
+                    no compite con el precio ni con los horarios. Sin requisitos
+                    no se pinta nada. */}
+                {l.requerimientos.length > 0 ? (
+                  <div className="mt-2 rounded-[10px] bg-muted px-2.5 py-2">
+                    <p className="text-[11.5px] font-semibold text-[#404040]">
+                      Necesitas tener listo
+                    </p>
+                    <ul className="mt-1 flex flex-col gap-0.5">
+                      {l.requerimientos.map((r, i) => (
+                        <li key={`${i}-${r}`} className="flex items-start gap-1.5">
+                          <span className="mt-[6px] size-1 shrink-0 rounded-full bg-brand" />
+                          <span className="text-[11.5px] text-[#525252]">{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>

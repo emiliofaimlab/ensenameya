@@ -135,6 +135,27 @@ export default async function ConfirmacionPedidoPage({
                     </li>
                   ))}
                 </ul>
+                {/* Qué tiene que traer el alumno a ESTA mentoría. Va dentro
+                    de la línea y no como bloque único del pedido porque los
+                    requisitos son de la mentoría: juntarlos todos en una lista
+                    daría un «necesitas un portátil» sin decir para cuál de las
+                    tres clases. Sin requisitos no se pinta nada. */}
+                {l.requerimientos.length > 0 ? (
+                  <div className="mt-2 rounded-[10px] bg-muted px-3 py-2.5">
+                    <p className="text-[12px] font-semibold text-[#404040]">
+                      Qué necesitas para esta sesión
+                    </p>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {l.requerimientos.map((r, i) => (
+                        <li key={`${i}-${r}`} className="flex items-start gap-2">
+                          <span className="mt-[7px] size-1 shrink-0 rounded-full bg-brand" />
+                          <span className="text-[12.5px] text-[#525252]">{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+
                 <Link
                   href={`/reservas/${l.bookingId}`}
                   className="mt-2 flex w-fit items-center gap-1.5 text-[13px] font-semibold text-brand hover:underline"

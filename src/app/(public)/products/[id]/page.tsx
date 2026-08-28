@@ -250,6 +250,47 @@ export default async function ProductPage({
               </div>
             ) : null}
 
+            {/* Requerimientos de sesión — lo que el alumno tiene que TRAER.
+
+                Va justo detrás de "Qué vas a conquistar" y por delante de "Cómo
+                funciona": las dos primeras responden a "¿esto es para mí?", y
+                esta es la mitad que puede contestar que NO —quien no tiene
+                portátil necesita saberlo aquí, no a los diez minutos de pagar—.
+                Por eso está por encima del panel de reserva en móvil y no al
+                final con las FAQ.
+
+                Sin requisitos NO se pinta nada: no hay lista genérica de
+                plataforma a la que caer (a diferencia de las FAQ). Anunciar
+                condiciones que el tutor no puso sería peor que callar. */}
+            {product.requirements.length > 0 ? (
+              <div>
+                <h2 className="text-[22px] font-bold text-[#1f1f1f]">
+                  Qué necesitas para la sesión
+                </h2>
+                <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
+                  Tenlo listo antes de tu primera clase.
+                </p>
+                <ul className="mt-3.5 flex flex-col gap-3">
+                  {product.requirements.map((r, i) => (
+                    // La clave lleva el índice porque los requisitos no se
+                    // deduplican: dos iguales compartirían `key` y React
+                    // tiraría uno. Mismo criterio que las FAQ de más abajo.
+                    <li key={`${i}-${r}`} className="flex items-start gap-3">
+                      {/* Viñeta y no el check de "Qué vas a conquistar": allí
+                          el tick significa "esto te llevas", y aquí leería
+                          como "esto ya lo tienes", que es justo lo contrario de
+                          lo que la lista está pidiendo. Se conserva la caja de
+                          22 px para que las dos listas queden alineadas. */}
+                      <span className="mt-0.5 grid size-[22px] shrink-0 place-items-center rounded-full bg-brand-muted">
+                        <span className="size-1.5 rounded-full bg-brand" />
+                      </span>
+                      <span className="text-[15px] text-[#4d4d4d]">{r}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
             {/* "Qué incluye el paquete" del Figma pide una segunda lista que el
                 modelo no tiene: `products` guarda un solo texto libre. Queda
                 como hueco de datos, no se rellena con contenido inventado. */}

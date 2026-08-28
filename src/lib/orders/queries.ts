@@ -2,6 +2,7 @@ import "server-only";
 
 import { createClient } from "@/lib/supabase/server";
 import { tutorNames } from "@/lib/booking";
+import { parseRequirements } from "@/lib/product-requirements";
 import type { Database } from "@/lib/database.types";
 import type { OrderRow } from "@/lib/orders/tipos";
 
@@ -38,6 +39,13 @@ export type LineaResuelta = {
    * `pending_acceptance`.
    */
   aceptaSola: boolean;
+  /**
+   * Requerimientos de sesión de ESTA mentoría: lo que el alumno tiene que traer
+   * a clase. Va por línea por el mismo motivo que `aceptaSola` — el dato vive
+   * en `products`, y un pedido de tres mentorías puede pedir portátil para una
+   * y nada para las otras dos. Vacío = el tutor no puso ninguno.
+   */
+  requerimientos: string[];
 };
 
 export type PedidoResuelto = {
@@ -84,7 +92,7 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
   const { data: lineas } = await supabase
     .from("bookings")
     .select(
-      "id, status, product_id, session_duration_min, products(title, tutor_id, auto_accept_bookings), sessions(start_at, status), payments(gross_amount, currency)",
+      "id, status, product_id, session_duration_min, products(title, tutor_id, auto_accept_bookings, requirements), sessions(start_at, status), payments(gross_amount, currency)",
     )
     .eq("order_id", orderId);
 
@@ -126,6 +134,7 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
       // a un humano. Aquí además es lo que hace que la pantalla prometa la
       // ventana de 24 h, que es lo que de verdad va a pasar en ese caso.
       aceptaSola: b.products?.auto_accept_bookings ?? false,
+      requerimientos: parseRequirements(b.products?.requirements),
     };
   });
 
