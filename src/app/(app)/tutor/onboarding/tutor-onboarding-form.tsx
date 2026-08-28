@@ -387,7 +387,7 @@ export function TutorOnboardingForm({
       }
       // M-03 · El asistente TERMINA aquí. Antes hacía `router.push("/tutor")`
       // y el tutor aterrizaba en el menú sin señal de haber acabado.
-      finish(); // olvida el paso: volver a entrar ya no reabre el asistente
+      finish(); // saca el `?paso=` de la URL: la pantalla de cierre no es un paso
       setBusy(false);
       setDone(true);
       return;
