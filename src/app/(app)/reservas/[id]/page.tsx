@@ -288,27 +288,6 @@ export default async function BookingDetailPage({
             </PanelCard>
           ) : null}
 
-          <PanelCard>
-            <PanelCardTitle>Política de cancelación</PanelCardTitle>
-            <p className="mt-3.5 text-sm text-[#6b6b6b]">
-              Cancela con {P.cutoffHours} h o más de anticipación y recibe{" "}
-              {P.refundPct.studentEarly} % de reembolso. Con menos de{" "}
-              {P.cutoffHours} h, el reembolso es del {P.refundPct.studentLate} %.
-              Si cancela el tutor, {P.refundPct.tutorCancels} %.
-            </p>
-            {CANCELLABLE.has(booking.status) ? (
-              <Button
-                asChild
-                variant="outline"
-                className="mt-3.5 h-10 rounded-[8px] px-4 text-[13.5px] text-[#262626]"
-              >
-                <Link href={`/reservas/${booking.id}/cancelar`}>
-                  Cancelar reserva
-                </Link>
-              </Button>
-            ) : null}
-          </PanelCard>
-
           {booking.status === "completed" ? (
             <PanelCard>
               <PanelCardTitle>Tu reseña</PanelCardTitle>
@@ -354,6 +333,40 @@ export default async function BookingDetailPage({
               reabierta el 17-jul: la retención del chat sigue sin decidirse. */}
         </PanelCard>
       </div>
+
+      {/* ⚠️ LA POLÍTICA DE CANCELACIÓN, AL FINAL Y FUERA DE LA REJILLA.
+
+          Estaba en la columna izquierda, entre el pago y la reseña. Ahí es un
+          bloque de texto fijo —los plazos de RN-37, que no cambian por reserva—
+          empujando hacia abajo la única parte viva de la pantalla: el chat con
+          el tutor. Al sacarla de la rejilla, la fila que comparten las dos
+          columnas la marcan las sesiones y el pago, y el hilo gana todo el alto
+          que ocupaba este párrafo.
+
+          Solo se ha movido: mismo texto, mismo `CANCELLABLE`, mismo botón. Los
+          plazos siguen leyéndose de `lib/policy.ts` (RN-37) y no escritos aquí,
+          que es lo que mantiene esta tarjeta y las páginas legales diciendo lo
+          mismo. */}
+      <PanelCard>
+        <PanelCardTitle>Política de cancelación</PanelCardTitle>
+        <p className="mt-3.5 text-sm text-[#6b6b6b]">
+          Cancela con {P.cutoffHours} h o más de anticipación y recibe{" "}
+          {P.refundPct.studentEarly} % de reembolso. Con menos de{" "}
+          {P.cutoffHours} h, el reembolso es del {P.refundPct.studentLate} %. Si
+          cancela el tutor, {P.refundPct.tutorCancels} %.
+        </p>
+        {CANCELLABLE.has(booking.status) ? (
+          <Button
+            asChild
+            variant="outline"
+            className="mt-3.5 h-10 rounded-[8px] px-4 text-[13.5px] text-[#262626]"
+          >
+            <Link href={`/reservas/${booking.id}/cancelar`}>
+              Cancelar reserva
+            </Link>
+          </Button>
+        ) : null}
+      </PanelCard>
     </PanelShell>
   );
 }

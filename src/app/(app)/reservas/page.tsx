@@ -4,6 +4,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
+import { salaDeLaReserva } from "@/lib/room-window";
 import { BookingRow } from "@/components/booking-row";
 import { EmptyResults } from "@/components/catalog/empty-results";
 import {
@@ -39,7 +40,12 @@ export default async function ReservasPage() {
   const { data } = await supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, products(title, tutor_id), sessions(id, start_at, status)",
+      // Las columnas de ventana viajan con la sesión: sin ellas esta lista no
+      // puede saber si la sala está abierta, y el cliente pidió el botón
+      // «Entrar a sala» aquí también — hasta hoy solo lo tenía el panel, así
+      // que desde la lista había que entrar al detalle para llegar a la clase.
+      // Ver `salaDeLaReserva`.
+      "id, status, total_amount, currency, products(title, tutor_id), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
     )
     .eq("student_id", user.id)
     .order("created_at", { ascending: false });
@@ -85,28 +91,44 @@ export default async function ReservasPage() {
     );
   };
 
-  const row = (b: (typeof bookings)[number]) => (
-    <BookingRow
-      key={b.id}
-      href={`/reservas/${b.id}`}
-      tutor={names.get(b.products?.tutor_id ?? "")}
-      tutorHref={perfilDelTutor(b.products?.tutor_id)}
-      title={b.products?.title ?? "Mentoría"}
-      when={when(b)}
-      timeZone={tz}
-      status={BOOKING_STATUS_LABEL[b.status]}
-      note={formatMoney(b.total_amount, b.currency)}
-      action={
-        <Button
-          asChild
-          variant="outline"
-          className="h-[38px] rounded-[8px] px-4 text-[13px] text-[#4d4d4d]"
-        >
-          <Link href={`/reservas/${b.id}`}>Ver detalle</Link>
-        </Button>
-      }
-    />
-  );
+  const row = (b: (typeof bookings)[number]) => {
+    // El mismo criterio del panel del alumno, ahora en un solo sitio: reserva
+    // en `confirmed`/`in_progress` **y** sesión dentro de su ventana de acceso.
+    // Sin la segunda mitad el botón saldría para una clase de dentro de tres
+    // semanas y el servidor la rechazaría.
+    const sala = salaDeLaReserva(b.status, b.sessions);
+    return (
+      <BookingRow
+        key={b.id}
+        href={`/reservas/${b.id}`}
+        tutor={names.get(b.products?.tutor_id ?? "")}
+        tutorHref={perfilDelTutor(b.products?.tutor_id)}
+        title={b.products?.title ?? "Mentoría"}
+        when={when(b)}
+        timeZone={tz}
+        status={BOOKING_STATUS_LABEL[b.status]}
+        note={formatMoney(b.total_amount, b.currency)}
+        action={
+          sala ? (
+            <Button
+              asChild
+              className="h-[38px] rounded-[8px] px-4 text-[13px] font-semibold"
+            >
+              <Link href={`/room/${sala.id}`}>Entrar a sala</Link>
+            </Button>
+          ) : (
+            <Button
+              asChild
+              variant="outline"
+              className="h-[38px] rounded-[8px] px-4 text-[13px] text-[#4d4d4d]"
+            >
+              <Link href={`/reservas/${b.id}`}>Ver detalle</Link>
+            </Button>
+          )
+        }
+      />
+    );
+  };
 
   return (
     <PanelShell>

@@ -73,8 +73,12 @@ export default async function RoomPage({
       .order("start_at")
       .limit(1)
       .maybeSingle(),
-    // US-1801 · quién aceptó que se grabe. La RLS deja a los dos participantes
-    // ver las dos filas: hay que poder decir "falta que el otro acepte".
+    // Quién ha marcado ya el «Entiendo» de la grabación. Era US-1801/RN-42 —un
+    // consentimiento de dos partes, y por eso se leían LAS DOS filas para poder
+    // decir «falta que el otro acepte»—; desde el 28-ago la mentoría se graba
+    // siempre y esto solo informa, así que de aquí sale un único booleano. La
+    // consulta se queda igual: la RLS ya la limita a los participantes y filtrar
+    // por `user_id` no ahorraría un viaje.
     supabase
       .from("session_recording_consents")
       .select("user_id")
@@ -148,10 +152,10 @@ export default async function RoomPage({
       currentUserId={user.id}
       firstSessionAt={firstSession?.start_at ?? null}
       initialMessages={initialMessages}
-      consent={{
-        mine: (consents ?? []).some((c) => c.user_id === user.id),
-        other: (consents ?? []).some((c) => c.user_id !== user.id),
-      }}
+      // El aviso de grabación ya no es un permiso de dos partes, así que del
+      // resultado solo interesa la fila PROPIA: si ya está, la casilla nace
+      // marcada y el botón de entrar nace habilitado. Ver `RecordingConsent`.
+      entendido={(consents ?? []).some((c) => c.user_id === user.id)}
     />
   );
 }

@@ -355,7 +355,7 @@ export function LiveRoom({
   currentUserId,
   firstSessionAt,
   initialMessages,
-  consent,
+  entendido: entendidoInicial,
 }: {
   /**
    * V-2 · El `SiteHeader` real, ya renderizado por `page.tsx`. Llega como slot
@@ -394,8 +394,16 @@ export function LiveRoom({
   currentUserId: string;
   firstSessionAt: string | null;
   initialMessages: ChatMessage[];
-  /** US-1801 · quién ha aceptado ya que se grabe (RN-42). */
-  consent: { mine: boolean; other: boolean };
+  /**
+   * ¿este usuario ya marcó el «Entiendo» de la grabación?
+   *
+   * Antes eran DOS booleanos (`consent: {mine, other}`): la grabación se pedía
+   * y hacía falta el sí de los dos, así que había que poder decir «falta que el
+   * tutor acepte». Desde el 28-ago la mentoría se graba siempre y esto solo
+   * informa, así que el estado del otro dejó de significar nada. Ver
+   * `RecordingConsent`.
+   */
+  entendido: boolean;
 }) {
   const router = useRouter();
   /**
@@ -415,6 +423,47 @@ export function LiveRoom({
   const [now, setNow] = useState<number | null>(null);
   const [joined, setJoined] = useState<Joined | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * El «Entiendo» de la grabación, que ahora es OBLIGATORIO para entrar.
+   *
+   * Vive aquí y no dentro de `RecordingConsent` porque quien tiene que
+   * reaccionar a la casilla es el botón de entrar, que está fuera de ella. El
+   * valor inicial lo resuelve la página en servidor (¿hay fila suya?); a partir
+   * de ahí lo mueve el propio componente al escribir en la base.
+   */
+  const [entendido, setEntendido] = useState(entendidoInicial);
+  /**
+   * A dónde se va uno al salir de la sala: SU detalle de la reserva.
+   *
+   * ⚠️ Antes salir era `setJoined(null)`, o sea volver a esta misma pantalla en
+   * su rama de «todavía no has entrado» — con el aviso de grabación y el botón
+   * de entrar otra vez. El cliente lo describió tal cual: «cuando le damos al
+   * botón de salir nos manda a la pantalla del check de que la mentoría será
+   * grabada. No debe ocurrir más». Salir de una clase es terminar, no volver a
+   * la puerta.
+   *
+   * Tutor y alumno tienen detalles distintos (`/tutor/reservas/<id>` y
+   * `/reservas/<id>`) y cada uno solo puede leer el suyo: mandar al alumno al
+   * del tutor sería un 404 por RLS.
+   */
+  const detalleDeLaReserva = isTutor
+    ? `/tutor/reservas/${bookingId}`
+    : `/reservas/${bookingId}`;
+  /**
+   * Una sola salida, aunque la empujen tres cosas a la vez.
+   *
+   * Se sale por cuatro caminos —el botón «Salir» de Daily, el de la sala
+   * simulada, «Marcar completada» y el cierre que llega por Realtime— y varios
+   * se encadenan: `leave()` dispara `left-meeting`, y navegar desmonta el
+   * componente, cuyo `destroy()` puede disparar otro. Sin este pestillo, la
+   * misma salida haría dos o tres `router.push` seguidos.
+   */
+  const saliendo = useRef(false);
+  const salirDeLaSala = useCallback(() => {
+    if (saliendo.current) return;
+    saliendo.current = true;
+    router.push(detalleDeLaReserva);
+  }, [router, detalleDeLaReserva]);
   // Controles locales de la sala simulada (con Daily real los trae el SDK).
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
@@ -654,9 +703,23 @@ export function LiveRoom({
       });
       callRef.current = call;
 
+      // El «Salir» de la barra de Daily. Antes esto era `setJoined(null)` +
+      // `router.refresh()`, o sea quedarse en la sala pintando su pantalla de
+      // antesala — el aviso de grabación incluido. Ahora se sale de verdad: al
+      // detalle de la reserva. Ver `salirDeLaSala`.
+      //
+      // ⚠️ EL `cancelled` NO SOBRA. La limpieza de este efecto llama a
+      // `destroy()`, que cuelga la llamada y puede emitir `left-meeting` él
+      // solo. Sin esta guarda, salir de la sala por CUALQUIER otro camino —un
+      // enlace de la cabecera, con su confirmación de `GuardaDeSalida` ya
+      // aceptada— desmontaría el componente, el `destroy()` dispararía este
+      // manejador y un `router.push` al detalle pisaría la navegación que el
+      // usuario acababa de pedir. `cancelled` solo se pone a true en esa
+      // limpieza, así que distingue «se fue de la llamada» de «estamos
+      // recogiendo».
       call.on("left-meeting", () => {
-        setJoined(null);
-        router.refresh();
+        if (cancelled) return;
+        salirDeLaSala();
       });
       call.on("error", (e) => {
         toast.error("Se perdió la conexión con la sala.");
@@ -693,7 +756,96 @@ export function LiveRoom({
         callRef.current = null;
       }
     };
-  }, [live, joined, router, alternarChat]);
+    // `salirDeLaSala` es estable (`useCallback` sobre el router y una cadena),
+    // así que entra en la lista sin recrear la llamada en cada render. Si algún
+    // día deja de serlo, este efecto empezaría a destruir y rehacer el iframe:
+    // comprobarlo antes de tocarla.
+  }, [live, joined, salirDeLaSala, alternarChat]);
+
+  /**
+   * ⚠️ SACAR AL OTRO CUANDO LA SESIÓN SE CIERRA.
+   *
+   * Hasta hoy «Marcar completada» cerraba la sesión y sacaba solo a quien
+   * pulsaba —el tutor—; el alumno se quedaba dentro de la videollamada, en una
+   * clase que para la base ya había terminado. El cliente pidió las dos cosas:
+   * que se le saque y que se le bloquee el acceso.
+   *
+   * El bloqueo es de servidor y ya está puesto: `join_session` vuelve a
+   * rechazar `completed`/`no_show` (`20260828120000`). Esto es la otra mitad —
+   * enterarse—, y va por Realtime sobre la fila de `sessions` y no por un
+   * mensaje de Daily por un motivo concreto: el tutor puede cerrar la sesión
+   * **desde fuera de la sala**, en `/tutor/reservas/<id>`
+   * (`CompleteSessionButton`), y desde ahí no hay llamada por la que mandarle
+   * nada a nadie. La fila cambia en los dos caminos.
+   *
+   * Mismo patrón que el canal de `chat-thread.tsx`, incluido el `setAuth`: para
+   * tablas con RLS hay que autenticar el websocket con el JWT o los cambios no
+   * llegan. La RLS de `sessions_select_participant` ya limita cada fila a su
+   * alumno y su tutor; el filtro solo la estrecha a ésta.
+   *
+   * Vale para los dos roles a propósito: si el cron cierra la sesión mientras
+   * el tutor sigue dentro, también se le lleva a su detalle. Al que acaba de
+   * pulsar «Marcar completada» no le afecta — ya va de camino y `saliendo` está
+   * echado.
+   */
+  useEffect(() => {
+    if (!joined) return;
+
+    const supabase = createClient();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelado = false;
+
+    void (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (cancelado) return;
+      if (session?.access_token) supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel(`sesion:${sessionId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "sessions",
+            filter: `id=eq.${sessionId}`,
+          },
+          (payload) => {
+            const estado = (payload.new as { status?: SessionStatus }).status;
+            // `in_progress` también llega por aquí (lo pone `join_session`) y
+            // no es un cierre: solo cuentan los tres estados que cierran la
+            // puerta, los mismos que rechaza la RPC.
+            if (
+              estado !== "completed" &&
+              estado !== "no_show" &&
+              estado !== "cancelled"
+            ) {
+              return;
+            }
+            if (saliendo.current) return;
+            toast(
+              estado === "cancelled"
+                ? "La sesión se canceló."
+                : "La mentoría se marcó como completada.",
+            );
+            // Colgar antes de navegar: el desmontaje ya llama a `destroy()`,
+            // pero eso ocurre después del render y deja la cámara encendida
+            // ese rato. `void` porque devuelve promesa y no hay nada que
+            // esperar — la navegación no depende de que Daily termine.
+            void callRef.current?.leave();
+            salirDeLaSala();
+          },
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      cancelado = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [joined, sessionId, salirDeLaSala]);
 
   async function join() {
     setBusy(true);
@@ -761,7 +913,13 @@ export function LiveRoom({
   // pelearse con `customTrayButtons`.
 
   async function complete() {
-    if (!window.confirm("¿Marcar la sesión como completada? La sala se cerrará.")) return;
+    if (
+      !window.confirm(
+        "¿Marcar la sesión como completada? La sala se cierra para los dos: al alumno se le saca y ninguno podrá volver a entrar.",
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     const supabase = createClient();
     const { error } = await supabase.rpc("complete_session", { p_session_id: sessionId });
@@ -770,9 +928,16 @@ export function LiveRoom({
       toast.error(error.message || "No se pudo completar la sesión.");
       return;
     }
-    setJoined(null);
+    // Antes: `setJoined(null)` + `router.refresh()`, que dejaba al tutor en la
+    // antesala de la sala —con el aviso de grabación y el botón de volver a
+    // entrar— de una clase que él mismo acababa de cerrar. Ahora sale al
+    // detalle, igual que por cualquier otra puerta.
+    //
+    // Al ALUMNO lo saca el canal de Realtime de arriba: este `complete_session`
+    // escribe la fila de `sessions` y su navegador la está mirando.
     toast.success("Sesión completada.");
-    router.refresh();
+    void callRef.current?.leave();
+    salirDeLaSala();
   }
 
   // ── Estado en vivo (unido) ────────────────────────────────────────────────
@@ -1038,7 +1203,10 @@ export function LiveRoom({
                 >
                   {sinLeer > 0 ? `Chat (${sinLeer > 9 ? "9+" : sinLeer})` : "Chat"}
                 </Button>
-                <Button size="sm" variant="destructive" onClick={() => setJoined(null)}>
+                {/* El gemelo del «Salir» de la barra de Daily, y va al mismo
+                    sitio: el detalle de la reserva. Antes era `setJoined(null)`
+                    y devolvía a la antesala con el aviso de grabación. */}
+                <Button size="sm" variant="destructive" onClick={salirDeLaSala}>
                   Salir
                 </Button>
               </div>
@@ -1190,12 +1358,26 @@ export function LiveRoom({
           <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
             Comprobando el horario de la sesión…
           </p>
-        ) : !bookingAllowsRoom || sessionCancelled ? (
+        ) : !bookingAllowsRoom || sessionCancelled || sessionEnded ? (
+          /*
+           * ⚠️ `sessionEnded` ENTRA AQUÍ, y es marcha atrás sobre MN-05.
+           *
+           * Con la sala de 7 días, una sesión `completed` seguía teniendo sala
+           * y esta pantalla lo contaba («ya terminó, pero su sala sigue abierta
+           * X más»). Con la ventana de B-2 (10 min) el cierre del cron cae justo
+           * cuando la ventana expira, así que el único cierre que ocurre con la
+           * sala abierta es el anticipado del tutor — y el cliente pidió que ése
+           * bloquee el acceso. `join_session` ya lo rechaza
+           * (`20260828120000`); si esta rama no lo recogiera, el botón seguiría
+           * ofreciéndose para que el servidor dijera que no.
+           */
           <>
             <p className="rounded-lg border border-dashed p-6 text-sm text-muted-foreground">
               {sessionCancelled
                 ? "Esta sesión se canceló, así que su sala no se abre."
-                : "Esta reserva no está activa, así que la sala no está disponible."}
+                : sessionEnded
+                  ? "Esta mentoría ya se dio por terminada, así que su sala está cerrada."
+                  : "Esta reserva no está activa, así que la sala no está disponible."}
             </p>
             <Button asChild variant="outline">
               <Link href={isTutor ? "/tutor/reservas" : "/reservas"}>Volver a mis reservas</Link>
@@ -1218,14 +1400,13 @@ export function LiveRoom({
             <p className="text-sm text-muted-foreground">
               {new Date(startAt).toLocaleString("es", { timeZone, dateStyle: "full", timeStyle: "short" })}
             </p>
-            {/* El permiso se puede dar mientras esperas: RN-42 pide que esté
-                decidido ANTES de entrar, no que la sala ya esté abierta. */}
+            {/* El «Entiendo» se puede marcar mientras esperas: lo que se pide
+                es que esté leído ANTES de entrar, no que la sala ya abra. */}
             <RecordingConsent
               sessionId={sessionId}
               userId={currentUserId}
-              isTutor={isTutor}
-              mine={consent.mine}
-              other={consent.other}
+              marcado={entendido}
+              onChange={setEntendido}
             />
           </>
         ) : afterWindow ? (
@@ -1240,23 +1421,28 @@ export function LiveRoom({
         ) : (
           <>
             <p className="text-sm text-muted-foreground" suppressHydrationWarning>
-              {/* MN-05 · Con la clase ya cerrada la sala sigue abierta una
-                  semana, y decir solo "la sala está abierta" haría pensar que la
-                  mentoría no ha ocurrido. El estado de la sesión y el de la sala
-                  son cosas distintas y aquí se dicen las dos. */}
-              {sessionEnded
-                ? `Esta mentoría ya terminó, pero su sala sigue abierta ${human(closes - now)} más.`
-                : `La sala está abierta. Cierra en ${human(closes - now)}.`}
+              {/* La rama de «la sesión ya se cerró» se fue arriba, con las
+                  canceladas: desde `20260828120000` una sesión cerrada no tiene
+                  sala, así que aquí ya solo se llega con clase viva. */}
+              {`La sala está abierta. Cierra en ${human(closes - now)}.`}
             </p>
-            {/* RN-42: el permiso se pide ANTES de entrar, no a mitad de clase. */}
+            {/* El aviso se lee ANTES de entrar, no a mitad de clase. */}
             <RecordingConsent
               sessionId={sessionId}
               userId={currentUserId}
-              isTutor={isTutor}
-              mine={consent.mine}
-              other={consent.other}
+              marcado={entendido}
+              onChange={setEntendido}
             />
-            <Button size="lg" disabled={busy} onClick={join} className="min-w-40">
+            {/* ⚠️ `!entendido` deshabilita: la casilla es obligatoria desde que
+                el aviso dejó de ser un permiso y pasó a ser un «Entiendo» de
+                términos. El porqué se explica junto a la casilla, no aquí: un
+                botón deshabilitado no puede contar por qué lo está. */}
+            <Button
+              size="lg"
+              disabled={busy || !entendido}
+              onClick={join}
+              className="min-w-40"
+            >
               {busy ? "Entrando…" : "Entrar a la sala"}
             </Button>
           </>

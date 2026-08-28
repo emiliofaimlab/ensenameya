@@ -44,11 +44,20 @@ export type VentanaDeSala = {
 /**
  * ¿Esta sesión tiene sala AHORA MISMO?
  *
- * Se pregunta por la ventana de acceso, no por el estado: `completed` y
- * `no_show` son contabilidad —la clase venció y con ella arrancó el reloj del
- * cobro del tutor—, no una puerta cerrada. La única sesión sin sala es la
- * `cancelled`. Y se mira la ventana además del estado para no ofrecer un botón
- * que el servidor va a rechazar con «fuera de la ventana de acceso».
+ * Ventana de acceso **y** sesión no cerrada. Se mira la ventana para no ofrecer
+ * un botón que el servidor va a rechazar con «fuera de la ventana de acceso», y
+ * el estado por lo mismo: desde `20260828120000` `join_session` rechaza también
+ * `completed` y `no_show`.
+ *
+ * ⚠️ AQUÍ DECÍA QUE LA ÚNICA SESIÓN SIN SALA ERA LA `cancelled`, y era verdad
+ * mientras la sala vivió 7 días (MN-05): entonces `completed` solo significaba
+ * «el cron cerró el reloj del cobro», no «la puerta está cerrada». Con la
+ * ventana de B-2 (10 min) el cierre del cron cae justo cuando la ventana
+ * expira, así que el único cierre que ocurre con sala abierta es el anticipado
+ * del tutor —«Marcar completada»— y el cliente pidió que ése bloquee el acceso,
+ * no solo eche a la gente. La lista es la misma, palabra por palabra, que la
+ * guarda de `join_session`: si divergen, el botón aparece y el server dice que
+ * no.
  *
  * ⚠️ El respaldo va columna a columna y NUNCA armando un rango con los dos
  * nulos: `tstzrange(null, null, '[]')` es infinito y `@> now()` da `true`, o
@@ -59,7 +68,8 @@ export type VentanaDeSala = {
  * dispara la regla de pureza de `react-hooks`.
  */
 export function roomOpen(s: VentanaDeSala): boolean {
-  if (s.status === "cancelled") return false;
+  if (s.status === "cancelled" || s.status === "completed" || s.status === "no_show")
+    return false;
   const now = Date.now();
   const opens = s.access_opens_at
     ? new Date(s.access_opens_at).getTime()
@@ -68,6 +78,46 @@ export function roomOpen(s: VentanaDeSala): boolean {
     ? new Date(s.access_closes_at).getTime()
     : new Date(s.end_at).getTime() + ACCESS_WINDOW_MIN * MIN_MS;
   return now >= opens && now <= closes;
+}
+
+/**
+ * Estados de la RESERVA que pueden tener sala abierta desde una LISTA.
+ *
+ * ⚠️ No es la misma lista que la de los DETALLES (`ROOM_BOOKING` en
+ * `reservas/[id]`, `LIVE` en `tutor/reservas/[id]`), que además incluyen
+ * `completed`. La diferencia es a propósito y no un descuido: allí se pinta una
+ * sesión concreta y `completed` entra para que el botón no parpadee en el
+ * último minuto según qué pasada del cron llegue antes. Aquí se pinta la
+ * RESERVA, y una reserva completada en medio de una lista no es un sitio al que
+ * ofrecer «Entrar a sala». Es el criterio que ya usaba el panel del alumno
+ * (`(app)/app/page.tsx`), copiado tal cual — que es de donde salió esto.
+ */
+const RESERVA_CON_SALA = new Set<string>(["confirmed", "in_progress"]);
+
+/**
+ * La sesión de esta reserva cuya sala está abierta AHORA, o `null`.
+ *
+ * El criterio es el del panel del alumno: estado de la reserva en
+ * `confirmed`/`in_progress` **y** `roomOpen(sesion)`. Vive aquí porque desde
+ * hoy lo preguntan las TRES listas de reservas —el panel, `/reservas` y
+ * `/tutor/reservas`—, y tres copias de «hay sala» acabarían discrepando: ya
+ * pasó con la ventana escrita en cinco sitios (ver la cabecera del fichero).
+ *
+ * Los dos detalles siguen llamando a `roomOpen` a pelo, y no es un olvido: ahí
+ * el botón cuelga de CADA sesión de la reserva (no de la reserva entera) y su
+ * lista de estados incluye `completed` — ver `RESERVA_CON_SALA`.
+ *
+ * Devuelve la SESIÓN y no un booleano porque quien lo llama necesita su `id`
+ * para el enlace a `/room/<id>`; y busca en todas las de la reserva en vez de
+ * en «la próxima», porque la que abre la sala es la que esté en su ventana, no
+ * la que la lista haya elegido para enseñar la fecha.
+ */
+export function salaDeLaReserva<T extends VentanaDeSala & { id: string }>(
+  bookingStatus: string,
+  sesiones: readonly T[] | null | undefined,
+): T | null {
+  if (!RESERVA_CON_SALA.has(bookingStatus)) return null;
+  return (sesiones ?? []).find((s) => roomOpen(s)) ?? null;
 }
 
 /**
