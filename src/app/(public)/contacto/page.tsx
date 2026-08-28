@@ -1,8 +1,8 @@
-import { BuildingIcon, MailIcon, ScaleIcon } from "lucide-react";
+import { MailIcon, ScaleIcon } from "lucide-react";
 
 import { Container } from "@/components/layout/container";
 import { ContactForm } from "@/components/contact/contact-form";
-import { COMPANY, COMPANY_ADDRESS_LINE } from "@/lib/company";
+import { COMPANY } from "@/lib/company";
 
 export const metadata = {
   title: "Contacto · Enséñame Ya",
@@ -11,16 +11,27 @@ export const metadata = {
 };
 
 /**
- * DL-01, DL-02 y DL-03 · la página que dLocal Go exige para validar el sitio.
+ * DL-01 y DL-02 · la página que dLocal Go exige para validar el sitio.
  *
- * Tiene que cumplir tres cosas a la vez, y las tres se comprueban a mano:
+ * Tiene que cumplir dos cosas, y las dos se comprueban a mano:
  *   · un formulario con nombre, correo y mensaje que **envíe de verdad**;
- *   · datos de contacto reales y accesibles;
- *   · la identidad legal del prestador, con los mismos datos que se dieron de
- *     alta en dLocal Go (§39 del contrato → `lib/company.ts`).
+ *   · datos de contacto reales y accesibles.
  *
- * Por eso la identidad va en la propia página y no solo en el pie: el
- * requisito dice literalmente «en la página de contacto».
+ * ⚠️ **DL-03 (identidad legal) YA NO SE PINTA AQUÍ.** El 24-ago salió el EIN
+ * (V-8) y el 28-ago el cliente pidió el cuadro entero: «super importante, en la
+ * página de contacto sigue saliendo el EIN y dirección de la empresa en el
+ * cuadro de quién opera, eliminamos ese cuadro por completo».
+ *
+ * Lo que hay que saber antes de darlo por cerrado:
+ *   · La razón social y el domicilio siguen publicados en el **§39 de los
+ *     Términos**, en inglés y en español, que es donde los pone el contrato
+ *     firmado. `COMPANY` y `COMPANY_ADDRESS_LINE` NO se tocan por eso —
+ *     `terms-content.ts` los interpola y borrarlos rompería el contrato.
+ *   · El requisito de dLocal decía literalmente «en la página de contacto», así
+ *     que esto **es una divergencia consciente** con lo que se les presentó. Si
+ *     su revisión vuelve a pedirlo, el cuadro se recupera de este commit; la
+ *     decisión es del cliente y está anotada aquí para que nadie la deshaga
+ *     "arreglando" DL-03 sin preguntar.
  */
 export default function ContactoPage() {
   return (
@@ -58,30 +69,10 @@ export default function ContactoPage() {
               </a>
             </div>
 
-            {/* DL-03 · identidad legal. Los mismos datos que constan en dLocal
-                Go: los comparan uno contra otro, así que no se tocan aquí sin
-                tocarlos allí.
-
-                ⚠️ **El EIN ya no se pinta** (V-8, 24-ago): el cliente lo quiere
-                fuera de la web. Quedan la razón social y el domicilio, que es
-                lo que dLocal busca para identificar al prestador. `COMPANY.taxId`
-                sigue existiendo en `lib/company.ts` porque el §39 de
-                `terms-content.ts` lo interpola en inglés y en español —
-                sacarlo de ahí es otra cosa, espera a Néstor y sube
-                `TERMS_VERSION`. */}
-            <div className="rounded-2xl border border-border bg-background p-6">
-              <BuildingIcon className="size-5 text-brand" aria-hidden />
-              <h2 className="mt-3 text-[16px] font-semibold">
-                Quién opera la plataforma
-              </h2>
-              <address className="mt-2 text-[14px] leading-relaxed not-italic text-muted-foreground">
-                <span className="font-medium text-foreground">
-                  {COMPANY.legalName}
-                </span>
-                <br />
-                {COMPANY_ADDRESS_LINE}
-              </address>
-            </div>
+            {/* Aquí iba el cuadro "Quién opera la plataforma" (DL-03: razón
+                social + domicilio). Fuera por petición del cliente el 28-ago —
+                el porqué y lo que hay que saber antes de devolverlo, en la
+                cabecera del fichero. */}
 
             <div className="rounded-2xl border border-border bg-background p-6">
               <ScaleIcon className="size-5 text-brand" aria-hidden />

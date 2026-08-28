@@ -351,6 +351,44 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_message_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          id: string
+          message_id: string
+          mime_type: string
+          path: string
+          size_bytes: number
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          id?: string
+          message_id: string
+          mime_type: string
+          path: string
+          size_bytes: number
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          id?: string
+          message_id?: string
+          mime_type?: string
+          path?: string
+          size_bytes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_message_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "contact_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_messages: {
         Row: {
           created_at: string
@@ -361,6 +399,7 @@ export type Database = {
           handled_at: string | null
           id: string
           ip: unknown
+          kind: Database["public"]["Enums"]["contact_request_kind"]
           message: string
           name: string
           sender_id: string | null
@@ -376,6 +415,7 @@ export type Database = {
           handled_at?: string | null
           id?: string
           ip?: unknown
+          kind?: Database["public"]["Enums"]["contact_request_kind"]
           message: string
           name: string
           sender_id?: string | null
@@ -391,6 +431,7 @@ export type Database = {
           handled_at?: string | null
           id?: string
           ip?: unknown
+          kind?: Database["public"]["Enums"]["contact_request_kind"]
           message?: string
           name?: string
           sender_id?: string | null
@@ -2279,6 +2320,7 @@ export type Database = {
         | "cancelled"
         | "refunded"
       contact_delivery_status: "pending" | "sent" | "failed"
+      contact_request_kind: "mensaje" | "documentos" | "capturas"
       document_status: "pending" | "approved" | "rejected" | "draft"
       identity_verification_status:
         | "not_submitted"
@@ -2454,6 +2496,7 @@ export const Constants = {
         "refunded",
       ],
       contact_delivery_status: ["pending", "sent", "failed"],
+      contact_request_kind: ["mensaje", "documentos", "capturas"],
       document_status: ["pending", "approved", "rejected", "draft"],
       identity_verification_status: [
         "not_submitted",

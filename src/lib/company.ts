@@ -40,10 +40,16 @@ export const COMPANY = {
 } as const;
 
 /**
- * La dirección en una línea. La consumen `/contacto` y el §39 de los Términos
- * en los dos idiomas — **ya no el pie**, que la dejó de pintar el 20-ago con
- * MN-10, por decisión del cliente. No borrar este export: `terms-content.ts`
- * lo necesita y quitarlo rompe el contrato firmado.
+ * La dirección en una línea. Hoy la consume **un solo sitio**: el §39 de los
+ * Términos, en los dos idiomas.
+ *
+ * Los otros dos la fueron dejando por decisión del cliente: el pie el 20-ago
+ * (MN-10) y `/contacto` el 28-ago —«eliminamos ese cuadro por completo»—, que
+ * era el cuadro «Quién opera la plataforma».
+ *
+ * ⚠️ NO BORRAR ESTE EXPORT. Que ya no se pinte en pantalla no lo deja sin uso:
+ * `terms-content.ts` lo interpola en el §39 y quitarlo rompe el contrato
+ * firmado con dLocal.
  */
 export const COMPANY_ADDRESS_LINE = [
   COMPANY.address.street,

@@ -1,5 +1,5 @@
 /**
- * MN-11a · Formatos y topes de subida del CLIENTE, en UN sitio: los cinco
+ * MN-11a · Formatos y topes de subida del CLIENTE, en UN sitio: los seis
  * buckets que toca el navegador declaran aquí qué aceptan, cuánto pesa como
  * máximo y con qué frase se le cuenta al usuario.
  *
@@ -19,12 +19,17 @@
  * copia cliente, y solo sirve para dar un mensaje decente en vez de un error
  * crudo. Nunca es la barrera.
  *
+ * (La excepción es `support-attachments`: ahí la subida va con una URL firmada
+ * que emite `POST /api/contacto/adjuntos`, así que el servidor SÍ valida antes.
+ * El bucket sigue siendo el último filtro, y estas constantes siguen siendo la
+ * copia — solo que allí la comparte el handler.)
+ *
  * ⚠️⚠️ SI VIENES A CAMBIAR UN NÚMERO, LEE ESTO ANTES.
  * Tocar solo la constante hace que la UI mienta al revés: promete el tope
  * nuevo y Storage sigue cortando por el viejo, con un error que ya no
  * explicamos. El cambio de verdad es una migración NUEVA con
  *     update storage.buckets set file_size_limit = … where id = '<bucket>';
- * y **NO** el patrón de las migraciones que crearon los buckets: los cinco son
+ * y **NO** el patrón de las migraciones que crearon los buckets: todos son
  * `insert into storage.buckets … on conflict (id) do nothing`, y sobre un
  * bucket que ya existe eso es un NO-OP SILENCIOSO — `db:push` en verde,
  * `typecheck` en verde, y el bucket exactamente igual que estaba. Solo se
@@ -48,11 +53,12 @@
  *   `tutor-materials`  10 MB · `20260722160000`
  *   `chat-attachments` 25 MB · `20260722180000` → `20260820170000` (MN-11b)
  *   `kyc-documents`    10 MB · `20260706150000`
+ *   `support-attachments` 25 MB · `20260828161500` (DL-01, adjuntos de contacto)
  */
 
 const MB = 1024 * 1024;
 
-/** PDF, que lo aceptan cuatro de los cinco buckets. */
+/** PDF, que lo aceptan cinco de los seis buckets. */
 const PDF = "application/pdf";
 
 /**
@@ -108,6 +114,32 @@ export const ATTACHMENT_MAX_BYTES = 25 * MB;
 export const ATTACHMENT_TYPES = [PDF, ...IMAGE_TYPES, ...OFFICE_TYPES];
 export const ATTACHMENT_HINT =
   `PDF, imagen o documento de Office · máx. ${maxLabel(ATTACHMENT_MAX_BYTES)}`;
+
+/* ── Adjuntos de soporte → bucket privado `support-attachments` (DL-01) ───── */
+/**
+ * El formulario de `/contacto` acepta documentos o capturas según el tipo de
+ * solicitud, así que aquí hay DOS listas y no una: el `accept` del input y la
+ * validación del servidor cambian con el tipo elegido, y ofrecer un .docx a
+ * quien ha dicho «capturas de pantalla» es prometer algo que luego se rechaza.
+ * La correspondencia tipo → lista vive en `src/lib/contact/request-kinds.ts`.
+ *
+ * El tope es el del chat —25 MB, MN-11b— y por la misma razón: es el mismo
+ * material (un PDF, una captura) subido por la misma gente y con la misma
+ * línea. Lo declara `20260828161500`, y ahí es donde hay que tocarlo.
+ *
+ * ⚠️ `SUPPORT_TYPES` tiene que ser exactamente lo que el bucket lista en
+ * `allowed_mime_types`: es lo que el servidor usa como último filtro antes de
+ * firmar la subida, y si aquí sobra un tipo el rechazo llega de Storage con un
+ * 400 crudo en vez de con una frase.
+ */
+export const SUPPORT_MAX_BYTES = 25 * MB;
+export const SUPPORT_DOC_TYPES = [PDF, ...OFFICE_TYPES];
+export const SUPPORT_SHOT_TYPES = IMAGE_TYPES;
+export const SUPPORT_TYPES = [...SUPPORT_DOC_TYPES, ...SUPPORT_SHOT_TYPES];
+export const SUPPORT_DOC_HINT =
+  `PDF, Word, PowerPoint o Excel · máx. ${maxLabel(SUPPORT_MAX_BYTES)} por archivo`;
+export const SUPPORT_SHOT_HINT =
+  `PNG, JPG o WebP · máx. ${maxLabel(SUPPORT_MAX_BYTES)} por captura`;
 
 /* ── Documentos de verificación → bucket privado `kyc-documents` (S-42) ───── */
 export const KYC_MAX_BYTES = 10 * MB;
