@@ -51,3 +51,44 @@ export function referralUrl(isTutor: boolean): string | null {
     : process.env.NEXT_PUBLIC_REFERRAL_URL;
   return url?.trim() ? url.trim() : null;
 }
+
+/**
+ * US-1301 · La misma campaña, pero servida DENTRO de la app (petición del
+ * cliente, 28-ago: «cuando le damos a invita y gana nos abre una url externa»).
+ *
+ * Es una variable APARTE y no se deriva de `NEXT_PUBLIC_REFERRAL_URL` añadiéndole
+ * un sufijo: lo que hay en esa otra es la **landing pública** de la campaña —el
+ * sitio de Referral Factory con su propio cromo—, y el `src` que RF da para
+ * embeber no tiene por qué ser esa misma dirección. Derivarla sería adivinar, y
+ * el modo de fallar es el peor posible: la landing puede responder con
+ * `X-Frame-Options` y dejar un recuadro EN BLANCO dentro del panel, que es
+ * exactamente lo que `referral-card.tsx` evitaba abriendo pestaña nueva.
+ *
+ * La URL es el interruptor, igual que arriba: sin ella no se monta ningún
+ * iframe y `/referidos` cae al enlace externo de siempre, que es el
+ * comportamiento de hoy y no falla nunca.
+ *
+ * ⚠️ Y FALLA CERRADO POR ROL, por el mismo motivo que `referralUrl`: si algún
+ * día existe la campaña de tutores, su embed será OTRO. Al tutor NO se le cae
+ * al embed del alumno — darlo de alta en el programa equivocado dentro de
+ * nuestro propio cromo sería aún más difícil de notar que en una pestaña nueva,
+ * porque ya ni cambia la barra de direcciones.
+ */
+export function referralEmbedUrl(isTutor: boolean): string | null {
+  const url = isTutor
+    ? process.env.NEXT_PUBLIC_REFERRAL_EMBED_URL_TUTOR
+    : process.env.NEXT_PUBLIC_REFERRAL_EMBED_URL;
+  return url?.trim() ? url.trim() : null;
+}
+
+/**
+ * ¿Hay algo que ofrecerle a este rol, embebido o en su web?
+ *
+ * Una sola respuesta para las dos puertas —la tarjeta del panel y la ruta
+ * `/referidos`— para que no puedan discrepar: si la tarjeta se pinta, la
+ * pantalla a la que lleva existe, y si no hay nada configurado no aparece
+ * ningún botón que acabe en un 404.
+ */
+export function hasReferralProgram(isTutor: boolean): boolean {
+  return Boolean(referralEmbedUrl(isTutor) ?? referralUrl(isTutor));
+}
