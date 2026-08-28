@@ -34,7 +34,12 @@ const DOC_LABELS: Record<string, string> = {
   diploma: "Diploma",
   transcript: "Expediente académico",
   cv: "Currículum vitae",
-  social_media: "Redes sociales (enlace)",
+  // 28-ago · el apartado pasó a llamarse «Portafolio» de cara al tutor; este
+  // `doc_type` es el heredado de antes de R29-02 (cuando el enlace se guardaba
+  // como documento) y solo sale en expedientes viejos. Se traduce igual que se
+  // llama hoy para que el admin y el tutor hablen de lo mismo; la CLAVE no se
+  // toca, que es lo que hay en la BD.
+  social_media: "Portafolio (enlace)",
 };
 
 /** Revisión de UN documento. La identidad la recalcula la RPC, no la UI. */

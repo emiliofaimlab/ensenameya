@@ -133,6 +133,8 @@ export function ProductForm({
   product,
   materials = [],
   isApproved = false,
+  onCreated,
+  submitLabel,
 }: {
   userId: string;
   categories: { id: string; name: string }[];
@@ -143,6 +145,19 @@ export function ProductForm({
   materials?: SavedMaterial[];
   /** Habilita "Publicar" al guardar (RN-23: solo tutor aprobado). */
   isApproved?: boolean;
+  /**
+   * N-03 · Alta DESDE EL ASISTENTE de tutor (28-ago). El asistente tenía su
+   * propio formulario reducido —`first-product-form.tsx`— y se quedó atrás:
+   * "los vi y siento que en el onboarding está desactualizado" (le faltaban
+   * portada, materiales, FAQ, nivel, idioma, horarios y el modo de aceptación).
+   * Ya no hay dos: es este, y lo único que cambia al pasar esta prop es que al
+   * CREAR no se navega a «Mis mentorías» —eso sacaba al tutor del asistente y,
+   * dicho por la sesión de pruebas, no volvía—, sino que se avisa aquí y el
+   * asistente sigue donde estaba.
+   */
+  onCreated?: (productId: string) => void;
+  /** Texto del botón de guardar; por defecto, el del panel. */
+  submitLabel?: string;
 }) {
   const router = useRouter();
   const isEdit = !!product;
@@ -454,10 +469,23 @@ export function ProductForm({
     if (aMedias.length > 0) {
       // Se dice qué quedó guardado y qué no, y se abre la edición de ESTA
       // mentoría: lo que falta se remata ahí sin reescribir el formulario.
+      // Dentro del asistente NO se abre nada: sacar al tutor a media alta es
+      // justo lo que N-03 vino a arreglar, así que se le dice dónde rematarlo.
       toast.error(
-        `La mentoría se guardó, pero faltó ${enumerar(aMedias)}. Complétalo desde aquí.`,
+        `La mentoría se guardó, pero faltó ${enumerar(aMedias)}. ${
+          onCreated
+            ? "Complétalo desde «Mis mentorías» cuando termines el registro."
+            : "Complétalo desde aquí."
+        }`,
         { duration: 12_000 },
       );
+      if (onCreated) {
+        // La mentoría EXISTE aunque falte algo: el asistente tiene que
+        // enterarse igual, o su repaso seguiría diciendo que no hay ninguna.
+        setLoading(false);
+        onCreated(productId!);
+        return;
+      }
       router.push(`/tutor/products/${productId}/edit`);
       router.refresh();
       return;
@@ -470,6 +498,13 @@ export function ProductForm({
           ? "Mentoría actualizada."
           : "Mentoría guardada como borrador.",
     );
+    if (onCreated) {
+      // `loading` sí se apaga aquí: en el panel el formulario se va con la
+      // navegación y daba igual, pero en el asistente sigue montado.
+      setLoading(false);
+      onCreated(productId!);
+      return;
+    }
     router.push("/tutor/products");
     router.refresh();
 
@@ -923,9 +958,7 @@ export function ProductForm({
         >
           {loading && !publishAfter
             ? "Guardando…"
-            : isEdit
-              ? "Guardar cambios"
-              : "Guardar borrador"}
+            : (submitLabel ?? (isEdit ? "Guardar cambios" : "Guardar borrador"))}
         </Button>
       </div>
     </form>

@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { toast } from "sonner";
-import { CheckIcon, TriangleAlertIcon } from "lucide-react";
+import { TriangleAlertIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { horasSemana, type Rule } from "@/lib/availability";
+import { storageUrl } from "@/lib/catalog/format";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,7 +28,10 @@ import {
   useSaveOnExit,
 } from "@/components/onboarding/wizard";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
-import { FirstProductForm } from "@/components/onboarding/first-product-form";
+import { TutorProfileBasics } from "@/components/tutor/profile-basics";
+// 28-ago · el asistente usa EL FORMULARIO DEL PANEL, no una copia reducida:
+// `first-product-form.tsx` se borró porque llevaba meses quedándose atrás.
+import { ProductForm } from "../products/product-form";
 import { AvailabilityManager } from "../availability/availability-manager";
 import {
   VerificationForm,
@@ -52,10 +57,22 @@ const LEVELS: { id: TeachingLevel; label: string }[] = [
 const E164 = /^\+[1-9]\d{6,14}$/;
 
 /**
- * US-202 / UX-202 (SCR-TU01) — asistente de 6 pasos: perfil, categorías,
- * contacto, **disponibilidad** (EY-183), **verificación de identidad**
- * (penúltimo, 24-jul) y primera mentoría (N-03). Los materiales de clase
- * salieron a la creación de la oferta (R24-16).
+ * US-202 / UX-202 (SCR-TU01) — asistente de **5 pasos**: perfil, categorías,
+ * contacto, **disponibilidad** (EY-183) y **repaso** — verificación de
+ * identidad, portafolio y el alta de la primera mentoría, todo en el mismo
+ * sitio. Los materiales de clase salieron a la creación de la oferta (R24-16).
+ *
+ * ⚠️ Eran 6 hasta el 28-ago. El último no hacía más que montar el alta de
+ * mentoría, y el penúltimo se limitaba a anunciarla: «no digas que en el
+ * próximo paso la cargo, debemos incluir el formulario ahí mismo. Entonces este
+ * penúltimo paso ya pasa a ser el último paso, finalizamos ahí mismo».
+ *
+ * ⚠️ **La foto y la biografía ya no bloquean el paso 1** (misma fecha): «deben
+ * ser OPCIONALES, no que se van, pasan a ser opcionales… y luego llenadas desde
+ * mi cuenta». Siguen haciendo falta para APROBAR, y esa diferencia se dice en
+ * tres sitios —el propio paso 1, el checklist del repaso y la pantalla de
+ * cierre—, porque es exactamente la clase de matiz que, callada, se lee como
+ * "ya no hacen falta".
  *
  * Cada paso persiste al avanzar, así que "Guardar y salir" no necesita lógica
  * propia: lo escrito ya está guardado. `approval_status` NO se toca aquí (fuera
@@ -128,9 +145,9 @@ export function TutorOnboardingForm({
   productCategories: { id: string; name: string }[];
   selectedCategories: string[];
   docsByType: Record<string, DocState>;
-  /** Estado global de la verificación → checklist del paso 5 (N-10). */
+  /** Estado global de la verificación → checklist del repaso (N-10). */
   identityStatus: IdentityStatus;
-  /** R29-02: redes/portafolio ya guardados; los edita el módulo del paso 5. */
+  /** R29-02: portafolio ya guardado; lo edita el módulo del repaso. */
   socials: SocialLink[];
   /** Mentorías ya creadas. EX-02: se puede posponer, pero sin ninguna el
    *  perfil no se aprueba — el asistente lo dice, no lo bloquea. */
@@ -145,7 +162,23 @@ export function TutorOnboardingForm({
   /** N-04 · `rule_id` → mentorías que la usan; el gestor avisa antes de borrar. */
   rulesUsedBy: Record<string, string[]>;
 }) {
-  const { step, setStep, finish } = useWizardStep("tutor", initialStep);
+  const { step: pasoBruto, setStep, finish } = useWizardStep("tutor", initialStep);
+
+  /**
+   * ⚠️ TODO(merge) · `TOTAL_STEPS` vive en `page.tsx`, que este carril NO toca,
+   * y sigue valiendo 6. Los pasos reales son **5** desde que el alta de mentoría
+   * se metió dentro del repaso: bájalo allí a 5 al mergear y esta constante y su
+   * `min` se pueden borrar, dejando `totalSteps` a secas.
+   *
+   * El `min` deja la pantalla correcta ANTES y DESPUÉS de ese cambio, así que el
+   * orden de los merges da igual; y el clamp del paso evita que la cookie de
+   * quien dejó el asistente en el viejo paso 6 aterrice en un paso que ya no
+   * existe (`resolveStep` satura contra el 6 de la página, no contra este).
+   */
+  const PASO_REPASO = 5;
+  const total = Math.min(totalSteps, PASO_REPASO);
+  const step = Math.min(pasoBruto, total);
+
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   // `exists` viene del server y no se entera del INSERT del paso 1: sin este
@@ -161,16 +194,16 @@ export function TutorOnboardingForm({
   const [addingProduct, setAddingProduct] = useState(false);
 
   /**
-   * Guardado del paso 5, en manos del asistente. El módulo de verificación ya
+   * Guardado del repaso, en manos del asistente. El módulo de verificación ya
    * no pinta sus dos botones aquí dentro (ver `verification-form.tsx`), así que
-   * lo registra y quien lo dispara es «Continuar».
+   * lo registra y quien lo dispara es «Finalizar», justo antes de enviar.
    */
   const guardarVerificacion = useRef<VerificationSave | null>(null);
 
   /*
    * Cuánto expediente hay, para la pantalla de cierre. `null` = "todavía manda
-   * el servidor": entre guardar el paso 5 y pulsar «Finalizar» no hay otra
-   * petición a la página, así que las props dirían "cero documentos" a quien
+   * el servidor": guardar el repaso y enviar ocurren en la misma pulsación y
+   * sin otra petición a la página, así que las props dirían "cero documentos" a quien
    * acaba de subir seis. Se guarda el DELTA en vez de sembrar un `useState` con
    * el valor del servidor, que se quedaría fijo aunque las props se refresquen.
    */
@@ -185,6 +218,22 @@ export function TutorOnboardingForm({
   const [headline, setHeadline] = useState(headline0);
   const [bio, setBio] = useState(bio0);
   const [avatar, setAvatar] = useState<string | null>(avatarPath);
+  /**
+   * La URL pública de la foto, EN VIVO. `avatarUrl` es la del servidor y no se
+   * entera de lo que se acaba de subir, así que sin esto el repaso pintaría el
+   * hueco vacío a quien acababa de elegir su foto en el paso 1 — justo lo que
+   * el cliente pidió arreglar ("muéstrame ahí el cuadrito de la foto que subí").
+   * El bucket `avatars` es público y su URL determinista (`storageUrl`).
+   */
+  const [avatarSrc, setAvatarSrc] = useState<string | null>(avatarUrl);
+
+  /** Foto recién subida: ruta para la BD y URL para pintarla. El sufijo
+   *  anti-caché hace falta porque la ruta se reutiliza al reemplazarla. */
+  function onAvatarPath(path: string) {
+    setAvatar(path);
+    const url = storageUrl("avatars", path);
+    setAvatarSrc(url ? `${url}?v=${Date.now()}` : null);
+  }
   const [cats, setCats] = useState<Set<string>>(new Set(selectedCategories));
   const [level, setLevel] = useState<TeachingLevel | null>(level0);
   const [timezone, setTimezone] = useState(tz0);
@@ -289,8 +338,10 @@ export function TutorOnboardingForm({
       // copia a `tutor_profiles.display_name`, que es lo que ve el catálogo.
       if (!fullName.trim()) return fail("Escribe tu nombre.");
       if (!headline.trim()) return fail("Escribe un titular para tu perfil.");
-      if (!avatar) return fail("La foto de perfil es obligatoria.");
-      if (!bio.trim()) return fail("Escribe tu biografía.");
+      // ⚠️ La FOTO y la BIO ya no se exigen aquí (28-ago). No es que dejen de
+      // importar: sin ellas no aprobamos el perfil, y eso lo dice el propio
+      // paso, el checklist del repaso y la pantalla de cierre. Lo que se quita
+      // es el bloqueo, no el requisito.
       const { error } = await supabase
         .from("profiles")
         .update({ full_name: fullName.trim() })
@@ -340,19 +391,22 @@ export function TutorOnboardingForm({
     // aquí no hay nada que guardar ni nada que validar. Ver EY-183.
 
     /*
-     * Paso 5 · verificación. Este SÍ guarda desde aquí: el módulo traía dentro
+     * Repaso · verificación. Este SÍ guarda desde aquí: el módulo traía dentro
      * «Guardar borrador» y «Guardar y enviar a revisión», que dentro del
      * asistente eran dos botones más peleándose con «Atrás» y «Continuar» sin
-     * que nadie dijera cuál avanzaba. Ahora manda el paso y «Continuar» guarda
-     * —siempre como BORRADOR, ver el cierre de abajo—.
+     * que nadie dijera cuál avanzaba. Ahora manda el paso, y desde el 28-ago el
+     * repaso ES el último: «Finalizar» guarda esto como borrador y, en la misma
+     * pulsación, lo envía a revisión ahí abajo. El orden importa —guardar
+     * primero, enviar después—, porque `submit_documents_for_review` solo mueve
+     * lo que ya está en la BD.
      */
-    if (step === 5) {
+    if (step === total) {
       const guardado = await guardarVerificacion.current?.();
-      // OPCIONAL como el 4 y el 6 (EX-02): sin nada elegido no hay nada que
-      // guardar y se avanza. Lo que sí frena es un guardado FALLIDO —un enlace
-      // inválido, una subida caída—: el paso siguiente desmonta el módulo y con
-      // él los archivos elegidos, que hasta guardarse viven solo en memoria.
-      // El QUÉ falló ya lo dijo `persist` con su propio toast.
+      // OPCIONAL como el paso 4 (EX-02): sin nada elegido no hay nada que
+      // guardar y se termina igual. Lo que sí frena es un guardado FALLIDO —un
+      // enlace inválido, una subida caída—: la pantalla de cierre desmonta el
+      // módulo y con él los archivos elegidos, que hasta guardarse viven solo en
+      // memoria. El QUÉ falló ya lo dijo `persist` con su propio toast.
       if (guardado && !guardado.ok) {
         setBusy(false);
         return;
@@ -363,20 +417,22 @@ export function TutorOnboardingForm({
       }
     }
 
-    if (step === totalSteps) {
+    // `>=` y no `===`: mientras `page.tsx` siga anunciando 6 pasos, `total` es
+    // 5 y el clamp de arriba deja `step` justo ahí. Ver el TODO(merge).
+    if (step >= total) {
       /*
        * ⚠️ Aquí —y solo aquí— el expediente pasa a revisión.
        *
        * Antes «Finalizar» se limitaba a cerrar el asistente, y la pantalla de
        * cierre decía "Tu perfil pasó a revisión" sin que nadie lo hubiera
-       * enviado: quien hubiese usado «Guardar borrador» en el paso 5 terminaba
-       * con los seis documentos en `draft`, la identidad en `not_submitted` —o
-       * sea, invisible para el admin— y la sensación de haber acabado.
+       * enviado: quien hubiese usado «Guardar borrador» terminaba con sus
+       * documentos en `draft`, la identidad en `not_submitted` —o sea,
+       * invisible para el admin— y la sensación de haber acabado.
        *
        * Este es además el único momento en que el envío es honesto: manda
-       * documentos Y enlaces a la vez, y el propio checklist del paso 5 cuenta
-       * la primera mentoría, que es el paso 6. Enviar desde el 5 era enviar
-       * antes de terminar.
+       * documentos Y enlaces a la vez, y el checklist del repaso cuenta también
+       * la primera mentoría, que ahora se crea en ese mismo bloque. Enviar
+       * antes era enviar a medias.
        *
        * La RPC solo pasa `draft` → `pending`: sin borradores es un no-op, así
        * que llamarla siempre es seguro (y no toca lo ya aprobado o rechazado).
@@ -402,7 +458,9 @@ export function TutorOnboardingForm({
     setBusy(false);
   }
 
-  const back = () => setStep((s) => Math.max(1, s - 1));
+  // Sobre el paso CLAMPADO: desde el viejo paso 6 (cookie antigua) «Atrás»
+  // tiene que llevar al 4, no volver a pintar el mismo repaso.
+  const back = () => setStep(Math.max(1, step - 1));
   const toggle = (set: Set<string>, id: string) => {
     const n = new Set(set);
     if (n.has(id)) n.delete(id);
@@ -423,6 +481,12 @@ export function TutorOnboardingForm({
      */
     const horas = horasSemana(rules);
     const pendientes = [
+      // 28-ago · foto y biografía dejaron de bloquear el paso 1, así que ahora
+      // se puede llegar hasta aquí sin ellas. Van las primeras porque son la
+      // ficha: sin cara ni texto no hay nada que aprobar ni que enseñar.
+      !avatar || !bio.trim()
+        ? `Te falta ${!avatar && !bio.trim() ? "la foto de perfil y la biografía" : !avatar ? "la foto de perfil" : "la biografía"}. No aprobamos un perfil sin ellas; se completan desde «Verificación».`
+        : null,
       // El expediente de identidad ya salió hacia el admin (lo manda
       // «Finalizar»), pero puede haber salido VACÍO: sin documentos no hay nada
       // que verificar, y eso el tutor tiene que oírlo aquí y no tres semanas
@@ -434,7 +498,7 @@ export function TutorOnboardingForm({
       // enviar a revisión; aquí no se bloquea —ningún paso del asistente
       // bloquea— pero sí se dice, y allí seguirá esperándole el mismo aviso.
       (enlacesGuardados ?? socials.length) === 0
-        ? "No dejaste ninguna red social ni portafolio. Forma parte de lo que revisamos; se añade desde «Verificación»."
+        ? "No dejaste ningún enlace de portafolio. Forma parte de lo que revisamos; se añade desde «Verificación»."
         : null,
       productCount === 0
         ? "Te falta tu primera mentoría. Puedes crearla cuando quieras desde «Mis mentorías», pero hasta que exista no podemos aprobar tu perfil."
@@ -463,9 +527,9 @@ export function TutorOnboardingForm({
               : "Sin mentorías todavía",
           ]}
         />
-        {/* Los dos pasos opcionales se pueden posponer, y eso está bien; lo que
-            no puede es descubrirse semanas después, cuando el tutor se pregunte
-            por qué su revisión no avanza o por qué no le entra nadie. */}
+        {/* Todo lo opcional se puede posponer, y eso está bien; lo que no puede
+            es descubrirse semanas después, cuando el tutor se pregunte por qué
+            su revisión no avanza o por qué no le entra nadie. */}
         {pendientes.length > 0 ? (
           <div className="flex w-full gap-3 rounded-[16px] border border-[#f0d9a8] bg-[#fdf6e7] p-5">
             <TriangleAlertIcon className="mt-0.5 size-4.5 shrink-0 text-[#9a6b00]" />
@@ -489,7 +553,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={1}
-        total={totalSteps}
+        total={total}
         title="Crea tu perfil de tutor"
         description="Empecemos por lo básico. Esta info es parte de tu entrevista de ingreso."
         onNext={next}
@@ -512,11 +576,11 @@ export function TutorOnboardingForm({
             className={FIELD_CLASS}
           />
         </Field>
-        <Field label="Foto de perfil (obligatoria)">
+        <Field label="Foto de perfil (opcional)">
           <AvatarUpload
             userId={userId}
-            initialUrl={avatarUrl}
-            onUploaded={setAvatar}
+            initialUrl={avatarSrc}
+            onUploaded={onAvatarPath}
             name={fullName}
             large
             fileBase="tutor-avatar"
@@ -531,7 +595,7 @@ export function TutorOnboardingForm({
             className={FIELD_CLASS}
           />
         </Field>
-        <Field label="Bio (obligatoria)" htmlFor="bio">
+        <Field label="Bio (opcional)" htmlFor="bio">
           <Textarea
             id="bio"
             rows={4}
@@ -541,6 +605,25 @@ export function TutorOnboardingForm({
             className="rounded-[8px] px-3.5 placeholder:text-[#8c8c8c]"
           />
         </Field>
+
+        {/* 28-ago · "la foto y bio deben ser OPCIONALES… y luego llenadas desde
+            mi cuenta". Poder posponerlas obliga a decir DÓNDE se rematan, y ese
+            sitio existe: «Verificación» del panel monta el mismo bloque de foto
+            + biografía que el último paso de aquí. No se enlaza a «Mi cuenta»
+            aposta — la foto de allí es la PERSONAL, otra columna y otra imagen
+            (R24-23); esta es la de tu ficha de tutor. */}
+        <p className="text-xs text-[#6b6b6b]">
+          Puedes seguir sin ellas y completarlas más tarde en el último paso de
+          este registro o desde{" "}
+          <Link
+            href="/tutor/verification"
+            className="font-medium text-brand underline underline-offset-2"
+          >
+            Verificación
+          </Link>{" "}
+          en tu panel. Eso sí: sin foto ni biografía no podemos aprobar tu
+          perfil, porque los alumnos eligen tutor por la ficha.
+        </p>
       </WizardShell>
     );
   }
@@ -549,7 +632,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={2}
-        total={totalSteps}
+        total={total}
         title="¿Qué enseñas?"
         description="Elige al menos una categoría. Podrás ajustarlas luego."
         onBack={back}
@@ -593,7 +676,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={3}
-        total={totalSteps}
+        total={total}
         title="Zona horaria y contacto"
         description="Usamos tu zona horaria para mostrar tus horarios correctamente."
         onBack={back}
@@ -652,7 +735,7 @@ export function TutorOnboardingForm({
     return (
       <WizardShell
         step={4}
-        total={totalSteps}
+        total={total}
         title="¿Cuándo puedes dar clase?"
         description={`Marca las franjas en las que estás disponible cada semana. Se guardan en tu zona horaria (${timezone}) y se muestran a cada alumno en la suya.`}
         onBack={back}
@@ -683,114 +766,107 @@ export function TutorOnboardingForm({
     );
   }
 
-  // Penúltimo paso (24-jul): verificación de identidad reusando el módulo TU02,
-  // pero SIN sus dos botones: aquí guarda «Continuar» (ver `next()`) y el envío
-  // a revisión es de «Finalizar». Los materiales de clase salieron del
-  // onboarding a la oferta (R24-16).
-  if (step === 5) {
-    return (
-      <WizardShell
-        step={5}
-        total={totalSteps}
-        title="Verifica tu identidad"
-        description="Sube lo que tengas a mano y pulsa «Continuar»: se guarda solo, y lo que falte lo puedes completar después. Nada llega a revisión hasta que termines el registro."
-        onBack={back}
-        onNext={next}
-        busy={busy}
-        bare
-        maxWidth={760}
-      >
-        <VerificationForm
-          userId={userId}
-          docsByType={docsByType}
-          socials={socials}
-          identityStatus={identityStatus}
-          hasAvatar={!!avatar}
-          productCount={productCount}
-          // La mentoría es el paso SIGUIENTE de este mismo asistente: el
-          // checklist muestra su estado pero no manda a crearla fuera, que es
-          // exactamente el salto que hay que evitar aquí (N-03). `inWizard`
-          // apaga además sus dos botones de guardar: aquí manda el paso.
-          inWizard
-          saveRef={guardarVerificacion}
-        />
-      </WizardShell>
-    );
-  }
-
   /*
-   * N-03 · La primera mentoría se crea AQUÍ DENTRO.
+   * ÚLTIMO PASO · el repaso. Monta el módulo TU02 (verificación) sin sus dos
+   * botones —aquí manda el paso: guarda y envía «Finalizar», ver `next()`—, y
+   * desde el 28-ago hace algo más que informar.
    *
-   * Antes esto eran dos `<Link>` a `/tutor/products/new`: el tutor salía del
-   * asistente y aterrizaba en el panel del tutor, donde ya no había ni rastro
-   * del asistente ni de "vuelve a terminar" — "quien se sale ahí no vuelve".
+   * "No me digas que ya subí la foto, muéstrame ahí el cuadrito de la foto que
+   * subí y cambiarlo" · "en el último bloque… debemos incluir el formulario ahí
+   * mismo. Entonces este penúltimo paso ya pasa a ser el último paso".
    *
-   * Y "Finalizar" ya NO se bloquea (EX-02): el tutor puede posponer su primera
-   * mentoría; lo que no puede es que le aprueben el perfil sin ella. Eso se
-   * dice —aquí y en la pantalla de cierre— en vez de dejarle un botón muerto
-   * cuya causa no se ve.
+   * Traducido: los bloques del checklist dejan EDITAR. La foto y la biografía
+   * se cambian dentro del bloque 1, y el bloque 4 trae el formulario de
+   * mentoría entero —el DEL PANEL, no una copia—, así que ya no hay un paso
+   * siguiente al que mandar a nadie: el asistente termina aquí.
+   *
+   * Los dos bloques llegan montados desde este fichero y no desde el módulo
+   * porque quien sabe guardar es quien tiene los datos: la foto y la bio son
+   * estado de este asistente (los usa el checklist y la pantalla de cierre) y
+   * la mentoría necesita las categorías activas y las franjas del paso 4.
    */
   const mostrarFormulario = productCount === 0 || addingProduct;
   return (
     <WizardShell
-      step={totalSteps}
-      total={totalSteps}
-      title="Tu primera mentoría"
-      description={
-        productCount > 0
-          ? "Ya tienes tu primera mentoría creada. Puedes finalizar tu registro."
-          : "Créala sin salir de aquí. Lo básico basta: podrás completarla y publicarla desde tu panel."
-      }
+      step={total}
+      total={total}
+      title="Repasa y termina"
+      description="Esto es todo lo que revisamos. Complétalo aquí mismo: lo que dejes a medias no te impide terminar, pero sí que podamos aprobarte."
       onBack={back}
       onNext={next}
       nextLabel="Finalizar"
       // No es "Guardando…": lo que hace este botón es ENVIAR el expediente.
       busyLabel="Enviando…"
       busy={busy}
+      bare
+      maxWidth={760}
     >
-      {productCount > 0 ? (
-        <>
-          <p className="flex items-center gap-2 text-[13px] font-medium text-success">
-            <CheckIcon className="size-4" />
-            {productCount === 1
-              ? "Tienes una mentoría creada."
-              : `Tienes ${productCount} mentorías creadas.`}
-          </p>
-          {!addingProduct ? (
-            <Button
-              variant="outline"
-              onClick={() => setAddingProduct(true)}
-              className="h-[45px] w-full rounded-[8px] text-sm"
-            >
-              Añadir otra mentoría
-            </Button>
-          ) : null}
-        </>
-      ) : (
-        // EX-02: la salida por arriba existe y se nombra, para que posponer sea
-        // una decisión y no un abandono.
-        <p className="text-[13px] text-[#4d4d4d]">
-          Sin al menos una mentoría no podemos aprobar tu perfil. Si prefieres
-          dejarlo para luego, pulsa «Finalizar»: tu perfil se envía igual y
-          quedará marcado como incompleto hasta que la crees.
-        </p>
-      )}
-
-      {mostrarFormulario ? (
-        <FirstProductForm
-          userId={userId}
-          categories={productCategories}
-          onCreated={() => {
-            setProductCount((n) => n + 1);
-            setAddingProduct(false);
-          }}
-        />
-      ) : null}
+      <VerificationForm
+        userId={userId}
+        docsByType={docsByType}
+        socials={socials}
+        identityStatus={identityStatus}
+        // En vivo, no del servidor: se pueden cambiar en este mismo paso.
+        hasAvatar={!!avatar}
+        hasBio={!!bio.trim()}
+        productCount={productCount}
+        // `inWizard` apaga sus dos botones de guardar y cierra todos los
+        // bloques al entrar: aquí manda el paso.
+        inWizard
+        saveRef={guardarVerificacion}
+        perfil={
+          <TutorProfileBasics
+            userId={userId}
+            avatarUrl={avatarSrc}
+            fullName={fullName}
+            bio={bio}
+            // Guarda él mismo contra `tutor_profiles`; esto solo mantiene al
+            // asistente al día — su checklist y su pantalla de cierre leen de
+            // aquí, y «Finalizar» ya no vuelve a pasar por `saveProfile`.
+            onChange={(patch) => {
+              if (patch.avatarPath) onAvatarPath(patch.avatarPath);
+              if (patch.bio !== undefined) setBio(patch.bio);
+            }}
+          />
+        }
+        mentoria={
+          <div className="flex flex-col gap-4">
+            {productCount > 0 && !addingProduct ? (
+              <Button
+                variant="outline"
+                onClick={() => setAddingProduct(true)}
+                className="h-[45px] w-full rounded-[8px] text-sm"
+              >
+                Añadir otra mentoría
+              </Button>
+            ) : null}
+            {mostrarFormulario ? (
+              <ProductForm
+                userId={userId}
+                categories={productCategories}
+                // Las franjas del paso 4, para poder acotar la mentoría a unas
+                // cuantas (N-04) sin salir de aquí.
+                availabilityRules={rules}
+                // `isApproved` se queda en false: quien está en el asistente es
+                // `pending` por definición, así que no hay «Publicar» (RN-23).
+                submitLabel={
+                  productCount > 0
+                    ? "Guardar esta mentoría"
+                    : "Crear mi primera mentoría"
+                }
+                onCreated={() => {
+                  setProductCount((n) => n + 1);
+                  setAddingProduct(false);
+                }}
+              />
+            ) : null}
+          </div>
+        }
+      />
 
       <p className="text-xs text-[#6b6b6b]">
-        Al finalizar enviamos a revisión tu perfil y los documentos del paso
-        anterior. Es el único botón que los envía: hasta aquí todo queda en
-        borrador.
+        Al finalizar enviamos a revisión tu perfil y tus documentos. Es el único
+        botón que los envía: hasta aquí todo queda en borrador.
       </p>
     </WizardShell>
   );

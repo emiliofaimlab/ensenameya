@@ -60,25 +60,46 @@ export type IdentityStatus =
 const TOPE = maxLabel(KYC_MAX_BYTES);
 
 /**
- * C-14 — set final confirmado por el cliente (UX-203 / EY-100): 6 documentos
- * de archivo. Las redes ya NO son un documento: viven en `tutor_profiles.socials`
- * como lista (R29-02), en la tarjeta de abajo.
+ * C-14 — set de tipos confirmado por el cliente (UX-203 / EY-100). Las redes ya
+ * NO son un documento: viven en `tutor_profiles.socials` como lista (R29-02),
+ * en la tarjeta de abajo.
+ *
+ * ⚠️ Desde el 28-ago esta lista NO se pinta entera. El cliente pidió lo
+ * contrario de lo que había: «ya no vamos a listar todos los documentos… un
+ * selector correspondiente a qué documento y que cargo, para no bloquear al
+ * usuario que vea una lista tan larga de documentos y se salga». Así que
+ * alimenta un desplegable, y lo que se ve debajo es solo lo que el tutor ya
+ * tiene — mismo patrón que el portafolio: elegir plataforma + añadir.
+ *
+ * `requerido` marca los tres que la aprobación exige de verdad (CV, título y
+ * documento de identidad). Se DESTACAN, no se imponen: ningún paso del
+ * asistente bloquea (EX-02) y este tampoco.
+ *
  * Ampliar o reordenar el set = tocar esta lista. La BD (`doc_type` es texto) y
  * la pantalla de revisión del admin son genéricas y no se enteran.
  */
 const KYC_DOCS = [
-  { type: "id_document", label: "Documento de identidad", hint: `Cédula o pasaporte · PDF/JPG, máx ${TOPE}` },
-  { type: "degree", label: "Título académico", hint: `PDF, máx ${TOPE}` },
-  { type: "certificate", label: "Certificado", hint: `PDF, máx ${TOPE}` },
-  { type: "diploma", label: "Diploma", hint: `PDF/JPG, máx ${TOPE}` },
-  { type: "transcript", label: "Corte de notas (transcript)", hint: `PDF, máx ${TOPE}` },
-  { type: "cv", label: "Currículum vitae", hint: `PDF, máx ${TOPE}` },
+  { type: "cv", label: "Currículum vitae", hint: `PDF, máx ${TOPE}`, requerido: true },
+  { type: "degree", label: "Título académico", hint: `PDF, máx ${TOPE}`, requerido: true },
+  { type: "id_document", label: "Documento de identidad", hint: `Cédula o pasaporte · PDF/JPG, máx ${TOPE}`, requerido: true },
+  { type: "certificate", label: "Certificado", hint: `PDF, máx ${TOPE}`, requerido: false },
+  { type: "diploma", label: "Diploma", hint: `PDF/JPG, máx ${TOPE}`, requerido: false },
+  { type: "transcript", label: "Corte de notas (transcript)", hint: `PDF, máx ${TOPE}`, requerido: false },
 ] as const;
+
+/** Los tres de arriba, ya filtrados: se nombran en dos sitios de la pantalla. */
+const KYC_REQUERIDOS = KYC_DOCS.filter((d) => d.requerido);
+
+/** "el CV, el título y la cédula" — enumeración en castellano, con «y» final. */
+function enumerar(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} y ${items.at(-1)}`;
+}
 
 export type DocState = { status: DocStatus; linkUrl: string | null };
 
 /**
- * Lo que el asistente recibe de vuelta al guardar su paso 5.
+ * Lo que el asistente recibe de vuelta al guardar su paso de repaso.
  *
  * Los contadores salen de aquí y no de las props del servidor porque entre
  * guardar y pulsar «Finalizar» el asistente no vuelve a pedir la página: su
@@ -110,6 +131,7 @@ const STAGED_PILL = { label: "Sin guardar", tone: "amber" as PillTone };
 function FileRow({
   label,
   hint,
+  requerido,
   status,
   stagedName,
   onPick,
@@ -118,6 +140,8 @@ function FileRow({
 }: {
   label: string;
   hint: string;
+  /** De los tres que pide la aprobación: se dice en la fila, no solo arriba. */
+  requerido?: boolean;
   status?: DocStatus;
   stagedName?: string;
   onPick: (file: File) => void;
@@ -164,7 +188,10 @@ function FileRow({
           <p className="truncate text-[13.5px] font-medium text-[#333333]">
             {label}
           </p>
-          <p className="truncate text-xs text-[#6b6b6b]">{stagedName ?? hint}</p>
+          <p className="truncate text-xs text-[#6b6b6b]">
+            {stagedName ?? hint}
+            {requerido ? " · requerido para aprobar" : ""}
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -293,7 +320,7 @@ function ChecklistStep({
  * comparten estado para que los dos botones actúen sobre todo a la vez.
  *
  * N-10 · Ya no es una lista plana que obligaba a saltar de pantalla en pantalla
- * para saber qué falta: son cuatro pasos plegables con estado propio. El estado
+ * para saber qué falta: son cuatro bloques plegables con estado propio. El estado
  * NO sale de un sitio, sale de tres —documentos, redes y nº de mentorías— más
  * la foto, y por eso vive aquí y no en la columna `identity_verification_status`
  * (que solo habla de los documentos).
@@ -303,9 +330,10 @@ function ChecklistStep({
  * dijera "sin enviar" a secas para quien lleva seis documentos subidos le haría
  * volver a subirlos.
  *
- * ⚠️ Este módulo está COMPARTIDO entre `/tutor/verification` y el paso 5 del
- * asistente (era el 4 hasta que EY-183 metió la disponibilidad delante):
- * cualquier cambio de aquí se ve en las dos.
+ * ⚠️ Este módulo está COMPARTIDO entre `/tutor/verification` y el ÚLTIMO paso
+ * del asistente (fue el 4, luego el 5 cuando EY-183 metió la disponibilidad
+ * delante, y desde el 28-ago es el último porque el alta de mentoría se metió
+ * aquí dentro): cualquier cambio de aquí se ve en las dos.
  *
  * ⚠️ …pero los DOS BOTONES de arriba son solo del panel (`inWizard === false`).
  * En el panel son la única acción de la pantalla y están bien; dentro del
@@ -327,27 +355,48 @@ export function VerificationForm({
   socials,
   identityStatus,
   hasAvatar,
+  hasBio,
   productCount,
   inWizard = false,
+  perfil,
+  mentoria,
   saveRef,
 }: {
   userId: string;
   docsByType: Record<string, DocState>;
-  /** R29-02: redes y portafolio ya guardados (`tutor_profiles.socials`). */
+  /** R29-02: portafolio y redes ya guardados (`tutor_profiles.socials`). */
   socials: SocialLink[];
   /** Estado global de los DOCUMENTOS (lo pone un trigger al enviar). */
   identityStatus: IdentityStatus;
-  /** Foto pública del tutor (`tutor_profiles.avatar_path`), paso 1. */
+  /** Foto pública del tutor (`tutor_profiles.avatar_path`). */
   hasAvatar: boolean;
+  /**
+   * Biografía (`tutor_profiles.bio`). Desde el 28-ago ni ella ni la foto
+   * bloquean el avance del asistente, pero las dos siguen haciendo falta para
+   * APROBAR — y esa diferencia tiene que verse: por eso el checklist las cuenta.
+   */
+  hasBio: boolean;
   /** Mentorías creadas: sin ninguna no se aprueba el perfil (EX-02). */
   productCount: number;
-  /** Dentro del asistente la mentoría es el paso siguiente: no se manda fuera. */
+  /** Dentro del asistente el repaso es el ÚLTIMO paso: nada manda fuera. */
   inWizard?: boolean;
+  /**
+   * Bloques que se montan DESDE FUERA, ya listos (mismo patrón que las tarjetas
+   * de `account-form`): la foto + biografía y el alta de mentoría.
+   *
+   * 28-ago · "no me digas que ya subí la foto, muéstrame ahí el cuadrito de la
+   * foto que subí y cambiarlo" — el repaso deja EDITAR, no solo informar. Vienen
+   * de fuera porque quien sabe guardar es quien los monta: uno escribe en
+   * `tutor_profiles` y el otro crea un `product`, y ninguna de las dos
+   * escrituras es de este módulo.
+   */
+  perfil?: React.ReactNode;
+  mentoria?: React.ReactNode;
   /**
    * Solo en el asistente: sin botones propios, «Continuar» necesita disparar el
    * guardado y ESPERAR su resultado (un enlace inválido no puede avanzar de
-   * paso, porque el paso siguiente desmonta este módulo y con él los archivos
-   * elegidos, que hasta guardarlos viven solo en memoria).
+   * paso, porque la pantalla de cierre desmonta este módulo y con él los
+   * archivos elegidos, que hasta guardarlos viven solo en memoria).
    */
   saveRef?: RefObject<VerificationSave | null>;
 }) {
@@ -358,6 +407,9 @@ export function VerificationForm({
   const [links, setLinks] = useState<SocialLink[]>(() =>
     socials.length > 0 ? socials : [{ platform: "", url: "" }],
   );
+  /** Tipo elegido en el selector de documentos, todavía sin archivo detrás. */
+  const [tipoNuevo, setTipoNuevo] = useState("");
+  const nuevoRef = useRef<HTMLInputElement>(null);
 
   const filled = links.filter((l) => l.platform || l.url.trim());
   const linksDirty =
@@ -392,6 +444,18 @@ export function VerificationForm({
     return { label: "Sin empezar", tone: "neutral", hecho: false };
   })();
 
+  /** Tipos que aún no están en el expediente → los que ofrece el selector. */
+  const disponibles = KYC_DOCS.filter(
+    (d) => !staged[d.type] && !docsByType[d.type],
+  );
+  /** Y los que sí: es lo único que se pinta como lista (28-ago). */
+  const enExpediente = KYC_DOCS.filter(
+    (d) => staged[d.type] || docsByType[d.type],
+  );
+  const faltanRequeridos = KYC_REQUERIDOS.filter(
+    (d) => !staged[d.type] && !docsByType[d.type],
+  );
+
   const redesGuardadas = socials.length > 0;
   const redesState: StepState = redesGuardadas
     ? { label: "Guardado", tone: "green", hecho: true }
@@ -399,24 +463,42 @@ export function VerificationForm({
       ? { label: "Sin guardar", tone: "amber", hecho: false }
       : { label: "Falta", tone: "neutral", hecho: false };
 
-  const fotoState: StepState = hasAvatar
-    ? { label: "Lista", tone: "green", hecho: true }
-    : { label: "Falta", tone: "neutral", hecho: false };
+  /**
+   * Foto y biografía, juntas: desde el 28-ago las dos son opcionales para
+   * avanzar y ninguna lo es para aprobar, así que aquí cuentan igual. Una sola
+   * de las dos deja el paso «a medias» en vez de «lista» — que es exactamente
+   * la diferencia entre "puedes seguir" y "podemos aprobarte".
+   */
+  const perfilState: StepState =
+    hasAvatar && hasBio
+      ? { label: "Lista", tone: "green", hecho: true }
+      : hasAvatar || hasBio
+        ? { label: "A medias", tone: "amber", hecho: false }
+        : { label: "Falta", tone: "neutral", hecho: false };
 
   const mentoriaState: StepState = productCount > 0
     ? { label: "Creada", tone: "green", hecho: true }
     : { label: "Falta", tone: "neutral", hecho: false };
 
-  const pasos = [fotoState, docsState, redesState, mentoriaState];
+  const pasos = [perfilState, docsState, redesState, mentoriaState];
   const completos = pasos.filter((p) => p.hecho).length;
 
   /**
-   * Abierto de entrada: el primer paso que falte, para que el tutor caiga
-   * donde tiene trabajo en vez de en una lista cerrada. Es estado INICIAL a
-   * propósito — recalcularlo en cada render cerraría de golpe la sección que
-   * el tutor acaba de completar mientras sigue dentro.
+   * TODOS CERRADOS dentro del asistente (28-ago, petición del cliente): el
+   * repaso ahora trae dentro la foto, la biografía y el formulario entero de la
+   * mentoría, así que abrir uno de entrada es abrir una pantalla larguísima
+   * sobre otra pantalla larga.
+   *
+   * En el panel se mantiene lo de antes —el primer paso que falte, abierto—
+   * porque allí esta lista ES la pantalla: no hay nada que la preceda y caer en
+   * una lista toda cerrada obliga a un clic para empezar a trabajar.
+   *
+   * En los dos casos es estado INICIAL a propósito: recalcularlo en cada render
+   * cerraría de golpe la sección que el tutor acaba de completar sin haber
+   * salido de ella.
    */
   const [abiertos, setAbiertos] = useState<Set<number>>(() => {
+    if (inWizard) return new Set();
     const primero = pasos.findIndex((p) => !p.hecho);
     return new Set([primero === -1 ? 2 : primero + 1]);
   });
@@ -464,10 +546,10 @@ export function VerificationForm({
 
     const cleaned = cleanLinks();
     if (!cleaned) return false;
-    // La primera red es obligatoria para ENVIAR a revisión; el borrador puede
+    // El primer enlace es obligatorio para ENVIAR a revisión; el borrador puede
     // quedarse a medias (el módulo se completa poco a poco, R24-15).
     if (!draft && cleaned.length === 0) {
-      toast.error("Añade al menos una red social o tu portafolio.");
+      toast.error("Añade al menos un enlace a tu portafolio.");
       return false;
     }
 
@@ -517,17 +599,19 @@ export function VerificationForm({
     return true;
   }
 
-  /** Marca de "el paso 5 ya se guardó"; su porqué, dentro de `guardarPaso`. */
+  /** Marca de "el repaso ya se guardó"; su porqué, dentro de `guardarPaso`. */
   const yaGuardado = useRef(false);
 
   /**
-   * Guardado del paso 5 del asistente. Siempre BORRADOR: el envío a revisión
-   * manda documentos Y enlaces a la vez, y aquí todavía falta la primera
-   * mentoría (paso 6), así que enviarlo desde aquí sería enviar a medias.
+   * Guardado del paso de repaso. Siempre BORRADOR, también ahora que es el
+   * último paso: quien envía a revisión es «Finalizar», en la misma pulsación y
+   * justo después de esto (ver `next()` del asistente). Separarlo no es un
+   * capricho — el envío manda documentos Y enlaces a la vez, y si el guardado
+   * falla no hay nada que enviar.
    *
-   * No avisa de nada al terminar bien: quien lo dispara es «Continuar», y el
-   * cambio de paso ya es el acuse de recibo. Los fallos sí hablan (los toasts
-   * los pone `persist`).
+   * No avisa de nada al terminar bien: quien lo dispara es «Finalizar», y la
+   * pantalla de cierre ya es el acuse de recibo. Los fallos sí hablan (los
+   * toasts los pone `persist`).
    */
   async function guardarPaso(): Promise<VerificationSaveResult> {
     setBusy("draft");
@@ -563,8 +647,9 @@ export function VerificationForm({
 
   /**
    * ⚠️ …y se BORRA al desmontar. Sin esto el asistente se quedaría con un cierre
-   * sobre el `staged` del paso 5 y, al salir desde el paso 6, volvería a subir
-   * como `draft` los documentos que «Finalizar» acaba de pasar a `pending`.
+   * sobre el `staged` del repaso y, al salir desde la pantalla de cierre,
+   * volvería a subir como `draft` los documentos que «Finalizar» acaba de pasar
+   * a `pending`.
    */
   useEffect(() => {
     if (!saveRef) return;
@@ -574,7 +659,7 @@ export function VerificationForm({
   }, [saveRef]);
 
   /**
-   * Salir del paso 5 por cualquier otra puerta —«Atrás», «Guardar y salir» del
+   * Salir del repaso por cualquier otra puerta —«Atrás», «Guardar y salir» del
    * header, el botón del navegador— también guarda. Sin los dos botones de
    * antes, este desmontaje es lo único que queda entre el tutor y perder los
    * archivos que eligió, que hasta aquí solo existen en memoria.
@@ -620,6 +705,28 @@ export function VerificationForm({
   const setLink = (i: number, patch: Partial<SocialLink>) =>
     setLinks((prev) => prev.map((l, j) => (i === j ? { ...l, ...patch } : l)));
 
+  /**
+   * Archivo elegido desde el selector: se deja listo bajo su tipo y el
+   * desplegable vuelve a cero, que es lo que invita a añadir el siguiente.
+   * La subida sigue siendo diferida (nada toca Storage hasta el guardado).
+   */
+  function onNuevoArchivo(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite volver a elegir el mismo archivo
+    if (!file || !tipoNuevo) return;
+    const problema = fileProblem(file, {
+      types: KYC_TYPES,
+      maxBytes: KYC_MAX_BYTES,
+      hint: KYC_HINT,
+    });
+    if (problema) {
+      toast.error(problema);
+      return;
+    }
+    setStaged((p) => ({ ...p, [tipoNuevo]: file }));
+    setTipoNuevo("");
+  }
+
   return (
     <>
       {/* Barra de progreso del paquete completo: foto + documentos + redes +
@@ -632,11 +739,11 @@ export function VerificationForm({
           <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
             {inWizard
               ? completos === pasos.length
-                ? "Está todo. Lo enviamos a revisión cuando termines el registro."
-                : "Lo que dejes aquí se guarda al pulsar «Continuar»; nada llega a revisión hasta que termines el registro."
+                ? "Está todo. Lo enviamos a revisión al pulsar «Finalizar»."
+                : "Repasa lo que falta y complétalo aquí mismo. Lo que dejes se guarda al pulsar «Finalizar»; nada llega a revisión hasta entonces."
               : completos === pasos.length
                 ? "Está todo. Envía tus documentos a revisión cuando quieras."
-                : "Completa los cuatro pasos y envíalo todo junto: así lo revisamos de una vez."}
+                : "Completa los cuatro bloques y envíalo todo junto: así lo revisamos de una vez."}
           </p>
         </div>
         <StatusPill tone={completos === pasos.length ? "green" : "neutral"}>
@@ -644,78 +751,156 @@ export function VerificationForm({
         </StatusPill>
       </PanelCard>
 
-      {/* Paso 1 · Foto. No se edita aquí (vive en el paso 1 del asistente),
-          pero sin ella el perfil no se aprueba, así que se ve su estado. El
-          enlace directo al paso 1 es posible gracias a `?paso=` (M-03). */}
+      {/* Paso 1 · Foto y biografía, editables AQUÍ MISMO (28-ago). Antes esto
+          era un texto que decía "ya la subiste" y un enlace al paso 1 del
+          asistente — el único sitio donde se podían tocar—; ahora las dos son
+          opcionales para avanzar, así que el sitio donde se completan «luego»
+          tiene que existir, y es este. */}
       <ChecklistStep
         n={1}
         icon={UserRoundIcon}
-        title="Tu foto de perfil"
-        summary="La cara de tu tarjeta en el catálogo."
-        state={fotoState}
+        title="Tu foto y tu biografía"
+        summary="La cara y el texto de tu tarjeta en el catálogo."
+        state={perfilState}
         open={abiertos.has(1)}
         onToggle={() => togglePaso(1)}
       >
-        <p className="text-[13px] text-[#4d4d4d]">
-          {hasAvatar
-            ? "Ya tienes foto de perfil. Puedes cambiarla desde el primer paso de tu registro de tutor."
-            : "Todavía no has subido tu foto. Es obligatoria: los alumnos eligen tutor por la ficha, y sin cara no hay ficha."}
-        </p>
-        {!inWizard ? (
-          <Button
-            asChild
-            variant="outline"
-            className="mt-3 h-10 rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
-          >
-            <Link href="/tutor/onboarding?paso=1">
-              {hasAvatar ? "Cambiar mi foto" : "Subir mi foto"}
-            </Link>
-          </Button>
-        ) : (
-          <p className="mt-2 text-xs text-[#6b6b6b]">
-            La subiste en el paso 1 de este asistente.
+        {perfil ?? (
+          <p className="text-[13px] text-[#4d4d4d]">
+            {hasAvatar && hasBio
+              ? "Ya tienes foto y biografía."
+              : "Todavía te falta la foto o la biografía. Puedes completarlas desde tu registro de tutor."}
           </p>
         )}
+        {/* Opcionales para AVANZAR, no para APROBAR: la diferencia se dice, no
+            se deduce. Es lo único que queda del bloqueo que había antes. */}
+        {!hasAvatar || !hasBio ? (
+          <p className="mt-3 text-[12.5px] text-[#9a6b00]">
+            Puedes seguir sin ellas, pero no aprobamos un perfil sin foto ni
+            biografía: los alumnos eligen tutor por la ficha.
+          </p>
+        ) : null}
       </ChecklistStep>
 
-      {/* Paso 2 · Documentos (C-14). */}
+      {/* Paso 2 · Documentos (C-14). 28-ago: selector + lista de lo subido, no
+          las seis filas fijas de antes — ver la nota de `KYC_DOCS`. */}
       <ChecklistStep
         n={2}
         icon={FileTextIcon}
         title="Documentos de identidad y formación"
-        summary={`${docsListos} de ${KYC_DOCS.length} preparados · ${KYC_HINT}`}
+        summary={
+          docsListos === 0
+            ? `Elige el tipo y añádelo · ${KYC_HINT}`
+            : `${docsListos} ${docsListos === 1 ? "documento añadido" : "documentos añadidos"} · ${
+                faltanRequeridos.length === 0
+                  ? "tienes los tres requeridos"
+                  : `${faltanRequeridos.length === 1 ? "falta 1" : `faltan ${faltanRequeridos.length}`} de los requeridos`
+              }`
+        }
         state={docsState}
         open={abiertos.has(2)}
         onToggle={() => togglePaso(2)}
       >
-        <div className="divide-y divide-[#e0e0e0]">
-          {KYC_DOCS.map((d) => (
-            <FileRow
-              key={d.type}
-              label={d.label}
-              hint={d.hint}
-              status={docsByType[d.type]?.status}
-              stagedName={staged[d.type]?.name}
-              onPick={(file) => setStaged((p) => ({ ...p, [d.type]: file }))}
-              onClear={() =>
-                setStaged((p) => {
-                  const next = { ...p };
-                  delete next[d.type];
-                  return next;
-                })
-              }
-              disabled={busy !== null}
-            />
-          ))}
+        <p className="text-xs text-[#6b6b6b]">
+          Sube lo que tengas a mano y vuelve cuando quieras: no hay una lista
+          que rellenar de golpe.
+        </p>
+        {/* Se DESTACAN, no bloquean: «Continuar» nunca los exige. */}
+        <p
+          className={cn(
+            "mt-2 text-xs",
+            faltanRequeridos.length > 0 ? "text-[#9a6b00]" : "text-success",
+          )}
+        >
+          {faltanRequeridos.length === 0
+            ? "Ya tienes los tres documentos que pide la aprobación."
+            : `Requeridos para aprobar tu perfil: ${enumerar(KYC_REQUERIDOS.map((d) => d.label))}. Te ${faltanRequeridos.length === 1 ? "falta" : "faltan"} ${enumerar(faltanRequeridos.map((d) => d.label))}.`}
+        </p>
+
+        {/* El selector: mismo gesto que el portafolio de abajo — elegir qué es
+            y añadirlo. El archivo NO sube aquí; se queda listo como siempre. */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <select
+            aria-label="Tipo de documento"
+            value={tipoNuevo}
+            disabled={busy !== null || disponibles.length === 0}
+            onChange={(e) => setTipoNuevo(e.target.value)}
+            className="h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[260px]"
+          >
+            <option value="">¿Qué documento subes?</option>
+            {/* Un solo hijo de texto por opción: `<option>` no admite varios. */}
+            {disponibles.map((d) => (
+              <option key={d.type} value={d.type}>
+                {`${d.label}${d.requerido ? " · requerido" : ""}`}
+              </option>
+            ))}
+          </select>
+          <input
+            ref={nuevoRef}
+            type="file"
+            accept={KYC_TYPES.join(",")}
+            className="hidden"
+            onChange={onNuevoArchivo}
+          />
+          <Button
+            variant="outline"
+            disabled={busy !== null || !tipoNuevo}
+            onClick={() => nuevoRef.current?.click()}
+            className="h-[45px] rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
+          >
+            Elegir archivo y añadir
+          </Button>
         </div>
+        {disponibles.length === 0 ? (
+          <p className="mt-2 text-xs text-[#6b6b6b]">
+            Ya has añadido los {KYC_DOCS.length} tipos de documento que
+            aceptamos. Puedes reemplazar cualquiera desde la lista.
+          </p>
+        ) : null}
+
+        {/* Lo que YA hay. Un documento guardado se REEMPLAZA, no se quita: la
+            RLS de `verification_documents` no da `delete` a `authenticated`
+            —solo select, insert y update de `storage_path`—, así que un botón
+            de borrar sería un botón que falla. Lo que sí se quita es lo elegido
+            en esta sesión, que hasta guardarse vive solo en memoria. */}
+        {enExpediente.length > 0 ? (
+          <div className="mt-5 divide-y divide-[#e0e0e0]">
+            {enExpediente.map((d) => (
+              <FileRow
+                key={d.type}
+                label={d.label}
+                hint={d.hint}
+                requerido={d.requerido}
+                status={docsByType[d.type]?.status}
+                stagedName={staged[d.type]?.name}
+                onPick={(file) => setStaged((p) => ({ ...p, [d.type]: file }))}
+                onClear={() =>
+                  setStaged((p) => {
+                    const next = { ...p };
+                    delete next[d.type];
+                    return next;
+                  })
+                }
+                disabled={busy !== null}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 rounded-[12px] border border-dashed border-[#e0e0e0] p-4 text-center text-[13px] text-[#6b6b6b]">
+            Todavía no has añadido ningún documento.
+          </p>
+        )}
       </ChecklistStep>
 
-      {/* Paso 3 · R29-02 — redes Y portafolio en UN módulo (190:98). Antes esto
-          era un enlace suelto aquí y dos campos más en el paso 3 del asistente. */}
+      {/* Paso 3 · R29-02 — portafolio y redes en UN módulo (190:98). Antes esto
+          era un enlace suelto aquí y dos campos más en el paso 3 del asistente.
+          ⚠️ El apartado se llama «Portafolio» desde el 28-ago (petición del
+          cliente): solo cambia la ETIQUETA. La columna sigue siendo
+          `tutor_profiles.socials` y su lógica, `lib/socials.ts`. */}
       <ChecklistStep
         n={3}
         icon={LinkIcon}
-        title="Redes sociales y portafolio"
+        title="Portafolio"
         summary={
           redesGuardadas
             ? `${socials.length} ${socials.length === 1 ? "enlace guardado" : "enlaces guardados"}`
@@ -726,9 +911,10 @@ export function VerificationForm({
         onToggle={() => togglePaso(3)}
       >
         <p className="text-xs text-[#6b6b6b]">
-          La primera es obligatoria para enviar tu perfil a revisión. Puedes
-          añadir hasta {MAX_SOCIALS}; si tienes portafolio o web propia, elige
-          «Sitio web / Portafolio» y pega el enlace que quieras.
+          Tu web, tu portafolio o tus perfiles públicos: es parte de lo que
+          revisamos. El primer enlace es obligatorio para enviar tu perfil a
+          revisión y puedes añadir hasta {MAX_SOCIALS}; si lo tuyo es una web
+          propia, elige «Sitio web / Portafolio» y pega el enlace que quieras.
         </p>
         <div className="mt-4 flex flex-col gap-3">
           {links.map((l, i) => (
@@ -818,12 +1004,11 @@ export function VerificationForm({
             ? "Ya tienes tu primera mentoría. Se publicará en cuanto aprobemos tu perfil."
             : "Define qué enseñas, a qué precio y en cuánto tiempo. Se guarda como borrador: una mentoría solo se publica con el perfil aprobado."}
         </p>
-        {inWizard ? (
-          <p className="mt-2 text-xs text-[#6b6b6b]">
-            {productCount > 0
-              ? "Puedes añadir más en el paso siguiente."
-              : "La crearás en el paso siguiente, sin salir de aquí."}
-          </p>
+        {/* 28-ago · "no digas que en el próximo paso la cargo, debemos incluir
+            el formulario ahí mismo". El paso siguiente ya no existe: el alta
+            entra AQUÍ y con ella el asistente termina. */}
+        {mentoria ? (
+          <div className="mt-4">{mentoria}</div>
         ) : (
           <Button
             asChild
@@ -846,10 +1031,10 @@ export function VerificationForm({
           los pasos a propósito: manda documentos Y enlaces a la vez, así que
           colgarlo de uno solo mentiría sobre su alcance.
 
-          ⚠️ Y por eso mismo NO se pintan dentro del asistente: allí «enviar a
-          revisión» tampoco puede colgar del paso 5, porque el paso 6 —la primera
-          mentoría, que este mismo checklist cuenta— viene después. El guardado
-          lo lleva «Continuar» y el envío, «Finalizar». */}
+          ⚠️ Y NO se pintan dentro del asistente: allí serían dos botones más
+          peleándose con «Atrás» y «Finalizar» sin que ninguno dijera cuál
+          termina. Manda el paso: «Finalizar» guarda esto como borrador y, en la
+          misma pulsación, envía el expediente. */}
       {!inWizard ? (
         <div className="flex flex-wrap items-center justify-end gap-3">
           <Button
@@ -874,7 +1059,7 @@ export function VerificationForm({
         Formatos: {KYC_HINT}. Tus documentos son privados; solo el equipo de
         revisión los ve.{" "}
         {inWizard
-          ? "Elige tus archivos y pulsa «Continuar»: se guardan como borrador y se envían a revisión al finalizar tu registro."
+          ? "Elige tus archivos y pulsa «Finalizar»: se guardan y se envían a revisión con el resto de tu expediente."
           : "Elige tus archivos y guárdalos como borrador para seguir más tarde: nada llega a revisión hasta que pulses «Guardar y enviar a revisión»."}
       </p>
     </>
