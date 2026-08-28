@@ -111,10 +111,13 @@ export default async function ProductPage({
    * Doc 22 (G1)—: mientras el tutor no escriba nada, la ficha enseña cuatro
    * preguntas nuestras firmadas visualmente como suyas.
    */
-  const faqs =
-    product.faqs.length + product.tutor.faqs.length > 0
-      ? [...product.faqs, ...product.tutor.faqs]
-      : PRODUCT_FAQ;
+  //
+  // ⚠️ 28-ago: la sección de FAQ de PERFIL está oculta (su editor responde 404),
+  // así que aquí ya no se concatena `product.tutor.faqs` — lo escrito antes de
+  // ocultarla sigue en la BD pero no se publica. `getProductDetail` tampoco baja
+  // ya esa columna, así que llega siempre vacía. Todo lo de arriba describe cómo
+  // era y vuelve a valer en cuanto se reactive la sección.
+  const faqs = product.faqs.length > 0 ? product.faqs : PRODUCT_FAQ;
 
   const chips = [
     reviews.length > 0 && product.tutor.ratingAvg

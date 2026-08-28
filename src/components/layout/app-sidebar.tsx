@@ -15,7 +15,6 @@ import {
   HomeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
-  MessageCircleQuestionIcon,
   PercentIcon,
   ReceiptIcon,
   ShieldCheckIcon,
@@ -78,7 +77,12 @@ export const TUTOR_ITEMS: Item[] = [
   // ENVUELVE en vez de desbordar (antes era `h-[41px]` fija y se salía). Eso
   // quita el riesgo de rotura, no la razón de la etiqueta corta: dos líneas en
   // el menú siguen sin ser lo que se quiere.
-  { href: "/tutor/faqs", label: "Mis FAQ", icon: MessageCircleQuestionIcon },
+  // OCULTA (petición del cliente, 28-ago): la sección de FAQ de perfil no se
+  // ofrece en el panel. No se borra nada — la ruta `/tutor/faqs` y su editor
+  // siguen en el repo, solo dejan de tener puerta de entrada. Para volver a
+  // enseñarla hay que descomentar esta línea, reponer el import de
+  // `MessageCircleQuestionIcon` y el enlace de product-form.
+  // { href: "/tutor/faqs", label: "Mis FAQ", icon: MessageCircleQuestionIcon },
   { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
   { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
   { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },

@@ -73,6 +73,10 @@ export type ProductDetail = ProductCardData & {
      * EY-194 · FAQ del TUTOR, las mismas en todas sus mentorías. Llegan
      * separadas de las de la mentoría a propósito: la ficha las pinta en orden
      * (primero las de esta mentoría) y ese orden se pierde si se fusionan aquí.
+     *
+     * ⚠️ Desde el 28-ago llega SIEMPRE vacía: la sección de FAQ de perfil está
+     * oculta y la columna ya no se consulta. El campo se conserva para no tener
+     * que rehacer el tipo al reactivarla.
      */
     faqs: Faq[];
   };
@@ -502,7 +506,11 @@ export async function getProductDetail(
     // una columna a un `select` de listado nadie se entera. Este comentario es
     // la única barrera.
     .select(
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, faqs",
+      // 28-ago: `faqs` sale del select mientras la sección de FAQ de perfil esté
+      // oculta — la ficha ya no las pinta y bajar un jsonb sin tope para tirarlo
+      // es justo lo que avisa el párrafo de abajo. Al reactivar la sección hay
+      // que reponerlo aquí y en el mapeo de `tutor.faqs`.
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
     )
     .eq("profile_id", p.tutor_id)
     .eq("approval_status", "approved")
@@ -536,7 +544,8 @@ export async function getProductDetail(
       bio: tutor.bio,
       ratingAvg: tutor.rating_avg,
       ratingCount: tutor.rating_count,
-      faqs: parseFaqs(tutor.faqs),
+      // Vacío a propósito: la columna ya no se consulta (ver el select de arriba).
+      faqs: [],
     },
   };
 }

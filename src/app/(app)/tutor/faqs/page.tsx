@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
@@ -25,7 +26,24 @@ export const metadata = { title: "Mis preguntas frecuentes · Enséñame Ya" };
  * respuestas mientras espera, igual que ya puede preparar mentorías en
  * borrador.
  */
+
+/**
+ * ⚠️ INTERRUPTOR DE LA SECCIÓN (petición del cliente, 28-ago).
+ *
+ * En `false` la ruta responde 404 y la sección no existe de cara al tutor: la
+ * entrada "Mis FAQ" del menú (`app-sidebar.tsx`) y el enlace desde el editor de
+ * mentoría (`product-form.tsx`) también están comentados, así que sin esto la
+ * URL a pelo seguía sirviendo el editor. Nada se ha borrado: poner `true` aquí
+ * y descomentar esos dos sitios devuelve la sección tal cual estaba.
+ *
+ * El 404 va DENTRO de una condición (y no un `notFound()` suelto) para que el
+ * resto del componente siga siendo código alcanzable a ojos de tsc y eslint.
+ */
+const SECCION_VISIBLE = false;
+
 export default async function TutorFaqsPage() {
+  if (!SECCION_VISIBLE) notFound();
+
   const { userId, approvalStatus } = await requireTutorProfile();
 
   const supabase = await createClient();
