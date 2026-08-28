@@ -111,6 +111,28 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
       "Puedes verla y descargarla desde la reserva. Estará disponible durante 30 días desde que terminó la mentoría; después se borra.",
     cta: "Ver la grabación",
   }),
+  // NTF-22 (EY-189) · ⚠️ LA ÚNICA PLANTILLA CON CUERPO LIBRE. Las doce
+  // anteriores son literales de este fichero; esta la escribe el administrador
+  // desde la bandeja de moderación y viaja en el payload
+  // (`admin_contact_user`). Por eso `renderEmail` escapa el cuerpo antes de
+  // meterlo en el HTML — ver el comentario de allí.
+  //
+  // Se cae a una frase neutra si el payload viniera sin texto: un correo con el
+  // cuerpo vacío es peor que uno que dice poco, y la RPC ya rechaza el mensaje
+  // en blanco, así que esto es solo el cinturón.
+  admin_message: (p) => {
+    // A una variable antes de mirarla: el payload es `Record<string, unknown>`
+    // y solo así el estrechamiento a `string` sobrevive al ternario.
+    const m = p?.mensaje;
+    return {
+      asunto: "Un mensaje del equipo de Enséñame Ya",
+      cuerpo:
+        typeof m === "string" && m.trim()
+          ? m.trim()
+          : "El equipo de Enséñame Ya quiere hablar contigo sobre tu cuenta.",
+      cta: "Entrar a mi cuenta",
+    };
+  },
 };
 
 /** A dónde lleva el correo, según lo que el trigger dejó en el payload. */
@@ -129,7 +151,32 @@ function rutaFor(template: string, payload: Payload): string {
   if (template === "tutor_review_result" || template === "identity_in_review") {
     return "/tutor/verification";
   }
+  // NTF-22 · a `/account`, que es la única pantalla del área con sesión que
+  // existe para los tres perfiles. `/app` es el panel del ALUMNO, y este correo
+  // se le manda igual de a menudo a un tutor.
+  if (template === "admin_message") return "/account";
   return "/app";
+}
+
+/**
+ * Escapa lo que va a interpolarse dentro del HTML del correo.
+ *
+ * ⚠️ Existe desde que hay UNA plantilla con cuerpo libre (`admin_message`,
+ * NTF-22). Las demás son literales de este fichero y no contienen ni un `<`, así
+ * que escapar siempre no cambia nada de lo que ya se enviaba — y evita tener
+ * que acordarse de escapar en la plantilla, que es la clase de olvido que no se
+ * ve hasta que alguien pega un `<script>` en el mensaje.
+ *
+ * Solo se aplica a la rama HTML: en la de texto plano el mensaje va tal cual,
+ * porque ahí un `&amp;` se leería literalmente.
+ */
+function escaparHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export type EmailRendered = { subject: string; html: string; text: string };
@@ -164,9 +211,19 @@ export function renderEmail(opts: {
   // HTML con estilos EN LÍNEA y sin imágenes: los clientes de correo descartan
   // el <style> del head y bloquean las remotas por defecto. Nada de layout
   // moderno aquí — esto se ve en Outlook.
+  //
+  // ⚠️ Los dos trozos variables van escapados. El cuerpo por `admin_message`
+  // (NTF-22, lo escribe el admin), y el saludo porque sale de
+  // `profiles.full_name`, que lo escribe el propio usuario: eso ya se estaba
+  // interpolando crudo desde el primer correo.
+  //
+  // Los saltos de línea del cuerpo se convierten en `<br>` DESPUÉS de escapar:
+  // un mensaje del panel se escribe en varios párrafos y sin esto llegaba todo
+  // pegado en una línea.
+  const cuerpoHtml = escaparHtml(plantilla.cuerpo).replace(/\n/g, "<br>");
   const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#242424;max-width:520px;margin:0 auto;padding:24px">
-  <p style="margin:0 0 16px">${saludo}</p>
-  <p style="margin:0 0 24px">${plantilla.cuerpo}</p>
+  <p style="margin:0 0 16px">${escaparHtml(saludo)}</p>
+  <p style="margin:0 0 24px">${cuerpoHtml}</p>
   <p style="margin:0 0 24px">
     <a href="${url}" style="display:inline-block;background:#fe6a00;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">${plantilla.cta ?? "Abrir Enséñame Ya"}</a>
   </p>

@@ -68,6 +68,77 @@ export type Database = {
           },
         ]
       }
+      account_suspensions: {
+        Row: {
+          had_tutor_role: boolean
+          lifted_at: string | null
+          lifted_by: string | null
+          prev_approval:
+            | Database["public"]["Enums"]["tutor_approval_status"]
+            | null
+          reason: string | null
+          report_id: string | null
+          suspended_at: string
+          suspended_by: string | null
+          user_id: string
+        }
+        Insert: {
+          had_tutor_role?: boolean
+          lifted_at?: string | null
+          lifted_by?: string | null
+          prev_approval?:
+            | Database["public"]["Enums"]["tutor_approval_status"]
+            | null
+          reason?: string | null
+          report_id?: string | null
+          suspended_at?: string
+          suspended_by?: string | null
+          user_id: string
+        }
+        Update: {
+          had_tutor_role?: boolean
+          lifted_at?: string | null
+          lifted_by?: string | null
+          prev_approval?:
+            | Database["public"]["Enums"]["tutor_approval_status"]
+            | null
+          reason?: string | null
+          report_id?: string | null
+          suspended_at?: string
+          suspended_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_suspensions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_suspensions_suspended_by_fkey"
+            columns: ["suspended_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_suspensions_lifted_by_fkey"
+            columns: ["lifted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "account_suspensions_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "conversation_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alert_acks: {
         Row: {
           acked_at: string
@@ -1937,6 +2008,10 @@ export type Database = {
           reporter_name: string
         }[]
       }
+      admin_contact_user: {
+        Args: { p_message: string; p_report_id?: string; p_user_id: string }
+        Returns: string
+      }
       admin_gmv_weekly: { Args: { p_weeks?: number }; Returns: Json }
       admin_report_thread: {
         Args: { p_limit?: number; p_report_id: string }
@@ -2183,6 +2258,15 @@ export type Database = {
       session_live_window: {
         Args: { p_end: string; p_start: string }
         Returns: unknown
+      }
+      set_account_suspended: {
+        Args: {
+          p_reason?: string
+          p_report_id?: string
+          p_suspended: boolean
+          p_user_id: string
+        }
+        Returns: Json
       }
       set_conversation_blocked: {
         Args: {

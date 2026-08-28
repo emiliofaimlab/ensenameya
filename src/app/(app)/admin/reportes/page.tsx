@@ -1,7 +1,11 @@
 import Link from "next/link";
 
 import { getUserTimezone, requireRole } from "@/lib/auth/server";
-import { listReports } from "@/lib/admin/reports";
+import {
+  listReports,
+  listSuspendedUsers,
+  reportParties,
+} from "@/lib/admin/reports";
 import { esperaDesde } from "../tiempo";
 import {
   PanelCard,
@@ -37,9 +41,12 @@ export default async function AdminReportesPage({
   const { atendidos } = await searchParams;
   const verTodos = atendidos === "1";
 
-  const [tz, rows] = await Promise.all([
+  // Los suspendidos se piden UNA vez para toda la pantalla, no por reporte:
+  // la cola llega a 500 casos y consultarlo caso a caso serían mil viajes.
+  const [tz, rows, suspendidos] = await Promise.all([
     getUserTimezone(),
     listReports(!verTodos),
+    listSuspendedUsers(),
   ]);
 
   const fecha = (iso: string) =>
@@ -109,6 +116,9 @@ export default async function AdminReportesPage({
       ) : (
         <div className="flex flex-col gap-3">
           {rows.map((r) => {
+            // Tutor y alumno por PAPEL, no por quién denunció: «desactivar
+            // tutor» apunta al tutor lo levante la mano quien la levante.
+            const partes = reportParties(r, suspendidos);
             const estado: { label: string; tone: PillTone } = r.blockedAt
               ? { label: "Bloqueado", tone: "red" }
               : r.handledAt
@@ -152,6 +162,8 @@ export default async function AdminReportesPage({
                       conversationId={r.conversationId}
                       handled={Boolean(r.handledAt)}
                       blocked={Boolean(r.blockedAt)}
+                      tutor={partes.tutor}
+                      alumno={partes.alumno}
                     />
                   </div>
                 </div>

@@ -289,6 +289,32 @@ export async function markConversationRead(
   }
 }
 
+/**
+ * Tira TODO lo que este módulo recuerda de la persona que estaba dentro.
+ *
+ * Lo llama el cierre de sesión, y no es paranoia de más: este almacén es de
+ * MÓDULO, o sea de la pestaña, y no se desmonta con ningún componente. Hoy el
+ * `signOut` recarga la página entera (`window.location.assign`), así que el
+ * módulo muere con ella y esto no cambia nada visible; existe para que el día
+ * que alguien convierta esa recarga en una navegación de cliente —que es lo
+ * natural de hacer— los contadores de la cuenta anterior no se queden pintados
+ * sobre la bandeja de la siguiente. La misma clase de fuga entre cuentas que
+ * reportó el cliente el 28-ago con los avisos.
+ *
+ * Se vacían los CUATRO almacenes, no solo el estado: sin limpiar `vistos` se
+ * descartarían por duplicado mensajes que solo vio la sesión anterior, sin
+ * limpiar `marcadoEn` la primera instantánea del que entra se anularía por «ya
+ * leído», y `hilosAbiertos` es un contador de montajes que ninguna cuenta nueva
+ * ha hecho.
+ */
+export function resetChatUnread() {
+  estado = VACIO;
+  vistos.clear();
+  marcadoEn.clear();
+  hilosAbiertos.clear();
+  avisar();
+}
+
 // ── El vigía ─────────────────────────────────────────────────────────────────
 
 /** Fila de `messages` tal y como la entrega Realtime. */

@@ -29,6 +29,7 @@ const TEMPLATES = [
   "payout_paid",
   "recording_ready",
   "new_message",
+  "admin_message",
 ];
 
 for (const template of TEMPLATES) {
@@ -96,4 +97,28 @@ assert.ok(!fisgon!.text.includes("Marcos"), "el correo coló el nombre del remit
 const anonimo = renderEmail({ template: "review_request", payload: {}, nombre: "", baseUrl: BASE });
 assert.ok(anonimo!.text.startsWith("Hola,"), "el saludo sin nombre queda roto");
 
-console.log(`OK · ${TEMPLATES.length} plantillas + 8 casos borde`);
+// NTF-22 · el mensaje del admin SÍ viaja en el correo (es su razón de ser), y
+// llega escapado. Es la única plantilla con cuerpo libre del proyecto.
+const delAdmin = renderEmail({
+  template: "admin_message",
+  payload: { mensaje: "Hola:\nrevisa <b>esto</b> & responde." },
+  nombre: "Ana",
+  baseUrl: BASE,
+});
+assert.ok(delAdmin!.text.includes("revisa <b>esto</b>"), "el texto plano no lleva el mensaje");
+assert.ok(delAdmin!.html.includes("&lt;b&gt;esto&lt;/b&gt;"), "el HTML no escapó el mensaje");
+assert.ok(!delAdmin!.html.includes("<b>esto</b>"), "coló HTML del admin sin escapar");
+assert.ok(delAdmin!.html.includes("&amp;"), "no escapó el ampersand");
+assert.ok(delAdmin!.html.includes("<br>"), "los saltos de línea no llegaron al HTML");
+assert.ok(delAdmin!.text.includes("/account"), "el enlace del admin no va a /account");
+
+// El nombre también sale de datos del usuario y también se escapa.
+const nombreRaro = renderEmail({
+  template: "review_request",
+  payload: {},
+  nombre: "<script>x</script> Pérez",
+  baseUrl: BASE,
+});
+assert.ok(!nombreRaro!.html.includes("<script>"), "coló un script por el nombre");
+
+console.log(`OK · ${TEMPLATES.length} plantillas + 14 casos borde`);

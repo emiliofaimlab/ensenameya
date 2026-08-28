@@ -162,6 +162,61 @@ export async function readReportThread(
 }
 
 /**
+ * Las dos personas del reporte, repartidas por PAPEL y no por quién denunció.
+ *
+ * La RPC devuelve «quien reporta» y «reportado» más un `reporterIsTutor`, que
+ * es lo que hace falta para leer el caso. Pero las acciones sobre las personas
+ * no van de eso: «desactivar tutor» tiene que apuntar al tutor tanto si es el
+ * que se queja como si es el señalado. Aquí se hace esa traducción, una sola
+ * vez, para que ninguna pantalla la repita al revés.
+ *
+ * ⚠️ El tipo se deja INFERIR a propósito, sin importar `ReportParty` de
+ * `report-actions.tsx`: ese fichero es `"use client"` y este es `server-only`.
+ * Encajan por estructura, que es lo único que TypeScript necesita.
+ */
+export function reportParties(r: ReportRow, suspendidos: Set<string>) {
+  const tutorId = r.reporterIsTutor ? r.reporterId : r.reportedId;
+  const tutorName = r.reporterIsTutor ? r.reporterName : r.reportedName;
+  const alumnoId = r.reporterIsTutor ? r.reportedId : r.reporterId;
+  const alumnoName = r.reporterIsTutor ? r.reportedName : r.reporterName;
+
+  return {
+    tutor: {
+      id: tutorId,
+      name: tutorName,
+      suspended: suspendidos.has(tutorId),
+    },
+    alumno: {
+      id: alumnoId,
+      name: alumnoName,
+      suspended: suspendidos.has(alumnoId),
+    },
+  };
+}
+
+/**
+ * Quién está DESACTIVADO ahora mismo (EY-189, 2ª tanda).
+ *
+ * Esta sí va por RLS pura y no por RPC, igual que el contador de abajo:
+ * `account_suspensions_select_admin` deja al admin leer la tabla entera, y aquí
+ * no hace falta ningún contexto que la política no dé. `lifted_at is null` es
+ * el criterio de «suspendida ahora», el mismo del índice parcial.
+ *
+ * Se pide de una vez para TODA la pantalla y no reporte a reporte: la bandeja
+ * lista hasta 500 casos y una consulta por parte serían mil viajes. La tabla
+ * solo tiene una fila por cuenta sancionada alguna vez, así que traerla entera
+ * es más barato que filtrar por ids.
+ */
+export async function listSuspendedUsers(): Promise<Set<string>> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("account_suspensions")
+    .select("user_id")
+    .is("lifted_at", null);
+  return new Set((data ?? []).map((r) => r.user_id));
+}
+
+/**
  * Cuántos reportes esperan. Para la fila de «colas que piden acción» del
  * dashboard, que es donde se entera el admin de que hay trabajo.
  *
