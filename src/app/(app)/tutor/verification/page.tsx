@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/server";
+import { storageUrl } from "@/lib/catalog/format";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
+import { TutorProfileBasics } from "@/components/tutor/profile-basics";
 import {
   PanelCard,
   StatusPill,
@@ -49,7 +51,7 @@ export default async function VerificationPage() {
   // Requiere haber hecho el onboarding de tutor (existe la fila tutor_profiles).
   const { data: tp } = await supabase
     .from("tutor_profiles")
-    .select("identity_verification_status, socials, avatar_path")
+    .select("identity_verification_status, socials, avatar_path, bio")
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!tp) redirect("/tutor/onboarding");
@@ -57,16 +59,26 @@ export default async function VerificationPage() {
   // N-10 · El checklist deriva su estado de TRES fuentes; dos se leen aquí y
   // la tercera (la foto) ya viene en `tp`. Sin el nº de mentorías esta pantalla
   // seguiría obligando a salir a "Mis mentorías" solo para saber si falta.
-  const [{ data: docs }, { count: productCount }] = await Promise.all([
-    supabase
-      .from("verification_documents")
-      .select("doc_type, status, link_url")
-      .eq("tutor_id", user.id),
-    supabase
-      .from("products")
-      .select("id", { count: "exact", head: true })
-      .eq("tutor_id", user.id),
-  ]);
+  const [{ data: docs }, { count: productCount }, { data: prof }] =
+    await Promise.all([
+      supabase
+        .from("verification_documents")
+        .select("doc_type, status, link_url")
+        .eq("tutor_id", user.id),
+      supabase
+        .from("products")
+        .select("id", { count: "exact", head: true })
+        .eq("tutor_id", user.id),
+      // 28-ago · el bloque de la foto ya no informa, EDITA — y con él la
+      // biografía: desde que las dos son opcionales en el asistente, esta
+      // pantalla es el «luego» donde se completan. El nombre solo pinta las
+      // iniciales del hueco sin foto.
+      supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle(),
+    ]);
 
   const docsByType: Record<string, DocState> = Object.fromEntries(
     (docs ?? []).map((d) => [d.doc_type, { status: d.status, linkUrl: d.link_url }]),
@@ -104,7 +116,16 @@ export default async function VerificationPage() {
         socials={parseSocials(tp.socials)}
         identityStatus={tp.identity_verification_status}
         hasAvatar={!!tp.avatar_path}
+        hasBio={!!tp.bio?.trim()}
         productCount={productCount ?? 0}
+        perfil={
+          <TutorProfileBasics
+            userId={user.id}
+            avatarUrl={storageUrl("avatars", tp.avatar_path)}
+            fullName={prof?.full_name ?? ""}
+            bio={tp.bio ?? ""}
+          />
+        }
       />
     </TutorShell>
   );
