@@ -49,14 +49,19 @@ export default async function AdminTutorPage({
   const { id } = await params;
 
   const supabase = await createClient();
-  const { data: tutor } = await supabase
+  // El `!tutor_profiles_profile_id_fkey` no es adorno: ver la nota de la lista
+  // (`../page.tsx`). Sin él, PGRST201 y esta ficha respondía 404 para TODOS.
+  const { data: tutor, error } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, created_at, profiles(full_name, timezone, phone)",
+      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, created_at, profiles!tutor_profiles_profile_id_fkey(full_name, timezone, phone)",
     )
     .eq("profile_id", id)
     .maybeSingle();
 
+  // Un fallo de consulta no es un tutor inexistente. Mezclarlos es lo que
+  // convirtió un error de PostgREST en un 404 creíble.
+  if (error) throw new Error(`No se pudo leer la ficha del tutor: ${error.message}`);
   if (!tutor) notFound();
 
   // US-1103 / RN-06: el tier decide el split de sus próximas reservas.

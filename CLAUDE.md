@@ -128,6 +128,7 @@ Deployment Protection devuelve 302 antes de que corra nuestro código.
 7. **Operaciones con snapshots financieros** (p. ej. crear `booking`) van por **función controlada / Route Handler**, no por insert directo del cliente. (cierra H-2)
 8. **Nada de inventar decisiones pendientes** (DP-xx): se consumen como configuración, no como código acoplado. Ver Doc 9.
 9. ⚠️ **`service_role` se salta la RLS, pero NO los `grant` de tabla.** Con "auto-expose new tables" OFF, un job con `service_role` come `permission denied` **en tiempo de ejecución** —no en el build, no en el typecheck— hasta que su migración declare `grant … to service_role`. Mordió **tres veces el 6-ago**: `sessions` (`20260806140000`), `payments`/`profiles` (`20260806170000`) y `payment_routing_rules` (`20260806180000`). Tabla que toque un job = grant explícito, en la misma migración.
+10. ⚠️ **Una tabla puente nueva vuelve AMBIGUOS los embeds de PostgREST entre las dos tablas que une**, y la consulta entera se cae con `PGRST201` — no se degrada. `tutor_views` (EY-186, `20260827140000`) une `profiles` y `tutor_profiles`, que ya tenían FK directa: desde ese día `.select("…, profiles(full_name)")` sobre `tutor_profiles` **devolvía error**, y la cola de aprobación del admin enseñaba «(0)» en los tres chips con 11 tutores esperando (28-ago). Se nombra la FK: `profiles!tutor_profiles_profile_id_fkey(…)`. Y **si la consulta alimenta una cola, se mira el `error`**: `const { data } = …` convierte el fallo en una lista vacía, que es una mentira creíble.
 
 ## Dónde está cada cosa
 

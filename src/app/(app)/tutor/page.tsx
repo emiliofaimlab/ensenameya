@@ -79,7 +79,9 @@ export default async function TutorHomePage() {
     supabase
       .from("tutor_profiles")
       .select(
-        "headline, approval_notes, identity_verification_status, profiles(full_name)",
+        // Ver la nota de `admin/tutores/page.tsx`: con `tutor_views` en medio,
+        // el embed corto a `profiles` es ambiguo y tumba la consulta entera.
+        "headline, approval_notes, identity_verification_status, profiles!tutor_profiles_profile_id_fkey(full_name)",
       )
       .eq("profile_id", userId)
       .maybeSingle(),

@@ -51,12 +51,25 @@ export default async function AdminTutoresPage({
   const filter = FILTERS.find((x) => x.id === f) ?? FILTERS[0];
 
   const supabase = await createClient();
-  const { data } = await supabase
+  // ⚠️ `profiles!tutor_profiles_profile_id_fkey` — el nombre de la FK, no basta
+  // con "profiles". Desde `tutor_views` (EY-186, `20260827140000`) hay DOS
+  // caminos entre `tutor_profiles` y `profiles`: la FK directa y el
+  // muchos-a-muchos que PostgREST deduce de esa tabla puente (su PK son dos
+  // FKs, una a cada lado). Con dos caminos el embed corto es ambiguo y la
+  // consulta entera se cae con PGRST201.
+  const { data, error } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, headline, approval_status, identity_verification_status, created_at, profiles(full_name)",
+      "profile_id, headline, approval_status, identity_verification_status, created_at, profiles!tutor_profiles_profile_id_fkey(full_name)",
     )
     .order("created_at", { ascending: true }); // los que más llevan esperando, primero
+
+  // Se revienta a propósito en vez de pintar la lista vacía. Esto es una COLA
+  // DE MODERACIÓN: "No hay tutores en este filtro" y "la consulta falló" se ven
+  // igual en pantalla, y el primero hace cerrar la pestaña tan tranquilo. Fue
+  // exactamente lo que pasó el 28-ago — la pantalla decía (0) en los tres chips
+  // mientras el badge del menú, que no lleva embed, contaba 10.
+  if (error) throw new Error(`No se pudo leer la cola de tutores: ${error.message}`);
 
   const tutors = data ?? [];
 
