@@ -32,6 +32,13 @@ export function panelFromPath(pathname: string): Panel | null {
   if (isOnboardingRoute(pathname)) return null;
   if (isAdminRoute(pathname)) return "admin";
   if (pathname === "/tutor" || pathname.startsWith("/tutor/")) return "tutor";
-  if (pathname === "/app" || pathname.startsWith("/reservas")) return "alumno";
+  // `/agendar` es del alumno como `/app` y `/reservas`: sin él, quien viniera
+  // de ahí a `/pagos` o `/account` se llevaría el menú del panel anterior.
+  if (
+    pathname === "/app" ||
+    pathname === "/agendar" ||
+    pathname.startsWith("/reservas")
+  )
+    return "alumno";
   return null;
 }
