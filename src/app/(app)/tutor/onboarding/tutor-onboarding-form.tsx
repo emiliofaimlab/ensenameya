@@ -164,19 +164,13 @@ export function TutorOnboardingForm({
 }) {
   const { step: pasoBruto, setStep, finish } = useWizardStep("tutor", initialStep);
 
+  const total = totalSteps;
   /**
-   * ⚠️ TODO(merge) · `TOTAL_STEPS` vive en `page.tsx`, que este carril NO toca,
-   * y sigue valiendo 6. Los pasos reales son **5** desde que el alta de mentoría
-   * se metió dentro del repaso: bájalo allí a 5 al mergear y esta constante y su
-   * `min` se pueden borrar, dejando `totalSteps` a secas.
-   *
-   * El `min` deja la pantalla correcta ANTES y DESPUÉS de ese cambio, así que el
-   * orden de los merges da igual; y el clamp del paso evita que la cookie de
-   * quien dejó el asistente en el viejo paso 6 aterrice en un paso que ya no
-   * existe (`resolveStep` satura contra el 6 de la página, no contra este).
+   * El clamp se queda aunque `page.tsx` ya sature contra el mismo número: un
+   * enlace `?paso=6` de los que se repartieron mientras el asistente tuvo seis
+   * pasos sigue existiendo, y aterrizar en un paso que ya no se pinta deja la
+   * pantalla en blanco. Saturar dos veces no cuesta nada; no saturar, sí.
    */
-  const PASO_REPASO = 5;
-  const total = Math.min(totalSteps, PASO_REPASO);
   const step = Math.min(pasoBruto, total);
 
   const [busy, setBusy] = useState(false);
@@ -417,8 +411,10 @@ export function TutorOnboardingForm({
       }
     }
 
-    // `>=` y no `===`: mientras `page.tsx` siga anunciando 6 pasos, `total` es
-    // 5 y el clamp de arriba deja `step` justo ahí. Ver el TODO(merge).
+    // `>=` y no `===`: el clamp de arriba deja `step` como mucho en `total`,
+    // pero un `===` haría que cualquier futuro desajuste entre los dos números
+    // se tradujera en un asistente que no termina nunca — y el síntoma sería
+    // «pulso Finalizar y no pasa nada», que no se diagnostica solo.
     if (step >= total) {
       /*
        * ⚠️ Aquí —y solo aquí— el expediente pasa a revisión.

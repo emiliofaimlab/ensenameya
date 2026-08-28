@@ -41,12 +41,15 @@ const WELCOME_POINTS = [
 /**
  * Pasos del asistente de tutor; lo sabe la página para saturar `?paso=`.
  *
- * EY-183 · pasó de 5 a 6 al entrar la disponibilidad como paso 4. `resolveStep`
- * satura al rango [1, total], así que un enlace guardado con la numeración
- * vieja sigue abriendo un paso válido — como mucho uno antes del que decía,
- * nunca una pantalla en blanco.
+ * EY-183 · pasó de 5 a 6 al entrar la disponibilidad como paso 4, y el 28-ago
+ * **volvió a 5**: el alta de la mentoría dejó de ser un paso propio y vive
+ * dentro del repaso, que pasó a ser el último (decisión del cliente).
+ *
+ * `resolveStep` satura al rango [1, total], así que un enlace guardado con la
+ * numeración vieja sigue abriendo un paso válido — como mucho uno antes del que
+ * decía, nunca una pantalla en blanco.
  */
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
 
 export default async function TutorOnboardingPage({
   searchParams,
