@@ -167,7 +167,27 @@ function matchLength(item: Item, pathname: string): number {
   return Math.max(porHref, porAlias);
 }
 
-export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
+/**
+ * Contadores por `href` (petición del cliente, 28-ago: «que en un badge al lado
+ * de reportes, incidentes, etc salga un número»).
+ *
+ * ⚠️ **CERO NO PINTA BADGE.** Un badge con «0» no informa de nada y además
+ * ENTRENA a no mirarlos: si están siempre puestos, el que sí importa deja de
+ * saltar a la vista. Se resuelve aquí, en el render, y no en quien cuenta, para
+ * que la regla valga sea cual sea la fuente del número.
+ *
+ * Se resuelven en SERVIDOR y llegan como prop: este componente es de cliente y
+ * consultarlos desde aquí sería una ida y vuelta por pantalla, con el menú
+ * pintándose primero sin números y saltando después. Quién los cuenta:
+ * `lib/admin/sidebar-badges.ts`.
+ */
+export function AppSidebar({
+  items = STUDENT_ITEMS,
+  badges,
+}: {
+  items?: Item[];
+  badges?: Record<string, number>;
+}) {
   const pathname = usePathname();
 
   // El ítem más específico que casa con la ruta. `-1` = ninguno (rutas del área
@@ -210,11 +230,18 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
           // nada; el código hacía lo contrario.
           const active =
             mejorMatch >= 0 && matchLength(item, pathname) === mejorMatch;
+          // Cero (o sin contador) = sin badge. Ver la nota de `badges`.
+          const pendientes = badges?.[href] ?? 0;
           return (
             <li key={href}>
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
+                aria-label={
+                  pendientes > 0
+                    ? `${label}, ${pendientes} ${pendientes === 1 ? "pendiente" : "pendientes"}`
+                    : undefined
+                }
                 className={cn(
                   // CHIP (base, <768): 38 de alto = pad9/14 + texto 13/20. Aquí
                   // son pad 8 + borde 1 para que el total sea 38 EXACTOS con
@@ -252,6 +279,33 @@ export function AppSidebar({ items = STUDENT_ITEMS }: { items?: Item[] }) {
                     etiquetas quepan en una línea. */}
                 <Icon className="size-4 shrink-0 max-lg:hidden" />
                 {label}
+                {/* La cuenta, al final de la fila. `ml-auto` la empuja a la
+                    derecha en la columna (≥768) y no hace nada en el chip,
+                    donde el ancho lo marca el contenido.
+
+                    ⚠️ `aria-hidden`, porque el número ya va en el `aria-label`
+                    del enlace: leído tal cual, "Tutores 8" suena a que el menú
+                    tiene ocho entradas. Con la etiqueta se anuncia "Tutores, 8
+                    pendientes", que es lo que es.
+
+                    `min-w` en vez de ancho fijo: "99+" son tres caracteres y
+                    una píldora cuadrada los cortaría. */}
+                {pendientes > 0 ? (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums",
+                      active
+                        ? // Sobre el naranja del activo, el contraste lo da el
+                          // relleno blanco: un badge naranja sobre naranja no se
+                          // ve, y el blanco sobre blanco tampoco.
+                          "bg-white text-brand"
+                        : "bg-brand text-white",
+                    )}
+                  >
+                    {pendientes > 99 ? "99+" : pendientes}
+                  </span>
+                ) : null}
               </Link>
             </li>
           );

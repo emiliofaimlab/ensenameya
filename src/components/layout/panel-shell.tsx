@@ -24,6 +24,16 @@ import { AppSidebar, type SidebarItem } from "@/components/layout/app-sidebar";
 export type PanelShellProps = {
   items?: SidebarItem[];
   /**
+   * Contadores del menú, indexados por el `href` del ítem (petición del cliente
+   * del 28-ago). Hoy solo los pone `AdminShell`; el resto de paneles pasan sin
+   * él y el menú se pinta exactamente igual que antes.
+   *
+   * Es un objeto plano —números, no funciones— porque `AppSidebar` es de
+   * cliente y esto lo cruza desde el servidor. Quién decide el número está en
+   * `lib/admin/sidebar-badges.ts`.
+   */
+  badges?: Record<string, number>;
+  /**
    * ⚠️ `false` = pantalla del área con sesión **sin menú lateral**, con el mismo
    * ancho, el mismo aire y el mismo fondo que las demás.
    *
@@ -56,6 +66,7 @@ export type PanelShellProps = {
 
 export function PanelShell({
   items,
+  badges,
   sidebar = true,
   back,
   title,
@@ -107,7 +118,7 @@ export function PanelShell({
                   "md:grid-cols-[168px_1fr] md:gap-4 lg:grid-cols-[232px_1fr] lg:gap-6"),
           )}
         >
-          {sidebar ? <AppSidebar items={items} /> : null}
+          {sidebar ? <AppSidebar items={items} badges={badges} /> : null}
           {/* ⚠️ `min-w-0` NO es decoración, y quitarlo rompe la página entera.
               Un hijo de grid nace con `min-width: auto`, o sea que se niega a
               encogerse por debajo del ancho INTRÍNSECO de su contenido. En

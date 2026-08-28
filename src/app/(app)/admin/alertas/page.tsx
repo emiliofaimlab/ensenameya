@@ -2,6 +2,10 @@ import Link from "next/link";
 
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
+// EY-189 (2ª tanda) · la ventana, los estados y la clave del acuse salen de un
+// solo sitio desde que el menú lateral pinta un badge con este mismo recuento.
+// Si divergieran, el badge diría un número y la pantalla enseñaría otro.
+import { PAYOUT_PROBLEMA, ackKey, desdeAlertas } from "@/lib/admin/alertas";
 import { formatMoney } from "@/lib/catalog/format";
 import { cn } from "@/lib/utils";
 import {
@@ -62,9 +66,7 @@ export default async function AdminAlertasPage({
   const filter = FILTERS.find((x) => x.id === f)?.id ?? "todas";
   const showAcked = atendidas === "1";
 
-  const since = new Date();
-  since.setUTCDate(since.getUTCDate() - 30);
-  const sinceIso = since.toISOString();
+  const sinceIso = desdeAlertas();
 
   const supabase = await createClient();
   const [{ data: acks }, { data: failedPayments }, { data: problemPayouts }, { data: cancelled }] =
@@ -80,7 +82,7 @@ export default async function AdminAlertasPage({
       supabase
         .from("payouts")
         .select("id, amount, currency, status, failure_reason, created_at, profiles(full_name)")
-        .in("status", ["failed", "on_hold"])
+        .in("status", PAYOUT_PROBLEMA)
         .order("created_at", { ascending: false })
         .limit(20),
       supabase
@@ -92,7 +94,7 @@ export default async function AdminAlertasPage({
         .limit(20),
     ]);
 
-  const ackedKeys = new Set((acks ?? []).map((a) => `${a.kind}:${a.entity_id}`));
+  const ackedKeys = new Set((acks ?? []).map((a) => ackKey(a.kind, a.entity_id)));
 
   const alerts: Alert[] = [
     ...(failedPayments ?? []).map(
@@ -134,7 +136,7 @@ export default async function AdminAlertasPage({
     .sort((a, z) => z.at.localeCompare(a.at))
     .filter((a) => filter === "todas" || a.kind === filter);
 
-  const isAcked = (a: Alert) => ackedKeys.has(`${a.kind}:${a.entityId}`);
+  const isAcked = (a: Alert) => ackedKeys.has(ackKey(a.kind, a.entityId));
   const ackedCount = alerts.filter(isAcked).length;
   const visible = alerts.filter((a) => (showAcked ? isAcked(a) : !isAcked(a)));
 

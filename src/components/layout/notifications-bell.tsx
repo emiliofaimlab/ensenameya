@@ -51,7 +51,20 @@ import {
  */
 const ESPERA_BURBUJA_MS = 400;
 
-export function NotificationsBell({ initial }: { initial: AppNotice[] }) {
+export function NotificationsBell({
+  initial,
+  userId,
+}: {
+  initial: AppNotice[];
+  /**
+   * ⚠️ De quién son estos avisos, y hace falta de verdad. La RLS de
+   * `notifications` tiene DOS políticas de lectura y la de admin abre la tabla
+   * entera (`20260716170000:38-44`), así que una consulta sin `recipient_id`
+   * le devolvía a un administrador los avisos de CUALQUIERA. El razonamiento
+   * largo está en `lib/notifications-server.ts`, que es donde se descubrió.
+   */
+  userId: string;
+}) {
   const router = useRouter();
   const [notices, setNotices] = useState<AppNotice[]>(initial);
   // Controlado (antes no lo era) para poder cerrarlo A MANO: cuando el aviso
@@ -63,6 +76,9 @@ export function NotificationsBell({ initial }: { initial: AppNotice[] }) {
     const { data } = await createClient()
       .from("notifications")
       .select("id, type, template, payload, created_at, read_at")
+      // Ver la nota del prop `userId`: sin esto, un admin se traía los avisos
+      // de toda la plataforma en cuanto abría la campana.
+      .eq("recipient_id", userId)
       .order("created_at", { ascending: false })
       .limit(NOTICES_LIMIT);
     setNotices(((data ?? []) as NotificationRow[]).map(toNotice));
@@ -77,7 +93,14 @@ export function NotificationsBell({ initial }: { initial: AppNotice[] }) {
     await createClient()
       .from("notifications")
       .update({ read_at: new Date().toISOString() })
-      .is("read_at", null); // la RLS acota a las suyas
+      .eq("recipient_id", userId)
+      // ⚠️ El comentario que había aquí —«la RLS acota a las suyas»— era cierto
+      // para la ESCRITURA (`notifications_update_own_read` es `auth.uid() =
+      // recipient_id`, y esa política no tiene gemela de admin) pero se apoyaba
+      // en ella para no escribir el filtro. Puesto explícito: la barrera sigue
+      // siendo la política, y así además el update no recorre la tabla entera
+      // en la sesión de un administrador.
+      .is("read_at", null);
     router.refresh();
   }
 

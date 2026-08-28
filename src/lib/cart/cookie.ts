@@ -305,6 +305,26 @@ export function addCartLine(line: CartLine): AddResult {
   return null;
 }
 
+/**
+ * Vacía el carrito entero.
+ *
+ * ⚠️ Existe por el FINAL DE SESIÓN, y solo por eso. La cookie es del NAVEGADOR
+ * y no de la sesión —es lo que permite que un anónimo apunte mentorías, se
+ * registre y las siga teniendo (ver el bloque de arriba)—, pero eso convierte
+ * el cierre de sesión explícito en el único momento en que sigue puesta y ya no
+ * es de quien la mira: en un ordenador compartido, el siguiente que entrara
+ * encontraba las mentorías que eligió el anterior.
+ *
+ * Solo lo llama `lib/session-reset.ts`, o sea los dos finales EXPLÍCITOS:
+ * cerrar sesión y darse de baja. Que la sesión caduque sola, o navegar sin
+ * ella, no vacía nada — ahí el carrito sigue siendo de quien está delante, y
+ * borrárselo sería el fallo contrario.
+ */
+export function clearCart() {
+  if (typeof document === "undefined") return;
+  writeCartCookie([]);
+}
+
 /** Quita las líneas cuyas claves se pasan. Una sola escritura para todas. */
 export function removeCartLines(keys: string[]) {
   if (keys.length === 0) return;

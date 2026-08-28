@@ -14,7 +14,7 @@ export default async function AppLayout({
   // Área autenticada: sin sesión → /login?next=… (SCR-AU01).
   const { user, roles, fullName, avatarPath } = await requireUser();
   // US-1203: la campana se pinta ya en el servidor, sin ida y vuelta extra.
-  const notices = await listNotices();
+  const notices = await listNotices(user.id);
   // EY-177 · el mismo contador que en lo público: el carrito es del navegador
   // (cookie), no de la sesión, así que cruzar de `(public)` a `(app)` no lo
   // pierde ni lo cambia.

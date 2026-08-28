@@ -25,6 +25,9 @@ export function toHeaderUser(
   if (!user) return null;
   const metaName = user.user_metadata?.full_name as string | undefined;
   return {
+    // La campana lo usa para acotar sus consultas a los avisos propios; ver la
+    // nota del tipo `HeaderUser`.
+    id: user.id,
     email: user.email ?? "",
     name: profile.fullName?.trim() || metaName?.trim() || null,
     avatarUrl: storageUrl("avatars", profile.avatarPath),

@@ -44,6 +44,15 @@ import { isAdminRoute, isOnboardingRoute } from "@/lib/panel";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
 export type HeaderUser = {
+  /**
+   * El uid. Lo necesita la campana para acotar sus consultas a los avisos
+   * PROPIOS — que no es un lujo: un admin tiene política de lectura sobre toda
+   * la tabla `notifications` y sin el filtro veía los avisos de los demás (ver
+   * `lib/notifications-server.ts`).
+   *
+   * No es un dato sensible: ya viaja en el JWT que el navegador tiene.
+   */
+  id: string;
   email: string;
   name: string | null;
   /** Foto de `profiles` ya resuelta a URL pública, o `null` (van iniciales). */
@@ -462,7 +471,9 @@ export function SiteHeader({
                   el grupo único de acciones, que sí se pinta a los tres anchos.
                   A 390 cae en el hueco que la `avatar-row` del Figma deja a la
                   izquierda, que es justo para lo que sirve esa fila. */}
-              {user ? <NotificationsBell initial={notices} /> : null}
+              {user ? (
+                <NotificationsBell initial={notices} userId={user.id} />
+              ) : null}
 
               {user ? (
                 <DropdownMenu open={accountOpen} onOpenChange={setAccountOpen}>

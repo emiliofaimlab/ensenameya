@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { resetDatosDeSesion } from "@/lib/session-reset";
 import {
   Dialog,
   DialogContent,
@@ -161,6 +162,12 @@ function CuerpoDelDialogo({
       setBusy(false);
       return;
     }
+
+    // Y el rastro que `signOut` no se lleva: el carrito, el paso del asistente,
+    // el panel y los contadores del chat. Es la MISMA limpieza que al cerrar
+    // sesión, compartida a propósito — aquí importa todavía más, porque la
+    // cuenta ya no existe y ese carrito no puede volver a ser de nadie.
+    resetDatosDeSesion();
 
     // Recarga completa, igual que al cerrar sesión y por el mismo motivo: hay
     // que tirar TODO el estado de cliente y las cachés RSC de las rutas ya

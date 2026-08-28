@@ -1,7 +1,12 @@
 import { notFound } from "next/navigation";
 
 import { getUserTimezone, requireRole } from "@/lib/auth/server";
-import { listReports, readReportThread } from "@/lib/admin/reports";
+import {
+  listReports,
+  listSuspendedUsers,
+  readReportThread,
+  reportParties,
+} from "@/lib/admin/reports";
 import { esperaDesde } from "../../tiempo";
 import { cn } from "@/lib/utils";
 import {
@@ -44,14 +49,17 @@ export default async function AdminReporteDetallePage({
   // —si no, «Reabrir» sería un botón sin pantalla—, y la cola está acotada por
   // la propia función (tope de 500). El día que 500 se quede corto, esto es lo
   // primero que hay que convertir en una consulta por id.
-  const [tz, rows] = await Promise.all([
+  const [tz, rows, suspendidos] = await Promise.all([
     getUserTimezone(),
     listReports(false),
+    listSuspendedUsers(),
   ]);
   const r = rows.find((x) => x.id === id);
   if (!r) notFound();
 
   const mensajes = await readReportThread(r.id);
+  // Tutor y alumno por PAPEL, no por quién denunció (ver `reportParties`).
+  const partes = reportParties(r, suspendidos);
 
   const fecha = (iso: string) =>
     new Date(iso).toLocaleString("es", {
@@ -80,6 +88,8 @@ export default async function AdminReporteDetallePage({
           conversationId={r.conversationId}
           handled={Boolean(r.handledAt)}
           blocked={Boolean(r.blockedAt)}
+          tutor={partes.tutor}
+          alumno={partes.alumno}
         />
       }
     >
@@ -104,6 +114,25 @@ export default async function AdminReporteDetallePage({
             label="El par llegó a comprar"
             value={r.pairBought ? "Sí" : "No"}
           />
+          {/* El estado de cuenta de cada parte. Solo se pinta cuando hay algo
+              que decir: una fila que repite «activa / activa» en todos los
+              reportes es ruido, y lo que importa saber de un vistazo al reabrir
+              un caso es a quién ya se sancionó. */}
+          {partes.tutor.suspended || partes.alumno.suspended ? (
+            <PanelRow
+              label="Cuentas desactivadas"
+              value={[
+                partes.tutor.suspended
+                  ? `${partes.tutor.name ?? "el tutor"} (tutor)`
+                  : null,
+                partes.alumno.suspended
+                  ? `${partes.alumno.name ?? "el estudiante"} (estudiante)`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+          ) : null}
           <PanelRow
             label="Último mensaje"
             value={r.lastMessageAt ? fecha(r.lastMessageAt) : "—"}

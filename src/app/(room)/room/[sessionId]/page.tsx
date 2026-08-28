@@ -85,7 +85,7 @@ export default async function RoomPage({
       .eq("session_id", sessionId),
     // V-2 · la campana de la cabecera. Va en el mismo `Promise.all` para que no
     // añada un viaje en serie a una pantalla que ya hace tres.
-    listNotices(),
+    listNotices(user.id),
     // EY-189 · La conversación del par, para el botón de «Reportar conducta».
     //
     // Se resuelve AQUÍ y no en el cliente por dos motivos. Uno: la sala ya paga
