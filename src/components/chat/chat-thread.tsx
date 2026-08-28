@@ -26,8 +26,7 @@ import {
 import {
   cupoConsulta,
   quedanLabel,
-  TOPE_SEGUIDOS,
-  TOPE_TOTAL,
+  TOPE_POR_LADO,
 } from "@/lib/chat/limits";
 import { asRpc } from "./rpc";
 import { ReportConversation } from "./report-conversation";
@@ -267,9 +266,11 @@ export function ChatThread({
   // «no me lo han dicho», y ahí manda el comportamiento de siempre (ver la nota
   // de la prop).
   const soloLectura = canChat === false;
-  // ¿Quien mira es el alumno del par? Solo entonces hay topes que contar. Con
-  // el rol sin pasar esto es `false` y todo lo de abajo se queda en la regla
-  // general: nunca se inventa un contador que no se sabe de quién es.
+  // ¿Quien mira es el alumno del par? Ya NO decide si hay topes que contar —el
+  // tope es simétrico desde el 28-ago y los cuenta `cupo` para los dos lados—,
+  // solo elige la redacción del estado vacío: «pregúntale antes de reservar» no
+  // se le dice igual a quien pregunta que a quien responde. Con el rol sin
+  // pasar esto es `false` y cae al texto neutro.
   const soyAlumno = counterpartRole === "tutor";
 
   // ── El cupo de la consulta previa, en vivo ─────────────────────────────────
@@ -280,38 +281,42 @@ export function ChatThread({
   // purga deja en 30 días de conversación, y memorizarlo costaría más
   // vigilancia que cálculo.
   //
-  // `null` cuando no aplica —hilo de cliente, de solo lectura, bloqueado, o
-  // visto desde el lado del tutor— y de ahí cuelga TODO lo de abajo: es la
-  // única condición que hay que leer para saber si esta pantalla cuenta algo.
+  // `null` cuando no aplica —hilo de cliente, de solo lectura o bloqueado— y de
+  // ahí cuelga TODO lo de abajo: es la única condición que hay que leer para
+  // saber si esta pantalla cuenta algo.
+  //
+  // ⚠️ Ya NO depende de `soyAlumno`, y ese es el cambio del 28-ago: desde que
+  // el tope es simétrico, el tutor también gasta cupo y también tiene derecho a
+  // ver cuánto le queda. Antes contar del lado del tutor habría sido inventarse
+  // un número; ahora no enseñárselo sería esconderle el suyo.
   const cupo =
-    esConsulta && !soloLectura && !blocked && soyAlumno
+    esConsulta && !soloLectura && !blocked
       ? cupoConsulta(messages, currentUserId)
       : null;
-  // Se acabó el turno. En los dos casos el cuadro de texto se cambia por una
-  // explicación: el servidor rechazaría el envío igual, y enterarse por un
-  // error rojo después de escribir el párrafo es la peor manera posible.
+  // Se acabó el turno: el cuadro de texto se cambia por una explicación. El
+  // servidor rechazaría el envío igual, y enterarse por un error rojo después
+  // de escribir el párrafo es la peor manera posible.
   //
-  // ⚠️ Los dos textos dicen QUÉ HACER, no qué ha fallado, y no dicen lo mismo
-  // porque no se sale igual de los dos sitios: de la espera se sale sola (en
-  // cuanto el tutor contesta, Realtime mete su mensaje, la racha se reinicia y
-  // el formulario vuelve solo), y del tope duro no se sale sin reservar.
+  // ⚠️ El texto dice QUÉ HACER, no qué ha fallado, y cambia según el lado
+  // porque no se sale igual de los dos: el alumno sale reservando, y el tutor
+  // no puede hacer nada más que esperar a que reserven. Desde que el tope es
+  // simétrico (28-ago) el tutor también puede llegar aquí, y ese es justo el
+  // caso incómodo de la decisión: se queda sin poder contestar. El texto lo
+  // dice sin rodeos en vez de dejarlo en un «no puedes escribir».
   //
   // `null` = hay cupo, o esta pantalla no cuenta nada. Es también lo que
   // silencia el contador de abajo: si el recuadro ya lo explica, la línea
   // pequeña repitiéndolo solo estorba.
   const textoSinCupo =
-    cupo === null
+    cupo === null || !cupo.agotado
       ? null
-      : cupo.agotado
-        ? `Has usado los ${TOPE_TOTAL} mensajes que puedes escribir antes de reservar. Para seguir hablando con este tutor, reserva una de sus mentorías: entonces el chat se abre sin tope de mensajes y con archivos.`
-        : cupo.esperando
-          ? `Llevas ${TOPE_SEGUIDOS} mensajes seguidos sin respuesta, que es el máximo antes de reservar. En cuanto el tutor conteste podrás escribir otros ${TOPE_SEGUIDOS} (te quedan ${cupo.quedanTotal} de ${TOPE_TOTAL} en total). Si prefieres no esperar, reservar una mentoría abre el chat sin topes.`
-          : null;
+      : counterpartRole === "student"
+        ? `Has usado tus ${TOPE_POR_LADO} mensajes previos a la reserva, que es el máximo por cada lado. Podrás volver a escribir en cuanto el alumno reserve una de tus mentorías: entonces el chat se abre sin tope y con archivos.`
+        : `Has usado tus ${TOPE_POR_LADO} mensajes previos a la reserva, que es el máximo por cada lado. Para seguir hablando con este tutor, reserva una de sus mentorías: entonces el chat se abre sin tope de mensajes y con archivos.`;
 
-  // ── La línea pequeña de los topes ──────────────────────────────────────────
-  // Tres redacciones, y las tres dicen la verdad de QUIEN LAS LEE, que es lo
-  // que el texto anterior no hacía: decía «el número de mensajes es limitado»
-  // igual al alumno (que tiene dos topes) que al tutor (que no tiene ninguno).
+  // ── La línea pequeña del tope ──────────────────────────────────────────────
+  // Dice la verdad de QUIEN LA LEE, que es lo que el texto anterior no hacía:
+  // decía «el número de mensajes es limitado» sin decir cuál ni a quién.
   //
   // Cadena vacía y no `null`: el `<span>` tiene que seguir existiendo para que
   // el `justify-between` empuje «Reportar» a la derecha.
@@ -323,16 +328,10 @@ export function ChatThread({
         textoSinCupo
         ? ""
         : cupo
-          ? `Consulta previa: ${quedanLabel(cupo.quedanSeguidos, TOPE_SEGUIDOS)} mensajes seguidos, y ${cupo.quedanTotal} de ${TOPE_TOTAL} antes de reservar. Aún no se pueden enviar archivos.`
-          : counterpartRole === "student"
-            ? // Al tutor NO se le cuenta nada (el bloque de topes del SQL entra
-              // solo `if v_uid = v_c.student_id`), así que decirle «te quedan
-              // N» sería mentirle con un número, que se cree más que una frase
-              // vaga. Se le dice lo que sí le afecta: el ritmo del otro lado.
-              `Es una consulta previa a la reserva: todavía no se pueden enviar archivos. Tú respondes sin tope, pero quien pregunta solo puede escribir ${TOPE_SEGUIDOS} mensajes seguidos sin respuesta y ${TOPE_TOTAL} en total hasta que reserve.`
-            : // Sin saber de qué lado se mira: la regla, con sus números, y sin
-              // contador. Un contador que no se sabe de quién es no vale nada.
-              `Hasta que la reserva esté pagada no se pueden enviar archivos, y antes de reservar el alumno puede escribir ${TOPE_SEGUIDOS} mensajes seguidos sin respuesta y ${TOPE_TOTAL} en total.`;
+          ? `Consulta previa: ${quedanLabel(cupo.quedan, TOPE_POR_LADO)} mensajes antes de reservar. Aún no se pueden enviar archivos.`
+          : // Sin saber de qué lado se mira: la regla, con su número, y sin
+            // contador. Un contador que no se sabe de quién es no vale nada.
+            `Hasta que la reserva esté pagada no se pueden enviar archivos, y antes de reservar cada lado puede escribir ${TOPE_POR_LADO} mensajes.`;
 
   // N-23 · tener el hilo delante ES leerlo: se marca al abrirlo y, mientras
   // siga DELANTE, la burbuja no cuenta como pendiente lo que entra aquí.
