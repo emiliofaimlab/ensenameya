@@ -318,6 +318,32 @@ on conflict (id) do update set
   auto_accept_bookings = excluded.auto_accept_bookings;
 
 
+-- ── 4a bis · Requerimientos de sesión (`20260828143000`) ─────────────────────
+-- Lo que el ALUMNO tiene que traer. Va en un `update` aparte y no como columna
+-- del `values` de arriba para no reescribir las 14 filas por un campo opcional
+-- —y porque el interés en dev es tener las DOS caras: mentorías que piden algo
+-- y mentorías que no piden nada, que es como se comprueba que la sección
+-- desaparece en vez de quedarse vacía—.
+--
+-- Tres mentorías con requisitos de tres formas distintas: material físico, algo
+-- que hay que instalar antes, y una condición del sitio desde donde se conecta.
+update public.products set requirements = '[
+  "Papel y lápiz: los ejercicios se hacen a mano, no en el chat",
+  "Calculadora científica (vale la del móvil)"
+]'::jsonb where id = '22222222-0000-4000-8000-000000000001';
+
+update public.products set requirements = '[
+  "Un portátil o sobremesa: desde el móvil no se puede programar",
+  "Node.js 20 o superior y un editor instalados antes de la primera sesión",
+  "Cuenta de GitHub"
+]'::jsonb where id = '22222222-0000-4000-8000-000000000003';
+
+update public.products set requirements = '[
+  "Tableta gráfica (cualquier modelo con lápiz)",
+  "Un sitio con buena luz y, si hace calor, ventilador: son 60 min seguidos"
+]'::jsonb where id = '22222222-0000-4000-8000-000000000014';
+
+
 -- ── 4b · Categorías, resueltas por slug (patrón de ep03-demo.sql) ────────────
 insert into public.product_categories (product_id, category_id)
 select v.product_id, c.id

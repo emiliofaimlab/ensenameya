@@ -12,6 +12,7 @@ import {
   bookingFormatLabel,
 } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
+import { parseRequirements } from "@/lib/product-requirements";
 import {
   PanelCard,
   PanelCardTitle,
@@ -80,7 +81,7 @@ export default async function BookingDetailPage({
       // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
       // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
       // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
-      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at), payments(status, gross_amount, currency, paid_at, refunded_amount)",
+      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at), payments(status, gross_amount, currency, paid_at, refunded_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -93,6 +94,12 @@ export default async function BookingDetailPage({
   const done = sessions.filter((s) => s.status === "completed").length;
   const payment = booking.payments;
   const chatOpen = CHAT_BOOKING.has(booking.status);
+  // Lo que el alumno tiene que traer. Se lee de la mentoría y no de una copia
+  // congelada en la reserva a propósito: si el tutor añade «un ventilador» la
+  // semana antes de la clase, quien ya reservó tiene que enterarse — es un
+  // aviso operativo, no una condición económica de las que se congelan
+  // (regla de oro 2, que habla del importe, no de esto).
+  const requisitos = parseRequirements(booking.products?.requirements);
 
   // V-6 · aquí se pinta la ficha del tutor, no solo su nombre: esta es LA
   // pantalla de la queja («tras reservar no hay forma de llegar al tutor»).
@@ -231,6 +238,34 @@ export default async function BookingDetailPage({
               </ul>
             )}
           </PanelCard>
+
+          {/* Requerimientos de sesión — lo que el alumno tiene que traer.
+
+              Va DEBAJO de las sesiones y por encima del pago: quien abre esta
+              pantalla el día antes de la clase viene a mirar la hora y el botón
+              de la sala, y lo siguiente que necesita saber es si le falta algo.
+              El pago ya está hecho y puede esperar un scroll más.
+
+              Sin requisitos no se pinta la tarjeta: una sección "no necesitas
+              nada" no es información, es ruido en una pantalla que ya tiene
+              sesiones, pago, política y chat. */}
+          {requisitos.length > 0 ? (
+            <PanelCard>
+              <PanelCardTitle>Qué necesitas para la sesión</PanelCardTitle>
+              <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
+                Lo pide tu tutor para esta mentoría. Tenlo listo antes de entrar
+                a la sala.
+              </p>
+              <ul className="mt-3.5 flex flex-col gap-2.5">
+                {requisitos.map((r, i) => (
+                  <li key={`${i}-${r}`} className="flex items-start gap-2.5">
+                    <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-brand" />
+                    <span className="text-[13.5px] text-[#404040]">{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </PanelCard>
+          ) : null}
 
           <PanelCard>
             <PanelCardTitle>Pago</PanelCardTitle>

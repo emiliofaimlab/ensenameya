@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
+import { parseRequirements } from "@/lib/product-requirements";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { ProductForm } from "../../product-form";
 
@@ -27,7 +28,7 @@ export default async function EditProductPage({
       supabase
         .from("products")
         .select(
-          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, faqs, level, language, auto_accept_bookings, product_categories(category_id)",
+          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, faqs, requirements, level, language, auto_accept_bookings, product_categories(category_id)",
         )
         .eq("id", id)
         .eq("tutor_id", userId)
@@ -97,6 +98,10 @@ export default async function EditProductPage({
           // `??` es para el día que alguien quite el campo del `select` de
           // arriba y no para un dato ausente de verdad.
           autoAccept: product.auto_accept_bookings ?? true,
+          // jsonb → lista de textos, con el MISMO parseo que usan la ficha
+          // pública y la reserva: lo que el tutor ve al reabrir el formulario
+          // es exactamente lo que se publica.
+          requirements: parseRequirements(product.requirements),
           // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}.
           faqs: Array.isArray(product.faqs)
             ? (product.faqs as { q?: unknown; a?: unknown }[])

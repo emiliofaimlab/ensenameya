@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 import { parseFaqs, type Faq } from "@/lib/tutor-faqs";
+import { parseRequirements } from "@/lib/product-requirements";
 import { stripAccents } from "./format";
 
 /**
@@ -82,6 +83,14 @@ export type ProductDetail = ProductCardData & {
   };
   /** FAQ propias de la mentoría (R24-17); vacío = se muestran las genéricas. */
   faqs: Faq[];
+  /**
+   * Requerimientos de sesión: lo que el alumno tiene que tener listo ANTES de
+   * la clase (`20260828143000`). Vacío = el tutor no puso ninguno y la ficha
+   * NO pinta la sección — aquí no hay lista genérica de plataforma a la que
+   * caer, como sí la hay con las FAQ: inventarle requisitos a una mentoría
+   * sería anunciar condiciones que su tutor no ha puesto.
+   */
+  requirements: string[];
 };
 
 const PAGE_SIZE = 12;
@@ -485,7 +494,7 @@ export async function getProductDetail(
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, level, language, tutor_id, product_categories(categories(slug, name, icon))",
+      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, requirements, level, language, tutor_id, product_categories(categories(slug, name, icon))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -536,6 +545,9 @@ export async function getProductDetail(
     // se concatenan al pintar y una diferencia de criterio se vería como
     // preguntas que aparecen o desaparecen según de dónde vengan.
     faqs: parseFaqs(p.faqs),
+    // Igual que las FAQ: jsonb sin garantías más allá de «es una lista», así
+    // que se filtra aquí y no en cada pantalla que lo pinta.
+    requirements: parseRequirements(p.requirements),
     tutor: {
       id: tutor.profile_id,
       displayName: tutor.display_name,

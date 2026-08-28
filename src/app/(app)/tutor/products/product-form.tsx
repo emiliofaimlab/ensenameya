@@ -10,6 +10,11 @@ import { createClient } from "@/lib/supabase/client";
 import { bookingTotal } from "@/lib/booking";
 import { formatMoney, storageUrl } from "@/lib/catalog/format";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
+import {
+  MAX_REQUIREMENTS,
+  MAX_REQUIREMENT_LEN,
+  parseRequirements,
+} from "@/lib/product-requirements";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/lib/database.types";
 import { PanelCard } from "@/components/layout/panel-shell";
@@ -93,6 +98,12 @@ export type ProductFormValues = {
   /** FAQ propias de la mentoría (R24-17). */
   faqs: { q: string; a: string }[];
   /**
+   * Requerimientos de sesión: lo que el ALUMNO tiene que tener listo antes de
+   * la clase. No confundir con los materiales (R24-16), que son los ficheros
+   * que pone el TUTOR.
+   */
+  requirements: string[];
+  /**
    * M-02 · `products.auto_accept_bookings` — si las reservas pagadas de ESTA
    * mentoría se confirman solas. No es una preferencia de estilo: decide si la
    * reserva pasa o no por `pending_acceptance`, y con ella la ventana de 24 h
@@ -165,6 +176,12 @@ export function ProductForm({
   // FAQ de la mentoría (R24-17): lista editable, se guarda con el producto.
   const [faqs, setFaqs] = useState<{ q: string; a: string }[]>(
     product?.faqs ?? [],
+  );
+  // Requerimientos de sesión: misma mecánica que las FAQ —lista editable en
+  // memoria que viaja en el mismo `row` del guardado—, pero de una sola línea
+  // por fila: un requisito es una frase, no un par pregunta/respuesta.
+  const [requirements, setRequirements] = useState<string[]>(
+    product?.requirements ?? [],
   );
   // N-06: la portada dejó de viajar en el `FormData` y vive aquí. Sigue
   // valiendo la regla de antes — `null` significa "no eligió ninguna nueva",
@@ -333,6 +350,10 @@ export function ProductForm({
       faqs: faqs
         .map((f) => ({ q: f.q.trim(), a: f.a.trim() }))
         .filter((f) => f.q && f.a),
+      // Requerimientos: se guardan por el MISMO parseo con el que se leen, así
+      // que una fila que el tutor añadió y dejó en blanco no llega a la BD y
+      // tampoco reaparece al reabrir el formulario.
+      requirements: parseRequirements(requirements),
       // M-02 · viaja en el mismo `row` que todo lo demás: el column-grant de
       // `20260817180000` cubre insert Y update, así que el alta y la edición
       // escriben por el mismo camino. Va explícito también en el insert —y no
@@ -804,6 +825,73 @@ export function ProductForm({
           onRemoveSaved={removeSavedMaterial}
           disabled={loading}
         />
+      </PanelCard>
+
+      {/* Requerimientos de sesión — lo que el ALUMNO tiene que traer.
+
+          Va pegada a los materiales a propósito: las dos tarjetas hablan de con
+          qué se llega a la sala y son las dos caras de lo mismo — arriba lo que
+          pone el tutor, aquí lo que pone el alumno. Ponerla arriba, entre los
+          campos de "Detalles", la habría mezclado con lo que se VENDE (título,
+          resultado, precio), y esto no vende: avisa.
+
+          Misma mecánica que las FAQ de abajo, con una fila por requisito. */}
+      <PanelCard className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Requerimientos de sesión
+        </h2>
+        <p className="text-[13px] text-[#6b6b6b]">
+          Lo que tu alumno necesita tener listo ANTES de la clase: un portátil,
+          buena conexión, un cuaderno, un ventilador… Se lo enseñamos en la
+          ficha —antes de que reserve— y en su reserva. Es opcional: si lo dejas
+          vacío no se muestra nada.
+        </p>
+
+        {requirements.map((r, i) => (
+          // La clave lleva el índice porque el contenido lo está escribiendo el
+          // tutor: dos filas vacías tendrían la misma `key` y React tiraría una.
+          <div key={i} className="flex items-center gap-2">
+            <Input
+              value={r}
+              onChange={(e) =>
+                setRequirements((p) =>
+                  p.map((x, j) => (j === i ? e.target.value : x)),
+                )
+              }
+              maxLength={MAX_REQUIREMENT_LEN}
+              placeholder="Ej: un portátil con cámara y micrófono"
+              aria-label={`Requisito ${i + 1}`}
+              className={cn(FIELD, "min-w-0 flex-1")}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() =>
+                setRequirements((p) => p.filter((_, j) => j !== i))
+              }
+              aria-label={`Quitar el requisito ${i + 1}`}
+              className="h-9 shrink-0 rounded-[8px] px-3 text-[13px] text-[#bf3333]"
+            >
+              Quitar
+            </Button>
+          </div>
+        ))}
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setRequirements((p) => [...p, ""])}
+          disabled={requirements.length >= MAX_REQUIREMENTS}
+          className="h-10 self-start rounded-[8px] px-4 text-[13px]"
+        >
+          + Añadir requisito
+        </Button>
+        {requirements.length >= MAX_REQUIREMENTS ? (
+          <p className="text-xs text-[#6b6b6b]">
+            Máximo {MAX_REQUIREMENTS}. Una lista más larga deja de leerse justo
+            donde importa, que es antes de reservar.
+          </p>
+        ) : null}
       </PanelCard>
 
       {/* FAQ de ESTA mentoría (R24-17). Las del PERFIL del tutor (EY-194) se

@@ -1118,6 +1118,7 @@ export type Database = {
           package_num_sessions: number | null
           price_amount: number
           pricing_model: Database["public"]["Enums"]["pricing_model"]
+          requirements: Json
           search_text: string | null
           search_vector: unknown
           session_duration_min: number | null
@@ -1142,6 +1143,7 @@ export type Database = {
           package_num_sessions?: number | null
           price_amount: number
           pricing_model: Database["public"]["Enums"]["pricing_model"]
+          requirements?: Json
           search_text?: string | null
           search_vector?: unknown
           session_duration_min?: number | null
@@ -1166,6 +1168,7 @@ export type Database = {
           package_num_sessions?: number | null
           price_amount?: number
           pricing_model?: Database["public"]["Enums"]["pricing_model"]
+          requirements?: Json
           search_text?: string | null
           search_vector?: unknown
           session_duration_min?: number | null
