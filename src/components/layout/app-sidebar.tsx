@@ -55,7 +55,12 @@ type Item = SidebarItem;
 const STUDENT_ITEMS: Item[] = [
   { href: "/app", label: "Inicio", icon: HomeIcon, exact: true },
   { href: "/reservas", label: "Mis reservas", icon: TicketIcon },
-  { href: "/tutors", label: "Agendar", icon: CalendarPlusIcon },
+  // ⚠️ Apunta a `/agendar` y NO a `/tutors`. Llevaba al buscador PÚBLICO: el
+  // alumno pulsaba una entrada de su menú y salía del panel —otra cabecera,
+  // otro ancho, sin menú— a la misma pantalla que ve cualquiera sin cuenta. El
+  // cliente lo señaló como error. `/agendar` es lo mismo dentro de casa: sus
+  // tutores, lo que se le recomienda y su historial.
+  { href: "/agendar", label: "Agendar", icon: CalendarPlusIcon },
   { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
 ];

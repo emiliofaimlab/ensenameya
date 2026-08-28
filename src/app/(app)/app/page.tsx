@@ -12,9 +12,10 @@ import {
   PanelCard,
   PanelCardTitle,
   PanelShell,
-  StatusPill,
 } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
+import { historialDelAlumno } from "./historial";
+import { HistorialCard } from "./historial-card";
 import { suggestedForStudent } from "./sugerencias";
 import { SugerenciasCard } from "./sugerencias-card";
 import { tutoresParaElAlumno } from "./tutores";
@@ -63,9 +64,9 @@ export default async function AppHome() {
   const [
     { data: profile },
     { data: openRows },
-    { data: pastRows },
     sugerencias,
     misTutores,
+    historial,
   ] = await Promise.all([
     // El nombre sale del PERFIL, no de `user_metadata`: el metadata es un
     // espejo que se queda viejo si el perfil cambia después.
@@ -82,19 +83,6 @@ export default async function AppHome() {
       .in("status", OPEN)
       .order("created_at", { ascending: false })
       .limit(6),
-    supabase
-      .from("bookings")
-      .select(
-        // EY-186 · aquí ya NO se pide `created_at`. B1.10 lo trajo para poder
-        // ordenar «Tus últimos tutores» mezclando esta lista con la de arriba;
-        // ese bloque lo sustituye ahora `TutoresCard`, que ordena en Postgres
-        // sobre el historial ENTERO y no sobre las tres filas que quepan aquí.
-        "id, status, products(title, tutor_id), sessions(id, start_at, status), reviews(rating)",
-      )
-      .eq("student_id", user.id)
-      .eq("status", "completed")
-      .order("created_at", { ascending: false })
-      .limit(3),
     // N-30 · va DENTRO del mismo `Promise.all` a propósito: resuelve sus
     // propias consultas (intereses, oferta y catálogo) y encadenarla después
     // de las reservas sumaría su latencia a la de la pantalla para nada.
@@ -102,18 +90,26 @@ export default async function AppHome() {
     // EY-186 · lo mismo: es una RPC independiente de las reservas de arriba y
     // encadenarla le sumaría su viaje a la pantalla para nada.
     tutoresParaElAlumno(),
+    // El historial (tercera tarjeta). Sustituye a la consulta de reservas
+    // `completed` que había aquí y al bloque «Sesiones pasadas» que pintaba
+    // —ver la nota de más abajo, donde estaba—, así que no es una consulta de
+    // más: es la misma movida a su módulo y ampliada a los tres estados
+    // terminales.
+    historialDelAlumno(user.id),
   ]);
 
   const open = openRows ?? [];
-  const completed = pastRows ?? [];
   // `tutorCards` y no `tutorNames`: es la MISMA consulta con cuatro columnas
   // más (avatar, titular, valoración). B1.10 las trajo para el bloque de
   // tutores recientes; ese bloque ahora sale de `TutoresCard`, pero las fichas
   // se siguen necesitando aquí para el «con Fulanito» de cada fila y su enlace
   // (V-6), así que la consulta se queda tal cual.
+  //
+  // Ya solo se piden para las reservas VIVAS: las terminadas las resuelve
+  // `historialDelAlumno`, que trae las suyas.
   const fichas = await tutorCards(
     supabase,
-    [...open, ...completed].map((b) => b.products?.tutor_id),
+    open.map((b) => b.products?.tutor_id),
   );
   const nombreDelTutor = (id: string | null | undefined) =>
     (id ? fichas.get(id)?.displayName : null) ?? undefined;
@@ -148,7 +144,16 @@ export default async function AppHome() {
 
   const upcomingCount = open.filter((b) => ROOM_READY.has(b.status)).length;
   const awaitingCount = open.length - upcomingCount;
-  const hasActivity = open.length + completed.length > 0;
+  /**
+   * ¿Ha pasado algo alguna vez en esta cuenta? Decide entre el estado vacío de
+   * bienvenida y el panel de verdad.
+   *
+   * Antes se miraba `open + completed`, o sea que un alumno que reservó y
+   * canceló veía «Aún no tienes mentorías reservadas» — que en su caso era
+   * falso. `historial` cubre los tres estados terminales, así que ahora la
+   * frase solo sale cuando de verdad no hay nada.
+   */
+  const hasActivity = open.length > 0 || historial !== null;
 
   return (
     <PanelShell>
@@ -258,48 +263,19 @@ export default async function AppHome() {
             )}
           </PanelCard>
 
-          {completed.length > 0 ? (
-            <PanelCard>
-              <PanelCardTitle className="text-[22px]">
-                Sesiones pasadas
-              </PanelCardTitle>
-              <ul className="mt-4 divide-y divide-[#e0e0e0]">
-                {completed.map((b) => {
-                  const last = [...(b.sessions ?? [])].sort((x, y) =>
-                    y.start_at.localeCompare(x.start_at),
-                  )[0];
-                  return (
-                    <BookingRow
-                      key={b.id}
-                      href={`/reservas/${b.id}`}
-                      tutor={nombreDelTutor(b.products?.tutor_id)}
-                      tutorHref={perfilDelTutor(b.products?.tutor_id)}
-                      title={b.products?.title ?? "Mentoría"}
-                      when={last?.start_at ?? null}
-                      timeZone={tz}
-                      status={BOOKING_STATUS_LABEL[b.status]}
-                      // "Ver grabación · 30 días" del Figma es US-1602 (S4).
-                      action={
-                        b.reviews ? (
-                          <StatusPill>Reseñada</StatusPill>
-                        ) : (
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="h-[38px] rounded-[8px] px-4 text-[13px] text-[#4d4d4d]"
-                          >
-                            <Link href={`/reservas/${b.id}/resena`}>
-                              Dejar reseña
-                            </Link>
-                          </Button>
-                        )
-                      }
-                    />
-                  );
-                })}
-              </ul>
-            </PanelCard>
-          ) : null}
+          {/* Aquí estaba «Sesiones pasadas»: las tres últimas reservas
+              `completed` como filas, con su «Dejar reseña».
+
+              Lo sustituye `HistorialCard`, más abajo, por petición del cliente
+              —quiere el historial con el mismo diseño que las otras dos
+              tarjetas— y porque las dos cosas juntas serían el mismo contenido
+              dos veces en la misma pantalla. Es exactamente lo que ya pasó con
+              «Tus últimos tutores» cuando llegó `TutoresCard` (EY-186).
+
+              No se pierde nada por el camino: la tarjeta nueva lleva el mismo
+              «Dejar reseña», el mismo aviso de «Ya dejaste tu reseña», y además
+              enseña las canceladas y reembolsadas —que este bloque no miraba— y
+              ocho en vez de tres. */}
         </>
       )}
 
@@ -322,6 +298,17 @@ export default async function AppHome() {
           (catálogo vacío), y entonces no se monta: un carrusel vacío es peor
           que no ponerlo. */}
       {sugerencias ? <SugerenciasCard data={sugerencias} /> : null}
+
+      {/* La tercera tarjeta que pidió el cliente: el historial de reservas con
+          el mismo diseño que las dos de arriba. Va la ÚLTIMA de las tres a
+          propósito — las otras dos llevan a reservar algo nuevo y esta a
+          repetir, que es el camino que menos gente toma— y es la que sustituye
+          al bloque «Sesiones pasadas» de más arriba.
+
+          Las tres son las mismas que monta `/agendar`, con los mismos módulos.
+          `null` = todavía no tiene ninguna reserva terminada, y entonces no se
+          monta: el estado vacío de esta pantalla ya está arriba. */}
+      {historial ? <HistorialCard data={historial} timeZone={tz} /> : null}
 
       {/* Las dos tarjetas del Figma. "Invita y gana" (US-1301) solo aparece con
           campaña configurada: el programa vive entero en Referral Factory. */}
