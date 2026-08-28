@@ -57,12 +57,14 @@ export function LoginForm({
 
     setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    if (error) {
+    // `!data.user` sin `error` no debería ocurrir, pero sin id no hay a quién
+    // enrutar: se trata igual que unas credenciales malas.
+    if (error || !data.user) {
       // Mensaje genérico y NO colgado del correo: decir "ese correo no existe"
       // revelaría qué direcciones tienen cuenta (S-40).
       const msg = "Correo o contraseña incorrectos.";
@@ -76,9 +78,18 @@ export function LoginForm({
     // perfil de tutor: el rol `tutor` solo llega con la aprobación, y quien
     // está en revisión debe entrar igualmente por su panel, no por el de
     // alumno. Las dos consultas van en paralelo, que son independientes.
+    //
+    // ⚠️ El `.eq()` de `tutor_profiles` NO sobra por tener RLS: la política
+    // `tutor_profiles_select_public` deja leer la fila de CUALQUIER tutor
+    // aprobado, así que sin filtro esto traía todas y `maybeSingle()` devolvía
+    // error —nunca la propia—, dejando `esTutor` en falso siempre.
     const [{ data: rolesData }, { data: tutorProfile }] = await Promise.all([
       supabase.from("user_roles").select("role"),
-      supabase.from("tutor_profiles").select("profile_id").maybeSingle(),
+      supabase
+        .from("tutor_profiles")
+        .select("profile_id")
+        .eq("profile_id", data.user.id)
+        .maybeSingle(),
     ]);
     const roles = (rolesData ?? []).map((r) => r.role as AppRole);
     router.push(

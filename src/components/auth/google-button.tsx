@@ -32,7 +32,7 @@ function GoogleIcon() {
 
 /**
  * Inicio de sesión / registro con Google (OAuth). Vuelve a /auth/callback
- * (AU04), que intercambia el código y enruta por rol. En local el provider
+ * (AU04), que intercambia el código y decide el destino. En local el provider
  * no está configurado (config.toml), así que sólo funciona en cloud.
  */
 export function GoogleButton({
@@ -42,57 +42,47 @@ export function GoogleButton({
   intent,
   referralCode,
   terms,
-  onTermsMissing,
 }: {
   next: string | null;
   label: string;
   className?: string;
   /** AU02: el selector "quiero aprender/enseñar" está encima de este botón, así
-   *  que la intención tiene que viajar también por OAuth (la lee AU04). */
+   *  que la intención tiene que viajar también por OAuth (la lee AU04) — y en
+   *  un alta MANDA sobre el destino, igual que en el camino por correo. */
   intent?: "alumno" | "tutor";
   /** US-1302: el `?ref=` no sobrevive al viaje a Google; se lo pasamos al
    *  callback por la URL de vuelta, igual que la intención. */
   referralCode?: string | null;
   /**
-   * Solo en el REGISTRO. Cierra un agujero que estuvo abierto hasta el 17-ago:
-   * este botón se pinta ANTES del `<form>` y su `onClick` no leía la casilla de
-   * términos, así que quien pulsaba "Registrarme con Google" creaba cuenta sin
-   * haber aceptado nada — y era el camino que la propia pantalla ofrece
-   * primero. Con esto el clic se bloquea igual que el submit del formulario.
+   * Versión de los términos que se da por aceptada al registrarse con Google.
+   * Solo la pasa el REGISTRO.
+   *
+   * ⚠️ 28-ago-2026 · Entre el 17-ago y hoy este botón EXIGÍA la casilla del
+   * formulario de correo y bloqueaba el clic sin ella. El cliente lo quitó
+   * ("cuando creo mi cuenta con google no hace falta que marque acepto
+   * términos"), así que el camino de Google pasa al patrón de "al continuar
+   * aceptas…": no se pide nada, pero la constancia se sigue grabando. Es la
+   * razón de que esto ya no lleve un `aceptado`.
    *
    * La versión viaja por la URL de vuelta y la graba AU04, porque el metadata
    * de un alta por Google lo trae Google: no pasa por `handle_new_user` con
    * nada nuestro dentro. Mismo camino que `intent` y `ref`.
    *
-   * En el LOGIN no se pasa: quien ya tiene cuenta ya aceptó, y volver a pedirlo
-   * para entrar sería pedir dos veces lo mismo.
+   * En el LOGIN no se pasa: quien ya tiene cuenta ya aceptó al registrarse, y
+   * volver a dejar constancia por entrar sería contar dos veces lo mismo.
    */
-  terms?: { aceptado: boolean; version: string; locale: string };
-  /**
-   * RV-14 · Qué hacer cuando falta la casilla de términos. La pantalla de
-   * registro lo usa para encender su error bajo la casilla —que es donde hay
-   * que mirar—; sin él queda el aviso flotante de siempre.
-   */
-  onTermsMissing?: () => void;
+  terms?: { version: string; locale: string };
 }) {
   const [loading, setLoading] = useState(false);
 
   async function onClick() {
-    // Mismo mensaje y mismo momento que el submit por correo, para que los dos
-    // caminos de alta se comporten igual.
-    if (terms && !terms.aceptado) {
-      if (onTermsMissing) onTermsMissing();
-      else toast.error("Debes aceptar los términos para continuar.");
-      return;
-    }
-
     setLoading(true);
     const supabase = createClient();
     const params = new URLSearchParams();
     if (next) params.set("next", next);
     if (intent) params.set("intent", intent);
     if (referralCode) params.set("ref", referralCode);
-    if (terms?.aceptado) {
+    if (terms) {
       params.set("terms", terms.version);
       params.set("terms_locale", terms.locale);
     }

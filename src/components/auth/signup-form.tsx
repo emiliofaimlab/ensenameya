@@ -240,27 +240,43 @@ export function SignupForm({
         ))}
       </div>
 
+      {/*
+        ⚠️ 28-ago-2026 · El botón de Google YA NO espera a la casilla.
+        Entre el 17-ago y hoy leía `accepted` y bloqueaba el clic; el cliente lo
+        quitó ("cuando creo mi cuenta con google no hace falta que marque acepto
+        términos"). Lo que NO se fue es la constancia: la versión sigue viajando
+        en la URL de vuelta y la graba AU04, que es el patrón de "al continuar
+        aceptas…" que dice el pie de aquí abajo.
+
+        La casilla del `<form>` se queda como estaba: manda en el alta por
+        correo y solo en ella.
+      */}
       <GoogleButton
         next={next}
         intent={intent}
         referralCode={referralCode ?? refDeCookie()}
-        // La casilla de términos se pinta más abajo, dentro del formulario,
-        // pero aplica a los DOS caminos de alta. Sin esto, este botón la
-        // esquivaba por completo.
-        terms={{
-          aceptado: accepted,
-          version: TERMS_VERSION,
-          locale: TERMS_GOVERNING_LOCALE,
-        }}
-        onTermsMissing={() =>
-          setErrores((prev) => ({
-            ...prev,
-            terms: "Debes aceptar los términos para continuar.",
-          }))
-        }
+        terms={{ version: TERMS_VERSION, locale: TERMS_GOVERNING_LOCALE }}
         label="Registrarme con Google"
         className={`${AUTH_FIELD} font-medium`}
       />
+      {/* El aviso va bajo el botón porque es lo que sustituye a la casilla en
+          ESTE camino: si no se pide marcar nada, hay que decir qué se acepta
+          al pulsar. Mismos enlaces y misma versión que la casilla. */}
+      <p className="-mt-2 text-[12.5px] leading-snug text-muted-foreground">
+        Al continuar con Google aceptas los{" "}
+        <Link href="/terms" className="text-brand hover:underline" {...legal(enModal)}>
+          Términos y Condiciones
+        </Link>{" "}
+        (
+        <Link href="/terms/es" className="hover:underline" {...legal(enModal)}>
+          versión en español
+        </Link>
+        ) y la{" "}
+        <Link href="/privacy" className="text-brand hover:underline" {...legal(enModal)}>
+          Política de privacidad
+        </Link>
+        .
+      </p>
       <AuthDivider />
 
       {/*

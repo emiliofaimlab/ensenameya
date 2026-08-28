@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import {
   BadgeCheckIcon,
   GraduationCapIcon,
@@ -12,7 +11,7 @@ import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { buildUsedBy } from "@/lib/availability";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
-import { resolveStep, stepCookie } from "@/components/onboarding/wizard-step";
+import { resolveStep } from "@/components/onboarding/wizard-step";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { Button } from "@/components/ui/button";
@@ -43,9 +42,9 @@ const WELCOME_POINTS = [
  * Pasos del asistente de tutor; lo sabe la página para saturar `?paso=`.
  *
  * EY-183 · pasó de 5 a 6 al entrar la disponibilidad como paso 4. `resolveStep`
- * satura al rango [1, total], así que la cookie de quien dejó el asistente a
- * medias con la numeración vieja sigue siendo válida — como mucho aterriza un
- * paso antes de donde lo dejó, nunca en blanco.
+ * satura al rango [1, total], así que un enlace guardado con la numeración
+ * vieja sigue abriendo un paso válido — como mucho uno antes del que decía,
+ * nunca una pantalla en blanco.
  */
 const TOTAL_STEPS = 6;
 
@@ -117,13 +116,11 @@ export default async function TutorOnboardingPage({
     supabase.from("product_availability_rules").select("rule_id, product_id"),
   ]);
 
-  // M-03 · Paso resuelto en servidor (URL → cookie → 1): el primer HTML ya sale
-  // con el paso bueno y no parpadea un "Paso 1 de 5" que no es.
-  const initialStep = resolveStep({
-    param: paso,
-    cookie: (await cookies()).get(stepCookie("tutor"))?.value,
-    total: TOTAL_STEPS,
-  });
+  // Paso resuelto en servidor: el primer HTML ya sale con el bueno y no parpadea
+  // otro número al hidratar. Solo mira `?paso=` —la navegación interna del
+  // asistente—; entrar aquí sin parámetro da el paso 1 SIEMPRE (28-ago-2026,
+  // ver `wizard-step.ts`).
+  const initialStep = resolveStep({ param: paso, total: TOTAL_STEPS });
 
   // Estado de los documentos KYC → el paso de verificación reusa el módulo TU02.
   const docsByType: Record<string, DocState> = Object.fromEntries(

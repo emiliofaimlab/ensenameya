@@ -7,7 +7,7 @@ import { CheckIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { forgetStep, rememberStep, type WizardId } from "./wizard-step";
+import { forgetStep, type WizardId } from "./wizard-step";
 
 /**
  * Armazón del asistente de onboarding (AL01 / TU01). El Figma reparte la
@@ -24,11 +24,10 @@ import { forgetStep, rememberStep, type WizardId } from "./wizard-step";
  * queja que trajo esto. Lo que sí puede convivir es un botón que CREA algo
  * («Añadir franja», «Crear mi primera mentoría»): no compite con avanzar.
  *
- * ⚠️ El paso YA NO vive solo en `useState`. Lo decía este comentario —"recargar
- * no pierde datos"— y era verdad a medias: los datos sí sobrevivían, el PASO
- * no, así que quien salía volvía a "Paso 1 de 3" y leía eso como haberlo
- * perdido todo. Ahora lo llevan la URL y una cookie (`useWizardStep`, ver
- * `wizard-step.ts`).
+ * ⚠️ El paso se espeja en la URL (`?paso=N`) para que el botón "atrás" del
+ * navegador y una recarga a media edición no tiren al principio. Lo que NO
+ * hace es recordarte entre visitas: desde el 28-ago-2026 entrar al asistente
+ * empieza siempre por el paso 1 (`useWizardStep`, ver `wizard-step.ts`).
  */
 
 /** Alto y forma de los controles del asistente: 45 px, r8 (AL01 180:1297). */
@@ -36,31 +35,46 @@ export const FIELD_CLASS =
   "h-[45px] rounded-[8px] px-3.5 text-sm placeholder:text-[#8c8c8c]";
 
 /**
- * M-03 · Paso del asistente, recordado. `initial` lo resuelve la PÁGINA
- * (`resolveStep`) leyendo `?paso=` y la cookie, así que el servidor ya pinta el
- * paso correcto y no hay parpadeo de "Paso 1" al hidratar.
+ * Paso del asistente, espejado en la URL. `initial` lo resuelve la PÁGINA
+ * (`resolveStep`), así que el primer HTML ya viene con el paso bueno y no hay
+ * parpadeo de "Paso 1" al hidratar.
  *
- * El espejo en la URL se hace con `history.replaceState` y NO con
- * `router.replace`: cambiar el query con el router vuelve a pedir el RSC de la
- * página entera —y con él el `redirect` de `onboarding_complete`— solo para
- * mover un número. Next integra la History API nativa desde la 14.1, así que
- * `useSearchParams` sigue viendo el valor. `replace` y no `push` a propósito:
- * el asistente ya tiene su botón "Atrás" y no queremos que salir del onboarding
- * cueste cinco pulsaciones del botón del navegador.
+ * El espejo se hace con `history.replaceState` y NO con `router.replace`:
+ * cambiar el query con el router vuelve a pedir el RSC de la página entera —y
+ * con él el `redirect` de `onboarding_complete`— solo para mover un número.
+ * Next integra la History API nativa desde la 14.1, así que `useSearchParams`
+ * sigue viendo el valor. `replace` y no `push` a propósito: el asistente ya
+ * tiene su botón "Atrás" y no queremos que salir del onboarding cueste cinco
+ * pulsaciones del botón del navegador.
  */
 export function useWizardStep(wizard: WizardId, initial: number) {
   const [step, setStep] = useState(initial);
 
   useEffect(() => {
-    rememberStep(wizard, step);
     const url = new URL(window.location.href);
     if (url.searchParams.get("paso") === String(step)) return;
     url.searchParams.set("paso", String(step));
     window.history.replaceState(null, "", url);
-  }, [wizard, step]);
+  }, [step]);
 
-  /** El asistente terminó: la próxima visita no debe reabrirlo a medias. */
-  const finish = () => forgetStep(wizard);
+  // 28-ago-2026 · La cookie de M-03 ya no decide dónde aterrizas, pero la que se
+  // escribió antes dura un año. Se borra al montar para no dejarla rondando.
+  useEffect(() => {
+    forgetStep(wizard);
+  }, [wizard]);
+
+  /**
+   * El asistente terminó: el `?paso=` sale de la URL. Si se quedara, compartir
+   * o recargar la pantalla de cierre reabriría el asistente por el último paso
+   * —y encima con el `redirect` de `onboarding_complete` esperando detrás.
+   */
+  const finish = () => {
+    forgetStep(wizard);
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("paso")) return;
+    url.searchParams.delete("paso");
+    window.history.replaceState(null, "", url);
+  };
 
   return { step, setStep, finish };
 }

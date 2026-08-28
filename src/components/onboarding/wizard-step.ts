@@ -1,26 +1,30 @@
 /**
- * M-03 · Dónde se quedó el asistente.
+ * Dónde arranca el asistente de onboarding.
  *
- * El fallo reportado: sales del onboarding, vuelves y reapareces en "Paso 1 de
- * 3". Lo escrito seguía en la base (cada paso persiste al avanzar), pero el
- * número de paso vivía SOLO en `useState`, así que cualquier ida y vuelta lo
- * borraba y parecía que se había perdido todo.
+ * ⚠️ **28-ago-2026 · el cliente revirtió M-03.** Aquel cambio guardaba el paso
+ * en una cookie para que salir y volver no reiniciara el asistente. En la demo
+ * se leyó justo al revés —"cuando fui a tutor me saltó al paso 4 y con
+ * estudiante al paso 3"— y la orden fue tajante: entrar al asistente empieza
+ * **siempre** por el paso 1, tenga o no los campos llenos, sea tutor o alumno.
  *
- * Se guarda en DOS sitios a propósito, y ninguno necesita migración:
+ * Lo que NO cambia: los datos siguen persistiendo paso a paso en la base (cada
+ * "Continuar" escribe, y `useSaveOnExit` guarda al salir por el header). Lo
+ * único que se pierde es el marcador de por dónde ibas — el asistente se
+ * recorre otra vez, con los campos ya rellenos.
  *
- *  · **La URL (`?paso=N`)** es el estado *direccionable*: recargar, abrir el
- *    enlace en otra pestaña o volver con el botón del navegador ya no
- *    reinician el asistente.
- *  · **La cookie** es el estado *duradero*: la cabecera ofrece "Guardar y
- *    salir" y lleva a `/`, así que al volver la URL ya no trae `?paso`. Sin la
- *    cookie el enlace seguiría mintiendo.
+ * De M-03 sobrevive el espejo en la URL (`?paso=N`), porque no es la puerta de
+ * entrada sino la navegación INTERNA del propio asistente: es lo que hace que
+ * el botón "atrás" del navegador retroceda un paso en vez de sacarte, y que
+ * recargar a media edición no te tire al principio. Entrar a `/onboarding` o a
+ * `/tutor/onboarding` a pelo, sin parámetro, da el paso 1.
  *
- * Se descartó la columna `profiles.onboarding_step` porque exige migración (y
- * este carril no puede hacerlas). Su ventaja real sería cruzar de dispositivo;
- * si algún día se añade, manda ella y esto queda como respaldo — no al revés.
+ * La cookie `ey-onb-*` ya no se escribe. Sigue aquí `forgetStep` porque las que
+ * se escribieron antes tienen un año de vida por delante: el asistente las
+ * borra al montarse para que no queden rondando (y para que nadie las
+ * resucite leyéndolas otra vez).
  *
  * ⚠️ Módulo NEUTRO (sin `"use client"`) a propósito: lo importan la página
- * (servidor, para el paso inicial) y el asistente (cliente, para recordarlo).
+ * (servidor, para el paso inicial) y el asistente (cliente, para la limpieza).
  * Exportado desde un fichero `"use client"`, el servidor recibiría una
  * *referencia de cliente* en vez del string del nombre de la cookie y leería
  * `undefined` — el mismo tropiezo que ya documenta `lib/tz.ts`.
@@ -31,9 +35,6 @@ export type WizardId = "alumno" | "tutor";
 
 export const stepCookie = (wizard: WizardId) => `ey-onb-${wizard}`;
 
-/** Un año: el asistente se abandona por semanas, no por minutos. */
-const MAX_AGE = 31_536_000;
-
 /** Número de paso válido dentro del asistente, o `null` si el valor no sirve. */
 function parseStep(raw: string | null | undefined, total: number): number | null {
   if (!raw) return null;
@@ -42,33 +43,26 @@ function parseStep(raw: string | null | undefined, total: number): number | null
 }
 
 /**
- * Paso con el que arranca el asistente. Manda la URL (es lo que el usuario
- * pidió explícitamente), luego la cookie y, si no hay nada usable, el 1.
+ * Paso con el que arranca el asistente: el de la URL si lo hay, y si no el 1.
  *
- * Se satura al rango [1, total] a propósito: `?paso=99` o una cookie de una
- * versión anterior con más pasos no deben dejar el asistente en blanco.
+ * Se satura al rango [1, total] a propósito: un `?paso=99` escrito a mano —o el
+ * que dejó una versión del asistente con más pasos— no debe dejar la pantalla
+ * en blanco.
  */
 export function resolveStep({
   param,
-  cookie,
   total,
 }: {
   param?: string | null;
-  cookie?: string | null;
   total: number;
 }): number {
-  return parseStep(param, total) ?? parseStep(cookie, total) ?? 1;
+  return parseStep(param, total) ?? 1;
 }
 
-/** Recuerda el paso (solo cliente; en servidor no hace nada). */
-export function rememberStep(wizard: WizardId, step: number) {
-  if (typeof document === "undefined") return;
-  // Sin `Secure`: en local la app corre en http y la cookie no llegaría nunca.
-  // No lleva nada sensible — es un número de paso.
-  document.cookie = `${stepCookie(wizard)}=${step}; path=/; max-age=${MAX_AGE}; SameSite=Lax`;
-}
-
-/** Olvida el paso: el asistente terminó y volver a entrar empieza de cero. */
+/**
+ * Borra la cookie de paso heredada de M-03 (solo cliente; en servidor no hace
+ * nada). Ya nadie la lee: esto es la limpieza del rastro que dejó.
+ */
 export function forgetStep(wizard: WizardId) {
   if (typeof document === "undefined") return;
   document.cookie = `${stepCookie(wizard)}=; path=/; max-age=0; SameSite=Lax`;

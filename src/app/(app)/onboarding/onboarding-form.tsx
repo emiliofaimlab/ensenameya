@@ -217,7 +217,7 @@ export function OnboardingForm({
       // `router.push` y el alumno aparecía en el panel sin saber si había
       // acabado bien ("directamente me sacó"). Ahora se pinta el cierre en
       // sitio; salir es una decisión suya, con su botón.
-      finish(); // olvida el paso: volver a entrar ya no reabre el asistente
+      finish(); // saca el `?paso=` de la URL: la pantalla de cierre no es un paso
       setDone(true);
       setBusy(false);
       return;
