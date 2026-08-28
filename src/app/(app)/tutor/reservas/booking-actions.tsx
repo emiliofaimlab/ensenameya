@@ -143,7 +143,21 @@ export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
   );
 }
 
-/** US-802 (SCR-TU08) — cierre anticipado de la sesión por el tutor (S-26). */
+/**
+ * US-802 (SCR-TU08) — cierre anticipado de la sesión por el tutor (S-26).
+ *
+ * ⚠️ Desde el 28-ago esto SACA TAMBIÉN AL ALUMNO, aunque aquí no se vea ni una
+ * línea de código para ello — y por eso queda escrito. `complete_session` deja
+ * la fila de `sessions` en `completed`, y la sala del alumno está suscrita a los
+ * cambios de esa fila por Realtime (`live-room.tsx`): al verlo cuelga la
+ * llamada y lo lleva a su detalle de la reserva. La puerta se cierra además del
+ * lado del servidor — `join_session` rechaza las sesiones cerradas desde
+ * `20260828120000` —, así que no puede volver a entrar.
+ *
+ * Es lo que hace que este botón y el gemelo de dentro de la sala hagan lo mismo:
+ * este se pulsa desde el detalle, donde el tutor no está en la llamada y no
+ * tiene por dónde avisar a nadie. Por eso el aviso va por la base y no por Daily.
+ */
 export function CompleteSessionButton({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -178,7 +192,7 @@ export function CompleteSessionButton({ sessionId }: { sessionId: string }) {
         open={confirming}
         onOpenChange={setConfirming}
         title="¿Marcar la sesión como completada?"
-        description="La mentoría queda como dictada y se cierra su sala. Cuando a la reserva no le queden sesiones abiertas pasará a completada: es eso lo que arranca la retención de tu pago y la invitación al alumno para que te reseñe. No se puede reabrir."
+        description="La mentoría queda como dictada y su sala se cierra para los dos: si el alumno está dentro, se le saca, y ninguno podrá volver a entrar. Cuando a la reserva no le queden sesiones abiertas pasará a completada: es eso lo que arranca la retención de tu pago y la invitación al alumno para que te reseñe. No se puede reabrir."
         confirmLabel="Sí, completar"
         busyLabel="Guardando…"
         busy={busy}

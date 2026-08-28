@@ -6,6 +6,7 @@ import { getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, BOOKING_STATUS_LABEL } from "@/lib/booking";
+import { salaDeLaReserva } from "@/lib/room-window";
 import { cn } from "@/lib/utils";
 import {
   PanelCard,
@@ -79,7 +80,10 @@ export default async function TutorReservasPage({
   let query = supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, created_at, student_id, products(title), sessions(id, start_at, status)",
+      // Las columnas de ventana viajan con la sesión: el tutor pidió el mismo
+      // «Entrar a sala» que tiene el alumno en su panel, y sin ellas esta lista
+      // no puede saber si la sala está abierta ahora. Ver `salaDeLaReserva`.
+      "id, status, total_amount, currency, created_at, student_id, products(title), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
     )
     .eq("tutor_id", userId)
     .order("created_at", { ascending: false });
@@ -247,6 +251,11 @@ export default async function TutorReservasPage({
           <ul className="divide-y divide-[#e0e0e0]">
             {rest.map((b) => {
               const s = when(b);
+              // Mismo criterio que el panel del alumno y que `/reservas`:
+              // reserva `confirmed`/`in_progress` y sesión dentro de su ventana
+              // de acceso. Aquí importa más que en ninguna lista — el tutor
+              // llega tarde a su propia clase si tiene que pasar por el detalle.
+              const sala = salaDeLaReserva(b.status, b.sessions);
               return (
                 <li
                   key={b.id}
@@ -279,6 +288,19 @@ export default async function TutorReservasPage({
                     >
                       {BOOKING_STATUS_LABEL[b.status]}
                     </StatusPill>
+                    {/* «Entrar a sala» ANTES de «Ver» y en naranja: cuando la
+                        sala está abierta es lo único que el tutor quiere de
+                        esta fila. «Ver» se queda al lado —no se sustituye—
+                        porque desde el detalle también se cancela y se marca
+                        completada. */}
+                    {sala ? (
+                      <Button
+                        asChild
+                        className="h-9 rounded-[8px] px-3.5 text-[13px] font-semibold"
+                      >
+                        <Link href={`/room/${sala.id}`}>Entrar a sala</Link>
+                      </Button>
+                    ) : null}
                     <Button
                       asChild
                       variant="outline"

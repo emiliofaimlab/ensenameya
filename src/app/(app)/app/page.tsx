@@ -4,7 +4,7 @@ import { CompassIcon } from "lucide-react";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { BOOKING_STATUS_LABEL, isUpcoming, tutorCards } from "@/lib/booking";
-import { roomOpen } from "@/lib/room-window";
+import { salaDeLaReserva } from "@/lib/room-window";
 import { BookingRow } from "@/components/booking-row";
 import { ReferralCard } from "@/components/referral/referral-card";
 import { SupportCard } from "@/components/support/support-card";
@@ -205,6 +205,14 @@ export default async function AppHome() {
                 {open.map((b) => {
                   const s = nextSession(b);
                   const ready = ROOM_READY.has(b.status);
+                  // El criterio de «hay sala ahora» salió de aquí a
+                  // `salaDeLaReserva`: el cliente pidió este mismo botón en
+                  // `/reservas` y en `/tutor/reservas`, y tres copias de la
+                  // regla acabarían discrepando. Es la de siempre —estado de la
+                  // reserva + ventana de la sesión—, con una diferencia: busca
+                  // la sesión cuya sala esté abierta en vez de mirar solo la
+                  // «próxima», que es la que esta lista usa para la fecha.
+                  const sala = salaDeLaReserva(b.status, b.sessions);
                   return (
                     <BookingRow
                       key={b.id}
@@ -234,12 +242,12 @@ export default async function AppHome() {
                         //
                         // Con la ventana en 7 días casi no se notaba; con 10
                         // minutos sería un botón muerto casi siempre.
-                        ready && s && roomOpen(s) ? (
+                        sala ? (
                           <Button
                             asChild
                             className="h-[38px] rounded-[8px] px-4 text-[13px] font-semibold"
                           >
-                            <Link href={`/room/${s.id}`}>Entrar a sala</Link>
+                            <Link href={`/room/${sala.id}`}>Entrar a sala</Link>
                           </Button>
                         ) : (
                           <Button
