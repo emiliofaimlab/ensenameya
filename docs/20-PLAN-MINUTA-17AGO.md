@@ -317,6 +317,10 @@ variante barata, MN-02, MN-11b, MN-10 y MN-12 son todos S o menos.
 > ejercitado no está hecho.** Los reembolsos siguen sin mover un euro, el cobro tardío no se ha
 > probado con un pago real y nadie ha visto llegar un correo. Esa lista pesa más que los catorce
 > puntos de esta minuta, porque es dinero.
+>
+> 🟢 **Al 30-ago queda uno y medio de los tres.** Los reembolsos **ya movieron dinero** ($47,50 en
+> *test mode*, los 2 de la cola de dev). Siguen sin ejercitar el **cobro tardío** y **ver llegar un
+> correo**.
 
 ---
 
@@ -594,7 +598,7 @@ poniendo **5 $ de su bolsillo** en cada reserva, porque el tutor sigue cobrando 
 | 1 | **El alta de tarjeta no se ejercitó entera.** La URL de vuelta usa un placeholder que en el modo viejo sustituía Stripe; con el modo nuevo redirige el navegador y nadie ha comprobado que se siga sustituyendo | Si no, no sale el aviso «Tarjeta guardada» y la tarjeta no se marca reutilizable. **Un minuto**: guardar una tarjeta con `4242…` y mirar |
 | 2 | **Los hilos pre-compra caducan a los 30 días** aunque el cliente los quisiera visibles (ver MN-06) | Coincide con la retención publicada, así que es **decisión de producto**, no fallo |
 | 3 | **El domicilio sigue en `/contacto` y en el §39 de los Términos** | El cliente dijo «no público». Quitarlo del pie no lo hace privado — falta decidir los otros dos |
-| 4 | **El reembolso real sigue sin mover un euro** | Sigue siendo el punto 2 de §19.10, y pesa más que todo lo demás porque es dinero |
+| 4 | ~~**El reembolso real sigue sin mover un euro**~~ ✅ **resuelto el 30-ago** | $47,50 en dos reembolsos de *test mode* contra los 2 `refund_requests` de dev, cuadrando en las cuatro superficies. Cerrado el punto 2 de §19.10 |
 | 5 | **Nada de esto está en producción** | `main` sigue en el commit del 29-jul |
 
 ### Lo que queda de la minuta, y no depende de desarrollo

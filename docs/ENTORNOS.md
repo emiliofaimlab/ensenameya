@@ -328,11 +328,13 @@ lo llama ningún reloj:
 | Cola | prod | dev |
 | :-- | :-- | :-- |
 | `notifications` (`pendientes_email`) | 0 | **0** — eran 336; vaciada el 30-ago (§4.6) |
-| `refund_requests` (`pending`) | 0 | **2**, sobre PaymentIntents reales de *test mode* |
+| `refund_requests` (`pending`) | 0 | **0** — eran 2; ejecutados contra Stripe el 30-ago ($47,50) |
 
-Los **2 reembolsos de dev** son el caso de prueba que X-01 nunca ha ejercitado: el job jamás ha
-movido un euro, ni en dev ni en prod. Los **336 correos** que eran la mina de §1 ya no están: se
-cerraron como `failed` el 30-ago.
+Los **2 reembolsos de dev** eran el caso de prueba que X-01 nunca había ejercitado — y **se ejecutó
+el 30-ago**: $47,50 contra Stripe *test mode*, cuadrando en la cola, en `refunds_backlog()`, en
+Stripe y en `payments`. El job **sí mueve dinero**. Se corrió en **local** (`npm run dev` contra la
+BD de dev) porque la preview está tras Deployment Protection y `APP_BASE_URL` apunta a prod. Los
+**336 correos** que eran la mina de §1 tampoco están: se cerraron como `failed` el mismo día.
 
 `status: "ok"` (en vez de `sin-proveedor` / `sin-stripe`) confirma de paso que producción ya tenía
 `RESEND_API_KEY` **y** `STRIPE_API_KEY`: son las propias respuestas del endpoint las que lo dicen.
@@ -424,8 +426,10 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
 - [x] ✅ **Cola vieja de notificaciones de dev vaciada, 30-ago**: 336 avisos a `failed` (§4.6).
 - [ ] ⚠️ **Arreglar el seed para que no vuelva a llenarse**: usa `@ensenameya.dev`, dominio sin MX
   (187 de las 336 iban ahí). Mientras siga así hay que repetir §4.6 antes de cada encendido.
-- [ ] **Ejercitar X-01 con los 2 `refund_requests` de dev**: el job de reembolsos no ha movido un
-  euro todavía, ni en dev ni en prod. `?simulacro=1` enseña qué mandaría sin mandarlo.
+- [x] ✅ **X-01 ejercitado, 30-ago**: los 2 `refund_requests` de dev ejecutados contra Stripe *test
+  mode* — $47,50 en dos reembolsos, cuadrando cola / `refunds_backlog()` / Stripe / `payments`.
+  Se hizo **en local** (`npm run dev` contra la BD de dev), porque la preview de Vercel está tras
+  Deployment Protection y `APP_BASE_URL` apunta a prod. `?simulacro=1` primero, pasada real después.
 - [ ] `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel — solo están en local.
 - [ ] `NEXT_PUBLIC_REFERRAL_URL_TUTOR` (B1.11) — **ni en local**: hace falta la URL de la segunda
       campaña de Referral Factory, la de tutores. Sin ella el tutor no ve el bloque.

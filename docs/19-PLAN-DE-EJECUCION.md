@@ -147,6 +147,9 @@ pero no están publicados.
 **4. Hay tres cosas que no salieron en ninguna reunión y pesan más que media lista.** Están en
 §19.3. La peor: **ningún reembolso mueve dinero de verdad.**
 
+> 🟢 **Y el asterisco se quitó el 30-ago: el dinero se movió.** $47,50 en dos reembolsos de *test
+> mode* contra los 2 `refund_requests` de dev. Lo que sigue debajo describe el estado hasta entonces.
+>
 > 🟠 **Las tres se atacaron el mismo día** (§19.3). Pero la peor sigue teniendo un asterisco que hay
 > que leer: los reembolsos **ya se encolan** contra Stripe y **todavía no se ha movido un euro**,
 > porque el job que los ejecuta no lo llama nadie. Escrito ≠ ejecutado.
@@ -797,7 +800,7 @@ Esta lista es la parte útil del apartado. **Nada de aquí se puede dar por buen
 | # | Qué | Por qué importa |
 | :-- | :-- | :-- |
 | 1 | ~~**`main` sigue en `57edfa9`.**~~ ✅ **Mergeado el 26-ago** (`3fca8b2`). Hoy `dev` va **52 commits** y **7 migraciones** por delante | Ya no es el bloqueante que era. Las legales, `/contacto` y el pie están vivos en producción; lo que llegó de rebote fueron los relojes de los crons, que empezaron a fallar en rojo el 27 (punto 6) |
-| 2 | **X-01 no ha movido un euro.** *(Sigue abierto al 30-ago.)* | `refunds-cron.yml` **ya corre** desde el 30-ago… contra **producción**, donde la cola está vacía. Las **2** solicitudes `pending` sobre PaymentIntents reales de test mode están en **dev**. Un job en verde que no toca nada es más peligroso que uno en rojo: parece cerrado |
+| 2 | ~~**X-01 no ha movido un euro.**~~ ✅ **CERRADO el 30-ago** | Las 2 solicitudes de dev ejecutadas contra Stripe *test mode*: **$47,50** (`re_…0jlnmFAq` $12,50 = 50 % de un cargo de $25,00; `re_…1GMUMHYr` $35,00 = 100 %). Cuadra en cola, `refunds_backlog()`, Stripe y `payments`; segunda pasada no-op. Se corrió **en local** contra la BD de dev — la preview está tras Deployment Protection y `APP_BASE_URL` apunta a prod |
 | 3 | **X-02 no se ha ejercitado.** Pagar tarde y ver el reembolso en Stripe necesita un pago real | Lo escrito es idempotente por dos caminos y está razonado, pero **razonado no es probado** — y es dinero |
 | 4 | **M-01 no se ha comprobado contra la API.** `tsc` pasa | Ya pasó una vez: `ui_mode: "embedded_page"` compilaba y devolvía **400** contra la API real |
 | 5 | **Nadie ha visto llegar un correo.** Ni el de contacto, ni uno de la cola | `RESEND_API_KEY` está puesta y el código está entero, pero **DL-01 se cumple cuando el revisor recibe respuesta**, no cuando el handler devuelve 200 |

@@ -51,12 +51,22 @@ Cataloga **todas las notificaciones** del MVP: qué evento las dispara (cruzando
 | NTF-08 | Apertura de ventana (RN-18, S-45) | alumno + tutor | email + in-app | `session_starting` | "Tu clase está por comenzar" | enlace_sala, hora local |
 | NTF-09 | M4/M5 `→ cancelled` | afectado(s) | email + in-app | `cancellation` | "Se canceló tu reserva/sesión" | motivo, reembolso_estimado (DP-03) |
 | NTF-10 | M6 `→ refunded/partially_refunded` | alumno | email | `refund_processed` | "Procesamos tu reembolso" | monto, moneda, ref |
+<!-- ⚠️ NTF-10 se dispara al PEDIR el reembolso, no al moverlo. Medido el 30-ago. -->
 | NTF-11 | Recordatorio 24h antes (job) | alumno + tutor | email + in-app | `session_reminder_24h` | "Recordatorio: clase mañana" | producto, hora local, enlace |
 | NTF-12 | M7 `→ paid` | tutor | email + in-app | `payout_paid` | "Tu pago fue liquidado" | monto, moneda, periodo, ref |
 | NTF-13 | Incidencias (pago fallido, payout `failed`/`on_hold`, disputa, conciliación) | admin | email + in-app | `admin_alert` | "Incidencia operativa" | tipo, entidad, severidad |
 | NTF-14 | M4 `→ completed` (RN-28) | alumno | email + in-app | `review_request` | "¿Cómo estuvo tu clase?" | tutor, enlace_reseña |
 | NTF-15 | M6 `→ failed` dentro de ventana (RN-27) | alumno | email + in-app | `payment_failed` | "No pudimos procesar tu pago" | motivo, reintentar_url, expiración |
 | NTF-16 | M7 `→ on_hold`/`failed` | tutor | in-app (email opcional) | `payout_issue` | "Tu liquidación está en revisión" | motivo, contacto |
+
+> ⚠️ **NTF-10 avisa cuando el reembolso se PIDE, no cuando el dinero se mueve.** Lo encola
+> `20260716170000` dentro del camino de cancelación (`cancel_booking` / `refund_payment`); quien
+> habla con el PSP es el job `/api/cron/refunds-process`, y **ese no encola nada**. Entre las dos
+> cosas hay una cola (`refund_requests`, `20260817170000`). Medido el 30-ago al ejercitar X-01 por
+> primera vez: a dos alumnos se les dijo «procesado» el **17-ago** y el **27-ago**, y el dinero
+> salió el **30**. Con el cron ya corriendo la ventana baja de días a horas, así que no es urgente
+> — pero el correo dice «procesamos tu reembolso» antes de que sea verdad, y mover el aviso al job
+> es **decisión de producto**, no un arreglo técnico.
 
 > **No-show (NTF condicional):** el aviso por inasistencia y su contenido dependen de **DP-08** (política) y **DP-03** (efecto financiero); se reutilizan NTF-09/NTF-10 según la resolución. No se fija aquí.
 

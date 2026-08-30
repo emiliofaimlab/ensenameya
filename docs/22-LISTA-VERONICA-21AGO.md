@@ -39,7 +39,9 @@
 6. **Y hay un dato que conviene decir en la misma frase que todo lo demás:** el correo pide integrar
    Zinli y PayPal «de inmediato» mientras **el correo de la plataforma no envía ni un mensaje**
    —los avisos se acumulan `pending`, no `failed`, así que el síntoma es que no pasa nada— y
-   **ningún reembolso ha movido un euro todavía**. Eso pesa más que las dos pasarelas.
+   ~~**ningún reembolso ha movido un euro todavía**~~ → ✅ **resuelto el 30-ago** ($47,50 contra
+   Stripe *test mode*). Sigue en pie la primera mitad: **nadie ha visto llegar un correo**. Eso
+   pesa más que las dos pasarelas.
 
 ---
 
@@ -303,9 +305,9 @@ Tres cosas que no aparecen en el correo y que valen más que cualquiera de sus 3
    cerrados como `failed`). El correo pide «pruebas
    integrales de envíos de correo» (A4) y esa media frase sigue siendo el punto más importante de
    toda la lista.
-2. **Ningún reembolso ha movido un euro.** El job se ejercitó en simulacro. Encolar no es devolver.
-   Sigue **exactamente igual** al 30-ago: el cron ya corre, pero contra prod, donde la cola está
-   vacía; los **2** `refund_requests` `pending` viven en dev.
+2. ~~**Ningún reembolso ha movido un euro.**~~ ✅ **Resuelto el 30-ago.** Los 2 `refund_requests` de
+   dev se ejecutaron contra Stripe *test mode*: **$47,50**, cuadrando en la cola, en
+   `refunds_backlog()`, en Stripe y en `payments`. Encolar seguía sin ser devolver — ahora devuelve.
 3. ~~**`main` sigue congelada en el commit del 29-jul.**~~ ✅ **El merge se hizo el 26-ago**
    (`3fca8b2`). Hoy `dev` va 52 commits y 7 migraciones por delante — un merge de una semana, no de
    dos meses. El párrafo de abajo describe el estado hasta esa fecha. Para el equipo `dev` es producción y esta

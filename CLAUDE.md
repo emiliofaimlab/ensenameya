@@ -131,9 +131,14 @@ Sin verificar siguen `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY`.
 ⚠️ **Verde no es lo mismo que útil.** Los dos relojes apuntan a **producción**, donde las dos
 colas están **vacías**. Y la de correo de **dev** también, desde el 30-ago: eran **336** avisos
 `pending` del 11-ago en adelante y se cerraron como `failed` (`docs/QA-LANZAMIENTO.md` §4.6).
-Lo que sigue esperando en dev son **2** `refund_requests`, así que **X-01 sigue sin mover un
-euro** y **nadie ha visto llegar un correo de la cola** — con la diferencia de que ahora hay dos
-jobs en verde que pueden hacer creer lo contrario. ⚠️ **La cola de dev volverá a llenarse**: el
+✅ **Y X-01 se ejercitó el 30-ago**: los 2 `refund_requests` que esperaban en dev se ejecutaron
+contra Stripe *test mode* — $47,50, 50 % y 100 % de RN-37, cuadrando cola / `refunds_backlog()` /
+Stripe / `payments`. El dinero **sí se mueve**. Lo que sigue sin pasar es que **nadie ha visto
+llegar un correo de la cola**. ⚠️ Y salió un desfase al hacerlo: **NTF-10 avisa cuando el reembolso
+se PIDE, no cuando el dinero se mueve** (lo encola `20260716170000` en el camino de cancelación; el
+job no encola nada). A esos dos alumnos se les dijo «procesado» el 17 y el 27-ago y el dinero salió
+el 30. Con el cron corriendo la ventana baja a horas; cambiar cuándo se avisa es decisión de
+producto. ⚠️ **La cola de dev volverá a llenarse**: el
 seed usa `@ensenameya.dev`, un dominio sin MX, y 187 de las 336 iban ahí. Hasta que eso cambie,
 §4.6 hay que repetirlo antes de apuntar un reloj a dev.
 El endpoint de Stripe apunta a la preview con `?x-vercel-protection-bypass=…`: sin eso
