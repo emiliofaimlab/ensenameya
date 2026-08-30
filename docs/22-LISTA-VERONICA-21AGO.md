@@ -299,7 +299,8 @@ Tres cosas que no aparecen en el correo y que valen más que cualquiera de sus 3
    dos workflows de Actions llevaban **30 corridas en rojo**. Ya están puestos y los jobs dan 200. El
    síntoma que describe la línea —«no pasa nada»— era real; la causa, no. **Y sigue en pie lo que de
    verdad importa: nadie ha visto llegar un correo de la cola**, porque el reloj apunta a producción
-   y allí la cola está vacía (los **336** avisos `pending` están en dev). El correo pide «pruebas
+   y allí la cola está vacía — y la de dev también desde el 30-ago (eran **336** avisos `pending`,
+   cerrados como `failed`). El correo pide «pruebas
    integrales de envíos de correo» (A4) y esa media frase sigue siendo el punto más importante de
    toda la lista.
 2. **Ningún reembolso ha movido un euro.** El job se ejercitó en simulacro. Encolar no es devolver.

@@ -89,7 +89,7 @@ Info@ensenameya.com
    > no existen. Procedimiento para vaciarlos: `docs/QA-LANZAMIENTO.md` §4.6.
    > 🔵 **Epílogo del 30-ago.** El cron se encendió **sin** vaciar la cola, y no pasó nada: la
    > variable `APP_BASE_URL` apunta a **producción**, y esos correos están en **dev**. Fue suerte, no
-   > diseño. Y la cola ha crecido: hoy son **336**, no 126.
+   > diseño. La cola había crecido a **336** (no 126) y se vació ese mismo día: 336 a `failed`.
 2. **El remitente sigue siendo `onboarding@resend.dev`** porque el dominio propio no está verificado.
    Funciona, pero un correo de contacto que no llega desde `@ensenameya.com` es lo que un revisor
    marca. **Verificar el dominio en Resend hoy si se puede; si no, queda anotado.**
@@ -801,7 +801,7 @@ Esta lista es la parte útil del apartado. **Nada de aquí se puede dar por buen
 | 3 | **X-02 no se ha ejercitado.** Pagar tarde y ver el reembolso en Stripe necesita un pago real | Lo escrito es idempotente por dos caminos y está razonado, pero **razonado no es probado** — y es dinero |
 | 4 | **M-01 no se ha comprobado contra la API.** `tsc` pasa | Ya pasó una vez: `ui_mode: "embedded_page"` compilaba y devolvía **400** contra la API real |
 | 5 | **Nadie ha visto llegar un correo.** Ni el de contacto, ni uno de la cola | `RESEND_API_KEY` está puesta y el código está entero, pero **DL-01 se cumple cuando el revisor recibe respuesta**, no cuando el handler devuelve 200 |
-| 6 | ~~**Los crons siguen sin reloj.**~~ ✅ Los tres corren desde el 30-ago. ⚠️ **La cola de dev sigue sin vaciar**, y ya son **336** avisos (~89 a buzones muertos) | No estalló porque el reloj apunta a prod, no porque se resolviera. Vaciar **antes** de apuntar nada a dev: `QA-LANZAMIENTO.md` §4.6. Y de paso se midió que GitHub entrega **una corrida cada 2-6 h**, no cada 5/15 min |
+| 6 | ~~**Los crons siguen sin reloj.**~~ ✅ Los tres corren desde el 30-ago, y ~~la cola de dev~~ ✅ también se vació ese día (336 → 0) | Cerrado por los dos lados. ⚠️ Lo que queda abierto es la **causa**: el seed usa `@ensenameya.dev`, sin MX, así que la cola se vuelve a llenar sola. Y de paso se midió que GitHub entrega **una corrida cada 2-6 h**, no cada 5/15 min |
 | 7 | **Google no está en prod**, y necesita sus propias credenciales | Si se mergea sin eso, el botón sale roto en producción el día del estreno |
 | 8 | **RV-12 a medias:** el mínimo de 8 está en el formulario, **no en el panel de Auth** | El navegador rechaza 6 y la API los sigue aceptando: la mitad que protege es la que falta |
 | 9 | **Las 5 filas con `timezone = 'UTC'` no se sanearon** | RV-03 las tapa cayendo a la cookie `ey-tz`. Si alguien entra sin cookie, vuelve el síntoma |
@@ -811,9 +811,9 @@ Esta lista es la parte útil del apartado. **Nada de aquí se puede dar por buen
 
 ### Lo primero de mañana, en orden
 
-1. ✅ ~~**dar de alta `APP_BASE_URL` + `CRON_SECRET`**~~ — hecho el 30-ago (en Vercel ya estaba).
-   ⚠️ **Vaciar la cola de correo de dev sigue pendiente** (`QA-LANZAMIENTO.md` §4.6, 336 avisos), y
-   arrancar los jobs **no** arrancó X-01: apuntan a prod y allí no hay cola.
+1. ✅ ~~**dar de alta `APP_BASE_URL` + `CRON_SECRET`**~~ y ~~**vaciar la cola de correo de dev**~~
+   — las dos el 30-ago (en Vercel `CRON_SECRET` ya estaba; la cola eran 336 avisos, hoy 0).
+   ⚠️ Arrancar los jobs **no** arrancó X-01: apuntan a prod y allí no hay cola.
 2. **Probar el camino del dinero de punta a punta** con la solicitud que ya está encolada en dev:
    pago real de test mode → reembolso visible en el panel de Stripe. Cierra los puntos 2, 3 y 4.
 3. **Merge `dev` → `main`**, con su ventana propia y su repaso. Antes: Google en prod, y decidir qué

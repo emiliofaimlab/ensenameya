@@ -58,10 +58,11 @@ código; ausentes, la función se apaga sola en vez de romper:
 > 🟢 **El reloj se encendió el 30-ago y no salió ni un correo, porque apunta a producción.** Las dos
 > variables de GitHub ya están puestas (abajo), pero `APP_BASE_URL` = `https://ensenameya.vercel.app`
 > y la cola de **prod está vacía** (`revisadas: 0` en la pasada de verificación). ⚠️ **La mina sigue
-> armada en dev**, y ha crecido: `select public.process_notifications();` devuelve hoy **336**
-> `pendientes_email`, la más antigua del **11-ago** — no 126, que era el número del 17-ago. El día
-> que alguien apunte `APP_BASE_URL` a dev o a una preview, salen los 336 de golpe y ~89 rebotan.
-> **Vaciar esa cola antes** — procedimiento en `docs/QA-LANZAMIENTO.md` §4.6.
+> 🟢 **Y la mina de dev se desactivó el mismo 30-ago: la cola está VACÍA.** Eran **336**
+> `pendientes_email` (la más antigua del 11-ago, no las 126 del censo del 17-ago); se cerraron las
+> 336 como `failed` siguiendo `docs/QA-LANZAMIENTO.md` §4.6. Hoy `process_notifications()` en dev
+> devuelve `pendientes_email: 0, fallidas: 336`. ⚠️ **Volverá a llenarse**: el seed usa
+> `@ensenameya.dev`, un dominio sin MX — 187 de las 336 iban ahí.
 
 **Y dos que fallan CERRADO**, al revés que las de arriba, porque su ausencia dejaría un endpoint
 público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no corren (§4), y sin
@@ -226,10 +227,9 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
   **preview**: Deployment Protection responde 302 antes de llegar a nuestro código. El workflow de
   reembolsos lo manda por cabecera si existe y **dice qué pasa** si recibe un 3xx; el de correo
   todavía no, así que apuntado a una preview se queda en rojo sin explicar por qué.
-- [x] ⚠️ **La cola vieja de notificaciones no se disparó** — no porque se vaciara, sino porque
-  `APP_BASE_URL` apunta a **producción** y allí la cola está vacía. Los **336** avisos de prueba
-  (~89 a buzones inexistentes) siguen en **dev**, intactos. Vaciarlos sigue pendiente
-  (`docs/QA-LANZAMIENTO.md` §4.6) y es requisito **antes** de apuntar cualquier reloj a dev.
+- [x] ⚠️ **La cola vieja de notificaciones no se disparó** — porque `APP_BASE_URL` apunta a
+  **producción** y allí la cola está vacía. Y el mismo 30-ago **se vació también la de dev**: 336
+  avisos cerrados como `failed` (§4.6). Ya no hay mina que armar al repuntar un reloj a dev.
 
 ### E) Jira — [x] conectado (proyecto `EY`, `faimlab.atlassian.net`).
 
@@ -327,12 +327,12 @@ lo llama ningún reloj:
 
 | Cola | prod | dev |
 | :-- | :-- | :-- |
-| `notifications` (`pendientes_email`) | 0 | **336**, la más antigua del 11-ago |
+| `notifications` (`pendientes_email`) | 0 | **0** — eran 336; vaciada el 30-ago (§4.6) |
 | `refund_requests` (`pending`) | 0 | **2**, sobre PaymentIntents reales de *test mode* |
 
 Los **2 reembolsos de dev** son el caso de prueba que X-01 nunca ha ejercitado: el job jamás ha
-movido un euro, ni en dev ni en prod. Y los **336 correos** son la mina de §1 — no se dispararon por
-suerte de a dónde apunta la variable, no porque se vaciara la cola.
+movido un euro, ni en dev ni en prod. Los **336 correos** que eran la mina de §1 ya no están: se
+cerraron como `failed` el 30-ago.
 
 `status: "ok"` (en vez de `sin-proveedor` / `sin-stripe`) confirma de paso que producción ya tenía
 `RESEND_API_KEY` **y** `STRIPE_API_KEY`: son las propias respuestas del endpoint las que lo dicen.
@@ -421,9 +421,9 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
 - [ ] Branch protection en `main` (ver §3D).
 - [x] **`CRON_SECRET` en Vercel y en GitHub, y `APP_BASE_URL` en GitHub — 30-ago.** Los tres jobs
   corren y dan 200 (§4). En Vercel `CRON_SECRET` ya estaba desde antes; solo faltaba el lado GitHub.
-- [ ] ⚠️ **Vaciar la cola vieja de notificaciones de dev** (336 avisos,
-  `docs/QA-LANZAMIENTO.md` §4.6). Ya no bloquea el cron —apunta a prod, que está vacío— pero sigue
-  siendo requisito antes de apuntar cualquier reloj a dev o a una preview.
+- [x] ✅ **Cola vieja de notificaciones de dev vaciada, 30-ago**: 336 avisos a `failed` (§4.6).
+- [ ] ⚠️ **Arreglar el seed para que no vuelva a llenarse**: usa `@ensenameya.dev`, dominio sin MX
+  (187 de las 336 iban ahí). Mientras siga así hay que repetir §4.6 antes de cada encendido.
 - [ ] **Ejercitar X-01 con los 2 `refund_requests` de dev**: el job de reembolsos no ha movido un
   euro todavía, ni en dev ni en prod. `?simulacro=1` enseña qué mandaría sin mandarlo.
 - [ ] `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel — solo están en local.
@@ -461,4 +461,4 @@ de arriba, porque el CI solo las aplica al mergear a `main`. El workflow de migr
 *Última edición: 2026-08-30 — `APP_BASE_URL` + `CRON_SECRET` dados de alta en GitHub tras 30
 corridas en rojo; corregido que a Vercel le faltaba `CRON_SECRET` (ya estaba); cadencia real de los
 programados de GitHub medida (~2-6 h, no 5/15 min); estado de ramas al día (`main` = `3fca8b2`,
-7 migraciones pendientes, no 30); cola de dev recontada (336 avisos, no 126).*
+7 migraciones pendientes, no 30); cola de dev recontada (336 avisos, no 126) **y vaciada** (§4.6).*

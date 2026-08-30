@@ -432,13 +432,41 @@ de agosto que nunca se enviaron porque no había remitente. Reparto comprobado e
 | `diana@faimlab.com` | 6 | ídem |
 | cuentas `@ensenameya.dev` | ~89 | **~89 REBOTES**: ese dominio no tiene buzón |
 
-⚠️ **AVISO DEL 30-AGO: el reloj YA SE ENCENDIÓ, y esta cola no se disparó — por suerte, no por
-diseño.** `APP_BASE_URL` se dio de alta apuntando a **producción**, y la cola de esta sección vive en
-**dev**. La pasada de verificación devolvió `revisadas: 0`. La mina sigue armada y ha **crecido**:
-`select public.process_notifications();` en dev devuelve hoy **336** `pendientes_email` (la más
-antigua del 11-ago), no las 126 del censo de abajo. **Ese censo hay que rehacerlo antes de ejecutar
-nada**, y este procedimiento sigue siendo requisito **antes** de apuntar cualquier reloj a dev o a
-una preview.
+🟢 **EJECUTADO EL 30-AGO. La cola de dev está vacía: `pendientes_email: 0, fallidas: 336`.**
+
+Antes de eso pasaron dos cosas el mismo día. El reloj se encendió (`APP_BASE_URL` + `CRON_SECRET` en
+GitHub) **sin** haber vaciado la cola, saltándose el orden que manda esta sección — y no costó nada
+solo porque `APP_BASE_URL` apunta a **producción** y esta cola vive en **dev**. Después se ejecutó el
+procedimiento de verdad.
+
+**El censo real no fue el de abajo, y por dos motivos.** Eran **336**, no 126 — la cola siguió
+creciendo del 17 al 30-ago. Y había **más dominios de los que decía**:
+
+| Dominio | Cerradas | Qué es |
+| :-- | --: | :-- |
+| `ensenameya.dev` | **187** | 13 buzones del seed. **Dominio sin MX**: eran 187 rebotes garantizados |
+| `faimlab.com` | 95 | equipo (`veronica@` 50, `jose@` 23, `diana@` 7, `ennis@` 4) + `josetest*` |
+| `gmail.com` | 22 | `ejfaim@`, `codefaim@`, `correo@`, `dianacriverao@` |
+| `pruebas.com` | 20 | `mas@pruebas.com` |
+| `ey.com` | 11 | `estudiantenuevo@`, `nuevotutor@`, `tutornuevoprueba@` |
+| `emilioensen.com` | 1 | `prueba@` |
+
+Las 15 direcciones entregables eran equipo o cuentas de prueba evidentes. **Ni un usuario de fuera** —
+se comprobó una a una antes de tocar nada, que es para lo que existe el paso 1.
+
+Por plantilla, las tres primeras: `cancellation` 126, `payment_failed` 57, `payment_receipt` 32.
+
+**Cómo se ejecutó, que no fue con el SQL de abajo.** No hace falta el editor SQL: las dos RPC del job
+(`pending_email_notifications` y `mark_notification`, ambas `security definer` y concedidas a
+`service_role`) llegan al mismo sitio por la API REST, y `mark_notification(id, false)` hace
+exactamente el `update ... set status='failed'` de abajo —con el mismo `and status = 'pending'` y el
+mismo `sent_at` nulo—. Se leyó en dos vueltas de 200 y se cerraron 336 con 0 errores. Ojo: por la API
+**no** se puede leer `public.notifications` directamente (no tiene `grant select` a `service_role`,
+regla de oro 9), pero las RPC sí funcionan.
+
+⚠️ **Esto vuelve a pasar.** 187 de las 336 iban a `@ensenameya.dev`, que sigue sin MX. Mientras el
+seed no use direcciones que acepten correo, hay que repetir este procedimiento antes de cada
+encendido — ver el aviso del final de la sección.
 
 **Por qué importa y no es cosmético.** La cuenta de Resend es nueva y no tiene historial de envío.
 Estrenarla con ~89 rebotes es la forma más rápida de que limiten o suspendan el envío — y es
@@ -450,8 +478,12 @@ de prueba que a nadie le importan.
 variables— **se saltó el 30-ago**: las variables entraron primero. No costó nada porque apuntan a
 prod, pero la lección se mantiene y ahora aplica al siguiente reloj: **antes de que ningún cron
 apunte a dev o a una preview**, primero el censo, luego el `update`. El interruptor son **dos** cosas
-(clave de Resend **y** reloj) y las dos están ya puestas: lo único que separa esos 336 correos de la
-bandeja de alguien es el valor de una variable.
+(clave de Resend **y** reloj) y las dos están ya puestas: lo único que separaba esos 336 correos de
+la bandeja de alguien era el valor de una variable. Ya no: la cola está en 0.
+
+> Lo que sigue es el procedimiento **tal como se escribió el 17-ago**, con sus 126. Se conserva
+> entero porque hay que volver a ejecutarlo cada vez que el seed vuelva a llenar la cola; los números
+> reales de la pasada del 30-ago están arriba.
 
 **1) Censo — confirmar que los números siguen siendo estos.** Desde el SQL editor de **dev** (hace
 falta leer `auth.users`, así que esto no sale por la API):

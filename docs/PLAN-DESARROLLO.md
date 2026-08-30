@@ -1381,7 +1381,7 @@ misma marca sin conectar, con **dos juegos de términos**. Ningún merge lo arre
 | ~~**Que todo esto llegue a producción**~~ | ✅ **el merge se hizo el 26-ago** (`3fca8b2`). Hoy `dev` va 52 commits y **7** migraciones por delante, no 20 | Jose |
 | ~~Correos (`EY-73`)~~ | ✅ `RESEND_API_KEY` (17-ago) + `APP_BASE_URL` y `CRON_SECRET` en GitHub (30-ago). ⚠️ Queda **ver llegar un correo**: el reloj apunta a prod y allí la cola está vacía | Jose |
 | ~~Purga de grabaciones (RN-42)~~ | ✅ `CRON_SECRET` en Vercel ya estaba. Sigue sin haber nada que purgar: falta el add-on de Daily | Jose |
-| **Vaciar la cola de correo de dev** | 336 avisos `pending` (~89 a buzones muertos) desde el 11-ago — `QA-LANZAMIENTO.md` §4.6 | Jose |
+| ~~**Vaciar la cola de correo de dev**~~ | ✅ **hecho el 30-ago**: 336 avisos a `failed` (§4.6). ⚠️ Vuelve a llenarse sola mientras el seed use `@ensenameya.dev` (sin MX): 187 de las 336 iban ahí | Jose |
 | **Ejercitar X-01** | 2 `refund_requests` `pending` en dev; el job **no ha movido un euro** todavía | Jose |
 | Referidos (`EY-78`/`EY-79`) | `NEXT_PUBLIC_REFERRAL_URL` + `REFERRAL_FACTORY_API_KEY` en Vercel, **y rehacer la atribución por email** | Jose |
 | Términos de la campaña de RF | están sin rellenar (plantilla con corchetes) | Cliente / Jose |

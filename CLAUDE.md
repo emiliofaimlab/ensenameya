@@ -129,13 +129,13 @@ pasada de verificación devolvió `status:"ok"` en los dos endpoints, o sea que 
 Sin verificar siguen `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY`.
 
 ⚠️ **Verde no es lo mismo que útil.** Los dos relojes apuntan a **producción**, donde las dos
-colas están **vacías**. Lo encolado está en **dev**, donde no llega ningún reloj: **336** avisos
-de correo `pending` (el más antiguo del 11-ago) y **2** `refund_requests`. O sea que **X-01
-sigue sin mover un euro** y **nadie ha visto llegar un correo de la cola**, con la diferencia de
-que ahora hay dos jobs en verde que pueden hacer creer lo contrario. Y antes de apuntar ningún
-reloj a dev: vaciar esa cola primero (`docs/QA-LANZAMIENTO.md` §4.6), porque ~89 de los 336 van
-a buzones que no existen y estrenar Resend con 89 rebotes es la vía rápida a que limiten el
-envío.
+colas están **vacías**. Y la de correo de **dev** también, desde el 30-ago: eran **336** avisos
+`pending` del 11-ago en adelante y se cerraron como `failed` (`docs/QA-LANZAMIENTO.md` §4.6).
+Lo que sigue esperando en dev son **2** `refund_requests`, así que **X-01 sigue sin mover un
+euro** y **nadie ha visto llegar un correo de la cola** — con la diferencia de que ahora hay dos
+jobs en verde que pueden hacer creer lo contrario. ⚠️ **La cola de dev volverá a llenarse**: el
+seed usa `@ensenameya.dev`, un dominio sin MX, y 187 de las 336 iban ahí. Hasta que eso cambie,
+§4.6 hay que repetirlo antes de apuntar un reloj a dev.
 El endpoint de Stripe apunta a la preview con `?x-vercel-protection-bypass=…`: sin eso
 Deployment Protection devuelve 302 antes de que corra nuestro código.
 
