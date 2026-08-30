@@ -514,7 +514,7 @@ cascada y un cambio de ventana que toca el reloj del dinero— y porque le falta
 | **P-9** — quién absorbe el descuento | Cliente, vía Verónica | MN-14b |
 | **P-10** — el snippet de widget de Referral Factory | RF | MN-12 |
 | **P-3** — qué URL se presentó a dLocal | Cliente | MN-13, MN-03 |
-| `STRIPE_PUBLISHABLE_KEY`, `CRON_SECRET` y `APP_BASE_URL` | Jose (paneles) | Revisar la tanda B · que un reembolso mueva un euro |
+| ~~`CRON_SECRET` y `APP_BASE_URL`~~ | ✅ **hecho el 30-ago** — `CRON_SECRET` ya estaba en Vercel; faltaba el lado GitHub, y su ausencia costó **30 corridas en rojo**. Queda `STRIPE_PUBLISHABLE_KEY` | Revisar la tanda B · **que un reembolso mueva un euro sigue sin pasar**: el cron corre contra prod y los 2 `refund_requests` `pending` están en dev |
 
 ---
 

@@ -102,7 +102,7 @@ git push origin dev    # el CI la aplica a dev; a prod llega al mergear a main
 ├─ supabase/
 │  ├─ config.toml           # config del CLI de Supabase (link, migraciones)
 │  └─ migrations/           # esquema versionado (fuente de verdad)
-├─ .github/workflows/       # CI: migraciones (dev/prod) + lint/typecheck
+├─ .github/workflows/       # CI: migraciones (dev/prod) + lint/typecheck + 2 crons
 └─ docs/
    ├─ BACKLOG.md · PLAN-DESARROLLO.md · ENTORNOS.md
    └─ context/              # Docs 0–9 + adenda + revisión + aprobación cliente

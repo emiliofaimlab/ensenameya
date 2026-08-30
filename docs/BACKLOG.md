@@ -51,10 +51,9 @@
 > `PAC-03` hechas por esa pata. Y un hallazgo que **cambia el alcance de EP-13**: el mecanismo de
 > `US-1302` no funciona con la campaña de referidos que hay montada. Todo en **§4.5**.
 >
-> ⚠️ **Sigue sin haber nada de esto en producción.** `main` sigue en `57edfa9` (29-jul); `dev`, en
-> `3529655`. Ya **no** hacen falta dos merges: queda **uno solo, `dev` → `main`**, y con él llegan
-> **20 migraciones que prod no tiene** (`20260729130000` … `20260806180000`) — eran 12 el 4-ago; se
-> sumaron 8 entre el 5 y el 6 de agosto.
+> ⚠️ ~~**Sigue sin haber nada de esto en producción.**~~ **Desplegado el 26-ago** (`main` =
+> `3fca8b2`). El párrafo describía el estado al 7-ago, cuando `main` seguía en `57edfa9` y faltaban
+> 20 migraciones. Al **30-ago** quedan **7** por aplicar y `dev` va 52 commits por delante.
 
 ---
 
@@ -231,13 +230,16 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 > marcaba la cola **entera** como `sent` cada 2 minutos sin enviar nada, así que cualquier remitente
 > externo habría llegado siempre a una cola vacía. Ahora esa función solo **informa** (mismo patrón que
 > la pausa de la purga del chat, `20260722200000`: no se borra ni se desprograma, "si se desprograma,
-> se olvida") y el envío real lo hace `/api/cron/notifications-send` cada 5 minutos **por GitHub
-> Actions** — Vercel Hobby limita los crons a **uno al día**, y un aviso de "tienes 24 h para aceptar"
-> que llega mañana no sirve. 🐞 **Y un defecto de catálogo encontrado al probarlo: NTF-07** ("tienes
+> se olvida") y el envío real lo hace `/api/cron/notifications-send` **por GitHub Actions** — Vercel
+> Hobby limita los crons a **uno al día**, y un aviso de "tienes 24 h para aceptar" que llega mañana
+> no sirve. ⚠️ El `cron:` pide 5 minutos pero **GitHub entrega una corrida cada 2-6 h** (medido del
+> 27 al 30-ago): mejor que una al día, lejos de lo que dice el archivo. 🐞 **Y un defecto de catálogo encontrado al probarlo: NTF-07** ("tienes
 > una reserva nueva por aceptar") se encolaba al pasar a `confirmed`, o sea **después** de que el tutor
 > aceptara; ahora se encola en `pending_acceptance` (`20260806160000`), con la misma clave de
-> idempotencia, así que no duplica. **Falta la cuenta de Resend y su `RESEND_API_KEY`**: sin ella el
-> job no toca la cola (los avisos quedan `pending`, no `failed`).
+> idempotencia, así que no duplica. ~~**Falta la cuenta de Resend y su `RESEND_API_KEY`**~~ →
+> ✅ **puesta el 17-ago** en local, Preview y Production; comprobado el 30-ago (el cron devuelve
+> `status:"ok"`, no `sin-proveedor`). El reloj también está desde el 30-ago, pero apunta a **prod**,
+> donde la cola está vacía: **nadie ha visto llegar todavía un correo de la cola**.
 
 ### EP-13 — Referidos · S4
 | US | Historia | MoSCoW | SP | S | Criterio de aceptación | Refs |
@@ -961,11 +963,11 @@ hay detrás borra o cobra). Eran tres el 29-jul; al 7-ago son estas:
 | `DAILY_API_KEY` | sala real de Daily (sin ella, sala simulada) | — |
 | `NEXT_PUBLIC_REFERRAL_URL` | bloque "Invita y gana" (`EY-78`) | **Vercel** (está en local) |
 | `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` | monitoreo de errores (`EY-80`) | — |
-| `CRON_SECRET` | cron de purga de grabaciones (`EY-86`) — **sin ella responde 503 y no corre** | **Vercel** y **secret de GitHub** |
+| `CRON_SECRET` | los **tres** crons (purga `EY-86`, correo `US-1201`, reembolsos X-01) — **sin ella responden 503 y no corren** | ✅ **puesta**: Vercel ya la tenía, GitHub desde el **30-ago** |
 | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET` | checkout y webhook de Stripe (`EY-93`/`EY-95`) | ✅ ya en Vercel, scope **Preview** |
-| `RESEND_API_KEY` | envío real de correo (`US-1201`) — sin ella la cola se queda `pending`, no `failed` | **todas** (falta la cuenta) |
+| `RESEND_API_KEY` | envío real de correo (`US-1201`) — sin ella la cola se queda `pending`, no `failed` | ✅ **puesta el 17-ago** (local, Preview y Production) |
 | `REFERRAL_FACTORY_API_KEY` | atribución de referidos contra la API de RF | **Vercel** (está en local) |
-| `APP_BASE_URL` (variable de repo en GitHub) | el workflow de notificaciones cada 5 min | **GitHub** — sin ella el job sale **en rojo cada 5 minutos** |
+| `APP_BASE_URL` (variable de repo en GitHub) | los workflows de correo y de reembolsos | ✅ **puesta el 30-ago** (`https://ensenameya.vercel.app`), tras **30 corridas en rojo**. ⚠️ Y la cadencia que entrega GitHub es **una cada 2-6 h**, no los 5/15 min que piden los `cron:` |
 
 **Decisiones del cliente (`C-xx`) al 7-ago.** **Resueltas:** C-01 (proveedor → **DLocal + Stripe**; lo
 que bloquea el Sprint 6 AC son las **cuentas y claves**, no la decisión), C-03 (RN-37), **C-14** (los

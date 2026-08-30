@@ -249,9 +249,9 @@ entró en el barrido.
 ### 4.1 Antes de abrir
 
 - [ ] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`). Al
-      **17-ago** faltan **30**: de `20260729130000_us1302_referral_code` a
-      `20260817180000_m02_acepta_sola_por_mentoria`. Sigue siendo **un solo** merge (`dev` → `main`),
-      pero ya no es un merge pequeño — 85 commits y 30 migraciones de una tacada.
+      **30-ago** faltan **7** (prod tiene 111 de 118), de `20260827200000_m02_retira_el_auto_aceptar_global`
+      a `20260828183000_cierre_automatico_de_sesiones_nunca_corrio`. Las 30 que listaba este punto
+      entraron con el merge del **26-ago** (`3fca8b2`): vuelve a ser un merge de una semana.
 - [ ] **`npm run db:types` regenerado** y sin cambios pendientes en el PR.
 - [ ] **`lint` + `typecheck` + `build`** en verde.
 - [ ] **Cuenta de admin sembrada** en prod (`supabase/seed/admin-bootstrap.sql`) — y **completar su
@@ -300,23 +300,26 @@ RN-37 ya es código. Las dos se reconcilian **con el cliente**, no en el repo.
 
 Detalle en `docs/ENTORNOS.md`. **`service_role` jamás en `NEXT_PUBLIC_*`** (regla de oro 3).
 
-**Estado real al 17-ago.** Se repartieron las de Stripe a **Production** y se dio de alta
-`RESEND_API_KEY` en local, Preview y Production. Faltan por poner:
+**Estado real al 30-ago.** Quedan por poner:
 
-- [ ] `CRON_SECRET` en Vercel (Preview y Production) — sin ella los tres crons responden 503.
+- [x] ~~`CRON_SECRET` en Vercel~~ — **ya estaba**. Comprobado el 30-ago sin abrir el panel: sin la
+      variable el endpoint responde 503 y con ella 401, y un `curl` sin cabecera a
+      `https://ensenameya.vercel.app/api/cron/notifications-send` devuelve **401**.
 - [ ] `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel (la URL de campaña es
       `https://vercel.referral-factory.com/cXr65Wou/signup`).
 
 **Y en GitHub**, que es donde viven los relojes del correo y de los reembolsos
 (`.github/workflows/notifications-cron.yml` y `refunds-cron.yml`, que comparten las dos):
 
-- [ ] variable `APP_BASE_URL`
-- [ ] secret `CRON_SECRET` — **el mismo valor que en Vercel**
+- [x] variable `APP_BASE_URL` = `https://ensenameya.vercel.app` — **30-ago**
+- [x] secret `CRON_SECRET`, el mismo valor que en Vercel — **30-ago**
 - [ ] *(opcional)* secret `VERCEL_PROTECTION_BYPASS`, solo si `APP_BASE_URL` apunta a una preview
 
-Sin las dos primeras los workflows **fallan en rojo** cada 5 y cada 15 minutos, y es a propósito: el
-503 ("no hay `CRON_SECRET` en Vercel") y el 401 ("no coincide") son configuración a medias, que es
-exactamente lo que son. ⚠️ **Antes de darlas de alta, §4.6.**
+⚠️ **Estas dos faltaron durante cuatro días con los workflows ya en `main`, y el resultado fue
+exactamente el diseñado: 30 corridas en rojo (15 y 15) entre el 27 y el 30-ago, el 100 % de las que
+hubo.** El fallo cerrado hizo su trabajo; lo que no había era nadie leyendo los correos de GitHub.
+Si algún día vuelve a pasar, el diagnóstico son diez segundos: `gh variable list` y `gh secret list`
+sobre el repo — si salen vacías, es esto y no el endpoint.
 
 ### 4.3 Jobs de `pg_cron` (verificar que existen en prod)
 
@@ -429,9 +432,13 @@ de agosto que nunca se enviaron porque no había remitente. Reparto comprobado e
 | `diana@faimlab.com` | 6 | ídem |
 | cuentas `@ensenameya.dev` | ~89 | **~89 REBOTES**: ese dominio no tiene buzón |
 
-`RESEND_API_KEY` ya está puesta desde el 17-ago, así que **lo único que falta para que salgan todas
-de golpe es el reloj**: en cuanto se den de alta `APP_BASE_URL` y `CRON_SECRET` en GitHub, la primera
-pasada coge las 50 más viejas y las siguientes el resto, en menos de quince minutos.
+⚠️ **AVISO DEL 30-AGO: el reloj YA SE ENCENDIÓ, y esta cola no se disparó — por suerte, no por
+diseño.** `APP_BASE_URL` se dio de alta apuntando a **producción**, y la cola de esta sección vive en
+**dev**. La pasada de verificación devolvió `revisadas: 0`. La mina sigue armada y ha **crecido**:
+`select public.process_notifications();` en dev devuelve hoy **336** `pendientes_email` (la más
+antigua del 11-ago), no las 126 del censo de abajo. **Ese censo hay que rehacerlo antes de ejecutar
+nada**, y este procedimiento sigue siendo requisito **antes** de apuntar cualquier reloj a dev o a
+una preview.
 
 **Por qué importa y no es cosmético.** La cuenta de Resend es nueva y no tiene historial de envío.
 Estrenarla con ~89 rebotes es la forma más rápida de que limiten o suspendan el envío — y es
@@ -439,10 +446,12 @@ exactamente lo que hace falta que funcione para **DL-01**, el formulario de cont
 de dLocal va a probar a mano esperando respuesta. Se perdería la validación por un montón de correos
 de prueba que a nadie le importan.
 
-**Cuándo ejecutarlo.** En la **misma ventana** en la que se configura Actions y **antes** de guardar
-la segunda variable: primero el censo, luego el `update`, luego `APP_BASE_URL` + `CRON_SECRET`. El
-orden importa porque el interruptor son **dos** cosas (clave de Resend **y** reloj) y ya hay una
-puesta; en cuanto entre la otra, no hay marcha atrás.
+**Cuándo ejecutarlo.** El orden que decía este párrafo —censo, `update`, y solo entonces las dos
+variables— **se saltó el 30-ago**: las variables entraron primero. No costó nada porque apuntan a
+prod, pero la lección se mantiene y ahora aplica al siguiente reloj: **antes de que ningún cron
+apunte a dev o a una preview**, primero el censo, luego el `update`. El interruptor son **dos** cosas
+(clave de Resend **y** reloj) y las dos están ya puestas: lo único que separa esos 336 correos de la
+bandeja de alguien es el valor de una variable.
 
 **1) Censo — confirmar que los números siguen siendo estos.** Desde el SQL editor de **dev** (hace
 falta leer `auth.users`, así que esto no sale por la API):
@@ -486,7 +495,9 @@ commit;
 ```
 
 **3) Comprobar.** `select public.process_notifications();` → `pendientes_email` en 0 (o solo lo
-nuevo). Después ya se pueden dar de alta `APP_BASE_URL` y `CRON_SECRET`.
+nuevo). ~~Después ya se pueden dar de alta `APP_BASE_URL` y `CRON_SECRET`.~~ Ya están dadas de alta
+(30-ago) y apuntan a prod; lo que habilita este paso es **repuntar el reloj a dev**, si algún día
+hace falta.
 
 **Las cuatro decisiones que hay detrás, por si alguien las discute más adelante:**
 

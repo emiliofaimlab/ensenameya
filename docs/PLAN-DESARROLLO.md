@@ -36,6 +36,12 @@
 >
 > ⚠️ Y `docs/BACKLOG.md` **ya no es espejo de Jira**: ninguna de las nueve fichas de EP-25/EP-26/EP-27
 > aparece en él.
+>
+> 🔵 **Repaso de variables y crons, 30-ago.** Las tablas de variables de este doc (y las de
+> `ENTORNOS.md`, `QA-LANZAMIENTO.md` y `BACKLOG.md`) daban por ausentes en Vercel `CRON_SECRET` y
+> `RESEND_API_KEY`, que **llevaban semanas puestas**. Lo que de verdad faltaba era el lado GitHub, y
+> su ausencia dejó **30 corridas en rojo** en los dos crons de Actions. Corregido en línea donde
+> tocaba; el relato completo, con la cadencia real medida, está en **`docs/ENTORNOS.md` §4**.
 
 ---
 
@@ -1053,14 +1059,19 @@ falla, se desactiva — y ponerla no toca código. _(Ampliada el 6-ago con las c
 | `NEXT_PUBLIC_REFERRAL_URL` | bloque "Invita y gana" (`EY-78`) | el bloque **no se pinta** |
 | `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` | monitoreo (`EY-80`) | Sentry **apagado** |
 | `RESEND_API_KEY` | envío real de correo (`EY-73`) | el job **no toca la cola**: los avisos quedan `pending` (no `failed`) y salen todos en la primera pasada con clave |
-| `CRON_SECRET` | los dos jobs HTTP (purga de grabaciones, envío de correo) | **503 y no corre** — falla cerrado, a propósito: un endpoint que borra datos o dispara correos sin secreto sería público |
+| `CRON_SECRET` | los **tres** jobs HTTP (purga de grabaciones, envío de correo, **cola de reembolsos**) | **503 y no corre** — falla cerrado, a propósito: un endpoint que borra datos, dispara correos o **mueve dinero** sin secreto sería público. ✅ Puesta en Vercel y en GitHub (30-ago) |
 | `STRIPE_API_KEY` | checkout de Stripe (`EY-93`) | `/api/pagos/checkout` responde `{simulated:true}` y sigue el camino simulado |
 | `STRIPE_WEBHOOK_SECRET` | webhook firmado (`EY-95`) | **503** y no procesa nada |
 
 ⚠️ **`CRON_SECRET` no es como los demás.** Los otros interruptores apagan una función que nadie echa
-de menos; este apaga **la purga que sostiene un compromiso de privacidad publicado** (RN-42, 30 días).
-Sin él en Vercel, el cron de las 04:00 responde 503 todos los días **en silencio** y las grabaciones
-no caducan.
+de menos; este apaga **la purga que sostiene un compromiso de privacidad publicado** (RN-42, 30 días)
+y **la cola de reembolsos**. Sin él en Vercel, el cron de las 04:00 responde 503 todos los días **en
+silencio** y las grabaciones no caducan.
+
+> 🟢 **Resuelto el 30-ago, y con una vuelta de tuerca.** En Vercel `CRON_SECRET` **ya estaba** —este
+> documento y `ENTORNOS.md` decían lo contrario desde el 6-ago—; lo que faltaba era el lado **GitHub**
+> (`APP_BASE_URL` + `CRON_SECRET`), y sin él los dos workflows de Actions llevaban **30 corridas en
+> rojo** desde el 27-ago. Detalle y comprobación en `docs/ENTORNOS.md` §4.
 
 ---
 
@@ -1196,10 +1207,12 @@ purga del chat (`20260722200000`): la función no se borra ni se desprograma el 
 desprograma, se olvida"— sino que pasa a **informar**. Ahora `select process_notifications();` dice
 cuánto hay encolado, así que si el remitente se cae **la cola se ve crecer** en vez de desaparecer.
 
-**El envío** lo hace **`/api/cron/notifications-send` cada 5 minutos vía GitHub Actions**, y no Vercel
-Cron: **Hobby limita los crons a uno al día**, y un aviso de "tienes 24 h para aceptar esta reserva"
-que llega mañana no sirve de nada. El workflow documenta los dos peajes de Actions (retrasos de 10-15
-min con la cola cargada; GitHub desactiva los programados tras 60 días sin actividad en el repo).
+**El envío** lo hace **`/api/cron/notifications-send` vía GitHub Actions**, y no Vercel Cron: **Hobby
+limita los crons a uno al día**, y un aviso de "tienes 24 h para aceptar esta reserva" que llega
+mañana no sirve de nada. El workflow documenta los dos peajes de Actions (retrasos con la cola
+cargada; GitHub desactiva los programados tras 60 días sin actividad en el repo). ⚠️ **El `cron:`
+pide 5 minutos y GitHub entrega una corrida cada 2-6 horas** — medido sobre las corridas reales del
+27 al 30-ago, no es el "10-15 min" del manual.
 
 - **Dos RPC y ningún grant de tabla**: el correo del destinatario vive en `auth.users`, que no está
   expuesto por la Data API. En vez de abrir `notifications` a `service_role` se le dan dos verbos —
@@ -1337,18 +1350,21 @@ column-grants que el proyecto ya usaba.
 
 | Variable | Local | Vercel | GitHub |
 | :-- | :-- | :-- | :-- |
-| `CRON_SECRET` | ✅ | ❌ **falta** (sin ella el cron de grabaciones responde 503) | ❌ **falta** (secret) |
+| `CRON_SECRET` | ✅ | ✅ **sí** (comprobado 30-ago; este doc la daba por ausente desde el 6-ago) | ✅ **sí (30-ago)** (secret) |
 | `STRIPE_API_KEY` | ✅ | ✅ (Preview) | — |
 | `STRIPE_PUBLISHABLE_KEY` | ✅ | — | — |
 | `STRIPE_WEBHOOK_SECRET` | ✅ | ✅ (Preview) | — |
-| `RESEND_API_KEY` | ❌ (falta la cuenta) | ❌ **falta** | — |
+| `RESEND_API_KEY` | ❌ (falta la cuenta) | ✅ **sí (17-ago)** — comprobado el 30-ago: el cron devuelve `status:"ok"`, no `sin-proveedor` | — |
 | `NEXT_PUBLIC_REFERRAL_URL` | ✅ | ❌ **falta** | — |
 | `REFERRAL_FACTORY_API_KEY` | ✅ | ❌ **falta** | — |
-| `APP_BASE_URL` | — | — | ❌ **falta** (variable) |
+| `APP_BASE_URL` | — | — | ✅ **sí (30-ago)**: `https://ensenameya.vercel.app` (variable) |
 
-⚠️ **El workflow de notificaciones falla en rojo cada 5 minutos** hasta que estén `APP_BASE_URL` y
-`CRON_SECRET` en GitHub — está escrito así a propósito (`exit 1`), porque una configuración a medias
-que se ve en verde es peor que una que se ve en rojo.
+⚠️ **Esto se cumplió al pie de la letra, y nadie lo miró.** El workflow está escrito para fallar en
+rojo (`exit 1`) porque una configuración a medias en verde es peor que una en rojo — y desde que
+llegó a `main` (26-ago) falló **el 100 % de las veces**: **30 corridas rojas** entre los dos crons
+hasta que el 30-ago se dieron de alta las dos variables. La alarma funcionó; el destinatario era una
+bandeja de entrada. Segunda cosa que se aprendió midiendo: **la cadencia de "cada 5 minutos" es
+ficción** — GitHub entrega una corrida cada **2-6 horas** (`docs/ENTORNOS.md` §4).
 ⚠️ De paso: `.env.example` **no documenta `STRIPE_WEBHOOK_SECRET` ni `RESEND_API_KEY`**, aunque el
 código las usa.
 
@@ -1362,9 +1378,11 @@ misma marca sin conectar, con **dos juegos de términos**. Ningún merge lo arre
 
 | Para | Falta | De quién |
 | :-- | :-- | :-- |
-| **Que todo esto llegue a producción** | el merge `dev`→`main` (20 migraciones entran por CI) | Jose |
-| Correos (`EY-73`) | cuenta de Resend + `RESEND_API_KEY`; `APP_BASE_URL` y `CRON_SECRET` en GitHub | Jose |
-| Purga de grabaciones (RN-42) | `CRON_SECRET` en Vercel — **hoy el cron responde 503 en silencio** | Jose |
+| ~~**Que todo esto llegue a producción**~~ | ✅ **el merge se hizo el 26-ago** (`3fca8b2`). Hoy `dev` va 52 commits y **7** migraciones por delante, no 20 | Jose |
+| ~~Correos (`EY-73`)~~ | ✅ `RESEND_API_KEY` (17-ago) + `APP_BASE_URL` y `CRON_SECRET` en GitHub (30-ago). ⚠️ Queda **ver llegar un correo**: el reloj apunta a prod y allí la cola está vacía | Jose |
+| ~~Purga de grabaciones (RN-42)~~ | ✅ `CRON_SECRET` en Vercel ya estaba. Sigue sin haber nada que purgar: falta el add-on de Daily | Jose |
+| **Vaciar la cola de correo de dev** | 336 avisos `pending` (~89 a buzones muertos) desde el 11-ago — `QA-LANZAMIENTO.md` §4.6 | Jose |
+| **Ejercitar X-01** | 2 `refund_requests` `pending` en dev; el job **no ha movido un euro** todavía | Jose |
 | Referidos (`EY-78`/`EY-79`) | `NEXT_PUBLIC_REFERRAL_URL` + `REFERRAL_FACTORY_API_KEY` en Vercel, **y rehacer la atribución por email** | Jose |
 | Términos de la campaña de RF | están sin rellenar (plantilla con corchetes) | Cliente / Jose |
 | Cobro real (live mode) | `sk_live_` — o sea el KYC de Stripe del cliente | Cliente |
@@ -1441,10 +1459,12 @@ Los tres los encontró una **revisión adversarial** posterior o el navegador. N
 
 ### 🛠️ Y una lección de método
 
-Los agentes con worktree **se crean desde `main`**, que va 141 commits y 44 migraciones por detrás.
+Los agentes con worktree **se crean desde `main`**, que iba entonces 141 commits y 44 migraciones por
+detrás. ⚠️ **Ya no**: tras el merge del 26-ago (`3fca8b2`), `main` está a 52 commits y 7 migraciones
+de `dev` — el `git merge dev` previo sigue haciendo falta, pero ya no es una base fantasma.
 Quien no hace `git merge dev` antes de leer nada escribe sobre una base fantasma. De cinco agentes,
 uno perdió su ejecución entera diagnosticando el git en vez de su ficha.
 
 ---
 
-*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: **2026-08-26** (la jornada de los agentes: 46 commits, 10 migraciones y nueve fichas a `In Review`; y sobre todo **tres fallos que pasaron typecheck, lint y build y solo aparecieron al ejecutar** — los dos de `anonymize_account` (42501 de Storage y 428C9 de columna generada) y el panel de reserva, cuyo «arreglo» tapaba 11 de 15 chips de hora sobre una premisa falsa. De rebote: **`purge_expired_messages` hace el mismo `delete` prohibido sobre Storage** y es el cron de la retención que publican los legales; **no existe forma de reprogramar** aunque la FAQ lo prometa; `home_testimonials` publicaba borradores. ⚠️ Entre el 8 y el 25 de agosto hay un hueco deliberado en este relato — ver el aviso del encabezado. Previo: 2026-08-07 (**relato del 5–6 de agosto, tanda a tanda**: la **PR #11 se mergeó** (`1a36da2`, 5-ago) — se acabó el "dos merges", queda **uno** (`dev`→`main`) y las migraciones pendientes de prod pasan de **12 a 20**; `dev` va **43 commits** por delante de `main`. Pulido del 5-ago (5 commits, con la regresión del filtro de precio y el catálogo que dependía de quién miraba); **páginas legales redactadas** y el hallazgo de que el cliente ya tenía términos publicados en `ensenameya.com` desde marzo (buzón real `info@ensenameya.com`); 🐞 **US-1802 no encontraba ninguna grabación** (nombre de sala) y **la retención de 30 días ya borra de verdad**; 🔒 **`confirm_payment` sale del alcance del cliente** y se parte en dos; **C-11 RESUELTA → Resend**, con el stub que vaciaba la cola apagado y 🐞 **NTF-07 avisaba después de aceptar**; **Stripe PAC-01/PAC-03 verificados de punta a punta en test mode** contra la preview con webhook firmado — la premisa de `EY-92` ("esperar a ambas cuentas") era falsa; 🔎 **la campaña de Referral Factory no manda código**, así que la atribución de US-1302 hay que rehacerla por email y **RF-03 (`EY-148`) probablemente sobra**; lección repetida tres veces: **`service_role` no se salta los grants de tabla**; **dLocal rechazó la cuenta** y el fondo son los dos dominios sin conectar. Previo: 2026-08-04 (**pasada de veracidad contra el repo y Jira**: el proyecto lleva **8 sprints**, no 4; **DD-04 rehecho** como vista `tutors_public` + rango logarítmico (`cccb566`/`96f4e0b`, migración `20260804120000`); limpieza de código muerto (`9e56afb`/`63a7896`) y `AdminShell`+`TutorShell`→`PanelShell`; recuperado el bloque de commits del **27–28 jul**; **`EY-109` se arregló dos veces** y la buena es la del 27-jul (`b032cc5`), no la del 21; las 6 IV de EP-22 están en `Done` desde el 27-jul; Sprint 4, P01 y la captura de `?ref=` marcados como lo que son —hechos—; DD-03…DD-08 todas cerradas; C-06/C-12/C-15 añadidas al tracker. **El código está en la PR #11, no en producción**: `main` y `dev` siguen en `57edfa9` y hay **12 migraciones sin aplicar en prod**. Previo: 2026-07-29 (**las 6 tandas del plan, COMPLETAS**: los 20 tickets abiertos de los sprints 7 y 8 en código, más los 4 compromisos del 24-jul que no tenían ticket; 12 migraciones nuevas; QA con matriz de RLS ejecutada en `docs/QA-LANZAMIENTO.md`. Sprint 6 AC sigue esperando credenciales. Previo: **plan de los sprints 6 AC / 7 / 8**: inventario contra Jira — 20 tickets abiertos y todos en estos tres sprints; 4 compromisos del 24-jul sin ticket; `US-1302` y `DD-05` ya cumplidos a falta de verificar; Sprint 6 AC ejecutable a medias vía Stripe test mode). Previo: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*
+*Documento vivo. Se actualiza con cada rebanada cerrada y se empareja con Jira. Última edición: **2026-08-30** (**repaso de variables y trabajos programados**: `APP_BASE_URL` + `CRON_SECRET` dados de alta en GitHub tras **30 corridas en rojo** de los dos crons de Actions —el 100 % de las que hubo desde el merge del 26-ago—; comprobado que a **Vercel no le faltaba nada**: `CRON_SECRET`, `RESEND_API_KEY` y `STRIPE_API_KEY` ya estaban, y las tablas de este doc llevaban desde el 6-ago diciendo lo contrario; **la cadencia de los `cron` de GitHub es ficción** —pide 5 y 15 min, entrega una cada **2-6 h**, medido sobre 3,5 días—; los dos jobs quedan en **verde pero apuntando a producción, donde las colas están vacías**: los **336** avisos de correo y los **2** reembolsos `pending` viven en **dev** y ahí no llega ningún reloj, así que **X-01 sigue sin mover un euro**; estado de ramas al día: `main` = `3fca8b2`, `dev` +52 commits y **7** migraciones, no 141/44). Previo: **2026-08-26** (la jornada de los agentes: 46 commits, 10 migraciones y nueve fichas a `In Review`; y sobre todo **tres fallos que pasaron typecheck, lint y build y solo aparecieron al ejecutar** — los dos de `anonymize_account` (42501 de Storage y 428C9 de columna generada) y el panel de reserva, cuyo «arreglo» tapaba 11 de 15 chips de hora sobre una premisa falsa. De rebote: **`purge_expired_messages` hace el mismo `delete` prohibido sobre Storage** y es el cron de la retención que publican los legales; **no existe forma de reprogramar** aunque la FAQ lo prometa; `home_testimonials` publicaba borradores. ⚠️ Entre el 8 y el 25 de agosto hay un hueco deliberado en este relato — ver el aviso del encabezado. Previo: 2026-08-07 (**relato del 5–6 de agosto, tanda a tanda**: la **PR #11 se mergeó** (`1a36da2`, 5-ago) — se acabó el "dos merges", queda **uno** (`dev`→`main`) y las migraciones pendientes de prod pasan de **12 a 20**; `dev` va **43 commits** por delante de `main`. Pulido del 5-ago (5 commits, con la regresión del filtro de precio y el catálogo que dependía de quién miraba); **páginas legales redactadas** y el hallazgo de que el cliente ya tenía términos publicados en `ensenameya.com` desde marzo (buzón real `info@ensenameya.com`); 🐞 **US-1802 no encontraba ninguna grabación** (nombre de sala) y **la retención de 30 días ya borra de verdad**; 🔒 **`confirm_payment` sale del alcance del cliente** y se parte en dos; **C-11 RESUELTA → Resend**, con el stub que vaciaba la cola apagado y 🐞 **NTF-07 avisaba después de aceptar**; **Stripe PAC-01/PAC-03 verificados de punta a punta en test mode** contra la preview con webhook firmado — la premisa de `EY-92` ("esperar a ambas cuentas") era falsa; 🔎 **la campaña de Referral Factory no manda código**, así que la atribución de US-1302 hay que rehacerla por email y **RF-03 (`EY-148`) probablemente sobra**; lección repetida tres veces: **`service_role` no se salta los grants de tabla**; **dLocal rechazó la cuenta** y el fondo son los dos dominios sin conectar. Previo: 2026-08-04 (**pasada de veracidad contra el repo y Jira**: el proyecto lleva **8 sprints**, no 4; **DD-04 rehecho** como vista `tutors_public` + rango logarítmico (`cccb566`/`96f4e0b`, migración `20260804120000`); limpieza de código muerto (`9e56afb`/`63a7896`) y `AdminShell`+`TutorShell`→`PanelShell`; recuperado el bloque de commits del **27–28 jul**; **`EY-109` se arregló dos veces** y la buena es la del 27-jul (`b032cc5`), no la del 21; las 6 IV de EP-22 están en `Done` desde el 27-jul; Sprint 4, P01 y la captura de `?ref=` marcados como lo que son —hechos—; DD-03…DD-08 todas cerradas; C-06/C-12/C-15 añadidas al tracker. **El código está en la PR #11, no en producción**: `main` y `dev` siguen en `57edfa9` y hay **12 migraciones sin aplicar en prod**. Previo: 2026-07-29 (**las 6 tandas del plan, COMPLETAS**: los 20 tickets abiertos de los sprints 7 y 8 en código, más los 4 compromisos del 24-jul que no tenían ticket; 12 migraciones nuevas; QA con matriz de RLS ejecutada en `docs/QA-LANZAMIENTO.md`. Sprint 6 AC sigue esperando credenciales. Previo: **plan de los sprints 6 AC / 7 / 8**: inventario contra Jira — 20 tickets abiertos y todos en estos tres sprints; 4 compromisos del 24-jul sin ticket; `US-1302` y `DD-05` ya cumplidos a falta de verificar; Sprint 6 AC ejecutable a medias vía Stripe test mode). Previo: 2026-07-27 (**plan del 24-jul COMPLETO: 🅐 12/12 y 🅑 11/11** — `R24-01…23` en `dev`/`main`. Lo estructural del 27-jul: reserva día→clase→horario con precio dinámico, verificación dentro del onboarding, materiales y FAQ por producto, auto-aceptar, módulo de pagos, bandeja de chat, tz del visitante y fotos independientes. Quedan las **12 decisiones de pago (`C-xx`)** del cliente. Previo: **fila 🅐 COMPLETA — 12/12** en `dev`/`main`, commits `4bd2e51`→`bd3801c`: full-width fluido, hover, burbujas-ícono, buscar por nombre (migración `20260724140000`), buscador global, precio destacado, "Mi cuenta" con sidebar, admin historial/tiers, disponibilidad por día, pantalla cero, 🐞 zona horaria del usuario. Previo 24-jul: plan de acción `R24-01…23` + decisiones 13–30 del cliente cerradas; revisión nodo a nodo COMPLETA del Figma **P01–P09, AL01–AL08, TU01–TU09, AD01–AD15**).*

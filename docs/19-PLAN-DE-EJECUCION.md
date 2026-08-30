@@ -72,8 +72,8 @@ Info@ensenameya.com
 | **H-3** | **`/contacto`**: formulario nombre + correo + mensaje → `POST /api/contacto` → correo real **+ fila en BD** para que nada se pierda si el correo falla · bloque de identidad legal · honeypot | 2–3 h | Jose | 🟠 `dc89ddd` — construido y probado contra el handler. **Nadie ha visto llegar el correo** |
 | **H-4** | **Términos de Néstor, EN + ES.** `legal-doc.tsx` pasa a mapa por idioma · `/terms` (ES) y `/terms/en` (EN, **gobernante**) · exportar `TERMS_VERSION = "2026-08-17"` | 2–3 h | Jose | 🟢 `d2fa263`, con las rutas al revés de lo previsto: `/terms` sirve el **inglés** (es el que gobierna y el que se acepta) y `/terms/es` el español |
 | **H-5** | **Aceptación en el registro:** migración `terms_acceptances` · el dato viaja en el metadata de `signUp` y lo persiste `handle_new_user` · **cerrar el bypass de Google** · la casilla enlaza a la versión **inglesa** | 2 h | Jose | 🟢 `bfc9a13`, los cinco casos verificados contra dev. ⚠️ Las cuentas anteriores a hoy **no tienen fila** |
-| **H-6** | **Variables:** `RESEND_API_KEY` en Vercel · `CRON_SECRET` en Vercel **y** GitHub (mismo valor) · `APP_BASE_URL` en GitHub | 20 min | **Jose (paneles)** | 🟠 **A medias, y a propósito.** `RESEND_API_KEY` puesta y Stripe repartida a producción; `CRON_SECRET` y `APP_BASE_URL` **NO** — encenderlas hoy habría soltado 126 correos de prueba (§19.10) |
-| **H-7** | **Merge `dev` → `main`** y verificar que las tres legales, `/contacto` y el footer están vivos en producción | 1 h | Jose | 🔴 **NO se hizo.** Es lo único importante que no se movió |
+| **H-6** | **Variables:** `RESEND_API_KEY` en Vercel · `CRON_SECRET` en Vercel **y** GitHub (mismo valor) · `APP_BASE_URL` en GitHub | 20 min | **Jose (paneles)** | 🟢 **CERRADA el 30-ago.** Al 17-ago quedó a medias y a propósito (§19.10). Lo que faltaba resultó ser **solo el lado GitHub**: `CRON_SECRET` ya estaba en Vercel. Las dos variables entraron el 30 y los dos workflows pasaron a verde. ⚠️ **Costó 30 corridas en rojo** (27→30-ago) |
+| **H-7** | **Merge `dev` → `main`** y verificar que las tres legales, `/contacto` y el footer están vivos en producción | 1 h | Jose | 🟢 **Hecho el 26-ago** (`3fca8b2`). De rebote es lo que dio reloj a los crons — y lo que destapó H-6, porque a partir del 27 empezaron a fallar en rojo cada pocas horas |
 | **H-8** | Avisar a dLocal | 5 min | Verónica | 🔴 Depende de H-7 |
 
 ### Cuatro avisos de ejecución, para no tropezar
@@ -87,6 +87,9 @@ Info@ensenameya.com
    > la clave (H-3 la necesitaba) y **no** se dieron de alta `CRON_SECRET` ni `APP_BASE_URL`: el
    > gatillo es el cron, y detrás hay **126 correos de prueba** esperando, ~89 de ellos a buzones que
    > no existen. Procedimiento para vaciarlos: `docs/QA-LANZAMIENTO.md` §4.6.
+   > 🔵 **Epílogo del 30-ago.** El cron se encendió **sin** vaciar la cola, y no pasó nada: la
+   > variable `APP_BASE_URL` apunta a **producción**, y esos correos están en **dev**. Fue suerte, no
+   > diseño. Y la cola ha crecido: hoy son **336**, no 126.
 2. **El remitente sigue siendo `onboarding@resend.dev`** porque el dominio propio no está verificado.
    Funciona, pero un correo de contacto que no llega desde `@ensenameya.com` es lo que un revisor
    marca. **Verificar el dominio en Resend hoy si se puede; si no, queda anotado.**
@@ -288,6 +291,12 @@ divergir del código.
 > el camino entero contra Stripe. Hay **una solicitud `pending` esperando en dev**, apuntando a un
 > PaymentIntent de test mode: es el caso listo para esa primera verificación. Hasta que se haga, lo
 > honesto es decir que el dinero **todavía no se ha movido ni una vez**.
+>
+> 🔵 **Al 30-ago: (a) hecho, (b) NO — y el matiz importa.** El workflow corre y devuelve 200, pero
+> apunta a **producción**, donde la cola está vacía. Las solicitudes `pending` —ya son **2**— siguen
+> en **dev**, donde no llega ningún reloj. Así que la frase de arriba se mantiene entera: **el dinero
+> no se ha movido ni una vez**, y ahora además hay un job en verde que puede hacer creer lo
+> contrario.
 
 ### 🔴 X-02 · Se puede cobrar por una clase que ya no existe
 
@@ -787,12 +796,12 @@ Esta lista es la parte útil del apartado. **Nada de aquí se puede dar por buen
 
 | # | Qué | Por qué importa |
 | :-- | :-- | :-- |
-| 1 | **`main` sigue en `57edfa9`, el commit del 29-jul.** 85 commits y **30 migraciones** de retraso | Es el único punto que hace que todo lo demás **exista para quien lo revisa**. Hoy dLocal ve tres 404 legales, sin `/contacto` y con las redes rotas. ⚠️ Y no es un merge de trámite: 30 migraciones de una tacada, con la app nueva contra el esquema viejo si se equivoca el orden |
-| 2 | **X-01 no ha movido un euro.** El job existe y no lo llama nadie | Se añadió `refunds-cron.yml` (cada 15 min), pero **sin `APP_BASE_URL` ni `CRON_SECRET` no corre**. Hay **una solicitud `pending`** esperando en dev sobre un PaymentIntent real de test mode: ese es el caso de la primera prueba |
+| 1 | ~~**`main` sigue en `57edfa9`.**~~ ✅ **Mergeado el 26-ago** (`3fca8b2`). Hoy `dev` va **52 commits** y **7 migraciones** por delante | Ya no es el bloqueante que era. Las legales, `/contacto` y el pie están vivos en producción; lo que llegó de rebote fueron los relojes de los crons, que empezaron a fallar en rojo el 27 (punto 6) |
+| 2 | **X-01 no ha movido un euro.** *(Sigue abierto al 30-ago.)* | `refunds-cron.yml` **ya corre** desde el 30-ago… contra **producción**, donde la cola está vacía. Las **2** solicitudes `pending` sobre PaymentIntents reales de test mode están en **dev**. Un job en verde que no toca nada es más peligroso que uno en rojo: parece cerrado |
 | 3 | **X-02 no se ha ejercitado.** Pagar tarde y ver el reembolso en Stripe necesita un pago real | Lo escrito es idempotente por dos caminos y está razonado, pero **razonado no es probado** — y es dinero |
 | 4 | **M-01 no se ha comprobado contra la API.** `tsc` pasa | Ya pasó una vez: `ui_mode: "embedded_page"` compilaba y devolvía **400** contra la API real |
 | 5 | **Nadie ha visto llegar un correo.** Ni el de contacto, ni uno de la cola | `RESEND_API_KEY` está puesta y el código está entero, pero **DL-01 se cumple cuando el revisor recibe respuesta**, no cuando el handler devuelve 200 |
-| 6 | **Los crons siguen sin reloj**, y encender el de correo **sin vaciar antes la cola** suelta 126 avisos, ~89 a buzones inexistentes | Estrenar Resend con 89 rebotes es la vía rápida a que limiten el envío, justo antes de que dLocal pruebe el formulario. Procedimiento: `QA-LANZAMIENTO.md` §4.6 |
+| 6 | ~~**Los crons siguen sin reloj.**~~ ✅ Los tres corren desde el 30-ago. ⚠️ **La cola de dev sigue sin vaciar**, y ya son **336** avisos (~89 a buzones muertos) | No estalló porque el reloj apunta a prod, no porque se resolviera. Vaciar **antes** de apuntar nada a dev: `QA-LANZAMIENTO.md` §4.6. Y de paso se midió que GitHub entrega **una corrida cada 2-6 h**, no cada 5/15 min |
 | 7 | **Google no está en prod**, y necesita sus propias credenciales | Si se mergea sin eso, el botón sale roto en producción el día del estreno |
 | 8 | **RV-12 a medias:** el mínimo de 8 está en el formulario, **no en el panel de Auth** | El navegador rechaza 6 y la API los sigue aceptando: la mitad que protege es la que falta |
 | 9 | **Las 5 filas con `timezone = 'UTC'` no se sanearon** | RV-03 las tapa cayendo a la cookie `ey-tz`. Si alguien entra sin cookie, vuelve el síntoma |
@@ -802,8 +811,9 @@ Esta lista es la parte útil del apartado. **Nada de aquí se puede dar por buen
 
 ### Lo primero de mañana, en orden
 
-1. **Vaciar la cola de correo** (`QA-LANZAMIENTO.md` §4.6) y **dar de alta `APP_BASE_URL` +
-   `CRON_SECRET`** en GitHub y Vercel. Es lo que arranca los tres jobs, X-01 incluido.
+1. ✅ ~~**dar de alta `APP_BASE_URL` + `CRON_SECRET`**~~ — hecho el 30-ago (en Vercel ya estaba).
+   ⚠️ **Vaciar la cola de correo de dev sigue pendiente** (`QA-LANZAMIENTO.md` §4.6, 336 avisos), y
+   arrancar los jobs **no** arrancó X-01: apuntan a prod y allí no hay cola.
 2. **Probar el camino del dinero de punta a punta** con la solicitud que ya está encolada en dev:
    pago real de test mode → reembolso visible en el panel de Stripe. Cierra los puntos 2, 3 y 4.
 3. **Merge `dev` → `main`**, con su ventana propia y su repaso. Antes: Google en prod, y decidir qué

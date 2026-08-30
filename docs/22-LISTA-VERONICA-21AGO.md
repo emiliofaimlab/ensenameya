@@ -293,12 +293,21 @@ no el email. Confirmado otra vez aquí, y ahora con la consecuencia añadida de 
 
 Tres cosas que no aparecen en el correo y que valen más que cualquiera de sus 34 puntos:
 
-1. **El correo no envía.** `RESEND_API_KEY` no está dada de alta, así que los avisos se acumulan
-   `pending` —no `failed`— y el síntoma es que **no pasa nada**. Ni la confirmación de reserva, ni el
-   aviso de las 24 h, ni nada. El correo pide «pruebas integrales de envíos de correo» (A4) y esa
-   media frase es el punto más importante de toda la lista.
+1. **El correo no envía.** ⚠️ **Corregido el 30-ago: el diagnóstico de esta línea estaba mal.**
+   `RESEND_API_KEY` **sí estaba** dada de alta desde el 17-ago (en local, Preview y Production); lo
+   que faltaba era el **reloj**, o sea `APP_BASE_URL` + `CRON_SECRET` en GitHub, sin los cuales los
+   dos workflows de Actions llevaban **30 corridas en rojo**. Ya están puestos y los jobs dan 200. El
+   síntoma que describe la línea —«no pasa nada»— era real; la causa, no. **Y sigue en pie lo que de
+   verdad importa: nadie ha visto llegar un correo de la cola**, porque el reloj apunta a producción
+   y allí la cola está vacía (los **336** avisos `pending` están en dev). El correo pide «pruebas
+   integrales de envíos de correo» (A4) y esa media frase sigue siendo el punto más importante de
+   toda la lista.
 2. **Ningún reembolso ha movido un euro.** El job se ejercitó en simulacro. Encolar no es devolver.
-3. **`main` sigue congelada en el commit del 29-jul.** Para el equipo `dev` es producción y esta
+   Sigue **exactamente igual** al 30-ago: el cron ya corre, pero contra prod, donde la cola está
+   vacía; los **2** `refund_requests` `pending` viven en dev.
+3. ~~**`main` sigue congelada en el commit del 29-jul.**~~ ✅ **El merge se hizo el 26-ago**
+   (`3fca8b2`). Hoy `dev` va 52 commits y 7 migraciones por delante — un merge de una semana, no de
+   dos meses. El párrafo de abajo describe el estado hasta esa fecha. Para el equipo `dev` es producción y esta
    auditoría se ha hecho contra `dev`, como toca. Pero el dominio público **no tiene** ni la sala de
    7 días, ni el checkout nuevo, ni el perfil del alumno, ni las páginas legales. Y es la URL que
    dLocal revisa a mano.

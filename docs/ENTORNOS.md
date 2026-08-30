@@ -53,9 +53,15 @@ código; ausentes, la función se apaga sola en vez de romper:
 > aviso que llevaba semanas escrito al revés. Desde `20260806150000` quien envía es el job
 > `/api/cron/notifications-send`, así que hacen falta **las dos cosas**: la clave en Vercel **y** un
 > reloj que llame al job. Con la clave puesta y sin reloj no sale nada; el día que se configure el
-> reloj sale **todo lo acumulado de golpe**. En dev hay **126 avisos encolados** de pruebas de
-> agosto, y ~89 van a direcciones que no existen. **Antes de dar de alta el cron hay que vaciar esa
-> cola** — el procedimiento, con su SQL y su porqué, está en `docs/QA-LANZAMIENTO.md` §4.6.
+> reloj sale **todo lo acumulado de golpe**.
+>
+> 🟢 **El reloj se encendió el 30-ago y no salió ni un correo, porque apunta a producción.** Las dos
+> variables de GitHub ya están puestas (abajo), pero `APP_BASE_URL` = `https://ensenameya.vercel.app`
+> y la cola de **prod está vacía** (`revisadas: 0` en la pasada de verificación). ⚠️ **La mina sigue
+> armada en dev**, y ha crecido: `select public.process_notifications();` devuelve hoy **336**
+> `pendientes_email`, la más antigua del **11-ago** — no 126, que era el número del 17-ago. El día
+> que alguien apunte `APP_BASE_URL` a dev o a una preview, salen los 336 de golpe y ~89 rebotan.
+> **Vaciar esa cola antes** — procedimiento en `docs/QA-LANZAMIENTO.md` §4.6.
 
 **Y dos que fallan CERRADO**, al revés que las de arriba, porque su ausencia dejaría un endpoint
 público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no corren (§4), y sin
@@ -67,7 +73,7 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
 `service_role` (`select` + `update` de `charge_provider`, `payout_provider`, `is_active`; sin
 `insert` ni `delete`), ya **no** escribiendo una migración. En **dev** ya está en `'stripe'`.
 
-**Dónde está puesta cada variable (17-ago).** "falta" = hay que ponerla; el resto ya está.
+**Dónde está puesta cada variable (rev. 30-ago).** "falta" = hay que ponerla; el resto ya está.
 
 | Variable | `.env.local` | Vercel Preview | Vercel Production | GitHub |
 | :-- | :-- | :-- | :-- | :-- |
@@ -75,13 +81,13 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
 | `STRIPE_API_KEY` | sí (`sk_test_`) | sí | **sí (17-ago)** | — |
 | `STRIPE_WEBHOOK_SECRET` | sí (el de `stripe listen`) | sí (el del endpoint) | **sí (17-ago)** | — |
 | `STRIPE_PUBLISHABLE_KEY` | sí | — | — | — |
-| `CRON_SECRET` | sí | **falta** | **falta** | **falta** (secret) |
+| `CRON_SECRET` | sí | ? sin comprobar | **sí** (comprobado 30-ago) | **sí (30-ago)** (secret) |
 | `RESEND_API_KEY` | **sí (17-ago)** | **sí (17-ago)** | **sí (17-ago)** | — |
 | `NEXT_PUBLIC_REFERRAL_URL` | sí | **falta** | **falta** | — |
 | `NEXT_PUBLIC_REFERRAL_URL_TUTOR` | **falta** | **falta** | **falta** | — |
 | `NEXT_PUBLIC_REFERRAL_EMBED_URL` · `..._TUTOR` | **falta** | **falta** | **falta** | — (pendiente: el cliente tiene que dar el snippet de embed de RF) |
 | `REFERRAL_FACTORY_API_KEY` | sí | **falta** | **falta** | — |
-| `APP_BASE_URL` | — | — | — | **falta** (variable, no secret) |
+| `APP_BASE_URL` | — | — | — | **sí (30-ago)**: `https://ensenameya.vercel.app` (variable, no secret) |
 | `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional (secret) — solo si `APP_BASE_URL` apunta a una preview |
 
 - `STRIPE_PUBLISHABLE_KEY` está en local por simetría, pero hoy **no la lee nadie**: el checkout es
@@ -101,9 +107,9 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
   una línea nuestra** y el job no falla, simplemente no hace nada. Es la misma trampa que el webhook
   de Stripe (§5), y el workflow de reembolsos la detecta y lo dice; el de correo, todavía no.
 - **Lo que ya no vale como excusa:** hasta el 7-ago producción estaba vacía a propósito porque en
-  `main` no había ni código que leyera estas variables. Sigue sin haberlo — `main` va **85 commits y
-  30 migraciones por detrás** — pero ahora el orden es el contrario: primero las variables, luego el
-  merge, para que el despliegue de producción nazca con todo puesto.
+  `main` no había ni código que leyera estas variables. **Desde el merge del 26-ago sí lo hay**, y
+  `main` va hoy solo 52 commits y 7 migraciones por detrás. El orden pasa a ser el contrario:
+  primero las variables, luego el merge, para que el despliegue de producción nazca con todo puesto.
 
 > **Vercel no aplica una variable nueva a un despliegue que ya existe.** Las env vars se inyectan al
 > construir: añadirla en Settings y recargar la misma URL de preview devuelve **exactamente el mismo
@@ -194,30 +200,36 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
   mientras no haya dominio verificado.
 - [x] Scope **Production**: las dos de Stripe, 17-ago. ⚠️ Siguen siendo **de test mode** — ver el
   aviso de §1 sobre producción cobrando en sandbox.
-- [ ] Scope **Preview y Production**: faltan `CRON_SECRET`, `NEXT_PUBLIC_REFERRAL_URL`,
-  `NEXT_PUBLIC_REFERRAL_URL_TUTOR` y `REFERRAL_FACTORY_API_KEY` (ver la matriz de §1). Sin
-  `CRON_SECRET` los **tres** crons responden **503**.
+- [x] **`CRON_SECRET` en Production ya estaba** — comprobado el 30-ago, y este doc decía lo
+  contrario desde el 17. La prueba no necesita el panel: sin la variable el endpoint responde **503**
+  y con ella **401**, y `curl https://ensenameya.vercel.app/api/cron/notifications-send` (sin
+  cabecera) devuelve **401**. Con la cabecera correcta, **200**.
+- [ ] Scope **Preview y Production**: faltan `NEXT_PUBLIC_REFERRAL_URL`,
+  `NEXT_PUBLIC_REFERRAL_URL_TUTOR` y `REFERRAL_FACTORY_API_KEY` (ver la matriz de §1).
 - [ ] Tras dar de alta cualquiera: **Redeploy**. Vercel no las aplica al despliegue ya construido (§1).
 
-### D) GitHub — Environments (CI de migraciones) — [x] hecho, salvo branch protection y los dos crons
+### D) GitHub — Environments (CI de migraciones) — [x] hecho, salvo branch protection
 - [x] Repo → Settings → **Environments** → **`production`** y **`development`** creados; en cada uno el
   *Environment secret* `SUPABASE_DB_URL` = connection string del **session pooler** (percent-encoded):
   `postgresql://postgres.<ref>:<pwd>@aws-0-us-east-1.pooler.supabase.com:5432/postgres`
 - [x] Rama **`dev`** creada desde `main`.
 - [ ] (Recomendado) Branch protection en `main`: PR + checks verdes. **Sin configurar** (la API de
   protección devuelve 404 el 5-ago): hoy nada impide un push directo a `main` → prod.
-- [ ] **Crons de correo y de reembolsos** (Settings → Secrets and variables → Actions): *variable*
-  `APP_BASE_URL` y *secret* `CRON_SECRET`. **Faltan las dos**, y las comparten los dos workflows.
-  Están escritos para **fallar en rojo** si alguna no está —en vez de fingir que la pasada fue
-  bien—, así que en cuanto `main` los tenga saldrá un fallo cada 5 y cada 15 minutos hasta que se
-  configuren (§4).
+- [x] **Crons de correo y de reembolsos, 30-ago** (Settings → Secrets and variables → Actions):
+  *variable* `APP_BASE_URL` = `https://ensenameya.vercel.app` y *secret* `CRON_SECRET`, el mismo
+  valor que ya tenía Vercel. Los dos workflows pasaron a **verde** en la primera pasada manual.
+  ⚠️ **Costó 30 corridas en rojo y otros tantos correos de GitHub**: los workflows llegaron a `main`
+  el 26-ago y fallaron **el 100 % de las veces** (15 y 15) del 27 al 30 con
+  `exit 1` en la primera línea. Están escritos para fallar en rojo a propósito, y funcionó — lo que
+  no había era nadie mirando el rojo.
 - [ ] *(Opcional)* **secret `VERCEL_PROTECTION_BYPASS`**, solo si `APP_BASE_URL` va a apuntar a una
   **preview**: Deployment Protection responde 302 antes de llegar a nuestro código. El workflow de
   reembolsos lo manda por cabecera si existe y **dice qué pasa** si recibe un 3xx; el de correo
   todavía no, así que apuntado a una preview se queda en rojo sin explicar por qué.
-- [ ] ⚠️ **Antes de dar de alta estas dos: vaciar la cola vieja de notificaciones**
-  (`docs/QA-LANZAMIENTO.md` §4.6). Con `RESEND_API_KEY` ya puesta desde el 17-ago, el cron es lo
-  único que falta para que salgan 126 correos de prueba de golpe, ~89 de ellos a buzones inexistentes.
+- [x] ⚠️ **La cola vieja de notificaciones no se disparó** — no porque se vaciara, sino porque
+  `APP_BASE_URL` apunta a **producción** y allí la cola está vacía. Los **336** avisos de prueba
+  (~89 a buzones inexistentes) siguen en **dev**, intactos. Vaciarlos sigue pendiente
+  (`docs/QA-LANZAMIENTO.md` §4.6) y es requisito **antes** de apuntar cualquier reloj a dev.
 
 ### E) Jira — [x] conectado (proyecto `EY`, `faimlab.atlassian.net`).
 
@@ -258,8 +270,8 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
 | Job | Ruta | Reloj | Cadencia |
 | :-- | :-- | :-- | :-- |
 | Purga de grabaciones (RN-42) | `/api/cron/recordings-purge` | **Vercel Cron** (`vercel.json`) | diaria, `0 4 * * *` |
-| Envío de la cola de correo (US-1201) | `/api/cron/notifications-send` | **GitHub Actions** (`notifications-cron.yml`) | cada 5 min |
-| **Cola de reembolsos (X-01)** | `/api/cron/refunds-process` | **GitHub Actions** (`refunds-cron.yml`) | **cada 15 min** (`7,22,37,52`) |
+| Envío de la cola de correo (US-1201) | `/api/cron/notifications-send` | **GitHub Actions** (`notifications-cron.yml`) | pide 5 min · **entrega ~2-6 h** |
+| **Cola de reembolsos (X-01)** | `/api/cron/refunds-process` | **GitHub Actions** (`refunds-cron.yml`) | pide 15 min (`7,22,37,52`) · **entrega ~2-6 h** |
 
 Los tres se autentican igual: `Authorization: Bearer $CRON_SECRET`. Sin la variable configurada
 responden **503** y no corren (falla cerrado a propósito: son endpoints que borran datos, envían
@@ -278,8 +290,13 @@ mandara — cuando el §13 de los Términos promete devolver "al método de pago
 granularidad de minutos, logs y reejecución manual (`workflow_dispatch`). El precio son tres peajes,
 anotados también en los propios workflows para que nadie los descubra depurando:
 
-- los programados de GitHub **se retrasan** cuando la cola va cargada (10-15 min es normal,
-  aceptable para un correo y para un reembolso, **no** para un cobro);
+- ⚠️ los programados de GitHub **se retrasan muchísimo más de lo que dice este párrafo**. La cifra
+  de "10-15 min" era la del manual; la medida sobre las corridas reales del 27 al 30-ago es **una
+  cada 2-6 horas** — 15 corridas de cada workflow en 3,5 días, cuando lo pedido eran ~1.000 y ~336.
+  GitHub estrangula los `cron` de cadencia corta y no avisa. **Sigue siendo mejor que el único cron
+  diario de Vercel Hobby, que es el motivo por el que están aquí**, pero no se puede planificar con
+  "cada 5 minutos": un aviso de "te quedan 24 h" puede llegar con 6 h de retraso. Si algún día hace
+  falta cadencia de verdad, el arreglo no es tocar el `cron:` — es Vercel Pro o un reloj externo;
 - GitHub **desactiva los workflows programados tras 60 días sin actividad** en el repo — si los
   correos o los reembolsos dejan de salir sin más, mirar eso primero;
 - GitHub solo programa los workflows de la **rama por defecto** (`main`): un workflow que solo vive
@@ -295,19 +312,30 @@ el dinero del alumno por un mal minuto del PSP— y con cadencia diaria ese mal 
 Quince minutos dan tres reintentos por hora y dejan el peor caso, retraso de GitHub incluido, por
 debajo de la media hora. Una pasada con la cola vacía no llama a Stripe: son dos consultas.
 
-**Hoy no corre ninguno de los tres**, por dos motivos que se suman:
+**🟢 Desde el 30-ago corren los tres.** Los dos motivos que lo impedían están resueltos: el merge a
+`main` del 26-ago les dio reloj, y ese mismo día empezaron a fallar en rojo porque faltaban las dos
+variables de GitHub, que se dieron de alta el 30. Pasada de verificación:
 
-1. `vercel.json` y los dos workflows **solo están en `dev`**; `main` no los tiene. Los crons de
-   Vercel se disparan sobre el despliegue de **producción** y GitHub solo programa la rama por
-   defecto. Hasta el merge, ninguno tiene reloj. **Es la causa nº 1 y se arregla con `dev` → `main`.**
-2. Falta `CRON_SECRET` en Vercel y en GitHub, y `APP_BASE_URL` en GitHub (§1 y §3C/§3D).
+```
+GET /api/cron/notifications-send   → 200 {"status":"ok","revisadas":0,"enviadas":0,...}
+GET /api/cron/refunds-process      → 200 {"status":"ok","revisadas":0,"reembolsados":0,...,"lote":25}
+```
 
-⚠️ **Y hay un tercer motivo que no es técnico: no conviene encender el de correo todavía.** En cuanto
-tenga reloj, la primera pasada saca **126 avisos encolados** de pruebas de agosto, ~89 de ellos a
-buzones que no existen. Estrenar la cuenta de Resend con 89 rebotes es la forma más rápida de que
-limiten el envío, justo antes de que dLocal pruebe el formulario de contacto. **Vaciar la cola vieja
-primero** — procedimiento en `docs/QA-LANZAMIENTO.md` §4.6. El de reembolsos y el de grabaciones no
-tienen este problema: sus colas están limpias.
+⚠️ **Verde no es lo mismo que útil, y aquí la diferencia importa.** Los relojes apuntan a
+**producción**, donde las dos colas están **vacías**. Lo que hay encolado está en **dev**, y a dev no
+lo llama ningún reloj:
+
+| Cola | prod | dev |
+| :-- | :-- | :-- |
+| `notifications` (`pendientes_email`) | 0 | **336**, la más antigua del 11-ago |
+| `refund_requests` (`pending`) | 0 | **2**, sobre PaymentIntents reales de *test mode* |
+
+Los **2 reembolsos de dev** son el caso de prueba que X-01 nunca ha ejercitado: el job jamás ha
+movido un euro, ni en dev ni en prod. Y los **336 correos** son la mina de §1 — no se dispararon por
+suerte de a dónde apunta la variable, no porque se vaciara la cola.
+
+`status: "ok"` (en vez de `sin-proveedor` / `sin-stripe`) confirma de paso que producción ya tenía
+`RESEND_API_KEY` **y** `STRIPE_API_KEY`: son las propias respuestas del endpoint las que lo dicen.
 
 Y aunque corriera, la purga no tendría nada que borrar todavía: el **add-on de grabación de Daily
 sigue sin contratar** (falta el visto bueno de coste), así que sin `DAILY_API_KEY` el job devuelve
@@ -391,32 +419,46 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
   Falta verificar el dominio y **ver llegar el primer correo** (§3G).
 - [ ] Rotar secret keys antes del primer usuario real.
 - [ ] Branch protection en `main` (ver §3D).
-- [ ] `CRON_SECRET` en **Vercel** y en **GitHub**, y `APP_BASE_URL` en GitHub: sin ellas los **tres**
-  jobs programados responden 503 o ni se disparan (§4). ⚠️ Y antes de ponerlas, vaciar la cola vieja
-  de notificaciones (`docs/QA-LANZAMIENTO.md` §4.6).
+- [x] **`CRON_SECRET` en Vercel y en GitHub, y `APP_BASE_URL` en GitHub — 30-ago.** Los tres jobs
+  corren y dan 200 (§4). En Vercel `CRON_SECRET` ya estaba desde antes; solo faltaba el lado GitHub.
+- [ ] ⚠️ **Vaciar la cola vieja de notificaciones de dev** (336 avisos,
+  `docs/QA-LANZAMIENTO.md` §4.6). Ya no bloquea el cron —apunta a prod, que está vacío— pero sigue
+  siendo requisito antes de apuntar cualquier reloj a dev o a una preview.
+- [ ] **Ejercitar X-01 con los 2 `refund_requests` de dev**: el job de reembolsos no ha movido un
+  euro todavía, ni en dev ni en prod. `?simulacro=1` enseña qué mandaría sin mandarlo.
 - [ ] `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel — solo están en local.
 - [ ] `NEXT_PUBLIC_REFERRAL_URL_TUTOR` (B1.11) — **ni en local**: hace falta la URL de la segunda
       campaña de Referral Factory, la de tutores. Sin ella el tutor no ve el bloque.
 - [ ] Mínimo de contraseña a 8 en el panel de Auth, dev y prod (§3B).
 
-**Ramas y despliegue al 17-ago — sigue faltando UN merge, y cada día pesa más.** `main` continúa en
-**`57edfa9`**, el commit del **29 de julio**. `dev` va **85 commits por delante** y trae **30
-migraciones sin aplicar en producción**. Nada de agosto está desplegado: ni Stripe, ni el correo, ni
-la purga de grabaciones, ni **nada de lo del 17-ago** — legales del cliente, `/contacto`, identidad
-fiscal en el pie, reembolsos reales, cobro tardío, horas correctas. En producción, ahora mismo,
-`/terms`, `/privacy` y `/cookies` siguen dando **404** mientras el pie las enlaza.
+**Ramas y despliegue al 30-ago — el merge grande YA SE HIZO.** `main` está en **`3fca8b2`**
+(**26-ago**), no en `57edfa9`: todo lo de agosto —Stripe, correo, legales, `/contacto`, reembolsos,
+purga de grabaciones, `vercel.json` y los dos workflows de cron— está desplegado, y por eso los
+crons empezaron a tener reloj (y a fallar en rojo) el 27. `dev` va hoy **52 commits por delante**
+con **7 migraciones** sin aplicar en prod (111 aplicadas de 118):
 
-El merge **`dev` → `main`** es el que dispara el job de migraciones de prod y el que lleva allí
-`vercel.json`, los **dos** workflows de cron y las rutas nuevas (`/api/pagos/checkout`,
-`/api/webhooks/stripe`, `/api/contacto`, los tres crons). Ojo con el orden: la app nueva contra el
-esquema viejo revienta, y **30 migraciones de una tacada no es un merge de trámite** — necesita su
-ventana y su repaso, no el final de una jornada larga.
+```
+20260827200000_m02_retira_el_auto_aceptar_global.sql
+20260828120000_sala_cierra_al_marcar_completada.sql
+20260828130000_ey189_acciones_sobre_los_usuarios.sql
+20260828143000_requerimientos_de_sesion.sql
+20260828150000_chat_previo_cinco_por_lado.sql
+20260828161500_dl01_tipo_de_solicitud_y_adjuntos.sql
+20260828183000_cierre_automatico_de_sesiones_nunca_corrio.sql
+```
 
-**Migraciones por ambiente.** **dev al día**: 84/84 aplicadas, la última
-`20260817180000_m02_acepta_sola_por_mentoria.sql`, con `database.types.ts` regenerado y conteniendo
-ya `refund_requests`, `contact_messages`, `terms_acceptances` y `late_payment_refunds`. **prod va 30
-por detrás** (tiene 54): le faltan las de `20260729130000` en adelante, porque el CI solo las aplica
-al mergear a `main`.
+Es un merge de una semana, no de dos meses: sigue necesitando su repaso, pero ya no es el bloqueante
+que describía este párrafo.
 
-*Última edición: 2026-08-17 — variables repartidas (Stripe a producción, `RESEND_API_KEY`), tercer
-job programado (reembolsos), Google encendido en dev y las dos trampas de `db:types`.*
+El merge **`dev` → `main`** es el que dispara el job de migraciones de prod. Ojo con el orden de
+siempre: la app nueva contra el esquema viejo revienta.
+
+**Migraciones por ambiente (30-ago).** **dev al día**: 118/118 aplicadas, la última
+`20260828183000_cierre_automatico_de_sesiones_nunca_corrio.sql`. **prod tiene 111**: le faltan las 7
+de arriba, porque el CI solo las aplica al mergear a `main`. El workflow de migraciones lleva
+**22/22 corridas en verde**.
+
+*Última edición: 2026-08-30 — `APP_BASE_URL` + `CRON_SECRET` dados de alta en GitHub tras 30
+corridas en rojo; corregido que a Vercel le faltaba `CRON_SECRET` (ya estaba); cadencia real de los
+programados de GitHub medida (~2-6 h, no 5/15 min); estado de ramas al día (`main` = `3fca8b2`,
+7 migraciones pendientes, no 30); cola de dev recontada (336 avisos, no 126).*

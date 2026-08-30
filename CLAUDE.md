@@ -22,9 +22,11 @@ quedaron cortos; el marco actual salió de la reunión del 24-jul). En Jira: **9
 - **El PR #11 ya se mergeó** (`1a36da2`): Sprint 7 completo y Sprint 8 casi, las 15
   historias están en `dev` aunque en Jira sigan en `In Review`. El detalle, tanda a tanda
   y con SHA, está en `docs/PLAN-DESARROLLO.md`.
-- **Queda UN merge: `dev` → `main`.** `main` sigue en `57edfa9` y `dev` va **43 commits por
-  delante, con 20 migraciones sin aplicar en prod**. Nada de lo de agosto —legales, Stripe,
-  correo, purga real de grabaciones— está desplegado.
+- ~~**Queda UN merge: `dev` → `main`.**~~ ✅ **Se hizo el 26-ago** (`main` = `3fca8b2`): las
+  legales, Stripe, el correo y la purga están desplegados. Al **30-ago** `dev` va **52 commits**
+  y **7 migraciones** por delante (prod tiene 111 de 118) — un merge de una semana, no de dos
+  meses. ⚠️ Ese merge fue también lo que dio **reloj** a los dos crons de Actions, que a partir
+  del 27 fallaron en rojo cada pocas horas hasta el 30 (ver más abajo).
 - **Sprint 6 AC:** la pata de **Stripe** está hecha (PAC-01 y PAC-03 en *test mode*, aunque
   en Jira sigan `To Do`). La premisa de la épica —"no empezar hasta tener AMBAS cuentas"—
   era falsa: el sandbox de Stripe da Sessions, webhooks firmados y reembolsos con solo
@@ -104,16 +106,36 @@ Ninguna falta de clave rompe la app: el camino se cae al simulado o la cola se q
 | **Grabación de Daily** | add-on sin contratar → hoy no hay nada que borrar. El nombre de sala se **lee** de `sessions.daily_room_name`; derivarlo otra vez es lo que hacía fallar a US-1802 en silencio | el go de coste |
 | **Referral Factory** | campaña viva, atribución **por email** | `REFERRAL_FACTORY_API_KEY` · `NEXT_PUBLIC_REFERRAL_URL` |
 
-**Dos jobs y dos sitios**, los dos exigen `CRON_SECRET` y fallan cerrado (503) sin ella:
-`/api/cron/recordings-purge` por **Vercel Cron** (`vercel.json`, diario 04:00) y
-`/api/cron/notifications-send` por **GitHub Actions** cada 5 min — Vercel Hobby limita los
-crons a uno al día, y un aviso de "te quedan 24 h para aceptar" que llega mañana no sirve.
+**TRES jobs y dos sitios**, los tres exigen `CRON_SECRET` y fallan cerrado (503) sin ella:
+`/api/cron/recordings-purge` por **Vercel Cron** (`vercel.json`, diario 04:00), y
+`/api/cron/notifications-send` y `/api/cron/refunds-process` por **GitHub Actions** — Vercel
+Hobby limita los crons a uno al día, y un aviso de "te quedan 24 h para aceptar" que llega
+mañana no sirve.
 ⚠️ `process_notifications()` **ya solo informa**; antes marcaba toda la cola como `sent` sin
 enviar nada. El envío real es el job.
 
-**Falta configurar:** en Vercel `CRON_SECRET`, `RESEND_API_KEY`, `NEXT_PUBLIC_REFERRAL_URL` y
-`REFERRAL_FACTORY_API_KEY` (solo están las dos de Stripe, en scope Preview); en GitHub la
-variable `APP_BASE_URL` y el secret `CRON_SECRET`, o el workflow sale en rojo cada 5 minutos.
+⚠️ **La cadencia de los programados de GitHub es una ficción.** Los dos `cron` piden 5 y 15
+minutos; lo que GitHub entrega, medido sobre las corridas reales del 27 al 30-ago, es **una cada
+2-6 horas** (15 corridas en 3,5 días, no ~1.000). Sigue siendo mejor que el único cron diario de
+Vercel Hobby, que es el motivo por el que están aquí, pero no se puede planificar con "5 minutos":
+los comentarios de cabecera de `notifications-cron.yml` y `refunds-cron.yml` lo dicen y se
+quedaron cortos.
+
+**Configurado el 2026-08-30, tras 30 corridas en rojo:** en GitHub la variable `APP_BASE_URL`
+(`https://ensenameya.vercel.app`) y el secret `CRON_SECRET`. Faltaban SOLO ahí — no en Vercel: la
+pasada de verificación devolvió `status:"ok"` en los dos endpoints, o sea que prod ya tenía
+`CRON_SECRET`, `STRIPE_API_KEY` **y** `RESEND_API_KEY` (si faltaran, la respuesta sería
+`sin-stripe` / `sin-proveedor`). Este párrafo decía lo contrario y mandaba a buscar donde no era.
+Sin verificar siguen `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY`.
+
+⚠️ **Verde no es lo mismo que útil.** Los dos relojes apuntan a **producción**, donde las dos
+colas están **vacías**. Lo encolado está en **dev**, donde no llega ningún reloj: **336** avisos
+de correo `pending` (el más antiguo del 11-ago) y **2** `refund_requests`. O sea que **X-01
+sigue sin mover un euro** y **nadie ha visto llegar un correo de la cola**, con la diferencia de
+que ahora hay dos jobs en verde que pueden hacer creer lo contrario. Y antes de apuntar ningún
+reloj a dev: vaciar esa cola primero (`docs/QA-LANZAMIENTO.md` §4.6), porque ~89 de los 336 van
+a buzones que no existen y estrenar Resend con 89 rebotes es la vía rápida a que limiten el
+envío.
 El endpoint de Stripe apunta a la preview con `?x-vercel-protection-bypass=…`: sin eso
 Deployment Protection devuelve 302 antes de que corra nuestro código.
 
