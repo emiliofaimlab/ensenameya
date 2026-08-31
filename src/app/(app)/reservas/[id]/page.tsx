@@ -20,6 +20,7 @@ import {
   PanelShell,
   StatusPill,
 } from "@/components/layout/panel-shell";
+import { AddToCalendar } from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { TutorSummary } from "@/components/tutor-summary";
 import { RecordingLink } from "@/components/room/recording-link";
@@ -231,6 +232,18 @@ export default async function BookingDetailPage({
                           la URL no sirve para eso. */}
                       {s.status === "completed" ? (
                         <RecordingLink sessionId={s.id} nroSesion={s.session_ref} />
+                      ) : null}
+                      {/* Un evento de calendario es una CLASE, no una reserva:
+                          por eso va aquí, en la fila de cada sesión, y no una
+                          vez arriba. Fuera de las canceladas, que no van a
+                          existir. */}
+                      {s.status !== "cancelled" ? (
+                        <AddToCalendar
+                          sessionId={s.id}
+                          titulo={booking.products?.title ?? "Mentoría"}
+                          inicio={s.start_at}
+                          fin={s.end_at}
+                        />
                       ) : null}
                     </div>
                   </li>

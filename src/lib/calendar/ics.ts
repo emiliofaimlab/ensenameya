@@ -31,7 +31,7 @@ function ordinal(e: EventoFeed): string | null {
   return `Sesión ${e.sequence_no} de ${e.num_sessions}`;
 }
 
-function vevento(e: EventoFeed, origin: string): string[] {
+function vevento(e: EventoFeed, origin: string, suelto: boolean): string[] {
   const cancelada = e.estado === "cancelada";
   const salaUrl = `${origin}/room/${e.session_id}`;
   const resumen = e.con ? `${e.titulo} con ${e.con}` : e.titulo;
@@ -54,7 +54,11 @@ function vevento(e: EventoFeed, origin: string): string[] {
 
   const lineas = [
     "BEGIN:VEVENT",
-    crudo("UID", `${e.session_id}@${UID_DOMINIO}`),
+    // El archivo suelto lleva sufijo: si el mismo usuario descarga la clase Y
+    // está suscrito al feed, son dos eventos con el mismo origen en dos
+    // calendarios distintos. Con UID distinto ninguno intenta «actualizar» al
+    // otro; se ve duplicado, que es honesto, en vez de fusionarse a medias.
+    crudo("UID", `${e.session_id}${suelto ? "-suelto" : ""}@${UID_DOMINIO}`),
     crudo("DTSTAMP", utc(new Date().toISOString())),
     crudo("DTSTART", utc(e.start_at)),
     crudo("DTEND", utc(e.end_at)),
@@ -107,10 +111,20 @@ export function construirIcs({
   eventos,
   timezone,
   origin,
+  suelto = false,
 }: {
   eventos: EventoFeed[];
   timezone: string;
   origin: string;
+  /**
+   * ¿Es un .ics de descarga (una clase) en vez del feed suscribible?
+   *
+   * Un archivo suelto no es un calendario: con `X-WR-CALNAME` puesto, Apple
+   * ofrece crear un calendario NUEVO llamado «Mis mentorías» cada vez que se
+   * añade una clase, y `REFRESH-INTERVAL` promete una recarga que aquí no va a
+   * ocurrir nunca. Se omiten las cuatro.
+   */
+  suelto?: boolean;
 }): string {
   const nombre = "Enséñame Ya · Mis mentorías";
   const descripcion = "Tus clases reservadas en Enséñame Ya.";
@@ -126,16 +140,19 @@ export function construirIcs({
     // `NAME`/`DESCRIPTION` son del RFC 7986; las `X-WR-*` son las de facto que
     // Google y Apple entienden desde siempre. Se ponen las dos porque no hay
     // una sola que funcione en los dos sitios con seguridad.
-    campo("NAME", nombre),
-    campo("X-WR-CALNAME", nombre),
+    ...(suelto ? [] : [campo("NAME", nombre), campo("X-WR-CALNAME", nombre)]),
     campo("DESCRIPTION", descripcion),
     campo("X-WR-CALDESC", descripcion),
     campo("X-WR-TIMEZONE", timezone),
-    crudo("REFRESH-INTERVAL;VALUE=DURATION", "PT1H"),
-    crudo("X-PUBLISHED-TTL", "PT1H"),
+    ...(suelto
+      ? []
+      : [
+          crudo("REFRESH-INTERVAL;VALUE=DURATION", "PT1H"),
+          crudo("X-PUBLISHED-TTL", "PT1H"),
+        ]),
   ];
 
-  for (const e of eventos) lineas.push(...vevento(e, origin));
+  for (const e of eventos) lineas.push(...vevento(e, origin, suelto));
 
   lineas.push("END:VCALENDAR");
 

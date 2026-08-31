@@ -14,6 +14,7 @@ import type {
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
+import { AddToCalendar } from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { ReportConversation } from "@/components/chat/report-conversation";
 import { RecordingConsent } from "@/components/room/recording-consent";
@@ -1376,6 +1377,16 @@ export function LiveRoom({
             <p className="text-sm text-muted-foreground">
               {new Date(startAt).toLocaleString("es", { timeZone, dateStyle: "full", timeStyle: "short" })}
             </p>
+            {/* Solo en esta rama: quien llega con la sala ya abierta viene a
+                entrar, y apuntar en la agenda una clase que empieza en diez
+                minutos no le sirve de nada. Sin props nuevas — `sessionId`,
+                `productTitle`, `startAt` y `endAt` ya estaban aquí. */}
+            <AddToCalendar
+              sessionId={sessionId}
+              titulo={productTitle}
+              inicio={startAt}
+              fin={endAt}
+            />
             {/* El «Entiendo» se puede marcar mientras esperas: lo que se pide
                 es que esté leído ANTES de entrar, no que la sala ya abra. */}
             <RecordingConsent
