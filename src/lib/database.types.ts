@@ -39,6 +39,59 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_deletion_requests: {
+        Row: {
+          cancelled_at: string | null
+          completed_at: string | null
+          last_check_at: string | null
+          last_error: string | null
+          pending_snapshot: Json
+          prev_active_products: string[]
+          prev_approval:
+            | Database["public"]["Enums"]["tutor_approval_status"]
+            | null
+          requested_at: string
+          status: Database["public"]["Enums"]["account_deletion_request_status"]
+          user_id: string
+        }
+        Insert: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          last_check_at?: string | null
+          last_error?: string | null
+          pending_snapshot?: Json
+          prev_active_products?: string[]
+          prev_approval?:
+            | Database["public"]["Enums"]["tutor_approval_status"]
+            | null
+          requested_at?: string
+          status?: Database["public"]["Enums"]["account_deletion_request_status"]
+          user_id: string
+        }
+        Update: {
+          cancelled_at?: string | null
+          completed_at?: string | null
+          last_check_at?: string | null
+          last_error?: string | null
+          pending_snapshot?: Json
+          prev_active_products?: string[]
+          prev_approval?:
+            | Database["public"]["Enums"]["tutor_approval_status"]
+            | null
+          requested_at?: string
+          status?: Database["public"]["Enums"]["account_deletion_request_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "account_deletion_requests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       account_deletions: {
         Row: {
           deleted_at: string
@@ -1235,6 +1288,7 @@ export type Database = {
           search_vector: unknown
           session_duration_min: number | null
           slug: string | null
+          start_time_increment_min: number | null
           status: Database["public"]["Enums"]["product_status"]
           title: string
           tutor_id: string
@@ -1260,6 +1314,7 @@ export type Database = {
           search_vector?: unknown
           session_duration_min?: number | null
           slug?: string | null
+          start_time_increment_min?: number | null
           status?: Database["public"]["Enums"]["product_status"]
           title: string
           tutor_id: string
@@ -1285,6 +1340,7 @@ export type Database = {
           search_vector?: unknown
           session_duration_min?: number | null
           slug?: string | null
+          start_time_increment_min?: number | null
           status?: Database["public"]["Enums"]["product_status"]
           title?: string
           tutor_id?: string
@@ -2044,6 +2100,15 @@ export type Database = {
     }
     Functions: {
       account_deletion_blockers: { Args: { p_user_id: string }; Returns: Json }
+      account_deletion_state: { Args: { p_user_id: string }; Returns: Json }
+      account_deletions_pendientes_de_barrido: {
+        Args: { p_limit?: number }
+        Returns: {
+          ficheros: Json
+          ficheros_recolectados: number
+          user_id: string
+        }[]
+      }
       admin_bookings_by_category: {
         Args: { p_from?: string; p_to?: string }
         Returns: Json
@@ -2104,6 +2169,7 @@ export type Database = {
       }
       calendar_feed: { Args: { p_token: string }; Returns: Json }
       calendar_feed_token: { Args: never; Returns: string }
+      cancel_account_deletion: { Args: { p_user_id: string }; Returns: Json }
       cancel_booking: {
         Args: { p_booking_id: string; p_reason?: string }
         Returns: Json
@@ -2204,6 +2270,7 @@ export type Database = {
         Returns: undefined
       }
       mask_person_name: { Args: { p_name: string }; Returns: string }
+      my_account_deletion_state: { Args: never; Returns: Json }
       my_calendar_feed_token: { Args: never; Returns: string }
       my_conversations: {
         Args: never
@@ -2254,6 +2321,10 @@ export type Database = {
       }
       pre_booking_message_cap: { Args: never; Returns: number }
       process_notifications: { Args: never; Returns: Json }
+      process_pending_account_deletions: {
+        Args: { p_limit?: number }
+        Returns: Json
+      }
       process_scheduled_payouts: { Args: never; Returns: Json }
       purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
@@ -2276,6 +2347,7 @@ export type Database = {
         Args: { p_conversation_id: string; p_reason: string }
         Returns: string
       }
+      request_account_deletion: { Args: { p_user_id: string }; Returns: Json }
       request_withdrawal: {
         Args: { p_retention_days?: number }
         Returns: string
@@ -2412,6 +2484,7 @@ export type Database = {
       }
     }
     Enums: {
+      account_deletion_request_status: "pending" | "completed" | "cancelled"
       app_role: "alumno" | "tutor" | "admin"
       availability_exception_type: "block" | "open"
       booking_status:
@@ -2587,6 +2660,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      account_deletion_request_status: ["pending", "completed", "cancelled"],
       app_role: ["alumno", "tutor", "admin"],
       availability_exception_type: ["block", "open"],
       booking_status: [

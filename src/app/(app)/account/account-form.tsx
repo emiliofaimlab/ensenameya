@@ -21,6 +21,8 @@ import {
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { DeleteAccountDialog } from "./delete-account-dialog";
+import { DeactivatedCard } from "./deactivated-card";
+import { estaDesactivada, type EstadoBaja } from "./baja";
 
 /**
  * US-104 (SCR-G03) — "Mi cuenta" en módulos (24-jul): foto, información
@@ -38,6 +40,7 @@ export function AccountForm({
   timezone,
   avatarUrl,
   isTutor,
+  estadoBaja,
   calendario,
   referidos,
 }: {
@@ -47,6 +50,10 @@ export function AccountForm({
   timezone: string;
   avatarUrl: string | null;
   isTutor: boolean;
+  /** Estado de baja de la cuenta (`my_account_deletion_state`). `null` si la
+   *  consulta falló: se pinta como cuenta activa, que es el caso de casi todo
+   *  el mundo, y la verdad sigue estando en el diálogo de confirmación. */
+  estadoBaja: EstadoBaja | null;
   /** Tarjetas que arma la página (servidor) y que este mosaico COLOCA.
    *  Entran como props en vez de detrás del componente porque su sitio dentro
    *  de la rejilla es una decisión de diseño, no un "y además". */
@@ -396,31 +403,52 @@ export function AccountForm({
 
           El tinte y el borde salen de `--destructive`, ya en uso para lo mismo
           en el carrito; no es un lenguaje nuevo. Y el texto va a la izquierda
-          con el botón a la derecha para que la fila ancha no quede vacía. */}
-      <PanelCard className="border-destructive/30 bg-destructive/[0.03] md:col-span-2 md:mt-1">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-8">
-          <div className="md:max-w-[680px]">
-            <PanelCardTitle>Eliminar mi cuenta</PanelCardTitle>
-            <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
-              Borramos tu nombre, tu foto y tus datos de contacto, y cerramos tu
-              acceso. Tus reservas y pagos se conservan por obligación legal, y
-              tus reseñas quedan publicadas sin tu nombre. No se puede deshacer.
-            </p>
+          con el botón a la derecha para que la fila ancha no quede vacía.
+
+          ⚠️ LA MISMA CASILLA TIENE DOS CARAS desde `20260831160000`. Si la baja
+          ya está pedida y la cuenta está desactivada esperando a que se mueva
+          el dinero, aquí va `DeactivatedCard` en vez del botón: sería absurdo
+          ofrecer «Eliminar mi cuenta» a quien ya lo pidió. Ocupan el mismo
+          sitio a propósito — el estado de tu cuenta se lee donde estaba el
+          botón, no en un aviso nuevo en otra parte de la pantalla. */}
+      {estaDesactivada(estadoBaja) && estadoBaja ? (
+        <DeactivatedCard estado={estadoBaja} isTutor={isTutor} />
+      ) : (
+        <PanelCard className="border-destructive/30 bg-destructive/[0.03] md:col-span-2 md:mt-1">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between md:gap-8">
+            <div className="md:max-w-[680px]">
+              <PanelCardTitle>Eliminar mi cuenta</PanelCardTitle>
+              <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
+                Borramos tu nombre, tu foto y tus datos de contacto, y cerramos
+                tu acceso. Tus reservas y pagos se conservan por obligación
+                legal, y tus reseñas quedan publicadas sin tu nombre. No se
+                puede deshacer.
+              </p>
+              {/* La media frase que evita la sorpresa. Quien tiene un
+                  reembolso en curso pulsa esperando que su cuenta desaparezca
+                  hoy; que se entere aquí y no en el diálogo. */}
+              <p className="mt-2 text-[13px] text-[#6b6b6b]">
+                Si tienes saldo, un retiro o un reembolso en curso, tu cuenta se
+                desactiva primero y se borra sola en cuanto ese dinero termine
+                de moverse.
+              </p>
+            </div>
+            <Button
+              variant="destructive"
+              onClick={() => setDeleteOpen(true)}
+              className="h-[45px] shrink-0 self-start rounded-[8px] px-5 md:self-auto"
+            >
+              Eliminar mi cuenta
+            </Button>
           </div>
-          <Button
-            variant="destructive"
-            onClick={() => setDeleteOpen(true)}
-            className="h-[45px] shrink-0 self-start rounded-[8px] px-5 md:self-auto"
-          >
-            Eliminar mi cuenta
-          </Button>
-        </div>
-        <DeleteAccountDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          email={email}
-        />
-      </PanelCard>
+          <DeleteAccountDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            email={email}
+            isTutor={isTutor}
+          />
+        </PanelCard>
+      )}
     </div>
   );
 }
