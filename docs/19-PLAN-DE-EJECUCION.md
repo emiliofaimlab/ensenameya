@@ -536,7 +536,7 @@ los dos dominios que ya bloqueó el alta de dLocal: **ningún merge lo arregla, 
 | :-- | :-- | :-- |
 | 5 | **Referidos:** porcentajes por referido (**AB-09**) y si hay campaña de estudiantes (**AB-04**) | M-07 |
 | 6 | **Nombres de los niveles de tutor** (**AB-06**) — las comisiones ya están fijadas (25/15/10 %) | N-16 |
-| 7 | **Grabación de Daily:** add-on de pago **sin contratar**. Sin él, N-19/N-20/N-21 se pueden escribir pero **no se pueden entregar funcionando** | N-19, N-20, N-21 |
+| ~~7~~ | ~~**Grabación de Daily:** add-on de pago **sin contratar**~~ → ✅ **resuelto (verificado el 31-ago)**: está contratado y hay grabaciones reales. N-19/N-20/N-21 dejan de estar bloqueadas | N-19, N-20, N-21 |
 | 8 | **Ennis: ¿manda el Word o el documento de contenido?** Se contradicen entre sí (§19.8) | C-01, C-04 |
 
 ### Ya contestadas — no volver a preguntarlas

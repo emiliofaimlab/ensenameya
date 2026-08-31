@@ -199,7 +199,12 @@ mano en la BD. Cierra además el *boundary* que S2 dejó abierto.
     - _Robustez de filtros_: estado y fecha vienen de la query string, o sea texto libre. Se **validan e ignoran** si no encajan: un `?status=basura` llegaba al enum (`invalid input value`) y `?from=basura` dejaba la lista en cero fingiendo que no había datos.
     - ⚠️ _Ceiling_: los totales se suman en el servidor sobre todas las filas filtradas (PostgREST no agrega sin vista/función). Sirve al volumen del MVP; si crece → RPC de agregación. Monedas distintas no se suman: se avisa.
   - [x] **US-1105 · Estadísticas globales** `EY-72` (migración `20260715190000`): `/admin/stats` (SCR-AD13) con KPIs filtrables por período — reservas creadas/pagadas, **conversión**, tutores activos, y por moneda GMV/comisión/neto/reembolsado. Los agrega la RPC `admin_stats(from, to)` — **una consulta**, no miles de filas a JS (al revés que US-1104: aquí agregar es SQL), y verifica `has_role('admin')` dentro. **S-44 (vistas materializadas) se pospuso a propósito**: es un supuesto de rendimiento, la matview obliga a `pg_cron` de refresco (más piezas, datos con retraso) para un problema que aún no existe; el día que el histórico pese, se cambia la función por un `select` sobre matview sin tocar el frontend. Filtra por `created_at` (consistente con US-1104); el dinero se agrupa por moneda (RN-13, no se suman distintas). **Verificado**: histórico completo (21 reservas, 15 pagadas, 71,4% conversión, 5 tutores, GMV 253/comisión 63,25/neto 189,75/reembolsado −193); período vacío → ceros + "sin ingresos"; presets 7/30/90d; no-admin y anon → 42501.
-- [x] **EP-08 · Sala en vivo (Daily)** ✅ — Daily **cableado de verdad** (US-801, migración `20260717120000` + `src/lib/daily.ts` + `/api/room/[sessionId]`), con la **credencial como interruptor**: sin `DAILY_API_KEY` la sala va **simulada** (como el PSP); con la clave, Daily real, sin tocar código. **Cuenta de Daily con método de pago desde el 28-jul** (dominio `ensenameya.daily.co`, `allow_plan_free:false`); `DAILY_API_KEY` puesta en local, Preview y Production — **prod pasa a Daily real en el próximo deploy**. Validado contra la API real: crear sala privada con `exp`/`enable_chat:false`, firmar meeting-token owner y borrar sala. Pendiente el E2E por navegador con sala real. Para la grabación (US-1802) falta configurarla en el dashboard: `recordings_bucket` y `enable_auto_recording` siguen en `null`. Migración base `20260716120000`.
+- [x] **EP-08 · Sala en vivo (Daily)** ✅ — Daily **cableado de verdad** (US-801, migración `20260717120000` + `src/lib/daily.ts` + `/api/room/[sessionId]`), con la **credencial como interruptor**: sin `DAILY_API_KEY` la sala va **simulada** (como el PSP); con la clave, Daily real, sin tocar código. **Cuenta de Daily con método de pago desde el 28-jul** (dominio `ensenameya.daily.co`, `allow_plan_free:false`); `DAILY_API_KEY` puesta en local, Preview y Production — **prod pasa a Daily real en el próximo deploy**. Validado contra la API real: crear sala privada con `exp`/`enable_chat:false`, firmar meeting-token owner y borrar sala. Pendiente el E2E por navegador con sala real. ⚠️ **Sobre la grabación, corregido el 31-ago:** `recordings_bucket` y `enable_auto_recording`
+siguen en `null` —eso era y es cierto— pero **no es configuración que falte**. `recordings_bucket`
+null = los ficheros viven en el almacenamiento de Daily, que es el modo por defecto y funciona (hay
+dos grabaciones `finished` del 14-ago). Y `enable_auto_recording` **tiene que quedarse en `null`**:
+encenderlo grabaría toda sala automáticamente, o sea sin el consentimiento de las dos partes que
+exige RN-42. La grabación se activa **por sala**, y eso ya está cableado. Migración base `20260716120000`.
   - [x] **US-801 · Entrar a la sala** `EY-59`: RPC `join_session` (SECURITY DEFINER) — exige participante + reserva activa + `now()` dentro de la ventana **RN-18/S-45 (10 min antes / 10 después)**; nombre de sala determinista `ey-<sessionId>`. El **token de Daily lo firma el server** en `/api/room/[sessionId]` con `DAILY_API_KEY` (server-only), tras autorizar con la RPC — efímero, no almacenado (Doc 1 §1.4.11); el tutor entra como `owner`. Sin la clave, el endpoint devuelve sala simulada (**sin fallback silencioso**: un Daily configurado que falla se ve, no se disfraza de simulado). Pantalla `/room/[sessionId]` (SCR-LV01). **C-08 resuelto**: el propio AC fija 10/10, constante nombrada. **Verificado E2E**: por API (dentro de ventana → autoriza; no-participante → rechazado; anón → 28000; a-destiempo → "fuera de la ventana"; reserva no confirmada → "no está activa") y por navegador esta sesión (`POST /api/room → 200`, sala renderizada).
   - [x] **US-802 · Ciclo de vida** `EY-60`: primer join → sesión `in_progress` (y reserva `in_progress` si era la 1ª); el tutor cierra con `complete_session` → `completed` + reserva `completed` cuando no quedan sesiones abiertas; **cierre automático al vencer la ventana** por `close_expired_sessions()` en `pg_cron` cada 5 min (S-26), `no_show` si nadie entró. Grant revocado de PUBLIC → solo `service_role` (lección de US-605). **Verificado E2E**: join→in_progress→complete→completed; re-entrar tras cerrada → rechazado.
   - [x] **US-803 · Responsive/móvil** `EY-61`: sala mobile-first con controles táctiles grandes (mute/cámara/salir/completar); **verificado a 375px** + cuenta regresiva. La **reconexión automática ante caída de red** la aporta el SDK de Daily, ya cableado (US-801); en modo simulado se mantienen los controles locales para ejercitar los toques.
@@ -442,7 +447,7 @@ No consumen SP del sprint. Se filtran en Jira por label.
 - [x] **EP-15** US-1501 Sentry (`EY-80`, `eed746d`, **apagado hasta que haya DSN**) · US-1502 métricas pago/payout/webhook (`EY-81`, migración `20260729210000`, `ccb7058`)
 - [x] **EP-16** US-1601 responsive (`EY-82`) · US-1602 QA + UAT (`EY-83`) — `6f84b45`, resultados en `docs/QA-LANZAMIENTO.md`. ⚠️ US-1601 es "que nada se rompa" a 360/768, **no el responsive del diseño**: los frames de tablet/escritorio siguen pendientes de Diana (decisión 24)
 - [x] **EP-17** US-1702 descargar conversación — `EY-84`, `c53a949` (tanda 2)
-- [x] **EP-18** US-1801 grabar con consentimiento (`EY-85`) · US-1802 ver/descargar 30 días (`EY-86`) — migraciones `20260729220000` + `20260729230000`, `bc35f9b`. [!] Sigue faltando el **go de coste**: el add-on de grabación de Daily no está activado
+- [x] **EP-18** US-1801 grabar con consentimiento (`EY-85`) · US-1802 ver/descargar 30 días (`EY-86`) — migraciones `20260729220000` + `20260729230000`, `bc35f9b`. ~~[!] Sigue faltando el **go de coste**~~ → ✅ **el add-on está activo** (verificado el 31-ago: dos grabaciones `finished` del 14-ago)
   - 🐞 **US-1802 no encontraba NINGUNA grabación** → ✅ `fffd4b5` (6-ago). Y **los 30 días ya se aplican de verdad** (`0722b64`, migraciones `20260806130000` + `20260806140000`): antes solo se cumplían "al servir". Ambos en la sección del 5–6 de agosto
 - [x] ~~**EP-13** US-1301 widget Referral Factory · US-1302 captura `?ref=`~~ → se movió a los últimos
   dos sprints (17-jul) y **allí se cerró**: `EY-78` (`58161f2`) + `EY-79` (`cefb805`). Falta solo pegar
@@ -738,7 +743,7 @@ paso queda cubierto por tipos + el módulo verificado en su otro punto de montaj
 | Sprint | Tickets | Estado real |
 | :-- | :-- | :-- |
 | **6 AC** · Activación comercial | 5 (`EY-93…96`, `EY-147`) | 🔒 bloqueado por cuentas/API keys — **con un matiz, ver abajo** |
-| **7** · Datos + observabilidad + chat + grabación | 11 (`EY-76,77,80,81,84,85,86,113…116`) | Todo ejecutable hoy; la grabación pide un go de coste |
+| **7** · Datos + observabilidad + chat + grabación | 11 (`EY-76,77,80,81,84,85,86,113…116`) | Todo ejecutable hoy; ~~la grabación pide un go de coste~~ → el add-on ya está activo (31-ago) |
 | **8** · Referidos + responsive + QA | 4 (`EY-78,79,82,83`) | Referidos ✅ **desbloqueados** (cuenta RF creada); responsive espera diseños |
 
 ### 🔎 Lo que el inventario destapó
@@ -873,9 +878,10 @@ descarga**) sacó a las dos del limbo en que las dejó el 17-jul.
 ⚠️ **Dos límites reales, no descuidos:**
 - **Los 30 días se aplican al servir**, no en Daily. Borrar el fichero allí necesita la API key en un
   job (Edge Function), igual que el `provider.payout()` de EP-10.
-- **El add-on de grabación de Daily sigue sin activar** (`enable_auto_recording` en `null`). Todo lo de
-  arriba está cableado y verificado hasta donde llega la cuenta: cuando se active en el panel de Daily,
-  la grabación empieza a existir sin tocar código. **Falta el go de coste.**
+- ~~**El add-on de grabación de Daily sigue sin activar**~~ → ✅ **está activo** (31-ago: dos
+  grabaciones `finished` del 14-ago). ⚠️ Y el indicio en que se apoyaba esta línea era erróneo:
+  `enable_auto_recording` en `null` **no significa add-on apagado**, significa que no se graba
+  automáticamente — que es justo lo que RN-42 exige. Debe seguir en `null`.
 
 **Tanda 5 · referidos** · ✅ **COMPLETA (29-jul)** — `EY-78` US-1301, en AL02 y `/account`.
 
@@ -932,7 +938,7 @@ esperando credenciales** — y se puede adelantar a medias en cuanto llegue la c
 | :-- | :-- |
 | Referidos (`EY-78`) | pegar la URL de la campaña en `NEXT_PUBLIC_REFERRAL_URL` — ⚠️ **y replantear la atribución** (6-ago) |
 | Sentry (`EY-80`) | crear la cuenta y pegar el DSN |
-| Grabación (`EY-85/86`) | activar el add-on en Daily (go de coste) |
+| ~~Grabación (`EY-85/86`)~~ | ~~activar el add-on en Daily (go de coste)~~ → ✅ ya activo (31-ago) |
 | ~~Correos (EP-12)~~ | ~~proveedor real (C-11)~~ → ✅ **decidido: Resend** (6-ago); falta la cuenta y `RESEND_API_KEY` |
 | Cobros y payouts reales | cuentas y API keys de Stripe/DLocal (EP-20) — ✅ **Stripe test ya cableado y probado** (6-ago) |
 | Responsive "de diseño" (`EY-82`) | los frames de tablet/escritorio de Diana |
@@ -1161,9 +1167,10 @@ callarlo habría sido peor. Piezas:
   `server-only` para que importarlo desde el cliente rompa el build en vez de filtrar la clave.
 - **Falla cerrado**: sin `CRON_SECRET` responde **503** y no corre.
 
-⚠️ **Sigue bloqueado el add-on de grabación de Daily** (`recordings_bucket` en `null`): falta el **go
-de coste**. O sea que hoy no hay grabaciones que borrar — esto quita el bug y cierra la promesa, no el
-bloqueo de EP-18.
+~~⚠️ **Sigue bloqueado el add-on de grabación de Daily** (`recordings_bucket` en `null`)~~ → ✅ **no
+lo está** (31-ago). `recordings_bucket` en `null` solo dice que los ficheros viven en Daily y no en un
+bucket nuestro; hay dos grabaciones `finished` del 14-ago. Lo que aún no ha pasado es que a alguna le
+venza la retención: la primera cae el **13-sep**.
 
 ### D · Seguridad: `confirm_payment` sale del alcance del cliente (S-15 / RN-26)
 
@@ -1380,14 +1387,14 @@ misma marca sin conectar, con **dos juegos de términos**. Ningún merge lo arre
 | :-- | :-- | :-- |
 | ~~**Que todo esto llegue a producción**~~ | ✅ **el merge se hizo el 26-ago** (`3fca8b2`). Hoy `dev` va 52 commits y **7** migraciones por delante, no 20 | Jose |
 | ~~Correos (`EY-73`)~~ | ✅ `RESEND_API_KEY` (17-ago) + `APP_BASE_URL` y `CRON_SECRET` en GitHub (30-ago). ⚠️ Queda **ver llegar un correo**: el reloj apunta a prod y allí la cola está vacía | Jose |
-| ~~Purga de grabaciones (RN-42)~~ | ✅ `CRON_SECRET` en Vercel ya estaba. Sigue sin haber nada que purgar: falta el add-on de Daily | Jose |
+| ~~Purga de grabaciones (RN-42)~~ | ✅ `CRON_SECRET` en Vercel ya estaba. ⚠️ Sigue sin haber nada que purgar, pero **no por el add-on** —que está activo (31-ago)—: a ninguna grabación le ha vencido la retención, la primera el **13-sep**. Que funcione cuando toque **sigue sin demostrarse** | Jose |
 | ~~**Vaciar la cola de correo de dev**~~ | ✅ **hecho el 30-ago**: 336 avisos a `failed` (§4.6). ⚠️ Vuelve a llenarse sola mientras el seed use `@ensenameya.dev` (sin MX): 187 de las 336 iban ahí | Jose |
 | ~~**Ejercitar X-01**~~ | ✅ **hecho el 30-ago**: los 2 `refund_requests` de dev ejecutados contra Stripe *test mode*, **$47,50**. El job **sí mueve dinero**. ⚠️ Salió que NTF-10 avisa al PEDIR el reembolso, no al moverlo | Jose |
 | Referidos (`EY-78`/`EY-79`) | `NEXT_PUBLIC_REFERRAL_URL` + `REFERRAL_FACTORY_API_KEY` en Vercel, **y rehacer la atribución por email** | Jose |
 | Términos de la campaña de RF | están sin rellenar (plantilla con corchetes) | Cliente / Jose |
 | Cobro real (live mode) | `sk_live_` — o sea el KYC de Stripe del cliente | Cliente |
 | DLocal + payouts | cuenta (rechazada) y contrato; Connect exige KYC | Cliente / Veronica |
-| Grabación (`EY-85/86`) | el add-on de Daily (go de coste) | Cliente / Emilio |
+| ~~Grabación (`EY-85/86`)~~ | ~~el add-on de Daily (go de coste)~~ → ✅ **contratado y verificado el 31-ago**. Sale de la lista de bloqueos | ~~Cliente / Emilio~~ |
 | Un solo contrato legal | decidir qué pasa con los términos de `ensenameya.com` (marzo) y con `ensenameya.com` → app | Negocio |
 | Sentry (`EY-80`) | el DSN | Jose |
 | Responsive "de diseño" (`EY-82`) | los frames de Diana | Diana |

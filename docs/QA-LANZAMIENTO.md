@@ -413,8 +413,9 @@ nada**, porque un cron que no llega a ninguna parte se parece a un cron que no t
   cambiar de proveedor es reescribir una función.
 - **Grabación** — el borrado a los 30 días **ya está automatizado** (RN-42): antes la retención se
   cumplía solo "al servir" —410 al pedir el enlace— y el fichero seguía en Daily para siempre. Pero
-  el add-on de grabación de Daily **sigue sin activarse** (falta el go de coste), así que hoy no hay
-  grabaciones que borrar.
+  ⚠️ **corregido el 31-ago:** decía que el add-on «sigue sin activarse». **Está activo**: hay dos
+  grabaciones `finished` del 14-ago. Hoy no hay nada que borrar por otro motivo — a ninguna le ha
+  vencido la retención, que empieza a caer el **13-sep**.
 
 > **Ninguna de las tres se cae sola**: las tres siguen el patrón credencial-interruptor. El día que
 > haya credenciales, se encienden sin tocar código.

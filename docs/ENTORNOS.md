@@ -339,10 +339,16 @@ BD de dev) porque la preview está tras Deployment Protection y `APP_BASE_URL` a
 `status: "ok"` (en vez de `sin-proveedor` / `sin-stripe`) confirma de paso que producción ya tenía
 `RESEND_API_KEY` **y** `STRIPE_API_KEY`: son las propias respuestas del endpoint las que lo dicen.
 
-Y aunque corriera, la purga no tendría nada que borrar todavía: el **add-on de grabación de Daily
-sigue sin contratar** (falta el visto bueno de coste), así que sin `DAILY_API_KEY` el job devuelve
-`sin-daily` y no marca ninguna sesión — mentir en `sessions.recordings_purged_at`, que es la prueba
-de que la política se cumple, sería peor que no tener sello.
+Y aunque corriera, la purga no tendría nada que borrar **todavía** — pero ⚠️ **no por lo que decía
+este párrafo**, que daba el add-on de Daily por «sin contratar». Está contratado y funcionando
+(`GET api.daily.co/v1/recordings` → dos grabaciones `finished` del 14-ago) y `DAILY_API_KEY` lleva
+puesta desde julio, así que el job **no** devuelve `sin-daily`.
+
+Lo que pasa es más simple: **a ninguna le ha vencido la retención**. La sala más antigua terminó el
+**14-ago**, o sea que los 30 días se cumplen el **13-sep**. Hasta entonces `recordings_purged_at`
+seguirá en `null` en las 12 sesiones con sala, y eso es lo correcto — mentir en esa columna, que es
+la prueba de que la política se cumple, sería peor que no tener sello. Lo que sigue **sin demostrar**
+es que la purga funcione cuando le toque.
 
 ---
 
