@@ -339,34 +339,35 @@ export default async function BookingDetailPage({
           ) : null}
         </div>
 
-        {/* V-6 · Encima del chat y no debajo: quien abre esta pantalla para
-            escribirle primero quiere saber a quién. Sin `chatHref` — el hilo
-            está justo aquí abajo, y un botón «Escribirle» que baja tres
-            centímetros es ruido. */}
-        <TutorSummary tutor={ficha} />
+        {/* La rejilla tiene DOS columnas: tutor y chat van juntos en un mismo
+            hijo o el chat cae en la fila 2 de la columna izquierda. */}
+        <div className="flex flex-col gap-5">
+          {/* V-6 · Encima del chat y no debajo: quien abre esta pantalla para
+              escribirle primero quiere saber a quién. Sin `chatHref` — el hilo
+              está justo aquí abajo, y un botón «Escribirle» que baja tres
+              centímetros es ruido. */}
+          <TutorSummary tutor={ficha} />
 
-        <PanelCard className="flex flex-col gap-3">
-          <PanelCardTitle className="text-base">
-            {tutor ? `Chat con ${tutor}` : "Chat con el tutor"}
-          </PanelCardTitle>
-          <p className="text-xs text-[#6b6b6b]">
-            Disponible desde 2 días antes de tu 1ª sesión.
-          </p>
-          {chatOpen ? (
-            <ChatThread
-              bookingId={booking.id}
-              currentUserId={user.id}
-              firstSessionAt={sessions[0]?.start_at ?? null}
-              initialMessages={initial}
-            />
-          ) : (
-            <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
-              El chat se habilita cuando la reserva esté confirmada.
-            </p>
-          )}
-          {/* "Descargar conversación" del Figma depende de US-1703 (`EY-76`),
-              reabierta el 17-jul: la retención del chat sigue sin decidirse. */}
-        </PanelCard>
+          <PanelCard className="flex flex-col gap-3">
+            <PanelCardTitle className="text-base">
+              {tutor ? `Chat con ${tutor}` : "Chat con el tutor"}
+            </PanelCardTitle>
+            {chatOpen ? (
+              <ChatThread
+                bookingId={booking.id}
+                currentUserId={user.id}
+                firstSessionAt={sessions[0]?.start_at ?? null}
+                initialMessages={initial}
+              />
+            ) : (
+              <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                El chat se habilita cuando la reserva esté confirmada.
+              </p>
+            )}
+            {/* "Descargar conversación" del Figma depende de US-1703 (`EY-76`),
+                reabierta el 17-jul: la retención del chat sigue sin decidirse. */}
+          </PanelCard>
+        </div>
       </div>
 
       {/* ⚠️ LA POLÍTICA DE CANCELACIÓN, AL FINAL Y FUERA DE LA REJILLA.

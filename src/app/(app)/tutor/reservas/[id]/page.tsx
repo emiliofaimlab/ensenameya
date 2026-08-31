@@ -308,20 +308,12 @@ export default async function TutorBookingDetailPage({
         </div>
 
         <PanelCard className="flex flex-col gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-semibold text-[#19191f]">
-              {/* Con nombre cuando lo hay: "Chat con Alumno" sonaría a error. */}
-              {student?.fullName
-                ? `Chat con ${student.fullName}`
-                : "Chat con el alumno"}
-            </h2>
-            {/* M-06 · aquí ponía "RN-41" pelado. Ese es un código de NUESTRA
-                documentación interna: al tutor no le dice nada y parece un
-                error de la aplicación. Lo que necesita saber es la regla. */}
-            <span className="text-[11px] text-[#6b6b6b]">
-              Se abre 2 días antes de la clase
-            </span>
-          </div>
+          <h2 className="text-base font-semibold text-[#19191f]">
+            {/* Con nombre cuando lo hay: "Chat con Alumno" sonaría a error. */}
+            {student?.fullName
+              ? `Chat con ${student.fullName}`
+              : "Chat con el alumno"}
+          </h2>
           {chatOpen ? (
             <ChatThread
               bookingId={booking.id}

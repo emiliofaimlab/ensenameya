@@ -32,10 +32,17 @@ export const metadata = { title: "Mensajes · Enséñame Ya" };
  *
  *  · **Correos ya enviados**, que están en buzones ajenos (`email-templates.ts`
  *    → `rutaFor`, NTF-21). Una URL que sale de aquí ya no vuelve.
- *  · **La sala** (`live-room.tsx`, «Ver hilo completo»), el único sitio de la
- *    app sin burbuja por la decisión MN-04.
  *  · **La campana cuando no hay burbuja donde está pintada** — la propia sala, o
  *    cualquier pantalla futura fuera de `(app)`/`(public)`.
+ *  · **La burbuja misma** (`chat-bubble.tsx`, `router.push`) cuando le piden un
+ *    hilo y no está montada.
+ *
+ * ⚠️ **31-ago: ya no queda NINGÚN enlace clicable a esta ruta.** El «Ver hilo
+ * completo» de la sala (`live-room.tsx`) era el último y se borró: el cliente
+ * volvió a pedir que esta pantalla «no exista». Los tres respaldos de arriba son
+ * programáticos o vienen de fuera, así que desde dentro de la app ya no se puede
+ * llegar. La ruta sigue en pie porque un correo NTF-21 que ya salió no se puede
+ * reescribir; borrarla convertiría ese aviso en un 404.
  *
  * Por eso **no se borra la ruta**. Y por eso el `git grep '/chat/'` de esta
  * tanda se hizo a mano: no hay `typedRoutes` en `next.config.ts` y el CI solo

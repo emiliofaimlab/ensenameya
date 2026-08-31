@@ -146,6 +146,7 @@ export function ChatThread({
   currentUserId,
   initialMessages,
   fill,
+  sinAvisoDeRetencion,
   hasBooking,
   canChat,
   counterpartRole,
@@ -170,6 +171,8 @@ export function ChatThread({
   initialMessages: ChatMessage[];
   /** En la sala (LV01) el hilo ocupa el alto de su columna; suelto, no. */
   fill?: boolean;
+  /** Oculta el aviso de retención: solo la sala, que ya lo tiene en la ficha. */
+  sinAvisoDeRetencion?: boolean;
   /** ¿El par ya compró? Decide los adjuntos y el aviso de los topes. */
   hasBooking?: boolean;
   /**
@@ -591,8 +594,9 @@ export function ChatThread({
             promete un plazo único.
           · Consulta previa: el reloj corre por CONVERSACIÓN y solo si no se
             llega a reservar (decisión b de M-12). No se erosiona: o está el
-            hilo entero o no está. */}
-      {messages.length > 0 && listo ? (
+            hilo entero o no está.
+          En la sala no se pinta: el aviso vive en la ficha de la reserva. */}
+      {messages.length > 0 && listo && !sinAvisoDeRetencion ? (
         <p className="text-[11px] text-muted-foreground">
           {esConsulta
             ? "Si no llegas a reservar, esta conversación se borra a los 30 días del último mensaje."

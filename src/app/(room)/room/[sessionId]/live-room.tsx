@@ -1237,33 +1237,6 @@ export function LiveRoom({
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[color:var(--sala-border)] px-4 py-3">
               <h2 className="font-semibold">Chat</h2>
               <div className="flex items-center gap-2">
-                {/* ⚠️ ESTE ENLACE A `/chat/<id>` SOBREVIVE A PROPÓSITO — NO LO
-                    BORRES CREYENDO QUE SE OLVIDÓ.
-
-                    El 27-ago se retiró la navegación a `/chat/[threadId]` desde
-                    DENTRO de la app: el botón de la ficha del tutor, el «Chat»
-                    del panel del tutor y los avisos de la campana abren ahora la
-                    burbuja sin cambiar de pantalla («que abra directo en la
-                    burbuja de chat», cliente, 27-ago). Aquí no, y la razón es
-                    que **la sala es el único sitio sin burbuja**: `(room)` no
-                    monta `ChatLauncher` y eso es la decisión MN-04 —la burbuja
-                    flotante encima del vídeo dejaba el iframe de Daily en 34rem—.
-                    Sin burbuja que abrir, pedirle a la burbuja que se abra sería
-                    un clic muerto, y la página es la respuesta correcta.
-
-                    Que siga siendo el id de la RESERVA tampoco es un descuido:
-                    la página resuelve los dos (conversación, y si no, reserva →
-                    conversación vía `conversation_of_booking`). Ver su docblock.
-
-                    Sigue sin `target="_blank"`, como estaba: no se ha tocado
-                    aquí nada más que este comentario. */}
-                <Link
-                  href={`/chat/${bookingId}`}
-                  className="text-[11px] text-[color:var(--sala-supportive)] underline-offset-2 hover:underline"
-                  title="Ver el hilo completo fuera de la sala"
-                >
-                  Ver hilo completo
-                </Link>
                 {/* ⚠️ Este aspa NO es un duplicado del botón de la barra de
                     Daily: en móvil el panel TAPA el iframe, así que ese botón
                     queda debajo y no hay forma de volver al vídeo sin esto. */}
@@ -1297,6 +1270,9 @@ export function LiveRoom({
             >
               <ChatThread
                 fill
+                // El aviso de retención ocupa media columna en un panel de
+                // 360px y ya se lee entero en la ficha de la reserva.
+                sinAvisoDeRetencion
                 bookingId={bookingId}
                 currentUserId={currentUserId}
                 firstSessionAt={firstSessionAt}
