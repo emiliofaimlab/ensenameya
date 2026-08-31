@@ -385,6 +385,7 @@ export async function BookingPanel({
                         : undefined,
                     d: key,
                   })}
+                  scroll={false}
                   aria-current={isSelected ? "date" : undefined}
                   className={`grid h-[38px] place-items-center rounded-full text-[13px] transition-colors ${
                     isSelected
@@ -585,14 +586,13 @@ export async function BookingPanel({
         B3.5 · LA BARRA. El botón se queda a la vista en TODOS los pasos —día,
         mentoría y hora—, sin inventarse un CTA por paso.
 
-        El problema era medible y de móvil: el panel es lo último de la página,
-        cada chip navega y aterriza en `#reservar` (el ancla de B2, que existe
-        para que la pulsación no devuelva la vista al principio de la ficha), y
-        desde ahí el botón cae a ~700 px del borde superior. En un teléfono eso
-        es bajo el pliegue en los tres pasos: se elige el día, se elige la hora,
-        y la pantalla nunca enseña a dónde lleva eso. Con `sticky bottom-0` el
-        botón se despega y queda clavado abajo mientras el panel esté a la
-        vista, y vuelve a su sitio al llegar al final.
+        El problema era medible y de móvil: el panel es lo último de la página
+        y, con la vista puesta en él, el botón cae a ~700 px del borde
+        superior. En un teléfono eso es bajo el pliegue en los tres pasos: se
+        elige el día, se elige la hora, y la pantalla nunca enseña a dónde lleva
+        eso. Con `sticky bottom-0` el botón se despega y queda clavado abajo
+        mientras el panel esté a la vista, y vuelve a su sitio al llegar al
+        final.
 
         ⚠️ Lo que NO se ha hecho, a propósito: un CTA distinto por paso. Eso
         reabre §20.14 —«la queja no era el número de pasos, era no saber en cuál
@@ -641,10 +641,10 @@ export async function BookingPanel({
         ⚠️ Y en MÓVIL queda un solape TRANSITORIO conocido, medido y aceptado:
         mientras se baja hacia el panel —la banda de unos 200 px anterior a que
         asiente— la barra flota sobre los chips y se come su clic (8 de 8 en el
-        peor punto). Se resuelve solo en cuanto se sigue bajando, y quien llega
-        pulsando un día aterriza en `#reservar`, donde el solape ya es CERO. Es
-        el precio del patrón «barra de compra fija» y se paga a sabiendas: la
-        alternativa es devolver el CTA bajo el pliegue, que era la queja.
+        peor punto). Se resuelve solo en cuanto se sigue bajando, y quien pulsa
+        un día ya está sobre el panel, donde el solape es CERO. Es el precio
+        del patrón «barra de compra fija» y se paga a sabiendas: la alternativa
+        es devolver el CTA bajo el pliegue, que era la queja.
       */}
       {/*
         EY-177 · B3.2 · ⚠️ AQUÍ CAMBIA EL BOTÓN, Y ES LA MARCHA ATRÁS SOBRE N-33.
@@ -755,8 +755,8 @@ export async function BookingPanel({
               por defecto (`allDays[0]`), o sea que no dejaría la pantalla en
               blanco: la dejaría en OTRO día, elegido por nosotros.
 
-              Y como `hrefFor` lleva su `#reservar`, la vista aterriza en el
-              panel en vez de volver al principio de la ficha.
+              Y la navegación va con `scroll: false`, así que la vista se queda
+              donde está en vez de saltar al `#reservar` que lleva el href.
             */
             limpiarHref={hrefFor({ d: day })}
             motivo={motivoDelBloqueo}

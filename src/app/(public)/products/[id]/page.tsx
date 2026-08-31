@@ -384,10 +384,11 @@ export default async function ProductPage({
             </div>
           </div>
 
-          {/* El ancla es de MN-16: los chips de hora ahora navegan a esta misma
-              página para seleccionarse, y sin `#reservar` cada pulsación
-              devolvía la vista al principio de la ficha — con el panel fuera de
-              pantalla en móvil, parecía que no había pasado nada. */}
+          {/* El ancla es de MN-16 y sirve a quien llega de FUERA (los enlaces
+              del carrito): aterriza en el panel y no al principio de la ficha.
+              Para los controles del propio panel el hash era el problema —Next
+              realineaba la vista bajo la cabecera en cada selección—, así que
+              navegan con `scroll: false`. */}
           <div id="reservar">
             <BookingPanel
               products={[product]}

@@ -133,7 +133,7 @@ export function BookingSelect({
           // vacío, no se navega a ningún sitio. Nunca se inventa un destino.
           if (!opcion) return;
           setElegido(opcion.value);
-          router.push(opcion.href);
+          router.push(opcion.href, { scroll: false });
         }}
         className="mt-2 h-[45px] w-full rounded-[10px] border border-[#cccccc] bg-card px-3 text-[13.5px] text-[#212121] transition-colors hover:border-brand focus-visible:border-brand focus-visible:outline-none"
       >

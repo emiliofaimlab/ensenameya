@@ -94,8 +94,11 @@ export default async function TutorProfilePage({
    * query, donde significa "espacio" — la hora llegaría destrozada al otro lado
    * y el panel la descartaría por no casar con ningún hueco.
    *
-   * El `#reservar` mantiene la vista en el panel: sin él, elegir una hora
-   * rebotaría al principio de la ficha en cada pulsación.
+   * El `#reservar` es para quien llega de FUERA (los enlaces del carrito):
+   * aterriza en el panel y no al principio de la ficha. Dentro del panel el
+   * hash es justo lo contrario —hacía que Next realineara la vista bajo la
+   * cabecera en cada selección—, y por eso sus controles navegan con
+   * `scroll: false`.
    */
   const hrefFor = (next: { p?: string; d?: string; h?: string }) => {
     const q = new URLSearchParams();

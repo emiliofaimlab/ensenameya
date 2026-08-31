@@ -167,7 +167,7 @@ export function AddToCart({
      * caché), y el contador de la cabecera no depende de ese render: vive sobre
      * la cookie y se entera por `CART_EVENT`, que acaba de dispararse solo.
      */
-    if (limpiarHref) router.push(limpiarHref);
+    if (limpiarHref) router.push(limpiarHref, { scroll: false });
   }
 
   return (
