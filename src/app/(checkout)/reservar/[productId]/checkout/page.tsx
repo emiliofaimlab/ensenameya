@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import { getSessionContext, getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
@@ -22,9 +22,25 @@ export const metadata = { title: "Confirmar pago · Enséñame Ya" };
  * `src/app/(checkout)/layout.tsx`. La URL no cambia —los grupos de rutas no
  * salen en la dirección—, así que todos los enlaces de siempre siguen valiendo.
  *
- * La guarda de sesión la pone este `requireUser()` y no el layout: es también
- * quien exige el onboarding y quien arma el `?next=` con la query, de modo que
- * quien llegue aquí sin sesión vuelve del login con sus horarios intactos.
+ * ⚠️ CHECKOUT DE INVITADO · ESTA PANTALLA ADMITE ANÓNIMOS, y es la única del
+ * grupo que lo hace. Quien llega sin cuenta NO se va a `/login`: el formulario
+ * le pide correo, contraseña y la casilla de términos aquí mismo y la cuenta se
+ * crea con el clic de pagar (`components/checkout/datos-invitado.tsx` +
+ * `api/checkout/invitado`). Todo lo demás de esta página ya funcionaba con la
+ * ANON key —el catálogo es público, la zona sale de la cookie `ey-tz`—, así que
+ * lo único que cambia es de dónde sale el `studentId`.
+ *
+ * Quien SÍ tiene cuenta sigue pasando por `requireUser()` entero: es quien
+ * exige el onboarding (RN-44) y quien arma el `?next=` con la query a partir
+ * del header `x-pathname`, de modo que vuelve del asistente con sus horarios
+ * intactos. Se llama solo cuando hay sesión —cuesta una lectura de más y no
+ * duplica la guarda, que es justo lo que no se puede tocar aquí—.
+ *
+ * ⚠️ Y «quien tiene cuenta» incluye a quien se autentica DENTRO del formulario:
+ * ese render ya había ocurrido sin sesión, así que la guarda se lo habría
+ * saltado entero. Por eso `DatosInvitado` no continúa en cliente —recarga la
+ * página— y esta línea vuelve a correr con la sesión puesta. Sin eso, alguien
+ * con el onboarding a medias pagaba y aterrizaba en el asistente después.
  */
 export default async function CheckoutPage({
   params,
@@ -35,7 +51,13 @@ export default async function CheckoutPage({
 }) {
   const { productId } = await params;
   const { slots: slotsParam } = await searchParams;
-  const { user } = await requireUser();
+  const { user } = await getSessionContext();
+  // ⚠️ Quitar el `requireUser()` de aquí quitaría DOS cosas, no una: la sesión
+  // y el onboarding obligatorio. Lo segundo tiene que seguir en pie para quien
+  // ya tiene cuenta —el encargo prohíbe relajarlo—, así que la guarda de
+  // siempre se llama tal cual en cuanto hay sesión, en vez de reescribir aquí
+  // su rama de tutor y su `?next=`, que es como divergen las guardas.
+  if (user) await requireUser();
 
   const product = await getProductDetail(productId);
   if (!product) notFound();
@@ -46,7 +68,12 @@ export default async function CheckoutPage({
   // Selección inválida → de vuelta al picker (evita un checkout inconsistente).
   // ⚠️ Al `/reservar/<id>` PELADO, sin `?slot=`: con la hora en la query esa
   // página rebotaría otra vez aquí (N-33) y serían dos redirecciones en bucle.
-  if (slots.length !== required) redirect(`/reservar/${productId}`);
+  // ⚠️ Y sin sesión, a la ficha PÚBLICA: el selector cuelga de `(app)`, así que
+  // mandar ahí a un invitado es mandarlo a `/login`, que es la pantalla que esta
+  // página existe para que no vea (mismo criterio que `ChangeSlotLink`).
+  if (slots.length !== required) {
+    redirect(user ? `/reservar/${productId}` : `/products/${productId}`);
+  }
 
   const supabase = await createClient();
   // RN-01/RN-02 · la zona del alumno, resuelta en SERVIDOR. El checkout pintaba
@@ -111,7 +138,8 @@ export default async function CheckoutPage({
             es decir que ese hueco ya no se quiere. */}
         <ChangeSlotLink
           productId={productId}
-          studentId={user.id}
+          // Sin cuenta todavía no hay hold que soltar: aquí es un enlace normal.
+          studentId={user?.id ?? null}
           slots={slots}
           etiqueta="Cambiar horario"
           className="mb-4 flex w-fit items-center gap-1.5 text-sm text-[#6b6b6b] transition-colors hover:text-foreground"
@@ -132,7 +160,12 @@ export default async function CheckoutPage({
         // poder buscar la que ya hubiera de ESTE alumno. El id sale de la
         // sesión de servidor y no de `auth.getUser()` en el navegador: una
         // llamada menos y un dato menos que el cliente pueda equivocar.
-        studentId={user.id}
+        //
+        // `null` = invitado: el formulario pide los datos y NO abre reserva ni
+        // cobro hasta que la cuenta existe. Esa espera es la que hace que
+        // abandonar la pantalla antes de rellenar nada no deje ni cuenta ni
+        // horario retenido.
+        studentId={user?.id ?? null}
         // El tutor de la mentoría: con él se localizan los holds propios que
         // solapan lo que se va a pedir, que es como se mide el choque en el SQL
         // (`get_available_slots` filtra por tutor, no por mentoría).

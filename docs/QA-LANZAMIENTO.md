@@ -218,6 +218,35 @@ dos crons miente en la base de datos. Sin credenciales de Daily la purga no marc
 el job de correo no toca la cola: los avisos quedan **`pending`, no `failed`**, así que el día que
 se ponga la clave sale todo lo acumulado en la primera pasada.
 
+### ⚠️ `POST /api/checkout/invitado` — lo que NO garantiza (31-ago)
+
+Es la única puerta del sitio por la que se entra **sin sesión** y se sale con una cuenta: el checkout
+de invitado crea al comprador con `auth.admin.createUser` (`service_role`) para poder cobrarle, y por
+eso no hereda ninguno de los límites que GoTrue le pone a `signUp`. **Esta ruta no está en la lista
+de "protegidas"**, y estas tres cosas hay que leerlas antes de abrir al público:
+
+| Lo que se cerró | Lo que sigue abierto |
+| :-- | :-- |
+| Origen: se rechaza (403) todo `Origin` / `Sec-Fetch-Site` que no sea el propio, y el `Content-Type` tiene que ser JSON — sin eso, cualquier web ajena creaba cuentas desde el navegador **y la IP** de sus visitantes, sin preflight | Un cliente que no manda esas cabeceras (curl, un script) pasa: no hay nada que comprobar. A ese solo lo frena el límite |
+| Límite por IP **contra la base** (`signup_attempts`, `20260831140000`): 5 intentos / 10 min. Antes se contaba en la memoria de la instancia, o sea que en Vercel no limitaba nada. ⚠️ **Falla cerrado**: si la tabla no está (migración sin aplicar) el endpoint responde **503** y no crea ni una cuenta — `db:push` antes de desplegar | Se limita por **origen, no por persona**: un bot con proxies reparte y pasa. Y una salida NAT compartida (colegio, operadora móvil) comparte cupo → el sexto comprador legítimo de esa red en diez minutos se come un 429 en mitad de un pago. Lo único que cierra esto es un **captcha**, que no está decidido |
+| La IP se toma de las cabeceras que pone la infraestructura (`x-vercel-forwarded-for`, `x-real-ip`) y no del primer elemento de `x-forwarded-for`, que lo escribe el cliente | Sin verificar contra el borde real de Vercel: si algún día la plataforma cambia qué cabecera pone, hay que volver aquí |
+
+⚠️ **Las cuentas nacidas en este endpoint son «correo NO probado».** Llevan `email_confirm: true`
+—hace falta para que haya sesión con la que cobrar— pero **nadie ha demostrado poseer esa
+dirección**: basta con teclearla. No son lo mismo que una cuenta confirmada por su dueño desde
+`/signup`, y hoy **nada en el panel ni en los recuentos las distingue**. Consecuencias que hay que
+tener presentes: un correo mal tecleado crea una cuenta real e irrecuperable (el *reset password* va
+al buzón equivocado), y alguien puede crear una a nombre de un tercero. Lo único que lo hace
+detectable es que **el alta ya no es muda**: al crear la cuenta se manda un aviso a la dirección
+(«se creó una cuenta con tu correo… si no fuiste tú, escríbenos»), directo por `sendEmail` y no por
+la cola, porque un aviso de seguridad que llega en la pasada del cron de dentro de 2-6 h no avisa.
+Sin `RESEND_API_KEY` ese aviso **no sale** (la credencial es el interruptor), así que en un ambiente
+sin correo configurado el agujero está entero.
+
+**Grant nuevo de `service_role`** (regla de oro 9, además de los cuatro de §1):
+`signup_attempts` → `select, insert, delete` (`20260831140000`) y `profiles` → `update
+(onboarding_complete)` (`20260831130000`).
+
 ## 3. Responsive (US-1601)
 
 Barrido automático de scroll horizontal —el síntoma que delata un layout roto— en **17 rutas** a

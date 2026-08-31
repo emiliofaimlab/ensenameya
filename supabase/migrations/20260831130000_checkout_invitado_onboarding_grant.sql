@@ -1,0 +1,39 @@
+-- ============================================================================
+-- Enséñame Ya — CHECKOUT DE INVITADO · el único grant que le falta al alta
+-- creada desde la pantalla de pago.
+--
+-- QUÉ PASA AQUÍ. `POST /api/checkout/invitado` crea la cuenta del comprador
+-- anónimo con `auth.admin.createUser({ email_confirm: true })` y necesita que
+-- ese perfil nazca con `onboarding_complete = true`: al volver de Stripe, la
+-- confirmación (`/reservas/<id>/confirmacion`, `/pedidos/<id>/confirmacion`)
+-- cuelga del grupo `(app)`, cuyo layout llama a `requireUser()`, y esa guarda
+-- rebota al asistente de onboarding mientras el flag esté en false (que es el
+-- default de `20260706130000`). El comprador acabaría rellenando nombre y foto
+-- justo después de pagar, que es exactamente lo que el checkout de invitado
+-- viene a evitar.
+--
+-- ⚠️ REGLA DE ORO 9 — Y ES POR ESO QUE ESTA MIGRACIÓN EXISTE.
+-- `service_role` se salta la RLS pero NO los grants de tabla, y sobre
+-- `public.profiles` solo tiene `select` y `update (stripe_customer_id)`
+-- (`20260806170000_stripe_customer_y_referencia.sql:40-41`). Sin la línea de
+-- abajo, `admin.from("profiles").update({ onboarding_complete: true })` muere
+-- con `permission denied` **en tiempo de ejecución**: no lo ve el build, no lo
+-- ve el typecheck, y el síntoma es un comprador que vuelve de la pasarela y
+-- aterriza en `/onboarding` con la compra ya hecha.
+--
+-- ⚠️ POR QUÉ NO SE TOCA `handle_new_user` PARA QUE LEA EL FLAG DEL METADATA.
+-- Sería más corto —una clave más en `user_metadata` y ni esta migración haría
+-- falta— y es justo lo que no se puede hacer: `options.data` de `signUp` lo
+-- pone el NAVEGADOR, así que cualquiera podría saltarse el onboarding
+-- registrándose con `onboarding_complete: true` en el metadata. Eso sí sería
+-- relajar la guarda para todo el mundo. Aquí la escritura es del servidor y
+-- solo desde el endpoint del checkout.
+--
+-- Columna y no tabla: `grant update (col)` es el mismo gesto acotado que ya usa
+-- `stripe_customer_id`. `service_role` sigue sin poder escribir el nombre, la
+-- zona ni el código de referido de nadie — eso lo hace el trigger del alta.
+--
+-- Regla de oro 9 · 20260806170000 (precedente) · 20260706130000 (la columna)
+-- ============================================================================
+
+grant update (onboarding_complete) on public.profiles to service_role;

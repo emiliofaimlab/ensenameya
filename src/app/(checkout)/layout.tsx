@@ -20,13 +20,23 @@ import { LockIcon } from "lucide-react";
  * `/reservar/<id>/checkout` sigue siendo exactamente la misma dirección de
  * siempre y no hay enlace que arreglar.
  *
- * ⚠️ LA GUARDA DE SESIÓN NO SE PIERDE POR SALIR DE `(app)`. Allí la ponía el
- * layout con su `requireUser()`, pero las dos páginas de este grupo lo llaman
- * por su cuenta —y `requireUser()` es quien además obliga a completar el
- * onboarding (RN-44) y quien arma el `?next=` del login con la query incluida
- * (M-10), que es lo que hace que el horario elegido sobreviva al registro—.
- * Comprobado una por una: si mañana se añade una tercera pantalla aquí, tiene
- * que empezar por `requireUser()`.
+ * ⚠️ LA GUARDA DE SESIÓN LA PONE CADA PÁGINA, Y NO TODAS PIDEN LO MISMO. Este
+ * layout no guarda nada, así que hay que mirar página por página:
+ *
+ *   · `reservas/[id]/pagar` y `pedidos/[id]/pagar` empiezan por `requireUser()`
+ *     —cobran algo que YA existe y es de alguien—, y esa llamada es además
+ *     quien obliga a completar el onboarding (RN-44) y quien arma el `?next=`
+ *     del login con la query incluida (M-10);
+ *   · `reservar/[productId]/checkout` **admite anónimos a propósito**: es el
+ *     checkout de invitado, donde la cuenta se crea DENTRO del formulario de
+ *     pago para que nadie tenga que pasar por `/signup` ni por el onboarding en
+ *     mitad de una compra. Ahí `requireUser()` se llama solo cuando hay sesión,
+ *     que es como se conserva el onboarding obligatorio para quien ya tiene
+ *     cuenta sin cerrarle la puerta a quien no la tiene. El porqué completo
+ *     está en esa página y en `api/checkout/invitado/route.ts`.
+ *
+ * Una pantalla nueva aquí empieza por `requireUser()` salvo que tenga un motivo
+ * escrito para no hacerlo, como lo tiene el checkout de invitado.
  *
  * Lo que SÍ se hereda es el layout raíz: fuentes, `TimezoneSync`, el `Toaster`
  * de sonner (los `toast.error` del formulario dependen de él) y el proveedor de
