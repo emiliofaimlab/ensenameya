@@ -583,9 +583,66 @@ la cola de futuros rebotes. Mientras siga así, este procedimiento hay que repet
 encendido. La salida limpia es que el seed use direcciones que acepten correo (un buzón propio con
 subdirecciones `+algo`, o las direcciones de prueba del propio Resend).
 
+### 4.7 🟢 Baja de cuenta con dinero en vuelo — ciclo ejercitado (31-ago)
+
+`27739b1` + `52e5b69`. Ejecutado contra **dev**, en dos mitades, porque el esquema **no deja forjar
+el estado intermedio** — ver el final de esta sección, que es el hallazgo más útil de la pasada.
+
+**Mitad 1 · recolectar y barrer** (usuario desechable creado y borrado para esto):
+
+| Paso | Resultado |
+| :-- | :-- |
+| 2 ficheros suyos en Storage | `kyc-documents/<uid>/cedula.png` + `avatars/<uid>/foto.png` |
+| `anonymize_account` | `ficheros_recolectados: 2`, los deja en `summary` y **no** borra de Storage |
+| `account_deletions_pendientes_de_barrido` | los ve: 1 cuenta, 2 ficheros |
+| `POST …/barrido?simulacro=1` | `{"cuentas":1,"ficheros":2,"buckets":["avatars","kyc-documents"]}` — y los dos ficheros **siguen** en Storage |
+| `POST …/barrido` | `{"ficheros_barridos":2,"ficheros_pendientes":0}` |
+| Storage después | `kyc-documents: []` · `avatars: []` |
+| `summary` después | `{"ficheros":{}, "ficheros_barridos":2, "ficheros_recolectados":2}` |
+
+**Mitad 2 · pedir, desactivar y arrepentirse** (tutor real del seed, **revertido al terminar**):
+
+| Paso | Resultado |
+| :-- | :-- |
+| Bloqueante | `saldo_sin_liquidar: 20250` USD, liquidable desde el 7-sep |
+| Antes | en catálogo **sí** · mentorías activas **3** |
+| `request_account_deletion` | `"programada"` |
+| Después | en catálogo **NO** · mentorías activas **0** |
+| Fila guardada | `prev_approval: "approved"` + los 3 ids de sus mentorías |
+| Segunda llamada | `"ya_programada"` — **sin** repausar ni pisar `prev_active_products` |
+| `process_pending_account_deletions()` | `esperando: 1 · completadas: 0` — se niega, correctamente |
+| `cancel_account_deletion` | `"cancelada"`; en catálogo **sí** · mentorías activas **3** |
+| ¿Anonimizada? | **No** |
+
+La idempotencia no es un detalle: si la segunda llamada pisara `prev_active_products` con la lista ya
+vaciada, cancelar dejaría el catálogo apagado **para siempre**. Es el fallo que anticipa el comentario
+de `request_account_deletion`, y no ocurre.
+
+⚠️ **LO QUE SIGUE SIN EJERCITARSE: la transición.** Que el `pg_cron` complete una baja cuando el
+bloqueante desaparece. No se pudo montar, y el motivo es que **el esquema lo impide a propósito**:
+para plantar un bloqueante que luego se pudiera quitar hacía falta insertar en `bookings`, `payments`
+o `account_deletion_requests`, y las tres tienen **SELECT pero NO INSERT** para `service_role` — solo
+las escriben las funciones `security definer`. Es la regla de oro 2 funcionando (el dinero no se
+escribe a mano ni para una prueba), así que el hueco de cobertura es el precio de una barrera que
+queremos. Se verá cuando un saldo se liquide solo, o con acceso a `psql`.
+
+Mapa de privilegios comprobado de paso, todo con `service_role`:
+
+| Tabla | SELECT | INSERT / DELETE |
+| :-- | :-- | :-- |
+| `profiles`, `bookings`, `payments`, `refund_requests`, `account_deletions`, `account_deletion_requests` | ✅ | ❌ 42501 |
+| `products`, `tutor_profiles`, `payouts`, `payout_items` | ❌ 42501 | ❌ |
+
+Ninguna rompe nada hoy: todo lo que las lee es `security definer`. Pero es más amplio de lo que decía
+la tabla de §1, y lo próximo que las toque sin serlo morderá en ejecución (regla de oro 9).
+
+**Estado de dev al terminar:** 8 tutores, 15 mentorías activas, 33 sesiones vivas — idéntico al de
+antes. Nota práctica: `kyc-documents` **rechaza `text/plain`** (solo png, jpeg, webp y pdf); una
+subida de prueba con el mime equivocado devuelve 400 y no es un problema de permisos.
+
 ---
 
-*Se actualiza en cada pasada de QA. Última edición: **2026-08-17** — superficies nuevas del día
+*Se actualiza en cada pasada de QA. Última edición: **2026-08-31** — §4.7 con el ciclo de la baja de cuenta con dinero en vuelo ejercitado de punta a punta (recolección, ensayo, barrido real, desactivación y cancelación), el mapa de privilegios de `service_role` por operación, y el hueco de cobertura que deja la regla de oro 2. Edición previa el **2026-08-17** — superficies nuevas del día
 (contacto, aceptación de términos, alumnos del tutor, cobro tardío, cola de reembolsos), tercer job
 programado, §4.6 para vaciar la cola vieja de correo, y el checklist al día (30 migraciones
 pendientes de prod, variables repartidas, Stripe de test mode ya en producción). Edición previa el
