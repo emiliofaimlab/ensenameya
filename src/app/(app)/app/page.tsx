@@ -3,7 +3,12 @@ import { CompassIcon } from "lucide-react";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { BOOKING_STATUS_LABEL, isUpcoming, tutorCards } from "@/lib/booking";
+import {
+  BOOKING_STATUS_LABEL,
+  porProximidad,
+  sesionVigente,
+  tutorCards,
+} from "@/lib/booking";
 import { salaDeLaReserva } from "@/lib/room-window";
 import { BookingRow } from "@/components/booking-row";
 import { ReferralCard } from "@/components/referral/referral-card";
@@ -82,7 +87,11 @@ export default async function AppHome() {
       .eq("student_id", user.id)
       .in("status", OPEN)
       .order("created_at", { ascending: false })
-      .limit(6),
+      // ⚠️ el LÍMITE se aplica en Postgres, o sea sobre `created_at desc`: con
+      // `.limit(6)` una clase de ahora mismo comprada hace un mes ni siquiera
+      // llegaba, y ningún orden posterior la puede subir. Se traen 30 y se
+      // recorta a 6 abajo, ya ordenadas por proximidad.
+      .limit(30),
     // N-30 · va DENTRO del mismo `Promise.all` a propósito: resuelve sus
     // propias consultas (intereses, oferta y catálogo) y encadenarla después
     // de las reservas sumaría su latencia a la de la pantalla para nada.
@@ -98,7 +107,11 @@ export default async function AppHome() {
     historialDelAlumno(user.id),
   ]);
 
-  const open = openRows ?? [];
+  // En curso primero, luego las próximas por fecha y hora (`porProximidad`).
+  // El `.slice(0, 6)` va DESPUÉS de ordenar y antes de todo lo demás: las seis
+  // que se pintan son también las que cuentan para el saludo y para las fichas
+  // de tutor, como hasta ahora.
+  const open = (openRows ?? []).sort(porProximidad).slice(0, 6);
   // `tutorCards` y no `tutorNames`: es la MISMA consulta con cuatro columnas
   // más (avatar, titular, valoración). B1.10 las trajo para el bloque de
   // tutores recientes; ese bloque ahora sale de `TutoresCard`, pero las fichas
@@ -126,21 +139,6 @@ export default async function AppHome() {
    */
   const perfilDelTutor = (id: string | null | undefined) =>
     id && fichas.get(id)?.displayName ? `/tutors/${id}` : undefined;
-
-  /**
-   * Sesión relevante de la reserva: la primera que aún no ha terminado.
-   *
-   * MN-05 · Sigue mirando `end_at` y NO la ventana de acceso, a propósito. Esto
-   * es "Próximas sesiones": una clase de hace cuatro días cuya sala sigue
-   * abierta no es próxima, y meterla aquí llenaría el panel de pasado. A su
-   * sala se llega igual desde el detalle de la reserva, que es donde vive la
-   * lista completa.
-   */
-  const nextSession = (b: (typeof open)[number]) =>
-    [...(b.sessions ?? [])]
-      .filter((s) => s.status === "scheduled" || s.status === "in_progress")
-      .sort((x, y) => x.start_at.localeCompare(y.start_at))
-      .find((s) => isUpcoming(s.end_at)) ?? null;
 
   const upcomingCount = open.filter((b) => ROOM_READY.has(b.status)).length;
   const awaitingCount = open.length - upcomingCount;
@@ -208,7 +206,10 @@ export default async function AppHome() {
             ) : (
               <ul className="mt-4 divide-y divide-[#e0e0e0]">
                 {open.map((b) => {
-                  const s = nextSession(b);
+                  // La misma sesión que ordena la lista, para que el orden y
+                  // la fecha que se pinta no se contradigan. Vive en `lib` (era
+                  // `nextSession`, aquí mismo) porque las tres listas la usan.
+                  const s = sesionVigente(b.sessions);
                   const ready = ROOM_READY.has(b.status);
                   // El criterio de «hay sala ahora» salió de aquí a
                   // `salaDeLaReserva`: el cliente pidió este mismo botón en

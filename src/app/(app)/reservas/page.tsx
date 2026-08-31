@@ -3,7 +3,12 @@ import Link from "next/link";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { BOOKING_STATUS_LABEL, isUpcoming, tutorNames } from "@/lib/booking";
+import {
+  BOOKING_STATUS_LABEL,
+  porProximidad,
+  sesionVigente,
+  tutorNames,
+} from "@/lib/booking";
 import { salaDeLaReserva } from "@/lib/room-window";
 import { BookingRow } from "@/components/booking-row";
 import { EmptyResults } from "@/components/catalog/empty-results";
@@ -69,7 +74,10 @@ export default async function ReservasPage() {
   const perfilDelTutor = (id: string | null | undefined) =>
     id && names.has(id) ? `/tutors/${id}` : undefined;
 
-  const open = bookings.filter((b) => OPEN.has(b.status));
+  // En curso primero, luego las próximas por fecha y hora. El «Historial» se
+  // queda como está: sin sesión viva todas empatan y el sort estable conserva
+  // el `created_at desc` de la consulta.
+  const open = bookings.filter((b) => OPEN.has(b.status)).sort(porProximidad);
   const closed = bookings.filter((b) => !OPEN.has(b.status));
 
   // RV-11 · las burbujas del estado vacío. Se piden SOLO cuando no hay ninguna
@@ -78,17 +86,15 @@ export default async function ReservasPage() {
   // categoría sin mentorías es el mismo callejón del que se le quiere sacar.
   const conOferta = bookings.length === 0 ? await categoriesWithOffer() : [];
 
-  /** La sesión que representa a la reserva: la próxima viva, o la última. */
+  /** La sesión que representa a la reserva: la vigente, o la última que hubo.
+   *  Es la MISMA que ordena la lista — antes filtraba por `start_at`, así que
+   *  durante la clase la fila saltaba a mostrar la sesión siguiente y la fecha
+   *  contradecía al orden. */
   const when = (b: (typeof bookings)[number]) => {
     const all = [...(b.sessions ?? [])].sort((x, y) =>
       x.start_at.localeCompare(y.start_at),
     );
-    return (
-      all.find((s) => s.status === "scheduled" && isUpcoming(s.start_at))
-        ?.start_at ??
-      all.at(-1)?.start_at ??
-      null
-    );
+    return sesionVigente(all)?.start_at ?? all.at(-1)?.start_at ?? null;
   };
 
   const row = (b: (typeof bookings)[number]) => {

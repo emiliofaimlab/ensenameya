@@ -5,7 +5,12 @@ import { requireTutorProfile } from "@/lib/auth/tutor";
 import { getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { formatSessionTime, BOOKING_STATUS_LABEL } from "@/lib/booking";
+import {
+  formatSessionTime,
+  BOOKING_STATUS_LABEL,
+  porProximidad,
+  sesionVigente,
+} from "@/lib/booking";
 import { salaDeLaReserva } from "@/lib/room-window";
 import { cn } from "@/lib/utils";
 import {
@@ -100,18 +105,21 @@ export default async function TutorReservasPage({
 
   const bookings = data ?? [];
   const pending = bookings.filter((b) => b.status === "pending_acceptance");
-  const rest = bookings.filter((b) => b.status !== "pending_acceptance");
+  // En curso primero, luego las próximas por fecha y hora. Las tarjetas «Por
+  // aceptar» (`pending`) se quedan con su orden: es otro ticket.
+  const rest = bookings
+    .filter((b) => b.status !== "pending_acceptance")
+    .sort(porProximidad);
 
-  /** Fecha representativa: la primera sesión futura o la última que hubo. */
+  /** Fecha representativa: la sesión vigente, o la última que hubo. Es la
+   *  MISMA que ordena la lista — antes valía cualquier `scheduled`, sin filtro
+   *  temporal, así que un paquete cuya primera sesión ya pasó (y el cron aún no
+   *  había cerrado) enseñaba la fecha de una clase que ya ocurrió. */
   const when = (b: (typeof bookings)[number]) => {
     const all = [...(b.sessions ?? [])].sort((x, y) =>
       x.start_at.localeCompare(y.start_at),
     );
-    return (
-      all.find((s) => s.status === "scheduled")?.start_at ??
-      all.at(-1)?.start_at ??
-      null
-    );
+    return sesionVigente(all)?.start_at ?? all.at(-1)?.start_at ?? null;
   };
 
   return (

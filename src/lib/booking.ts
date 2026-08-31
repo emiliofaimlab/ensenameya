@@ -65,6 +65,54 @@ export function isUpcoming(iso: string): boolean {
 }
 
 /**
+ * La sesión que representa a la reserva HOY: la primera que todavía no ha
+ * terminado. Su `start_at` es la clave de orden por proximidad — una clase en
+ * curso lo tiene en el pasado, así que sale la primera ella sola y no se mueve
+ * hasta que la sesión se cierra.
+ *
+ * ⚠️ «En curso» se deduce del RELOJ, no del estado `in_progress`: ese estado
+ * solo se escribe si alguien pulsa «Entrar a sala» (`join_session`), así que
+ * una mentoría que está ocurriendo ahora mismo y a la que nadie ha entrado
+ * seguiría en `confirmed` y no subiría.
+ *
+ * MN-05 · mira `end_at` y NO la ventana de acceso, a propósito: una clase de
+ * hace cuatro días cuya sala sigue abierta no es próxima.
+ */
+export function sesionVigente<
+  T extends { status: string; start_at: string; end_at: string },
+>(sesiones: readonly T[] | null | undefined): T | null {
+  return (
+    [...(sesiones ?? [])]
+      .filter((s) => s.status === "scheduled" || s.status === "in_progress")
+      .sort((x, y) => x.start_at.localeCompare(y.start_at))
+      .find((s) => isUpcoming(s.end_at)) ?? null
+  );
+}
+
+/** Mayor que cualquier ISO-8601 real: las reservas sin sesión viva, al final. */
+const AL_FINAL = "9999";
+
+type Sesionable = { status: string; start_at: string; end_at: string };
+
+/**
+ * Comparador de reservas por proximidad: la que está en curso primero, luego
+ * las próximas por fecha y hora, y al final las que ya no tienen sesión viva.
+ * Esas empatan entre sí y, como `Array.prototype.sort` es estable, conservan
+ * el `created_at desc` que trae la consulta — por eso el `.order()` de las
+ * consultas no se quita: pasa a ser el desempate.
+ *
+ * ISO-8601 UTC ordena bien como texto, así que no hace falta `new Date`.
+ */
+export function porProximidad(
+  a: { sessions?: readonly Sesionable[] | null },
+  b: { sessions?: readonly Sesionable[] | null },
+): number {
+  return (sesionVigente(a.sessions)?.start_at ?? AL_FINAL).localeCompare(
+    sesionVigente(b.sessions)?.start_at ?? AL_FINAL,
+  );
+}
+
+/**
  * B1.3 · CÓMO SE LLAMA UNA MENTORÍA DE UNA SOLA SESIÓN. En un sitio.
  *
  * El cliente contó que la misma cosa se llamaba de cinco maneras distintas por
