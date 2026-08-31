@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDownIcon } from "lucide-react";
 import { toast } from "sonner";
@@ -59,6 +60,11 @@ import {
  * trigger del proyecto. Sale por Resend con los mismos reintentos, aparece en la
  * campana del destinatario y queda listado en /admin/notificaciones. No se
  * inventa un buzón: el que hay ya sabe enviar, reintentar y dejar rastro.
+ *
+ * ── 0 · MIRAR — ni escribe ni pide permiso: es un enlace ───────────────────
+ * «Ver la ficha del tutor» va primera y no es una acción de las de arriba: no
+ * toca nada. Está en el mismo menú porque es el paso que faltaba antes de los
+ * otros cuatro, no porque comparta su naturaleza.
  *
  * ⚠️ LAS CUATRO SON INDEPENDIENTES A PROPÓSITO. Un reporte se puede cerrar sin
  * bloquear (no había caso), un hilo se puede bloquear dejando el reporte abierto
@@ -268,6 +274,25 @@ export function ReportActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-64">
+            {/* ⚠️ Antes de sancionar, mirar. El menú abría directamente con
+                «Desactivar a …» y no había una sola forma de llegar a la ficha
+                del tutor desde aquí: el diálogo de desactivación remite a otras
+                pantallas («eso va por la ficha de la reserva») que el admin
+                tenía que buscar a mano en el menú lateral. La primera opción de
+                un menú de moderación debería ser la que no rompe nada.
+
+                Del alumno no hay entrada equivalente porque no existe ficha de
+                alumno en el panel (`ADMIN_ITEMS` no tiene `/admin/alumnos`). La
+                asimetría se deja a la vista en vez de inventar un enlace roto. */}
+            <DropdownMenuLabel className="text-[12px] font-normal text-muted-foreground">
+              Antes de decidir
+            </DropdownMenuLabel>
+            <DropdownMenuItem asChild>
+              <Link href={`/admin/tutores/${tutor.id}`}>
+                Ver la ficha de {etiqueta(tutor, "tutor")}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuLabel className="text-[12px] font-normal text-muted-foreground">
               Sobre las personas del reporte
             </DropdownMenuLabel>

@@ -74,9 +74,13 @@ function DialogContent({
               className="absolute top-2 right-2"
               size="icon-sm"
             >
-              <XIcon
-              />
-              <span className="sr-only">Close</span>
+              <XIcon />
+              {/* La X no tiene más nombre accesible que este `sr-only`, así que
+                  esta cadena ES el botón para quien navega con lector o por
+                  teclado. Venía en inglés del scaffold de shadcn en un producto
+                  que está entero en español: la única «X» de los diálogos de
+                  moderación se anunciaba como «Close». */}
+              <span className="sr-only">Cerrar</span>
             </Button>
           </DialogPrimitive.Close>
         )}
@@ -115,7 +119,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">Cerrar</Button>
         </DialogPrimitive.Close>
       )}
     </div>

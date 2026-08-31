@@ -14,8 +14,17 @@ import {
  * GET  → si hay grabación y sigue dentro de los 30 días, un enlace firmado.
  *
  * Autorización por RLS: si la consulta de `sessions` no devuelve la fila, no
- * eres participante y no hay nada que enseñar (ni el admin la ve — el criterio
- * es el del chat, RN-41).
+ * hay nada que enseñar.
+ *
+ * ⚠️ CORRECCIÓN (EY-189, 31-ago). Esta línea decía «ni el admin la ve — el
+ * criterio es el del chat, RN-41», y es falso: `sessions_select_admin` existe
+ * desde EP-06 (`20260709140000:153-155`), así que un admin SÍ recibe la fila y
+ * este endpoint le devuelve el enlace firmado. Comprobado contra dev: sesión
+ * `28794f4a…` → `status:"ready"`. Es lo que hace posible «ver la grabación»
+ * desde la ficha de un reporte, y conviene que esté escrito donde toca en vez
+ * de que el próximo lector construya encima de una limitación que no existe.
+ * (Quien SÍ queda fuera del criterio del chat es `conversations`, que no tiene
+ * política de admin a propósito — esa parte de RN-41 sigue en pie.)
  *
  * La caducidad se aplica **al servir**: pasados los 30 días el enlace deja de
  * darse. Quien lo borra de verdad en el proveedor es el job diario
