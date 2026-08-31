@@ -752,12 +752,7 @@ export function TutorOnboardingForm({
             aprobemos tu perfil. Se cambia cuando quieras desde
             «Disponibilidad».
           </p>
-        ) : (
-          <p className="text-[13px] text-[#6b6b6b]">
-            Podrás afinarlo desde «Disponibilidad», donde además se marcan los
-            días sueltos que no puedes (vacaciones, un festivo…).
-          </p>
-        )}
+        ) : null}
       </WizardShell>
     );
   }
