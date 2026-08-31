@@ -1,0 +1,201 @@
+# Barre los ficheros que quedaron huérfanos tras una baja de cuenta PROGRAMADA.
+#
+# QUÉ HAY DETRÁS. `anonymize_account` no puede borrar ficheros: Supabase prohíbe
+# escribir en `storage.objects` desde SQL («Direct deletion from storage tables
+# is not allowed. Use the Storage API instead.», 42501). Lo que hace es
+# RECOLECTAR las rutas en `account_deletions.summary.ficheros` y dejarlas ahí
+# para quien pueda hablar con la Storage API — un Route Handler con
+# `service_role`.
+#
+# Con la baja INMEDIATA eso ya estaba resuelto: barre el propio
+# `POST /api/cuenta/eliminar` justo después de anonimizar, en la misma petición.
+# Con la baja PROGRAMADA (`20260831160000`) no hay nadie delante: la completa
+# `process_pending_account_deletions` desde pg_cron, DENTRO de la base de datos,
+# sin ninguna petición HTTP donde colgar un `remove()`. Sin este workflow esas
+# rutas se quedan en `summary` para siempre.
+#
+# ⚠️ Y NO SON FICHEROS CUALQUIERA: entre ellos están los `kyc-documents`, o sea
+# documentos de identidad de gente que YA pidió que borráramos su cuenta. La
+# cuenta queda anonimizada igual —la promesa legal no se rompe— pero el fichero
+# sigue en el bucket. Eso es exactamente lo que este reloj existe para evitar.
+#
+# POR QUÉ NO VA EN VERCEL CRON. El plan Hobby limita los crons a UNO AL DÍA y
+# ese hueco ya lo gasta `vercel.json` con `/api/cron/recordings-purge` (04:00).
+# Es el mismo motivo por el que están aquí los otros dos.
+#
+# ⚠️ POR QUÉ DIARIO Y NO CADA X MINUTOS, al revés que sus dos vecinos. Aquí no
+# hay nadie esperando: el usuario ya se fue y su cuenta ya está anonimizada.
+# Lo único que se retrasa es el borrado del fichero, y una pasada cada 15 min
+# sería llamar a la Storage API 96 veces al día para no encontrar nada el 99 %
+# de las veces. Se programa a las 05:37 UTC porque el pg_cron que COMPLETA las
+# bajas corre a las 05:00: antes de esa hora no habría nada nuevo que barrer.
+#
+# ⚠️ Y NO, NO VA A CORRER A LAS 05:37. Medido sobre las corridas reales de los
+# otros dos workflows (27→30-ago): GitHub entrega **una cada 2-6 horas**, no la
+# cadencia que se le pide. Para este job da igual —nadie espera— pero que nadie
+# depure «no corrió a su hora»: es lo normal, no un fallo. Los comentarios de
+# `notifications-cron.yml` y `refunds-cron.yml` cuentan lo mismo.
+#
+# El minuto va desplazado (37) a propósito: GitHub retrasa más los programados
+# que caen en punto, que es donde los pone todo el mundo.
+#
+# ⚠️ LOS DOS PEAJES QUE COMPARTE CON SUS VECINOS:
+#   · GitHub DESACTIVA los workflows programados tras 60 días sin actividad en
+#     el repo. Si el barrido deja de correr sin más, mirar eso primero.
+#   · solo se programan desde la RAMA POR DEFECTO (`main`). Mientras este
+#     archivo viva únicamente en `dev`, ESTE RELOJ NO EXISTE — igual que los
+#     otros dos. Hasta que el merge llegue a `main`, el barrido hay que
+#     dispararlo a mano con `workflow_dispatch`.
+#
+# El termómetro que no depende de este workflow, para el SQL editor:
+#   select public.process_pending_account_deletions();
+# Su `ficheros_por_barrer` es el número que este job tiene que hacer bajar. Si
+# sube y no baja, el que no corre es esto.
+name: Barrido de ficheros de bajas
+
+on:
+  schedule:
+    - cron: "37 5 * * *"
+  # Para forzar una pasada, y sobre todo para el ENSAYO: la ruta acepta
+  # `?simulacro=1`, que dice cuántos ficheros barrería y de qué buckets sin
+  # borrar nada. Es la única forma de mirar por dentro de un job que borra
+  # documentos de identidad antes de dejarlo suelto — y ahora mismo es también
+  # la ÚNICA forma de ejecutarlo, porque el reloj no existe fuera de `main`.
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: "Ensayo: dice qué borraría, sin borrarlo"
+        type: boolean
+        default: false
+
+# Este job BORRA ficheros. `cancel-in-progress: false` no es una preferencia: la
+# ruta anota lo barrido cuenta por cuenta, así que una cancelación a mitad deja
+# el resto para mañana sin corromper nada — pero provocarlo a propósito sería
+# absurdo. La siguiente pasada espera.
+concurrency:
+  group: barrido-bajas-cron
+  cancel-in-progress: false
+
+# El token de Actions no pinta nada aquí: esto es un `curl` a una URL pública.
+permissions: {}
+
+jobs:
+  barrer:
+    runs-on: ubuntu-latest
+    # Con `LOTE = 25` cuentas por pasada y la Storage API de por medio, lo
+    # normal son segundos. Un tutor con material de clase puede arrastrar
+    # cientos de ficheros, de ahí el margen; si tarda 10 min algo está colgado.
+    timeout-minutes: 10
+    steps:
+      - name: Barrer ficheros de cuentas dadas de baja
+        env:
+          BASE_URL: ${{ vars.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # OPCIONAL y normalmente vacío. Solo hace falta si `APP_BASE_URL`
+          # apunta a un despliegue de PREVIEW — ver el bloque de abajo.
+          BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
+          SIMULACRO: ${{ inputs.simulacro }}
+        run: |
+          set -uo pipefail
+
+          # FALLA CERRADO, igual que el endpoint y que los otros tres jobs. Una
+          # configuración a medias tiene que verse en rojo y no fingir que la
+          # pasada fue bien: mientras esto no corra hay documentos de identidad
+          # de gente que pidió su baja durmiendo en un bucket.
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Falta la variable APP_BASE_URL o el secret CRON_SECRET del repo."
+            echo "CRON_SECRET tiene que valer LO MISMO aquí y en Vercel: GitHub lo"
+            echo "manda en la cabecera y Vercel lo compara. Ver docs/ENTORNOS.md §4."
+            exit 1
+          fi
+
+          # ⚠️ Esta ruta NO cuelga de `/api/cron/`, al revés que sus tres
+          # vecinas. Vive junto a la baja de cuenta porque comparte con ella
+          # `storage.ts` y `rpc.ts` — es la misma operación, disparada por otro.
+          URL="$BASE_URL/api/cuenta/eliminar/barrido"
+          if [ "$SIMULACRO" = "true" ]; then
+            URL="$URL?simulacro=1"
+            echo "▶ ENSAYO: no se borra ningún fichero."
+          fi
+
+          # ⚠️ LA TRAMPA DE DEPLOYMENT PROTECTION, la misma que ya mordió con el
+          # webhook de Stripe (docs/ENTORNOS.md §5). Los despliegues de preview
+          # están detrás del SSO de Vercel, que responde 302 hacia la pantalla
+          # de login ANTES de que corra una línea de nuestro código. No es un
+          # fallo del endpoint ni del secreto: la petición no llega. En
+          # producción no pasa, así que con `APP_BASE_URL` apuntando a prod este
+          # secret sobra. Va por CABECERA para que el token no acabe escrito en
+          # una URL, ni en los logs de Actions, ni en los de Vercel.
+          if [ -n "${BYPASS:-}" ]; then
+            set -- -H "x-vercel-protection-bypass: $BYPASS"
+          else
+            set --
+          fi
+
+          code=$(curl -sS --max-time 300 -o /tmp/barrido.json -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$@" \
+            "$URL")
+
+          echo "HTTP $code"
+          cat /tmp/barrido.json; echo
+
+          # Cada código dice una cosa distinta y confundirlos cuesta una tarde.
+          case "$code" in
+            200) ;;
+            30*)
+              echo "::error::$code — Deployment Protection: la petición ni llegó al código."
+              echo "APP_BASE_URL apunta a una PREVIEW protegida. O se apunta a producción,"
+              echo "o se da de alta el secret VERCEL_PROTECTION_BYPASS (Vercel → Settings →"
+              echo "Deployment Protection → Protection Bypass for Automation)."
+              exit 1 ;;
+            503)
+              echo "::error::503 — falta CRON_SECRET en VERCEL (aquí sí está)."
+              exit 1 ;;
+            401)
+              echo "::error::401 — CRON_SECRET no coincide entre GitHub y Vercel."
+              exit 1 ;;
+            500)
+              echo "::error::500 — falló la consulta de cuentas pendientes, no el borrado."
+              echo "Mirar el mensaje de arriba: si es 42501, le falta el grant a"
+              echo "account_deletions_pendientes_de_barrido (regla de oro 9)."
+              exit 1 ;;
+            *)
+              echo "::error::$code — respuesta inesperada del endpoint."
+              exit 1 ;;
+          esac
+
+          # A partir de aquí el HTTP fue 200, que significa "el job corrió", no
+          # "los ficheros se borraron". El endpoint devuelve 200 A PROPÓSITO
+          # aunque Storage falle —las rutas siguen en `summary` y salen mañana—,
+          # así que la única señal de que algo va mal está en el cuerpo.
+          if command -v jq >/dev/null 2>&1; then
+            estado=$(jq -r '.status // "?"'             /tmp/barrido.json)
+            cuentas=$(jq -r '.cuentas // 0'             /tmp/barrido.json)
+            barridos=$(jq -r '.ficheros_barridos // 0'  /tmp/barrido.json)
+            quedan=$(jq -r '.ficheros_pendientes // 0'  /tmp/barrido.json)
+
+            # Ficheros que Storage no dejó borrar (caído, 413, timeout). Se
+            # reintentan solos mañana y por eso esto NO tumba el workflow: una
+            # alarma que suena cada día por algo que se arregla solo deja de ser
+            # una alarma. Pero si el número no baja entre pasadas, hay que mirar.
+            if [ "$quedan" != "0" ] && [ "$quedan" != "null" ]; then
+              echo "::warning::$quedan fichero(s) sin borrar — se reintentan en la próxima pasada."
+            fi
+
+            # `LOTE = 25` en la ruta: una pasada llena significa que había cola.
+            # No es un error, pero conviene saber que mañana quedará más.
+            # ⚠️ El 25 está escrito DOS veces —aquí y en `barrido/route.ts:60`—
+            # y nada las ata: si alguien cambia `LOTE`, este aviso deja de
+            # saltar y no lo dice nadie. Cambiar los dos o ninguno.
+            if [ "$cuentas" = "25" ]; then
+              echo "::warning::Lote completo (25 cuentas): probablemente quedan más esperando."
+            fi
+
+            {
+              echo "**Barrido de bajas** · estado \`$estado\` · cuentas **$cuentas** · ficheros borrados **$barridos** · pendientes **$quedan**"
+              echo ""
+              echo "Termómetro completo: \`select public.process_pending_account_deletions();\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
