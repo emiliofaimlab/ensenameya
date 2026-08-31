@@ -168,7 +168,19 @@ export async function requireUser(): Promise<
   const enAlgunOnboarding =
     path === "/onboarding" || path === "/tutor/onboarding";
   if (!ctx.onboardingComplete && !enAlgunOnboarding) {
-    redirect(`/onboarding?next=${encodeURIComponent(path)}`);
+    // Quien se registró para ENSEÑAR va a su propio asistente. `intended_role`
+    // en el metadata de Auth es el único rastro de esa elección: el rol `tutor`
+    // solo se concede al aprobar (US-1101), así que mirar los roles aquí manda
+    // a todo el mundo al asistente de alumno. Este es el embudo de `(app)`, así
+    // que arreglarlo aquí cierra los tres caminos (alta, login y callback).
+    // `?start=1` entra directo al formulario: sin él, la pantalla de bienvenida
+    // ofrece un "Ahora no" → `/app` que volvería a rebotar aquí (bucle). No se
+    // pasa `?next=`: esa página no lo lee.
+    redirect(
+      ctx.user.user_metadata?.intended_role === "tutor"
+        ? "/tutor/onboarding?start=1"
+        : `/onboarding?next=${encodeURIComponent(path)}`,
+    );
   }
   return { ...ctx, user: ctx.user };
 }

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
-import { pickHome, safeNext, type AppRole } from "@/lib/auth/roles";
+import { panelDeCookie, pickHome, safeNext, type AppRole } from "@/lib/auth/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,8 +92,17 @@ export function LoginForm({
         .maybeSingle(),
     ]);
     const roles = (rolesData ?? []).map((r) => r.role as AppRole);
+    // `panel`: el último panel en el que estuvo este navegador (`ey-panel`).
+    // Manda sobre la prioridad de rol, así que quien administra pero estaba
+    // enseñando vuelve a `/tutor` y no a `/admin`.
     router.push(
-      safeNext(next, pickHome(roles, { esTutor: Boolean(tutorProfile) })),
+      safeNext(
+        next,
+        pickHome(roles, {
+          esTutor: Boolean(tutorProfile),
+          panel: panelDeCookie(),
+        }),
+      ),
     );
     router.refresh();
   }

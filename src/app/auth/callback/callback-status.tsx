@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/client";
-import { pickHome, safeNext, type AppRole } from "@/lib/auth/roles";
+import { panelDeCookie, pickHome, safeNext, type AppRole } from "@/lib/auth/roles";
 
 /**
  * A dónde lleva la intención elegida en AU02. Mismo reparto que el alta por
@@ -158,10 +158,13 @@ export function CallbackStatus({
             .eq("profile_id", user.id)
             .maybeSingle(),
         ]);
-        target = pickHome(
-          (roleRows ?? []).map((r) => r.role as AppRole),
-          { esTutor: Boolean(tutorProfile) },
-        );
+        target = pickHome((roleRows ?? []).map((r) => r.role as AppRole), {
+          esTutor: Boolean(tutorProfile),
+          // El último panel de este navegador (`ey-panel`), que ya no se borra
+          // al cerrar sesión. Solo aplica a quien vuelve: un alta trae `intent`
+          // y sale por arriba.
+          panel: panelDeCookie(),
+        });
       }
       setDest(target);
       router.replace(target);

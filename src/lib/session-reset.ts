@@ -1,7 +1,6 @@
 "use client";
 
 import { clearCart } from "@/lib/cart/cookie";
-import { PANEL_COOKIE } from "@/lib/panel";
 import { forgetStep } from "@/components/onboarding/wizard-step";
 import { resetChatUnread } from "@/components/chat/unread";
 import { consumirPeticion } from "@/components/chat/open-thread";
@@ -23,15 +22,20 @@ import { consumirPeticion } from "@/components/chat/open-thread";
  * no devuelve un solo uso, así que por ahí no hay nada):
  *
  *  · **Cookies nuestras.** `ey-cart` (el carrito: es del NAVEGADOR a propósito,
- *    para que un anónimo pueda apuntar mentorías y registrarse después),
- *    `ey-onb-alumno` / `ey-onb-tutor` (por qué paso iba el asistente) y
- *    `ey-panel` (de qué panel venías, que es lo que decide el menú de `/pagos`
- *    y `/account`). Las tres sobreviven de verdad al cierre de sesión y las
- *    tres describen a la persona que se acaba de ir.
+ *    para que un anónimo pueda apuntar mentorías y registrarse después) y
+ *    `ey-onb-alumno` / `ey-onb-tutor` (por qué paso iba el asistente). Las dos
+ *    sobreviven de verdad al cierre de sesión y las dos describen a la persona
+ *    que se acaba de ir.
  *  · **Almacenes de módulo.** `unread.ts` (mensajes sin leer por conversación)
  *    y `open-thread.ts` (la petición «ábreme este hilo», que se guarda a
  *    propósito hasta que haya una burbuja que la atienda). Viven en la PESTAÑA,
  *    no en un componente, así que ningún desmontaje se los lleva.
+ *
+ * ⚠️ **`ey-panel` tampoco se borra ya**: es la memoria de en qué panel estabas
+ * (`lib/auth/roles.ts`, `pickHome`), y el ciclo cerrar sesión → volver a entrar
+ * es justo el momento que tiene que sobrevivir. No es un secreto y `pickHome`
+ * la valida contra los permisos reales, así que la de otra persona no abre
+ * nada: como mucho cae al destino de siempre.
  *
  * ⚠️ **`ey-tz` y `ey-ref` NO se tocan, y es deliberado.** La zona horaria es del
  * navegador, no de la cuenta: borrarla haría que la siguiente sesión pintara las
@@ -58,10 +62,6 @@ export function resetDatosDeSesion() {
   clearCart();
   forgetStep("alumno");
   forgetStep("tutor");
-  // `ey-panel` la repone el proxy en la primera navegación a un panel
-  // (`lib/supabase/middleware.ts`), así que esto no la deja rota: solo evita
-  // que entre medias le pinte a nadie el menú de admin del anterior.
-  document.cookie = `${PANEL_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
 
   resetChatUnread();
   consumirPeticion();
