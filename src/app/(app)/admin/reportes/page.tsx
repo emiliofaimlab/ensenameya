@@ -43,11 +43,12 @@ export default async function AdminReportesPage({
 
   // Los suspendidos se piden UNA vez para toda la pantalla, no por reporte:
   // la cola llega a 500 casos y consultarlo caso a caso serían mil viajes.
-  const [tz, rows, suspendidos] = await Promise.all([
+  const [tz, cola, suspendidos] = await Promise.all([
     getUserTimezone(),
     listReports(!verTodos),
     listSuspendedUsers(),
   ]);
+  const { rows, error: errorCola } = cola;
 
   const fecha = (iso: string) =>
     new Date(iso).toLocaleString("es", {
@@ -77,9 +78,29 @@ export default async function AdminReportesPage({
         </p>
       </PanelCard>
 
+      {/* ⚠️ El fallo se dice, no se disfraza de cola vacía. Hasta hoy
+          `listReports` se comía el error y esta pantalla contestaba «Nada
+          pendiente de moderar 🎉» tanto si no había trabajo como si la RPC se
+          había caído — y las dos cosas se ven idénticas (regla de oro 10). Un
+          admin que lee el 🎉 cierra la pestaña; uno que lee esto, avisa. */}
+      {errorCola ? (
+        <PanelCard className="border-[#e8b4b4] bg-[#fdf2f2]">
+          <p className="text-[13px] font-semibold text-[#bf3333]">
+            No se pudo leer la cola de reportes.
+          </p>
+          <p className="mt-1 text-[13px] text-[#8a3a3a]">
+            Lo que devolvió la base de datos: {errorCola}. Puede haber reportes
+            esperando que esta pantalla no está enseñando, así que{" "}
+            <strong>no la des por vacía</strong>.
+          </p>
+        </PanelCard>
+      ) : null}
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[13px] text-[#6b6b6b]">
-          {verTodos ? (
+          {errorCola ? (
+            "La cola no se pudo leer (ver arriba)."
+          ) : verTodos ? (
             <>
               Viendo la cola completa.{" "}
               <Link
@@ -106,13 +127,18 @@ export default async function AdminReportesPage({
       </div>
 
       {rows.length === 0 ? (
-        <PanelCard>
-          <p className="text-[13px] text-[#6b6b6b]">
-            {verTodos
-              ? "Todavía no hay ningún reporte."
-              : "Nada pendiente de moderar. 🎉"}
-          </p>
-        </PanelCard>
+        // El 🎉 solo se gana cuando la consulta ha ido bien. Con `errorCola`
+        // puesto ya se ha dicho arriba lo que pasa y aquí no se añade nada:
+        // felicitar por una cola que no se ha podido leer es el bug de antes.
+        errorCola ? null : (
+          <PanelCard>
+            <p className="text-[13px] text-[#6b6b6b]">
+              {verTodos
+                ? "Todavía no hay ningún reporte."
+                : "Nada pendiente de moderar. 🎉"}
+            </p>
+          </PanelCard>
+        )
       ) : (
         <div className="flex flex-col gap-3">
           {rows.map((r) => {
@@ -170,10 +196,30 @@ export default async function AdminReportesPage({
 
                 {/* El motivo, tal cual lo escribió quien reporta. Texto libre:
                     la taxonomía cerrada de la ficha sería columna nueva y
-                    decisión de producto sin respuesta (ver la migración). */}
-                <p className="mt-3 rounded-md bg-[#f7f7f7] p-3 text-[13px] whitespace-pre-wrap text-[#333333]">
+                    decisión de producto sin respuesta (ver la migración).
+
+                    ⚠️ Y por eso mismo se recorta AQUÍ. `report_conversation`
+                    guarda hasta 2000 caracteres, así que un solo desahogo largo
+                    empujaba los demás casos fuera de la pantalla y convertía una
+                    cola de trabajo en un muro de texto. Se enseñan cuatro líneas
+                    —las que hacen falta para saber de qué va— y el texto entero
+                    vive en la ficha, que es donde se lee para decidir. Recortar
+                    es de pintado: el `reason` no se toca ni se puede tocar (el
+                    grant de M-12 es por columnas). */}
+                <p className="mt-3 line-clamp-4 rounded-md bg-[#f7f7f7] p-3 text-[13px] whitespace-pre-wrap text-[#333333]">
                   {r.reason}
                 </p>
+                {r.reason.length > 280 ? (
+                  <p className="mt-1 text-xs text-[#6b6b6b]">
+                    Motivo recortado ({r.reason.length} caracteres).{" "}
+                    <Link
+                      href={`/admin/reportes/${r.id}`}
+                      className="font-semibold text-brand hover:underline"
+                    >
+                      Leerlo entero
+                    </Link>
+                  </p>
+                ) : null}
 
                 {r.handledAt ? (
                   <p className="mt-2 text-xs text-[#6b6b6b]">

@@ -103,7 +103,7 @@ Ninguna falta de clave rompe la app: el camino se cae al simulado o la cola se q
 | **Stripe** (`lib/stripe.ts`) | *test mode*, probado de punta a punta contra la preview: Session creada → expirada desde la API → webhook firmado → reserva `cancelled`. API fijada a mano a `2026-07-29.dahlia`. | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET`, y la fila de `payment_routing_rules` (ya un `UPDATE`, no una migración) |
 | **DLocal** | sin cuenta — **rechazada** | — |
 | **Correo** (`lib/email.ts` → **Resend**) | plantillas y job listos; sin clave la cola ni se toca | `RESEND_API_KEY` |
-| **Grabación de Daily** | add-on sin contratar → hoy no hay nada que borrar. El nombre de sala se **lee** de `sessions.daily_room_name`; derivarlo otra vez es lo que hacía fallar a US-1802 en silencio | el go de coste |
+| **Grabación de Daily** | ⚠️ **contratada y funcionando** — esta fila decía «add-on sin contratar → hoy no hay nada que borrar» y era falso: `GET api.daily.co/v1/recordings` devuelve **2 grabaciones `finished`** (14-ago, 13 s y 33 s). No hay tabla ni URL guardada **a propósito**: se consultan a Daily en el momento (`lib/daily.ts`). Y RN-42 exige el sí de las DOS partes, así que lo NORMAL es que una sesión no tenga vídeo — hay tres formas distintas de no tenerlo y quien las enseñe tiene que distinguirlas. El nombre de sala se **lee** de `sessions.daily_room_name`; derivarlo otra vez es lo que hacía fallar a US-1802 en silencio | `DAILY_API_KEY` |
 | **Referral Factory** | campaña viva, atribución **por email** | `REFERRAL_FACTORY_API_KEY` · `NEXT_PUBLIC_REFERRAL_URL` |
 
 **TRES jobs y dos sitios**, los tres exigen `CRON_SECRET` y fallan cerrado (503) sin ella:
@@ -113,6 +113,12 @@ Hobby limita los crons a uno al día, y un aviso de "te quedan 24 h para aceptar
 mañana no sirve.
 ⚠️ `process_notifications()` **ya solo informa**; antes marcaba toda la cola como `sent` sin
 enviar nada. El envío real es el job.
+
+⚠️ **`recordings_purged_at` a `null` en las 12 sesiones con sala NO es un job roto.** Es lo
+correcto: la sala más antigua terminó el **14-ago**, así que con la retención de 30 días la
+primera purga vence el **13-sep** y `recordings-purge` no ha tenido nunca nada que hacer.
+Lo que sigue sin demostrarse es que funcione **cuando le toque** — el día que empiece a haber
+vencimientos hay que mirarlo, porque esa retención es la que prometen las páginas legales.
 
 ⚠️ **La cadencia de los programados de GitHub es una ficción.** Los dos `cron` piden 5 y 15
 minutos; lo que GitHub entrega, medido sobre las corridas reales del 27 al 30-ago, es **una cada

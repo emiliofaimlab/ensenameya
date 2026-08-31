@@ -6,7 +6,11 @@ import { toast } from "sonner";
 import { CopyIcon, PlusIcon, XIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
-import { horasSemana, type Rule } from "@/lib/availability";
+import {
+  horasSemana,
+  type PreviewDeFranja,
+  type Rule,
+} from "@/lib/availability";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -64,11 +68,23 @@ export function AvailabilityManager({
   userId,
   rules,
   usedBy = {},
+  slotPreview = {},
 }: {
   userId: string;
   rules: Rule[];
   /** N-04 · rule_id → títulos de las mentorías que usan esa franja. */
   usedBy?: Record<string, string[]>;
+  /**
+   * `rule_id` → en qué convierte esta franja el calendario del alumno: «9 clases
+   * de 60 min», o el aviso de que pisa a otra franja del mismo día. Lo calcula
+   * `buildSlotPreview` en servidor, con la misma aritmética que
+   * `get_available_slots`.
+   *
+   * Opcional y con default vacío porque el paso 4 del asistente de onboarding
+   * (EY-183) monta este mismo gestor y ahí todavía no hay mentorías creadas:
+   * no hay nada que previsualizar y la línea simplemente no sale.
+   */
+  slotPreview?: Record<string, PreviewDeFranja>;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -221,6 +237,7 @@ export function AvailabilityManager({
                   <span className="flex flex-wrap items-center gap-1.5">
                     {list.map((r) => {
                       const usada = usedBy[r.id] ?? [];
+                      const vista = slotPreview[r.id];
                       return (
                         <span
                           key={r.id}
@@ -231,6 +248,31 @@ export function AvailabilityManager({
                           }`}
                         >
                           {hhmm(r.start_time)}–{hhmm(r.end_time)}
+                          {/* ⚠️ EN QUÉ SE CONVIERTE LA FRANJA, que es la
+                              pregunta que trajo el cliente: «08:00–17:00, ¿es
+                              una clase de nueve horas?». No lo era —el
+                              calendario parte por la duración desde US-601— pero
+                              esta pantalla no lo decía en ningún sitio, así que
+                              la única forma de saberlo era ir a mirar la ficha
+                              pública. Va DENTRO del chip y pegado a las horas
+                              porque es una propiedad de esa franja, no un dato
+                              suelto del día. */}
+                          {vista?.solapa ? (
+                            /* Pisa a otra franja del mismo día. No se da número
+                               —sería falso al sumarlo, ver `buildSlotPreview`—
+                               y se dice lo que pasa, que además hoy no se ve en
+                               ninguna otra pantalla. */
+                            <span
+                              className="text-[#a67314]"
+                              title="Esta franja se solapa con otra del mismo día. Los horarios repetidos se ofrecen una sola vez."
+                            >
+                              se solapa
+                            </span>
+                          ) : vista?.clases ? (
+                            <span className="text-[#4d7fb0]">
+                              → {vista.clases}
+                            </span>
+                          ) : null}
                           {/* N-04 · quién depende de esta franja. El detalle va
                               en `title` para no llenar la línea de títulos de
                               mentoría, pero el número se ve sin pasar el ratón:

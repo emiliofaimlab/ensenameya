@@ -8,6 +8,7 @@ import { InfoIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { bookingTotal } from "@/lib/booking";
+import { huecosDeFranja } from "@/lib/availability";
 import { formatMoney, storageUrl } from "@/lib/catalog/format";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import {
@@ -43,6 +44,17 @@ type TeachingLevel = Database["public"]["Enums"]["teaching_level"];
 // ponytail: MVP en una sola moneda (USD). Multi-moneda por geografía llega con
 // C-13 / EP-07 (routing de cobro); cuando exista, sale de aquí a config del tutor.
 const CURRENCY = "USD";
+
+/**
+ * Cada cuánto puede empezar una clase, en minutos. Es el «start time increment»
+ * de Calendly, cuya documentación cita como ejemplo «every 10, 15, 30, 45, or
+ * 60» sin cerrar la lista; aquí se cierra a propósito, porque un desplegable
+ * corto se elige y un campo libre se rellena mal.
+ *
+ * El `check` de la columna (`20260831190000`) admite de 5 a 240: la BD sigue
+ * siendo más ancha que este menú, así que ampliarlo mañana no pide migración.
+ */
+const INCREMENTOS = [10, 15, 20, 30, 45, 60, 90, 120] as const;
 
 /** Campo del panel (192:46): 45 px, r8, label 12/400 gris. */
 const FIELD = "h-[45px] rounded-[8px] px-3.5 text-sm placeholder:text-[#8c8c8c]";
@@ -89,6 +101,12 @@ export type ProductFormValues = {
   pricingModel: PricingModel;
   priceAmount: number; // unidades menores
   sessionDurationMin: number | null;
+  /**
+   * Cada cuántos minutos puede EMPEZAR una clase. `null` = cada
+   * `sessionDurationMin`, que es como se comportó todo hasta el 31-ago-2026 y
+   * como se comporta toda mentoría que no lo toque.
+   */
+  startTimeIncrementMin: number | null;
   packageNumSessions: number | null;
   /** DD-03 — nivel e idioma de ESTA mentoría, no del tutor. */
   level: TeachingLevel | null;
@@ -183,6 +201,19 @@ export function ProductForm({
   const [duracion, setDuracion] = useState(
     String(product?.sessionDurationMin ?? 60),
   );
+  /**
+   * El paso de la rejilla. Controlado —y no leído del `FormData` al enviar—
+   * porque la frase de ejemplo de debajo tiene que cambiar mientras se escribe:
+   * es la única forma de que el tutor entienda qué está eligiendo antes de
+   * guardarlo.
+   *
+   * Cadena vacía = «cada duración», que en la BD es `NULL`. Se representa así y
+   * no con un `null` en el estado porque el valor sale de un `<select>`, y el
+   * valor de un `<select>` siempre es texto.
+   */
+  const [paso, setPaso] = useState(
+    product?.startTimeIncrementMin ? String(product.startTimeIncrementMin) : "",
+  );
   const [selected, setSelected] = useState<Set<string>>(
     new Set(product?.categoryIds ?? []),
   );
@@ -268,6 +299,18 @@ export function ProductForm({
     const duration = Number(form.get("session_duration_min"));
     if (!Number.isFinite(duration) || duration < 30)
       return toast.error("La duración mínima es 30 minutos.");
+
+    // Paso de la rejilla. Vacío = null = «cada duración» (el comportamiento de
+    // siempre). Los límites son los del `check` de la columna
+    // (`20260831190000`): comprobarlos aquí es para dar un mensaje en español
+    // en vez de un 23514 crudo, no para sustituir a la BD, que sigue mandando.
+    const pasoRaw = paso.trim();
+    let increment: number | null = null;
+    if (pasoRaw) {
+      increment = Number(pasoRaw);
+      if (!Number.isInteger(increment) || increment < 5 || increment > 240)
+        return toast.error("El intervalo debe estar entre 5 y 240 minutos.");
+    }
 
     // Paquete ≥ 1 sesión, solo per_package (RN-22).
     let packageNum: number | null = null;
@@ -356,6 +399,12 @@ export function ProductForm({
       price_amount: priceAmount,
       currency: CURRENCY,
       session_duration_min: duration,
+      // Viaja en el mismo `row` que todo lo demás: el column-grant de
+      // `20260831190000` cubre insert Y update, así que el alta y la edición
+      // escriben por el mismo camino. `null` explícito —y no omitir la clave—
+      // para que volver a «cada duración» de verdad limpie la columna en vez de
+      // dejar el valor anterior.
+      start_time_increment_min: increment,
       package_num_sessions: packageNum,
       // DD-03: opcionales — vacío se guarda como nulo, que es lo que espera el
       // check, y las mentorías viejas siguen válidas sin el dato.
@@ -752,6 +801,69 @@ export function ProductForm({
               </p>
             ) : null}
           </div>
+
+          {/*
+            EL DIVISOR DE LA FRANJA — «cada cuánto puede empezar una clase».
+
+            ⚠️ ES UN AJUSTE INDEPENDIENTE DE LA DURACIÓN, y ése es el punto
+            entero. Hasta hoy el paso ERA la duración: una clase de 60 min solo
+            podía empezar cada 60 min, así que una franja de 8:00 a 17:00 daba 9
+            horarios y ni uno más. Con el paso separado, esa misma franja puede
+            dar 18 horarios de 60 min empezando cada 30 — que es lo que hace
+            Calendly y lo que pidió el cliente.
+
+            Va al lado de la duración porque solo se entiende con ella delante, y
+            la frase de debajo se recalcula en vivo: sin ella, «30» y «60» son
+            dos números sin consecuencia visible.
+          */}
+          <div className="grid gap-1.5">
+            <Label htmlFor="start_time_increment_min" className={LABEL}>
+              Las clases pueden empezar
+            </Label>
+            <select
+              id="start_time_increment_min"
+              name="start_time_increment_min"
+              value={paso}
+              onChange={(e) => setPaso(e.target.value)}
+              className={`${FIELD} border bg-transparent`}
+            >
+              {/* La opción vacía es `NULL` en la BD y es el comportamiento de
+                  siempre. Se nombra con la duración a la vista para que no haya
+                  que deducir qué significa «cada duración». */}
+              <option value="">
+                Una detrás de otra
+                {Number(duracion) >= 30 ? ` (cada ${duracion} min)` : ""}
+              </option>
+              {INCREMENTOS.map((m) => (
+                <option key={m} value={m}>
+                  Cada {m} min
+                </option>
+              ))}
+            </select>
+            {/* La cuenta, con los números que el tutor tiene delante. Es la
+                misma aritmética que `get_available_slots` y que la
+                previsualización del panel de disponibilidad
+                (`huecosDeFranja`): un hueco solo cuenta si la clase cabe
+                ENTERA en la franja. Se calla con el campo a medio escribir. */}
+            {Number(duracion) >= 30 ? (
+              <p className="text-xs text-[#6b6b6b]">
+                Una franja de 8:00 a 17:00 te daría{" "}
+                <strong className="font-semibold text-[#333333]">
+                  {huecosDeFranja(
+                    { start_time: "08:00", end_time: "17:00" },
+                    Number(duracion),
+                    paso ? Number(paso) : null,
+                  )}{" "}
+                  horarios
+                </strong>{" "}
+                de {duracion} min.
+                {paso && Number(paso) < Number(duracion)
+                  ? " Se solapan entre sí: al reservarse uno, los que lo pisan desaparecen."
+                  : ""}
+              </p>
+            ) : null}
+          </div>
+
           {/* DD-03 — de la mentoría, no del tutor: un tutor avanzado puede
               publicar una clase básica. Alimentan los filtros de P05/P06. */}
           <div className="grid gap-1.5">

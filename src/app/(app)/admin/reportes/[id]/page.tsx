@@ -1,12 +1,15 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getUserTimezone, requireRole } from "@/lib/auth/server";
 import {
+  listPairSessions,
   listReports,
   listSuspendedUsers,
   readReportThread,
   reportParties,
 } from "@/lib/admin/reports";
+import { SESSION_STATUS_LABEL } from "@/lib/booking";
 import { esperaDesde } from "../../tiempo";
 import { cn } from "@/lib/utils";
 import {
@@ -18,6 +21,7 @@ import {
 } from "@/components/layout/panel-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
 import { ReportActions } from "../report-actions";
+import { SessionRecording } from "./session-recording";
 
 export const metadata = { title: "Reporte · Enséñame Ya" };
 
@@ -49,17 +53,42 @@ export default async function AdminReporteDetallePage({
   // —si no, «Reabrir» sería un botón sin pantalla—, y la cola está acotada por
   // la propia función (tope de 500). El día que 500 se quede corto, esto es lo
   // primero que hay que convertir en una consulta por id.
-  const [tz, rows, suspendidos] = await Promise.all([
+  //
+  // ⚠️ Y ese «500» era falso hasta hoy: `listReports` no pasaba `p_limit`, así
+  // que mandaba el default de la RPC —100—. Un reporte más allá del centésimo
+  // abría esta pantalla en 404 y parecía borrado. Ahora se pide el tope de
+  // verdad; el arreglo está en `lib/admin/reports.ts`.
+  const [tz, cola, suspendidos] = await Promise.all([
     getUserTimezone(),
     listReports(false),
     listSuspendedUsers(),
   ]);
+  const { rows, error: errorCola } = cola;
   const r = rows.find((x) => x.id === id);
+  // Un error de la cola NO es un 404: `notFound()` diría «este reporte no
+  // existe», que es justo lo contrario de lo que se sabe. Se distingue.
+  if (!r && errorCola) throw new Error(`No se pudo leer el reporte: ${errorCola}`);
   if (!r) notFound();
 
-  const mensajes = await readReportThread(r.id);
   // Tutor y alumno por PAPEL, no por quién denunció (ver `reportParties`).
   const partes = reportParties(r, suspendidos);
+
+  const [hilo, clases] = await Promise.all([
+    readReportThread(r.id),
+    // EY-189 · Las clases del par, que es el «ver la llamada» que pidió el
+    // cliente. Se piden por par y no por reporte porque la tabla de reportes no
+    // guarda `session_id` (ver `listPairSessions`).
+    listPairSessions(partes.alumno.id, partes.tutor.id),
+  ]);
+  const { mensajes, error: errorHilo } = hilo;
+  const { sesiones, error: errorClases } = clases;
+
+  // Otros reportes sobre el MISMO hilo. Salen gratis —ya están en `rows`— y
+  // cambian el caso por completo: tres denuncias sobre la misma conversación no
+  // se trían como una. Sin esto había que volver a la bandeja y cotejar a ojo.
+  const otros = rows.filter(
+    (x) => x.conversationId === r.conversationId && x.id !== r.id,
+  );
 
   const fecha = (iso: string) =>
     new Date(iso).toLocaleString("es", {
@@ -68,6 +97,14 @@ export default async function AdminReporteDetallePage({
       hour: "2-digit",
       minute: "2-digit",
       timeZone: tz, // regla de oro 4
+    });
+
+  /** Solo la hora, para cerrar un rango («28 ago, 15:12 → 15:57»). */
+  const hora = (iso: string) =>
+    new Date(iso).toLocaleTimeString("es", {
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: tz, // regla de oro 4, también en el extremo derecho del rango
     });
 
   const estado: { label: string; tone: PillTone } = r.blockedAt
@@ -165,6 +202,34 @@ export default async function AdminReporteDetallePage({
             borrarse.
           </p>
         ) : null}
+
+        {/* Reincidencia. Un mismo hilo puede acumular varias denuncias —y las
+            acumula: en dev hay tres sobre la misma conversación— y hasta hoy
+            cada una se abría como si fuera el único caso. Solo el conteo ya
+            cambia la decisión, así que va junto al motivo y no escondido. */}
+        {otros.length > 0 ? (
+          <div className="mt-4 rounded-md border border-[#e0e0e0] p-3">
+            <p className="text-[13px] font-semibold text-[#19191f]">
+              Hay {otros.length}{" "}
+              {otros.length === 1 ? "reporte más" : "reportes más"} sobre esta
+              misma conversación.
+            </p>
+            <ul className="mt-2 flex flex-col gap-1">
+              {otros.map((o) => (
+                <li key={o.id} className="text-xs text-[#6b6b6b]">
+                  <Link
+                    href={`/admin/reportes/${o.id}`}
+                    className="font-semibold text-brand hover:underline"
+                  >
+                    {fecha(o.createdAt)}
+                  </Link>{" "}
+                  · {o.reporterName ?? "Alguien"} ·{" "}
+                  {o.handledAt ? "atendido" : "pendiente"}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </PanelCard>
 
       <PanelCard>
@@ -176,7 +241,84 @@ export default async function AdminReporteDetallePage({
           con su propia RLS.
         </p>
 
-        {mensajes.length === 0 ? (
+        {/* ⚠️ LAS CLASES DEL PAR, DENTRO DEL HILO Y NO EN OTRA TARJETA. Es lo
+            que pidió el cliente («ver la llamada dentro del hilo de chat del
+            administrador») y además es donde sirve: lo que se denuncia casi
+            siempre es lo que pasó EN una clase, y el chat es solo el rastro
+            escrito. Sin esto, comprobar un «me pidió pagar por fuera» obligaba
+            a salir a /admin/reservas y cruzar nombres y fechas a mano.
+
+            El vínculo es el PAR, no el reporte: `conversation_reports` no
+            guarda `session_id` (M-12 lo dejó escrito). Ver `listPairSessions`. */}
+        <div className="mt-4 rounded-md border border-[#e0e0e0] p-3">
+          <p className="text-[13px] font-semibold text-[#19191f]">
+            Las clases de este par
+          </p>
+          {errorClases ? (
+            <p className="mt-1 text-xs text-[#bf3333]">
+              No se pudieron leer las clases: {errorClases}. No quiere decir que
+              no las haya.
+            </p>
+          ) : sesiones.length === 0 ? (
+            <p className="mt-1 text-xs text-[#6b6b6b]">
+              Este par no tiene ninguna clase agendada, así que no hay llamada
+              que revisar: el caso se decide con el hilo.
+            </p>
+          ) : (
+            <>
+              <p className="mt-1 text-xs text-[#6b6b6b]">
+                {sesiones.length} en total, la más reciente primero. La
+                grabación solo existe si las dos partes la consintieron (RN-42)
+                y se sirve 30 días.
+              </p>
+              <ul className="mt-2 divide-y divide-[#ebebeb]">
+                {sesiones.slice(0, 8).map((s) => (
+                  <li
+                    key={s.id}
+                    className="flex flex-wrap items-center justify-between gap-2 py-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-[#333333]">
+                        {fecha(s.startAt)} → {hora(s.endAt)}
+                      </p>
+                      <p className="text-xs text-[#6b6b6b]">
+                        {SESSION_STATUS_LABEL[s.status]} ·{" "}
+                        <Link
+                          href={`/admin/bookings/${s.bookingId}`}
+                          className="font-semibold text-brand hover:underline"
+                        >
+                          Ver la reserva
+                        </Link>
+                      </p>
+                    </div>
+                    <SessionRecording
+                      sessionId={s.id}
+                      hasRoom={s.hasRoom}
+                      purgedAt={s.recordingsPurgedAt}
+                    />
+                  </li>
+                ))}
+              </ul>
+              {sesiones.length > 8 ? (
+                <p className="mt-2 text-xs text-[#6b6b6b]">
+                  Se enseñan las 8 más recientes de {sesiones.length}. El resto,
+                  en la ficha de cada reserva.
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        {/* Un fallo al leer el hilo NO se puede confundir con «el hilo está
+            vacío»: lo segundo es un caso legítimo (purga, hilo recién abierto) y
+            con el mensaje de abajo un admin cerraría el reporte creyendo que no
+            había nada escrito. Regla de oro 10. */}
+        {errorHilo ? (
+          <p className="mt-3 rounded-md border border-[#e8b4b4] bg-[#fdf2f2] p-3 text-[13px] text-[#bf3333]">
+            No se pudo leer la conversación: {errorHilo}. No la des por vacía —
+            vuelve a cargar antes de decidir nada.
+          </p>
+        ) : mensajes.length === 0 ? (
           <p className="mt-3 text-[13px] text-[#6b6b6b]">
             El hilo no tiene mensajes. Puede ser un reporte sobre una
             conversación recién abierta, o los mensajes ya caducaron por la

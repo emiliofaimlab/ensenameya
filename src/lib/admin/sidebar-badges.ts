@@ -67,7 +67,13 @@ export const adminSidebarBadges = cache(async (): Promise<SidebarBadges> => {
 
   return {
     "/admin/tutores": tutores ?? 0,
-    "/admin/reportes": reportes,
+    // ⚠️ `?? 0` porque `countPendingReports` ya devuelve `null` cuando la
+    // consulta falla, y un badge no tiene sitio donde decir «no lo sé»: aquí
+    // solo caben números. Se degrada a «sin badge», que es lo mismo que se ve
+    // con cero — el compromiso se acepta a sabiendas porque quien entra a
+    // /admin/reportes SÍ ve el fallo escrito, y esa es la pantalla donde se
+    // decide. Si algún día el menú admite un estado de error, este es el sitio.
+    "/admin/reportes": reportes ?? 0,
     "/admin/alertas": alertas,
   };
 });

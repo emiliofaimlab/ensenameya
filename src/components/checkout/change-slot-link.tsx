@@ -38,8 +38,20 @@ export function ChangeSlotLink({
   className,
 }: {
   productId: string;
-  /** El alumno, resuelto en servidor: acota la búsqueda a SUS reservas. */
-  studentId: string;
+  /**
+   * El alumno, resuelto en servidor: acota la búsqueda a SUS reservas.
+   *
+   * `null` = checkout de invitado sin cuenta todavía. Ahí no hay NADA que
+   * soltar —la reserva se crea al terminar el alta, no al llegar— y esto vuelve
+   * a ser el enlace pelado de antes de D-2, pero hacia la ficha pública (ver
+   * `destino`). Lo que no se puede es pasar `""`: la consulta saldría con
+   * `student_id=eq.` y podría traer la reserva de otro.
+   *
+   * Y en cuanto la cuenta existe deja de ser `null`: el alta recarga la página,
+   * así que este prop se vuelve a calcular en servidor CON sesión. Antes no —se
+   * quedaba congelado en `null` y el hold no se soltaba nunca—.
+   */
+  studentId: string | null;
   /** Los horarios de este checkout. Identifican el hold que se va a soltar. */
   slots: string[];
   etiqueta: string;
@@ -47,13 +59,26 @@ export function ChangeSlotLink({
 }) {
   const router = useRouter();
   const [soltando, setSoltando] = useState(false);
-  const destino = `/reservar/${productId}`;
+  /**
+   * ⚠️ EL INVITADO NO PUEDE IR AL SELECTOR: `/reservar/<id>` cuelga del grupo
+   * `(app)`, y ese layout empieza por `requireUser()`. O sea que la ÚNICA salida
+   * de la pantalla de pago —el logo no es enlace y no hay «Iniciar sesión»—
+   * llevaba a `/login?next=…` a quien todavía no tiene cuenta: justo la pantalla
+   * que el checkout de invitado existe para que nadie vea, y con la compra
+   * perdida por el camino. Sin cuenta se vuelve a la ficha pública, que es de
+   * donde salió y donde puede elegir otra hora.
+   */
+  const destino = studentId ? `/reservar/${productId}` : `/products/${productId}`;
 
   async function salir(e: React.MouseEvent<HTMLAnchorElement>) {
     // Sigue siendo un enlace de verdad: con ctrl/cmd/mayús o el botón central
     // el navegador abre otra pestaña y ESTA pantalla no se abandona. Soltar el
     // horario ahí sería cancelarle la reserva que sigue teniendo delante.
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    // Invitado sin cuenta: no hay hold suyo que buscar ni que soltar, así que
+    // el enlace navega como cualquier otro. Sin este corte, la búsqueda se
+    // haría sin alumno y no hay filtro que la acote.
+    if (!studentId) return;
     e.preventDefault();
     if (soltando) return;
     setSoltando(true);

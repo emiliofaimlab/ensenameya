@@ -9,6 +9,7 @@ import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
+import { DatosInvitado } from "@/components/checkout/datos-invitado";
 
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -151,8 +152,16 @@ export function CheckoutForm({
    * tutor lea las reservas de sus propias mentorías, así que sin este filtro un
    * tutor que abriera el checkout de su propia clase podría «reutilizar» la
    * reserva a medias de un alumno suyo.
+   *
+   * ⚠️ `null` = CHECKOUT DE INVITADO: quien mira esta pantalla no tiene cuenta.
+   * Entonces no se abre nada —ni reserva ni cobro— y en su lugar se pinta
+   * «Tus datos» (`DatosInvitado`). Cuando esa alta termina, la pantalla se
+   * RECARGA y este mismo prop llega ya con el id desde el servidor; solo
+   * entonces arranca el camino de siempre. Esa espera es todo el cambio: sin
+   * ella `create_booking` contestaría «auth requerido» antes de que el
+   * comprador teclee una letra.
    */
-  studentId: string;
+  studentId: string | null;
   /**
    * El tutor de esta mentoría. Sirve para UNA cosa y es la que cierra el
    * callejón sin salida de los paquetes: encontrar los holds propios que
@@ -214,6 +223,23 @@ export function CheckoutForm({
   const [pagando, setPagando] = useState(false);
 
   /**
+   * QUIÉN COMPRA — SIEMPRE el de la sesión de SERVIDOR, nunca un id que este
+   * componente se haya guardado por su cuenta.
+   *
+   * ⚠️ Era estado de cliente (`useState(studentId)`) que `DatosInvitado`
+   * rellenaba al terminar el alta, y esa media verdad se notaba en dos sitios a
+   * la vez: la página seguía pintada como se pintó —ANÓNIMA—, así que
+   * `ChangeSlotLink` conservaba `studentId={null}` y «Cambiar horario» dejaba de
+   * soltar el hold (se iba como enlace pelado y el hueco propio no aparecía en
+   * el selector hasta que lo expirara el cron), y la guarda de servidor no
+   * volvía a correr, así que quien se autenticaba aquí con una cuenta vieja se
+   * saltaba el onboarding obligatorio (RN-44) y aterrizaba en el asistente
+   * DESPUÉS de pagar. Por eso el alta recarga la página entera (ver abajo) en
+   * vez de continuar en cliente: el id vuelve por donde tiene que volver.
+   */
+  const alumnoId = studentId;
+
+  /**
    * QUÉ RESERVA SE ABRIÓ YA, para no abrir dos.
    *
    * No es un booleano: guarda la mentoría y los horarios concretos. Con un
@@ -227,10 +253,26 @@ export function CheckoutForm({
   const clave = `${productId}|${[...slots].sort().join(",")}`;
 
   useEffect(() => {
+    /*
+     * ⚠️ SIN CUENTA NO SE ABRE NADA, Y ESTE `return` VA EL PRIMERO.
+     *
+     * Dos motivos, los dos de fallo silencioso:
+     *   · `create_booking` resuelve al alumno con `auth.uid()` y contesta «auth
+     *     requerido» si es null: un invitado vería un error de sesión antes de
+     *     teclear una letra, en una pantalla que le está pidiendo los datos.
+     *   · Y va ANTES de `abiertoPara.current = clave` a propósito. Puesto
+     *     después, la clave quedaría marcada como «ya abierta» y cuando llegara
+     *     la sesión el efecto saldría por el `return` de la línea siguiente: el
+     *     pago no se abriría NUNCA. Eso no lo ve el typecheck.
+     */
+    if (!alumnoId) return;
     if (abiertoPara.current === clave) return;
     abiertoPara.current = clave;
 
-    async function abrir() {
+    // `alumnoId` entra por parámetro y no por cierre: `abrir` es una
+    // declaración de función y se iza, así que el estrechamiento del `return`
+    // de arriba no le llega y `studentId` seguiría siendo `string | null`.
+    async function abrir(alumnoId: string) {
       // Actualización funcional: en el montaje el estado YA es "abriendo" y
       // asignarle un objeto nuevo sería un render de más en cada carga de la
       // pantalla de pago. Solo hace algo cuando se vuelve a abrir con otros
@@ -246,7 +288,7 @@ export function CheckoutForm({
       // no solo la que esté a medias de pago: si ya se pagó, lo que toca es
       // llevarlo a su reserva, no volver a pedir un horario que ya es suyo.
       const yaHabia = await buscarReservaDelAlumno(supabase, {
-        studentId,
+        studentId: alumnoId,
         productId,
         slots,
       });
@@ -270,7 +312,7 @@ export function CheckoutForm({
         // volver atrás y elegir otra hora, y en un paquete basta con que UNA de
         // las N solape para tirar la reserva entera.
         const propios = await holdsQueSolapan(supabase, {
-          studentId,
+          studentId: alumnoId,
           tutorId,
           slots,
           durationMin,
@@ -290,7 +332,7 @@ export function CheckoutForm({
           // reserva buena ya existe: se busca UNA vez más antes de rendirse.
           const rescatada = esCarreraDeHorario(error)
             ? await buscarReservaDelAlumno(supabase, {
-                studentId,
+                studentId: alumnoId,
                 productId,
                 slots,
               })
@@ -357,8 +399,8 @@ export function CheckoutForm({
     // navegador. Y sin abortar la petición a medias: si el desmontaje llegara
     // entre `create_booking` y el checkout, cortar dejaría la reserva creada y
     // sin cobro abierto, que es peor que terminar y no pintar nada.
-    void abrir();
-  }, [clave, productId, slots, studentId, tutorId, durationMin, router]);
+    void abrir(alumnoId);
+  }, [clave, productId, slots, alumnoId, tutorId, durationMin, router]);
 
   /**
    * Camino simulado (`payment_routing_rules` aún en 'simulated'): no hay
@@ -503,7 +545,43 @@ export function CheckoutForm({
 
       {/* Columna derecha: el formulario de Stripe, embebido (sin PAN nuestro). */}
       <PanelCard>
-        <PanelCardTitle className="text-[15px]">Método de pago</PanelCardTitle>
+        <PanelCardTitle className="text-[15px]">
+          {alumnoId ? "Método de pago" : "Tus datos"}
+        </PanelCardTitle>
+
+        {/* CHECKOUT DE INVITADO · el alta ocupa el sitio del formulario de pago
+            hasta que la cuenta existe, y va en ESTA columna y no en otra: la de
+            la izquierda es lo ÚNICO que dice qué se está comprando (MN-01) y no
+            se toca.
+
+            Nada de lo de abajo se pinta mientras tanto —ni el contador ni el
+            «Preparando tu pago seguro…»— porque sería mentira: no hay reserva,
+            no hay horario retenido y no hay ningún cobro preparándose. Todo eso
+            arranca tras la recarga, ya con el alumno resuelto en servidor. */}
+        {!alumnoId ? (
+          <DatosInvitado
+            onCuentaLista={() => {
+              /*
+               * ⚠️ RECARGA ENTERA, y no `setAlumnoId` ni `router.refresh()`.
+               *
+               * La sesión ya está en las cookies, pero ESTA página se renderizó
+               * en servidor cuando aún no había ninguna: se pintó sin pasar por
+               * `requireUser()` y con `studentId={null}` por todas partes. Al
+               * recargar, el render de servidor vuelve a ocurrir CON sesión y
+               * eso arregla las dos cosas de golpe: corre la guarda de siempre
+               * —onboarding obligatorio (RN-44), rama de tutor y `?next=` con la
+               * query, sin reescribir aquí ninguna de las tres— y
+               * `ChangeSlotLink` recibe el alumno de verdad, así que «Cambiar
+               * horario» vuelve a soltar el hold.
+               *
+               * `router.refresh()` NO vale: no reinicia el estado de cliente, y
+               * era justo ese estado el que mentía.
+               */
+              window.location.reload();
+            }}
+            className="mt-3.5"
+          />
+        ) : null}
 
         {/* D-2 · el contador. Va arriba del formulario y no escondido en el
             resumen: es la contrapartida de que el horario se retenga por
@@ -512,7 +590,7 @@ export function CheckoutForm({
           <HoldCountdown hasta={apertura.retencionHasta} className="mt-3.5" />
         ) : null}
 
-        {apertura.fase === "abriendo" ? (
+        {alumnoId && apertura.fase === "abriendo" ? (
           <p className="mt-3.5 text-[13px] text-[#6b6b6b]" aria-live="polite">
             Preparando tu pago seguro…
           </p>
@@ -552,10 +630,17 @@ export function CheckoutForm({
                 la cabecera: si el fallo llegó DESPUÉS de crear la reserva —el
                 cobro no se pudo abrir— el hold existe, y mandar al alumno al
                 selector sin soltarlo lo deja mirando un calendario del que
-                falta justo su hueco. */}
+                falta justo su hueco.
+
+                ⚠️ En el checkout de invitado esta rama es MÁS probable que
+                antes: la reserva se pide al terminar el alta, no al llegar, así
+                que entre medias alguien puede haberse llevado el horario y el
+                comprador se queda con una cuenta que no venía a crear. El
+                mensaje ya lo dice (`mensajeDeApertura`) y aquí `alumnoId` sí
+                existe, que es lo que hace que se pueda soltar el hold. */}
             <ChangeSlotLink
               productId={productId}
-              studentId={studentId}
+              studentId={alumnoId}
               slots={slots}
               etiqueta="Elegir otro horario"
               className="mt-3 flex w-fit items-center gap-1.5 text-[13px] font-semibold text-brand hover:underline"

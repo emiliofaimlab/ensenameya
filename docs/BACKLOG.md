@@ -341,9 +341,13 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 > propio cliente, su propia copia de la clave y un pipeline que no existe. **Falla cerrado**: sin
 > `CRON_SECRET` responde 503 y no corre.
 >
-> 🔒 **Ninguna de las dos desbloquea EP-18:** el **add-on de grabación de Daily sigue sin activar**
-> (falta el go de coste, `recordings_bucket` en `null`), así que hoy no hay grabaciones ni que servir
-> ni que borrar. Esto quita los bugs, no el bloqueo.
+> ~~🔒 **Ninguna de las dos desbloquea EP-18:** el add-on de grabación de Daily sigue sin activar~~
+> ✅ **EP-18 NO ESTÁ BLOQUEADA — verificado el 31-ago.** El add-on está contratado: hay dos
+> grabaciones `finished` del 14-ago, servidas por `/api/recordings/[sessionId]`.
+>
+> ⚠️ Y `recordings_bucket` en `null` **no era la prueba del bloqueo**: significa que los ficheros
+> viven en el almacenamiento de Daily y no en un bucket nuestro, que es el modo por defecto y
+> funciona. Sigue en `null` hoy, con grabaciones dentro.
 
 ---
 
@@ -752,8 +756,8 @@ mano por SQL y nunca pasó por la RPC del admin que concede el rol.)
 PRODUCTO en TU04 (el modelo no los tiene: la agenda sale de la disponibilidad general y
 `tutor_materials` es por tutor → huecos de EP-23; el **material por producto se cerró el 27-jul** con
 R24-16, migración `20260724150000`); la tarjeta "Grabación" de TU08 —que es **US-1802**, no US-1602, y
-ya está construida: `RecordingLink` se pinta en TU08 y en AL03 desde la tanda 4 (`bc35f9b`), a la
-espera de que se active el add-on de Daily—;
+ya está construida: `RecordingLink` se pinta en TU08 y en AL03 desde la tanda 4 (`bc35f9b`) —y
+desde el 31-ago se sabe que el add-on **está activo**, así que ya no espera a nada—;
 "Cuenta de cobro" de TU09 (depende del PSP, EP-20); "Total ganado" bruto en TU06 (`tutor_balance`
 solo devuelve netos); el nombre del alumno en TU06/07/08 (`profiles` es RLS own-only — hueco ya
 documentado); y "Mis productos"→**"Mis mentorías"** por consistencia con el renombrado global.
@@ -993,7 +997,7 @@ nueve historias**, resuelven **C-11** y **cambian el alcance de EP-13**. Detalle
 | Jira | Historia | Cómo queda |
 | :-- | :-- | :-- |
 | `EY-116` | DD-06 · páginas legales | ✅ **Completada**: de "documento en preparación" a texto redactado (`4cf2ca6`→`b957933`). Ver la fila de DD-06 en §4.3 |
-| `EY-86` | US-1802 · ver y descargar grabación | 🐞 **Bug que la hacía fallar SIEMPRE, corregido** (`fffd4b5`) + la retención de 30 días ya borra de verdad (`0722b64`). Sigue **bloqueada por el add-on de Daily**. Ver EP-18 en §2 |
+| `EY-86` | US-1802 · ver y descargar grabación | 🐞 **Bug que la hacía fallar SIEMPRE, corregido** (`fffd4b5`) + la retención de 30 días ya borra de verdad (`0722b64`). ~~Sigue bloqueada por el add-on de Daily~~ → ✅ **desbloqueada**: el add-on está contratado (31-ago). Ver EP-18 en §2 |
 | `EY-76` | US-1703 · purga del chat | **En `dev`** desde el merge. Sin cambios de alcance |
 | `EY-77` | US-1203 · avisos in-app | **En `dev`** desde el merge. Sin cambios de alcance |
 | `EY-80` | US-1501 · Sentry | **En `dev`** desde el merge; se declara en la política de privacidad (`sendDefaultPii: false`). Sigue apagado sin DSN |

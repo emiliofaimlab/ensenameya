@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { ReferralCard } from "@/components/referral/referral-card";
 import { CalendarFeedCard } from "@/components/calendar/calendar-feed-card";
+import { rpcNueva } from "@/app/api/cuenta/eliminar/rpc";
 import { AccountForm } from "./account-form";
+import type { EstadoBaja } from "./baja";
 
 export const metadata = { title: "Mi cuenta · Enséñame Ya" };
 
@@ -34,6 +36,22 @@ export default async function AccountPage() {
     "my_calendar_feed_token",
   );
 
+  // ⚠️ Esto SÍ se pide en cada carga, a diferencia de los bloqueos de la baja,
+  // que el diálogo consulta solo al abrirse. La diferencia es que aquí no se
+  // pregunta «¿podrías darte de baja?» —eso solo le interesa a quien va a
+  // pulsar el botón— sino «¿está tu cuenta desactivada AHORA MISMO?». Una
+  // cuenta desactivada tiene que decirlo en cuanto la abres: si hay que pulsar
+  // algo para enterarse, la persona no se entera.
+  //
+  // Es una RPC de esta migración, así que todavía no está en los tipos
+  // generados: `rpcNueva` es la puerta estrecha hasta el próximo `db:types`.
+  // Un fallo aquí NO rompe la pantalla — se pinta como cuenta activa, que es
+  // el caso de casi todo el mundo, y la verdad sigue estando en el diálogo.
+  const { data: estadoBaja } = await rpcNueva<EstadoBaja>(
+    supabase,
+    "my_account_deletion_state",
+  );
+
   // El menú lateral es el del panel del rol (undefined = alumno por defecto).
   // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
   const items = await panelItems(user.id, roles);
@@ -58,6 +76,9 @@ export default async function AccountPage() {
         timezone={profile?.timezone ?? "UTC"}
         avatarUrl={avatarUrl}
         isTutor={roles.includes("tutor")}
+        /* Baja programada: si la cuenta está desactivada esperando a que se
+           mueva el dinero, la última tarjeta cambia de cara. */
+        estadoBaja={estadoBaja}
         /* EY-188 (B5.5) · la misma tarjeta para alumno y tutor: el feed
            devuelve las sesiones en las que participas, sin mirar el rol. */
         calendario={

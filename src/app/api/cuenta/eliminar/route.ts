@@ -2,24 +2,46 @@ import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type {
-  AnonymizeResult,
-  BucketDeLaBaja,
-  DeletionBlockers,
-  FicherosPorBucket,
+import {
+  rpcNueva,
+  type AnonymizeResult,
+  type EstadoBaja,
+  type ResultadoPeticion,
 } from "./rpc";
+import { anotarBarrido, barrerFicheros } from "./storage";
 
 /**
  * EY-192 · B5.9 — baja de cuenta con anonimización.
  *
- * GET  → los motivos por los que HOY no puedes darte de baja (o `{}` si puedes).
- * POST → ejecuta la baja. Irreversible.
+ * GET    → el estado de baja de la cuenta: qué falta y si ya está programada.
+ * POST   → pide la baja. Puede acabar en anonimización inmediata o en
+ *          «cuenta desactivada, baja programada».
+ * DELETE → se arrepiente: reactiva la cuenta y cancela la baja programada.
+ *
+ * ── LA BAJA YA NO ES SIEMPRE INMEDIATA (migración `20260831160000`) ─────────
+ * El cliente lo pidió así: «si tengo saldo, o espero un reembolso, o un retiro
+ * pendiente, desactivad la cuenta hasta que se haga ese pago, y LUEGO la
+ * borráis». Antes esos tres casos simplemente no dejaban darse de baja, y la
+ * persona tenía que volver dentro de dos semanas a repetir la operación.
+ *
+ * Así que este handler tiene ahora DOS desenlaces, y la diferencia la decide
+ * `request_account_deletion` mirando el esquema, no este archivo:
+ *
+ *   · `sin_espera` → nada en vuelo: se anonimiza AQUÍ Y AHORA, exactamente
+ *     como antes. Todo el camino de abajo (barrido de ficheros, `signOut`) es
+ *     el de siempre y no ha cambiado una línea.
+ *   · `programada` → hay dinero en vuelo: la cuenta queda DESACTIVADA y la
+ *     anonimización la hará `process_pending_account_deletions` por pg_cron
+ *     cuando el dinero termine de moverse. No se cierra la sesión: la persona
+ *     sigue entrando para ver su reembolso llegar y para poder arrepentirse.
+ *   · `bloqueada` → quedan cosas que solo puede resolver ella (clases futuras
+ *     suyas o ya vendidas). 409 con la lista, como antes.
  *
  * ── POR QUÉ ESTO ES UN ROUTE HANDLER Y NO UNA RPC LLAMADA DESDE EL NAVEGADOR ─
  * Regla de oro 7: es una operación destructiva sobre datos reales que además
  * toca el esquema `auth`. `anonymize_account` está concedida ÚNICAMENTE a
  * `service_role`, así que desde el cliente no se puede invocar ni con el uid
- * propio ni con el de otro. La función recibe el uid por parámetro porque
+ * propio ni con el de otro. Las funciones reciben el uid por parámetro porque
  * `service_role` no tiene `auth.uid()`; **quién puede dar de baja a quién se
  * decide AQUÍ**, y la respuesta es siempre «solo a uno mismo»: el uid que se
  * pasa sale de la cookie de sesión, nunca del cuerpo de la petición.
@@ -36,6 +58,10 @@ import type {
  * obliga a mirar de QUÉ cuenta se está hablando — que con varias sesiones
  * abiertas no es evidente.
  *
+ * ⚠️ Se pide TAMBIÉN para la baja programada, aunque esa sea reversible. Lo
+ * que se pide no es «borra esto ya», es «empieza el proceso de borrarlo»: el
+ * final es el mismo y el DELETE de más abajo es una ventana, no una promesa.
+ *
  * ── ⚠️ EL BORRADO DE FICHEROS VIVE AQUÍ, NO EN EL SQL ───────────────────────
  * `anonymize_account` lo intentaba y la baja devolvía 500: Supabase prohíbe
  * `delete from storage.objects` («Direct deletion from storage tables is not
@@ -43,9 +69,14 @@ import type {
  * función solo RECOLECTA las rutas y las devuelve; barrerlas es cosa de este
  * handler, que con `service_role` sí puede llamar a la Storage API.
  *
+ * ⚠️ Y por eso la baja PROGRAMADA deja ficheros pendientes: cuando la completa
+ * el pg_cron no hay ningún handler delante que pueda barrerlos, así que se
+ * quedan recolectados en `account_deletions.summary.ficheros` —el mismo estado
+ * recuperable de siempre— hasta que pase `POST /api/cuenta/eliminar/barrido`.
+ *
  * El detalle completo —por qué el orden importa y por qué un fallo del barrido
- * NO deshace la baja— está en la cabecera de esa migración y en
- * `barrerFicheros()` de más abajo.
+ * NO deshace la baja— está en la cabecera de esa migración y en `storage.ts`,
+ * que es donde vive el barrido compartido por las dos rutas.
  */
 
 const noAutenticado = () =>
@@ -60,142 +91,33 @@ async function quienLlama() {
   return { user, supabase, admin: createAdminClient() };
 }
 
-type Admin = ReturnType<typeof createAdminClient>;
-
-/**
- * `remove()` manda las rutas en el cuerpo de una sola petición. Un tutor con
- * cientos de materiales la haría enorme y se comería un 413 —que además
- * contaría como fallo de TODO el bucket—, así que se trocea.
- */
-const TAMANO_LOTE = 100;
-
-/**
- * Barre de Storage los ficheros que `anonymize_account` recolectó.
- *
- * ⚠️ SE LLAMA CON LA ANONIMIZACIÓN YA CONFIRMADA EN BASE DE DATOS, y de ahí
- * salen las dos reglas de esta función:
- *
- *  1 · NO LANZA. Un fallo aquí no puede convertirse en un 500. La identidad ya
- *      está borrada y la cuenta cerrada, que es lo que la persona pidió y lo
- *      que hay que cumplir; un fichero huérfano es un problema menor y, sobre
- *      todo, recuperable a mano. Devolver «no se pudo eliminar tu cuenta»
- *      cuando SÍ se eliminó sería mentir sobre lo único que le importa, y la
- *      empujaría a reintentar o a escribir a soporte por algo ya hecho.
- *  2 · PERO NO SE CALLA. El fallo se registra con las RUTAS CONCRETAS, que es
- *      lo que hace falta para barrerlas desde el panel de Storage, y lo que
- *      quede pendiente se devuelve para anotarlo en el rastro.
- *
- * Un `remove()` sobre una ruta que ya no existe no es error —Storage lo da por
- * bueno—, así que reintentar es seguro y no hay que llevar la cuenta de cuáles
- * se borraron en un intento anterior.
- */
-async function barrerFicheros(
-  admin: Admin,
-  userId: string,
-  ficheros: FicherosPorBucket,
-): Promise<{ barridos: number; pendientes: FicherosPorBucket }> {
-  const pendientes: FicherosPorBucket = {};
-  let barridos = 0;
-
-  for (const [bucket, rutas] of Object.entries(ficheros) as [
-    BucketDeLaBaja,
-    string[] | undefined,
-  ][]) {
-    if (!rutas?.length) continue;
-    const fallidas: string[] = [];
-
-    for (let i = 0; i < rutas.length; i += TAMANO_LOTE) {
-      const lote = rutas.slice(i, i + TAMANO_LOTE);
-      // El try/catch es por la red: `remove()` devuelve `error` en los fallos
-      // de la API, pero un fetch caído sí lanza. Los dos acaban igual.
-      try {
-        const { error } = await admin.storage.from(bucket).remove(lote);
-        if (error) throw error;
-        barridos += lote.length;
-      } catch (e) {
-        fallidas.push(...lote);
-        console.error(
-          "[EY-192] la cuenta SÍ se anonimizó, pero estos ficheros siguen en Storage:",
-          e instanceof Error ? e.message : e,
-          { user_id: userId, bucket, rutas: lote },
-        );
-      }
-    }
-
-    if (fallidas.length > 0) pendientes[bucket] = fallidas;
-  }
-
-  return { barridos, pendientes };
-}
-
-/**
- * Deja en el rastro qué se barrió y qué no.
- *
- * ⚠️ Solo puede escribir `summary`: el grant de `20260827100000` es por columna
- * (`grant update (summary) … to service_role`) justamente para que `deleted_at`
- * y `roles` —que son EL rastro— no se puedan reescribir desde aquí.
- *
- * `ficheros_recolectados` se reenvía tal cual, sin recalcularlo: es el número
- * de auditoría del momento de la baja y no se toca nunca.
- *
- * ⚠️ Y por eso `ficheros_barridos` se deriva de él y NO del contador del bucle.
- * En un reintento el bucle solo ve lo que quedaba pendiente, así que su cuenta
- * sería la de ESTA pasada; lo que hay que dejar escrito es el acumulado.
- */
-async function anotarBarrido(
-  admin: Admin,
-  userId: string,
-  recolectados: number,
-  pendientes: FicherosPorBucket,
-) {
-  const quedan = Object.values(pendientes).flat().length;
-
-  const { error } = await admin
-    .from("account_deletions")
-    .update({
-      summary: {
-        ficheros: pendientes,
-        ficheros_recolectados: recolectados,
-        ficheros_barridos: Math.max(0, recolectados - quedan),
-      },
-    })
-    .eq("user_id", userId);
-
-  if (error) {
-    // Tampoco es motivo de 500: como mucho el rastro se queda diciendo que hay
-    // pendientes que ya no lo están, y un reintento los volvería a barrer sin
-    // consecuencias. El log de `barrerFicheros` sigue siendo la vía buena.
-    console.error("[EY-192] no se pudo anotar el barrido en el rastro:", error.message, {
-      user_id: userId,
-      code: error.code,
-    });
-  }
-}
-
 export async function GET() {
   const ctx = await quienLlama();
   if (!ctx) return noAutenticado();
 
-  const { data, error } = await ctx.admin.rpc("account_deletion_blockers", {
-    p_user_id: ctx.user.id,
-  });
+  // ⚠️ Con el cliente de la SESIÓN, no con `admin`: `my_account_deletion_state`
+  // no acepta uid y lo saca de `auth.uid()`, así que por construcción no puede
+  // devolver el estado de otra persona. Es la misma función que lee «Mi
+  // cuenta», para que el diálogo y la tarjeta no puedan contar cosas distintas.
+  const { data, error } = await rpcNueva<EstadoBaja>(
+    ctx.supabase,
+    "my_account_deletion_state",
+  );
   if (error) {
     // ⚠️ Se registra en el servidor ADEMÁS de devolverlo. Es una operación
     // irreversible y con una sola oportunidad: si falla, el motivo tiene que
     // quedar en algún sitio que se pueda leer después. Devolverlo solo al
     // navegador significa que quien lo diagnostique dependa de que la persona
     // afectada haya copiado el mensaje, y no lo va a hacer.
-    console.error("[EY-192] account_deletion_blockers falló:", error.message, {
+    console.error("[EY-192] my_account_deletion_state falló:", error.message, {
       code: error.code,
-      details: error.details,
-      hint: error.hint,
     });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   return NextResponse.json({
     email: ctx.user.email ?? null,
-    bloqueos: (data ?? {}) as DeletionBlockers,
+    estado: data ?? { accionables: {}, en_espera: {}, baja_programada: null },
   });
 }
 
@@ -224,24 +146,58 @@ export async function POST(req: Request) {
     );
   }
 
-  // Se consultan aquí, aunque `anonymize_account` los vuelva a comprobar por
-  // dentro, para poder contestar 409 con el motivo en vez de un 500 con el
-  // texto de una excepción de Postgres.
-  const { data: bloqueos, error: errBloqueos } = await ctx.admin.rpc(
-    "account_deletion_blockers",
+  // Aquí se decide TODO: si hay bloqueos que solo puede resolver la persona, si
+  // hay dinero en vuelo (y entonces se desactiva la cuenta y se programa), o si
+  // hay vía libre para borrar ya. La decisión vive en SQL y no aquí porque es
+  // la misma que `anonymize_account` vuelve a comprobar por dentro: dos
+  // definiciones de «no puedes» divergirían el primer día.
+  const { data: peticion, error: errPeticion } = await rpcNueva<ResultadoPeticion>(
+    ctx.admin,
+    "request_account_deletion",
     { p_user_id: ctx.user.id },
   );
-  if (errBloqueos) {
-    return NextResponse.json({ error: errBloqueos.message }, { status: 500 });
-  }
-  const pendientes = (bloqueos ?? {}) as DeletionBlockers;
-  if (Object.keys(pendientes).length > 0) {
+  if (errPeticion || !peticion) {
+    console.error("[EY-192] request_account_deletion falló:", errPeticion?.message, {
+      code: errPeticion?.code,
+    });
     return NextResponse.json(
-      { error: "la cuenta todavía no puede darse de baja", bloqueos: pendientes },
+      { error: errPeticion?.message ?? "no se pudo procesar la baja" },
+      { status: 500 },
+    );
+  }
+
+  if (peticion.status === "bloqueada") {
+    return NextResponse.json(
+      {
+        error: "la cuenta todavía no puede darse de baja",
+        accionables: peticion.accionables,
+        en_espera: peticion.en_espera,
+      },
       { status: 409 },
     );
   }
 
+  // Cuenta desactivada y baja en cola. **No se cierra la sesión a propósito**:
+  // lo que está esperando es dinero suyo, y necesita poder entrar a verlo
+  // llegar —y a arrepentirse—. Ver la cabecera de la migración.
+  if (peticion.status === "programada" || peticion.status === "ya_programada") {
+    return NextResponse.json({
+      status: "programada",
+      en_espera: peticion.en_espera,
+    });
+  }
+
+  // No debería llegar (la sesión de una cuenta anonimizada está muerta y
+  // `quienLlama` habría devuelto 401), pero contestar 409 es mejor que caer al
+  // camino de abajo y volver a anonimizar lo ya anonimizado.
+  if (peticion.status === "ya_anonimizada") {
+    return NextResponse.json(
+      { error: "esta cuenta ya está dada de baja" },
+      { status: 409 },
+    );
+  }
+
+  // ── `sin_espera`: nada en vuelo → se borra ahora, como toda la vida ───────
   const { data, error } = await ctx.admin.rpc("anonymize_account", {
     p_user_id: ctx.user.id,
   });
@@ -272,7 +228,7 @@ export async function POST(req: Request) {
   // llega con una petición YA EN VUELO (doble clic, reintento del cliente por
   // timeout). Un reintento posterior ni entra — `anonymize_account` borró la
   // sesión y baneó al usuario, así que `quienLlama()` devuelve 401 arriba. Si
-  // el barrido falla de verdad, lo que queda es el log y `summary.ficheros`.
+  // el barrido falla de verdad, lo recoge `POST /api/cuenta/eliminar/barrido`.
   const barrido = await barrerFicheros(ctx.admin, ctx.user.id, resultado.ficheros ?? {});
   const quedan = Object.values(barrido.pendientes).flat().length;
   if (quedan > 0 || barrido.barridos > 0) {
@@ -316,4 +272,37 @@ export async function POST(req: Request) {
       ficheros_pendientes: quedan,
     },
   });
+}
+
+/**
+ * Se arrepintió. Reactiva la cuenta y cancela la baja programada.
+ *
+ * ⚠️ NO pide confirmación por correo, a diferencia del POST, y no es una
+ * incoherencia: lo que se confirma es lo irreversible. Ponerle fricción a
+ * «quiero conservar mi cuenta» solo consigue que alguien que ya se arrepintió
+ * no llegue a tiempo.
+ *
+ * Solo funciona mientras la baja siga `pending`; una vez completada, la sesión
+ * está muerta y esta ruta devuelve 401 antes de llegar a nada.
+ */
+export async function DELETE() {
+  const ctx = await quienLlama();
+  if (!ctx) return noAutenticado();
+
+  const { data, error } = await rpcNueva<{ status: "cancelada" | "sin_baja" }>(
+    ctx.admin,
+    "cancel_account_deletion",
+    { p_user_id: ctx.user.id },
+  );
+  if (error) {
+    console.error("[EY-192] cancel_account_deletion falló:", error.message, {
+      code: error.code,
+    });
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // `sin_baja` no es un error: es el doble clic, o la pestaña vieja que aún
+  // creía que había una baja en curso. La cuenta está activa, que es lo que se
+  // pedía, así que 200.
+  return NextResponse.json({ status: data?.status ?? "sin_baja" });
 }

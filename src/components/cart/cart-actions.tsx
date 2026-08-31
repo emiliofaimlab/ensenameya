@@ -6,6 +6,7 @@ import { AlertTriangleIcon, XIcon } from "lucide-react";
 
 import { removeCartLines } from "@/lib/cart/cookie";
 import { Button } from "@/components/ui/button";
+import { DatosInvitado } from "@/components/checkout/datos-invitado";
 import { cn } from "@/lib/utils";
 
 /**
@@ -147,6 +148,18 @@ export function PagarPedido({ lineas }: { lineas: LineaDelPedido[] }) {
     mensaje: string;
     linea: LineaDelPedido | null;
   } | null>(null);
+  /**
+   * CHECKOUT DE INVITADO · el 401 deja de ser un callejón.
+   *
+   * El carrito se puede llenar sin cuenta a propósito, pero `/api/pedidos`
+   * responde 401 porque `create_order` resuelve al alumno con `auth.uid()`. Ese
+   * 401 se pintaba CRUDO —el recuadro rojo decía literalmente «no autenticado»,
+   * que es texto de servidor y no un mensaje para nadie—. Ahora abre el mismo
+   * alta que el checkout suelto y reintenta el POST al terminar.
+   */
+  const [pideCuenta, setPideCuenta] = useState(false);
+  /** Reintentos ya gastados. UNO y no más: dos 401 seguidos no son un despiste. */
+  const reintentos = useRef(0);
   const cuantas = lineas.length;
 
   /**
@@ -193,13 +206,56 @@ export function PagarPedido({ lineas }: { lineas: LineaDelPedido[] }) {
   async function crear() {
     setEnviando(true);
     setError(null);
-    const res = await fetch("/api/pedidos", { method: "POST" });
+    // ⚠️ `fetch` RECHAZA —no devuelve `!res.ok`— si se cae la red a media
+    // petición, que es el caso normal comprando desde el móvil. Sin este `try`
+    // la promesa quedaba sin capturar y `setEnviando(false)` no se ejecutaba
+    // nunca: botón «Preparando tu pedido…» deshabilitado para siempre. Y desde
+    // el checkout de invitado esto se llama JUSTO DESPUÉS de crear la cuenta,
+    // así que el comprador se quedaría encerrado con una cuenta recién hecha.
+    let res: Response;
+    try {
+      res = await fetch("/api/pedidos", { method: "POST" });
+    } catch {
+      setError({
+        mensaje: "No pudimos conectar. Revisa tu conexión e inténtalo otra vez.",
+        linea: null,
+      });
+      setEnviando(false);
+      return;
+    }
     const salida = (await res.json().catch(() => ({}))) as {
       orderId?: string;
       error?: string;
       linea?: number | null;
       productId?: string | null;
     };
+
+    /*
+     * ⚠️ EL 401 SE ATIENDE ANTES QUE NADA, y no por orden estético.
+     *
+     * Ese cuerpo no trae `linea` ni `productId` —el handler sale antes de leer
+     * el carrito—, así que colándose por el bloque de abajo `culpable()`
+     * devolvería `null` y el `router.replace` + `refresh` serían un viaje
+     * inútil que además REPINTA la pantalla: desmontaría el formulario de datos
+     * que acabamos de decidir enseñar.
+     */
+    if (res.status === 401) {
+      if (reintentos.current > 0) {
+        // Segundo 401 con la cuenta ya creada: algo va mal de verdad (la sesión
+        // no llegó a cuajar). Mensaje nuestro y se para; reintentar en bucle
+        // sería pedirle a alguien que mire cómo no pasa nada.
+        setError({
+          mensaje:
+            "No pudimos abrir tu sesión para completar el pedido. Recarga la página e inténtalo otra vez.",
+          linea: null,
+        });
+        setEnviando(false);
+        return;
+      }
+      setPideCuenta(true);
+      setEnviando(false);
+      return;
+    }
 
     if (!res.ok || !salida.orderId) {
       // ⚠️ El mensaje ya viene traducido por `mensajeDeApertura`: NUNCA es el
@@ -242,9 +298,33 @@ export function PagarPedido({ lineas }: { lineas: LineaDelPedido[] }) {
 
   return (
     <>
-      <Button className="mt-4 h-[49px] w-full text-[15px]" disabled={enviando} onClick={crear}>
-        {enviando ? "Preparando tu pedido…" : `Pagar ${cuantas} mentorías juntas`}
-      </Button>
+      {pideCuenta ? (
+        /*
+         * El alta, aquí mismo y con el carrito delante. Es EL MISMO componente
+         * que el checkout suelto (`components/checkout/datos-invitado.tsx`): si
+         * cada pantalla escribiera el suyo, la constancia de términos que se
+         * guarda por un camino y por el otro acabaría divergiendo.
+         *
+         * ⚠️ El reintento vuelve a llamar a `crear()` ENTERO y no reusa nada de
+         * la llamada anterior. Con sesión, `resolveCart()` ya no corta antes de
+         * mirar los holds propios y alguna línea puede pasar a `pagando`: el
+         * conjunto comprable cambia de forma legítima, así que hay que
+         * preguntárselo otra vez al servidor.
+         */
+        <DatosInvitado
+          className="mt-4"
+          etiqueta={`Crear cuenta y pagar ${cuantas} mentorías`}
+          onCuentaLista={() => {
+            reintentos.current += 1;
+            setPideCuenta(false);
+            void crear();
+          }}
+        />
+      ) : (
+        <Button className="mt-4 h-[49px] w-full text-[15px]" disabled={enviando} onClick={crear}>
+          {enviando ? "Preparando tu pedido…" : `Pagar ${cuantas} mentorías juntas`}
+        </Button>
+      )}
       {error ? (
         /*
           ⚠️ QUÉ MENTORÍA Y A QUÉ HORA — la pregunta literal del responsable era
