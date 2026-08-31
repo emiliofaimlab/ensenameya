@@ -1,6 +1,9 @@
 // Relativo y no `@/`: así `email-templates.check.ts` puede ejecutarse con node
 // a pelo, sin resolver el alias de tsconfig. Mismo estilo que `src/lib/auth/*`.
 import { formatMoney } from "./catalog/format.ts";
+// El destino del enlace lo decide la campana (US-1203): una sola función para
+// el correo y el aviso in-app, y vive allí porque allí no arrastra nada.
+import { rutaFor } from "./notifications.ts";
 
 /**
  * Doc 7 · el texto de cada correo transaccional.
@@ -134,29 +137,6 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
     };
   },
 };
-
-/** A dónde lleva el correo, según lo que el trigger dejó en el payload. */
-function rutaFor(template: string, payload: Payload): string {
-  // NTF-21 · el hilo, que es lo único que trae su payload. Va ANTES que la
-  // reserva porque un mensaje puede ocurrir dentro de una: el día que alguien
-  // añada `booking_id` a este payload, el enlace tiene que seguir llevando al
-  // chat y no a la ficha de la reserva.
-  const conversationId = payload?.conversation_id;
-  if (typeof conversationId === "string") return `/chat/${conversationId}`;
-
-  const bookingId = payload?.booking_id;
-  if (typeof bookingId === "string") return `/reservas/${bookingId}`;
-  if (payload?.payout_id) return "/tutor/payouts";
-  if (payload?.payment_id) return "/pagos";
-  if (template === "tutor_review_result" || template === "identity_in_review") {
-    return "/tutor/verification";
-  }
-  // NTF-22 · a `/account`, que es la única pantalla del área con sesión que
-  // existe para los tres perfiles. `/app` es el panel del ALUMNO, y este correo
-  // se le manda igual de a menudo a un tutor.
-  if (template === "admin_message") return "/account";
-  return "/app";
-}
 
 /**
  * Escapa lo que va a interpolarse dentro del HTML del correo.

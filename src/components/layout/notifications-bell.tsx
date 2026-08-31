@@ -270,24 +270,18 @@ export function NotificationsBell({
               // Solo los avisos de chat cambian de destino. Los demás
               // (`/reservas/<id>`, `/tutor/payouts`…) siguen siendo enlaces y
               // punto: no hay burbuja de reservas.
-              const alHilo = n.href?.startsWith("/chat/") ?? false;
+              const alHilo = n.href.startsWith("/chat/");
               return (
                 <li key={n.id} className="px-2 py-2 text-[13px]">
-                  {n.href ? (
-                    <Link
-                      href={n.href}
-                      className="block hover:underline"
-                      onClick={
-                        alHilo
-                          ? (e) => abrirHiloEnBurbuja(e, n.href as string)
-                          : undefined
-                      }
-                    >
-                      {inner}
-                    </Link>
-                  ) : (
-                    inner
-                  )}
+                  <Link
+                    href={n.href}
+                    className="block hover:underline"
+                    onClick={
+                      alHilo ? (e) => abrirHiloEnBurbuja(e, n.href) : undefined
+                    }
+                  >
+                    {inner}
+                  </Link>
                 </li>
               );
             })}

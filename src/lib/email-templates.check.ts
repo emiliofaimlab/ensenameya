@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import { renderEmail } from "./email-templates.ts";
+import { rutaFor } from "./notifications.ts";
 
 /**
  * Comprobación mínima del renderizado de los correos. Sin framework: se corre
@@ -38,6 +39,9 @@ for (const template of TEMPLATES) {
   assert.ok(r.subject.length > 0, `"${template}" sin asunto`);
   assert.ok(r.html.includes(BASE), `"${template}" sin enlace a la app`);
   assert.ok(r.text.includes("Lucía"), `"${template}" no saluda por el nombre`);
+  // `rutaFor` la comparte la campana (US-1203): una plantilla sin destino se
+  // pinta como aviso in-app que no se puede clicar.
+  assert.ok(rutaFor(template, {}).startsWith("/"), `"${template}" sin destino`);
 }
 
 // Una plantilla que no existe devuelve null, que es lo que el job lee para
@@ -72,6 +76,14 @@ const aReserva = renderEmail({
   baseUrl: BASE,
 });
 assert.ok(aReserva!.text.includes("/reservas/abc-123"), "el enlace no apunta a la reserva");
+
+// Con reserva manda la reserva. Es lo que hace que los avisos de dinero
+// (NTF-04/10/15, con `booking_id` en el payload desde `20260831120000`) lleven
+// al detalle del pago y no a «Métodos de pago», que son las tarjetas guardadas.
+assert.equal(
+  rutaFor("refund_processed", { payment_id: "pay-1", booking_id: "bk-2" }),
+  "/reservas/bk-2",
+);
 
 // NTF-21 · el correo del mensaje nuevo lleva al HILO, no al panel.
 const aHilo = renderEmail({
@@ -121,4 +133,4 @@ const nombreRaro = renderEmail({
 });
 assert.ok(!nombreRaro!.html.includes("<script>"), "coló un script por el nombre");
 
-console.log(`OK · ${TEMPLATES.length} plantillas + 14 casos borde`);
+console.log(`OK · ${TEMPLATES.length} plantillas + 16 casos borde`);

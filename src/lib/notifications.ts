@@ -5,8 +5,9 @@
  * (Doc 7), no un texto: el mismo evento tiene que poder decirse distinto en un
  * correo y en un aviso. Aquí vive la versión corta, la de la campana.
  *
- * El destino sale del `payload` que ya escriben los triggers (`booking_id`,
- * `payout_id`…), así que el aviso lleva a la pantalla del hecho.
+ * El destino sale de la plantilla y del `payload` que ya escriben los triggers
+ * (`booking_id`, `payout_id`…), así que el aviso lleva a la pantalla del hecho.
+ * Lo decide `rutaFor`, que es la MISMA que usa el correo.
  */
 export type NotificationRow = {
   id: string;
@@ -20,7 +21,7 @@ export type NotificationRow = {
 export type AppNotice = {
   id: string;
   text: string;
-  href: string | null;
+  href: string;
   createdAt: string;
   read: boolean;
 };
@@ -51,18 +52,42 @@ const TEXT: Record<string, string> = {
 /** Cuánto del mensaje del admin cabe en una línea de la campana. */
 const CORTE_ADMIN = 120;
 
-/** A dónde lleva el aviso, según lo que el trigger dejó en el payload. */
-function hrefFor(payload: Record<string, unknown> | null): string | null {
-  // NTF-21 · primero el hilo: un mensaje puede ocurrir dentro de una reserva y
-  // el aviso tiene que abrir el chat, no la ficha (mismo orden que `rutaFor`
-  // en `email-templates.ts`, que es el otro sitio donde se decide esto).
+/**
+ * A dónde lleva el aviso, según la plantilla y lo que el trigger dejó en el
+ * payload. NUNCA devuelve null: un aviso que no se puede clicar es texto muerto.
+ *
+ * Vive aquí y no en `email-templates.ts` —que es quien la usaba primero— porque
+ * este fichero no importa nada y lo consume un componente cliente: al revés, la
+ * campana arrastraría al navegador las plantillas, el escapado de HTML y
+ * `catalog/format.ts` para calcular una cadena.
+ */
+export function rutaFor(
+  template: string,
+  payload: Record<string, unknown> | null,
+): string {
+  // NTF-21 · el hilo, que es lo único que trae su payload. Va ANTES que la
+  // reserva porque un mensaje puede ocurrir dentro de una: el día que alguien
+  // añada `booking_id` a este payload, el enlace tiene que seguir llevando al
+  // chat y no a la ficha de la reserva.
   const conversationId = payload?.conversation_id;
   if (typeof conversationId === "string") return `/chat/${conversationId}`;
 
   const bookingId = payload?.booking_id;
   if (typeof bookingId === "string") return `/reservas/${bookingId}`;
   if (payload?.payout_id) return "/tutor/payouts";
-  return null;
+  // Respaldo. Desde `20260831120000` los avisos de dinero (NTF-04/10/15) traen
+  // también `booking_id` —y `payments.booking_id` es `not null`—, así que aquí
+  // solo cae una fila cuyo pago ya no exista. `/pagos` son las tarjetas
+  // guardadas, no un historial: esa pantalla no existe.
+  if (payload?.payment_id) return "/pagos";
+  if (template === "tutor_review_result" || template === "identity_in_review") {
+    return "/tutor/verification";
+  }
+  // NTF-22 · a `/account`, que es la única pantalla del área con sesión que
+  // existe para los tres perfiles. `/app` es el panel del ALUMNO, y este aviso
+  // se le manda igual de a menudo a un tutor.
+  if (template === "admin_message") return "/account";
+  return "/app";
 }
 
 /** Cuántos avisos enseña la campana. */
@@ -94,7 +119,7 @@ export function toNotice(row: NotificationRow): AppNotice {
       (row.template === "admin_message" ? textoAdmin(row.payload) : null) ??
       TEXT[row.template] ??
       `Novedad en tu cuenta (${row.type})`,
-    href: hrefFor(row.payload),
+    href: rutaFor(row.template, row.payload),
     createdAt: row.created_at,
     read: row.read_at !== null,
   };
