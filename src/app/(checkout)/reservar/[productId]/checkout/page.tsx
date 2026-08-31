@@ -6,8 +6,6 @@ import { getProductDetail } from "@/lib/catalog/queries";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
 import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
 import { activeChargeProvider } from "@/lib/payments";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { isStripeConfigured, lastUsedCardId, listSavedCards } from "@/lib/stripe";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { CheckoutSteps } from "@/components/checkout/checkout-steps";
@@ -71,28 +69,6 @@ export default async function CheckoutPage({
     .eq("id", productId)
     .maybeSingle();
 
-  // La tarjeta ilustrada tiene que enseñar la de verdad o ninguna. Antes era un
-  // adorno del Figma con un `4821` escrito a mano, y parecía una tarjeta
-  // guardada que no existía —seguía ahí después de guardar una de verdad—.
-  const { data: perfilPago } = await createAdminClient()
-    .from("profiles")
-    .select("stripe_customer_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const cliente =
-    !simulado && isStripeConfigured() ? (perfilPago?.stripe_customer_id ?? null) : null;
-
-  // Las dos consultas van juntas: la segunda solo sirve para poner delante la
-  // que de verdad se usó la última vez, y esperarla en serie sería medio
-  // segundo de nada a cambio de nada.
-  const [guardadas, ultimaId] = cliente
-    ? await Promise.all([listSavedCards(cliente), lastUsedCardId(cliente)])
-    : [[], null];
-
-  const tarjetas = ultimaId
-    ? [...guardadas].sort((a, b) => Number(b.id === ultimaId) - Number(a.id === ultimaId))
-    : guardadas;
   // V-6 · AQUÍ SOBRABA UNA CONSULTA. `tutorNames()` volvía a `tutor_profiles` a
   // por un nombre que `getProductDetail` ya había traído en la misma petición
   // (`product.tutor.displayName`, del mismo `select` y con la misma RLS). Se
@@ -151,8 +127,6 @@ export default async function CheckoutPage({
 
       <CheckoutForm
         simulado={simulado}
-        tarjetas={tarjetas}
-        hayUltimaUsada={Boolean(ultimaId && tarjetas[0]?.id === ultimaId)}
         productId={productId}
         // D-2 · con la reserva creándose al llegar, el formulario tiene que
         // poder buscar la que ya hubiera de ESTE alumno. El id sale de la

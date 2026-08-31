@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { loadStripe, type StripeCheckoutFormChangeEvent } from "@stripe/stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import {
   // ⚠️ RENOMBRADO A PROPÓSITO. Stripe llama `CheckoutForm` a su elemento y en
   // este mismo directorio vivimos nosotros con `checkout-form.tsx`, que exporta
@@ -14,23 +14,6 @@ import {
 
 /** Lo que devuelve `/api/pagos/checkout` para montar el formulario. */
 export type Embed = { clientSecret: string; publishableKey: string };
-
-/**
- * D-1 (§20.14) · lo ÚNICO que el formulario nos cuenta de lo que se teclea.
- *
- * ⚠️ Y conviene saber lo que NO trae antes de intentar usarlo: `complete`,
- * `empty` y un `status` por secciones. **Ni marca, ni últimos cuatro dígitos,
- * ni caducidad** de la tarjeta que se está escribiendo — eso vive dentro del
- * iframe de Stripe y no sale de ahí, que es exactamente lo que mantiene el
- * proyecto en PCI-DSS SAQ A. La captura del cliente con el logo de Mastercard
- * la pinta Stripe dentro de su recuadro; a nosotros no nos llega.
- *
- * Lo que sí se puede hacer con esto es que la tarjeta ilustrada REACCIONE
- * (empezó a escribir / ya está completa) y, cuando la persona elige una tarjeta
- * YA guardada, saber cuál — `value.payment.payment_method.id`, que sí podemos
- * cruzar contra las que nos dio el servidor.
- */
-export type CambioDelFormulario = StripeCheckoutFormChangeEvent;
 
 /**
  * MN-01 · SOLO LOS CAMPOS DE LA TARJETA, Y POR QUÉ HUBO QUE CAMBIAR DE MODO.
@@ -127,11 +110,7 @@ function apariencia() {
  * donde tiene que estar para que el alumno vuelva a la confirmación de SU
  * reserva. Duplicarlo en el navegador sería un segundo sitio donde equivocarse.
  */
-function Formulario({
-  onChange,
-}: {
-  onChange?: (evento: CambioDelFormulario) => void;
-}) {
+function Formulario() {
   const resultado = useCheckoutForm();
   const [error, setError] = useState<string | null>(null);
 
@@ -148,14 +127,6 @@ function Formulario({
   return (
     <>
       <FormularioDeStripe
-        // ⚠️ NO ES UN `onInput`. Stripe emite este evento cuando cambia el
-        // ESTADO del formulario —una sección pasa a completa, se elige otro
-        // medio de pago, se despliega un bloque—, no en cada tecla; su propio
-        // tipo lo dice al no traer un valor de campo. Cualquier animación
-        // colgada de aquí tiene que verse bien con saltos de estado, no con un
-        // flujo continuo: si se anima «por letra», la mitad de las letras no
-        // llegan. No verificado con un navegador delante — ver el informe.
-        onChange={onChange}
         onConfirm={async (evento) => {
           setError(null);
           // `loading` no se da en la práctica —el botón vive dentro del propio
@@ -182,15 +153,7 @@ function Formulario({
   );
 }
 
-export function StripeEmbed({
-  clientSecret,
-  publishableKey,
-  onChange,
-}: Embed & {
-  /** D-1 · para que la tarjeta ilustrada reaccione. Opcional: los otros dos
-   *  puntos de montaje (reserva a medias, alta de tarjeta) no la pintan. */
-  onChange?: (evento: CambioDelFormulario) => void;
-}) {
+export function StripeEmbed({ clientSecret, publishableKey }: Embed) {
   // La promesa de `loadStripe` se crea UNA vez (inicializador perezoso del
   // estado): rehacerla en cada render remonta el formulario y se pierde lo
   // escrito.
@@ -238,7 +201,7 @@ export function StripeEmbed({
         pantalla. Si alguien quita este `div`, vuelve.
       */}
       <div className="mx-auto w-full max-w-[520px]">
-        <Formulario onChange={onChange} />
+        <Formulario />
       </div>
     </CheckoutFormProvider>
   );

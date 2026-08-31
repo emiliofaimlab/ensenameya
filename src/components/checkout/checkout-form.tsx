@@ -1,15 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRightIcon } from "lucide-react";
-import {
-  StripeEmbed,
-  type CambioDelFormulario,
-  type Embed,
-} from "@/components/checkout/stripe-embed";
+import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
@@ -22,13 +18,11 @@ import {
   liberarHolds,
   mensajeDeApertura,
 } from "@/lib/checkout/hold";
-import type { SavedCard } from "@/lib/stripe";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime, type TutorCardData } from "@/lib/booking";
 import { TutorSummary } from "@/components/tutor-summary";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 /**
  * Hora de fin de una sesión, derivada con LA MISMA FÓRMULA QUE EL SERVIDOR.
@@ -48,9 +42,6 @@ function horaFin(iso: string, minutos: number | null, timeZone: string): string 
     { hour: "2-digit", minute: "2-digit", timeZone },
   );
 }
-
-/** En qué punto está el formulario de Stripe, para la tarjeta ilustrada. */
-type EstadoTarjeta = "vacia" | "escribiendo" | "completa";
 
 /** Lo que hace falta para pagar, una vez resuelta la reserva. */
 type Apertura =
@@ -89,8 +80,7 @@ type Apertura =
  * Lo que hay en su lugar es el formulario de pago de Stripe (reunión 7-ago): se
  * ve dentro de esta pantalla, pero vive en un iframe del proveedor, así que los
  * datos de la tarjeta no tocan nuestro DOM y seguimos en SAQ A igual que con el
- * checkout alojado. La tarjeta ilustrada de la izquierda es decorativa (no
- * captura nada).
+ * checkout alojado.
  *
  * MN-01 · desde el 20-ago ese formulario es `ui_mode: 'form'` y NO el Embedded
  * Checkout: Stripe pinta solo los campos de pago, así que el «Resumen del
@@ -152,8 +142,6 @@ export function CheckoutForm({
   durationMin,
   timeZone,
   simulado,
-  tarjetas,
-  hayUltimaUsada,
   aceptaSola,
 }: {
   productId: string;
@@ -212,13 +200,6 @@ export function CheckoutForm({
   /** Lo decide `payment_routing_rules`, no el código: con un proveedor real no
    *  hay aviso de pruebas ni botón de simular fallo. */
   simulado: boolean;
-  /** Las tarjetas guardadas de verdad. La ilustración refleja la primera y el
-   *  texto dice cuántas hay: enseñar una sola cuando hay varias es la misma
-   *  mentira que el `4821` inventado, solo que más difícil de ver. */
-  tarjetas: SavedCard[];
-  /** true si la primera de la lista es de verdad la última usada, no solo la
-   *  más reciente. Cambia la etiqueta: sin cobros previos no se puede afirmar. */
-  hayUltimaUsada: boolean;
   /**
    * M-02 · `products.auto_accept_bookings`. Cambia lo que se PROMETE aquí, y
    * por eso llega hasta el formulario: con la aceptación automática puesta la
@@ -231,12 +212,6 @@ export function CheckoutForm({
   const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
   const [pagando, setPagando] = useState(false);
-  // D-1 · lo único que sabemos de lo que se teclea: en qué punto va el
-  // formulario. Ni marca, ni dígitos, ni caducidad — ver `stripe-embed.tsx`.
-  const [estadoTarjeta, setEstadoTarjeta] = useState<EstadoTarjeta>("vacia");
-  // Cuál de las tarjetas GUARDADAS eligió, cuando eligió una. Es un id nuestro
-  // (`pm_…`, el mismo que nos dio el servidor), así que cruzarlo no inventa nada.
-  const [tarjetaElegida, setTarjetaElegida] = useState<string | null>(null);
 
   /**
    * QUÉ RESERVA SE ABRIÓ YA, para no abrir dos.
@@ -417,218 +392,10 @@ export function CheckoutForm({
     router.push(`/reservas/${apertura.bookingId}/confirmacion`);
   }
 
-  /**
-   * D-1 · la tarjeta ilustrada reacciona, y NADA MÁS.
-   *
-   * Se derivan dos cosas del evento y las dos son honestas: en qué punto va el
-   * formulario (`empty`/`complete`) y, si eligió una tarjeta ya guardada, cuál.
-   * Lo que NO se hace, y no es un olvido, es pintar los dígitos o la marca de
-   * una tarjeta nueva: no llegan hasta aquí y no deben llegar.
-   */
-  const alCambiar = useCallback(
-    (evento: CambioDelFormulario) => {
-      setEstadoTarjeta(
-        evento.complete ? "completa" : evento.empty ? "vacia" : "escribiendo",
-      );
-      // Y CUÁL de las guardadas eligió, si eligió una. `payment_method` solo
-      // trae id cuando lo seleccionado es un medio de pago YA guardado; con una
-      // tarjeta nueva llega vacío, y ESE vacío es justo lo que hace que la
-      // ilustración deje de afirmar nada (`tecleandoNueva` más abajo): sin
-      // tarjeta elegida y con el formulario tocado, la cara de delante vuelve a
-      // genérica en vez de seguir enseñando los dígitos de otra.
-      //
-      // ⚠️ SIN NAVEGADOR DELANTE NO SE HA PODIDO VER CON QUÉ FRECUENCIA VIENE
-      // ESTE CAMPO. Si resultara que aparece y desaparece entre eventos, se
-      // vería la cara de delante alternando entre la tarjeta guardada y la
-      // genérica; ninguna de las dos versiones miente —el rótulo describe
-      // siempre lo que se está enseñando— pero sería ruido. La salida, si
-      // molesta, es quedarse solo con el `setEstadoTarjeta` de arriba y borrar
-      // estas dos líneas.
-      const seccionDePago = evento.value?.payment;
-      if (seccionDePago) {
-        setTarjetaElegida(seccionDePago.payment_method?.id ?? null);
-      }
-    },
-    [],
-  );
-
-  // El wallet: delante la elegida en el formulario, si Stripe nos dijo cuál, y
-  // si no la que el servidor puso primera (la última usada).
-  const alFrente =
-    tarjetas.find((t) => t.id === tarjetaElegida) ?? tarjetas[0] ?? null;
-  const esLaElegida = Boolean(alFrente && alFrente.id === tarjetaElegida);
-  // La pila de detrás se calcula sobre `alFrente` y NO sobre lo que se acabe
-  // pintando: así el mazo no cambia de forma —ni de altura— por empezar a
-  // teclear. Lo que cambia es el contenido de la de delante, no el montón.
-  const detras = tarjetas.filter((t) => t.id !== alFrente?.id).slice(0, 2);
-
-  /**
-   * ⚠️ LA CARA DE DELANTE NO PUEDE AFIRMAR UNA TARJETA QUE NO SE VA A USAR.
-   *
-   * El anillo reactivo (D-1) se enciende al escribir y se pone verde al
-   * completar, y hasta ahí bien. El problema era QUÉ envolvía: los dígitos, el
-   * titular y el «VENCE» salían de la tarjeta GUARDADA, porque mientras se
-   * teclea una nueva no hay ninguna elegida y se caía a la primera de la lista.
-   *
-   * El caso malo no es de borde: alumno con exactamente UNA tarjeta guardada.
-   * Veía «•••• 4242» con su caducidad y su nombre iluminándose al ritmo de OTRO
-   * número — una afirmación falsa sobre el medio de pago, justo en el instante
-   * de pagar. Así que en cuanto se escribe algo que no es la tarjeta elegida,
-   * la ilustración vuelve a genérica y el rótulo lo dice.
-   */
-  const tecleandoNueva = estadoTarjeta !== "vacia" && !esLaElegida;
-  const tarjeta = tecleandoNueva ? null : alFrente;
-  const rotulo = tecleandoNueva
-    ? "TARJETA NUEVA"
-    : !tarjeta
-      ? "SIN TARJETA GUARDADA"
-      : esLaElegida
-        ? "ELEGIDA PARA ESTE PAGO"
-        : tarjetas.length > 1
-          ? hayUltimaUsada
-            ? "ÚLTIMA USADA · ELIGES AL PAGAR"
-            : `1 DE ${tarjetas.length} · ELIGES AL PAGAR`
-          : "TITULAR";
-
-  /*
-   * ⚠️⚠️ B3.6 · «QUITAR LA TARJETA ILUSTRADA Y AGRANDAR EL RESUMEN» —
-   * ESTÁ HECHA A MEDIAS, Y LA MITAD QUE FALTA ES A PROPÓSITO.
-   *
-   * Lo que se ha hecho: agrandar el resumen (columna de 400 px y tipografía
-   * mayor abajo). Lo que NO se ha hecho: borrar la tarjeta ilustrada.
-   *
-   * Porque borrarla contradice una decisión del cliente de HACE SEIS DÍAS. El
-   * 20-ago se le preguntó por escrito si quería que la tarjeta reaccionara
-   * mientras se teclea, y contestó que sí — es la D-1 de `docs/20-PLAN-MINUTA-17AGO.md`
-   * §20.14: «La tarjeta reacciona (se ilumina al escribir, se marca completa al
-   * terminar) y se rellena de verdad solo con tarjetas guardadas». Se
-   * implementó ese mismo día en `ab0705b`, y la revisión posterior aún le dio
-   * otra vuelta (el rótulo «TARJETA NUEVA» nació de ahí).
-   *
-   * Así que hay dos peticiones suyas, con seis días de diferencia, que dicen lo
-   * contrario. Eso lo desempata él, no este fichero: quien borre la tarjeta
-   * ahora está tirando trabajo que él pidió y pagó, y quien la deje está
-   * ignorando lo último que dijo. La pregunta que hay que hacerle está en el
-   * reporte de EY-181.
-   *
-   * 🧭 Y un dato que probablemente explique la petición nueva, porque lo
-   * avisamos nosotros: el Doc 22 §22.2 (punto B4, 24-ago) ya dejó escrito que
-   * «la tarjeta ilustrada **está vacía en toda primera compra**
-   * (“SIN TARJETA GUARDADA”): agrandarla y subirla empeora la pantalla justo
-   * para el grueso de los alumnos». Si B3.6 es la respuesta a ese aviso, es una
-   * decisión nueva e informada y entonces sí se borra — pero conviene
-   * confirmarlo antes, no deducirlo.
-   */
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[400px_minmax(0,1fr)]">
-      {/* Columna izquierda del Figma: tarjeta ilustrada + resumen. */}
+      {/* Columna izquierda del Figma: el resumen del pedido. */}
       <div className="flex flex-col gap-5">
-        {/* Wallet: la de delante es la que se va a usar; las demás asoman
-            detrás y se abren en abanico al pasar el ratón. Es INFORMATIVO, no
-            un selector — elegir se elige en el formulario de Stripe, que es
-            quien tiene las tarjetas, y un selector aquí sería prometer un
-            control que no tenemos.
-
-            El montón NO cambia de forma al teclear: la pila de detrás se
-            calcula sobre la guardada que iría delante, no sobre lo que se
-            acabe pintando. Lo que cambia al escribir una tarjeta nueva es el
-            CONTENIDO de la de delante, que pasa a genérica; si la pila se
-            recalculara, con una sola tarjeta guardada aparecería una segunda
-            capa y la caja se desbordaría por abajo. */}
-        <div
-          className="group relative"
-          style={{ height: tarjetas.length > 2 ? 286 : tarjetas.length > 1 ? 232 : 178 }}
-        >
-          {/* Las de detrás, de la más lejana a la más cercana. */}
-          {detras.map((t, i) => (
-            <div
-              key={t.id}
-              aria-hidden
-              // Transformaciones explícitas y no calculadas: Tailwind necesita la
-              // clase entera en el fuente para generarla, y como mucho hay dos.
-              className={[
-                "absolute inset-x-0 top-0 flex h-[178px] items-end rounded-[20px]",
-                "bg-linear-to-br from-[#243043] to-[#0b3a6d] px-6 pb-1.5",
-                "text-[11px] text-white/70 shadow-lg",
-                "transition-transform duration-500 ease-out",
-                // Sin animación para quien la haya desactivado en su sistema.
-                "motion-reduce:transition-none motion-reduce:group-hover:transform-none",
-                i === 0
-                  ? "z-10 translate-y-[26px] scale-[0.955] group-hover:translate-y-[46px] group-hover:-rotate-2"
-                  : "z-0 translate-y-[52px] scale-[0.91] group-hover:translate-y-[92px] group-hover:-rotate-4",
-              ].join(" ")}
-            >
-              <span className="capitalize">
-                {t.brand} •••• {t.last4}
-              </span>
-            </div>
-          ))}
-
-          {/* La de delante. El anillo es TODO lo que reacciona al formulario
-              (D-1): un cerco de marca mientras se escribe y uno verde al
-              quedar completa. El desplazamiento se lo queda el `hover` para
-              que los dos efectos no se peleen por el mismo `translate`.
-
-              ⚠️ Y lo que el anillo envuelve tiene que ser verdad: mientras se
-              teclea una tarjeta que no es la elegida, aquí no hay dígitos, ni
-              titular, ni caducidad de ninguna guardada — ver `tecleandoNueva`.
-              Un anillo iluminándose alrededor de los últimos cuatro dígitos de
-              OTRA tarjeta es una afirmación falsa sobre con qué se paga. */}
-          <div
-            className={cn(
-              "absolute inset-x-0 top-0 z-20 h-[178px] rounded-[20px] bg-linear-to-br from-[#191925] to-[#054a94] p-6 text-white shadow-xl",
-              "ring-offset-2 ring-offset-muted transition-[box-shadow,transform] duration-500 ease-out",
-              "group-hover:-translate-y-1 motion-reduce:transition-none motion-reduce:group-hover:translate-y-0",
-              estadoTarjeta === "completa"
-                ? "ring-2 ring-success"
-                : estadoTarjeta === "escribiendo"
-                  ? "ring-2 ring-brand"
-                  : "ring-0 ring-transparent",
-            )}
-          >
-            <div className="flex items-center justify-between">
-              <span
-                className={cn(
-                  "h-7 w-9 rounded-[6px] bg-[#facc66] transition-opacity duration-500",
-                  estadoTarjeta === "vacia" ? "opacity-70" : "opacity-100",
-                )}
-              />
-              <span className="text-xs font-semibold tracking-wide">
-                ENSÉÑAME YA
-              </span>
-            </div>
-            <p className="mt-9 text-xl font-medium tracking-[0.15em]">
-              •••• •••• •••• {tarjeta ? tarjeta.last4 : "••••"}
-            </p>
-            <div className="mt-5 flex justify-between text-[13px]">
-              <span>
-                <span className="block text-[9px] tracking-wide opacity-70">
-                  {rotulo}
-                </span>
-                <span className="font-semibold capitalize">
-                  {tarjeta ? (tarjeta.nombre ?? tarjeta.brand) : "—"}
-                </span>
-              </span>
-              <span>
-                <span className="block text-[9px] tracking-wide opacity-70">
-                  VENCE
-                </span>
-                <span className="font-semibold">
-                  {tarjeta
-                    ? `${String(tarjeta.expMonth).padStart(2, "0")}/${String(tarjeta.expYear).slice(-2)}`
-                    : "––/––"}
-                </span>
-              </span>
-            </div>
-          </div>
-
-          {tarjetas.length > 3 ? (
-            <span className="absolute inset-x-0 bottom-0 z-30 text-center text-[11px] text-[#6b6b6b]">
-              y {tarjetas.length - 3} más
-            </span>
-          ) : null}
-        </div>
-
         {/*
           B3.6 · el resumen, agrandado. No es «más letra por gusto»: con
           `ui_mode:'form'` Stripe pinta SOLO los campos de pago (MN-01), así que
@@ -802,7 +569,7 @@ export function CheckoutForm({
                 Stripe dentro de este formulario (D-3), porque con el formulario
                 montado al llegar la Session existe antes de que nadie pueda
                 marcarla. Ver `lib/payments/stripe-provider.ts`. */}
-            <StripeEmbed {...apertura.embed} onChange={alCambiar} />
+            <StripeEmbed {...apertura.embed} />
           </div>
         ) : null}
 
