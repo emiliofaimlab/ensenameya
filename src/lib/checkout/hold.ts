@@ -232,23 +232,36 @@ type ErrorDeRpc = { code?: string; message?: string } | null;
  * ¿este error significa «alguien se te adelantó» y no «algo va mal»?
  *
  * Pasa de verdad con dos pestañas o un doble clic: las dos peticiones llaman a
- * `create_booking` y la perdedora choca contra `sessions_no_double_booking_idx`
- * (`20260709160000`). Cuando la ganadora es el propio alumno —que es justo lo
- * que ocurre con dos pestañas suyas—, la reserva buena YA EXISTE y es
- * reutilizable: hay que volver a buscarla antes de dar nada por perdido.
+ * `create_booking` y la perdedora choca contra el candado de agenda de
+ * `sessions`. Cuando la ganadora es el propio alumno —que es justo lo que
+ * ocurre con dos pestañas suyas—, la reserva buena YA EXISTE y es reutilizable:
+ * hay que volver a buscarla antes de dar nada por perdido.
  *
- * ⚠️ SE MIRAN LOS DOS DISFRACES DEL MISMO CHOQUE, y el segundo es el habitual.
- * `create_booking` tiene un `exception when unique_violation` que reescribe el
- * 23505 como «ese horario acaba de ser tomado» con errcode `check_violation`,
- * así que el código crudo casi nunca llega. Y si la ganadora alcanzó a
- * confirmar antes de que la perdedora revalidara, ni siquiera hay choque de
- * índice: la validación previa contesta «algún horario ya no está disponible».
- * Los tres son la misma carrera. El 23505 se conserva por si algún día alguien
- * quita ese `exception` de la función.
+ * ⚠️ SE MIRAN LOS TRES DISFRACES DEL MISMO CHOQUE, y el último es el habitual.
+ * `create_booking_line` tiene un `exception when exclusion_violation or
+ * unique_violation` que reescribe el choque como «ese horario acaba de ser
+ * tomado» con errcode `check_violation`, así que el código crudo casi nunca
+ * llega. Y si la ganadora alcanzó a confirmar antes de que la perdedora
+ * revalidara, ni siquiera hay choque de candado: la validación previa contesta
+ * «algún horario ya no está disponible». Los tres son la misma carrera.
+ *
+ * ⚠️ **23P01 NO ES OPCIONAL DESDE EL 31-AGO.** El candado dejó de ser el índice
+ * único `(tutor_id, start_at)` y pasó a ser la constraint de exclusión
+ * `sessions_sin_solape_por_tutor` (`20260831180000`), que compara INTERVALOS y
+ * no inicios — porque 9:00–10:00 y 9:30–11:00 del mismo tutor también son una
+ * doble reserva, y el índice viejo las dejaba pasar. Una exclusión levanta
+ * `exclusion_violation` (23P01), no `unique_violation` (23505): sin esta línea,
+ * el día que alguien quite el `exception` de la función el choque dejaría de
+ * reconocerse como carrera y el alumno vería el nombre crudo de la constraint.
+ *
+ * El 23505 se conserva porque sigue siendo posible: `create_booking_line`
+ * también inserta en `payments`, que tiene `booking_id` único.
  */
 export function esCarreraDeHorario(error: ErrorDeRpc): boolean {
   if (!error) return false;
-  if (error.code === "23505") return true; // unique_violation crudo
+  // Los dos códigos crudos del mismo suceso: choque de agenda (exclusión) y
+  // choque de clave única. Ver la nota de arriba.
+  if (error.code === "23P01" || error.code === "23505") return true;
   const m = (error.message ?? "").toLowerCase();
   return (
     m.includes("acaba de ser tomado") || m.includes("ya no está disponible")

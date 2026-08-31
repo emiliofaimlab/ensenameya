@@ -1,0 +1,22 @@
+-- Enséñame Ya — habilita `btree_gist`.
+--
+-- Sola no hace nada: no crea tablas, no toca políticas y no cambia una fila.
+-- Lo que aporta son las clases de operadores que permiten meter un `uuid` (o
+-- cualquier tipo con orden total) dentro de un índice GiST junto a un rango.
+--
+-- Existe porque el candado anti-doble-reserva de `sessions` es hoy un índice
+-- ÚNICO sobre `(tutor_id, start_at)` (`20260709160000_ep06_checkout.sql:46-48`),
+-- y un índice único compara valores, no intervalos: 9:00–10:00 y 9:30–11:00 del
+-- mismo tutor son dos claves distintas y las dos hacen COMMIT. La primitiva que
+-- sí cubre solapes es
+--
+--   exclude using gist (tutor_id with =, tstzrange(start_at, end_at) with &&)
+--
+-- y ese `tutor_id with =` es exactamente lo que GiST no sabe hacer sin esta
+-- extensión.
+--
+-- Va en su propia migración y no dentro de la del candado a propósito: si el
+-- proyecto no la tuviera disponible, quiero que falle AQUÍ —una migración que no
+-- cambia nada y se revierte con `drop extension`— y no a mitad de una que ya ha
+-- tocado el índice de las sesiones.
+create extension if not exists btree_gist;

@@ -245,6 +245,38 @@ export function SlotPicker({
     { month: "long", year: "numeric", timeZone: "UTC" },
   );
 
+  /**
+   * ¿este hueco se pisa con alguno de los ya elegidos?
+   *
+   * ⚠️ ESTO NO HACÍA FALTA HASTA HOY, y hace falta ahora. Mientras el paso de la
+   * rejilla ERA la duración, dos huecos ofrecidos nunca podían solaparse: 9:00 y
+   * 10:00 con clases de 60 no se tocan. Desde que la mentoría puede declarar
+   * `start_time_increment_min` (`20260831190000`), 9:00 y 9:30 con clases de 60
+   * SÍ se pisan y los dos se ofrecen — es el propósito del ajuste, no un fallo.
+   *
+   * Sin este filtro, elegir los dos es lo más natural del mundo (están uno al
+   * lado del otro) y el paquete se cae DOS PANTALLAS DESPUÉS, al pagar, contra
+   * la constraint `sessions_sin_solape_por_tutor`, con un «ese horario acaba de
+   * ser tomado» que echa la culpa a otro alumno cuando el choque era con la
+   * propia selección. Se corta aquí, que es donde se puede explicar.
+   *
+   * Intervalos medio abiertos, igual que el `tstzrange &&` del SQL y que
+   * `holdsQueSolapan`: pegado no es solapado — una clase que acaba a las 10:00
+   * no estorba a otra que empieza a las 10:00.
+   */
+  function sePisa(iso: string, elegidos: Set<string>): boolean {
+    // Sin duración declarada no hay tramo que medir; un minuto basta para que
+    // «empiezan a la misma hora» siga contando, que es el caso que importa.
+    const ms = Math.max(durationMin ?? 0, 1) * 60_000;
+    const ini = Date.parse(iso);
+    if (!Number.isFinite(ini)) return false;
+    for (const otro of elegidos) {
+      const o = Date.parse(otro);
+      if (Number.isFinite(o) && ini < o + ms && o < ini + ms) return true;
+    }
+    return false;
+  }
+
   function toggle(iso: string) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -255,6 +287,12 @@ export function SlotPicker({
       if (required === 1) return new Set([iso]); // sesión única: reemplaza
       if (next.size >= required) {
         toast.error(`Elige exactamente ${required} horarios.`);
+        return prev;
+      }
+      if (sePisa(iso, next)) {
+        toast.error(
+          `Ese horario se pisa con otro que ya elegiste: la clase dura ${durationMin} min.`,
+        );
         return prev;
       }
       next.add(iso);
@@ -515,17 +553,37 @@ export function SlotPicker({
                 <div className="mt-3.5 flex flex-wrap gap-2">
                   {openSlots.map((iso) => {
                     const on = selected.has(iso);
+                    /*
+                      Con paso fino, los huecos vecinos se pisan entre sí (9:00 y
+                      9:30 con clases de 60). Apagar los que ya no caben —en vez
+                      de dejar que se pulsen y contestar con un `toast`— es lo
+                      que hace visible la duración de la clase: al marcar las
+                      9:00 se apaga las 9:30 sola y se entiende por qué.
+
+                      Solo en paquetes: con `required === 1` la elección
+                      REEMPLAZA a la anterior, así que nunca hay nada con lo que
+                      chocar y apagar chips sería mentir.
+                    */
+                    const pisado = !on && required > 1 && sePisa(iso, selected);
                     return (
                       <button
                         key={iso}
                         type="button"
                         onClick={() => toggle(iso)}
                         aria-pressed={on}
+                        disabled={pisado}
+                        title={
+                          pisado
+                            ? `Se pisa con otro horario que ya elegiste (la clase dura ${durationMin} min).`
+                            : undefined
+                        }
                         className={cn(
                           "inline-flex h-9 items-center rounded-full border-[1.5px] px-3.5 text-[13px] font-medium transition-colors",
                           on
                             ? "border-brand bg-brand text-white"
-                            : "border-[#e0e0e0] bg-card text-[#19191f] hover:border-brand",
+                            : pisado
+                              ? "cursor-not-allowed border-[#ededed] bg-muted text-[#c4c4c4]"
+                              : "border-[#e0e0e0] bg-card text-[#19191f] hover:border-brand",
                         )}
                       >
                         {timeLabel(iso, timeZone)}

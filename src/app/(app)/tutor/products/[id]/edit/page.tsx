@@ -28,7 +28,7 @@ export default async function EditProductPage({
       supabase
         .from("products")
         .select(
-          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, package_num_sessions, image_path, faqs, requirements, level, language, auto_accept_bookings, product_categories(category_id)",
+          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, start_time_increment_min, package_num_sessions, image_path, faqs, requirements, level, language, auto_accept_bookings, product_categories(category_id)",
         )
         .eq("id", id)
         .eq("tutor_id", userId)
@@ -86,6 +86,7 @@ export default async function EditProductPage({
           pricingModel: product.pricing_model,
           priceAmount: product.price_amount,
           sessionDurationMin: product.session_duration_min,
+          startTimeIncrementMin: product.start_time_increment_min,
           packageNumSessions: product.package_num_sessions,
           level: product.level,
           language: product.language,
