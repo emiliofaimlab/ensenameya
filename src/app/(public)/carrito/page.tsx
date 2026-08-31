@@ -681,6 +681,26 @@ function EstadoDeLinea({ l }: { l: CartResolvedLine }) {
         </div>
       );
 
+    /* BUG-4 · el choque es SUYO, y el mensaje tiene que decirlo. «Ese horario
+       ya no está libre» mandaba a buscar un culpable que no existe. Se nombra
+       la causa —otra mentoría de su propio carrito, con el mismo tutor— porque
+       es lo único que le permite decidir cuál de las dos mueve. */
+    case "choca_contigo":
+      return (
+        <div className="flex items-start gap-1.5 text-[13px] text-destructive">
+          <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
+          <span>
+            Se pisa con otra mentoría de tu carrito del mismo tutor.{" "}
+            <Link
+              href={`/products/${l.line.productId}#reservar`}
+              className="font-semibold underline"
+            >
+              Elegir otra hora
+            </Link>
+          </span>
+        </div>
+      );
+
     case "no_disponible":
       return (
         <div className="flex items-start gap-1.5 text-[13px] text-destructive">

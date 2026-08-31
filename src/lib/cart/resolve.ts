@@ -73,7 +73,22 @@ export type CartLineState =
    * medio pagar: es su propio hold, creado al entrar al checkout (D-2). No es
    * un error — es «sigue por donde lo dejaste».
    */
-  | { tipo: "pagando"; bookingId: string };
+  | { tipo: "pagando"; bookingId: string }
+  /**
+   * BUG-4 · Choca con OTRA línea del propio carrito: mismo tutor y horarios que
+   * se pisan. No es que el hueco se lo llevara nadie — se lo lleva él mismo.
+   *
+   * Hasta aquí no se detectaba: cada línea se valida por separado contra
+   * `get_available_slots`, que no sabe nada de las otras, así que las dos salían
+   * `ok`. El choque no aparecía hasta `create_order`, que SÍ lo ve —la línea 2
+   * encuentra la sesión que acaba de crear la línea 1 dentro de la misma
+   * transacción— y entonces era tarde por partida doble: por P-1 se cae el
+   * PEDIDO ENTERO, y el mensaje que salía era «algún horario ya no está
+   * disponible», que la pantalla presenta como «te lo ocuparon». Culpaba a otro
+   * alumno de algo que hizo el propio comprador, y sin decirle cuál de sus
+   * líneas sobra.
+   */
+  | { tipo: "choca_contigo" };
 
 export type CartResolvedLine = {
   key: string;
@@ -354,6 +369,58 @@ export async function resolveCart(): Promise<ResolvedCart> {
       total,
       estado: sigueLibre ? { tipo: "ok" } : { tipo: "horario_ocupado" },
     });
+  }
+
+  // ── BUG-4 · el carrito contra sí mismo ────────────────────────────────────
+  // `get_available_slots` responde por PRODUCTO y no sabe nada de las otras
+  // líneas, así que este choque no lo puede ver ninguna de las consultas de
+  // arriba: hay que compararlas entre ellas, y aquí, que es donde ya están
+  // todas resueltas.
+  //
+  // Se compara por INTERVALO y no por instante de inicio, que es el mismo
+  // motivo por el que el candado de `sessions` pasó a ser una exclusión de
+  // rangos: dos clases de 60 min a las 9:00 y a las 9:30 no comparten inicio y
+  // se pisan media hora igual. Con el paso de agenda (`start_time_increment_min`)
+  // esto deja de ser un caso raro y pasa a ser el gesto natural.
+  const ocupado = new Map<string, Array<readonly [number, number]>>();
+
+  // Los intervalos de una línea. Sin duración legible se cae a comparar solo el
+  // instante exacto: es lo conservador — inventarle una duración marcaría como
+  // choque lo que quizá no lo es, y esto quita líneas del total.
+  const intervalos = (l: CartResolvedLine) => {
+    const min = l.product?.sessionDurationMin ?? 0;
+    const dur = min > 0 ? min * 60_000 : 1;
+    return l.line.slots.map((ms) => [ms, ms + dur] as const);
+  };
+
+  const anota = (l: CartResolvedLine) => {
+    const tutor = l.product?.tutorId;
+    if (!tutor) return;
+    ocupado.set(tutor, [...(ocupado.get(tutor) ?? []), ...intervalos(l)]);
+  };
+
+  // Los holds ya creados ocupan SIEMPRE y no se marcan nunca: son reservas de
+  // verdad, con su sesión en la base. Si una línea nueva se pisa con una de
+  // ellas, la que sobra es la nueva — y por eso van antes, fuera del orden del
+  // carrito. La línea `pagando` tiene su propio camino («Continuar el pago»).
+  for (const l of resueltas) {
+    if (l.estado.tipo === "pagando") anota(l);
+  }
+
+  // El resto, en el orden en que están en el carrito: la primera se queda y la
+  // que llegue encima se marca. Es el mismo criterio que aplica `create_order`
+  // al recorrer las líneas, así que la pantalla y el cobro dicen lo mismo.
+  for (const l of resueltas) {
+    if (l.estado.tipo !== "ok") continue;
+    const previos = ocupado.get(l.product!.tutorId) ?? [];
+    const choca = intervalos(l).some(([a, b]) =>
+      previos.some(([c, d]) => a < d && c < b),
+    );
+    if (choca) {
+      l.estado = { tipo: "choca_contigo" };
+      continue;
+    }
+    anota(l);
   }
 
   // El total solo suma lo que de verdad se puede comprar: meter dentro una
