@@ -3,7 +3,8 @@ import { CheckIcon } from "lucide-react";
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { PAYOUT_BADGE, type TutorBalance } from "@/lib/payouts";
+import { payoutCountries } from "@/lib/payments";
+import { PAYOUT_BADGE, nombrePais, type TutorBalance } from "@/lib/payouts";
 import {
   PanelCard,
   StatusPill,
@@ -11,6 +12,7 @@ import {
 } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { WithdrawButton } from "./withdraw-button";
+import { PayoutCountryForm } from "./payout-country-form";
 import { formatPct, tutorTier } from "../tier";
 
 export const metadata = { title: "Payouts · Enséñame Ya" };
@@ -45,11 +47,23 @@ const fmtDate = (iso: string) =>
  * con el layout del Figma. `tutor_balance` agrega disponible / retención /
  * pagado. US-1004: retiro self-service (RN-40).
  *
- * "Cuenta de cobro" (204:54) depende del PSP (EP-20 / C-01): el tutor la
- * registrará en el onboarding del proveedor, no en nuestra BD, así que no hay
- * columna ni la va a haber. R29-03b: en su lugar se dice **en qué estado está
- * el cobro**, que es lo que el tutor viene a mirar — sin migración y sin pintar
- * un "Banco BBVA ····1234" que no existe.
+ * ⚠️ AQUÍ DECÍA QUE NO HABRÍA COLUMNA DE CUENTA DE COBRO, Y ERA FALSO. El texto
+ * anterior daba por hecho que «el tutor la registrará en el onboarding del
+ * proveedor, no en nuestra BD, así que no hay columna ni la va a haber». Esa
+ * premisa era de Stripe Connect, donde el beneficiario efectivamente vive en el
+ * proveedor. Con dLocal Go —que es quien de verdad puede pagar en LATAM— NO:
+ * `POST /v1/payouts` no guarda beneficiarios, los datos bancarios viajan
+ * enteros en CADA llamada, así que esa PII va a tener que vivir en nuestra base
+ * de datos. Es B1, otra fase, y cuando llegue necesita **tabla propia**: no
+ * puede ir en `tutor_profiles`, que tiene `grant select` a `anon` y publica la
+ * fila entera de cualquier tutor aprobado (ver la nota de `20260901140000`).
+ *
+ * Lo que sí llega hoy es la mitad que no es PII y que hace falta antes que
+ * ninguna otra cosa: **el país de cobro** (A0, `tutor_profiles.payout_country`).
+ * Es la clave con la que `create_booking_line` elige pasarela, y hasta esta
+ * migración estaba clavada a 'VE' — el único país que ni dLocal Go ni Stripe
+ * pueden pagar. R29-03b sigue en pie para el resto: se dice en qué estado está
+ * el cobro, sin pintar un "Banco BBVA ····1234" que no existe.
  */
 export default async function TutorPayoutsPage() {
   // Mismo guard que el resto del panel: fila en `tutor_profiles`. Con
@@ -59,21 +73,46 @@ export default async function TutorPayoutsPage() {
   const { userId } = await requireTutorProfile();
 
   const supabase = await createClient();
-  const [{ data: balanceData }, { data: payouts }, tier] = await Promise.all([
-    supabase.rpc("tutor_balance"),
-    supabase
-      .from("payouts")
-      .select("id, status, currency, amount, scheduled_for, paid_at, created_at")
-      .order("created_at", { ascending: false }),
-    // N-16: aquí es donde el tutor viene a mirar cuánto cobra, así que aquí es
-    // donde tiene que estar el reparto que produjo esas cifras.
-    tutorTier(supabase, userId),
-  ]);
+  const [{ data: balanceData }, { data: payouts }, tier, { data: perfil }, servibles] =
+    await Promise.all([
+      supabase.rpc("tutor_balance"),
+      supabase
+        .from("payouts")
+        .select("id, status, currency, amount, scheduled_for, paid_at, created_at")
+        .order("created_at", { ascending: false }),
+      // N-16: aquí es donde el tutor viene a mirar cuánto cobra, así que aquí es
+      // donde tiene que estar el reparto que produjo esas cifras.
+      tutorTier(supabase, userId),
+      // A0 · dónde cobra (`null` = no lo ha declarado). Con el cliente del
+      // propio tutor: `tutor_profiles_select_own` ya le deja ver su fila y
+      // `service_role` no tiene grant sobre esta tabla (regla de oro 9).
+      supabase
+        .from("tutor_profiles")
+        .select("payout_country")
+        .eq("profile_id", userId)
+        .maybeSingle(),
+      // Y a dónde podemos transferir de verdad, según `payment_routing_rules`.
+      payoutCountries(),
+    ]);
 
   const balance = balanceData as unknown as TutorBalance;
   const hasAvailable = balance.available.length > 0;
   const upcoming = (payouts ?? []).filter((p) => UPCOMING.has(p.status));
   const history = (payouts ?? []).filter((p) => !UPCOMING.has(p.status));
+
+  const paisDeCobro = perfil?.payout_country ?? null;
+  /**
+   * Lo que ofrece el desplegable. Si el tutor tiene declarado un país que hoy ya
+   * no es servible —porque alguien desactivó su regla—, se conserva en la lista:
+   * quitarlo dejaría el `<select>` en blanco y le diría «no has declarado nada»
+   * a quien sí declaró. Que siga viéndolo es también la única pista de que sus
+   * mentorías han dejado de poder venderse.
+   */
+  const paisesOfrecidos = (
+    paisDeCobro && !servibles.includes(paisDeCobro)
+      ? [...servibles, paisDeCobro]
+      : servibles
+  ).map((code) => ({ code, label: nombrePais(code) }));
 
   return (
     <TutorShell
@@ -134,6 +173,19 @@ export default async function TutorPayoutsPage() {
               7 días desde que la mentoría se completa
             </dd>
           </div>
+          {/* A0 · el dato que decide quién paga. Va junto a los otros dos
+              porque es de la misma naturaleza: condiciones del cobro, no una
+              acción. El control para cambiarlo está debajo. */}
+          <div>
+            <dt className="text-xs text-[#6b6b6b]">País de cobro</dt>
+            <dd className="mt-1 flex items-center gap-2 text-sm text-[#19191f]">
+              {paisDeCobro ? (
+                nombrePais(paisDeCobro)
+              ) : (
+                <StatusPill tone="amber">Sin declarar</StatusPill>
+              )}
+            </dd>
+          </div>
           <div>
             <dt className="text-xs text-[#6b6b6b]">Cuenta de cobro</dt>
             <dd className="mt-1 flex items-center gap-2 text-sm text-[#19191f]">
@@ -156,11 +208,30 @@ export default async function TutorPayoutsPage() {
             </div>
           ) : null}
         </dl>
-        <p className="mt-3 text-[13px] text-[#6b6b6b]">
-          Todavía no hay cuenta de cobro que registrar: la pedirá el proveedor
-          de pagos cuando quede activo, y te avisaremos para completarla. Tu
-          saldo se sigue acumulando mientras tanto.
-        </p>
+        {/* A0 · la parte de la "cuenta de cobro" que hoy SÍ se puede pedir. Los
+            datos bancarios son B1 y no caben en esta tabla (ver la cabecera). */}
+        <div className="mt-4 border-t border-[#e0e0e0] pt-4">
+          <h3 className="text-sm font-semibold text-[#19191f]">
+            ¿En qué país cobras?
+          </h3>
+          <p className="mt-1 max-w-[620px] text-[13px] text-[#6b6b6b]">
+            De esto depende quién te paga, así que conviene tenerlo puesto antes
+            de la primera liquidación. La lista son los países a los que hoy
+            podemos transferir. Si el tuyo no está —Venezuela y Colombia, entre
+            otros— déjalo sin declarar: sigues vendiendo igual y tu saldo se
+            sigue acumulando.
+          </p>
+          <PayoutCountryForm
+            userId={userId}
+            current={paisDeCobro}
+            options={paisesOfrecidos}
+          />
+          <p className="mt-3 max-w-[620px] text-[13px] text-[#6b6b6b]">
+            Los datos de tu cuenta bancaria todavía no se piden en ninguna
+            parte: llegan cuando el proveedor de pagos quede activo y te
+            avisaremos para completarlos.
+          </p>
+        </div>
       </PanelCard>
 
       {/* Próximos payouts (204:2). */}
