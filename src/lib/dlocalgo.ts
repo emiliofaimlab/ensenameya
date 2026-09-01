@@ -295,3 +295,178 @@ export type ReembolsoDlocalGo = {
 export async function recuperarPago(id: string): Promise<PagoDlocalGo> {
   return await dlocalgoFetch<PagoDlocalGo>("GET", `/v1/payments/${encodeURIComponent(id)}`);
 }
+
+/**
+ * ── PAYOUTS (C2) ────────────────────────────────────────────────────────────
+ *
+ * `POST /v1/payouts` es, en palabras de su propia documentación, «a withdrawal
+ * that a merchant makes from its available dLocal Go balance to the bank account
+ * of a third party». O sea: paga a OTRA persona, sale del balance de dLocal Go,
+ * y **cobrar por Stripe no lo financia**. Esa última frase no es un matiz
+ * contable, es la que decide qué órdenes se pueden mandar (ver
+ * `payouts.funding_provider` y su comentario en `20260901130000`).
+ *
+ * ⚠️ LOS OCHO ESTADOS, Y QUE NO SON LOS NUESTROS. dLocal Go usa
+ * `PENDING · PROCESSING · ON_HOLD · DELIVERED · COMPLETED · CANCELLED ·
+ * REJECTED · FAILED`; `public.payout_status` usa
+ * `pending · scheduled · processing · paid · failed · on_hold`. Se parecen lo
+ * justo para equivocarse: su `ON_HOLD` **no** es nuestro `on_hold` (el nuestro
+ * lo pone un admin y `manage_payout('release')` lo devuelve a 'scheduled', o
+ * sea que traducirlo así reenviaría una orden que el proveedor ya tiene). La
+ * traducción vive en `dlocal-provider.ts` y solo allí.
+ */
+export type EstadoPayoutDlocalGo =
+  | "PENDING"
+  | "PROCESSING"
+  | "ON_HOLD"
+  | "DELIVERED"
+  | "COMPLETED"
+  | "CANCELLED"
+  | "REJECTED"
+  | "FAILED";
+
+/**
+ * Un payout tal como lo devuelve la API.
+ *
+ * ⚠️ TODO ES OPCIONAL MENOS `id` Y `status`, Y NO ES PEREZA. Al escribir esto
+ * la cuenta de sandbox devolvía `403 {"code":3001,"message":"Invalid
+ * Credentials."}` a TODA petición —incluidas las que sí funcionaron el mismo día
+ * con estas mismas claves— así que la forma exacta de la respuesta **no está
+ * verificada contra la API viva**, al revés que todo lo demás de este archivo.
+ * Lo que sí está verificado por quien abrió la cuenta: los ocho estados, que el
+ * cuerpo no admite `external_id` ni equivalente, y que un 400 puede haber creado
+ * el payout igual.
+ *
+ * Consecuencia práctica: los campos que el barrido de reconciliación necesita se
+ * leen con `campoNumero`/`campoTexto` probando VARIOS nombres, y lo que no se
+ * puede leer se trata como «podría ser nuestro» (ver `dlocal-provider.ts`).
+ * Cuando alguien pueda volver a llamar a la API, se transcribe la respuesta real
+ * aquí y esos alias sobran.
+ */
+export type PayoutDlocalGo = {
+  id: string;
+  status: EstadoPayoutDlocalGo | string;
+  /** El importe en unidad MAYOR, como todo en esta API. */
+  transfer_amount?: number;
+  amount?: number;
+  /** La moneda que recibe el beneficiario. */
+  currency_to_pay?: string;
+  currency?: string;
+  transfer_country?: string;
+  country?: string;
+  beneficiary_document?: string;
+  created_date?: string;
+  created_at?: string;
+  status_code?: string | number;
+  status_detail?: string;
+  [k: string]: unknown;
+};
+
+/** Lee un número de un payout probando los nombres que puede traer. */
+export function campoNumero(p: PayoutDlocalGo, ...claves: string[]): number | null {
+  for (const k of claves) {
+    const v = p[k];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+  }
+  return null;
+}
+
+/** Lo mismo para texto. Devuelve en mayúsculas: los códigos de país y moneda lo son. */
+export function campoTexto(p: PayoutDlocalGo, ...claves: string[]): string | null {
+  for (const k of claves) {
+    const v = p[k];
+    if (typeof v === "string" && v.trim() !== "") return v.trim().toUpperCase();
+  }
+  return null;
+}
+
+/**
+ * El cuerpo del `POST /v1/payouts`.
+ *
+ * Los trece campos de abajo son EXACTAMENTE lo que devuelve
+ * `payout_beneficiary(payout_id)` más `transfer_amount`, y esa correspondencia
+ * es deliberada: la construye la base de datos, que es quien tiene los datos y
+ * quien sabe qué exige cada país. Este archivo no compone beneficiarios.
+ */
+export type NuevoPayoutDlocalGo = {
+  transfer_amount: number;
+  transfer_country: string;
+  currency_to_pay: string;
+  flow_type: string;
+  purpose: string;
+  beneficiary_first_name: string;
+  beneficiary_last_name: string;
+  beneficiary_document: string;
+  beneficiary_document_type: string;
+  bank_code: string;
+  bank_account: string;
+  bank_account_type?: string | null;
+  bank_branch?: string | null;
+};
+
+/**
+ * 🔴 CREAR UN PAYOUT. Es la llamada que mueve dinero de verdad y la única de
+ * este archivo que NO SE PUEDE REINTENTAR A CIEGAS.
+ *
+ * No hay `Idempotency-Key`, no hay `external_id`, y `order_id` —el sustituto que
+ * salva al cobro— no existe en payouts. Además un 400 puede haber creado el
+ * payout igual. Quien llame a esto tiene que haber leído la emulación de
+ * idempotencia de `dlocal-provider.ts` entera; no hay atajo.
+ */
+export async function crearPayout(cuerpo: NuevoPayoutDlocalGo): Promise<PayoutDlocalGo> {
+  return await dlocalgoFetch<PayoutDlocalGo>("POST", "/v1/payouts", cuerpo);
+}
+
+/** `GET /v1/payouts/{id}` — el estado de una orden que ya tiene identidad. */
+export async function recuperarPayout(id: string): Promise<PayoutDlocalGo> {
+  return await dlocalgoFetch<PayoutDlocalGo>("GET", `/v1/payouts/${encodeURIComponent(id)}`);
+}
+
+/**
+ * `GET /v1/payouts` — el listado, que es lo que SUSTITUYE a la clave de
+ * idempotencia que la API no tiene.
+ *
+ * ⚠️ La forma de la envoltura tampoco está verificada (ver `PayoutDlocalGo`), y
+ * los listados de esta API son estilo Spring: `page` / `page_size` con
+ * `totalElements`. Se aceptan las tres formas que puede tener el array —`data`,
+ * `content`, `results`— y también que la respuesta sea el array pelado. Si
+ * ninguna cuadra devuelve `null`, que NO es lo mismo que una lista vacía: una
+ * lista vacía prueba que nuestro payout no existe; un `null` no prueba nada, y
+ * quien llama tiene que tratarlo como duda y no como ausencia.
+ */
+export async function listarPayouts(pagina = 0, tam = 100): Promise<PayoutDlocalGo[] | null> {
+  const bruto = await dlocalgoFetch<unknown>(
+    "GET",
+    `/v1/payouts?page=${pagina}&page_size=${tam}`,
+  );
+  if (Array.isArray(bruto)) return bruto as PayoutDlocalGo[];
+  if (bruto && typeof bruto === "object") {
+    for (const k of ["data", "content", "results", "payouts"]) {
+      const v = (bruto as Record<string, unknown>)[k];
+      if (Array.isArray(v)) return v as PayoutDlocalGo[];
+    }
+  }
+  return null;
+}
+
+/**
+ * ¿Este error es «no hay saldo»?
+ *
+ * ⚠️ NO ES UN FALLO PERMANENTE y por eso se reconoce aparte: es dinero que se
+ * debe y que saldrá en cuanto se fondee el balance. Comprobado en el sandbox
+ * (75 USD sobre un saldo menor → «Insufficient funds»). Se reconoce por TEXTO,
+ * como el «ya reembolsado» de los reembolsos, porque dLocal no publica un código
+ * para esto; si el mensaje cambia, el error cae a `rechazado`, que manda la
+ * orden a revisión humana en vez de reintentarla eternamente.
+ *
+ * ⚠️ Y AL REVÉS TAMBIÉN IMPORTA: la comprobación de fondos corre ANTES que la de
+ * campos, así que recibir esto **no dice nada** sobre si el resto del payload es
+ * válido. Un payout que solo ha visto «insufficient funds» sigue sin estar
+ * probado.
+ */
+export function esSaldoInsuficiente(e: DlocalGoError): boolean {
+  return /insufficient\s+funds|saldo\s+insuficiente|not\s+enough\s+(funds|balance)/i.test(
+    e.message,
+  );
+}

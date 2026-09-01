@@ -5,19 +5,29 @@ import {
   DlocalGoError,
   aUnidadMayor,
   aUnidadMenor,
+  campoNumero,
+  campoTexto,
+  crearPayout,
   dlocalgoFetch,
+  esSaldoInsuficiente,
   firmaCuadra,
   firmaDeCabecera,
   firmarNotificacion,
   isDlocalGoConfigured,
+  listarPayouts,
   recuperarPago,
+  recuperarPayout,
+  type NuevoPayoutDlocalGo,
   type PagoDlocalGo,
+  type PayoutDlocalGo,
   type ReembolsoDlocalGo,
 } from "@/lib/dlocalgo";
 import type {
   ChargeInput,
   ChargeResult,
   CobroRef,
+  PayoutInput,
+  PayoutResult,
   PspProvider,
   RefundInput,
   RefundResult,
@@ -267,6 +277,215 @@ function reutilizable(pago: PagoDlocalGo, input: ChargeInput): boolean {
   return aUnidadMenor(pago.amount, pago.currency) === esperado;
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// C2 · PAGARLE AL TUTOR — la emulación de idempotencia, que aquí es TODO
+// ════════════════════════════════════════════════════════════════════════════
+//
+// En el cobro la idempotencia se emula con `order_id`, que al menos CHOCA. En el
+// payout no hay nada con qué: ni cabecera, ni `external_id`, ni un campo libre
+// donde meter nuestro id. Y encima **un 400 puede haber creado el payout igual**
+// (tres en `FAILED` en el sandbox nacidos de respuestas de error), y la
+// cancelación tampoco salva: `POST /v1/payouts/{id}/cancel` devolvió
+// `2316 not cancellable` a los ~18 minutos de crearlo pese a estar `PENDING`,
+// cuando su doc promete una ventana de ~15. O sea que no hay «deshacer».
+//
+// Con eso, la única forma de no pagar dos veces es NO LLAMAR DOS VECES, y para
+// eso hacen falta las dos mitades de abajo. Ninguna sirve sin la otra:
+//
+//   1. EL CANDADO, que vive en la base de datos y no aquí: el job reclama la
+//      fila con `update payouts set status='processing' where id=? and
+//      status='scheduled'`. Es atómico, así que dos pasadas solapadas no pueden
+//      ganar la misma orden, y deja escrito en `provider_metadata` el instante
+//      del reclamo. Ese instante es `claimedAt`.
+//
+//   2. EL BARRIDO, que vive aquí: cuando una orden ya reclamada vuelve sin
+//      identificador —porque el proceso murió, porque el 400 mintió, porque se
+//      cayó la red— **no se reintenta**. Se le pregunta a `GET /v1/payouts` si
+//      hay algún payout que cuadre con esta orden y sea POSTERIOR a `claimedAt`.
+//      Si lo hay, se adopta. Si la lista prueba que no lo hay, la orden vuelve a
+//      la cola. Y si la lista no se puede leer o no se puede descartar lo que
+//      trae, la orden se queda en duda y **no la toca nadie hasta que la mire
+//      una persona**.
+//
+// La asimetría es deliberada y es el criterio de todo este bloque: un payout que
+// se queda parado se arregla; un payout pagado dos veces se reclama a alguien que
+// ya cobró. Ante la duda, no se manda.
+
+/** Cuánto puede adelantarse el reloj del proveedor al nuestro. */
+const MARGEN_RELOJ_MS = 2 * 60 * 1000;
+
+/** Páginas de `GET /v1/payouts` que se miran como mucho en un barrido. */
+const PAGINAS_BARRIDO = 5;
+const TAM_PAGINA = 100;
+
+/**
+ * De los ocho estados de dLocal Go a los seis de `public.payout_status`.
+ *
+ * ⚠️ `ON_HOLD` **no** se traduce a nuestro `on_hold`, y es el error más caro que
+ * se puede cometer en esta función. El nuestro significa «un admin retuvo esta
+ * orden» y `manage_payout('release')` lo devuelve a 'scheduled', o sea a la cola
+ * de envío: traducirlo así haría que una orden que dLocal ya tiene retenida se
+ * volviera a mandar. Su `ON_HOLD` es dinero EN VUELO parado por su compliance,
+ * y en vuelo, para nosotros, se llama 'processing'.
+ *
+ * `null` es «no lo conozco». Un estado nuevo NO se interpreta: la orden se queda
+ * donde está y se grita. Adivinar aquí es adivinar si el dinero salió.
+ */
+function estadoNuestro(estado: string): "paid" | "processing" | "failed" | null {
+  switch (estado.toUpperCase()) {
+    // El dinero llegó al beneficiario. Es lo ÚNICO que puede escribir 'paid', y
+    // con ello disparar el correo NTF-12 «Se pagó tu liquidación».
+    case "DELIVERED":
+    case "COMPLETED":
+      return "paid";
+    // Aceptado y en camino. dLocal Go nace PENDING de serie: darlo por pagado
+    // aquí es exactamente la mentira que C1 quitó.
+    case "PENDING":
+    case "PROCESSING":
+    case "ON_HOLD":
+      return "processing";
+    // No hubo pago y no lo va a haber por esta orden.
+    case "REJECTED":
+    case "FAILED":
+    case "CANCELLED":
+      return "failed";
+    default:
+      return null;
+  }
+}
+
+/** Lo que se guarda en `provider_metadata` y se enseña en el log: sin PII. */
+function detalleDe(p: PayoutDlocalGo): string {
+  const extra = [p.status_code, p.status_detail].filter(Boolean).join(" ");
+  return extra ? `${p.status} (${extra})` : String(p.status);
+}
+
+/**
+ * ¿Puede este payout del proveedor ser NUESTRA orden?
+ *
+ * Devuelve `"descartado"` solo cuando algún campo LEÍBLE lo contradice; si no se
+ * puede leer, no se descarta. Esa asimetría es el corazón de la seguridad: un
+ * falso positivo deja una orden sin mandar y a un humano mirándola; un falso
+ * negativo paga dos veces.
+ */
+function cotejar(
+  p: PayoutDlocalGo,
+  input: PayoutInput,
+  documento: string | null,
+): "descartado" | "identificado" | "posible" {
+  const importe = campoNumero(p, "transfer_amount", "amount");
+  const pais = campoTexto(p, "transfer_country", "country");
+  const moneda = campoTexto(p, "currency_to_pay", "currency");
+  const doc = campoTexto(p, "beneficiary_document");
+  const fechaBruta = p.created_date ?? p.created_at ?? null;
+  const fecha = fechaBruta ? Date.parse(String(fechaBruta)) : NaN;
+  const desde = Date.parse(input.claimedAt) - MARGEN_RELOJ_MS;
+
+  if (importe !== null && aUnidadMenor(importe, input.currency) !== input.amountMinor) {
+    return "descartado";
+  }
+  if (pais !== null && pais !== input.payeeCountry.toUpperCase()) return "descartado";
+  if (moneda !== null && moneda !== input.currency.toUpperCase()) return "descartado";
+  if (doc !== null && documento !== null && doc !== documento.toUpperCase()) return "descartado";
+  // ⚠️ ESTA ES LA LÍNEA QUE SEPARA «nuestro payout» de «el payout del mismo
+  // tutor por el mismo importe de la semana pasada». Sin fecha legible no se
+  // puede afirmar ninguna de las dos cosas, y por eso abajo no cuenta como
+  // identificado.
+  if (Number.isFinite(fecha) && fecha < desde) return "descartado";
+
+  const completo =
+    importe !== null && pais !== null && Number.isFinite(fecha) && fecha >= desde;
+  return completo ? "identificado" : "posible";
+}
+
+type Barrido =
+  /** Existe, y se puede afirmar que es nuestro. */
+  | { tipo: "encontrado"; payout: PayoutDlocalGo }
+  /** El proveedor contestó y NINGÚN payout suyo puede ser esta orden. */
+  | { tipo: "ausente" }
+  /** No se puede afirmar ni lo uno ni lo otro. Nadie toca la fila. */
+  | { tipo: "ilegible"; motivo: string };
+
+/**
+ * Busca nuestra orden entre los payouts del proveedor. Es el sustituto entero de
+ * la clave de idempotencia que la API no tiene.
+ */
+async function barrer(input: PayoutInput, documento: string | null): Promise<Barrido> {
+  const posibles: PayoutDlocalGo[] = [];
+
+  for (let pagina = 0; pagina < PAGINAS_BARRIDO; pagina++) {
+    let lote: PayoutDlocalGo[] | null;
+    try {
+      lote = await listarPayouts(pagina, TAM_PAGINA);
+    } catch (e) {
+      // Que el listado falle NO es que no exista: es que no se sabe. Distinguir
+      // las dos cosas es la diferencia entre «vuelve a la cola» y «pagar otra vez».
+      return {
+        tipo: "ilegible",
+        motivo: `no se pudo listar los payouts del proveedor: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      };
+    }
+    // `null` = la respuesta no tenía la forma esperada. Tampoco prueba ausencia.
+    if (lote === null) {
+      return { tipo: "ilegible", motivo: "la respuesta de GET /v1/payouts no trae una lista reconocible" };
+    }
+
+    for (const p of lote) {
+      const veredicto = cotejar(p, input, documento);
+      if (veredicto === "identificado") return { tipo: "encontrado", payout: p };
+      if (veredicto === "posible") posibles.push(p);
+    }
+    // Página incompleta = no hay más.
+    if (lote.length < TAM_PAGINA) break;
+  }
+
+  if (posibles.length > 0) {
+    return {
+      tipo: "ilegible",
+      motivo: `hay ${posibles.length} payout(s) en el proveedor que no se pueden descartar ni confirmar como esta orden (${posibles
+        .map((p) => p.id)
+        .join(", ")})`,
+    };
+  }
+  return { tipo: "ausente" };
+}
+
+/**
+ * El desenlace de un payout que ya tiene identidad, sea recién creado, adoptado
+ * por el barrido o consultado por su id.
+ *
+ * `adoptado` viaja como bandera y no como estado aparte porque lo que decide qué
+ * se escribe en la fila es SIEMPRE el estado del proveedor: adoptar es cómo se
+ * llegó al payout, no en qué quedó. Un `adoptado: true` en el log no es un
+ * incidente, es el mecanismo antidoble funcionando.
+ */
+function desenlace(p: PayoutDlocalGo, adoptado: boolean): PayoutResult {
+  const nuestro = estadoNuestro(String(p.status));
+  const detalle = detalleDe(p);
+  if (nuestro === "paid") {
+    return { estado: "pagado", payoutId: p.id, detalle, adoptado, crudo: p };
+  }
+  if (nuestro === "failed") {
+    // Tiene identidad Y el proveedor dice que no hubo pago. Es permanente, pero
+    // con el id anotado: sin él, un `manage_payout('retry')` no podría distinguir
+    // esta orden muerta de la que se cree después.
+    return {
+      estado: "rechazado",
+      mensaje: `el proveedor dejó el payout en ${detalle}`,
+      causa: p,
+      payoutId: p.id,
+      detalle,
+    };
+  }
+  // 'processing' y lo desconocido comparten salida a propósito: los dos
+  // significan «no consta que el dinero se haya movido», que es lo único que
+  // decide si se puede escribir 'paid'. Los distingue el `detalle`, que va al
+  // log y a `provider_metadata`.
+  return { estado: "enviado", payoutId: p.id, detalle, adoptado, crudo: p };
+}
+
 export const dlocalProvider: PspProvider = {
   /** El mismo valor que `payments.provider` y `payment_routing_rules`. */
   key: "dlocal",
@@ -287,6 +506,245 @@ export const dlocalProvider: PspProvider = {
   },
 
   canRefund: isDlocalGoConfigured,
+
+  /** Las mismas dos claves. Ver `missingChargeConfig`. */
+  missingPayoutConfig() {
+    return isDlocalGoConfigured()
+      ? null
+      : "dLocal Go no configurado (faltan DLOCALGO_API_KEY / DLOCALGO_SECRET_KEY)";
+  },
+
+  /**
+   * 🔴 C2 · PAGAR. Lee el bloque de arriba antes de tocar una línea de aquí.
+   *
+   * Tres caminos, y solo UNO de ellos crea algo:
+   *
+   *   · `providerPayoutId` → SEGUIR. La orden ya tiene identidad en el
+   *     proveedor; se pregunta por ella y se traduce su estado. Es el camino de
+   *     una orden en vuelo esperando a pasar de PENDING a DELIVERED, y el que
+   *     acaba disparando NTF-12.
+   *   · `reanudar` sin id → BARRER. La fila se reclamó y no se sabe en qué
+   *     quedó. **Aquí no se crea nada bajo ningún concepto.**
+   *   · ninguno de los dos → CREAR. Es un primer intento: `claimedAt` es de hace
+   *     un instante, así que no puede existir un payout nuestro posterior a él.
+   *
+   * ⚠️ LOS DATOS BANCARIOS NO SALEN DE ESTA FUNCIÓN. Se piden a
+   * `payout_beneficiary(payout_id)`, viajan al cuerpo del POST y ahí mueren: no
+   * se devuelven, no se registran, no entran en ningún mensaje de error. El
+   * único que se conserva —en memoria, durante la llamada— es el documento
+   * fiscal, y solo para poder COTEJAR el barrido; tampoco se devuelve.
+   */
+  async payout(input: PayoutInput): Promise<PayoutResult> {
+    // ── Camino 1 · seguir una orden que ya tiene identidad ───────────────────
+    if (input.providerPayoutId) {
+      try {
+        return desenlace(await recuperarPayout(input.providerPayoutId), false);
+      } catch (e) {
+        if (!(e instanceof DlocalGoError)) throw e;
+        // Da igual si es 404, 429 o 500: preguntar por un payout no mueve
+        // dinero, así que reintentar es gratis y siempre es mejor que inventar
+        // un desenlace. La fila se queda en 'processing' con su id anotado.
+        return {
+          estado: "transitorio",
+          mensaje: `no se pudo consultar el payout ${input.providerPayoutId}: ${e.message}`,
+          causa: e,
+        };
+      }
+    }
+
+    // ── El beneficiario, que es lo único que la BD no le da al job ───────────
+    //
+    // ⚠️ ESTA RPC ES LA ÚNICA PUERTA A UN NÚMERO DE CUENTA ENTERO (B1). Además
+    // de devolverlo, comprueba que la orden es ejecutable ('scheduled' o
+    // 'processing'), que tiene país, que el país de los datos coincide con el de
+    // la orden y que los datos siguen validando HOY — no solo el día que el
+    // tutor los guardó. Todo eso vive allí a propósito: un `select` plano no
+    // puede hacerlo, y por eso `service_role` no tiene `select` sobre la tabla.
+    const admin = createAdminClient();
+    const { data: beneficiario, error: eBenef } = await admin.rpc("payout_beneficiary", {
+      p_payout_id: input.payoutId,
+    });
+
+    if (eBenef) {
+      // ⚠️ REGLA DE ORO 9 DISFRAZADA DE PROBLEMA DEL TUTOR. Un 42501 aquí no es
+      // «este tutor no tiene datos»: es que a `service_role` le falta el
+      // `execute` y **ninguna** orden se va a pagar. Confundirlo con `sin-datos`
+      // dejaría la cola entera parada con un mensaje que culpa a los tutores.
+      const esPermiso =
+        (eBenef as { code?: string }).code === "42501" ||
+        /permission denied|not allowed/i.test(eBenef.message);
+      if (esPermiso) {
+        return {
+          estado: "transitorio",
+          mensaje: `payout_beneficiary no es ejecutable por service_role (regla de oro 9): ${eBenef.message}`,
+          causa: eBenef,
+        };
+      }
+      // ⚠️ REANUDANDO, ESTO **NO** PUEDE PARAR EL BARRIDO. Si la orden ya se
+      // reclamó, puede haber un payout creado en el proveedor sin identificar, y
+      // dejar de buscarlo porque hoy el tutor tenga los datos mal sería esconder
+      // justo el caso peligroso. Se sigue sin beneficiario: el barrido pierde el
+      // documento como criterio, lo cual solo lo vuelve MÁS conservador (menos
+      // capaz de descartar, nunca más capaz de confirmar).
+      if (!input.reanudar) {
+        // El resto son las excepciones que la propia función levanta, y todas
+        // significan lo mismo: esta orden no se puede construir tal como está.
+        // Ninguna lleva el número de cuenta dentro (`20260901170000`).
+        return { estado: "sin-datos", mensaje: eBenef.message };
+      }
+    }
+
+    const b = (beneficiario as Record<string, string | null> | null) ?? null;
+    if (!b && !input.reanudar) {
+      return { estado: "sin-datos", mensaje: "payout_beneficiary no devolvió beneficiario" };
+    }
+
+    const monedaDestino = (b?.currency_to_pay ?? "").toUpperCase();
+    const documento = b?.beneficiary_document ?? null;
+
+    // ── Camino 2 · barrer una orden reclamada sin identificador ─────────────
+    //
+    // ⚠️ VA ANTES DEL FRENO DEL TIPO DE CAMBIO, Y NO ES CASUAL. Una orden
+    // reclamada ya salió (o pudo salir) bajo las condiciones de ENTONCES;
+    // volver a evaluarlas hoy no cambia lo que el proveedor tenga guardado. Lo
+    // único que importa aquí es averiguar si existe, y eso se pregunta siempre.
+    if (input.reanudar) {
+      const b1 = await barrer(input, documento);
+      if (b1.tipo === "encontrado") return desenlace(b1.payout, true);
+      if (b1.tipo === "ilegible") {
+        return { estado: "en-duda", mensaje: b1.motivo, causa: null };
+      }
+      return {
+        estado: "sin-rastro",
+        mensaje: "el proveedor no tiene ningún payout que pueda ser esta orden: vuelve a la cola",
+      };
+    }
+
+    // ── 🔴 EL FRENO DE MANO DEL TIPO DE CAMBIO ──────────────────────────────
+    //
+    // `payouts.currency` es USD y `currency_to_pay` es la moneda del país del
+    // tutor: coinciden en UNO de los ocho países (Ecuador) y en ninguno más.
+    // Para los otros siete hay que convertir, y ahí hay una decisión de producto
+    // SIN RESPONDER: dLocal convierte a una tasa entre 4,6 % y 4,7 % peor que la
+    // que publica su propio `/v1/currency-exchanges`, y se puede fijar lo que
+    // RECIBE el tutor (`currency_to_pay` con importe local) o lo que PAGAMOS
+    // nosotros (USD), nunca las dos. Quién come ese spread —la plataforma o el
+    // tutor— no lo puede decidir este archivo.
+    //
+    // Así que no se decide: no se manda. La orden se queda en la cola, el job la
+    // cuenta y el workflow lo grita. Un payout que sale con una regla inventada
+    // es peor que uno que no sale, porque el error se descubre cuando el tutor
+    // mira su banco.
+    if (monedaDestino !== input.currency.toUpperCase()) {
+      return {
+        estado: "sin-decidir",
+        mensaje:
+          `este payout exige convertir ${input.currency.toUpperCase()} → ${monedaDestino} ` +
+          `(${input.payeeCountry}) y nadie ha decidido quién asume el spread de dLocal ` +
+          `(~4,6-4,7 % peor que su propio /v1/currency-exchanges). No se manda a propósito.`,
+      };
+    }
+
+    // ── Camino 3 · crear ────────────────────────────────────────────────────
+    //
+    // A partir de aquí `b` no puede ser null (los dos caminos que lo permiten ya
+    // han vuelto), pero se comprueba en vez de afirmarlo: lo que hay debajo es
+    // la única llamada de este archivo que mueve dinero.
+    if (!b) {
+      return { estado: "sin-datos", mensaje: "payout_beneficiary no devolvió beneficiario" };
+    }
+
+    // El cuerpo es EXACTAMENTE lo que devolvió la base de datos más el importe.
+    // Los campos opcionales que vengan a null se OMITEN en vez de mandarse
+    // vacíos: `bank_branch` solo lo piden BR y UY, y `bank_account_type` solo lo
+    // publican CL, BR y UY. Mandar `null` donde el país no lo espera es la clase
+    // de detalle que devuelve un 400 — y aquí un 400 puede haber creado el
+    // payout igual.
+    const cuerpo: NuevoPayoutDlocalGo = {
+      transfer_amount: aUnidadMayor(input.amountMinor, monedaDestino),
+      transfer_country: b.transfer_country ?? input.payeeCountry,
+      currency_to_pay: monedaDestino,
+      flow_type: b.flow_type ?? "B2C",
+      // Obligatorio y de lista cerrada. Lo fija la BD, no este archivo: un
+      // código inválido no es un 400 limpio, es una retención por compliance.
+      purpose: b.purpose ?? "OTHER_SERVICES",
+      beneficiary_first_name: b.beneficiary_first_name ?? "",
+      beneficiary_last_name: b.beneficiary_last_name ?? "",
+      beneficiary_document: b.beneficiary_document ?? "",
+      beneficiary_document_type: b.beneficiary_document_type ?? "",
+      bank_code: b.bank_code ?? "",
+      bank_account: b.bank_account ?? "",
+      ...(b.bank_account_type ? { bank_account_type: b.bank_account_type } : {}),
+      ...(b.bank_branch ? { bank_branch: b.bank_branch } : {}),
+    };
+
+    try {
+      return desenlace(await crearPayout(cuerpo), false);
+    } catch (e) {
+      if (!(e instanceof DlocalGoError)) {
+        // Un fallo de red antes de leer la respuesta es el peor caso posible: la
+        // petición pudo llegar. NO se decide nada aquí; se barre.
+        const b2 = await barrer(input, documento);
+        if (b2.tipo === "encontrado") return desenlace(b2.payout, true);
+        if (b2.tipo === "ausente") {
+          return {
+            estado: "transitorio",
+            mensaje: `falló la llamada y el barrido confirma que no se creó nada: ${
+              e instanceof Error ? e.message : String(e)
+            }`,
+            causa: e,
+          };
+        }
+        return {
+          estado: "en-duda",
+          mensaje: `falló la llamada y el barrido no pudo comprobar si se creó el payout: ${b2.motivo}`,
+          causa: e,
+        };
+      }
+
+      // 🔴 AQUÍ ESTÁ LA TRAMPA QUE ORDENA TODO EL DISEÑO: **un 400 puede haber
+      // creado el payout igual**. En la cuenta de sandbox hay tres en `FAILED`
+      // nacidos de respuestas de error. Así que un código de error NO autoriza a
+      // dar por hecho que no pasó nada: se barre SIEMPRE, sea 4xx o 5xx — y
+      // también cuando el mensaje dice «insufficient funds». La doc dice que la
+      // comprobación de fondos corre ANTES que la de campos y que por tanto no se
+      // crea nada, y probablemente sea cierto; pero «probablemente» no es el
+      // criterio con el que se decide si se puede volver a mandar un pago.
+      const b3 = await barrer(input, documento);
+      if (b3.tipo === "encontrado") {
+        // El error mintió: el payout existe. Se adopta y NO se vuelve a mandar.
+        return desenlace(b3.payout, true);
+      }
+      if (b3.tipo === "ilegible") {
+        return {
+          estado: "en-duda",
+          mensaje: `${e.message} — y el barrido no pudo comprobar si se creó el payout: ${b3.motivo}`,
+          causa: e,
+        };
+      }
+
+      // Barrido limpio: no se creó nada. Ahora —y solo ahora— se puede clasificar
+      // el error por lo que es.
+      //
+      // ⚠️ SALDO INSUFICIENTE NO ES UN FALLO PERMANENTE. Es dinero que se debe y
+      // que saldrá en cuanto se fondee el balance de dLocal Go; marcarlo 'failed'
+      // sería enterrarlo detrás de un `retry` que nadie va a pulsar. Y no dice
+      // nada del payload: la comprobación de fondos corre ANTES que la de campos,
+      // así que esta orden sigue SIN estar validada por el proveedor.
+      if (esSaldoInsuficiente(e)) {
+        return {
+          estado: "sin-fondos",
+          mensaje: `${e.message} (la comprobación de fondos va antes que la de campos: esto no valida el resto del payload)`,
+        };
+      }
+
+      // El resto, con el mismo criterio que los reembolsos: 429/5xx es el
+      // momento; 4xx es la orden.
+      return e.esTransitorio
+        ? { estado: "transitorio", mensaje: e.message, causa: e }
+        : { estado: "rechazado", mensaje: e.message, causa: e };
+    }
+  },
 
   /**
    * DESAJUSTE 4 · LA EMULACIÓN DE LA IDEMPOTENCIA. Léelo entero antes de tocar.

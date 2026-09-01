@@ -20,15 +20,24 @@ import "server-only";
  * dLocal (ver CLAUDE.md, «dos webs de la misma marca sin conectar»), que es otra
  * cosa y no impide escribir ni probar nada.
  *
- * ── QUÉ SE QUITÓ DEL DOC 6, Y POR QUÉ ──────────────────────────────────────
- * El doc mete `payout()` en la misma interfaz. En este repo NO existe ni un
- * adaptador de payouts ni una sola llamada a un PSP para pagar al tutor:
- * `manage_payout` mueve estados dentro de Postgres y la dispara un admin a mano
- * desde `/admin/payouts`. Un método que nadie implementa es PEOR que no tener
- * puerto, porque el día que llegue dLocal alguien lo rellenará a ciegas
- * creyendo que hay un flujo detrás. Cuando exista el job de payouts, el método
- * entra con él y no antes. (CLAUDE.md: los Docs son el objetivo, el código
- * manda.)
+ * ── `payout()` YA ESTÁ, Y ENTRÓ CON SU JOB (C2) ────────────────────────────
+ * Aquí estuvo escrito que el `payout()` del Doc 6 se quedaba fuera porque «no
+ * existe ni un adaptador de payouts ni una sola llamada a un PSP para pagar al
+ * tutor», con el criterio —correcto— de que un método que nadie implementa es
+ * peor que no tener puerto. La condición que ponía ese párrafo era exactamente
+ * esta: «cuando exista el job de payouts, el método entra con él y no antes».
+ *
+ * El job existe: `src/app/api/cron/payouts-process/route.ts`. Así que el método
+ * entra, y entra con las dos piezas que lo hacen ejecutable de verdad —
+ * `missingPayoutConfig()` para saber quién puede pagar, y `PayoutResult` con la
+ * taxonomía de desenlaces que decide qué se escribe en la fila.
+ *
+ * ⚠️ Y NO ENTRA COMO UN MÉTODO MUERTO EN STRIPE. `stripeProvider.payout()`
+ * devuelve `sin-ejecutor` con el motivo escrito (payouts a terceros exigen
+ * Connect, y Connect exige el KYC que sigue bloqueado), no lanza una excepción
+ * ni finge. El job pregunta `missingPayoutConfig()` ANTES de llamar, así que ese
+ * camino no se recorre nunca — pero el día que Connect exista, el sitio donde
+ * escribirlo ya tiene nombre.
  *
  * ── POR QUÉ DOS INTERFACES Y NO UNA ────────────────────────────────────────
  * Porque hay DOS proveedores hoy y solo uno es un PSP. El simulado
@@ -374,6 +383,161 @@ export type WebhookVerificacion =
 export type WebhookInput = { rawBody: string; signature: string | null };
 
 /**
+ * ── C2 · PAGARLE AL TUTOR ───────────────────────────────────────────────────
+ *
+ * Lo que hace falta para ejecutar UNA orden de pago. Es sorprendentemente poco,
+ * y eso es lo importante: **los datos bancarios NO viajan por aquí**.
+ *
+ * ⚠️ EL BENEFICIARIO NO ES UN PARÁMETRO. El adaptador lo saca él mismo con
+ * `payout_beneficiary(payout_id)` (B1, `20260901160000`), que es la única puerta
+ * del sistema a un número de cuenta entero: `service_role` NO tiene `select`
+ * sobre `tutor_payout_accounts`, a propósito. Meter el beneficiario en este tipo
+ * obligaría al Route Handler a leerlo primero, y entonces la PII pasaría por un
+ * sitio más —y por un log más, y por un mensaje de error más— sin que nadie lo
+ * necesitara. Quien llama aporta el ID de la orden; quien paga saca lo que le
+ * hace falta y no lo devuelve.
+ *
+ * ⚠️ EL IMPORTE SÍ VIAJA, y sale de `payouts.amount` (regla de oro 2). No lo
+ * calcula el adaptador ni lo recalcula nadie: `payout_beneficiary` se niega
+ * explícitamente a devolver `transfer_amount` por eso mismo.
+ */
+export type PayoutInput = {
+  /** `payouts.id`. Con esto el adaptador saca el beneficiario, y solo con esto. */
+  payoutId: string;
+  /** `payouts.amount`, en unidades menores. La única fuente del importe. */
+  amountMinor: number;
+  /** `payouts.currency` — la moneda del SALDO (hoy siempre USD). */
+  currency: string;
+  /** `payouts.payee_country`, congelado al construir la orden. */
+  payeeCountry: string;
+  /**
+   * 🔴 LA MARCA DE TIEMPO QUE SUSTITUYE A LA CLAVE DE IDEMPOTENCIA, y sin ella
+   * este puerto no se puede usar sin arriesgar un pago doble.
+   *
+   * `POST /v1/payouts` de dLocal Go **no tiene clave de idempotencia de ninguna
+   * clase** —ni cabecera, ni `external_id`, ni `order_id` como en el cobro
+   * (comprobado contra el sandbox el 1-sep-2026)— y además **un 400 puede haber
+   * creado el payout igual**: en la cuenta de sandbox hay tres en `FAILED`
+   * nacidos de respuestas de error. O sea que «reintentar porque no me
+   * contestaron» es literalmente pagar dos veces.
+   *
+   * Lo único que queda es reconocer nuestro propio payout entre los del
+   * proveedor, y para eso hace falta una frontera temporal: el instante en que
+   * ESTA orden se reclamó (`payouts.status` → 'processing'). Cualquier payout
+   * del proveedor que cuadre en importe, país y moneda y sea POSTERIOR a este
+   * sello solo puede ser el nuestro. Sin el sello, «cuadra en importe y país»
+   * también describe el payout de la semana pasada al mismo tutor.
+   *
+   * ISO-8601 con zona. Lo escribe el job al reclamar y lo relee de
+   * `payouts.provider_metadata` en las pasadas siguientes, porque un reintento
+   * tiene que buscar contra el sello del PRIMER intento y no contra el de hoy.
+   */
+  claimedAt: string;
+  /**
+   * ⚠️ ¿ES UN PRIMER INTENTO O UNA ORDEN QUE YA SE RECLAMÓ? De esto depende que
+   * se pueda crear un payout o no, así que va explícito y no deducido.
+   *
+   *   · `false` — la fila estaba 'scheduled' y este proceso acaba de ganarla con
+   *     un `update … where status='scheduled'`. Nadie ha llamado al proveedor
+   *     por ella: `claimedAt` es de hace un instante, así que **no puede existir
+   *     un payout nuestro posterior a él** y barrer antes de crear no aportaría
+   *     nada. Se crea.
+   *   · `true` — la fila ya estaba 'processing', o sea que una pasada anterior
+   *     la reclamó. Puede que llegara a crear el payout y puede que no, y esa
+   *     duda es justo la que no se resuelve reintentando. **Aquí NO se crea
+   *     nada**: se barre el proveedor y se adopta lo que haya, o se devuelve
+   *     `sin-rastro` si se puede demostrar que no hay nada.
+   */
+  reanudar: boolean;
+  /**
+   * El id del payout EN EL PROVEEDOR, si la orden ya lo tiene anotado
+   * (`payouts.provider_payout_id`). Con él no se barre ni se crea: se pregunta
+   * por él y se sigue su estado, que es el camino normal de una orden en vuelo
+   * esperando a pasar de PENDING a DELIVERED.
+   */
+  providerPayoutId: string | null;
+};
+
+/**
+ * Cómo acabó una orden de pago, ya clasificada por el adaptador.
+ *
+ * Mismo criterio que `RefundResult` y por el mismo motivo: la taxonomía de
+ * errores es de cada PSP y quien llama no puede conocerlas todas. Lo que sí es
+ * común es qué se puede escribir en la fila después de cada desenlace — y aquí
+ * eso importa más que en los reembolsos, porque escribir `paid` dispara
+ * `notify_payout()` y con él el correo NTF-12 «Se pagó tu liquidación» a un
+ * tutor de carne y hueso (`20260716170000:177-180`). C1 desarmó ese correo
+ * justo por mandarse sin que se moviera el dinero; estos estados son lo que
+ * impide volver a armarlo mal.
+ */
+export type PayoutResult =
+  /**
+   * El proveedor aceptó la orden y le dio identidad, pero **el dinero todavía no
+   * ha llegado**. Es el caso NORMAL de dLocal Go, que nace `PENDING`. Se anota
+   * `provider_payout_id` y la fila se queda 'processing': NO es 'paid' y no
+   * puede serlo, o NTF-12 volvería a mentir.
+   */
+  | { estado: "enviado"; payoutId: string; detalle: string; adoptado: boolean; crudo: unknown }
+  /** El proveedor confirma que el dinero salió. Esto —y solo esto— es 'paid'. */
+  | { estado: "pagado"; payoutId: string; detalle: string; adoptado: boolean; crudo: unknown }
+  /**
+   * 🔴 NI SE SABE NI SE PUEDE SABER si la orden llegó a crearse: falló la
+   * llamada Y falló también el barrido que tenía que comprobarlo. La fila se
+   * queda 'processing' SIN identificador y **no se reintenta jamás sola**.
+   * Es la única salida honesta de una API sin idempotencia: entre «puede que
+   * haya pagado» y «puede que no», reintentar es elegir pagar dos veces.
+   */
+  | { estado: "en-duda"; mensaje: string; causa: unknown }
+  /**
+   * El barrido de una orden reclamada demostró que **no se llegó a crear nada**:
+   * el proveedor devolvió su lista y ningún payout posterior a `claimedAt` cuadra
+   * con esta orden. Es la única prueba de ausencia que existe sin clave de
+   * idempotencia, y con ella la fila puede volver a 'scheduled' sin riesgo.
+   */
+  | { estado: "sin-rastro"; mensaje: string }
+  /**
+   * No se llamó a nadie: la orden exige una conversión de moneda que **nadie ha
+   * decidido**. `payouts.currency` es USD y `currency_to_pay` es la moneda local
+   * en 7 de los 8 países; dLocal convierte a una tasa entre 4,6 % y 4,7 % peor
+   * que la que publica su propio `/v1/currency-exchanges`, y se puede fijar lo
+   * que RECIBE el tutor o lo que PAGAMOS nosotros, nunca las dos. Quién come ese
+   * spread es decisión de producto y sigue sin respuesta. La fila se queda
+   * 'scheduled' y se cuenta: un payout que sale con una regla inventada es peor
+   * que uno que no sale.
+   */
+  | { estado: "sin-decidir"; mensaje: string }
+  /**
+   * La orden no se puede construir: el tutor no ha registrado datos de cobro, o
+   * los que tiene ya no validan, o son de otro país que el de la orden. Lo dice
+   * `payout_beneficiary`, que revalida al ejecutar y no solo al guardar.
+   * ⚠️ El mensaje viene de la BD y **no lleva el número de cuenta dentro**
+   * (`20260901170000`); aun así no se enseña a nadie que no sea el log.
+   */
+  | { estado: "sin-datos"; mensaje: string }
+  /**
+   * Saldo insuficiente en el balance del proveedor. **NO es un fallo
+   * permanente**: es dinero que se debe y que saldrá en cuanto haya fondos, así
+   * que marcarlo 'failed' sería enterrarlo. Y ojo con lo que NO significa: la
+   * comprobación de fondos corre ANTES que la de campos, así que un
+   * «insufficient funds» no dice nada sobre si el resto del payload es válido.
+   */
+  | { estado: "sin-fondos"; mensaje: string }
+  /** Fue el momento, no la orden (429, 5xx, red). Vuelve a 'scheduled'. */
+  | { estado: "transitorio"; mensaje: string; causa: unknown }
+  /**
+   * Fue la orden: repetirla dará el mismo error mañana. Va a 'failed'.
+   *
+   * ⚠️ PUEDE LLEVAR `payoutId`, y cuando lo lleva NO es decorativo: significa que
+   * el proveedor SÍ creó la orden y luego la rechazó (`REJECTED`/`FAILED`/
+   * `CANCELLED`). Anotarlo es lo que permite que un `manage_payout('retry')`
+   * distinga esa orden muerta de la que se cree después, en vez de dejar dos
+   * payouts indistinguibles en el panel del proveedor.
+   */
+  | { estado: "rechazado"; mensaje: string; causa: unknown; payoutId?: string; detalle?: string }
+  /** Este proveedor no sabe pagar payouts. El job no debería haber llegado aquí. */
+  | { estado: "sin-ejecutor"; mensaje: string };
+
+/**
  * La identidad de un proveedor. Es todo lo que tienen en común los dos que hay
  * hoy, y a propósito: cualquier otro método aquí sería un método que el
  * simulado tendría que fingir.
@@ -414,6 +578,27 @@ export interface PspProvider extends PaymentProvider {
   /** ¿Puede mover dinero de vuelta? Es menos exigente que cobrar: ver arriba. */
   canRefund(): boolean;
   refund(input: RefundInput): Promise<RefundResult>;
+  /**
+   * Qué le falta a este proveedor para PAGAR AL TUTOR, o `null` si puede.
+   *
+   * Es una tercera pregunta y no un alias de las otras dos, porque la respuesta
+   * es distinta en los dos proveedores que hay: Stripe cobra y reembolsa con la
+   * misma clave y **no puede pagar de ninguna manera** (payouts a terceros
+   * exigen Connect, y Connect exige el KYC bloqueado); dLocal Go contesta lo
+   * mismo a las tres, porque sus dos claves viajan juntas en la misma cabecera.
+   * Fusionarla con `missingChargeConfig()` funcionaría hoy por accidente en
+   * dLocal y sería falso en Stripe.
+   *
+   * El job la pregunta ANTES de tocar una fila: sin respuesta afirmativa la
+   * orden se queda 'scheduled' —nunca 'failed'— y sale entera en la primera
+   * pasada con el proveedor encendido.
+   */
+  missingPayoutConfig(): string | null;
+  /**
+   * Ejecuta UNA orden de pago. Lee `PayoutInput` entero antes de llamarla: el
+   * beneficiario no es un parámetro y `claimedAt` no es decorativo.
+   */
+  payout(input: PayoutInput): Promise<PayoutResult>;
   /** El cuerpo crudo entra aquí. Lee arriba `WebhookInput` antes de tocarlo. */
   verifyWebhook(input: WebhookInput): WebhookVerificacion;
 }

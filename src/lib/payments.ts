@@ -82,6 +82,50 @@ export async function activeChargeProvider(
 }
 
 /**
+ * C2 · `resolvePayout(payee_country)` del Doc 6 §6.2 — QUIÉN SACA EL DINERO.
+ *
+ * El gemelo de `activeChargeProvider`, y su contrario en la misma fila:
+ * `charge_provider` dice por dónde ENTRA el dinero y `payout_provider` por dónde
+ * SALE. Hoy no coinciden en ninguna de las diez filas de la tabla
+ * (`charge_provider='stripe'` con `payout_provider='dlocal'` en los ocho países
+ * de dLocal Go), y esa discrepancia no es un descuido: es la que hace que
+ * `payouts.funding_provider` tenga que existir aparte de `payouts.provider`.
+ *
+ * ⚠️ QUE ESTA FUNCIÓN DEVUELVA UN PSP **NO** SIGNIFICA QUE LA ORDEN SE PUEDA
+ * PAGAR. El ejecutor puede saber pagar y aun así no tener de dónde: un payout
+ * financiado por Stripe no se puede sacar del balance de dLocal Go, porque el
+ * dinero está en otro sitio. Esa comprobación —`funding_provider` contra la
+ * clave del ejecutor— la hace el job, fila a fila, y no se puede resolver aquí:
+ * aquí solo hay país.
+ *
+ * `payeeCountry` null es el tutor que no ha declarado país; tiene su propia fila
+ * con `payout_provider='simulated'`, que es la ausencia de ejecutor.
+ */
+export async function payoutProviderFor(
+  payeeCountry: string | null,
+): Promise<string> {
+  const base = createAdminClient()
+    .from("payment_routing_rules")
+    .select("payout_provider")
+    .eq("is_active", true)
+    .is("payer_country", null);
+
+  const { data } = await (
+    payeeCountry
+      ? base.eq("payee_country", payeeCountry)
+      : base.is("payee_country", null)
+  )
+    .order("priority")
+    .limit(1)
+    .maybeSingle();
+
+  // Sin fila activa no hay ejecutor. Se devuelve 'simulated' —que `adapterFor`
+  // resuelve al proveedor que no sale de casa— y el job lo cuenta como orden sin
+  // ejecutor en vez de mandarla a cualquiera.
+  return data?.payout_provider ?? "simulated";
+}
+
+/**
  * A0 · LOS PAÍSES A LOS QUE DE VERDAD PODEMOS TRANSFERIR.
  *
  * Es la lista que se le ofrece al tutor para declarar su país de cobro, y sale
