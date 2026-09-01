@@ -64,13 +64,26 @@ ya es código**. En prod siguen siendo 404.
 funcionó; el bueno es del **27-jul** (commit `b032cc5`, migraciones `20260727120000` y
 `20260727130000`). Si lees "corregido el 21-jul" en algún doc viejo, es esto.
 
-⚠️ **La atribución de referidos por cookie no puede funcionar.** Referral Factory no manda
-al referido a la app con un código: lo lleva a una **página de oferta alojada por RF** y solo
-después redirige aquí, y **no ofrece parámetro de código**. Se activó `ref_email`: la
-atribución va **por email contra su API**, no por la cookie `ey-ref` +
-`profiles.referral_code` (`EY-79`/US-1302, hoy en `In Review`). Su integración nativa con
-Stripe ya califica y descalifica referidos sola → **`EY-148` (RF-03) probablemente sobra**;
-comprobarlo antes de escribir nada.
+⚠️ **La atribución de referidos NO EXISTE, y la explicación que daba este párrafo era
+falsa.** La observación se mantiene y es correcta: Referral Factory **no manda al referido a
+la app con un código** — lo lleva a una **página de oferta alojada por RF** y no ofrece
+parámetro de código. Lo que era mentira es lo que venía después: **`ref_email` no existe ni
+existió nunca**, y esa frase la repetían cuatro documentos. `grep -rn "ref_email" src/
+supabase/` devuelve **cero**, y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea de
+código** — solo aparece en docs. Lo único implementado es exactamente el mecanismo que este
+párrafo declaraba inviable: el proxy guarda el `?ref=` en la cookie `ey-ref`
+(`src/lib/supabase/middleware.ts:76-83`), que viaja al metadata del alta y la aterriza
+`handle_new_user` en `profiles.referral_code` (`20260817130000`). Y **ese `?ref=` no llega
+nunca**: verificado el 1-sep contra la campaña real (50297) — ni su config de API ni la
+página que ve el referido mencionan `ensenameya` por ningún lado, así que no hay redirección
+de vuelta que pueda traer nada. Se ve en los dos extremos: **0 de 39 perfiles de dev** tienen
+`referral_code`, y en RF los únicos dos referidos con `referrer_id` se dieron de alta a mano
+por su API (`source: "Api"`), ninguno `qualified`. Remate: `referral_code` **no lo lee nadie**
+— se escribe en tres sitios, se anula en la baja de cuenta y no entra en ningún cálculo.
+Atribuir referidos está **entero por hacer**, no a medias (`EY-79`/US-1302 está `In Review`
+contra una premisa que no se cumple). Su integración nativa con Stripe sí califica y
+descalifica sola → **`EY-148` (RF-03) probablemente sobra**; comprobarlo antes de escribir
+nada.
 
 ## Stack
 
@@ -104,7 +117,7 @@ Ninguna falta de clave rompe la app: el camino se cae al simulado o la cola se q
 | **DLocal** | sin cuenta — **rechazada** | — |
 | **Correo** (`lib/email.ts` → **Resend**) | plantillas y job listos; sin clave la cola ni se toca | `RESEND_API_KEY` |
 | **Grabación de Daily** | ⚠️ **contratada y funcionando** — esta fila decía «add-on sin contratar → hoy no hay nada que borrar» y era falso: `GET api.daily.co/v1/recordings` devuelve **2 grabaciones `finished`** (14-ago, 13 s y 33 s). No hay tabla ni URL guardada **a propósito**: se consultan a Daily en el momento (`lib/daily.ts`). Y RN-42 exige el sí de las DOS partes, así que lo NORMAL es que una sesión no tenga vídeo — hay tres formas distintas de no tenerlo y quien las enseñe tiene que distinguirlas. El nombre de sala se **lee** de `sessions.daily_room_name`; derivarlo otra vez es lo que hacía fallar a US-1802 en silencio | `DAILY_API_KEY` |
-| **Referral Factory** | campaña viva, atribución **por email** | `REFERRAL_FACTORY_API_KEY` · `NEXT_PUBLIC_REFERRAL_URL` |
+| **Referral Factory** | ⚠️ campaña viva (**50297, la única**) pero **SIN atribución de ninguna clase** — esta fila decía «atribución por email» y era falso: esa vía no existe en el código y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea**. Lo único que hace la app es **pintar el enlace/embed** de la campaña (`lib/referral.ts`); quién trajo a quién se queda entero en RF, y ni siquiera eso: sus dos únicos referidos se metieron a mano por API. La cookie `ey-ref` existe y funciona, pero espera un `?ref=` que RF no manda | `NEXT_PUBLIC_REFERRAL_URL` · `NEXT_PUBLIC_REFERRAL_EMBED_URL` — el interruptor real es la **URL**, no la clave |
 
 **TRES jobs y dos sitios**, los tres exigen `CRON_SECRET` y fallan cerrado (503) sin ella:
 `/api/cron/recordings-purge` por **Vercel Cron** (`vercel.json`, diario 04:00), y

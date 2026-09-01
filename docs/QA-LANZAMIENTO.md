@@ -325,7 +325,8 @@ RN-37 ya es código. Las dos se reconcilian **con el cliente**, no en el repo.
 | `STRIPE_WEBHOOK_SECRET` | el webhook no procesa **nada**: 503 |
 | `CRON_SECRET` | los **tres** crons responden **503** y no corren |
 | `RESEND_API_KEY` | el job de correo no toca la cola (los avisos se quedan `pending`) y el formulario de contacto guarda pero no entrega → **DL-01 sin cumplir** |
-| `REFERRAL_FACTORY_API_KEY` | sin atribución de referidos |
+| `REFERRAL_FACTORY_API_KEY` | ⚠️ **nada**. Esta fila decía «sin atribución de referidos» y era falso: **ninguna línea de código la lee** (verificado el 1-sep, `grep -rn "REFERRAL_FACTORY_API_KEY" src/` = 0). Ponerla o quitarla no cambia el comportamiento de la app — ver §4.5 |
+| `NEXT_PUBLIC_REFERRAL_EMBED_URL` | «Invita y gana» cae al enlace externo en pestaña nueva en vez del iframe del panel (fallo previsto, no roto) |
 
 Detalle en `docs/ENTORNOS.md`. **`service_role` jamás en `NEXT_PUBLIC_*`** (regla de oro 3).
 
@@ -334,8 +335,12 @@ Detalle en `docs/ENTORNOS.md`. **`service_role` jamás en `NEXT_PUBLIC_*`** (reg
 - [x] ~~`CRON_SECRET` en Vercel~~ — **ya estaba**. Comprobado el 30-ago sin abrir el panel: sin la
       variable el endpoint responde 503 y con ella 401, y un `curl` sin cabecera a
       `https://ensenameya.vercel.app/api/cron/notifications-send` devuelve **401**.
-- [ ] `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel (la URL de campaña es
-      `https://vercel.referral-factory.com/cXr65Wou/signup`).
+- [ ] `NEXT_PUBLIC_REFERRAL_URL` en Vercel (la URL de campaña es
+      `https://vercel.referral-factory.com/cXr65Wou/signup`) — es la que decide si el bloque se pinta.
+      `NEXT_PUBLIC_REFERRAL_EMBED_URL` (`https://embed.referral-factory.com/cXr65Wou`) es opcional y
+      solo cambia si abre en pestaña nueva o dentro del panel.
+      ⚠️ `REFERRAL_FACTORY_API_KEY` **sale de este checklist**: no la lee nadie (§4.5). Subirla a
+      Vercel no habilita nada; da la falsa impresión de que la atribución quedaría encendida.
 
 **Y en GitHub**, que es donde viven los relojes del correo y de los reembolsos
 (`.github/workflows/notifications-cron.yml` y `refunds-cron.yml`, que comparten las dos):
@@ -442,12 +447,44 @@ Ninguna bloquea el despliegue: todas tienen default operable (ver el tracker de
 
 **C-10 ya no es solo una decisión pendiente: tiene un problema técnico encima.** La campaña de
 Referral Factory **no** manda al referido a nuestra app con un código. Lo lleva a una página de
-oferta **alojada por RF**, donde deja nombre y email, y solo después redirige a
-`ensenameya.vercel.app`. RF **no ofrece un parámetro de código de referido**, así que la atribución
-por cookie `ey-ref` + `profiles.referral_code` (EY-79 / US-1302, todavía en In Review) **no puede
-funcionar** con este tipo de campaña: tiene que ser **por email** contra la API de RF. Se activó el
-parámetro `ref_email` para eso — los tres que RF ofrece estaban apagados y el referido llegaba sin
-nada. Aparte: los términos que RF le enseña al referido son **su plantilla sin rellenar**, con
+oferta **alojada por RF**, donde deja nombre y email. RF **no ofrece un parámetro de código de
+referido**, así que la atribución por cookie `ey-ref` + `profiles.referral_code` (EY-79 / US-1302,
+todavía en In Review) **no puede funcionar** con este tipo de campaña.
+
+⚠️ **Lo que este párrafo decía después era falso, y se corrige el 1-sep (D2).** Decía que «se activó
+el parámetro `ref_email`» y que la atribución «tiene que ser por email contra la API de RF», en
+presente, como si estuviera hecho. **`ref_email` no existe**: `grep -rn "ref_email" src/ supabase/`
+devuelve **cero**, y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea de código**. Lo mismo
+decían `CLAUDE.md`, `BACKLOG.md` y `PLAN-DESARROLLO.md`; los cuatro están corregidos.
+
+**Qué hay de verdad, seguido de punta a punta (1-sep):**
+
+| Tramo | Fichero:línea | Qué hace |
+| :-- | :-- | :-- |
+| Escribe la cookie | `src/lib/supabase/middleware.ts:76-83` | si la URL trae `?ref=`, lo guarda en `ey-ref` (30 días, `sameSite lax`, **no** httpOnly) |
+| La lee — pantalla | `src/app/(auth)/signup/page.tsx:29-30` | `?ref=` de la URL manda; si no, la cookie |
+| La lee — modal | `src/components/auth/signup-form.tsx:60-73, 163` | `refDeCookie()` al enviar → `raw_user_meta_data.referral_code` |
+| La lee — Google | `src/components/auth/google-button.tsx:84` → `src/app/auth/callback/page.tsx:34` → `callback-status.tsx:110-116` | el `?ref=` viaja a Google y vuelve; `update … .is("referral_code", null)` para no pisar |
+| La lee — invitado | `src/app/api/checkout/invitado/route.ts:429, 442` | cookie leída **en servidor**, al metadata del `createUser` |
+| La aterriza | `20260817130000_terms_acceptances.sql:88-93` (`handle_new_user`) | `profiles.referral_code` |
+| La borra | `20260826230000_ey192_baja_de_cuenta.sql:326` | `referral_code = null` al anonimizar |
+| **La lee para algo** | — | **nadie**. No hay un solo `select` de `referral_code` en `src/` |
+
+**Y la cookie no se escribe nunca**, porque el `?ref=` no llega. Comprobado contra la campaña real
+`50297` con la clave de `.env.local`: ni `GET /api/v1/campaigns/50297` ni la página que ve el
+referido (`https://vercel.referral-factory.com/<code>`) contienen la cadena `ensenameya` por ningún
+lado — **no hay URL de vuelta configurada**, así que no existe la redirección que traería el
+parámetro. Los dos extremos lo confirman: **0 de 39 perfiles de dev** tienen `referral_code`, y en RF
+solo hay **5 usuarios**, los dos con `referrer_id` metidos a mano por su API (`source: "Api"`) y
+ninguno `qualified`; los dos reales (`veronica@faimlab.com`, `faim3110@gmail.com`) entraron por el
+embed como **referidores**, sin referidor propio.
+
+→ **Veredicto: hoy no hay atribución de referidos de ninguna clase.** No está «hecha por email» ni
+«hecha por cookie a falta de un ajuste»: está **entera por hacer**. El AC de `EY-79` hay que
+rehacerlo, no revisarlo. Y `EY-148` (RF-03) sigue pendiente de la comprobación de §EP-13 del backlog:
+si la integración nativa RF↔Stripe ya califica sola, el ticket se cierra sin código.
+
+Aparte: los términos que RF le enseña al referido son **su plantilla sin rellenar**, con
 corchetes tipo "[Insert link to Privacy Policy here]". Redactarlos antes de abrir.
 
 ### 4.6 ⚠️ Vaciar la cola vieja de correo — ANTES de dar reloj a Actions
@@ -640,9 +677,47 @@ la tabla de §1, y lo próximo que las toque sin serlo morderá en ejecución (r
 antes. Nota práctica: `kyc-documents` **rechaza `text/plain`** (solo png, jpeg, webp y pdf); una
 subida de prueba con el mime equivocado devuelve 400 y no es un problema de permisos.
 
+### 4.8 🔴 «Los splits del programa de referidos» (EY-209) no existen — desmentido leyendo el esquema (1-sep)
+
+`EY-209` pedía **verificar los splits del programa de referidos**. Se buscó qué verificar y **no hay
+nada**: el concepto no existe en la base de datos, ni apagado ni a medias.
+
+**El reparto de una venta tiene exactamente dos tramos, y son complementarios por construcción.**
+`payments` (`20260709140000_ep06_booking_core.sql:98-103`) guarda `gross_amount`,
+`platform_fee_amount` y `tutor_net_amount`, y las tres las escribe `create_booking` así:
+
+```sql
+v_net := round(v_total * v_split / 100.0);
+v_fee := v_total - v_net;          -- ← el resto, literalmente
+```
+
+(versión vigente: `20260831180000_candado_por_solape_en_sessions.sql:241-242`; idéntico en
+`20260827150000`, `20260715170000` y el original `20260709160000`). `v_fee` **no se calcula**: es lo
+que sobra. No queda ni un céntimo sin dueño donde pudiera entrar un tercer beneficiario, y meterlo
+exigiría **columna nueva + migración**, no configuración. Comprobado también en dev: **115 de 115
+`payments` cumplen `gross = fee + net`**, cero descuadres.
+
+**Y el payout tampoco tiene sitio.** `payouts.tutor_id` referencia a un único perfil, y
+`payout_items.payment_id` es **`unique`** (`20260716140000_ep10_payouts.sql:47-51`): «un pago ≤ 1
+payout», dice el propio comentario. Un referidor no podría cobrar ni como segunda línea del mismo
+pago.
+
+**Ni hay a quién pagarle.** No existe ninguna tabla `referr*` en `supabase/migrations/`; la única
+huella de referidos en el esquema es la columna `profiles.referral_code`, que —§4.5— **nadie lee** y
+que además está vacía en las 39 filas de dev.
+
+→ **Veredicto: EY-209 se cierra desmentido, sin código.** No es «los splits están mal»: es que un
+split de referidos nunca se construyó. El único `split_pct` del sistema es el de `tutor_tiers`
+(RN-06, US-1103), que reparte alumno↔plataforma↔tutor y no tiene nada que ver con el programa de
+invitaciones. Si el cliente decide que el referidor cobra (C-10, sin resolver), eso es **diseño
+nuevo**: tabla, migración y decisión de si sale de la comisión o del neto del tutor.
+
 ---
 
-*Se actualiza en cada pasada de QA. Última edición: **2026-08-31** — §4.7 con el ciclo de la baja de cuenta con dinero en vuelo ejercitado de punta a punta (recolección, ensayo, barrido real, desactivación y cancelación), el mapa de privilegios de `service_role` por operación, y el hueco de cobertura que deja la regla de oro 2. Edición previa el **2026-08-17** — superficies nuevas del día
+*Se actualiza en cada pasada de QA. Última edición: **2026-09-01** — §4.5 rehecha (la atribución de
+referidos no existe: `ref_email` era falso, mapa fichero:línea de lo que sí hay y verificación contra
+la campaña real de RF), §4.2 con `REFERRAL_FACTORY_API_KEY` degradada a «no la lee nadie», y §4.8
+nueva desmintiendo los splits de referidos de `EY-209`. Edición previa el **2026-08-31** — §4.7 con el ciclo de la baja de cuenta con dinero en vuelo ejercitado de punta a punta (recolección, ensayo, barrido real, desactivación y cancelación), el mapa de privilegios de `service_role` por operación, y el hueco de cobertura que deja la regla de oro 2. Edición previa el **2026-08-17** — superficies nuevas del día
 (contacto, aceptación de términos, alumnos del tutor, cobro tardío, cola de reembolsos), tercer job
 programado, §4.6 para vaciar la cola vieja de correo, y el checklist al día (30 migraciones
 pendientes de prod, variables repartidas, Stripe de test mode ya en producción). Edición previa el

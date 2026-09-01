@@ -279,6 +279,16 @@ el mecanismo que esos documentos declaran inviable: cookie `ey-ref` → `profile
 minuta:** hoy no hay atribución por email que un embed pueda romper. **El embed y la atribución son
 dos temas separados**, y el segundo está entero por hacer. *(Ficha L0-7.)*
 
+🟢 **Confirmado el 1-sep (D2), y es peor de lo que decía este punto: la cookie tampoco atribuye.**
+No es que esté implementada la vía B en vez de la A — es que la vía B **nunca se ejecuta**. El
+`?ref=` que espera `middleware.ts:76-83` no llega jamás: la campaña real `50297` **no tiene URL de
+vuelta a la app configurada** (ni `GET /api/v1/campaigns/50297` ni la página que ve el referido
+contienen la cadena `ensenameya`), así que no hay redirección que pudiera traer un parámetro. Los dos
+extremos cuadran: **0 de 39 perfiles de dev** tienen `referral_code`, y de los 5 usuarios que hay en
+RF los dos con `referrer_id` se metieron a mano por su API. Remate: **`referral_code` no lo lee
+nadie** — se escribe en tres sitios y no entra en ningún cálculo. Los cuatro documentos quedaron
+corregidos ese día; el mapa fichero:línea está en `docs/QA-LANZAMIENTO.md` §4.5.
+
 **2. `docs/ENTORNOS.md:83` dice que `STRIPE_PUBLISHABLE_KEY` «no la lee nadie».** Quedó obsoleto
 cuando el checkout pasó a Embedded: la lee `publishableKey()` y su ausencia es un **503**.
 *(Ficha L0-7.)*
@@ -561,9 +571,11 @@ poniendo **5 $ de su bolsillo** en cada reserva, porque el tutor sigue cobrando 
   `x-frame-options: SAMEORIGIN`. Que se pague RF no cambia su cabecera. Sigue haciendo falta pedirles
   **su snippet de widget**.
 - ⚠️ **La atribución NO va por email**, pase lo que pase con la campaña. Cuatro documentos del repo
-  dicen que sí y **es falso** (§20.6): lo implementado es la cookie `ey-ref`, y
-  `REFERRAL_FACTORY_API_KEY` no se lee en ninguna línea de código. Si la campaña depende de atribuir
-  bien, ese trabajo **está entero por hacer** y no lo arregla pagar la suscripción.
+  decían que sí y **era falso** (§20.6; **corregidos el 1-sep**): lo implementado es la cookie
+  `ey-ref`, y `REFERRAL_FACTORY_API_KEY` no se lee en ninguna línea de código. Y esa cookie **tampoco
+  atribuye**: la campaña no reenvía al referido a la app, así que el `?ref=` no llega nunca. Si la
+  campaña depende de atribuir bien, ese trabajo **está entero por hacer** —**por email o por lo que
+  sea, la vía sigue sin decidirse**— y no lo arregla pagar la suscripción.
 
 ---
 

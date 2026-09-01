@@ -87,7 +87,7 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
 | `NEXT_PUBLIC_REFERRAL_URL` | sí | **falta** | **falta** | — |
 | `NEXT_PUBLIC_REFERRAL_URL_TUTOR` | **falta** | **falta** | **falta** | — |
 | `NEXT_PUBLIC_REFERRAL_EMBED_URL` · `..._TUTOR` | **falta** | **falta** | **falta** | — (pendiente: el cliente tiene que dar el snippet de embed de RF) |
-| `REFERRAL_FACTORY_API_KEY` | sí | **falta** | **falta** | — |
+| `REFERRAL_FACTORY_API_KEY` | sí | **falta** | **falta** | — · ⚠️ **no la lee ningún fichero de `src/`** (1-sep): su ausencia no cambia nada, ver `QA-LANZAMIENTO.md` §4.5 |
 | `APP_BASE_URL` | — | — | — | **sí (30-ago)**: `https://ensenameya.vercel.app` (variable, no secret) |
 | `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional (secret) — solo si `APP_BASE_URL` apunta a una preview |
 
@@ -205,8 +205,10 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
   contrario desde el 17. La prueba no necesita el panel: sin la variable el endpoint responde **503**
   y con ella **401**, y `curl https://ensenameya.vercel.app/api/cron/notifications-send` (sin
   cabecera) devuelve **401**. Con la cabecera correcta, **200**.
-- [ ] Scope **Preview y Production**: faltan `NEXT_PUBLIC_REFERRAL_URL`,
-  `NEXT_PUBLIC_REFERRAL_URL_TUTOR` y `REFERRAL_FACTORY_API_KEY` (ver la matriz de §1).
+- [ ] Scope **Preview y Production**: faltan `NEXT_PUBLIC_REFERRAL_URL` y
+  `NEXT_PUBLIC_REFERRAL_URL_TUTOR` (ver la matriz de §1). ⚠️ `REFERRAL_FACTORY_API_KEY` **sale de
+  esta lista**: no la lee ningún fichero de `src/`, así que subirla no habilita nada y sugiere una
+  atribución de referidos que no existe (1-sep, `QA-LANZAMIENTO.md` §4.5).
 - [ ] Tras dar de alta cualquiera: **Redeploy**. Vercel no las aplica al despliegue ya construido (§1).
 
 ### D) GitHub — Environments (CI de migraciones) — [x] hecho, salvo branch protection
@@ -436,7 +438,8 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
   mode* — $47,50 en dos reembolsos, cuadrando cola / `refunds_backlog()` / Stripe / `payments`.
   Se hizo **en local** (`npm run dev` contra la BD de dev), porque la preview de Vercel está tras
   Deployment Protection y `APP_BASE_URL` apunta a prod. `?simulacro=1` primero, pasada real después.
-- [ ] `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY` en Vercel — solo están en local.
+- [ ] `NEXT_PUBLIC_REFERRAL_URL` en Vercel — solo está en local. (`REFERRAL_FACTORY_API_KEY` también,
+      pero **no la lee nadie**: fuera del checklist desde el 1-sep.)
 - [ ] `NEXT_PUBLIC_REFERRAL_URL_TUTOR` (B1.11) — **ni en local**: hace falta la URL de la segunda
       campaña de Referral Factory, la de tutores. Sin ella el tutor no ve el bloque.
 - [ ] Mínimo de contraseña a 8 en el panel de Auth, dev y prod (§3B).
