@@ -968,7 +968,7 @@ export type Database = {
           id: string
           is_active: boolean
           notes: string | null
-          payee_country: string
+          payee_country: string | null
           payer_country: string | null
           payout_provider: string
           priority: number
@@ -980,7 +980,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           notes?: string | null
-          payee_country: string
+          payee_country?: string | null
           payer_country?: string | null
           payout_provider: string
           priority?: number
@@ -992,7 +992,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           notes?: string | null
-          payee_country?: string
+          payee_country?: string | null
           payer_country?: string | null
           payout_provider?: string
           priority?: number
@@ -1149,8 +1149,10 @@ export type Database = {
           currency: string
           failed_at: string | null
           failure_reason: string | null
+          funding_provider: string | null
           id: string
           paid_at: string | null
+          payee_country: string | null
           provider: string | null
           provider_metadata: Json | null
           provider_payout_id: string | null
@@ -1166,8 +1168,10 @@ export type Database = {
           currency: string
           failed_at?: string | null
           failure_reason?: string | null
+          funding_provider?: string | null
           id?: string
           paid_at?: string | null
+          payee_country?: string | null
           provider?: string | null
           provider_metadata?: Json | null
           provider_payout_id?: string | null
@@ -1183,8 +1187,10 @@ export type Database = {
           currency?: string
           failed_at?: string | null
           failure_reason?: string | null
+          funding_provider?: string | null
           id?: string
           paid_at?: string | null
+          payee_country?: string | null
           provider?: string | null
           provider_metadata?: Json | null
           provider_payout_id?: string | null
@@ -1850,6 +1856,7 @@ export type Database = {
           faqs: Json
           headline: string | null
           identity_verification_status: Database["public"]["Enums"]["identity_verification_status"]
+          payout_country: string | null
           profile_id: string
           rating_avg: number | null
           rating_count: number
@@ -1870,6 +1877,7 @@ export type Database = {
           faqs?: Json
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
+          payout_country?: string | null
           profile_id: string
           rating_avg?: number | null
           rating_count?: number
@@ -1890,6 +1898,7 @@ export type Database = {
           faqs?: Json
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
+          payout_country?: string | null
           profile_id?: string
           rating_avg?: number | null
           rating_count?: number
