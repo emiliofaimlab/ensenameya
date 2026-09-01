@@ -10,6 +10,11 @@ import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
 import { DatosInvitado } from "@/components/checkout/datos-invitado";
+import {
+  interpretar,
+  irAPagar,
+  type RespuestaDeCobro,
+} from "@/components/checkout/respuesta-de-cobro";
 
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -365,11 +370,7 @@ export function CheckoutForm({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bookingId }),
       });
-      const salida = (await res.json().catch(() => ({}))) as Partial<Embed> & {
-        simulated?: boolean;
-        retencionHasta?: string | null;
-        error?: string;
-      };
+      const salida = (await res.json().catch(() => ({}))) as RespuestaDeCobro;
 
       if (!res.ok) {
         setApertura({
@@ -379,17 +380,29 @@ export function CheckoutForm({
         return;
       }
 
+      // A2 · ver `respuesta-de-cobro.ts`. Aquí `embed: null` significa «camino
+      // simulado» (así lo lee el render), así que la traducción tiene que ser
+      // explícita: antes CUALQUIER respuesta sin `clientSecret` acababa en ese
+      // null, y una redirección habría pintado el botón de simular pago.
+      const accion = interpretar(salida);
+
+      if (accion.tipo === "redireccion") {
+        // La reserva ya está creada y el hold corriendo; la pestaña se va a la
+        // pasarela. Si la persona vuelve sin pagar, `ResumePayment` reabre EL
+        // MISMO cobro (el adaptador lo recuerda por `provider_payment_id`).
+        irAPagar(accion.url);
+        return;
+      }
+      if (accion.tipo === "error") {
+        setApertura({ fase: "error", mensaje: accion.mensaje });
+        return;
+      }
+
       setApertura({
         fase: "lista",
         bookingId,
         retencionHasta: salida.retencionHasta ?? null,
-        embed:
-          salida.clientSecret && salida.publishableKey
-            ? {
-                clientSecret: salida.clientSecret,
-                publishableKey: salida.publishableKey,
-              }
-            : null,
+        embed: accion.tipo === "embebido" ? accion.embed : null,
       });
     }
 

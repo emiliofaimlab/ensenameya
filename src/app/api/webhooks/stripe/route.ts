@@ -307,7 +307,12 @@ export async function POST(req: Request) {
           // suelta o de un pedido, nunca de las dos (20260827170000).
           booking_id: estado.reserva ? ref.id : null,
           order_id: estado.pedido ? ref.id : null,
-          provider: "stripe",
+          // ⚠️ SALE DEL ADAPTADOR, NO DE UN LITERAL. Era `"stripe"` cableado, y
+          // con un solo PSP daba igual; con dos, un literal aquí es una fila que
+          // dice haber reembolsado por una pasarela que no fue. Esta columna la
+          // lee la conciliación, así que mentir en ella es mentir en el sitio
+          // donde se comprueba si el dinero salió.
+          provider: stripeProvider.key,
           provider_payment_id: pi,
           provider_refund_id: reembolso?.refundId ?? null,
           event_id: evento.id,

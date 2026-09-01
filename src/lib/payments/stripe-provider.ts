@@ -399,6 +399,11 @@ export const stripeProvider: PspProvider = {
     // `missingChargeConfig()`, este `?? ""` deja de ser inalcanzable.
     return {
       ok: true,
+      // A2 · el discriminante. Stripe monta el formulario DENTRO de nuestra
+      // pantalla; dLocal Go manda a la suya. Sin este campo, el navegador
+      // distinguía los dos casos por la forma del objeto y trataba «no hay
+      // clientSecret» como «camino simulado» — ver `respuesta-de-cobro.ts`.
+      modo: "embebido",
       clientSecret: session.client_secret,
       publishableKey: publishableKey() ?? "",
     };

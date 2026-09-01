@@ -3,7 +3,8 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { simulatedProvider } from "@/lib/payments/simulated-provider";
 import { stripeProvider } from "@/lib/payments/stripe-provider";
-import type { AnyProvider } from "@/lib/payments/port";
+import { dlocalProvider } from "@/lib/payments/dlocal-provider";
+import type { AnyProvider, PspProvider } from "@/lib/payments/port";
 
 /**
  * EL ENRUTADOR DE PAGOS — el `PaymentRouter` del Doc 6 §6.2, en la forma que el
@@ -15,10 +16,15 @@ import type { AnyProvider } from "@/lib/payments/port";
  * pantallas que ya importaban `activeChargeProvider` no se han tocado.
  *
  * Por aquí pasa quien tiene que resolver el proveedor DESDE EL DATO: el
- * checkout, que lo saca de `payments.provider`. Los dos endpoints que son de
- * Stripe por definición —`/api/webhooks/stripe` y el job de reembolsos, que
- * filtra la cola por `provider = 'stripe'`— importan su adaptador directamente,
- * porque no hay nada que elegir: dLocal traerá su propio webhook.
+ * checkout, que lo saca de `payments.provider`, y el job de reembolsos, que lo
+ * saca de `refund_requests.provider` (antes filtraba la cola por
+ * `provider = 'stripe'` a mano, en cuatro sitios).
+ *
+ * Los webhooks NO pasan por aquí y no es una omisión: cada uno es de su
+ * proveedor por definición —lo que los distingue es la FIRMA, y una firma solo
+ * la sabe verificar quien la emitió— así que `/api/webhooks/stripe` y
+ * `/api/webhooks/dlocalgo` importan su adaptador directamente. Son dos rutas
+ * porque son dos secretos, no porque hagan cosas distintas.
  *
  * Del Doc 6 falta `resolvePayout(payee_country)`, y falta porque no hay a quién
  * resolver: no existe adaptador de payouts en el repo (ver `port.ts`).
@@ -114,6 +120,29 @@ export async function payoutCountries(): Promise<string[]> {
 }
 
 /**
+ * Los PSP que saben mover dinero, por su clave. Es el registro que `adapterFor`
+ * consulta, y es también la respuesta a «¿qué proveedores existen de verdad?»
+ * para el job de reembolsos, que antes lo tenía escrito a mano como
+ * `.eq('provider', 'stripe')` en cuatro sitios.
+ *
+ * ⚠️ ESTAR AQUÍ NO ES ESTAR ENCENDIDO. Que dLocal figure en este mapa significa
+ * que su adaptador existe y sabe qué hacer si le llega trabajo — no que nadie
+ * le vaya a rutear un cobro. Eso lo decide `payment_routing_rules`, que sigue
+ * en 'simulated' y que se cambia con un `UPDATE`, no con un despliegue (regla
+ * de oro 8: las decisiones se consumen como configuración). Y si la fila
+ * cambiara sin que estén las credenciales, el checkout devuelve 503 diciendo
+ * cuál falta en vez de caer al simulado — que es lo que hace que encender esto
+ * sea reversible.
+ */
+const PSPS: Record<string, PspProvider> = {
+  [stripeProvider.key]: stripeProvider,
+  [dlocalProvider.key]: dlocalProvider,
+};
+
+/** Las claves de los PSP reales. La usa el job de reembolsos para filtrar. */
+export const PSP_KEYS: string[] = Object.keys(PSPS);
+
+/**
  * `adapterFor` del Doc 6 §6.3: de una clave de proveedor, su adaptador.
  *
  * La clave que se le pasa en el cobro es `payments.provider` —el snapshot que
@@ -121,17 +150,20 @@ export async function payoutCountries(): Promise<string[]> {
  * tabla mientras hay reservas a medias, esas reservas terminan por donde
  * empezaron.
  *
- * Todo lo que no sea 'stripe' cae al simulado, igual que antes de que esto
- * fuera una función. Lee la advertencia de `simulated-provider.ts`: no es lo
- * mismo que "no hay proveedor", y añadir dLocal a la tabla sin su adaptador
- * pasa por aquí sin hacer ruido.
+ * ⚠️ YA NO ES UN TERNARIO, Y ESO CIERRA UN AGUJERO REAL. Hasta hoy todo lo que
+ * no fuese 'stripe' caía al simulado, así que poner 'dlocal' en
+ * `payment_routing_rules` producía un checkout que no se podía terminar y **sin
+ * un solo error visible** (lo avisaba `simulated-provider.ts`). Con el registro,
+ * una clave conocida encuentra su adaptador y una desconocida sigue cayendo al
+ * simulado — que es lo correcto para 'simulated' y para `null`, porque ninguno
+ * de los dos es un proveedor: son la ausencia de uno.
  *
  * Acepta `null` porque `payments.provider` es nullable en el esquema: una fila
- * sin proveedor tampoco es Stripe, y el `!== "stripe"` de antes ya la trataba
+ * sin proveedor tampoco es un PSP, y el `!== "stripe"` de antes ya la trataba
  * así.
  */
 export function adapterFor(key: string | null): AnyProvider {
-  return key === stripeProvider.key ? stripeProvider : simulatedProvider;
+  return (key && PSPS[key]) || simulatedProvider;
 }
 
 export type { AnyProvider, PaymentProvider, PspProvider } from "@/lib/payments/port";

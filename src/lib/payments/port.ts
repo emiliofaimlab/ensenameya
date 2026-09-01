@@ -3,14 +3,22 @@ import "server-only";
 /**
  * EL PUERTO DE PAGOS — el del Doc 6 §6.2, recortado a lo que el código hace.
  *
- * POR QUÉ EXISTE. MN-03 pide dLocal como pasarela de respaldo, y no hay cuenta
- * de dLocal: dLocal Go espera a que el sitio pase su revisión, que espera al
- * merge `dev`→`main`. Escribir el adaptador sin sandbox sería escribir código
- * que nadie puede ejecutar — el patrón que ya produjo `process_notifications()`
- * marcando correos como enviados sin enviar ninguno. Lo que sí se puede hacer
- * hoy, y es la mitad del coste, es dejar el hueco con la forma exacta y meter
- * a Stripe dentro. Esto NO cambia nada para nadie: mismas llamadas, mismos
- * parámetros, mismos importes.
+ * POR QUÉ EXISTE. MN-03 pide dLocal como pasarela de respaldo. Este hueco se
+ * dejó con la forma exacta y con Stripe dentro, para que el segundo proveedor
+ * costara la mitad. Ya hay segundo proveedor: `dlocal-provider.ts`.
+ *
+ * ⚠️ AQUÍ ESTUVO ESCRITO, Y ERA FALSO: «no hay cuenta de dLocal: dLocal Go
+ * espera a que el sitio pase su revisión, que espera al merge dev→main». El
+ * alta del sandbox de dLocal Go es LIBRE —se registra un email y da claves al
+ * momento— y la revisión comercial solo bloquea producción, exactamente igual
+ * que el KYC de Stripe solo bloquea *live mode*. Desde el 1-sep-2026 hay cuenta
+ * y las claves están en `.env.local`.
+ *
+ * Se deja escrito porque es el MISMO error que costó tres meses con Stripe: dar
+ * por bloqueado un sandbox por un trámite que solo afecta a producción, y no
+ * volver a comprobarlo. Lo que sí sigue rechazado es la cuenta de PRODUCCIÓN de
+ * dLocal (ver CLAUDE.md, «dos webs de la misma marca sin conectar»), que es otra
+ * cosa y no impide escribir ni probar nada.
  *
  * ── QUÉ SE QUITÓ DEL DOC 6, Y POR QUÉ ──────────────────────────────────────
  * El doc mete `payout()` en la misma interfaz. En este repo NO existe ni un
@@ -36,9 +44,36 @@ import "server-only";
  * adaptador de dLocal, cuando haya sandbox, implementará `PspProvider` entero.
  */
 
+/**
+ * ⚠️ HAY DOS FORMAS DE COBRAR Y NO SE PARECEN EN NADA — el desajuste nº 1 con
+ * dLocal Go, y el que obligó a ensanchar este tipo.
+ *
+ * Stripe devuelve un `client_secret` con el que NOSOTROS montamos su formulario
+ * DENTRO de nuestra pantalla (MN-01, `ui_mode: 'form'`). dLocal Go devuelve una
+ * `redirect_url` a su propio checkout alojado y la persona SE VA de nuestro
+ * sitio. No es una diferencia de nombres: es que en un caso el alumno nunca
+ * sale y en el otro sí.
+ *
+ * ── ¿Y SmartFields, que sí sería embebido? NO ESTÁ DISPONIBLE ───────────────
+ * dLocal Go tiene un checkout transparente (SmartFields) que daría la forma
+ * embebida, pero exige `allow_transparent: true` en la cuenta, que lo activa su
+ * soporte a petición. Comprobado contra el sandbox el 1-sep-2026: un
+ * `POST /v1/payments` con `"direct": true` devuelve **200 con `"direct": false`**
+ * — no da error, simplemente ignora la petición y sirve el checkout alojado de
+ * siempre. O sea que no es cuestión de mandar otro parámetro: hasta que soporte
+ * lo habilite, la redirección es el ÚNICO camino, y por eso el tipo se ensancha
+ * en vez de forzar a dLocal a fingir un `clientSecret` que no existe.
+ *
+ * `modo` es el discriminante. Es obligatorio en las dos variantes a propósito:
+ * sin él, un `if (salida.clientSecret)` en el navegador trata la redirección
+ * como "no hay cobro" y cae al camino simulado — que es exactamente el fallo
+ * silencioso que este proyecto ya conoce (ver `simulated-provider.ts`).
+ */
+
 /** Lo que el navegador necesita para montar el formulario alojado del PSP. */
 export type ChargeEmbebido = {
   ok: true;
+  modo: "embebido";
   /** El secreto de la sesión de pago. Es de un solo uso y de un solo cobro. */
   clientSecret: string;
   /**
@@ -50,10 +85,31 @@ export type ChargeEmbebido = {
   publishableKey: string;
 };
 
+/**
+ * El cobro vive FUERA: hay que mandar a la persona a la URL del proveedor.
+ *
+ * ⚠️ `providerRef` NO es decorativo y NO es lo mismo que en Stripe. Es el
+ * `DP-…` del cobro, y quien llama tiene que sellarlo en
+ * `payments.provider_payment_id` ANTES de mandar a nadie a pagar. Con Stripe
+ * ese sello lo pone el webhook al volver; aquí no se puede esperar, porque es
+ * lo ÚNICO que permite reencontrar este cobro si la persona recarga la pantalla:
+ * `GET /v1/payments` no lista los cobros PENDING y no hay búsqueda por
+ * `order_id` (comprobado contra el sandbox, 1-sep-2026). Sin el sello, cada
+ * recarga abriría un cobro nuevo.
+ */
+export type ChargeRedirigido = {
+  ok: true;
+  modo: "redireccion";
+  /** Absoluta. Caduca a las 24 h y deja de servir en cuanto se paga. */
+  redirectUrl: string;
+  /** La referencia del cobro EN EL PROVEEDOR. Sellar antes de redirigir. */
+  providerRef: string;
+};
+
 /** El proveedor respondió, pero sin lo que hace falta para cobrar. */
 export type ChargeFallido = { ok: false; error: string };
 
-export type ChargeResult = ChargeEmbebido | ChargeFallido;
+export type ChargeResult = ChargeEmbebido | ChargeRedirigido | ChargeFallido;
 
 /**
  * EY-176 · A QUÉ APUNTA UN COBRO.
@@ -136,8 +192,48 @@ export type ChargeInput = {
   expiresAt: number;
   /** Absoluta y con protocolo. */
   returnUrl: string;
-  /** Un doble clic no puede abrir dos cobros para la misma reserva. */
+  /**
+   * A dónde debe avisar el proveedor cuando el cobro cambie de estado.
+   *
+   * ⚠️ ES POR COBRO, NO POR CUENTA, y ahí está la diferencia entre los dos PSP.
+   * En Stripe el webhook se configura UNA vez en su panel y vale para todo; en
+   * dLocal Go viaja en cada `POST /v1/payments` (`notification_url`) y **si no
+   * se manda, no hay notificación en absoluto** — el cobro se pagaría y nadie
+   * se enteraría nunca. Por eso lo aporta quien llama (que es quien sabe la URL
+   * base del entorno) y no el adaptador.
+   *
+   * Stripe lo ignora, a propósito: es el precio de que el puerto tenga una sola
+   * forma. Un campo que un proveedor no usa es más barato que dos interfaces.
+   */
+  notificationUrl: string;
+  /**
+   * Un doble clic no puede abrir dos cobros para la misma reserva.
+   *
+   * ⚠️ CON dLocal NO ES UNA CABECERA, ES EL `order_id` — desajuste nº 4. Su API
+   * no tiene `Idempotency-Key`; lo más parecido es que `order_id` sea único, y
+   * repetirlo NO devuelve el cobro anterior: devuelve `5009 Order id is
+   * duplicated`, un 400 seco (comprobado contra el sandbox, 1-sep-2026). Así
+   * que la garantía que este campo promete —"llamar dos veces con la misma
+   * clave da el mismo cobro"— la tiene que EMULAR el adaptador. Ver
+   * `dlocal-provider.ts`.
+   *
+   * Que siga siendo determinista por reserva es, por tanto, más importante aún
+   * que con Stripe: con Stripe una clave que cambia abre una Session de más
+   * (inofensivo); con dLocal, un `order_id` que cambia abre un COBRO de más.
+   */
   idempotencyKey: string;
+  /**
+   * ISO-3166-1 alfa-2 del PAGADOR, si se sabe (`payments.payer_country`).
+   *
+   * Opcional porque en este proyecto es nullable de verdad, y porque dLocal Go
+   * lo admite ausente: comprobado contra el sandbox el 1-sep-2026, un
+   * `POST /v1/payments` sin `country` devuelve 200 y su checkout le pregunta el
+   * país a la persona. Stripe lo ignora — deduce el país del medio de pago.
+   *
+   * Mandarlo cuando se sabe es mejor: ahorra un paso y acota los métodos de
+   * pago locales que se ofrecen.
+   */
+  payerCountry?: string | null;
 };
 
 /** Lo que hace falta para devolver dinero ya cobrado. */
@@ -146,6 +242,19 @@ export type RefundInput = {
   chargeRef: string;
   /** Parcial (RN-37 al 50 %, US-704). Sin él se devuelve el cargo entero. */
   amountMinor?: number;
+  /**
+   * ISO-4217 del importe de arriba, tal como está en `payments.currency`.
+   *
+   * ⚠️ HACE FALTA AUNQUE STRIPE NO LA USE, y no es un campo de adorno: Stripe
+   * habla en unidades menores igual que nosotros, pero dLocal Go habla en
+   * unidades MAYORES, así que su adaptador tiene que dividir — y cuánto dividir
+   * depende de la moneda. El peso chileno y el guaraní no tienen céntimos.
+   * Reembolsar 5000 CLP dividiendo por 100 devolvería 50 pesos en vez de 5000.
+   *
+   * Opcional para no romper a quien ya llamaba sin ella; el adaptador de dLocal
+   * asume USD si falta, que es la moneda real de este proyecto hoy.
+   */
+  currency?: string;
   /** Va a la metadata del proveedor; sirve para conciliar, no para decidir. */
   metadata: Record<string, string>;
   idempotencyKey: string;
@@ -193,9 +302,28 @@ export type RefundResult =
  */
 export type WebhookEvent = {
   /**
-   * El id del evento EN EL PROVEEDOR. Es la clave de deduplicación que come
-   * `confirm_payment` (US-703), así que tiene que ser el del proveedor y no uno
-   * nuestro.
+   * La clave de deduplicación que come `confirm_payment` (US-703).
+   *
+   * ⚠️ AQUÍ DECÍA «el id del evento EN EL PROVEEDOR […] tiene que ser el del
+   * proveedor y no uno nuestro», Y CON dLocal ESO ES IMPOSIBLE — desajuste nº 2.
+   *
+   * Stripe manda un evento con identidad propia (`evt_…`, con tipo y hora).
+   * dLocal Go manda un PING: el cuerpo entero es `{"payment_id":"DP-283"}`. No
+   * hay id de evento, ni tipo, ni timestamp, ni el estado que lo disparó. Dos
+   * notificaciones distintas del mismo cobro —"pagado" y, más tarde,
+   * "reembolsado"— llegan con EL MISMO cuerpo, byte a byte.
+   *
+   * Así que lo que se exige de este campo ya no es su procedencia sino su
+   * COMPORTAMIENTO, que es lo que de verdad importaba: **el mismo hecho tiene
+   * que producir la misma clave, y dos hechos distintos, claves distintas.** El
+   * adaptador de dLocal lo cumple sintetizándola como
+   * `dlocalgo:<payment_id>:<status>` con el estado que devuelve
+   * `GET /v1/payments/{id}` — no el del cuerpo, que no lo trae. Reentrega del
+   * mismo estado → misma clave → `confirm_payment` la descarta; transición real
+   * → clave nueva → se procesa.
+   *
+   * Quien escriba un tercer adaptador: la pregunta no es "¿qué id manda?", es
+   * "¿qué cadena identifica este hecho de forma estable?".
    */
   id: string;
   /** El tipo tal cual lo manda el proveedor. Se conserva para el log y la respuesta. */

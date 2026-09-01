@@ -774,10 +774,25 @@ cruza una segunda categoría en `CategoryExplorer`. Verificar y cerrar.
 - **Stripe:** las claves de *test mode* son self-serve y gratuitas — no hace falta la cuenta comercial
   del cliente para construir y verificar checkout alojado, tokenización, firma de webhook y adaptador.
   Pasar a la cuenta real del cliente después es **cambiar variables de entorno**, no código.
-- **DLocal:** su sandbox va detrás de contrato comercial. Esa pata sigue dura.
+- ~~**DLocal:** su sandbox va detrás de contrato comercial. Esa pata sigue dura.~~
+  ⚠️ **FALSO, y corregido el 1-sep-2026 (A2).** El sandbox de dLocal Go es **self-serve igual que
+  el de Stripe**: se registra un email en `dashboard-sbx.dlocalgo.com`, da API key + secret al
+  momento y `api-sbx.dlocalgo.com` responde 200 sin ningún contrato de por medio. Lo que va detrás
+  de revisión comercial es **producción**, exactamente igual que el KYC de Stripe solo bloquea
+  *live mode*.
+  **Es el mismo error que costó tres meses con Stripe**, dos párrafos más arriba en este mismo
+  documento: dar por bloqueado un sandbox por un trámite que solo afecta a producción, y no volver
+  a comprobarlo. La otra copia de esta premisa vivía en `src/lib/payments/port.ts:6-13` y también
+  está corregida.
+  Estado real: hay cuenta, hay claves en `.env.local`, y el adaptador está escrito y verificado
+  contra el sandbox (`src/lib/payments/dlocal-provider.ts`). Lo que SIGUE bloqueado es la cuenta de
+  **producción** de dLocal, que fue rechazada — y eso es negocio y DNS, no integración.
 → **Decisión para Jose:** si se abre una cuenta Stripe en test mode, Sprint 6 AC pasa de 0 a ~50%
 ejecutable en paralelo. Si no, los 5 tickets se quedan quietos y no se toca nada (nada de adaptadores
 especulativos "para cuando lleguen las claves": eso es la regla de oro 8).
+  _(Nota A2: la salvedad de la regla de oro 8 se cumple — el adaptador de dLocal NO es especulativo,
+  se escribió **con las claves delante** y cada decisión suya está comprobada contra respuestas
+  reales de la API. Entra **apagado**: `payment_routing_rules` no se toca.)_
 
 ### 📋 Orden de ejecución
 

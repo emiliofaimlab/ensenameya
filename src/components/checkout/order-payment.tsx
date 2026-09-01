@@ -6,6 +6,11 @@ import { toast } from "sonner";
 
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
+import {
+  interpretar,
+  irAPagar,
+  type RespuestaDeCobro,
+} from "@/components/checkout/respuesta-de-cobro";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/catalog/format";
@@ -69,11 +74,7 @@ export function OrderPayment({
         // líneas y no una.
         body: JSON.stringify({ orderId }),
       });
-      const salida = (await res.json().catch(() => ({}))) as Partial<Embed> & {
-        simulated?: boolean;
-        retencionHasta?: string | null;
-        error?: string;
-      };
+      const salida = (await res.json().catch(() => ({}))) as RespuestaDeCobro;
 
       if (!res.ok) {
         setApertura({
@@ -82,21 +83,26 @@ export function OrderPayment({
         });
         return;
       }
-      if (salida.clientSecret && salida.publishableKey) {
-        setApertura({
-          fase: "lista",
-          retencionHasta: salida.retencionHasta ?? null,
-          embed: {
-            clientSecret: salida.clientSecret,
-            publishableKey: salida.publishableKey,
-          },
-        });
+
+      // A2 · ver `respuesta-de-cobro.ts`. Con un pedido esto importa igual o
+      // más: caer al camino simulado aquí pintaría el botón de «simular pago»
+      // sobre un cargo de N mentorías.
+      const accion = interpretar(salida);
+      const retencionHasta = salida.retencionHasta ?? null;
+
+      if (accion.tipo === "redireccion") {
+        irAPagar(accion.url);
         return;
       }
-      setApertura({
-        fase: "simulado",
-        retencionHasta: salida.retencionHasta ?? null,
-      });
+      if (accion.tipo === "embebido") {
+        setApertura({ fase: "lista", retencionHasta, embed: accion.embed });
+        return;
+      }
+      if (accion.tipo === "simulado") {
+        setApertura({ fase: "simulado", retencionHasta });
+        return;
+      }
+      setApertura({ fase: "error", mensaje: accion.mensaje });
     }
 
     void abrir();

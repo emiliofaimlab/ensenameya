@@ -190,6 +190,8 @@ type Cobro = {
   currency: string;
   /** El snapshot de `payments.provider`, no la regla activa de hoy. */
   provider: string | null;
+  /** `payments.payer_country`, si se congeló. dLocal lo usa; Stripe lo ignora. */
+  payerCountry: string | null;
   /** El nacimiento del hold: de aquí salen el contador y la caducidad. */
   creadoEn: string | null;
   /** A dónde devuelve la pasarela cuando el cobro sale bien. */
@@ -251,7 +253,7 @@ export async function POST(req: Request) {
 
     const { data: payment } = await admin
       .from("payments")
-      .select("id, provider, gross_amount, currency")
+      .select("id, provider, gross_amount, currency, payer_country")
       .eq("booking_id", id)
       .maybeSingle();
     if (!payment) return { error: "sin pago asociado", status: 500 };
@@ -268,6 +270,7 @@ export async function POST(req: Request) {
       ],
       currency: payment.currency,
       provider: payment.provider,
+      payerCountry: payment.payer_country,
       creadoEn: booking.created_at,
       returnPath: `/reservas/${id}/confirmacion`,
       claveBase: `booking-${id}`,
@@ -317,7 +320,7 @@ export async function POST(req: Request) {
     // suma y no se calcula en ningún otro sitio (regla de oro 2).
     const { data: pagos } = await admin
       .from("payments")
-      .select("booking_id, provider, gross_amount, currency")
+      .select("booking_id, provider, gross_amount, currency, payer_country")
       .in(
         "booking_id",
         filas.map((b) => b.id),
@@ -338,6 +341,9 @@ export async function POST(req: Request) {
       // únicas entre las líneas: aquí solo se leen.
       currency: order.currency,
       provider: order.provider,
+      // De la primera línea: `create_order` obliga a que todas compartan
+      // pasarela y moneda, y el país del pagador es el mismo alumno.
+      payerCountry: porReserva.get(filas[0]!.id)?.payer_country ?? null,
       creadoEn: order.created_at,
       returnPath: `/pedidos/${id}/confirmacion`,
       claveBase: `order-${id}`,
@@ -364,7 +370,13 @@ export async function POST(req: Request) {
     // El contador viaja también por aquí: con el proveedor simulado no hay
     // formulario que montar, pero el horario se retiene exactamente igual y la
     // pantalla tiene que poder decir hasta cuándo.
-    return NextResponse.json({ simulated: true, retencionHasta: retencion });
+    // `simulated` se conserva por compatibilidad con lo que ya leían las
+    // pantallas; `modo` es lo que se mira desde A2. Los dos dicen lo mismo.
+    return NextResponse.json({
+      modo: "simulado",
+      simulated: true,
+      retencionHasta: retencion,
+    });
   }
 
   // Ruteado a un PSP pero sin credencial: es un error de configuración y se
@@ -428,6 +440,16 @@ export async function POST(req: Request) {
       // Con el formulario en nuestra pantalla NO hay `cancel_url`: Stripe
       // devuelve aquí ya pagado, y cancelar es no rellenar el formulario.
       returnUrl: `${base}${cobrar.returnPath}`,
+      // A2 · a dónde avisa el PSP cuando el cobro cambie de estado. Stripe lo
+      // ignora (su webhook se configura una vez en su panel); dLocal Go lo
+      // exige POR COBRO y sin él no notifica NADA — el cobro se pagaría y nadie
+      // se enteraría. Va aquí porque es este archivo el que sabe la URL base
+      // del entorno, no el adaptador.
+      notificationUrl: `${base}/api/webhooks/dlocalgo`,
+      // El país del pagador, si `create_booking` llegó a congelarlo. Stripe lo
+      // deduce del medio de pago y lo ignora; dLocal lo usa para acotar los
+      // métodos locales que ofrece, y si falta se lo pregunta a la persona.
+      payerCountry: cobrar.payerCountry,
       idempotencyKey: claveIdem,
     });
 
@@ -487,11 +509,37 @@ export async function POST(req: Request) {
   if (!cobro.ok) {
     return NextResponse.json({ error: cobro.error }, { status: 502 });
   }
+
+  /**
+   * A2 · EL COBRO QUE NO SE MONTA, SE VISITA.
+   *
+   * dLocal Go no tiene formulario embebible (SmartFields exige que su soporte
+   * lo habilite; `direct: true` se ignora hoy), así que su cobro es una URL a la
+   * que hay que mandar a la persona. El navegador la reconoce por `modo` y
+   * navega.
+   *
+   * ⚠️ `modo` VIAJA SIEMPRE, TAMBIÉN EN EL CAMINO EMBEBIDO, y esa es la mitad
+   * del arreglo. Las tres pantallas de cobro decidían con
+   * `if (salida.clientSecret && salida.publishableKey)` y **caían al camino
+   * simulado en cualquier otro caso**: una respuesta de redirección habría
+   * pintado el botón de «simular pago» de un entorno de pruebas sobre un cobro
+   * real. Con un discriminante explícito, lo desconocido es un error visible en
+   * vez de un checkout de mentira.
+   */
+  if (cobro.modo === "redireccion") {
+    return NextResponse.json({
+      modo: "redireccion",
+      redirectUrl: cobro.redirectUrl,
+      retencionHasta: retencion,
+    });
+  }
+
   // La publicable viaja con la respuesta en vez de por `NEXT_PUBLIC_*`: así el
   // interruptor de Stripe sigue siendo UNA sola cosa (las claves del servidor) y
   // no hay que acordarse de una variante pública en Vercel. Es pública por
   // diseño —solo permite crear tokens—, así que no roza la regla de oro 3.
   return NextResponse.json({
+    modo: "embebido",
     clientSecret: cobro.clientSecret,
     publishableKey: cobro.publishableKey,
     // D-2 (§20.14) · hasta cuándo se le retiene el horario. Sale del servidor y

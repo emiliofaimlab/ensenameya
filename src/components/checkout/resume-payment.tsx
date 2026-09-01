@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
+import {
+  interpretar,
+  irAPagar,
+  type RespuestaDeCobro,
+} from "@/components/checkout/respuesta-de-cobro";
 
 /** Igual que en el checkout: primero se abre el cobro, luego se pinta. */
 type Apertura =
@@ -56,11 +61,7 @@ export function ResumePayment({ bookingId }: { bookingId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bookingId }),
       });
-      const salida = (await res.json().catch(() => ({}))) as Partial<Embed> & {
-        simulated?: boolean;
-        retencionHasta?: string | null;
-        error?: string;
-      };
+      const salida = (await res.json().catch(() => ({}))) as RespuestaDeCobro;
 
       if (!res.ok) {
         setApertura({
@@ -69,21 +70,29 @@ export function ResumePayment({ bookingId }: { bookingId: string }) {
         });
         return;
       }
-      if (salida.clientSecret && salida.publishableKey) {
-        setApertura({
-          fase: "lista",
-          retencionHasta: salida.retencionHasta ?? null,
-          embed: {
-            clientSecret: salida.clientSecret,
-            publishableKey: salida.publishableKey,
-          },
-        });
+
+      // A2 · qué hacer con la respuesta lo decide `interpretar`, una vez y para
+      // las tres pantallas. Antes esto era un `if (clientSecret) … else
+      // simulado`, y ese `else` convertía un cobro por redirección en la
+      // pantalla de pruebas.
+      const accion = interpretar(salida);
+      const retencionHasta = salida.retencionHasta ?? null;
+
+      if (accion.tipo === "redireccion") {
+        // No se toca el estado: la pestaña se va. Dejarlo en "abriendo" es lo
+        // honesto mientras el navegador navega.
+        irAPagar(accion.url);
         return;
       }
-      setApertura({
-        fase: "simulado",
-        retencionHasta: salida.retencionHasta ?? null,
-      });
+      if (accion.tipo === "embebido") {
+        setApertura({ fase: "lista", retencionHasta, embed: accion.embed });
+        return;
+      }
+      if (accion.tipo === "simulado") {
+        setApertura({ fase: "simulado", retencionHasta });
+        return;
+      }
+      setApertura({ fase: "error", mensaje: accion.mensaje });
     }
 
     void abrir();
