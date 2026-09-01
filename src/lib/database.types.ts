@@ -968,7 +968,7 @@ export type Database = {
           id: string
           is_active: boolean
           notes: string | null
-          payee_country: string
+          payee_country: string | null
           payer_country: string | null
           payout_provider: string
           priority: number
@@ -980,7 +980,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           notes?: string | null
-          payee_country: string
+          payee_country?: string | null
           payer_country?: string | null
           payout_provider: string
           priority?: number
@@ -992,7 +992,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           notes?: string | null
-          payee_country?: string
+          payee_country?: string | null
           payer_country?: string | null
           payout_provider?: string
           priority?: number
@@ -1103,6 +1103,89 @@ export type Database = {
           },
         ]
       }
+      payout_banks: {
+        Row: {
+          bank_code: string
+          country: string
+          created_at: string
+          is_active: boolean
+          name: string
+          rejects_cpf: boolean
+          updated_at: string
+        }
+        Insert: {
+          bank_code: string
+          country: string
+          created_at?: string
+          is_active?: boolean
+          name: string
+          rejects_cpf?: boolean
+          updated_at?: string
+        }
+        Update: {
+          bank_code?: string
+          country?: string
+          created_at?: string
+          is_active?: boolean
+          name?: string
+          rejects_cpf?: boolean
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_banks_country_fkey"
+            columns: ["country"]
+            isOneToOne: false
+            referencedRelation: "payout_country_rules"
+            referencedColumns: ["country"]
+          },
+        ]
+      }
+      payout_country_rules: {
+        Row: {
+          account_help: string
+          account_label: string
+          account_patterns: Json
+          account_types: string[]
+          branch_pattern: string | null
+          country: string
+          created_at: string
+          currency: string
+          document_patterns: Json
+          notas: string
+          requires_branch: boolean
+          updated_at: string
+        }
+        Insert: {
+          account_help: string
+          account_label: string
+          account_patterns?: Json
+          account_types?: string[]
+          branch_pattern?: string | null
+          country: string
+          created_at?: string
+          currency: string
+          document_patterns: Json
+          notas: string
+          requires_branch?: boolean
+          updated_at?: string
+        }
+        Update: {
+          account_help?: string
+          account_label?: string
+          account_patterns?: Json
+          account_types?: string[]
+          branch_pattern?: string | null
+          country?: string
+          created_at?: string
+          currency?: string
+          document_patterns?: Json
+          notas?: string
+          requires_branch?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payout_items: {
         Row: {
           amount: number
@@ -1149,8 +1232,10 @@ export type Database = {
           currency: string
           failed_at: string | null
           failure_reason: string | null
+          funding_provider: string | null
           id: string
           paid_at: string | null
+          payee_country: string | null
           provider: string | null
           provider_metadata: Json | null
           provider_payout_id: string | null
@@ -1166,8 +1251,10 @@ export type Database = {
           currency: string
           failed_at?: string | null
           failure_reason?: string | null
+          funding_provider?: string | null
           id?: string
           paid_at?: string | null
+          payee_country?: string | null
           provider?: string | null
           provider_metadata?: Json | null
           provider_payout_id?: string | null
@@ -1183,8 +1270,10 @@ export type Database = {
           currency?: string
           failed_at?: string | null
           failure_reason?: string | null
+          funding_provider?: string | null
           id?: string
           paid_at?: string | null
+          payee_country?: string | null
           provider?: string | null
           provider_metadata?: Json | null
           provider_payout_id?: string | null
@@ -1838,6 +1927,76 @@ export type Database = {
           },
         ]
       }
+      tutor_payout_accounts: {
+        Row: {
+          bank_account: string
+          bank_account_last4: string | null
+          bank_account_type: string | null
+          bank_branch: string | null
+          bank_code: string
+          beneficiary_document: string
+          beneficiary_document_type: string
+          beneficiary_first_name: string
+          beneficiary_last_name: string
+          country: string
+          created_at: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          bank_account: string
+          bank_account_last4?: string | null
+          bank_account_type?: string | null
+          bank_branch?: string | null
+          bank_code: string
+          beneficiary_document: string
+          beneficiary_document_type: string
+          beneficiary_first_name: string
+          beneficiary_last_name: string
+          country: string
+          created_at?: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          bank_account?: string
+          bank_account_last4?: string | null
+          bank_account_type?: string | null
+          bank_branch?: string | null
+          bank_code?: string
+          beneficiary_document?: string
+          beneficiary_document_type?: string
+          beneficiary_first_name?: string
+          beneficiary_last_name?: string
+          country?: string
+          created_at?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_payout_accounts_country_bank_code_fkey"
+            columns: ["country", "bank_code"]
+            isOneToOne: false
+            referencedRelation: "payout_banks"
+            referencedColumns: ["country", "bank_code"]
+          },
+          {
+            foreignKeyName: "tutor_payout_accounts_country_fkey"
+            columns: ["country"]
+            isOneToOne: false
+            referencedRelation: "payout_country_rules"
+            referencedColumns: ["country"]
+          },
+          {
+            foreignKeyName: "tutor_payout_accounts_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tutor_profiles: {
         Row: {
           approval_notes: string | null
@@ -1850,6 +2009,7 @@ export type Database = {
           faqs: Json
           headline: string | null
           identity_verification_status: Database["public"]["Enums"]["identity_verification_status"]
+          payout_country: string | null
           profile_id: string
           rating_avg: number | null
           rating_count: number
@@ -1870,6 +2030,7 @@ export type Database = {
           faqs?: Json
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
+          payout_country?: string | null
           profile_id: string
           rating_avg?: number | null
           rating_count?: number
@@ -1890,6 +2051,7 @@ export type Database = {
           faqs?: Json
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
+          payout_country?: string | null
           profile_id?: string
           rating_avg?: number | null
           rating_count?: number
@@ -2308,6 +2470,19 @@ export type Database = {
         Args: { p_student_id: string; p_tutor_id: string }
         Returns: boolean
       }
+      payout_account_check: {
+        Args: {
+          p_account: string
+          p_account_type: string
+          p_bank_code: string
+          p_branch: string
+          p_country: string
+          p_document: string
+          p_document_type: string
+        }
+        Returns: string
+      }
+      payout_beneficiary: { Args: { p_payout_id: string }; Returns: Json }
       pending_email_notifications: {
         Args: { p_limit?: number }
         Returns: {
@@ -2481,6 +2656,19 @@ export type Database = {
           last_message_at: string
           unread: number
         }[]
+      }
+      upsert_payout_account: {
+        Args: {
+          p_account?: string
+          p_account_type?: string
+          p_bank_code: string
+          p_branch?: string
+          p_document?: string
+          p_document_type: string
+          p_first_name: string
+          p_last_name: string
+        }
+        Returns: Json
       }
     }
     Enums: {

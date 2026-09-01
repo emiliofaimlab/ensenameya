@@ -81,8 +81,24 @@ export default async function CheckoutPage({
   // Vercel— mientras el calendario que las eligió y `/reservas/[id]/pagar` sí la
   // usan. O sea que podía enseñar una hora distinta de la reservada.
   const tz = await getUserTimezone();
+  // A0 · el cobrador depende del PAÍS DE COBRO DEL TUTOR desde `20260901140000`,
+  // así que hay que traerlo para preguntar por la misma fila que va a usar
+  // `create_booking_line` al congelar `payments.provider`. Consulta aparte
+  // —mismo motivo que la de `auto_accept_bookings` de abajo—: `getProductDetail`
+  // no trae la columna y lo comparten media docena de pantallas públicas.
+  //
+  // Se lee con el cliente del visitante y no con el admin a propósito:
+  // `service_role` no tiene ni un grant sobre `tutor_profiles` (regla de oro 9)
+  // y aquí no hace falta — la RLS ya publica la fila de un tutor `approved`, que
+  // es el único cuyos productos llegan a esta pantalla.
+  const { data: cobro } = await supabase
+    .from("tutor_profiles")
+    .select("payout_country")
+    .eq("profile_id", product.tutor.id)
+    .maybeSingle();
   // La pantalla tiene que decir la verdad ANTES de que el alumno pulse.
-  const simulado = (await activeChargeProvider()) === "simulated";
+  const simulado =
+    (await activeChargeProvider(cobro?.payout_country ?? null)) === "simulated";
 
   // M-02 · ¿esta mentoría acepta sola? Cambia lo que se promete abajo: con la
   // aceptación automática la reserva pagada salta a `confirmed` sin pasar por

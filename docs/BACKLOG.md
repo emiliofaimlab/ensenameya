@@ -266,9 +266,19 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 > redirección (Nombre, Email, Referrer First Name) estaban **apagados**, así que el referido llegaba
 > sin nada. Y lo determinante: **RF no ofrece un parámetro de código de referido**. Toda la atribución
 > construida —cookie `ey-ref` + `profiles.referral_code`, migración `20260729130000` (`cefb805`,
-> `b01f26a`)— **no puede funcionar** tal cual. Se activó el parámetro **`ref_email`**: la atribución
-> tiene que pasar a ser **por correo contra la API de RF**, no por código propio. El ticket no está
-> "hecho a falta de mergear": está **hecho contra una premisa equivocada** y hay que rehacer su AC.
+> `b01f26a`)— **no puede funcionar** tal cual. El ticket no está "hecho a falta de mergear": está
+> **hecho contra una premisa equivocada** y hay que rehacer su AC.
+>
+> ⚠️ **Corregido el 1-sep (D2): aquí decía «se activó el parámetro `ref_email`: la atribución tiene
+> que pasar a ser por correo contra la API de RF». Es falso.** `grep -rn "ref_email" src/ supabase/`
+> devuelve **cero** y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea de código**; lo repetían
+> igual `CLAUDE.md`, `PLAN-DESARROLLO.md` y `QA-LANZAMIENTO.md`, y los cuatro están corregidos. Lo
+> único que existe es la cookie (`middleware.ts:76-83` → metadata → `handle_new_user` →
+> `profiles.referral_code`), y **`referral_code` no lo lee nadie después**. Comprobado contra la
+> campaña real `50297`: no tiene URL de vuelta a la app configurada, así que el `?ref=` no llega
+> nunca y la rama de la cookie **no se ejecuta jamás** — **0 de 39 perfiles de dev** lo tienen. O sea
+> que la atribución no está «pendiente de cambiar de mecanismo»: **no existe**, y qué mecanismo usar
+> es una pregunta abierta (C-10), no una decisión ya tomada. Ver `docs/QA-LANZAMIENTO.md` §4.5.
 >
 > **2. `RF-03` (`EY-148`) probablemente sobra.** La propia integración **Stripe ↔ Referral Factory**
 > de la herramienta ya califica al referido siguiendo el **gasto acumulado de UN Customer de Stripe**
@@ -281,9 +291,10 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 >
 > **3. Bloqueantes que no son código.** Los **términos que RF le enseña al referido** son **su
 > plantilla sin rellenar**, con corchetes tipo `[Insert link to Privacy Policy here]` — pendiente de
-> redactar, y ahora hay texto propio del que copiarlos (DD-06, §4.5). `NEXT_PUBLIC_REFERRAL_URL` y
-> `REFERRAL_FACTORY_API_KEY` están **en local pero no en Vercel**, así que en la preview el bloque
-> "Invita y gana" de `US-1301` **no se pinta**.
+> redactar, y ahora hay texto propio del que copiarlos (DD-06, §4.5). **`NEXT_PUBLIC_REFERRAL_URL`**
+> está **en local pero no en Vercel**, así que en la preview el bloque "Invita y gana" de `US-1301`
+> **no se pinta** — y es esa URL sola la que lo decide: `REFERRAL_FACTORY_API_KEY` estaba en la
+> misma frase pero **no la lee ningún fichero de `src/`**, así que no pinta ni deja de pintar nada.
 
 ### EP-14 — Seguridad / RLS · [S1]
 | US | Historia | MoSCoW | SP | S | Criterio de aceptación | Refs |
@@ -970,7 +981,7 @@ hay detrás borra o cobra). Eran tres el 29-jul; al 7-ago son estas:
 | `CRON_SECRET` | los **tres** crons (purga `EY-86`, correo `US-1201`, reembolsos X-01) — **sin ella responden 503 y no corren** | ✅ **puesta**: Vercel ya la tenía, GitHub desde el **30-ago** |
 | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET` | checkout y webhook de Stripe (`EY-93`/`EY-95`) | ✅ ya en Vercel, scope **Preview** |
 | `RESEND_API_KEY` | envío real de correo (`US-1201`) — sin ella la cola se queda `pending`, no `failed` | ✅ **puesta el 17-ago** (local, Preview y Production) |
-| `REFERRAL_FACTORY_API_KEY` | atribución de referidos contra la API de RF | **Vercel** (está en local) |
+| `REFERRAL_FACTORY_API_KEY` | ⚠️ **nada — no la lee ningún fichero de `src/`** (1-sep). Esta celda decía «atribución de referidos contra la API de RF» y esa atribución no está escrita | — (no hace falta en Vercel) |
 | `APP_BASE_URL` (variable de repo en GitHub) | los workflows de correo y de reembolsos | ✅ **puesta el 30-ago** (`https://ensenameya.vercel.app`), tras **30 corridas en rojo**. ⚠️ Y la cadencia que entrega GitHub es **una cada 2-6 h**, no los 5/15 min que piden los `cron:` |
 
 **Decisiones del cliente (`C-xx`) al 7-ago.** **Resueltas:** C-01 (proveedor → **DLocal + Stripe**; lo

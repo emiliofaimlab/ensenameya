@@ -1319,8 +1319,19 @@ First Name) estaban **apagados**, así que llegaba sin nada — y **RF no ofrece
 de referido** para este tipo de campaña.
 
 → **La atribución por cookie `ey-ref` + `profiles.referral_code` (`EY-79` / US-1302, hoy en
-`In Review`) no puede funcionar así.** Es código correcto que nunca va a recibir un código. Se activó
-el parámetro **`ref_email`**; la atribución tiene que pasar a ser **por email contra la API de RF**.
+`In Review`) no puede funcionar así.** Es código correcto que nunca va a recibir un código.
+
+⚠️ **Corrección del 1-sep (D2): la frase que seguía era falsa.** Decía «se activó el parámetro
+**`ref_email`**; la atribución tiene que pasar a ser por email contra la API de RF» — escrito en
+pasado, como si el cambio ya estuviera dado. **`ref_email` no existe**: `grep -rn "ref_email" src/
+supabase/` devuelve **cero**, y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea de código**.
+Lo único implementado sigue siendo la cookie: `middleware.ts:76-83` → metadata del alta →
+`handle_new_user` → `profiles.referral_code`, y ese `referral_code` **no lo lee nadie después**.
+Verificado además contra la campaña real `50297`: ni su configuración de API ni la página que ve el
+referido mencionan `ensenameya`, o sea que **no hay redirección de vuelta** y el `?ref=` no llega
+nunca — **0 de 39 perfiles de dev** tienen `referral_code`. Lo correcto es decirlo en futuro:
+**atribuir referidos está entero por hacer**, y el AC de `EY-79` hay que rehacerlo, no revisarlo.
+Detalle completo, con el mapa fichero:línea, en `docs/QA-LANZAMIENTO.md` §4.5.
 
 **Y hay más:** la integración **Stripe ↔ Referral Factory** de la propia herramienta ya califica
 referidos siguiendo el **gasto acumulado de un Customer de Stripe** y los **descalifica al
@@ -1363,7 +1374,7 @@ column-grants que el proyecto ya usaba.
 | `STRIPE_WEBHOOK_SECRET` | ✅ | ✅ (Preview) | — |
 | `RESEND_API_KEY` | ❌ (falta la cuenta) | ✅ **sí (17-ago)** — comprobado el 30-ago: el cron devuelve `status:"ok"`, no `sin-proveedor` | — |
 | `NEXT_PUBLIC_REFERRAL_URL` | ✅ | ❌ **falta** | — |
-| `REFERRAL_FACTORY_API_KEY` | ✅ | ❌ **falta** | — |
+| `REFERRAL_FACTORY_API_KEY` | ✅ | ❌ falta — **y da igual: no la lee ningún fichero de `src/`** (1-sep). Ponerla no enciende nada | — |
 | `APP_BASE_URL` | — | — | ✅ **sí (30-ago)**: `https://ensenameya.vercel.app` (variable) |
 
 ⚠️ **Esto se cumplió al pie de la letra, y nadie lo miró.** El workflow está escrito para fallar en
@@ -1390,7 +1401,7 @@ misma marca sin conectar, con **dos juegos de términos**. Ningún merge lo arre
 | ~~Purga de grabaciones (RN-42)~~ | ✅ `CRON_SECRET` en Vercel ya estaba. ⚠️ Sigue sin haber nada que purgar, pero **no por el add-on** —que está activo (31-ago)—: a ninguna grabación le ha vencido la retención, la primera el **13-sep**. Que funcione cuando toque **sigue sin demostrarse** | Jose |
 | ~~**Vaciar la cola de correo de dev**~~ | ✅ **hecho el 30-ago**: 336 avisos a `failed` (§4.6). ⚠️ Vuelve a llenarse sola mientras el seed use `@ensenameya.dev` (sin MX): 187 de las 336 iban ahí | Jose |
 | ~~**Ejercitar X-01**~~ | ✅ **hecho el 30-ago**: los 2 `refund_requests` de dev ejecutados contra Stripe *test mode*, **$47,50**. El job **sí mueve dinero**. ⚠️ Salió que NTF-10 avisa al PEDIR el reembolso, no al moverlo | Jose |
-| Referidos (`EY-78`/`EY-79`) | `NEXT_PUBLIC_REFERRAL_URL` + `REFERRAL_FACTORY_API_KEY` en Vercel, **y rehacer la atribución por email** | Jose |
+| Referidos (`EY-78`/`EY-79`) | `NEXT_PUBLIC_REFERRAL_URL` en Vercel (lo único que enciende algo: pinta el bloque). ⚠️ **La atribución no es «rehacerla por email»: es hacerla, y aún no se sabe cómo** — RF no manda código de vuelta y su API tampoco recibe hoy a nadie desde aquí. Decisión de producto antes que código (C-10) | Jose / Cliente |
 | Términos de la campaña de RF | están sin rellenar (plantilla con corchetes) | Cliente / Jose |
 | Cobro real (live mode) | `sk_live_` — o sea el KYC de Stripe del cliente | Cliente |
 | DLocal + payouts | cuenta (rechazada) y contrato; Connect exige KYC | Cliente / Veronica |

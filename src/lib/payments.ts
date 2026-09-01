@@ -37,17 +37,35 @@ import type { AnyProvider } from "@/lib/payments/port";
  * Va con `service_role` porque la tabla no está concedida a `authenticated`:
  * es configuración de plataforma, y el runtime la lee dentro de las RPC.
  *
- * ponytail: mira la regla activa sin filtrar por país porque `create_booking`
- * hoy resuelve el payee a 'VE' fijo (20260715170000:121). El día que el país
- * salga del tutor, esto tiene que recibirlo y filtrar igual que la RPC — y
- * entonces la firma de aquí se parecerá a la del Doc 6,
- * `resolveCharge(payer, payee)`.
+ * ⚠️ HAY QUE PASARLE EL PAÍS DEL TUTOR, y desde A0 (`20260901140000`) no es
+ * opcional. Hasta esa migración la tabla tenía UNA fila y mirar «la activa» sin
+ * filtrar daba siempre la respuesta correcta por accidente; ahora tiene diez —
+ * ocho países de dLocal Go, Venezuela y la del tutor que aún no ha declarado
+ * país— y un `order by priority limit 1` sin filtro devolvería la de cualquiera.
+ * Se filtra exactamente igual que `create_booking_line`, que es lo que de verdad
+ * congela `payments.provider`: si esta función y la RPC no coinciden, la
+ * pantalla promete una pasarela y cobra otra.
+ *
+ * `payeeCountry` null NO es «da igual el país»: es el tutor que no lo ha
+ * declarado, y tiene su propia fila (`payee_country` null). Por eso el filtro es
+ * `.is(...)` y no «sin filtro».
  */
-export async function activeChargeProvider(): Promise<string> {
-  const { data } = await createAdminClient()
+export async function activeChargeProvider(
+  payeeCountry: string | null,
+): Promise<string> {
+  const base = createAdminClient()
     .from("payment_routing_rules")
     .select("charge_provider")
     .eq("is_active", true)
+    // El comodín de esta tabla es el PAGADOR, y solo él: la RPC filtra por
+    // `payer_country is null` y una fila con país de pagador no la ve nadie.
+    .is("payer_country", null);
+
+  const { data } = await (
+    payeeCountry
+      ? base.eq("payee_country", payeeCountry)
+      : base.is("payee_country", null)
+  )
     .order("priority")
     .limit(1)
     .maybeSingle();
@@ -55,6 +73,44 @@ export async function activeChargeProvider(): Promise<string> {
   // Sin regla no se puede reservar (`create_booking` lanza RN-33). Se asume el
   // camino conservador: enseñar el aviso de simulado antes que fingir un cobro.
   return data?.charge_provider ?? "simulated";
+}
+
+/**
+ * A0 · LOS PAÍSES A LOS QUE DE VERDAD PODEMOS TRANSFERIR.
+ *
+ * Es la lista que se le ofrece al tutor para declarar su país de cobro, y sale
+ * de la tabla de ruteo en vez de estar escrita en el formulario por un motivo
+ * concreto: declarar un país sin regla activa deja sus mentorías sin vender
+ * (RN-33, «sin ruta de pago disponible para el destino»). Una lista a mano en el
+ * TSX se desincroniza el día que alguien active o desactive una fila, y lo que
+ * se rompe entonces no es un desplegable: es el checkout de ese tutor.
+ *
+ * ⚠️ SE EXCLUYE `payout_provider = 'simulated'`, que es lo que separa «tenemos
+ * regla» de «podemos pagarte». Hoy eso deja fuera a Venezuela —que conserva
+ * fila para no dejar sin vender a quien ya la tenga declarada, pero donde no
+ * transfiere ni dLocal Go ni Stripe— y deja fuera a Colombia por no tener fila
+ * ninguna. Es el mismo criterio con el que `adapterFor` trata 'simulated': no
+ * es un proveedor, es la ausencia de uno.
+ *
+ * También se excluye la fila con `payee_country` null: es la regla del tutor que
+ * NO ha declarado país, no un país que se pueda elegir.
+ */
+export async function payoutCountries(): Promise<string[]> {
+  const { data } = await createAdminClient()
+    .from("payment_routing_rules")
+    .select("payee_country")
+    .eq("is_active", true)
+    .is("payer_country", null)
+    .not("payee_country", "is", null)
+    .neq("payout_provider", "simulated")
+    .order("payee_country");
+
+  const codigos = (data ?? [])
+    .map((r) => r.payee_country)
+    .filter((c): c is string => Boolean(c));
+  // Un país podría tener varias filas activas (distinta prioridad); al tutor se
+  // le ofrece una vez.
+  return [...new Set(codigos)];
 }
 
 /**
