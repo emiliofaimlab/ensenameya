@@ -57,11 +57,24 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
       "La reserva quedó cancelada y el horario volvió a estar libre. Si había un reembolso, se aplicó según la política de cancelación.",
     cta: "Ver el detalle",
   }),
+  // NTF-14 · el correo de cierre de clase. Lo pidió el cliente con la grabación
+  // dentro (acta del 29-ago, ítem 12), y el enlace YA llevaba al sitio correcto:
+  // su `cta` resuelve a `/reservas/{id}` (ver `rutaFor`), que es justo la
+  // pantalla donde vive el control de grabación. Lo que faltaba era decirlo.
+  //
+  // ⚠️ Y SE DICE EN CONDICIONAL, QUE NO ES TIMIDEZ. RN-42 exige el sí de las DOS
+  // partes para grabar, así que lo NORMAL es que una clase no tenga vídeo.
+  // Prometer «tu grabación» en un correo que sale siempre convertiría el caso
+  // habitual en una decepción, y además hay tres formas distintas de no tenerla
+  // —nadie abrió la sala, nadie consintió, o caducaron los 30 días—. La página
+  // sabe distinguirlas y el correo no, así que el correo se limita a llevarte
+  // allí.
   review_request: () => ({
     asunto: "¿Cómo te fue la mentoría?",
     cuerpo:
-      "Tu mentoría terminó. Dejar una reseña ayuda a otros alumnos a elegir, y solo lleva un minuto.",
-    cta: "Dejar mi reseña",
+      "Tu mentoría terminó. Dejar una reseña ayuda a otros alumnos a elegir, y solo lleva un minuto. " +
+      "Y si la clase se grabó, encontrarás la grabación en esa misma página durante 30 días.",
+    cta: "Ver mi clase y dejar reseña",
   }),
   payment_receipt: (p) => ({
     asunto: "Recibimos tu pago",

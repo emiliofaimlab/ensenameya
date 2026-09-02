@@ -166,7 +166,24 @@ export function SiteFooter() {
         <hr className="mt-6 border-t border-primary lg:mt-8" />
 
         <div className="flex flex-col gap-2 pt-6 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:pt-4">
-          <p>© {AÑO} {COMPANY.brand}</p>
+          {/* La leyenda de autoría que pidió el cliente (acta del 29-ago, ítem
+              16). Va junto al copyright y no en su propia fila: son la misma
+              clase de letra pequeña —quién es dueño y quién lo construyó— y
+              separarlas añadiría una línea a un pie que en móvil ya apila seis.
+
+              El corazón va como emoji y no como SVG a propósito: hereda el
+              color y el tamaño del texto, así que no hay que mantener un icono
+              más ni ajustarlo cuando cambie la tipografía. Se le pone
+              `aria-hidden` porque un lector de pantalla leyendo «emoji corazón
+              rojo» en mitad de la frase estorba más de lo que aporta. */}
+          <p className="flex flex-wrap items-center gap-x-1.5">
+            <span>© {AÑO} {COMPANY.brand}</span>
+            <span aria-hidden className="text-muted-foreground/50">·</span>
+            <span>
+              made with <span aria-hidden>❤️</span>
+              <span className="sr-only">amor</span> by faimlab
+            </span>
+          </p>
 
           <div className="flex flex-wrap items-center gap-4">
             {/* `mailto:` y no texto plano: en móvil un correo que no se puede
