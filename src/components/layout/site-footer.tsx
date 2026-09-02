@@ -170,34 +170,41 @@ export function SiteFooter() {
             `lg:` devuelve el 32/16 del escritorio. */}
         <hr className="mt-6 border-t border-primary lg:mt-8" />
 
-        <div className="flex flex-col gap-2 pt-6 text-[13px] text-muted-foreground sm:flex-row sm:items-center sm:justify-between lg:pt-4">
-          {/* La leyenda de autoría que pidió el cliente (acta del 29-ago, ítem
-              16). Va junto al copyright y no en su propia fila: son la misma
-              clase de letra pequeña —quién es dueño y quién lo construyó— y
-              separarlas añadiría una línea a un pie que en móvil ya apila seis.
+        {/* ⚠️ REJILLA DE TRES COLUMNAS Y NO `justify-between`, y el motivo es la
+            petición: la leyenda tiene que ir CENTRADA. Con `justify-between` y
+            tres hijos, el del medio queda donde lo dejen los anchos de los
+            otros dos —aquí el copyright y el correo miden distinto, así que
+            caería descentrada y encima se movería sola cuando cambie el año o
+            el correo—. `grid-cols-3` con las laterales iguales (`1fr`) fija el
+            centro en el centro real del pie, pase lo que pase con el contenido.
+
+            En móvil se apila y se centra todo: a 360 px las tres piezas no
+            caben en fila, y alinear a la izquierda una sola línea suelta debajo
+            del bloque de enlaces se lee como un descuido. */}
+        <div className="flex flex-col items-center gap-3 pt-6 text-center text-[13px] text-muted-foreground sm:grid sm:grid-cols-3 sm:items-center sm:gap-2 sm:text-left lg:pt-4">
+          {/* «Enséñame Ya, LLC» y no `COMPANY.legalName`: la razón social
+              registrada es «Ensename Ya, LLC», SIN acentos y a propósito (ver
+              `lib/company.ts`). En el pie manda la marca, que sí los lleva, y
+              el «LLC» identifica a la sociedad. Si algún día hace falta la
+              cadena registrada exacta —un contrato, una pasarela— es
+              `COMPANY.legalName`, que sigue vivo y lo usa el §39 de los
+              Términos. */}
+          <p>© {AÑO} {COMPANY.brand}, LLC</p>
+
+          {/* La leyenda de autoría (acta del 29-ago, ítem 16), centrada.
 
               El corazón va como emoji y no como SVG a propósito: hereda el
               color y el tamaño del texto, así que no hay que mantener un icono
               más ni ajustarlo cuando cambie la tipografía. Se le pone
               `aria-hidden` porque un lector de pantalla leyendo «emoji corazón
-              rojo» en mitad de la frase estorba más de lo que aporta. */}
-          <p className="flex flex-wrap items-center gap-x-1.5">
-            {/* «Enséñame Ya, LLC» y no `COMPANY.legalName`: la razón social
-                registrada es «Ensename Ya, LLC», SIN acentos y a propósito (ver
-                `lib/company.ts`). En el pie manda la marca, que sí los lleva, y
-                el «LLC» identifica a la sociedad. Si algún día hace falta la
-                cadena registrada exacta —un contrato, una pasarela— es
-                `COMPANY.legalName`, que sigue vivo y lo usa el §39 de los
-                Términos. */}
-            <span>© {AÑO} {COMPANY.brand}, LLC</span>
-            <span aria-hidden className="text-muted-foreground/50">·</span>
-            <span>
-              made with <span aria-hidden>❤️</span>
-              <span className="sr-only">amor</span> by faimlab
-            </span>
+              rojo» en mitad de la frase estorba más de lo que aporta, y el
+              `sr-only` de al lado dice la palabra. */}
+          <p className="sm:text-center">
+            made with <span aria-hidden>❤️</span>
+            <span className="sr-only">amor</span> by faimlab
           </p>
 
-          <div className="flex flex-wrap items-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-4 sm:justify-end">
             {/* `mailto:` y no texto plano: en móvil un correo que no se puede
                 pulsar es medio canal, y dLocal comprueba que el contacto sea
                 accesible de verdad. */}
