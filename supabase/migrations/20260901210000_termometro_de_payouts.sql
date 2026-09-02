@@ -85,6 +85,15 @@ as $$
     --   select id, tutor_id, amount, currency, provider_metadata
     --     from public.payouts
     --    where status = 'processing' and provider_payout_id is null;
+    --
+    -- 🔑 Y NO HAY QUE BUSCARLAS POR IMPORTE Y FECHA: cada payout que manda C2
+    -- lleva su marca dentro. En dLocal Go va en `description` y es
+    -- `EY-<payouts.id>-<intento>`, con el intento en
+    -- `provider_metadata -> 'c2' -> 'intento'` (1 si no está). O sea que la fila
+    -- de arriba se busca en el panel del proveedor pegando esa cadena, y la
+    -- respuesta es sí o no — no «se le parece». Los ids de intentos anteriores
+    -- que el proveedor dio por muertos quedan en
+    -- `provider_metadata -> 'c2' -> 'intentos_muertos'`.
     'sin_identificar', (
       select count(*) from public.payouts p
        where p.status = 'processing'::public.payout_status

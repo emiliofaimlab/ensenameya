@@ -411,25 +411,37 @@ export type PayoutInput = {
   /** `payouts.payee_country`, congelado al construir la orden. */
   payeeCountry: string;
   /**
-   * 🔴 LA MARCA DE TIEMPO QUE SUSTITUYE A LA CLAVE DE IDEMPOTENCIA, y sin ella
-   * este puerto no se puede usar sin arriesgar un pago doble.
+   * 🔴 EL NÚMERO DE INTENTO. Junto con `payoutId` forma LA MARCA que viaja en
+   * `description` y que sustituye a la clave de idempotencia que esta API no
+   * tiene. Empieza en 1.
    *
-   * `POST /v1/payouts` de dLocal Go **no tiene clave de idempotencia de ninguna
-   * clase** —ni cabecera, ni `external_id`, ni `order_id` como en el cobro
-   * (comprobado contra el sandbox el 1-sep-2026)— y además **un 400 puede haber
-   * creado el payout igual**: en la cuenta de sandbox hay tres en `FAILED`
-   * nacidos de respuestas de error. O sea que «reintentar porque no me
-   * contestaron» es literalmente pagar dos veces.
+   * ⚠️ NO SE INCREMENTA POR REINTENTAR. Sube en UN solo caso: cuando el payout
+   * que esta orden tenía anotado está muerto en el proveedor (`REJECTED` /
+   * `FAILED` / `CANCELLED`) y un admin ha pulsado `manage_payout('retry')`. Es
+   * lo que separa «el payout viejo, que no pagó» de «el que estoy creando
+   * ahora»: sin ese contador, el barrido del segundo intento encontraría el
+   * cadáver del primero, lo adoptaría y volvería a marcar la orden `failed` para
+   * siempre — que es exactamente lo que hacía la versión anterior.
    *
-   * Lo único que queda es reconocer nuestro propio payout entre los del
-   * proveedor, y para eso hace falta una frontera temporal: el instante en que
-   * ESTA orden se reclamó (`payouts.status` → 'processing'). Cualquier payout
-   * del proveedor que cuadre en importe, país y moneda y sea POSTERIOR a este
-   * sello solo puede ser el nuestro. Sin el sello, «cuadra en importe y país»
-   * también describe el payout de la semana pasada al mismo tutor.
+   * Vive en `payouts.provider_metadata.c2.intento` y lo escribe el job.
+   */
+  intento: number;
+  /**
+   * HASTA DÓNDE HAY QUE PAGINAR HACIA ATRÁS, y **nada más que eso**.
+   *
+   * Es el instante en que esta orden se reclamó (`payouts.status` →
+   * 'processing'). Antes era el criterio de identidad —«cualquier payout
+   * posterior a este sello que cuadre en importe y país solo puede ser el
+   * nuestro»— y era falso: también describe el payout de otro tutor por el mismo
+   * importe creado un minuto después. Ahora la identidad la da la marca de
+   * `description` y esto solo dice cuándo puede el barrido dejar de pasear
+   * páginas, porque el listado va del más reciente al más antiguo.
+   *
+   * Consecuencia: equivocarse aquí ya no puede adoptar el payout de nadie. Solo
+   * puede hacer que se miren más páginas de la cuenta, que es gratis.
    *
    * ISO-8601 con zona. Lo escribe el job al reclamar y lo relee de
-   * `payouts.provider_metadata` en las pasadas siguientes, porque un reintento
+   * `payouts.provider_metadata` en las pasadas siguientes, porque un barrido
    * tiene que buscar contra el sello del PRIMER intento y no contra el de hoy.
    */
   claimedAt: string;
@@ -439,14 +451,12 @@ export type PayoutInput = {
    *
    *   · `false` — la fila estaba 'scheduled' y este proceso acaba de ganarla con
    *     un `update … where status='scheduled'`. Nadie ha llamado al proveedor
-   *     por ella: `claimedAt` es de hace un instante, así que **no puede existir
-   *     un payout nuestro posterior a él** y barrer antes de crear no aportaría
-   *     nada. Se crea.
+   *     por ella con ESTA marca, así que se puede crear.
    *   · `true` — la fila ya estaba 'processing', o sea que una pasada anterior
    *     la reclamó. Puede que llegara a crear el payout y puede que no, y esa
    *     duda es justo la que no se resuelve reintentando. **Aquí NO se crea
-   *     nada**: se barre el proveedor y se adopta lo que haya, o se devuelve
-   *     `sin-rastro` si se puede demostrar que no hay nada.
+   *     nada**: se barre el proveedor buscando la marca y se adopta lo que haya,
+   *     o se devuelve `sin-rastro` si se puede DEMOSTRAR que no hay nada.
    */
   reanudar: boolean;
   /**
@@ -477,9 +487,52 @@ export type PayoutResult =
    * `provider_payout_id` y la fila se queda 'processing': NO es 'paid' y no
    * puede serlo, o NTF-12 volvería a mentir.
    */
-  | { estado: "enviado"; payoutId: string; detalle: string; adoptado: boolean; crudo: unknown }
+  | { estado: "enviado"; payoutId: string; detalle: string; adoptado: boolean }
   /** El proveedor confirma que el dinero salió. Esto —y solo esto— es 'paid'. */
-  | { estado: "pagado"; payoutId: string; detalle: string; adoptado: boolean; crudo: unknown }
+  | { estado: "pagado"; payoutId: string; detalle: string; adoptado: boolean }
+  /**
+   * 🔑 EL IDENTIFICADOR QUE ESTA ORDEN ARRASTRA ESTÁ MUERTO. El proveedor lo da
+   * por `REJECTED`/`FAILED`/`CANCELLED`, así que no pagó ni va a pagar, y la
+   * orden puede volver a la cola **con un intento nuevo**.
+   *
+   * Existe porque sin él `manage_payout('retry')` no reintentaba nunca: devolvía
+   * la fila a 'scheduled' arrastrando el `provider_payout_id` del payout
+   * rechazado, el adaptador preguntaba por ese id, el proveedor repetía que
+   * estaba muerto y la orden volvía a 'failed'. Un bucle silencioso entre el
+   * botón del admin y el job.
+   *
+   * Quien lo reciba tiene que hacer las tres cosas juntas: archivar
+   * `payoutId` en el rastro, subir `intento`, y **borrar**
+   * `provider_payout_id`. Hacer solo las dos primeras deja el bucle intacto.
+   */
+  | { estado: "difunto"; payoutId: string; detalle: string; mensaje: string }
+  /**
+   * 🔴 NO HAY CREDENCIAL VÁLIDA (401/403). **No es un desenlace de esta orden:
+   * es un job que no puede trabajar**, y la fila no se toca.
+   *
+   * Va aparte de `transitorio` y de `en-duda` a propósito. Como `en-duda` marcaba
+   * la cola entera y esas filas solo salen si las mira una persona, un secreto
+   * mal puesto generaba diez incidencias falsas por pasada. Y como `transitorio`
+   * haría que las diez volvieran a la cola para fallar igual dentro de un rato,
+   * escondiendo la causa detrás de un contador que sube.
+   *
+   * Quien lo reciba **para el lote**: lo que le pase a esta orden le va a pasar
+   * a todas.
+   *
+   * ⚠️ `pudoCrear` DECIDE SI LA FILA VUELVE A LA COLA, y no es un detalle:
+   *   · `false` — el 401/403 lo devolvió la propia llamada, o sea que la
+   *     petición no llegó a ejecutarse y **no se creó nada**. La orden puede
+   *     volver a 'scheduled' intacta.
+   *   · `true` — la credencial se cayó DURANTE el barrido que comprobaba si una
+   *     creación anterior había cuajado. Esa duda sigue en pie, así que la fila
+   *     no se toca.
+   *
+   * Sin esa distinción, cada pasada con la clave rota deja una orden reclamada y
+   * sin identificador, que es justo la fila que `payouts_backlog()` cuenta como
+   * «puede haber un pago sin conciliar». La alarma que más importa dejaría de
+   * significar nada por culpa de una variable de entorno.
+   */
+  | { estado: "sin-credencial"; mensaje: string; pudoCrear: boolean }
   /**
    * 🔴 NI SE SABE NI SE PUEDE SABER si la orden llegó a crearse: falló la
    * llamada Y falló también el barrido que tenía que comprobarlo. La fila se
@@ -489,10 +542,13 @@ export type PayoutResult =
    */
   | { estado: "en-duda"; mensaje: string; causa: unknown }
   /**
-   * El barrido de una orden reclamada demostró que **no se llegó a crear nada**:
-   * el proveedor devolvió su lista y ningún payout posterior a `claimedAt` cuadra
-   * con esta orden. Es la única prueba de ausencia que existe sin clave de
-   * idempotencia, y con ella la fila puede volver a 'scheduled' sin riesgo.
+   * El barrido demostró que **no se llegó a crear nada**: se recorrieron todas
+   * las páginas que podían contener nuestra marca —hasta agotar `totalPages` o
+   * hasta cruzar la frontera de `claimedAt`— y ninguna la lleva.
+   *
+   * ⚠️ «DEMOSTRÓ» ES LITERAL Y ES LA PALABRA MÁS CARA DE ESTE ARCHIVO. Es lo
+   * único que autoriza a devolver la fila a 'scheduled', o sea a mandar el pago
+   * otra vez. Quedarse sin páginas que mirar NO es esto: eso es `en-duda`.
    */
   | { estado: "sin-rastro"; mensaje: string }
   /**

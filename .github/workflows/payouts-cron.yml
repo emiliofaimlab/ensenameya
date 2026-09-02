@@ -143,7 +143,19 @@ jobs:
               echo "Deployment Protection → Protection Bypass for Automation)."
               exit 1 ;;
             503)
-              echo "::error::503 — falta CRON_SECRET en VERCEL (aquí sí está)."
+              # ⚠️ DOS COSAS MUY DISTINTAS DAN 503 Y MANDAN A SITIOS OPUESTOS. El
+              # cuerpo las separa: sin `status` es que el endpoint ni arrancó
+              # (falta CRON_SECRET en Vercel); con `status: "sin-credencial"` es
+              # que el job corrió y el PSP le rechazó las claves. Distinguirlas
+              # aquí ahorra la tarde de buscar una variable que sí estaba.
+              if grep -q '"sin-credencial"' /tmp/payouts.json; then
+                echo "::error::503 — el PSP RECHAZÓ las credenciales (401/403). El lote se paró"
+                echo "a propósito: con la clave rota, lo que le pase a una orden le pasa a todas."
+                echo "Revisar DLOCALGO_API_KEY / DLOCALGO_SECRET_KEY en Vercel. Ninguna orden"
+                echo "quedó marcada como fallida y no se ha mandado dinero de más."
+              else
+                echo "::error::503 — falta CRON_SECRET en VERCEL (aquí sí está)."
+              fi
               exit 1 ;;
             401)
               echo "::error::401 — CRON_SECRET no coincide entre GitHub y Vercel."
@@ -176,6 +188,8 @@ jobs:
             credencial=$(jq -r '.bloqueos.sinCredencial // 0' /tmp/payouts.json)
             datos=$(jq -r '.bloqueos.sinDatosDeCobro // 0'   /tmp/payouts.json)
             descuadre=$(jq -r '.bloqueos.descuadrados // 0'  /tmp/payouts.json)
+            atascadas=$(jq -r '.atascadas // 0'        /tmp/payouts.json)
+            difuntos=$(jq -r '.difuntos // 0'          /tmp/payouts.json)
 
             # 🔴 LA ÚNICA CIFRA QUE NUNCA PUEDE QUEDARSE ARRIBA. Una orden
             # 'processing' sin identificador significa que puede haber un payout
@@ -190,6 +204,17 @@ jobs:
             fi
             if [ "$duda" != "0" ] && [ "$duda" != "null" ]; then
               echo "::error::$duda orden(es) en duda en esta pasada — ver el log de Vercel."
+            fi
+
+            # 🔴 ÓRDENES EN VUELO QUE LLEVAN MÁS DE UN DÍA SIN MOVERSE. Es lo que
+            # delata un atasco. Ya no puede parar los pagos nuevos —las dos colas
+            # tienen cupos separados— pero sigue significando que hay dinero de un
+            # tutor detenido, y ninguna pasada lo va a resolver sola.
+            if [ "$atascadas" != "0" ] && [ "$atascadas" != "null" ]; then
+              echo "::error::$atascadas payout(s) en vuelo sin moverse desde hace más de 24 h."
+              echo "O esperan a que una persona los mire (en duda), o están parados en el PSP."
+              echo "  select id, tutor_id, amount, currency, provider_payout_id, provider_metadata"
+              echo "    from public.payouts where status = 'processing' and updated_at < now() - interval '1 day';"
             fi
 
             # Rechazos del proveedor: dinero prometido que no va a salir sin que
@@ -229,7 +254,7 @@ jobs:
             {
               echo "**Payouts** · estado \`$estado\` · pagados **$pagados** ($importe) · en vuelo **$enviados** · adoptados **$adoptados**"
               echo ""
-              echo "Rechazados **$rechazados** · en duda **$duda** · sin identificar **$sinid**"
+              echo "Rechazados **$rechazados** · en duda **$duda** · sin identificar **$sinid** · atascadas **$atascadas** · reintentos rearmados **$difuntos**"
               echo ""
               echo "Bloqueos: cambio **$cambio** · balance ajeno **$balance** · sin fondos **$fondos** · sin datos **$datos**"
               echo ""

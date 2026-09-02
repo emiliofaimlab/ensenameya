@@ -131,9 +131,10 @@ export class DlocalGoError extends Error {
  * ⚠️ SIN REINTENTOS. Sin SDK no hay reintento con backoff, y añadirlo a ciegas
  * aquí sería peligroso: `POST /v1/payments` NO es idempotente (ver 5009 arriba)
  * y `POST /v1/payouts` no tiene NINGUNA clave de idempotencia —comprobado
- * contra el sandbox el 1-sep-2026: el cuerpo documentado no admite `external_id`
- * ni equivalente—, así que un reintento automático de un payout es un pago
- * doble. Quien quiera reintentar, que lo decida con la fila delante.
+ * contra el sandbox: el cuerpo no admite `external_id` ni equivalente, y dos
+ * POST con la misma `description` crean DOS payouts—, así que un reintento
+ * automático de un payout es un pago doble. Quien quiera reintentar, que lo
+ * decida con la fila delante.
  */
 export async function dlocalgoFetch<T>(
   metodo: "GET" | "POST",
@@ -326,59 +327,91 @@ export type EstadoPayoutDlocalGo =
   | "FAILED";
 
 /**
- * Un payout tal como lo devuelve la API.
+ * Un payout tal como lo devuelve la API. **Transcrito de respuestas reales del
+ * sandbox el 2-sep-2026**, no de la documentación.
  *
- * ⚠️ TODO ES OPCIONAL MENOS `id` Y `status`, Y NO ES PEREZA. Al escribir esto
- * la cuenta de sandbox devolvía `403 {"code":3001,"message":"Invalid
- * Credentials."}` a TODA petición —incluidas las que sí funcionaron el mismo día
- * con estas mismas claves— así que la forma exacta de la respuesta **no está
- * verificada contra la API viva**, al revés que todo lo demás de este archivo.
- * Lo que sí está verificado por quien abrió la cuenta: los ocho estados, que el
- * cuerpo no admite `external_id` ni equivalente, y que un 400 puede haber creado
- * el payout igual.
+ * ⚠️ SE LLAMA `payout_id`, NO `id`. Es el error más caro de este archivo y ya se
+ * cometió: la versión anterior leía `p.id`, que en esta API no existe, así que
+ * `provider_payout_id` se guardaba como `undefined` y **todos los pagos perdían
+ * su identificador** — que es justo la fila que `payouts_backlog()` cuenta como
+ * `sin_identificar` y la que nadie puede conciliar después.
  *
- * Consecuencia práctica: los campos que el barrido de reconciliación necesita se
- * leen con `campoNumero`/`campoTexto` probando VARIOS nombres, y lo que no se
- * puede leer se trata como «podría ser nuestro» (ver `dlocal-provider.ts`).
- * Cuando alguien pueda volver a llamar a la API, se transcribe la respuesta real
- * aquí y esos alias sobran.
+ * ⚠️ Y HAY DOS FORMAS DISTINTAS SEGÚN DE DÓNDE VENGA. Medido:
+ *
+ *   · `POST /v1/payouts` devuelve  {payout_id, flow_type, country,
+ *     currency_to_pay, amount, purpose, description, status} — **sin fecha**.
+ *   · `GET /v1/payouts` y `GET /v1/payouts/{id}` devuelven  {payout_id,
+ *     created_at, completed_at?, currency_to_pay, purpose, flow_type,
+ *     description, beneficiary_first_name, beneficiary_last_name,
+ *     balance_fee_amount, balance_total_amount, amount, bank_name, status}
+ *     — **sin país**.
+ *
+ * O sea que NINGUNA de las dos trae `transfer_country`, `transfer_amount`,
+ * `beneficiary_document` ni `created_date`. La versión anterior cotejaba por
+ * esos cuatro nombres: los cuatro salían `null` siempre, así que su barrido no
+ * podía ni identificar ni descartar un solo payout. Por eso ya no hay lectores
+ * de alias (`campoNumero`/`campoTexto`): con la forma real medida, adivinar
+ * nombres es lo que escondía el fallo.
+ *
+ * ⚠️ `beneficiary_first_name` y `beneficiary_last_name` VUELVEN EN EL LISTADO.
+ * Es PII y este objeto no se registra entero en ningún sitio: al log y a
+ * `provider_metadata` van el id, el estado y la marca, nunca el payout crudo.
  */
 export type PayoutDlocalGo = {
-  id: string;
+  /** ⚠️ `payout_id`, no `id`. Ver arriba. */
+  payout_id: string;
   status: EstadoPayoutDlocalGo | string;
-  /** El importe en unidad MAYOR, como todo en esta API. */
-  transfer_amount?: number;
+  /**
+   * 🔑 NUESTRA MARCA. Es texto libre que viaja de ida y vuelta sin tocarse
+   * (medido), y es lo único de esta API que permite decir «este payout es el de
+   * ESTA orden» en vez de «se le parece». Ver `marcaDe()` en el adaptador.
+   */
+  description?: string | null;
+  /**
+   * El importe EN LA MONEDA DEL BENEFICIARIO y en unidad mayor. Es lo que
+   * mandamos como `transfer_amount`; el cargo contra el balance va aparte en
+   * `balance_total_amount` (con `balance_fee_amount` dentro).
+   */
   amount?: number;
-  /** La moneda que recibe el beneficiario. */
   currency_to_pay?: string;
-  currency?: string;
-  transfer_country?: string;
-  country?: string;
-  beneficiary_document?: string;
-  created_date?: string;
+  /**
+   * ⚠️ SIN ZONA HORARIA: llega como `"2026-09-02T16:11:12"`. **Es UTC**, medido
+   * contra nuestro propio reloj en el momento de crear un payout (16:11:11 UTC
+   * nuestro → 16:11:12 suyo). Pero `Date.parse` de una fecha sin zona la
+   * interpreta como HORA LOCAL, así que leerla a pelo desplaza el instante el
+   * offset de la máquina —en Vercel, cero; en un portátil a -04:00, cuatro horas
+   * en el futuro—. Se lee SIEMPRE con `fechaDePayout()`.
+   *
+   * No viene en la respuesta del POST.
+   */
   created_at?: string;
-  status_code?: string | number;
-  status_detail?: string;
-  [k: string]: unknown;
+  completed_at?: string;
+  /** Solo en la respuesta del POST. El listado no lo trae. */
+  country?: string;
+  flow_type?: string;
+  purpose?: string;
+  /** Eco del `bank_code` que mandamos: `"BankCode: 037"`. */
+  bank_name?: string;
+  balance_fee_amount?: number;
+  balance_total_amount?: number;
+  /** PII. No se registra. */
+  beneficiary_first_name?: string;
+  /** PII. No se registra. */
+  beneficiary_last_name?: string;
 };
 
-/** Lee un número de un payout probando los nombres que puede traer. */
-export function campoNumero(p: PayoutDlocalGo, ...claves: string[]): number | null {
-  for (const k of claves) {
-    const v = p[k];
-    if (typeof v === "number" && Number.isFinite(v)) return v;
-    if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
-  }
-  return null;
-}
-
-/** Lo mismo para texto. Devuelve en mayúsculas: los códigos de país y moneda lo son. */
-export function campoTexto(p: PayoutDlocalGo, ...claves: string[]): string | null {
-  for (const k of claves) {
-    const v = p[k];
-    if (typeof v === "string" && v.trim() !== "") return v.trim().toUpperCase();
-  }
-  return null;
+/**
+ * Lee `created_at` como lo que es: UTC sin marcarlo.
+ *
+ * Devuelve `NaN` si no hay fecha o no se puede leer, y quien llama tiene que
+ * tratar ese `NaN` como «no sé cuándo», nunca como «hace mucho».
+ */
+export function fechaDePayout(p: PayoutDlocalGo): number {
+  const bruto = p.created_at;
+  if (!bruto) return NaN;
+  // Si ya trae zona (`Z` o `±hh:mm`) se respeta; si no, se declara UTC.
+  const conZona = /[Zz]$|[+-]\d{2}:?\d{2}$/.test(bruto) ? bruto : `${bruto}Z`;
+  return Date.parse(conZona);
 }
 
 /**
@@ -403,6 +436,20 @@ export type NuevoPayoutDlocalGo = {
   bank_account: string;
   bank_account_type?: string | null;
   bank_branch?: string | null;
+  /**
+   * 🔑 LA MARCA. Texto libre, **máximo 255 caracteres** (medido: 289 devuelve
+   * `7000 Field description exceeds max length 255`), y viaja de ida y vuelta
+   * intacto tanto al listado como al detalle.
+   *
+   * Es lo que convierte el barrido de «este payout se le parece» en «este payout
+   * ES el de esta orden», y por tanto lo único que sostiene la idempotencia de
+   * esta API. Lo compone `marcaDe()` en el adaptador; aquí solo se transporta.
+   *
+   * ⚠️ dLocal NO la usa para nada: no deduplica por ella. Dos POST con la misma
+   * `description` crean DOS payouts (medido). La marca sirve para RECONOCER, no
+   * para impedir.
+   */
+  description?: string;
 };
 
 /**
@@ -410,9 +457,18 @@ export type NuevoPayoutDlocalGo = {
  * este archivo que NO SE PUEDE REINTENTAR A CIEGAS.
  *
  * No hay `Idempotency-Key`, no hay `external_id`, y `order_id` —el sustituto que
- * salva al cobro— no existe en payouts. Además un 400 puede haber creado el
- * payout igual. Quien llame a esto tiene que haber leído la emulación de
- * idempotencia de `dlocal-provider.ts` entera; no hay atajo.
+ * salva al cobro— no existe en payouts. Lo único que hay es `description`, texto
+ * libre que vuelve intacto: **no impide el pago doble, permite reconocerlo**.
+ *
+ * ⚠️ Y UN 400 PUEDE HABER CREADO EL PAYOUT IGUAL. No es folclore: el 2-sep-2026,
+ * un `POST` con un documento inválido devolvió
+ * `400 {"code":7000,"message":"Invalid param: beneficiary.document.id …"}` y
+ * dejó el payout `86661116764330` en `FAILED`, visible en el listado y con
+ * nuestra `description` dentro. Un error de la API no autoriza a dar por hecho
+ * que no pasó nada.
+ *
+ * Quien llame a esto tiene que haber leído la emulación de idempotencia de
+ * `dlocal-provider.ts` entera; no hay atajo.
  */
 export async function crearPayout(cuerpo: NuevoPayoutDlocalGo): Promise<PayoutDlocalGo> {
   return await dlocalgoFetch<PayoutDlocalGo>("POST", "/v1/payouts", cuerpo);
@@ -424,30 +480,107 @@ export async function recuperarPayout(id: string): Promise<PayoutDlocalGo> {
 }
 
 /**
+ * ⚠️ LA PÁGINA ES FIJA DE 10 Y NO HAY FILTROS. Medido el 2-sep-2026: `size`,
+ * `page_size`, `status`, `description`, `created_at_from` y `sort` se aceptan y
+ * se **ignoran** — la respuesta es idéntica y siempre trae `size: 10`. Lo único
+ * que la API obedece es `page`.
+ *
+ * Eso decide la forma del barrido: no se puede pedir «el payout con esta
+ * descripción», hay que pasear el listado de diez en diez. Y por eso importa
+ * tanto lo de abajo.
+ */
+export const TAM_PAGINA_PAYOUTS = 10;
+
+/**
+ * La envoltura de `GET /v1/payouts`, medida:
+ * `{data, totalElements, totalPages, page, numberOfElements, size}`.
+ *
+ * 🔑 `totalPages` ES LA PRUEBA DE QUE SE AGOTÓ LA BÚSQUEDA, y es la pieza que le
+ * faltaba a la versión anterior. Una página vacía **no** demuestra que no haya
+ * nada: `page=99` devuelve `data: []` con `totalElements: 6` y `totalPages: 1`,
+ * o sea que «me quedé sin páginas» y «no existe» se ven exactamente igual si
+ * solo se mira el array. Distinguirlos es la diferencia entre devolver la orden
+ * a la cola y pagar dos veces.
+ *
+ * Y el orden es **el más reciente primero** (medido con 8 registros), lo que
+ * permite parar de paginar en cuanto se cruza la frontera temporal del reclamo.
+ */
+export type PaginaDePayouts = {
+  data: PayoutDlocalGo[];
+  totalElements: number;
+  totalPages: number;
+  page: number;
+  numberOfElements: number;
+  size: number;
+};
+
+/**
  * `GET /v1/payouts` — el listado, que es lo que SUSTITUYE a la clave de
  * idempotencia que la API no tiene.
  *
- * ⚠️ La forma de la envoltura tampoco está verificada (ver `PayoutDlocalGo`), y
- * los listados de esta API son estilo Spring: `page` / `page_size` con
- * `totalElements`. Se aceptan las tres formas que puede tener el array —`data`,
- * `content`, `results`— y también que la respuesta sea el array pelado. Si
- * ninguna cuadra devuelve `null`, que NO es lo mismo que una lista vacía: una
- * lista vacía prueba que nuestro payout no existe; un `null` no prueba nada, y
- * quien llama tiene que tratarlo como duda y no como ausencia.
+ * Devuelve `null` cuando la respuesta no tiene la forma esperada, y ese `null`
+ * **no es una lista vacía**: una lista vacía con `totalPages` a la vista prueba
+ * algo; un `null` no prueba nada, y quien llama tiene que tratarlo como duda.
  */
-export async function listarPayouts(pagina = 0, tam = 100): Promise<PayoutDlocalGo[] | null> {
-  const bruto = await dlocalgoFetch<unknown>(
-    "GET",
-    `/v1/payouts?page=${pagina}&page_size=${tam}`,
-  );
-  if (Array.isArray(bruto)) return bruto as PayoutDlocalGo[];
-  if (bruto && typeof bruto === "object") {
-    for (const k of ["data", "content", "results", "payouts"]) {
-      const v = (bruto as Record<string, unknown>)[k];
-      if (Array.isArray(v)) return v as PayoutDlocalGo[];
-    }
-  }
-  return null;
+export async function listarPayouts(pagina = 0): Promise<PaginaDePayouts | null> {
+  const bruto = await dlocalgoFetch<unknown>("GET", `/v1/payouts?page=${pagina}`);
+  if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) return null;
+  const o = bruto as Record<string, unknown>;
+  if (!Array.isArray(o.data)) return null;
+  const n = (k: string, porDefecto: number): number =>
+    typeof o[k] === "number" && Number.isFinite(o[k]) ? (o[k] as number) : porDefecto;
+  return {
+    data: o.data as PayoutDlocalGo[],
+    // Sin `totalPages` legible no se puede demostrar que se agotó la búsqueda.
+    // -1 es «no lo sé», y el barrido lo trata como tal: nunca como «una sola».
+    totalPages: n("totalPages", -1),
+    totalElements: n("totalElements", -1),
+    page: n("page", pagina),
+    numberOfElements: n("numberOfElements", (o.data as unknown[]).length),
+    size: n("size", TAM_PAGINA_PAYOUTS),
+  };
+}
+
+/**
+ * ¿Es un fallo de CREDENCIAL y no de esta orden?
+ *
+ * 🔴 Un 401/403 NO es un payout dudoso: es un job que no puede trabajar. La
+ * versión anterior lo metía en el mismo saco que «no sé si se creó el payout»,
+ * así que un secreto mal puesto marcaba EN DUDA la cola entera —diez órdenes por
+ * pasada— y cada una de esas filas se queda quieta esperando a que la mire una
+ * persona. Diez incidencias falsas por una variable de entorno.
+ *
+ * `3001 Invalid Credentials` es el código que devolvió el sandbox cuando las
+ * claves caducaron el 1-sep; el estado HTTP se comprueba igual porque el código
+ * no está garantizado.
+ *
+ * ⚠️ Y NO LO DETECTA SIEMPRE, PORQUE LA API NO ES COHERENTE. Medido el
+ * 2-sep-2026 con el mismo secreto inválido:
+ *
+ *   GET /v1/payouts        → 403 {"code":3001,"message":"Invalid Credentials."}
+ *   GET /v1/payouts/{id}   → 500 {"code":7000,"message":"internal_server_error"}
+ *
+ * O sea que preguntar por UN payout con la credencial rota se ve igual que una
+ * caída suya. Se deja así a propósito: un 500 se clasifica como transitorio, que
+ * deja la fila quieta con su identificador y la reintenta —inofensivo—, mientras
+ * que tratar cualquier 500 como «credencial» pararía el lote entero cada vez que
+ * a dLocal le diera hipo. El listado, que es el que usa el barrido, sí dice la
+ * verdad, así que el lote acaba parándose igual.
+ */
+export function esCredencialInvalida(e: DlocalGoError): boolean {
+  return e.status === 401 || e.status === 403 || e.code === 3001;
+}
+
+/**
+ * ¿Es el TOPE DIARIO de la cuenta?
+ *
+ * Medido: `7000 Daily payout limit exceeded. Limit is 5000.00 USD and today's
+ * total would be …`. Llega como 400, o sea que el criterio por HTTP lo daría por
+ * permanente y mandaría la orden a `failed` — y con ella la incidencia NTF-16 al
+ * tutor— por algo que se arregla solo a medianoche. Es transitorio de manual.
+ */
+export function esLimiteDiario(e: DlocalGoError): boolean {
+  return /daily\s+payout\s+limit|limite\s+diario/i.test(e.message);
 }
 
 /**

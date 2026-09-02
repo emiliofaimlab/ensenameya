@@ -76,13 +76,28 @@ import type { PayoutInput, PayoutResult, PspProvider } from "@/lib/payments/port
 export const runtime = "nodejs";
 
 /**
- * Tope por pasada. MÁS BAJO que el de los reembolsos (25) y mucho más que el del
- * correo (50), y no es simetría rota: cada vuelta de este bucle puede mover el
- * saldo de una semana entera de un tutor y, en el peor caso, hace hasta seis
- * llamadas a la API (la creación más cinco páginas de barrido). Lo que sobre sale
- * en la pasada siguiente — para eso 'scheduled' significa «todavía no».
+ * 🔴 DOS CUPOS, NO UNO, Y ESTA ES LA DIFERENCIA MÁS IMPORTANTE DE ESTE ARCHIVO.
+ *
+ * Antes había un solo tope de 10 que se repartían las dos colas: primero lo que
+ * está en vuelo y con lo que sobrara, lo nuevo. Suena razonable y es una bomba:
+ * las órdenes en vuelo que se quedan atascadas —una en duda no sale sola, se
+ * queda hasta que la mire una persona— **no se van nunca**, así que diez de
+ * ellas se comen el cupo entero de cada pasada y **ningún tutor vuelve a
+ * cobrar**. En silencio, además: la respuesta seguiría diciendo `status: "ok"` y
+ * el workflow saldría verde.
+ *
+ * Con dos cupos independientes, un atasco en vuelo no puede robarle sitio a un
+ * pago nuevo. Y la cola en vuelo se recorre por `updated_at` ascendente —lo que
+ * más tiempo lleva sin tocarse, primero— para que las mismas diez filas
+ * atascadas no acaparen todas las pasadas: cada intento escribe en la fila, así
+ * que rotan solas.
+ *
+ * Los topes son bajos a propósito: cada vuelta puede mover el saldo de una
+ * semana de un tutor y, en el peor caso, pasea decenas de páginas del listado
+ * del proveedor. Lo que sobre sale en la pasada siguiente.
  */
-const LOTE = 10;
+const LOTE_EN_VUELO = 10;
+const LOTE_NUEVOS = 10;
 
 /**
  * Cuánto tiene que llevar una orden reclamada sin identificador antes de que se
@@ -91,8 +106,12 @@ const LOTE = 10;
  * ⚠️ NO ES PRUDENCIA GENÉRICA: es que el listado del proveedor puede tardar en
  * enseñar un payout recién creado, y un barrido demasiado pronto devolvería
  * «ausente» sobre algo que existe. Y «ausente» es precisamente lo que autoriza a
- * devolver la orden a la cola, o sea a mandarla otra vez. Quince minutos es
- * mucho más que cualquier propagación razonable y no cuesta nada: el pago ya
+ * devolver la orden a la cola, o sea a mandarla otra vez.
+ *
+ * Medido el 2-sep-2026, la propagación fueron **once segundos**: payout creado a
+ * las 16:11:12 y visible en `GET /v1/payouts` a las 16:11:23. Los quince minutos
+ * se quedan igualmente, y con motivo: una medida no es una garantía, y lo que se
+ * arriesga al acortarlos es un pago doble. Esperar no cuesta nada — el pago ya
  * está hecho o no, y esperar no lo cambia.
  */
 const ESPERA_ANTES_DE_BARRER_MS = 15 * 60 * 1000;
@@ -110,15 +129,35 @@ type OrdenDePago = {
   funding_provider: string | null;
   payee_country: string | null;
   scheduled_for: string | null;
+  /** Lo bumpea el trigger `payouts_set_updated_at` en cada escritura nuestra. */
+  updated_at: string;
 };
 
 const COLUMNAS =
-  "id, tutor_id, status, currency, amount, provider, provider_payout_id, provider_metadata, funding_provider, payee_country, scheduled_for";
+  "id, tutor_id, status, currency, amount, provider, provider_payout_id, provider_metadata, funding_provider, payee_country, scheduled_for, updated_at";
 
 /** El rastro que este job deja en `provider_metadata`. Sin PII, nunca. */
 type Rastro = {
   /** ISO del `update` que ganó la orden. Es el `claimedAt` del puerto. */
   reclamado_en?: string;
+  /**
+   * 🔑 EL NÚMERO DE INTENTO, que junto a `payouts.id` forma la marca que viaja en
+   * `description` y que sustituye a la clave de idempotencia que dLocal Go no
+   * tiene. Empieza en 1 y **solo sube cuando el payout anterior está muerto en el
+   * proveedor** — nunca por reintentar, nunca por un fallo transitorio.
+   *
+   * Si sube de más, el barrido de la orden busca una marca que nunca se escribió
+   * y no encuentra el pago que sí salió. Si no sube cuando debe,
+   * `manage_payout('retry')` reencuentra el payout rechazado y no reintenta
+   * jamás. Por eso lo escribe un solo sitio: el caso `difunto` de abajo.
+   */
+  intento?: number;
+  /**
+   * Los `provider_payout_id` de intentos anteriores que el proveedor dio por
+   * muertos. Se archivan en vez de borrarse: es la única traza que queda para
+   * conciliar contra su panel un rechazo que ya no está en la fila.
+   */
+  intentos_muertos?: string[];
   /** Cómo acabó el último intento, en el vocabulario del puerto. */
   ultimo_estado?: string;
   ultimo_mensaje?: string;
@@ -184,32 +223,33 @@ export async function GET(req: Request) {
   // service_role a propósito: `payouts` es admin-only por RLS y este trabajo no
   // tiene ninguna persona detrás. Regla de oro 9 — los grants (select + update
   // por columnas) están en `20260901130000:277-318`.
+  //
+  // ⚠️ Y SON DOS CUPOS INDEPENDIENTES. Que la cola en vuelo se lea primero es
+  // una prioridad de atención, no un derecho a quedarse con el lote: ver
+  // `LOTE_EN_VUELO` / `LOTE_NUEVOS`. El `order` por `updated_at` ascendente es lo
+  // que hace rotar las atascadas — cada intento toca la fila y la manda al final.
   const { data: enVuelo, error: eVuelo } = await admin
     .from("payouts")
     .select(COLUMNAS)
     .eq("status", "processing")
-    .order("scheduled_for", { ascending: true, nullsFirst: true })
-    .limit(LOTE);
+    .order("updated_at", { ascending: true })
+    .limit(LOTE_EN_VUELO);
 
   if (eVuelo) {
     return NextResponse.json({ error: eVuelo.message }, { status: 500 });
   }
 
-  const hueco = Math.max(0, LOTE - (enVuelo?.length ?? 0));
-  let pendientes: OrdenDePago[] = [];
-  if (hueco > 0) {
-    const { data, error } = await admin
-      .from("payouts")
-      .select(COLUMNAS)
-      .eq("status", "scheduled")
-      .lte("scheduled_for", ahora())
-      .order("scheduled_for", { ascending: true }) // lo más viejo primero
-      .limit(hueco);
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-    pendientes = (data ?? []) as OrdenDePago[];
+  const { data: nuevas, error: eNuevas } = await admin
+    .from("payouts")
+    .select(COLUMNAS)
+    .eq("status", "scheduled")
+    .lte("scheduled_for", ahora())
+    .order("scheduled_for", { ascending: true }) // lo más viejo primero
+    .limit(LOTE_NUEVOS);
+  if (eNuevas) {
+    return NextResponse.json({ error: eNuevas.message }, { status: 500 });
   }
+  const pendientes = (nuevas ?? []) as OrdenDePago[];
 
   const cola: OrdenDePago[] = [...((enVuelo ?? []) as OrdenDePago[]), ...pendientes];
 
@@ -234,11 +274,22 @@ export async function GET(req: Request) {
   let enDuda = 0;
   let esperandoBarrido = 0;
   let noReclamados = 0;
+  /** Identidades muertas archivadas: `manage_payout('retry')` por fin reintenta. */
+  let difuntos = 0;
+  /**
+   * 🔴 Si esto se pone a true, el lote se PARA. No hay credencial válida, así que
+   * lo que le pase a esta orden le va a pasar a todas, y seguir solo sirve para
+   * escribir el mismo error en diez filas.
+   */
+  let credencialRota: string | null = null;
   const ensayo: unknown[] = [];
 
   for (const fila of cola) {
+    if (credencialRota) break;
     const rastro = rastroDe(fila);
     const enVueloYa = fila.status === "processing";
+    // El intento vive en el rastro y NO se toca aquí: solo lo sube `difunto`.
+    const intento = typeof rastro.intento === "number" && rastro.intento >= 1 ? rastro.intento : 1;
 
     // ── Quién ejecuta ───────────────────────────────────────────────────────
     // Para una orden en vuelo manda `payouts.provider`, que es el snapshot de
@@ -343,15 +394,16 @@ export async function GET(req: Request) {
       }
     }
 
-    // Una orden EN VUELO sin país no debería existir —para haberse mandado tuvo
-    // que tenerlo— pero si existe no se puede barrer: sin país el cotejo
-    // descartaría todos los payouts del proveedor y devolvería «ausente», que es
-    // justo lo que autoriza a mandarla otra vez. Se queda quieta y se grita.
-    if (!fila.payee_country) {
-      enDuda++;
-      console.error("[C2] 🔴 orden en vuelo SIN país de destino: no se puede barrer ni mandar", base);
-      continue;
-    }
+    // ⚠️ AQUÍ HABÍA UN FRENO QUE YA NO HACE FALTA Y QUE HACÍA DAÑO. Decía que una
+    // orden EN VUELO sin país no se podía barrer —«sin país el cotejo descartaría
+    // todos los payouts y devolvería ausente»— y la dejaba en duda para siempre.
+    // Era cierto cuando el cotejo iba por parecido; con la marca de
+    // `description`, el barrido no mira el país (ni podría: el listado del
+    // proveedor no devuelve `transfer_country`). Así que una orden en vuelo sin
+    // país SÍ se puede resolver, que es justo lo que hay que hacer con ella.
+    //
+    // El país sigue siendo obligatorio para CREAR, y eso lo corta la puerta de
+    // `sinPais` de arriba, que solo mira las órdenes nuevas.
 
     // ── El ensayo se para aquí ──────────────────────────────────────────────
     // Todo lo que sigue reclama o llama. En simulacro se pregunta solo lo que se
@@ -369,6 +421,12 @@ export async function GET(req: Request) {
           : "?";
       ensayo.push({
         ...base,
+        // El número de intento. Con `payout` (que es `payouts.id`) forma la
+        // marca que el ejecutor escribe en el proveedor y que permite conciliar
+        // una orden a mano — en dLocal Go, `EY-<payout>-<intento>` dentro de
+        // `description`. No se compone aquí: cómo se marca un pago es cosa de
+        // cada adaptador, y este job no conoce a ninguno por su nombre.
+        intento,
         beneficiario: eB ? `no: ${eB.message}` : "sí",
         conversion: eB
           ? "?"
@@ -416,7 +474,14 @@ export async function GET(req: Request) {
           status: "processing",
           provider: psp.key,
           provider_metadata: {
-            c2: { reclamado_en: claimedAt, ultimo_estado: "reclamado" } satisfies Rastro,
+            c2: {
+              reclamado_en: claimedAt,
+              // Se reescribe tal cual: el intento solo lo mueve `difunto`, y
+              // perderlo aquí haría que el barrido buscara una marca que no es.
+              intento,
+              ...(rastro.intentos_muertos ? { intentos_muertos: rastro.intentos_muertos } : {}),
+              ultimo_estado: "reclamado",
+            } satisfies Rastro,
           },
         })
         .eq("id", fila.id)
@@ -441,8 +506,11 @@ export async function GET(req: Request) {
       // comprobado contra `payout_items` unas líneas más arriba.
       amountMinor: fila.amount,
       currency: fila.currency,
-      payeeCountry: fila.payee_country,
+      // Vacío solo puede llegar en una orden EN VUELO, y a esas no se les crea
+      // nada: el camino que lo usa es el del POST, y ahí `sinPais` ya cortó.
+      payeeCountry: fila.payee_country ?? "",
       claimedAt,
+      intento,
       reanudar: enVueloYa,
       providerPayoutId: fila.provider_payout_id,
     };
@@ -467,13 +535,22 @@ export async function GET(req: Request) {
      * es «vuelve a la cola limpia»; para una que ya venía en 'processing' es
      * «no toques nada», porque puede tener un pago detrás.
      */
-    const volver: Record<string, unknown> =
-      enVueloYa || fila.provider_payout_id ? {} : { status: "scheduled", provider: null };
+    // ⚠️ LA CONDICIÓN ES SOLO `enVueloYa`, y antes también miraba
+    // `provider_payout_id`. Ese añadido dejaba atascada en 'processing' la orden
+    // que un admin acababa de reintentar: viene de 'failed' con el id del payout
+    // rechazado dentro, y cualquier desenlace que no fuera terminal la congelaba.
+    // Es innecesario además de dañino: si la fila se reclamó EN ESTA pasada, los
+    // únicos caminos que llegan aquí o no han llamado a crear nada (tienen id, y
+    // con id solo se consulta) o han barrido y han DEMOSTRADO que no se creó
+    // nada. En los dos casos volver a la cola es seguro.
+    const volver: Record<string, unknown> = enVueloYa ? {} : { status: "scheduled", provider: null };
 
     const marca = async (campos: Record<string, unknown>, estadoRastro: string, mensaje?: string) => {
       const meta = {
         c2: {
           reclamado_en: claimedAt,
+          intento,
+          ...(rastro.intentos_muertos ? { intentos_muertos: rastro.intentos_muertos } : {}),
           ultimo_estado: estadoRastro,
           ultimo_intento_en: ahora(),
           ...(mensaje ? { ultimo_mensaje: mensaje } : {}),
@@ -605,6 +682,85 @@ export async function GET(req: Request) {
         break;
       }
 
+      // ── 🔑 LA IDENTIDAD QUE ARRASTRABA ESTÁ MUERTA: se archiva, sube el
+      // intento y la orden vuelve a la cola LIMPIA. Es lo que hace que
+      // `manage_payout('retry')` reintente de verdad.
+      //
+      // Las tres escrituras van juntas y ninguna sobra:
+      //   · `provider_payout_id` a null — si se queda, la pasada siguiente vuelve
+      //     a preguntar por el cadáver y el bucle sigue igual.
+      //   · `intento + 1` — cambia la marca, para que el barrido del intento
+      //     nuevo no encuentre el payout del viejo y lo adopte como propio.
+      //   · el id viejo al historial — es la única traza que queda para conciliar
+      //     ese rechazo contra el panel del proveedor.
+      //
+      // ⚠️ NO se escribe 'failed' ni se manda NTF-16: el tutor ya recibió esa
+      // incidencia cuando el payout se rechazó. Esto es el reintento del admin
+      // poniéndose en marcha, no un fallo nuevo.
+      case "difunto": {
+        const muertos = [...(rastro.intentos_muertos ?? []), salida.payoutId];
+        const { error: eDif } = await admin
+          .from("payouts")
+          .update({
+            status: "scheduled",
+            provider: null,
+            provider_payout_id: null,
+            provider_metadata: {
+              c2: {
+                reclamado_en: claimedAt,
+                intento: intento + 1,
+                intentos_muertos: muertos,
+                ultimo_estado: "difunto",
+                ultimo_intento_en: ahora(),
+                ultimo_mensaje: salida.mensaje,
+                proveedor_detalle: salida.detalle,
+              } satisfies Rastro,
+            },
+          })
+          .eq("id", fila.id);
+        if (eDif) {
+          // No se pudo archivar. La fila sigue con su id muerto dentro: el bucle
+          // del retry sigue en pie, pero nadie ha pagado dos veces. Se grita.
+          enDuda++;
+          console.error("[C2] 🔴 no se pudo archivar la identidad muerta del payout", {
+            ...base,
+            proveedorPayout: salida.payoutId,
+            error: eDif.message,
+          });
+          break;
+        }
+        difuntos++;
+        console.info("[C2] identidad muerta archivada: la orden vuelve a la cola con intento nuevo", {
+          ...base,
+          proveedorPayout: salida.payoutId,
+          detalle: salida.detalle,
+          intentoNuevo: intento + 1,
+        });
+        break;
+      }
+
+      // ── 🔴 NO HAY CREDENCIAL. No se toca la fila —no es culpa suya— y se PARA
+      // el lote: lo que le pase a esta orden le va a pasar a las diez. Antes esto
+      // caía en `en-duda`, que marca la fila y exige que la mire una persona:
+      // una variable de entorno mal puesta abría diez incidencias falsas por
+      // pasada y las órdenes se quedaban paradas aunque la clave se arreglara.
+      case "sin-credencial": {
+        credencialRota = salida.mensaje;
+        // ⚠️ `pudoCrear` decide si la fila vuelve a la cola. Si el 401/403 lo dio
+        // la propia llamada, no se creó nada y la orden vuelve intacta; si la
+        // credencial se cayó durante un barrido que comprobaba si una creación
+        // había cuajado, esa duda sigue en pie y no se toca nada. Sin esto, cada
+        // pasada con la clave rota dejaría una orden reclamada y sin
+        // identificador, que es la alarma que no puede llorar en falso.
+        await marca(salida.pudoCrear ? {} : volver, "sin-credencial", salida.mensaje);
+        console.error("[C2] 🔴 CREDENCIAL RECHAZADA por el proveedor: se para el lote", {
+          ...base,
+          vuelveALaCola: !salida.pudoCrear,
+          error: salida.mensaje,
+        });
+        break;
+      }
+
       // ── El barrido demostró que no se creó nada. Vuelve a la cola limpia:
       // `provider` a null porque no la ejecutó nadie.
       case "sin-rastro": {
@@ -683,6 +839,18 @@ export async function GET(req: Request) {
     .eq("status", "processing")
     .is("provider_payout_id", null);
 
+  // 🔴 LA CIFRA QUE DELATA UN ATASCO. Órdenes en vuelo que llevan más de un día
+  // sin moverse: o están en duda esperando a una persona, o hay pagos parados en
+  // el proveedor. Con un solo cupo compartido, diez de estas paraban TODOS los
+  // pagos nuevos y la respuesta seguía diciendo `ok`; ahora no pueden, pero
+  // siguen siendo lo primero que hay que mirar cuando una cola no baja.
+  const ayer = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count: atascadas } = await admin
+    .from("payouts")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "processing")
+    .lt("updated_at", ayer);
+
   if (simulacro) {
     return NextResponse.json({
       status: "simulacro",
@@ -692,8 +860,32 @@ export async function GET(req: Request) {
       enCola: enCola ?? 0,
       enVuelo: enVueloTotal ?? 0,
       sinIdentificar: sinIdentificar ?? 0,
-      lote: LOTE,
+      atascadas: atascadas ?? 0,
+      lote: { enVuelo: LOTE_EN_VUELO, nuevos: LOTE_NUEVOS },
     });
+  }
+
+  // 🔴 SI SE ROMPIÓ LA CREDENCIAL, ESTO NO ES UN 200. Un lote que se para a la
+  // primera orden no es un lote «ok» con un contador dentro: el workflow tiene
+  // que verlo rojo, igual que los otros jobs devuelven 503 cuando les falta la
+  // configuración. Las filas que se llegaron a procesar antes van igualmente en
+  // la respuesta, porque el dinero que se movió se cuenta pase lo que pase.
+  if (credencialRota) {
+    return NextResponse.json(
+      {
+        status: "sin-credencial",
+        error: credencialRota,
+        revisadas: cola.length,
+        pagados,
+        importePagado,
+        enviados,
+        adoptados,
+        enCola: enCola ?? 0,
+        enVuelo: enVueloTotal ?? 0,
+        sinIdentificar: sinIdentificar ?? 0,
+      },
+      { status: 503 },
+    );
   }
 
   return NextResponse.json({
@@ -718,6 +910,11 @@ export async function GET(req: Request) {
     // 🔴 Órdenes que pueden corresponder a un pago sin identificar. Debe ser 0.
     enDuda,
     sinIdentificar: sinIdentificar ?? 0,
+    // 🔴 En vuelo y sin tocarse desde hace más de un día. Es lo que delata un
+    // atasco, y lo que antes se comía el lote entero en silencio.
+    atascadas: atascadas ?? 0,
+    // Identidades muertas archivadas: el `retry` del admin poniéndose en marcha.
+    difuntos,
     // Reclamadas hace poco: se barren en la pasada siguiente, no antes.
     esperandoBarrido,
     // Bloqueos que NO son fallos y que ninguna pasada va a resolver sola.
@@ -743,6 +940,6 @@ export async function GET(req: Request) {
     noReclamados,
     enCola: enCola ?? 0,
     enVuelo: enVueloTotal ?? 0,
-    lote: LOTE,
+    lote: { enVuelo: LOTE_EN_VUELO, nuevos: LOTE_NUEVOS },
   });
 }
