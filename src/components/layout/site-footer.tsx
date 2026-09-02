@@ -113,11 +113,16 @@ export function SiteFooter() {
                 `terms-content.ts` los interpola en los dos idiomas; borrarlos
                 allí rompe por tipos el contrato ya firmado. Sacarlo del §39
                 está pendiente de Néstor, y sube `TERMS_VERSION`. */}
-            <address className="mt-5 text-[12.5px] leading-relaxed not-italic text-muted-foreground">
-              <span className="font-medium text-foreground">
-                {COMPANY.legalName}
-              </span>
-            </address>
+            {/* ⚠️ AQUÍ ESTABA LA RAZÓN SOCIAL SUELTA, y se quitó a petición del
+                cliente (2-sep). NO es que deje de identificarse la sociedad:
+                se movió al copyright de abajo, que es donde se espera
+                encontrarla y donde ya está el año. Esto es la tercera pieza que
+                sale de este bloque —antes el domicilio y el EIN—, así que el
+                `<address>` se queda sin contenido y desaparece entero en vez de
+                quedarse vacío.
+
+                El domicilio y el EIN siguen publicados en `/contacto` y en el
+                §39 de los Términos; esto solo los quita del pie. */}
           </div>
 
           {/* US-1601: en tablet el bloque de texto se quedaba con sus 592 px y
@@ -177,7 +182,14 @@ export function SiteFooter() {
               `aria-hidden` porque un lector de pantalla leyendo «emoji corazón
               rojo» en mitad de la frase estorba más de lo que aporta. */}
           <p className="flex flex-wrap items-center gap-x-1.5">
-            <span>© {AÑO} {COMPANY.brand}</span>
+            {/* «Enséñame Ya, LLC» y no `COMPANY.legalName`: la razón social
+                registrada es «Ensename Ya, LLC», SIN acentos y a propósito (ver
+                `lib/company.ts`). En el pie manda la marca, que sí los lleva, y
+                el «LLC» identifica a la sociedad. Si algún día hace falta la
+                cadena registrada exacta —un contrato, una pasarela— es
+                `COMPANY.legalName`, que sigue vivo y lo usa el §39 de los
+                Términos. */}
+            <span>© {AÑO} {COMPANY.brand}, LLC</span>
             <span aria-hidden className="text-muted-foreground/50">·</span>
             <span>
               made with <span aria-hidden>❤️</span>
