@@ -96,7 +96,10 @@ export async function POST(
   // eso, y no lo va a avisar ni el typecheck: los dos son `Date`.
   const roomClosesAt = new Date(auth.closes_at);
 
-  // US-1801 · la sala se crea con grabación SOLO si los dos consintieron
+  // La sala se crea con grabación SIEMPRE (regla del 2-sep: obligatoria y
+  // notificada). `recording_allowed` devuelve true y se conserva porque es el
+  // único sitio donde volver a meter excepciones. ⚠️ Esto solo HABILITA: quien
+  // arranca la grabación es `start_cloud_recording` en el token.
   // (RN-42). La regla vive en `recording_allowed`, no aquí.
   const { data: allowed } = await supabase.rpc("recording_allowed", {
     p_session_id: sessionId,

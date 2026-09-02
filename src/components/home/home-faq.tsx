@@ -26,7 +26,12 @@ const FAQ = [
     // disponible en tu perfil para repasar todo el contenido durante 30 días".
     // Eso es US-1802 (EY-86), que sigue en To Do, y el add-on de grabación de
     // Daily ni siquiera está contratado. Se omite para no prometerlo.
-    a: "Son sesiones interactivas 100% privadas. Las grabaciones se realizan únicamente con el consentimiento de ambas partes.",
+    // ⚠️ Decía «las grabaciones se realizan únicamente con el consentimiento
+    // de ambas partes», y desde el 2-sep es FALSO: el cliente cambió la regla
+    // a grabación obligatoria y notificada, y por eso la casilla de la sala es
+    // un «Entiendo» y no un «Acepto». Un texto público que promete un permiso
+    // que ya no se pide es el peor sitio donde dejar una regla desactualizada.
+    a: "Sí: todas las sesiones se graban, y se avisa a las dos partes antes de entrar a la sala. Las grabaciones son privadas, solo accesibles para el alumno y el tutor de esa clase, y se borran a los 30 días.",
   },
   {
     q: "¿Cómo elegir al tutor correcto?",
