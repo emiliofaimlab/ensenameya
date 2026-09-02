@@ -16,7 +16,10 @@ import { Button } from "@/components/ui/button";
  * hay nada que borrar», está desactualizado.
  *
  * ── PERO CASI SIEMPRE NO HABRÁ NADA, Y ESE ES EL PUNTO DEL COMPONENTE ───────
- * RN-42: una clase solo se graba con el sí de LOS DOS (`recording_allowed`), y
+ * ⚠️ CAMBIÓ LA REGLA (2-sep): TODAS las clases se graban. Antes era el sí de
+ * los dos (RN-42); ahora `recording_allowed` devuelve true siempre y la
+ * casilla de la sala es un «Entiendo», no un permiso. Así que llegar aquí sin
+ * grabación ya no habla de consentimiento, sino de que no hubo sesión. Y
  * sin ese consentimiento la sala ni ofrece el botón. O sea: lo normal es que la
  * respuesta sea «esta clase no se grabó», y además hay tres formas distintas de
  * no tener vídeo —nadie entró a la sala, nadie consintió, o caducaron los 30
@@ -119,7 +122,12 @@ export function SessionRecording({
           // El motivo importa: no es un fallo, es que la clase no se grabó. Y
           // se dice por qué, porque «no hay grabación» a secas suena a error.
           texto:
-            "Esta clase no se grabó. Solo se graba con el consentimiento de las dos partes (RN-42).",
+            // Desde el 2-sep todas las clases se graban, así que llegar aquí ya
+            // no significa «no consintieron»: significa que no hubo clase que
+            // grabar —nadie llegó a entrar en la sala— o que Daily no la
+            // guardó. Decir «no consintieron» mandaría a buscar un permiso que
+            // ya no existe.
+            "Esta clase no tiene grabación: no llegó a haber sesión en la sala.",
         });
         return;
       }

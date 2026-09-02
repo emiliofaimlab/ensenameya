@@ -101,8 +101,17 @@ export function participantEjectAfterSec(startsAt: Date, endsAt: Date): number {
 export async function ensureRoom(
   name: string,
   expiresAt: Date,
-  /** US-1801 · solo con el sí de los DOS (RN-42). Es propiedad de SALA. */
-  recording = false,
+  /**
+   * ⚠️ CAMBIÓ LA REGLA DE NEGOCIO, Y ESTE PARÁMETRO ES SU RESTO. Nació con
+   * US-1801/RN-42, cuando grabar exigía el sí de las dos partes. El cliente lo
+   * reformuló: **la grabación es obligatoria y notificada**, no se pide permiso
+   * — por eso la casilla de la sala pasó de «Acepto» a «Entiendo».
+   *
+   * Se conserva el parámetro en vez de borrarlo porque sigue habiendo un caso
+   * legítimo de sala sin grabación: la simulada y cualquier prueba que no deba
+   * generar fichero. Lo que ya NO hace es depender de consentimientos.
+   */
+  recording = true,
   /** Tope de permanencia por persona. Sin default a propósito: nació con la
    *  sala de 7 días de MN-05, donde olvidarlo era dejar el contador de Daily
    *  corriendo. B-2 estrechó la sala a 10 min y ya no es la única red, pero
@@ -142,8 +151,10 @@ export async function ensureRoom(
     // vídeo, la barra de controles y la reconexión de US-803 siguen siendo de
     // Daily. Prebuilt se queda, y esta propiedad con él.)
     enable_prejoin_ui: false,
-    // Sin consentimiento la sala ni ofrece el botón de grabar: el permiso no
-    // se pide en la interfaz, se quita del proveedor (RN-42).
+    // Habilita la grabación en la nube. OJO: esto es el permiso, no el
+    // arranque — quien la pone en marcha es `start_cloud_recording` en el
+    // token (ver `mintToken`). Las dos piezas hacen falta: sin esta, el token
+    // no puede grabar; sin la del token, nadie graba.
     enable_recording: recording ? "cloud" : false,
   };
 
@@ -234,6 +245,21 @@ export async function mintToken(opts: {
         user_id: opts.userId,
         is_owner: opts.isOwner,
         exp: tokenExpiry(opts.endsAt),
+        // ⚠️ LA GRABACIÓN ARRANCA SOLA, Y ES LO QUE FALTABA PARA QUE LA REGLA
+        // FUERA CIERTA. `enable_recording: "cloud"` en la sala solo ENCIENDE EL
+        // BOTÓN: si nadie lo pulsa, no se graba nada. Eso explica el dato que
+        // teníamos delante sin atarlo — 12 sesiones con sala y 2 grabaciones.
+        // No es que la gente no consintiera: es que nadie pulsó.
+        //
+        // Daily no tiene propiedad de SALA para esto (`enable_automatic_recording`
+        // no existe: la API responde «invalid property name»). Se hace por
+        // TOKEN, y por eso vive aquí.
+        //
+        // Va en los DOS tokens, no solo en el del tutor: si el tutor se retrasa,
+        // la clase empieza igual y tiene que quedar grabada desde el primer
+        // minuto. Que el segundo en entrar lo pida otra vez es inocuo — la
+        // grabación ya está en marcha y Daily no abre una segunda.
+        start_cloud_recording: true,
       },
     }),
   });
