@@ -268,7 +268,8 @@ export default async function AdminReporteDetallePage({
             <>
               <p className="mt-1 text-xs text-[#6b6b6b]">
                 {sesiones.length} en total, la más reciente primero. La
-                grabación solo existe si las dos partes la consintieron (RN-42)
+                grabación existe siempre que haya habido clase (desde el 2-sep
+                se graba todo; antes hacía falta el sí de los dos)
                 y se sirve 30 días.
               </p>
               <ul className="mt-2 divide-y divide-[#ebebeb]">

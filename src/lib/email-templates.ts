@@ -57,11 +57,23 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
       "La reserva quedó cancelada y el horario volvió a estar libre. Si había un reembolso, se aplicó según la política de cancelación.",
     cta: "Ver el detalle",
   }),
+  // NTF-14 · el correo de cierre de clase. Lo pidió el cliente con la grabación
+  // dentro (acta del 29-ago, ítem 12), y el enlace YA llevaba al sitio correcto:
+  // su `cta` resuelve a `/reservas/{id}` (ver `rutaFor`), que es justo la
+  // pantalla donde vive el control de grabación. Lo que faltaba era decirlo.
+  //
+  // ⚠️ ESTE COMENTARIO DECÍA LO CONTRARIO HACE UNA HORA, y estaba mal. Decía
+  // que la frase iba en condicional porque RN-42 exigía el sí de las dos partes
+  // y «lo normal es que una clase no tenga vídeo». La regla del cliente es la
+  // contraria —grabación obligatoria y notificada— y por eso la casilla de la
+  // sala es un «Entiendo». Ahora la frase es afirmativa porque la grabación
+  // existe siempre que haya habido clase.
   review_request: () => ({
     asunto: "¿Cómo te fue la mentoría?",
     cuerpo:
-      "Tu mentoría terminó. Dejar una reseña ayuda a otros alumnos a elegir, y solo lleva un minuto.",
-    cta: "Dejar mi reseña",
+      "Tu mentoría terminó. Dejar una reseña ayuda a otros alumnos a elegir, y solo lleva un minuto. " +
+      "Y ahí mismo tienes la grabación de la clase, disponible durante 30 días.",
+    cta: "Ver mi clase y dejar reseña",
   }),
   payment_receipt: (p) => ({
     asunto: "Recibimos tu pago",
