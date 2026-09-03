@@ -1,0 +1,263 @@
+# Ejecuta la cola de payouts contra el PSP (C2) — le paga al tutor.
+#
+# QUÉ HAY DETRÁS. El lote semanal (`run_payout_batch`, pg_cron, lunes 03:00 UTC)
+# calcula lo que se le debe a cada tutor y deja la orden en `payouts` en
+# 'scheduled'. Hasta C2 nadie la ejecutaba: `process_scheduled_payouts()` la
+# marcaba 'paid' sin llamar a ningún proveedor y el trigger `notify_payout()`
+# mandaba el correo NTF-12 «Se pagó tu liquidación» por dinero que no se movía.
+# C1 (`20260901120000`) desarmó esa mentira; quien mueve el dinero de verdad es
+# `/api/cron/payouts-process`, y ese endpoint no lo llama nadie por sí solo.
+# Sin este workflow los payouts se quedan en 'scheduled' para siempre — y con
+# ellos la baja de cuenta programada, que retiene al tutor mientras tenga una
+# orden sin cerrar (`20260831160000`).
+#
+# POR QUÉ NO VA EN VERCEL CRON. El plan Hobby limita los crons a UNO AL DÍA y ese
+# hueco ya lo gasta `vercel.json` (`/api/cron/recordings-purge`, 04:00). Es el
+# mismo motivo por el que están aquí los otros tres.
+#
+# ⚠️ POR QUÉ CADA HORA PARA UN LOTE SEMANAL, QUE PARECE ABSURDO Y NO LO ES. Lo
+# que hay que hacer cada hora no es MANDAR pagos —eso pasa una vez por semana—
+# sino SEGUIR los que ya se mandaron: dLocal Go crea el payout en `PENDING` y el
+# dinero llega después, así que el paso de 'processing' a 'paid' (y con él NTF-12,
+# y con él la liberación de la baja de cuenta) solo ocurre cuando alguien vuelve a
+# preguntar. Y hay una segunda razón, más seria: una orden reclamada que se quedó
+# sin identificador es la única fila del sistema que puede corresponder a un pago
+# que nadie ha identificado, y la barre esta ruta. Cuanto antes se mire, mejor.
+# Una pasada con la cola vacía son tres consultas y ninguna llamada al PSP.
+#
+# ⚠️ Y NO VA A CORRER CADA HORA. Medido sobre las corridas reales de los otros
+# workflows (27→30-ago): GitHub entrega **una cada 2-6 horas**, pida uno lo que
+# pida. Pedir cada hora es lo que hace que la cadencia real salga de ahí y no de
+# una vez al día. Para un lote semanal, seis horas de retraso son invisibles; lo
+# que no se puede es planificar con «cada hora» y creérselo.
+#
+# El minuto va desplazado (13) a propósito: GitHub retrasa más los programados
+# que caen en punto, que es donde los pone todo el mundo.
+#
+# ⚠️ LOS TRES PEAJES QUE COMPARTE CON SUS VECINOS:
+#   · se retrasan cuando la cola de Actions va cargada (10-15 min es normal);
+#   · GitHub DESACTIVA los workflows programados tras 60 días sin actividad en el
+#     repo: si los payouts dejan de salir sin más, mirar eso primero;
+#   · solo se programan desde la RAMA POR DEFECTO (`main`). Mientras este archivo
+#     viva únicamente en `dev`, ESTE RELOJ NO EXISTE y hay que dispararlo a mano
+#     con `workflow_dispatch`.
+#
+# El termómetro que no depende de este workflow, para el SQL editor:
+#   select public.payouts_backlog();
+# Su `sin_identificar` es la cifra que nunca puede quedarse arriba.
+name: Payouts pendientes
+
+on:
+  schedule:
+    - cron: "13 * * * *"
+  # Para forzar una pasada, y sobre todo para el ENSAYO: la ruta acepta
+  # `?simulacro=1`, que dice de cada orden qué haría y por qué —incluido si el
+  # beneficiario se puede construir y si hace falta una conversión sin decidir—
+  # sin reclamar nada, sin llamar al PSP y sin escribir una fila. Es la única
+  # forma de mirar por dentro de este job antes de que mueva el primer dólar.
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: "Ensayo: enseña qué mandaría, sin mandarlo"
+        type: boolean
+        default: false
+
+# 🔴 ESTE JOB PAGA, Y LA API DEL PROVEEDOR NO TIENE CLAVE DE IDEMPOTENCIA.
+# `cancel-in-progress: false` no es una preferencia: si GitHub cancelara una
+# pasada justo entre el `POST /v1/payouts` y el `update` de la fila, quedaría un
+# pago hecho y sin anotar. La ruta está diseñada para sobrevivir a eso —la orden
+# se queda 'processing' sin identificador y la pasada siguiente BARRE el
+# proveedor en vez de reintentar— pero provocarlo a propósito cada hora sería
+# absurdo. La siguiente pasada espera.
+concurrency:
+  group: payouts-cron
+  cancel-in-progress: false
+
+# El token de Actions no pinta nada aquí: esto es un `curl` a una URL pública.
+permissions: {}
+
+jobs:
+  pagar:
+    runs-on: ubuntu-latest
+    # Con `LOTE = 10` órdenes por pasada y hasta seis llamadas a la API por orden
+    # en el peor caso (la creación más cinco páginas de barrido), una pasada
+    # normal son segundos. Si tarda 10 minutos algo está colgado y más vale
+    # liberar el candado de `concurrency` que arrastrarlo.
+    timeout-minutes: 10
+    steps:
+      - name: Ejecutar la cola de payouts
+        env:
+          BASE_URL: ${{ vars.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # OPCIONAL y normalmente vacío. Solo hace falta si `APP_BASE_URL`
+          # apunta a un despliegue de PREVIEW — ver el bloque de abajo.
+          BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
+          SIMULACRO: ${{ inputs.simulacro }}
+        run: |
+          set -uo pipefail
+
+          # FALLA CERRADO, igual que el endpoint y que los otros tres jobs. Una
+          # configuración a medias tiene que verse en rojo y no fingir que la
+          # pasada fue bien: mientras esto no corra hay tutores con su
+          # liquidación emitida y sin cobrar.
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Falta la variable APP_BASE_URL o el secret CRON_SECRET del repo."
+            echo "CRON_SECRET tiene que valer LO MISMO aquí y en Vercel: GitHub lo"
+            echo "manda en la cabecera y Vercel lo compara. Ver docs/ENTORNOS.md §4."
+            exit 1
+          fi
+
+          URL="$BASE_URL/api/cron/payouts-process"
+          if [ "$SIMULACRO" = "true" ]; then
+            URL="$URL?simulacro=1"
+            echo "▶ ENSAYO: no se reclama ninguna orden ni se llama al PSP."
+          fi
+
+          # ⚠️ LA TRAMPA DE DEPLOYMENT PROTECTION, la misma que ya mordió con el
+          # webhook de Stripe (docs/ENTORNOS.md §5). Los despliegues de preview
+          # están detrás del SSO de Vercel, que responde 302 hacia la pantalla de
+          # login ANTES de que corra una línea de nuestro código. No es un fallo
+          # del endpoint ni del secreto: la petición no llega. Va por CABECERA
+          # para que el token no acabe escrito en una URL ni en los logs.
+          if [ -n "${BYPASS:-}" ]; then
+            set -- -H "x-vercel-protection-bypass: $BYPASS"
+          else
+            set --
+          fi
+
+          code=$(curl -sS --max-time 300 -o /tmp/payouts.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$@" \
+            "$URL")
+
+          echo "HTTP $code"
+          cat /tmp/payouts.json; echo
+
+          # Cada código dice una cosa distinta y confundirlos cuesta una tarde.
+          case "$code" in
+            200) ;;
+            30*)
+              echo "::error::$code — Deployment Protection: la petición ni llegó al código."
+              echo "APP_BASE_URL apunta a una PREVIEW protegida. O se apunta a producción,"
+              echo "o se da de alta el secret VERCEL_PROTECTION_BYPASS (Vercel → Settings →"
+              echo "Deployment Protection → Protection Bypass for Automation)."
+              exit 1 ;;
+            503)
+              # ⚠️ DOS COSAS MUY DISTINTAS DAN 503 Y MANDAN A SITIOS OPUESTOS. El
+              # cuerpo las separa: sin `status` es que el endpoint ni arrancó
+              # (falta CRON_SECRET en Vercel); con `status: "sin-credencial"` es
+              # que el job corrió y el PSP le rechazó las claves. Distinguirlas
+              # aquí ahorra la tarde de buscar una variable que sí estaba.
+              if grep -q '"sin-credencial"' /tmp/payouts.json; then
+                echo "::error::503 — el PSP RECHAZÓ las credenciales (401/403). El lote se paró"
+                echo "a propósito: con la clave rota, lo que le pase a una orden le pasa a todas."
+                echo "Revisar DLOCALGO_API_KEY / DLOCALGO_SECRET_KEY en Vercel. Ninguna orden"
+                echo "quedó marcada como fallida y no se ha mandado dinero de más."
+              else
+                echo "::error::503 — falta CRON_SECRET en VERCEL (aquí sí está)."
+              fi
+              exit 1 ;;
+            401)
+              echo "::error::401 — CRON_SECRET no coincide entre GitHub y Vercel."
+              exit 1 ;;
+            500)
+              echo "::error::500 — falló la LECTURA de la cola, no el pago."
+              echo "Si el mensaje es 42501, le falta un grant a service_role sobre payouts o"
+              echo "payout_items (regla de oro 9; los grants están en 20260901130000)."
+              exit 1 ;;
+            *)
+              echo "::error::$code — respuesta inesperada del endpoint."
+              exit 1 ;;
+          esac
+
+          # A partir de aquí el HTTP fue 200, que significa "el job corrió", no
+          # "alguien cobró". Todo lo que sigue son las señales de que no cobró, y
+          # ninguna se ve en el código de estado.
+          if command -v jq >/dev/null 2>&1; then
+            estado=$(jq -r '.status // "?"'            /tmp/payouts.json)
+            pagados=$(jq -r '.pagados // 0'            /tmp/payouts.json)
+            importe=$(jq -r '.importePagado // 0'      /tmp/payouts.json)
+            enviados=$(jq -r '.enviados // 0'          /tmp/payouts.json)
+            adoptados=$(jq -r '.adoptados // 0'        /tmp/payouts.json)
+            rechazados=$(jq -r '.rechazados // 0'      /tmp/payouts.json)
+            duda=$(jq -r '.enDuda // 0'                /tmp/payouts.json)
+            sinid=$(jq -r '.sinIdentificar // 0'       /tmp/payouts.json)
+            cambio=$(jq -r '.bloqueos.sinDecidirCambio // 0' /tmp/payouts.json)
+            balance=$(jq -r '.bloqueos.balanceAjeno // 0'    /tmp/payouts.json)
+            fondos=$(jq -r '.bloqueos.sinFondos // 0'        /tmp/payouts.json)
+            credencial=$(jq -r '.bloqueos.sinCredencial // 0' /tmp/payouts.json)
+            datos=$(jq -r '.bloqueos.sinDatosDeCobro // 0'   /tmp/payouts.json)
+            descuadre=$(jq -r '.bloqueos.descuadrados // 0'  /tmp/payouts.json)
+            atascadas=$(jq -r '.atascadas // 0'        /tmp/payouts.json)
+            difuntos=$(jq -r '.difuntos // 0'          /tmp/payouts.json)
+
+            # 🔴 LA ÚNICA CIFRA QUE NUNCA PUEDE QUEDARSE ARRIBA. Una orden
+            # 'processing' sin identificador significa que puede haber un payout
+            # creado en el proveedor que esta base de datos no sabe reconocer. La
+            # ruta NO la reintenta —a propósito— así que no se resuelve sola: hay
+            # que mirar el panel del PSP y anotar el id a mano, o confirmar que no
+            # existe. Sube a error, no a warning.
+            if [ "$sinid" != "0" ] && [ "$sinid" != "null" ]; then
+              echo "::error::$sinid orden(es) reclamadas SIN identificador en el proveedor."
+              echo "Puede haber un payout creado sin conciliar. NO se reintenta solo (a"
+              echo "propósito: la API no tiene clave de idempotencia). Mirar el panel del PSP."
+            fi
+            if [ "$duda" != "0" ] && [ "$duda" != "null" ]; then
+              echo "::error::$duda orden(es) en duda en esta pasada — ver el log de Vercel."
+            fi
+
+            # 🔴 ÓRDENES EN VUELO QUE LLEVAN MÁS DE UN DÍA SIN MOVERSE. Es lo que
+            # delata un atasco. Ya no puede parar los pagos nuevos —las dos colas
+            # tienen cupos separados— pero sigue significando que hay dinero de un
+            # tutor detenido, y ninguna pasada lo va a resolver sola.
+            if [ "$atascadas" != "0" ] && [ "$atascadas" != "null" ]; then
+              echo "::error::$atascadas payout(s) en vuelo sin moverse desde hace más de 24 h."
+              echo "O esperan a que una persona los mire (en duda), o están parados en el PSP."
+              echo "  select id, tutor_id, amount, currency, provider_payout_id, provider_metadata"
+              echo "    from public.payouts where status = 'processing' and updated_at < now() - interval '1 day';"
+            fi
+
+            # Rechazos del proveedor: dinero prometido que no va a salir sin que
+            # una persona mire. Se avisa, no se tumba: quedarse en rojo cada hora
+            # convierte la alarma en ruido.
+            if [ "$rechazados" != "0" ] && [ "$rechazados" != "null" ]; then
+              echo "::warning::$rechazados payout(s) en 'failed' — requieren revisión manual."
+            fi
+            if [ "$fondos" != "0" ] && [ "$fondos" != "null" ]; then
+              echo "::warning::$fondos payout(s) sin saldo en el proveedor: hay que fondear el balance."
+            fi
+
+            # Los dos bloqueos que NO son un fallo y que ninguna pasada va a
+            # resolver sola: están esperando una decisión de fuera del código.
+            if [ "$cambio" != "0" ] && [ "$cambio" != "null" ]; then
+              echo "::warning::$cambio payout(s) parados por el TIPO DE CAMBIO: nadie ha decidido"
+              echo "quién asume el spread de dLocal (~4,6-4,7 %). Solo Ecuador cobra en USD y no"
+              echo "necesita conversión; los otros siete países esperan esa decisión de producto."
+            fi
+            if [ "$balance" != "0" ] && [ "$balance" != "null" ]; then
+              echo "::warning::$balance payout(s) financiados por un proveedor distinto del que paga."
+              echo "Un payout sale del balance del PSP que cobró ese dinero. Hoy todas las filas de"
+              echo "payment_routing_rules dicen charge_provider='stripe' con payout_provider='dlocal',"
+              echo "así que ninguna orden es ejecutable hasta que eso se decida (tesorería)."
+            fi
+            if [ "$credencial" != "0" ] && [ "$credencial" != "null" ]; then
+              echo "::warning::$credencial payout(s) intactos por falta de credencial del ejecutor."
+            fi
+            if [ "$datos" != "0" ] && [ "$datos" != "null" ]; then
+              echo "::warning::$datos payout(s) sin datos de cobro válidos del tutor."
+            fi
+            if [ "$descuadre" != "0" ] && [ "$descuadre" != "null" ]; then
+              echo "::error::$descuadre payout(s) cuyo importe NO cuadra con sus payout_items."
+              echo "No se manda ninguno. Es un problema de integridad, no del PSP."
+            fi
+
+            {
+              echo "**Payouts** · estado \`$estado\` · pagados **$pagados** ($importe) · en vuelo **$enviados** · adoptados **$adoptados**"
+              echo ""
+              echo "Rechazados **$rechazados** · en duda **$duda** · sin identificar **$sinid** · atascadas **$atascadas** · reintentos rearmados **$difuntos**"
+              echo ""
+              echo "Bloqueos: cambio **$cambio** · balance ajeno **$balance** · sin fondos **$fondos** · sin datos **$datos**"
+              echo ""
+              echo "Termómetro completo: \`select public.payouts_backlog();\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi

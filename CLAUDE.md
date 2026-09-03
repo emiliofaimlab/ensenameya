@@ -12,6 +12,9 @@
 - **`docs/QA-LANZAMIENTO.md`** — matriz de RLS **ejecutada**, idempotencia de webhooks, barrido responsive y checklist de lanzamiento (US-1602).
 - **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
 - **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (sin local) en Supabase + Vercel, flujo de trabajo y checklist (US-1603).
+- **`docs/PAGOS-Y-PAYOUTS.md`** — mapa de rutas de pago por país, coste real de cada tramo y
+  quién asume cada comisión (2026-09-02). **Manda en todo lo de pagos y payouts**: sustituye al
+  PDF «Infraestructura de Pagos» (jun-2026), cuyo eje de análisis es incorrecto.
 
 ### Dónde estamos (2026-08-07)
 
@@ -214,6 +217,7 @@ docs/BACKLOG.md               backlog vigente (sprints, espejo de Jira)
 docs/PLAN-DESARROLLO.md       estado de ejecución por sprint (el más fiel)
 docs/QA-LANZAMIENTO.md        matriz de RLS ejecutada + checklist de lanzamiento
 docs/ENTORNOS.md              ambientes dev + prod cloud (Supabase + Vercel), sin local
+docs/PAGOS-Y-PAYOUTS.md       rutas de pago por país, fees reales y quién asume qué
 docs/context/                 docs técnicos (Docs 0–9 + adenda + revisión + aprobación cliente)
 ```
 
