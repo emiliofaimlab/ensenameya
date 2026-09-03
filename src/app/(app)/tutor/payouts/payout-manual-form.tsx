@@ -233,9 +233,9 @@ export function PayoutManualForm({
     <div className="mt-3">
       <p className="max-w-[620px] text-[13px] text-[#6b6b6b]">
         A {etiquetaPais} no llega ninguna transferencia bancaria internacional,
-        así que tus cobros los envía una persona de nuestro equipo a la cuenta
-        que nos digas. Tiene que estar <strong>a tu nombre</strong>: no podemos
-        pagar a la cuenta de otra persona.
+        así que te pagamos a la cuenta que nos digas. Tiene que estar{" "}
+        <strong>a tu nombre</strong>: no podemos pagar a la cuenta de otra
+        persona. Cada forma de cobro te dice abajo cómo funciona.
       </p>
 
       {ordenada.length > 0 ? (
@@ -278,16 +278,19 @@ export function PayoutManualForm({
         </ul>
       ) : null}
 
-      {/* Se permiten VARIOS a propósito: la PK es `(tutor_id, channel)` y quien
-          paga es una persona, que necesita poder tirar de un segundo canal si el
-          primero no confirma. Pero entonces hay que decir quién elige, porque el
-          tutor no puede adivinarlo mirando esta lista. */}
+      {/* Se permiten VARIOS a propósito: la PK es `(tutor_id, channel)` y hace
+          falta poder tirar de un segundo canal si el primero no confirma.
+          ⚠️ Este comentario decía «quien paga es una persona» y ya no es cierto
+          para todos: desde `20260903210000` PayPal lo ejecuta el job. Da igual
+          para el porqué de permitir varios —la razón es el respaldo, no quién
+          lo maneja— pero sí cambia el texto de abajo, que atribuía la elección
+          a una persona. Quién elige de verdad es el orden de
+          `payment_routing_rules.payout_providers`. */}
       {ordenada.length > 1 ? (
         <p className="mt-2 max-w-[620px] text-[13px] text-[#6b6b6b]">
           Tienes {ordenada.length} formas de cobro registradas. Usamos una sola
-          por pago y la elige quien te lo envía, empezando por la de arriba; si
-          no llega, prueba con la siguiente. Si prefieres que sea siempre la
-          misma, retira las demás.
+          por pago, empezando por la de arriba; si esa no llega, la siguiente. Si
+          prefieres que sea siempre la misma, retira las demás.
         </p>
       ) : null}
 
