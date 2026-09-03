@@ -138,7 +138,7 @@ export type QuienEjecuta = "proveedor" | "persona";
  *   ───────────┼────────────────────┼──────────────────
  *   banco      │ dlocal, stripe,    │ banco-manual
  *              │ wise               │
- *   identific. │ paypal, airtm      │ manual
+ *   identific. │ paypal             │ manual
  */
 export type Riel = {
   clave: string;
@@ -153,7 +153,7 @@ export type Riel = {
    * cuando el cobro entró por dLocal — no es una regla de Colombia, es una
    * propiedad del riel, y por eso vive aquí y no en la tabla de ruteo.
    *
-   * Los fondeados aparte (wise, paypal, airtm, manual, banco-manual) recargan su
+   * Los fondeados aparte (wise, paypal, manual, banco-manual) recargan su
    * saldo desde nuestro banco y no dependen de quién cobró.
    */
   ataduraDeBalance: boolean;
@@ -172,7 +172,7 @@ export const RIEL_BANCO_MANUAL = "banco-manual";
  * EL REGISTRO DE RIELES. Es la única tabla de verdad sobre qué significa cada
  * clave de `payment_routing_rules.payout_providers`.
  *
- * ⚠️ 'paypal', 'wise' y 'airtm' ESTÁN DECLARADOS Y NO TIENEN ADAPTADOR, y eso es
+ * ⚠️ 'paypal' y 'wise' ESTÁN DECLARADOS Y NO TIENEN ADAPTADOR, y eso es
  * deliberado. Es lo que permite distinguir «riel que existe pero aún no está
  * listo» de «typo en la tabla»: una `s` de más en 'dlocals' no encuentra riel y
  * el país deja de ser servible, mientras que 'wise' sí lo es y su fila se limita
@@ -210,13 +210,6 @@ const RIELES: Record<string, Riel> = {
   },
   paypal: {
     clave: "paypal",
-    dato: "identificador",
-    ejecuta: "proveedor",
-    ataduraDeBalance: false,
-    puedePagar: () => false,
-  },
-  airtm: {
-    clave: "airtm",
     dato: "identificador",
     ejecuta: "proveedor",
     ataduraDeBalance: false,
@@ -426,13 +419,13 @@ export const PSP_KEYS: string[] = Object.keys(PSPS);
  *
  * Es un `LocalProvider` porque es literalmente lo que dice la interfaz: un
  * proveedor que **no sale de casa**. No implementa `payout()` y no lo hará —
- * escribir un adaptador de PayPal, Airtm o Wise sin cuenta con la que probarlo
- * es exactamente lo que la decisión del 2-sep prohíbe—, así que el compilador
+ * escribir un adaptador de PayPal o Wise antes de haber llamado a su API es
+ * exactamente lo que costó tres meses con Stripe—, así que el compilador
  * impide llamarlo igual que impide llamar a `charge()` sobre el simulado.
  *
  * ponytail: son dos campos y no va a crecer. El techo es a propósito: el día
- * que Airtm tenga cuenta, lo que se escribe es un `PspProvider` con su clave
- * ('airtm'), NO un `payout()` colgado de esta constante. 'manual' seguirá
+ * que se escriba PayPal, lo que se escribe es un `PspProvider` con su clave
+ * ('paypal'), NO un `payout()` colgado de esta constante. 'manual' seguirá
  * significando «lo paga una persona», que es un estado permanente del sistema y
  * no un escalón hacia la automatización.
  */

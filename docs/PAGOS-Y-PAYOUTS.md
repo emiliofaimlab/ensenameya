@@ -6,6 +6,12 @@
 > «Infraestructura de Pagos» (Emilio, junio-2026), **cuyo eje de análisis es incorrecto**
 > (ver §9).
 >
+> ⚠️ **Airtm queda descartada (3-sep-2026)**: Enséñame Ya es una entidad estadounidense.
+> Era el payout recomendado de Venezuela y el único camino legal a stablecoin que este
+> documento contemplaba, así que **§4 cambia entero**. El mismo día llegaron las credenciales
+> de **Wise Business y PayPal Business**: los dos rieles dejan de esperar cuenta y pasan a
+> esperar adaptador.
+>
 > ⚠️ **El flujo de ruteo vigente es el de §1**, fijado por el cliente el **2026-09-03**.
 > Sustituye a los mapas anteriores de este documento y al del PDF: las secciones §4–§7
 > siguen siendo válidas para los COSTES de cada riel, no para decidir el ruteo.
@@ -32,7 +38,7 @@
 
 | Región | Checkout (cobro al alumno) | Payouts automáticos | Payouts manuales |
 | :-- | :-- | :-- | :-- |
-| **Venezuela** | **Stripe siempre**; si no está disponible, dLocal | Airtm · PayPal | Zinli · Binance · Zelle |
+| **Venezuela** | **Stripe siempre**; si no está disponible, dLocal | PayPal | Zinli · Binance · Zelle |
 | **Colombia** | **Stripe siempre**; si no está disponible, dLocal | Wise · PayPal · payout directo de Stripe | — |
 | **Resto del mundo** | **dLocal** donde lo cubra; Stripe donde no lo cubra o no esté disponible | PayPal · Wise · dLocal · Stripe | — |
 
@@ -65,7 +71,7 @@ Dos reglas transversales:
 | **El respaldo del checkout (regla 1)** | Hoy el ruteo elige UN proveedor por país; si falla, el cobro no se abre. Hay que definir además qué cuenta como «no disponible»: error de la API, país no soportado, o rechazo de la tarjeta |
 | **Colombia** | No tiene fila en `payment_routing_rules`, y sin fila no se puede vender (`create_booking_line` levanta «sin ruta de pago disponible»). Esa tabla no admite inserts desde fuera → migración |
 | **Los otros países que dLocal cobra** | dLocal cobra en ~17 países y la tabla solo nombra 8 más Venezuela. Los que faltan hoy no se pueden vender |
-| **Adaptadores de Airtm, PayPal, Wise y payout directo de Stripe** | Cuatro integraciones. Tres esperan cuenta; la de Stripe espera su autorización por escrito (§5) |
+| **Adaptadores de PayPal, Wise y payout directo de Stripe** | Tres integraciones. **PayPal y Wise ya tienen credenciales (3-sep)**: lo que falta es código, no cuenta. La de Stripe sigue esperando su autorización por escrito (§5) |
 | **Elegir entre varios automáticos** | `payout_provider` es hoy un valor fijo por país. La regla 2 lo convierte en «uno de este conjunto». La pieza que compara existe; la que elige entre candidatos, no |
 
 ⚠️ **En producción, los 8 países de dLocal siguen cobrando por Stripe**, a propósito: la
@@ -113,7 +119,6 @@ cuando el proveedor confirma**, nunca al emitir — ver §8 y `20260901120000`.
 | PayPal Checkout (comprador intl.) | 3,49 % + 1,5 % + $0,49 | 📋 |
 | PayPal Payouts | 2 % (tope ~$20) | 📋 |
 | Wise Business | ~0,4–0,7 % + fijo pequeño, **tipo medio de mercado** | 📋 |
-| Airtm Business | ~1 % | ❓ |
 | dLocal Go payout | fijo ~$1–2 **+ spread FX del 4,6–4,7 %** | ✅ |
 | dLocal Go cobro | ~4–6 %, negociado por volumen | ❓ |
 | Stripe cross-border payouts | no publicado | ❓ |
@@ -132,27 +137,29 @@ MercadoPago. La solución pasa por **cuentas en dólares**, no por bancos.
 flowchart LR
   A["Alumno<br/>$300"] --> S["Stripe<br/>−$16,20"]
   S --> C["Cuenta EY<br/>en dólares"]
-  C --> AT["Airtm<br/>auto · ~1 % · $2,10"]
-  C --> PP["PayPal<br/>auto · 2 % · $4,20"]
+  C --> PP["PayPal<br/>auto · 2 % · $4,20<br/>único automático"]
   C -.-> MN["Zinli · Binance · Zelle<br/>manual · $0 + tiempo admin"]
-  AT --> T["Tutor"]
-  PP --> T
+  PP --> T["Tutor"]
   MN --> T
 ```
 
 | Tramo | Proveedor | Modo | Coste | % s/ $300 |
 | :-- | :-- | :-- | --: | --: |
 | Cobro | Stripe · tarjeta intl. | auto | $16,20 | 5,40 % |
-| Payout recomendado | Airtm | auto | $2,10 | 0,70 % |
-| Payout alternativo | PayPal | auto | $4,20 | 1,40 % |
+| Payout único automático | PayPal | auto | $4,20 | 1,40 % |
 | Payout casos sueltos | Zinli · Binance · Zelle | manual | $0,00 | 0,00 % |
-| **Total con Airtm** | | | **$18,30** | **6,10 %** |
+| **Total con PayPal** | | | **$20,40** | **6,80 %** |
+
+⚠️ **Sin Airtm, Venezuela pasa de 6,10 % a 6,80 %** y se queda con **un solo riel
+automático**. Eso convierte la pregunta de §9 —¿PayPal Payouts admite destinatarios
+venezolanos?— en la que decide si Venezuela se puede automatizar; si la respuesta es no,
+Venezuela es manual para siempre. Con las credenciales del 3-sep ya se puede responder.
 
 **Por qué PayPal sale barato aquí y caro en Europa:** las cuentas venezolanas de PayPal son
 en dólares y pagamos en dólares → **no hay conversión**. La conversión es el coste dominante
 de todo este documento.
 
-⚠️ **El coste invisible que el tutor asume siempre.** $210 en saldo PayPal o Airtm **no
+⚠️ **El coste invisible que el tutor asume siempre.** $210 en saldo PayPal **no
 valen $210 en Venezuela**: convertir a bolívares pasa por el mercado P2P con un descuento que
 ni controlamos ni vemos. Es el argumento principal para **no** cargarle además la comisión del
 payout.
@@ -161,7 +168,7 @@ payout.
 
 | Canal | Motivo |
 | :-- | :-- |
-| **Binance** | 🔴 **Legal.** Enviar USDT desde wallet propia es transmisión de dinero sin licencia (Fla. Stat. §560.103 incluye «virtual currency»; nuestros propios Términos cierran la exención de *agent of the payee*). Además Binance.com no admite entidades US. Stablecoin **solo vía tercero licenciado** — Airtm es MSB de FinCEN, por eso sí. |
+| **Binance** | 🔴 **Legal.** Enviar USDT desde wallet propia es transmisión de dinero sin licencia (Fla. Stat. §560.103 incluye «virtual currency»; nuestros propios Términos cierran la exención de *agent of the payee*). Además Binance.com no admite entidades US. Stablecoin **solo vía tercero licenciado**, y descartada Airtm (3-sep) **no queda ninguno en la mesa**: hoy no hay vía de stablecoin. |
 | **Zelle** | Red US-a-US, sin API para negocios. Solo sirve si el tutor tiene cuenta bancaria **propia** en EE. UU. |
 | **Zinli** | Producto de consumo, sin API de payouts ni programa de partners. Solo manual. |
 
@@ -281,7 +288,6 @@ Mismo ejercicio: **$300 cobrados**, tutor **$210**, comisión bruta **$90**.
 | Ecuador | dLocal | $16,20 | $1,50 | $17,70 | 5,90 % | $72,30 |
 | España / Europa | Wise | $16,20 | $1,55 | $17,75 | 5,92 % | $72,25 |
 | Colombia | Wise | $16,20 | $2,06 | $18,26 | 6,09 % | $71,74 |
-| Venezuela | Airtm | $16,20 | $2,10 | $18,30 | 6,10 % | $71,70 |
 | Venezuela | PayPal | $16,20 | $4,20 | $20,40 | 6,80 % | $69,60 |
 | LATAM (7 países) | dLocal | $16,20 | $1,50 | $17,70 | 5,90 % | $72,30 |
 
@@ -298,7 +304,7 @@ Mismo ejercicio: **$300 cobrados**, tutor **$210**, comisión bruta **$90**.
 2. **El riel más caro es el único que ya está escrito.** dLocal cuesta **5× lo que Wise** por
    su spread. Aun así, elegir bien el riel vale **$9,50 por tutor y mes** → con 100 tutores
    activos, **$11.400/año**. Eso es lo que justifica integrar Wise.
-3. **Cadencia del lote:** con comisiones porcentuales (PayPal, Airtm) agrupar no ahorra nada.
+3. **Cadencia del lote:** con comisiones porcentuales (PayPal) agrupar no ahorra nada.
    Solo ahorra en **Wise y dLocal**, que llevan un fijo por operación.
 
 ### ⚠️ PayPal Checkout NO ahorra dinero
@@ -401,8 +407,6 @@ responder la pregunta de dLocal.
 | :-- | :-- | :-- |
 | Autorización de cross-border payouts a CO | **Stripe** | Por escrito. Ver §5 |
 | ¿Admite destinatarios venezolanos? | **PayPal** | **Lo primero que hay que probar.** Sandbox self-serve, respuesta en horas |
-| Tier de API de Airtm Business | **Airtm** | |
-| Condiciones de cuenta empresarial | **Wise · Airtm** | Para una LLC de Florida |
 | Comisión de cobro negociada | **dLocal** | Depende del volumen |
 | Tarifa real de PayPal Payouts | **PayPal** | Varía por cuenta y país |
 
@@ -427,12 +431,15 @@ después congele la cuenta con dinero de tutores dentro. Por eso la prueba de sa
 | Fase | Qué | Por qué en este orden |
 | :-- | :-- | :-- |
 | **1** | Payouts **manuales** operativos en Venezuela | Lo más rápido. La deuda con tutores que ya trabajaron no espera a una integración |
-| **2** | Airtm o PayPal **automáticos** en Venezuela | Convierte el manual en automático en el mercado principal |
+| **2** | **PayPal** automático en Venezuela | Convierte el manual en automático en el mercado principal. Descartada Airtm, es el único candidato — y solo si la prueba de §9 sale bien |
 | **3** | **Wise** para Colombia + resto del mundo | Un solo desarrollo cubre CO, ES, Europa y EE. UU. Mejor retorno por hora |
 | **4** | **dLocal** para los 8 países LATAM | Ya está desarrollado. Solo espera la decisión del spread |
 
 **Antes de la fase 2**, y en paralelo a todo: la prueba de sandbox de PayPal (§9) y el correo
 a Stripe (§5). Ninguna de las dos bloquea la fase 1.
+
+⚠️ **Con las credenciales de Wise y PayPal (3-sep) las fases 2 y 3 dejan de estar bloqueadas
+por cuentas.** Lo que las separa del código es la prueba de §9 para la 2 y nada para la 3.
 
 ### Decisiones de negocio pendientes
 
@@ -442,7 +449,7 @@ a Stripe (§5). Ninguna de las dos bloquea la fase 1.
 | ~~1-bis~~ | ~~¿Por dónde cobramos en los 8 países de dLocal?~~ ✅ **Resuelta 3-sep-2026: donde dLocal cubra, se cobra por dLocal; donde no, Stripe.** Aplicado en dev; en producción no, por la cuenta rechazada. Antes decía: ⚠️ Su regla de ruteo dice hoy `charge_provider = stripe` y `payout_provider = dlocal`, y **un payout se paga desde el balance del PSP que cobró**. Verificado EN EJECUCIÓN el 3-sep: la puerta del balance rechaza esas órdenes antes de llamar a nadie. Mientras no cambie, el riel de dLocal **no puede pagar en producción** por bien que estén las cuentas | Cobrar por dLocal en esos 8 países (su `charge_provider` a `dlocal`), o fondear su balance aparte y decidir cómo se entera el job | Los 8 de LATAM. Es el bloqueante real, por delante de los datos que faltan en MX/PY/PE |
 | ~~2~~ | ~~¿Cada cuánto se paga?~~ | ✅ **Resuelta 3-sep-2026: se queda como está** — lote semanal, lunes 03:00 UTC (`run-payout-batch`). La recomendación de este doc era mensual | — |
 | ~~3~~ | ~~¿Importe mínimo de retiro?~~ | ✅ **Resuelta 3-sep-2026: se queda como está — no hay mínimo.** La recomendación de este doc era ponerlo | — |
-| ~~4~~ | ~~¿Cuántos canales manuales en VE?~~ | ✅ **Resuelta 3-sep-2026: Zinli, Binance y Zelle.** PayPal y Airtm quedan como rieles automáticos, no manuales — sus filas del catálogo están apagadas, no borradas (`20260903120000`) | — |
+| ~~4~~ | ~~¿Cuántos canales manuales en VE?~~ | ✅ **Resuelta 3-sep-2026: Zinli, Binance y Zelle.** PayPal queda como riel automático, no manual — su fila del catálogo está apagada, no borrada (`20260903120000`). La de Airtm también, y ahí se queda: descartada el 3-sep | — |
 | **5** | ⏳ **ÚNICA ABIERTA.** ¿Hay alumnos sin tarjeta internacional? | Si sí, PayPal Checkout deja de ser ahorro y pasa a ser **ingresos nuevos** | Decide si se integra PayPal para cobrar |
 
 ---
