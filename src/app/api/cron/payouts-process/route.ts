@@ -188,7 +188,7 @@ function rastroDe(fila: OrdenDePago): Rastro {
  * —es un `LocalProvider`, no sabe pagar— y sin embargo es lo contrario de un
  * callejón sin salida: es una orden que paga una persona.
  */
-function pspDe(clave: string): PspProvider | null {
+function pspDe(clave: string | null): PspProvider | null {
   const p = adapterFor(clave);
   return p.opensRemoteCheckout ? p : null;
 }
@@ -315,9 +315,18 @@ export async function GET(req: Request) {
     // quién la reclamó: si alguien cambia la tabla de ruteo mientras hay órdenes
     // a medias, esas órdenes terminan por donde empezaron. Para una orden nueva
     // se resuelve por `payee_country`, que es la definición de la columna.
+    // ⚠️ C2r · El resolvedor recibe ahora de dónde SALIÓ el dinero, porque con
+    // listas de candidatos la atadura del balance no es una comprobación
+    // posterior sino parte de elegir: descarta a un candidato y deja pasar al
+    // siguiente. Y puede devolver `null` — «ningún candidato puede pagar esta
+    // orden hoy» —, que NO es un fallo: la fila se queda esperando.
     const claveEjecutor = enVueloYa
       ? (fila.provider ?? "simulated")
-      : await payoutProviderFor(fila.payee_country);
+      : await payoutProviderFor(fila.payee_country, fila.funding_provider);
+    // `claveEjecutor` puede ser null desde C2r: «ningún candidato puede pagar
+    // esta orden hoy». `pspDe` ya sabe tratar una clave que no es un PSP, así
+    // que se le pasa el null tal cual y la fila cae en el camino de «sin
+    // ejecutor», que es exactamente lo que significa.
     const psp = pspDe(claveEjecutor);
 
     const base = {
@@ -334,7 +343,7 @@ export async function GET(req: Request) {
     // adaptador de 'manual' existe pero no sabe pagar (`LocalProvider`), así que
     // `pspDe('manual')` devuelve null igual que un typo. Preguntar por la CLASE
     // de riel es lo que separa las dos cosas, y por eso se hace primero.
-    if (rielDePayout(claveEjecutor) === "manual") {
+    if (rielDePayout(claveEjecutor)?.ejecuta === "persona") {
       // Riel manual: NO hay adaptador y no va a haberlo (decisión de producto
       // del 2-sep). La fila se queda intacta —igual que en el caso de abajo— y
       // se cuenta APARTE, porque esto no es un bloqueo: es una orden con riel,
@@ -344,7 +353,11 @@ export async function GET(req: Request) {
       if (simulacro) {
         ensayo.push({
           ...base,
-          haria: "nada: riel manual — la paga una persona desde /admin/payouts",
+          haria: `nada: ${
+            rielDePayout(claveEjecutor)?.dato === "banco"
+              ? "transferencia bancaria a mano"
+              : "riel manual por canal"
+          } — la paga una persona desde /admin/payouts`,
         });
       }
       continue;

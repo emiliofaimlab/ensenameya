@@ -43,6 +43,12 @@ import type { AnyProvider, LocalProvider, PspProvider } from "@/lib/payments/por
  * Va con `service_role` porque la tabla no está concedida a `authenticated`:
  * es configuración de plataforma, y el runtime la lee dentro de las RPC.
  *
+ * ⚠️ DEVUELVE LA LISTA ENTERA Y NO FILTRA POR DISPONIBILIDAD, y eso es a
+ * propósito. Quien abre el cobro necesita saber QUÉ SE INTENTÓ y por qué falló
+ * cada candidato para poder decirlo en el 503; si esta función devolviera solo
+ * «el primero que se puede», esa información se perdería aquí y el error final
+ * sería «no se pudo cobrar» sin más.
+ *
  * ⚠️ HAY QUE PASARLE EL PAÍS DEL TUTOR, y desde A0 (`20260901140000`) no es
  * opcional. Hasta esa migración la tabla tenía UNA fila y mirar «la activa» sin
  * filtrar daba siempre la respuesta correcta por accidente; ahora tiene diez —
@@ -56,12 +62,12 @@ import type { AnyProvider, LocalProvider, PspProvider } from "@/lib/payments/por
  * declarado, y tiene su propia fila (`payee_country` null). Por eso el filtro es
  * `.is(...)` y no «sin filtro».
  */
-export async function activeChargeProvider(
+export async function chargeProvidersFor(
   payeeCountry: string | null,
-): Promise<string> {
+): Promise<string[]> {
   const base = createAdminClient()
     .from("payment_routing_rules")
-    .select("charge_provider")
+    .select("charge_providers")
     .eq("is_active", true)
     // El comodín de esta tabla es el PAGADOR, y solo él: la RPC filtra por
     // `payer_country is null` y una fila con país de pagador no la ve nadie.
@@ -76,9 +82,11 @@ export async function activeChargeProvider(
     .limit(1)
     .maybeSingle();
 
-  // Sin regla no se puede reservar (`create_booking` lanza RN-33). Se asume el
-  // camino conservador: enseñar el aviso de simulado antes que fingir un cobro.
-  return data?.charge_provider ?? "simulated";
+  // Sin regla no se puede reservar (`create_booking` lanza RN-33). Se devuelve
+  // el simulado a secas —el camino conservador de siempre: enseñar el aviso
+  // antes que fingir un cobro— y NO una lista con respaldo, porque el respaldo
+  // de una regla que no existe sería inventarse una.
+  return data?.charge_providers ?? ["simulated"];
 }
 
 /**
@@ -102,19 +110,142 @@ export async function activeChargeProvider(
  * que una `s` de más en 'dlocals' habría metido el país en el desplegable del
  * tutor y lo habría dejado atascado más tarde, en el formulario bancario.
  */
-export type RielDePayout = "banco" | "manual";
+export type FamiliaDeDato = "banco" | "identificador";
+
+/** Quién mueve el dinero cuando llega el momento. */
+export type QuienEjecuta = "proveedor" | "persona";
 
 /**
- * La clave que significa «esto lo paga una persona».
+ * 🔑 UN RIEL DE PAYOUT, Y POR QUÉ SON DOS EJES Y NO UNA LISTA DE CLASES.
  *
- * No es un proveedor y no tiene adaptador: es la ausencia de automatismo
- * ESCRITA, que es justo lo que la distingue de 'simulated' —donde no hay ni
- * automatismo ni destino— y de un typo.
+ * Hasta hoy esto era `"banco" | "manual"`, dos valores que mezclaban dos
+ * preguntas distintas y que funcionaban por accidente porque solo había dos
+ * rieles. Con los de la decisión del 3-sep ya no: **PayPal y Airtm son
+ * AUTOMÁTICOS y piden un identificador, no coordenadas bancarias.** Con una
+ * sola dimensión no hay dónde ponerlos sin mentir.
+ *
+ * Las dos preguntas son independientes y cada consumidor necesita UNA:
+ *
+ *   `dato`    qué se le pide al tutor, o sea qué formulario se le pinta.
+ *             'banco'         → nombre, documento, banco, cuenta, tipo
+ *                               (payout_country_rules + payout_banks + tutor_payout_accounts)
+ *             'identificador' → un correo, un teléfono o un usuario
+ *                               (payout_manual_channels + tutor_manual_payout_destinations)
+ *
+ *   `ejecuta` quién mueve el dinero.
+ *             'proveedor' → lo llama el job
+ *             'persona'   → lo cierra el admin con `manage_payout('mark_paid', …)`
+ *
+ * Las cuatro combinaciones existen de verdad, y por eso no se pueden colapsar:
+ *
+ *              │ proveedor          │ persona
+ *   ───────────┼────────────────────┼──────────────────
+ *   banco      │ dlocal, stripe,    │ banco-manual
+ *              │ wise               │
+ *   identific. │ paypal, airtm      │ manual
  */
-export const RIEL_MANUAL = "manual";
+export type Riel = {
+  clave: string;
+  dato: FamiliaDeDato;
+  ejecuta: QuienEjecuta;
+  /**
+   * 🔴 SOLO PUEDE PAGAR EL DINERO QUE ÉL COBRÓ.
+   *
+   * Un payout sale del balance del PSP que cobró esa reserva, así que un riel
+   * atado a un balance solo sirve si `payouts.funding_provider` es él mismo. Es
+   * lo que hace que el payout directo de Stripe no esté disponible en Colombia
+   * cuando el cobro entró por dLocal — no es una regla de Colombia, es una
+   * propiedad del riel, y por eso vive aquí y no en la tabla de ruteo.
+   *
+   * Los fondeados aparte (wise, paypal, airtm, manual, banco-manual) recargan su
+   * saldo desde nuestro banco y no dependen de quién cobró.
+   */
+  ataduraDeBalance: boolean;
+  /**
+   * ¿Hay HOY con qué ejecutar por este riel? Un riel declarado sin adaptador
+   * devuelve `false` y su sitio en la lista de candidatos no hace nada — solo
+   * reserva el orden de preferencia para el día que exista.
+   */
+  puedePagar(): boolean;
+};
 
-/** Un país que se puede servir, con la clase de riel que le toca. */
-export type PaisDePayout = { code: string; riel: RielDePayout };
+export const RIEL_MANUAL = "manual";
+export const RIEL_BANCO_MANUAL = "banco-manual";
+
+/**
+ * EL REGISTRO DE RIELES. Es la única tabla de verdad sobre qué significa cada
+ * clave de `payment_routing_rules.payout_providers`.
+ *
+ * ⚠️ 'paypal', 'wise' y 'airtm' ESTÁN DECLARADOS Y NO TIENEN ADAPTADOR, y eso es
+ * deliberado. Es lo que permite distinguir «riel que existe pero aún no está
+ * listo» de «typo en la tabla»: una `s` de más en 'dlocals' no encuentra riel y
+ * el país deja de ser servible, mientras que 'wise' sí lo es y su fila se limita
+ * a esperar. Sin esta distinción, las dos cosas darían el mismo silencio.
+ *
+ * NO se escriben sus adaptadores: sin cuenta no hay sandbox con el que probarlos,
+ * y programar contra una API que nadie ha llamado es lo que costó tres meses con
+ * Stripe y una premisa falsa con dLocal. Encender uno es añadir su `payout()` y
+ * su credencial; el modelo no cambia.
+ */
+const RIELES: Record<string, Riel> = {
+  [stripeProvider.key]: {
+    clave: stripeProvider.key,
+    dato: "banco",
+    ejecuta: "proveedor",
+    ataduraDeBalance: true,
+    // Hoy devuelve siempre una frase («exige Connect, y Connect exige el KYC
+    // bloqueado»), así que este riel nunca puede pagar. Se pregunta igual, para
+    // que el día que se autorice no haya que tocar esto.
+    puedePagar: () => stripeProvider.missingPayoutConfig() === null,
+  },
+  [dlocalProvider.key]: {
+    clave: dlocalProvider.key,
+    dato: "banco",
+    ejecuta: "proveedor",
+    ataduraDeBalance: true,
+    puedePagar: () => dlocalProvider.missingPayoutConfig() === null,
+  },
+  wise: {
+    clave: "wise",
+    dato: "banco",
+    ejecuta: "proveedor",
+    ataduraDeBalance: false,
+    puedePagar: () => false,
+  },
+  paypal: {
+    clave: "paypal",
+    dato: "identificador",
+    ejecuta: "proveedor",
+    ataduraDeBalance: false,
+    puedePagar: () => false,
+  },
+  airtm: {
+    clave: "airtm",
+    dato: "identificador",
+    ejecuta: "proveedor",
+    ataduraDeBalance: false,
+    puedePagar: () => false,
+  },
+  [RIEL_MANUAL]: {
+    clave: RIEL_MANUAL,
+    dato: "identificador",
+    ejecuta: "persona",
+    ataduraDeBalance: false,
+    // Una persona siempre puede. Es lo que lo convierte en el último recurso
+    // que hace que ninguna orden se quede sin vía.
+    puedePagar: () => true,
+  },
+  [RIEL_BANCO_MANUAL]: {
+    clave: RIEL_BANCO_MANUAL,
+    dato: "banco",
+    ejecuta: "persona",
+    ataduraDeBalance: false,
+    puedePagar: () => true,
+  },
+};
+
+/** Un país que se puede servir, con el DATO que hay que pedirle a su tutor. */
+export type PaisDePayout = { code: string; dato: FamiliaDeDato };
 
 /**
  * C2 · `resolvePayout(payee_country)` del Doc 6 §6.2 — QUIÉN SACA EL DINERO.
@@ -126,22 +257,27 @@ export type PaisDePayout = { code: string; riel: RielDePayout };
  * de dLocal Go), y esa discrepancia no es un descuido: es la que hace que
  * `payouts.funding_provider` tenga que existir aparte de `payouts.provider`.
  *
- * ⚠️ QUE ESTA FUNCIÓN DEVUELVA UN PSP **NO** SIGNIFICA QUE LA ORDEN SE PUEDA
- * PAGAR. El ejecutor puede saber pagar y aun así no tener de dónde: un payout
- * financiado por Stripe no se puede sacar del balance de dLocal Go, porque el
- * dinero está en otro sitio. Esa comprobación —`funding_provider` contra la
- * clave del ejecutor— la hace el job, fila a fila, y no se puede resolver aquí:
- * aquí solo hay país.
+ * ⚠️ AQUÍ ESTUVO ESCRITO que la comprobación del balance «la hace el job, fila
+ * a fila, y no se puede resolver aquí: aquí solo hay país». Era cierto mientras
+ * la firma fuese solo el país. Desde C2r recibe también `fundingProvider`, así
+ * que la atadura se resuelve DENTRO — y tiene que ser dentro, porque con listas
+ * de candidatos el balance no es una comprobación posterior sino parte de
+ * ELEGIR: descarta a un candidato y deja pasar al siguiente.
+ *
+ * Devolver `null` NO es un error: es «ningún candidato puede pagar esta orden
+ * hoy». Quien lo reciba la cuenta y la deja `scheduled` — es dinero que se debe
+ * y que saldrá cuando exista el riel, no una orden fallida.
  *
  * `payeeCountry` null es el tutor que no ha declarado país; tiene su propia fila
  * con `payout_provider='simulated'`, que es la ausencia de ejecutor.
  */
 export async function payoutProviderFor(
   payeeCountry: string | null,
-): Promise<string> {
+  fundingProvider: string | null,
+): Promise<string | null> {
   const base = createAdminClient()
     .from("payment_routing_rules")
-    .select("payout_provider")
+    .select("payout_providers")
     .eq("is_active", true)
     .is("payer_country", null);
 
@@ -154,17 +290,25 @@ export async function payoutProviderFor(
     .limit(1)
     .maybeSingle();
 
-  // Sin fila activa no hay ejecutor. Se devuelve 'simulated' —que `adapterFor`
-  // resuelve al proveedor que no sale de casa— y el job lo cuenta como orden sin
-  // ejecutor en vez de mandarla a cualquiera.
-  //
-  // ⚠️ DESDE EL 2-SEP ESTA FUNCIÓN PUEDE DEVOLVER 'manual' (Venezuela,
-  // `20260902150000`), y eso NO es «no hay ejecutor»: es «el ejecutor es una
-  // persona». Quien la llame para decidir si toca una fila tiene que preguntar
-  // por `rielDePayout()` y no por `adapterFor()`, porque el adaptador de un riel
-  // manual no existe ni va a existir — un payout manual lo cierra el admin con
-  // `manage_payout(id, 'mark_paid', <referencia>, <canal>)` (`20260902120000`).
-  return data?.payout_provider ?? "simulated";
+  // Sin fila activa no hay a dónde pagar. `null`, igual que si ningún candidato
+  // sirve: las dos cosas significan «esta orden espera», y el job las cuenta.
+  const candidatos = data?.payout_providers ?? [];
+
+  for (const clave of candidatos) {
+    const riel = RIELES[clave];
+    // Clave desconocida (un typo) o 'simulated': no es un riel. Se salta, y si
+    // era el único la orden se queda esperando — que es lo correcto, porque
+    // mandarla a «cualquiera» es lo que este resolvedor existe para impedir.
+    if (!riel) continue;
+    if (!riel.puedePagar()) continue;
+    // 🔴 LA ATADURA DEL BALANCE. Aquí, y no en el job: tenerlo en dos sitios es
+    // cómo se desincronizan. Un riel atado solo sirve si el dinero está en SU
+    // balance; uno fondeado aparte no depende de quién cobró.
+    if (riel.ataduraDeBalance && riel.clave !== fundingProvider) continue;
+    return riel.clave;
+  }
+
+  return null;
 }
 
 /**
@@ -200,7 +344,7 @@ export async function payoutProviderFor(
 export async function payoutCountries(): Promise<PaisDePayout[]> {
   const { data } = await createAdminClient()
     .from("payment_routing_rules")
-    .select("payee_country, payout_provider")
+    .select("payee_country, payout_providers")
     .eq("is_active", true)
     .is("payer_country", null)
     .not("payee_country", "is", null)
@@ -212,19 +356,54 @@ export async function payoutCountries(): Promise<PaisDePayout[]> {
     .order("payee_country")
     .order("priority");
 
-  // Se queda la PRIMERA fila de cada país —la que ganaría el ruteo— y su riel
-  // se resuelve después. Que una fila con la clave rota tape a la siguiente es
-  // lo correcto: si el ruteo va a elegir la rota, el país no es servible por
-  // mucho que exista una fila buena detrás.
-  const gana = new Map<string, string>();
+  // Se queda la PRIMERA fila de cada país —la que ganaría el ruteo—. Que una
+  // fila con la clave rota tape a la siguiente es lo correcto: si el ruteo va a
+  // elegir la rota, el país no es servible por mucho que exista una buena detrás.
+  const gana = new Map<string, string[]>();
   for (const r of data ?? []) {
     if (!r.payee_country || gana.has(r.payee_country)) continue;
-    gana.set(r.payee_country, r.payout_provider);
+    gana.set(r.payee_country, r.payout_providers ?? []);
   }
 
-  return [...gana]
-    .map(([code, proveedor]) => ({ code, riel: rielDePayout(proveedor) }))
-    .filter((p): p is PaisDePayout => p.riel !== null);
+  const paises: PaisDePayout[] = [];
+  for (const [code, candidatos] of gana) {
+    const dato = datoQueSePide(candidatos);
+    if (dato !== null) paises.push({ code, dato });
+  }
+  return paises;
+}
+
+/**
+ * 🔑 QUÉ DATO SE LE PIDE AL TUTOR CUANDO SUS CANDIDATOS NO PIDEN LO MISMO.
+ *
+ * Colombia es el caso: `{wise, paypal, stripe, banco-manual}` mezcla tres rieles
+ * de coordenadas bancarias con uno de identificador. Solo se le puede pedir UNA
+ * cosa, así que hay que elegir, y elegir mal tiene un coste concreto:
+ * anunciarle un riel y pedirle los datos de otro lo deja con un formulario
+ * relleno que su payout no puede usar.
+ *
+ * Gana la familia del PRIMER candidato que de verdad pueda pagar hoy. No la del
+ * primero de la lista: si Wise aún no tiene adaptador, pedirle coordenadas
+ * bancarias «porque Wise es el preferido» sería pedirle datos para un riel que
+ * no existe. Y como el riel manual va siempre al final y siempre puede, hay
+ * garantía de que alguno contesta.
+ *
+ * `null` = ningún candidato puede pagar. Ese país NO se le ofrece al tutor,
+ * porque ofrecérselo es prometerle un cobro que no se puede ejecutar.
+ *
+ * ponytail: el techo es que un país mixto le pide los datos del riel de HOY, y
+ * el día que Wise se encienda un tutor colombiano que había registrado datos
+ * bancarios ya los tiene bien (Wise también es 'banco'). Si algún día el riel
+ * que se enciende pide otra familia, ese tutor tendrá que volver a declararlos y
+ * habrá que avisarle. No se escribe hoy una migración de datos para un caso que
+ * quizá no ocurra.
+ */
+function datoQueSePide(candidatos: string[]): FamiliaDeDato | null {
+  for (const clave of candidatos) {
+    const riel = RIELES[clave];
+    if (riel?.puedePagar()) return riel.dato;
+  }
+  return null;
 }
 
 /**
@@ -275,9 +454,24 @@ const manualProvider: LocalProvider = {
  * distinguir de un error de tecleo: los dos caen fuera de `PSPS`, pero solo uno
  * de los dos significa algo.
  */
+/**
+ * El riel manual con COORDENADAS BANCARIAS. Mismo motivo de existir que
+ * `manualProvider` —ser una identidad reconocible y no un typo— y misma
+ * ausencia de `payout()`: lo ejecuta una persona haciendo una transferencia.
+ *
+ * Es un riel aparte y no una variante de 'manual' porque le pide al tutor un
+ * dato DISTINTO (ver el registro `RIELES`), y esa diferencia es la que decide
+ * qué formulario se le pinta y qué destino tiene que leer el admin para pagar.
+ */
+const bancoManualProvider: LocalProvider = {
+  key: RIEL_BANCO_MANUAL,
+  opensRemoteCheckout: false,
+};
+
 const LOCALES: Record<string, LocalProvider> = {
   [simulatedProvider.key]: simulatedProvider,
   [manualProvider.key]: manualProvider,
+  [bancoManualProvider.key]: bancoManualProvider,
 };
 
 /**
@@ -299,10 +493,9 @@ const LOCALES: Record<string, LocalProvider> = {
  * ⚠️ Lee `PSPS`, que se declara arriba y se evalúa al cargar el módulo: aquí no
  * hay ciclo, solo orden de lectura.
  */
-export function rielDePayout(clave: string | null): RielDePayout | null {
+export function rielDePayout(clave: string | null): Riel | null {
   if (!clave) return null;
-  if (clave === RIEL_MANUAL) return "manual";
-  return PSPS[clave] ? "banco" : null;
+  return RIELES[clave] ?? null;
 }
 
 /**

@@ -215,7 +215,7 @@ export default async function TutorPayoutsPage() {
    * reconoce— y entonces no se pide ningún dato, porque no se iba a poder usar.
    */
   const rielDeclarado: RielDeCobro | null = paisDeCobro
-    ? (servibles.find((p) => p.code === paisDeCobro)?.riel ?? null)
+    ? (servibles.find((p) => p.code === paisDeCobro)?.dato ?? null)
     : null;
 
   // La regla del país DECLARADO. Si el tutor no ha declarado ninguno no hay
@@ -367,7 +367,7 @@ export default async function TutorPayoutsPage() {
                 «cuenta», hay un correo o un teléfono, y llamarlo cuenta es
                 pedirle al tutor un número que no tiene. */}
             <dt className="text-xs text-[#6b6b6b]">
-              {riel === "manual" ? "Forma de cobro" : "Cuenta de cobro"}
+              {riel === "identificador" ? "Forma de cobro" : "Cuenta de cobro"}
             </dt>
             <dd className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
               <StatusPill tone={estadoCuenta.tone}>
@@ -470,7 +470,7 @@ export default async function TutorPayoutsPage() {
                 ? ` Las formas de cobro que registraste (${destinos.map((d) => etiquetaDeCanal(d.channel)).join(", ")}) siguen guardadas.`
                 : ""}
             </p>
-          ) : riel === "manual" ? (
+          ) : riel === "identificador" ? (
             <>
               {/* El tutor que cambió de un país de banco a uno manual: sus datos
                   bancarios siguen ahí, pero no sirven para pagarle aquí. Mismo

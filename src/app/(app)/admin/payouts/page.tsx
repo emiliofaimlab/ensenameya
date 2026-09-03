@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney } from "@/lib/catalog/format";
 import { nombrePais, PAYOUT_BADGE } from "@/lib/payouts";
-import { rielDePayout, RIEL_MANUAL, type RielDePayout } from "@/lib/payments";
+import { rielDePayout, type Riel } from "@/lib/payments";
 import type { Database, Json } from "@/lib/database.types";
 import {
   PanelCard,
@@ -99,7 +99,7 @@ type FilaPayout = {
 type ReglaDeRuteo = {
   payee_country: string | null;
   payer_country: string | null;
-  payout_provider: string;
+  payout_providers: string[];
   priority: number;
   is_active: boolean;
 };
@@ -137,26 +137,30 @@ type ReglaDeRuteo = {
  *     declarado país. NO es «a mano»: no hay riel que ejecutar, y pintarlo como
  *     manual mandaría al admin a buscar un destino de cobro que no existe.
  */
-type Riel = {
+type RielEnPantalla = {
   /** Lo que se pinta en la píldora. */
   etiqueta: string;
   /**
-   * La clase de riel según la tabla de ruteo, o `null` si esa clave no nombra
-   * ninguno. `null` también cuando no se ha podido leer la tabla (ver
-   * `resuelto`): son dos «no se sabe» distintos y solo uno es culpa del dato.
+   * El riel según la tabla de ruteo, o `null` si ningún candidato nombra uno.
+   * `null` también cuando no se ha podido leer la tabla (ver `resuelto`): son
+   * dos «no se sabe» distintos y solo uno es culpa del dato.
    */
-  clase: RielDePayout | null;
-  /** ¿tiene que sacarla una persona? Solo `clase === 'manual'`. */
+  riel: Riel | null;
+  /**
+   * ¿tiene que sacarla una persona? Es `riel.ejecuta === 'persona'`, o sea
+   * 'manual' Y 'banco-manual': piden datos distintos al tutor pero los dos los
+   * cierra el admin.
+   */
   manual: boolean;
   /** false cuando no se ha podido leer la tabla de ruteo (sin clave de servicio). */
   resuelto: boolean;
 };
 
-function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): Riel {
+function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): RielEnPantalla {
   // Sin tabla de ruteo no se inventa nada: se dice lo poco que se sabe (quién
   // lo ejecutó, si ya se ejecutó) y la pantalla avisa arriba de por qué.
   if (reglas === null) {
-    return { etiqueta: fila.provider ?? "—", clase: null, manual: false, resuelto: false };
+    return { etiqueta: fila.provider ?? "—", riel: null, manual: false, resuelto: false };
   }
 
   const regla = reglas
@@ -168,18 +172,19 @@ function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): Riel {
     )
     .sort((a, b) => a.priority - b.priority)[0];
 
-  const ejecutor = regla?.payout_provider ?? null;
-  const clase = rielDePayout(ejecutor);
+  // ⚠️ C2r · El ruteo ya no da UN ejecutor sino una LISTA de candidatos, y la
+  // pantalla no puede resolver cuál gana: eso depende de `funding_provider` de
+  // cada orden y de qué rieles tienen adaptador hoy, que es lo que hace
+  // `payoutProviderFor` en el servidor. Lo que sí se puede enseñar sin mentir es
+  // el PRIMER candidato con riel reconocido, etiquetado como preferencia.
+  const candidatos = regla?.payout_providers ?? [];
+  const ejecutor = candidatos.find((c) => rielDePayout(c) !== null) ?? null;
+  const riel = rielDePayout(ejecutor);
 
   // Lo que dice el RUTEO. Si ya se ejecutó manda `payouts.provider`, que dice
   // quién la sacó DE VERDAD y no tiene por qué ser quien decía la tabla (un
   // `mark_paid` escribe 'zelle' sobre una orden que el ruteo mandaba a 'dlocal').
-  const delRuteo =
-    clase === "banco"
-      ? (ejecutor ?? "—")
-      : clase === "manual"
-        ? RIEL_MANUAL
-        : "sin ejecutor";
+  const delRuteo = riel ? (ejecutor ?? "—") : "sin ejecutor";
 
   // ⚠️ `fila.provider` y el ruteo NO son la misma pregunta, y confundirlos hace
   // que un payout argentino que dLocal rechazó y que se acabó pagando por Zelle
@@ -187,17 +192,20 @@ function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): Riel {
   // que ESA orden tendría que haber salido sola. El ruteo dice por dónde IBA;
   // `provider` dice por dónde SALIÓ. Cuando difieren se enseñan las dos.
   const pagadoPorOtro =
-    clase !== null && fila.provider !== null && fila.provider !== delRuteo;
+    riel !== null && fila.provider !== null && fila.provider !== delRuteo;
 
   return {
     etiqueta:
-      clase === null
+      riel === null
         ? (fila.provider ?? delRuteo)
         : pagadoPorOtro
           ? `${delRuteo} · pagado por ${fila.provider}`
           : delRuteo,
-    clase,
-    manual: clase === "manual",
+    riel,
+    // Pagable a mano es una propiedad del riel, no de su nombre: cubre 'manual'
+    // (canal e identificador) y 'banco-manual' (transferencia bancaria), que
+    // piden datos distintos pero los dos los cierra una persona.
+    manual: riel?.ejecuta === "persona",
     resuelto: true,
   };
 }
@@ -325,7 +333,7 @@ export default async function AdminPayoutsPage({
   if (admin) {
     const { data: rr, error: errRR } = await admin
       .from("payment_routing_rules")
-      .select("payee_country, payer_country, payout_provider, priority, is_active");
+      .select("payee_country, payer_country, payout_providers, priority, is_active");
     if (errRR) errorRuteo = errRR.message;
     else reglas = (rr ?? []) as unknown as ReglaDeRuteo[];
   }
@@ -531,7 +539,7 @@ export default async function AdminPayoutsPage({
             type: "select",
             options: rieles.map((r) => ({
               value: r,
-              label: r === RIEL_MANUAL ? "manual (a mano)" : r,
+              label: rielDePayout(r)?.ejecuta === "persona" ? `${r} (a mano)` : r,
             })),
           },
         ]}
@@ -654,12 +662,14 @@ export default async function AdminPayoutsPage({
           aunque diga lo mismo: ese texto está escrito en segunda persona para el
           TUTOR («el importe se te paga en ARS») y aquí quien lee es quien paga.
           Repetirlo tal cual sería más raro que decirlo bien una vez. */}
-      {/* ⚠️ La condición es `clase === 'banco'` y no `!riel.manual`: desde que
-          hay tres clases de riel, «no manual» incluye también las órdenes SIN
-          ejecutor (el tutor que no ha declarado país), que no pasan por dLocal
-          ni convierten nada. Con la condición vieja, una cola de puras órdenes
-          sin ejecutor pintaba un aviso sobre el tipo de cambio de dLocal. */}
-      {reglas !== null && visibles.some(({ riel }) => riel.clase === "banco") ? (
+      {/* ⚠️ La condición mira la CLAVE del riel y no su familia de dato, y desde
+          C2r eso importa: el aviso habla del tipo de cambio DE dLOCAL, y
+          'banco' incluye ahora también a Wise y al payout directo de Stripe,
+          que no convierten con la tasa de dLocal. Antes decía `clase ===
+          'banco'` para no meter las órdenes sin ejecutor —que era el bug que
+          arregló—, pero se quedó corto en la otra dirección. */}
+      {reglas !== null &&
+      visibles.some(({ riel }) => riel.riel?.clave === "dlocal") ? (
         <p className="text-xs text-[#6b6b6b]">
           En los rieles con conversión —los 7 países de dLocal con moneda local;
           Ecuador no, cobra en USD— el importe de cada fila es lo que{" "}

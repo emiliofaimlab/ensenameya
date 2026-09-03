@@ -238,7 +238,7 @@ export function estadoDeLaCuenta(args: {
     return { tone: "amber", pill: "Pendiente", detalle: null };
   }
 
-  if (riel === "manual") {
+  if (riel === "identificador") {
     if (destinos.length === 0) {
       return { tone: "amber", pill: "Sin datos", detalle: null };
     }
@@ -301,7 +301,14 @@ export function estadoDeLaCuenta(args: {
  * compilar y alguien tiene que venir a decidir qué formulario le toca. Un
  * `string` suelto habría dejado pasar ese día en silencio.
  */
-export type RielDeCobro = "banco" | "manual";
+/**
+ * ⚠️ C2r · Son las dos FAMILIAS DE DATO que un tutor puede tener que declarar, y
+ * ya no coinciden con «automático o a mano»: PayPal y Airtm son automáticos y
+ * piden un identificador, igual que el riel manual. Lo que esta pantalla
+ * necesita saber es qué campos pintar, no quién ejecuta — así que es el mismo
+ * par que `FamiliaDeDato` en `@/lib/payments`, del que sale por `payoutCountries()`.
+ */
+export type RielDeCobro = "banco" | "identificador";
 
 /** Una fila de `payout_manual_channels`, tal y como la sirve PostgREST. */
 export type CanalManual = {

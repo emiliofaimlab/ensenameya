@@ -963,38 +963,38 @@ export type Database = {
       }
       payment_routing_rules: {
         Row: {
-          charge_provider: string
+          charge_providers: string[]
           created_at: string
           id: string
           is_active: boolean
           notes: string | null
           payee_country: string | null
           payer_country: string | null
-          payout_provider: string
+          payout_providers: string[]
           priority: number
           updated_at: string
         }
         Insert: {
-          charge_provider: string
+          charge_providers: string[]
           created_at?: string
           id?: string
           is_active?: boolean
           notes?: string | null
           payee_country?: string | null
           payer_country?: string | null
-          payout_provider: string
+          payout_providers: string[]
           priority?: number
           updated_at?: string
         }
         Update: {
-          charge_provider?: string
+          charge_providers?: string[]
           created_at?: string
           id?: string
           is_active?: boolean
           notes?: string | null
           payee_country?: string | null
           payer_country?: string | null
-          payout_provider?: string
+          payout_providers?: string[]
           priority?: number
           updated_at?: string
         }

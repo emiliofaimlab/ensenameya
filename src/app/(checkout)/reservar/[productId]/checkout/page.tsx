@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
 import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
-import { activeChargeProvider } from "@/lib/payments";
+import { chargeProvidersFor } from "@/lib/payments";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { CheckoutSteps } from "@/components/checkout/checkout-steps";
@@ -97,8 +97,12 @@ export default async function CheckoutPage({
     .eq("profile_id", product.tutor.id)
     .maybeSingle();
   // La pantalla tiene que decir la verdad ANTES de que el alumno pulse.
+  // El PRIMER candidato es el que va a cobrar en el caso normal. El respaldo no
+  // se mira aquí a propósito: esta pantalla promete lo que va a pasar, y lo que
+  // va a pasar es que cobra el primero — el segundo solo entra si el primero no
+  // está disponible, y eso no se sabe hasta que se abre el cobro.
   const simulado =
-    (await activeChargeProvider(cobro?.payout_country ?? null)) === "simulated";
+    (await chargeProvidersFor(cobro?.payout_country ?? null))[0] === "simulated";
 
   // M-02 · ¿esta mentoría acepta sola? Cambia lo que se promete abajo: con la
   // aceptación automática la reserva pagada salta a `confirmed` sin pasar por
