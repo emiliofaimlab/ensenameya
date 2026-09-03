@@ -40,6 +40,7 @@ const TEXT: Record<string, string> = {
   payout_paid: "Se pagó tu liquidación",
   recording_ready: "La grabación de tu mentoría ya está disponible",
   payout_issue: "Una liquidación necesita atención",
+  payout_unclaimed: "Tu liquidación está esperando a que la reclames",
   // NTF-21 · el canal de este aviso es `email`, pero la campana pinta TODAS las
   // filas de `notifications` sin mirar el canal, así que también sale aquí. Sin
   // esta línea diría "Novedad en tu cuenta (NTF-21)".

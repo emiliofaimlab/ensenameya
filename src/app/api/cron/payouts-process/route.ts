@@ -984,9 +984,36 @@ export async function GET(req: Request) {
     );
   }
 
+  // ── EL PAGO QUE SALIÓ Y NO LLEGÓ ────────────────────────────────────────
+  //
+  // Va DESPUÉS de la pasada y fuera del bucle a propósito: no es un desenlace de
+  // ninguna orden concreta, es un barrido sobre las que llevan demasiado tiempo
+  // en vuelo. PayPal retiene 30 días un pago cuyo destinatario no lo reclama y
+  // luego lo devuelve; durante ese mes el panel del tutor dice «enviado» y el
+  // dinero no está. Ver la migración `20260903220000`.
+  //
+  // ⚠️ No rompe la pasada si falla. Encolar un aviso es lo MENOS importante que
+  // hace este job: dejar el pago de un tutor a medias por un fallo al avisar
+  // sería cambiar dinero por un correo.
+  let avisadosSinReclamar = 0;
+  try {
+    const { data: avisos, error: eAvisos } = await admin.rpc(
+      "avisar_payouts_sin_reclamar",
+      {},
+    );
+    if (eAvisos) throw eAvisos;
+    avisadosSinReclamar = avisos ?? 0;
+  } catch (e) {
+    console.error("[payouts] no se pudieron encolar los avisos de pago sin reclamar", e);
+    avisadosSinReclamar = -1;   // -1 = no se pudo preguntar; 0 = no había nada
+  }
+
   return NextResponse.json({
     status: "ok",
     revisadas: cola.length,
+    // Cuántos tutores se enteran en esta pasada de que su dinero salió y no ha
+    // llegado. `-1` significa que el barrido falló, no que no hubiera ninguno.
+    avisadosSinReclamar,
     // El dinero que se movió en esta pasada, en unidades menores como en la BD.
     // Es la cifra que debe cuadrar con el panel del proveedor al final del día.
     pagados,

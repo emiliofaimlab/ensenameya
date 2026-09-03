@@ -28,6 +28,7 @@ const TEMPLATES = [
   "tutor_review_result",
   "identity_in_review",
   "payout_paid",
+  "payout_unclaimed",
   "recording_ready",
   "new_message",
   "admin_message",

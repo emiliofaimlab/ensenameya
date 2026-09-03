@@ -2405,6 +2405,10 @@ export type Database = {
         Args: { p_tier_id: string; p_tutor_id: string }
         Returns: string
       }
+      avisar_payouts_sin_reclamar: {
+        Args: { p_dias?: number }
+        Returns: number
+      }
       build_payout_for_tutor: {
         Args: {
           p_retention_days: number

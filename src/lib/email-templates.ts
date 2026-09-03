@@ -110,6 +110,27 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
     cuerpo: `Tu liquidación${importe(p, "amount") && ` de ${importe(p, "amount")}`} se marcó como pagada. El detalle está en tu panel de cobros.`,
     cta: "Ver mis cobros",
   }),
+  // NTF-23 · el aviso de que el dinero salió y NO ha llegado.
+  //
+  // ⚠️ POR QUÉ EXISTE: PayPal deja un payout en `UNCLAIMED` cuando el correo del
+  // destinatario no es el de una cuenta suya confirmada. Lo retiene **30 días** y
+  // después lo devuelve. Medido el 3-sep-2026 contra su sandbox: mismo importe,
+  // misma cuenta, misma API — por correo sin confirmar queda `UNCLAIMED`, por id
+  // de cuenta entra con `SUCCESS`.
+  //
+  // Sin este correo el tutor no se entera de nada: en su panel el cobro figura
+  // como enviado —que es verdad— y el dinero no aparece. Se entera el día 30,
+  // cuando vuelve.
+  //
+  // No se le dice «tu correo está mal», porque no lo sabemos: `UNCLAIMED`
+  // también sale si simplemente aún no ha entrado a aceptarlo. Se le dice el
+  // hecho y qué comprobar.
+  payout_unclaimed: (p) => ({
+    asunto: "Tu liquidación está esperando a que la reclames",
+    cuerpo: `Enviamos tu liquidación${importe(p, "amount") && ` de ${importe(p, "amount")}`} pero todavía no ha llegado a tu cuenta de PayPal. Suele pasar cuando el correo que nos diste no es el de tu cuenta PayPal, o cuando aún no has entrado a aceptar el pago. Comprueba el correo que tienes registrado con nosotros. Si nadie lo reclama, PayPal nos lo devuelve a los 30 días y tendremos que pagártelo de otra forma.`,
+    cta: "Revisar mis datos de cobro",
+  }),
+
   // NTF-21 (EY-151). ⚠️ NI EL MENSAJE NI QUIÉN LO ESCRIBE: el payload que deja
   // el trigger trae solo el id del hilo, a propósito (ver la migración
   // `20260826160000`). Un correo se reenvía y se queda en bandejas ajenas; el
