@@ -471,11 +471,36 @@ export async function GET(req: Request) {
     // tutor, así que **de la respuesta sale un veredicto y nada más**: ni
     // nombres, ni documento, ni número de cuenta.
     if (simulacro) {
-      const { data: b, error: eB } = await admin.rpc("payout_beneficiary", {
-        p_payout_id: fila.id,
-      });
-      const destino =
-        b && typeof b === "object"
+      // ⚠️ QUÉ RPC SE PREGUNTA DEPENDE DE QUÉ DATO LE PIDE EL RIEL AL TUTOR, y
+      // esto preguntaba SIEMPRE por las coordenadas bancarias. Con PayPal en la
+      // lista (`20260903210000`) el ensayo decía «el tutor no ha registrado sus
+      // datos de cobro» sobre tutores que SÍ tienen su correo declarado —
+      // medido contra dev el 3-sep: val.rios sale con su PayPal en pantalla y
+      // aquí salía como si no tuviera nada.
+      //
+      // El pago real nunca estuvo afectado: esta consulta vive dentro del
+      // simulacro y quien paga es el adaptador, que ya pregunta a la suya. Lo
+      // que estaba roto era el informe — y un informe que acusa al tutor de no
+      // haber rellenado algo que rellenó es peor que no tener informe, porque
+      // manda a soporte a mirar donde no es.
+      // `clave` del riel y no `claveEjecutor`: son el mismo texto, pero esta ya
+      // no es nullable y el canal que se manda es exactamente el que el registro
+      // reconoce, no lo que venía en la fila.
+      const rielEjecutor = rielDePayout(claveEjecutor);
+      const canalIdentificador =
+        rielEjecutor?.dato === "identificador" ? rielEjecutor.clave : null;
+      const { data: b, error: eB } = canalIdentificador
+        ? await admin.rpc("payout_identifier_beneficiary", {
+            p_payout_id: fila.id,
+            p_channel: canalIdentificador,
+          })
+        : await admin.rpc("payout_beneficiary", { p_payout_id: fila.id });
+      // Los rieles de identificador pagan en la moneda del saldo y no convierten:
+      // no hay `currency_to_pay` que mirar, así que el destino es la propia
+      // moneda de la orden y la fila de conversión sale «no hace falta».
+      const destino: string = canalIdentificador
+        ? fila.currency
+        : b && typeof b === "object"
           ? ((b as Record<string, string | null>).currency_to_pay ?? "?")
           : "?";
       ensayo.push({
