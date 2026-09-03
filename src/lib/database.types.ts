@@ -965,6 +965,7 @@ export type Database = {
         Row: {
           charge_providers: string[]
           created_at: string
+          es_por_defecto: boolean
           id: string
           is_active: boolean
           notes: string | null
@@ -977,6 +978,7 @@ export type Database = {
         Insert: {
           charge_providers: string[]
           created_at?: string
+          es_por_defecto?: boolean
           id?: string
           is_active?: boolean
           notes?: string | null
@@ -989,6 +991,7 @@ export type Database = {
         Update: {
           charge_providers?: string[]
           created_at?: string
+          es_por_defecto?: boolean
           id?: string
           is_active?: boolean
           notes?: string | null
@@ -2630,6 +2633,28 @@ export type Database = {
       }
       revoke_calendar_feed_token: { Args: never; Returns: boolean }
       run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
+      ruta_de_pago: {
+        Args: { p_payee: string }
+        Returns: {
+          charge_providers: string[]
+          created_at: string
+          es_por_defecto: boolean
+          id: string
+          is_active: boolean
+          notes: string | null
+          payee_country: string | null
+          payer_country: string | null
+          payout_providers: string[]
+          priority: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payment_routing_rules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       search_product_ids_fuzzy: {
         Args: { p_limit?: number; p_q: string }
         Returns: {
@@ -2666,6 +2691,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: Json
+      }
+      set_charge_provider: {
+        Args: { p_payment_id: string; p_provider: string }
+        Returns: undefined
       }
       set_conversation_blocked: {
         Args: {

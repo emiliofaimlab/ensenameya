@@ -65,22 +65,18 @@ import type { AnyProvider, LocalProvider, PspProvider } from "@/lib/payments/por
 export async function chargeProvidersFor(
   payeeCountry: string | null,
 ): Promise<string[]> {
-  const base = createAdminClient()
-    .from("payment_routing_rules")
-    .select("charge_providers")
-    .eq("is_active", true)
-    // El comodín de esta tabla es el PAGADOR, y solo él: la RPC filtra por
-    // `payer_country is null` y una fila con país de pagador no la ve nadie.
-    .is("payer_country", null);
-
-  const { data } = await (
-    payeeCountry
-      ? base.eq("payee_country", payeeCountry)
-      : base.is("payee_country", null)
-  )
-    .order("priority")
-    .limit(1)
-    .maybeSingle();
+  // ⚠️ `ruta_de_pago()` y no un `select` sobre la tabla, y no es un detalle de
+  // estilo: desde el 3-sep el desempate tiene DOS pasos —la fila del país, y si
+  // no la hay, la fila POR DEFECTO que cubre a España, EE. UU. y al resto del
+  // mundo— y ese desempate vive en la función. Replicarlo aquí es cómo las dos
+  // copias se desincronizan y el ruteo pasa a depender de quién preguntó.
+  const { data } = await createAdminClient()
+    // ⚠️ El `as string` NO tapa un fallo: `ruta_de_pago(char(2))` acepta null y
+    // tiene una rama para él (la fila del tutor que aún no ha declarado país).
+    // Lo que no lo expresa es el tipo GENERADO, que marca todo argumento sin
+    // defecto como no nulo. Sin `.maybeSingle()`: la función devuelve un
+    // registro compuesto, no un conjunto de filas.
+    .rpc("ruta_de_pago", { p_payee: payeeCountry as string });
 
   // Sin regla no se puede reservar (`create_booking` lanza RN-33). Se devuelve
   // el simulado a secas —el camino conservador de siempre: enseñar el aviso
@@ -275,20 +271,16 @@ export async function payoutProviderFor(
   payeeCountry: string | null,
   fundingProvider: string | null,
 ): Promise<string | null> {
-  const base = createAdminClient()
-    .from("payment_routing_rules")
-    .select("payout_providers")
-    .eq("is_active", true)
-    .is("payer_country", null);
-
-  const { data } = await (
-    payeeCountry
-      ? base.eq("payee_country", payeeCountry)
-      : base.is("payee_country", null)
-  )
-    .order("priority")
-    .limit(1)
-    .maybeSingle();
+  // Mismo resolvedor que el cobro, y por el mismo motivo: el desempate entre la
+  // fila del país y la de por defecto vive en `ruta_de_pago()` y en ningún otro
+  // sitio. Ver `chargeProvidersFor`.
+  const { data } = await createAdminClient()
+    // ⚠️ El `as string` NO tapa un fallo: `ruta_de_pago(char(2))` acepta null y
+    // tiene una rama para él (la fila del tutor que aún no ha declarado país).
+    // Lo que no lo expresa es el tipo GENERADO, que marca todo argumento sin
+    // defecto como no nulo. Sin `.maybeSingle()`: la función devuelve un
+    // registro compuesto, no un conjunto de filas.
+    .rpc("ruta_de_pago", { p_payee: payeeCountry as string });
 
   // Sin fila activa no hay a dónde pagar. `null`, igual que si ningún candidato
   // sirve: las dos cosas significan «esta orden espera», y el job las cuenta.
