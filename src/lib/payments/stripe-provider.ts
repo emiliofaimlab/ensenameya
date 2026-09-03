@@ -424,7 +424,15 @@ export const stripeProvider: PspProvider = {
     );
 
     if (!session.client_secret) {
-      return { ok: false, error: "Stripe no devolvió client_secret" };
+      // ⚠️ `en-duda` y no 'nada': llegar aquí significa que la Session SÍ se
+      // creó —la respuesta trae el objeto— y lo que falta es el secreto con el
+      // que montarla. Hay un cobro vivo en Stripe, así que la cadena no puede
+      // probar otro proveedor.
+      return {
+        ok: false,
+        error: "Stripe no devolvió client_secret",
+        creado: "en-duda",
+      };
     }
     // La publicable viaja con la respuesta en vez de por `NEXT_PUBLIC_*`: así el
     // interruptor de Stripe sigue siendo UNA sola cosa (las claves del servidor) y

@@ -115,8 +115,34 @@ export type ChargeRedirigido = {
   providerRef: string;
 };
 
-/** El proveedor respondió, pero sin lo que hace falta para cobrar. */
-export type ChargeFallido = { ok: false; error: string };
+/**
+ * El proveedor respondió, pero sin lo que hace falta para cobrar.
+ *
+ * 🔴 `creado` ES OBLIGATORIO Y NO TIENE DEFECTO, y esa es toda la razón de que
+ * exista este comentario. Hasta hoy este tipo era `{ok:false, error}` a secas y
+ * la cadena de respaldo del checkout dedujo de ahí que «el proveedor dijo no,
+ * luego no creó nada». **Es falso**, y de los cuatro sitios que lo devuelven,
+ * TRES tienen un cobro vivo detrás: dLocal con `order_id` duplicado dice
+ * literalmente que ya existe, dLocal sin `redirect_url` ya ha creado el pago, y
+ * Stripe sin `client_secret` ya ha creado la Session.
+ *
+ * Sobre esa deducción, el respaldo abría un segundo cobro con OTRO proveedor
+ * para la misma reserva — el doble cobro que la parada por error de red existía
+ * para evitar, entrando por la puerta de al lado.
+ *
+ *   `'nada'`     el proveedor rechazó la petición y NO llegó a crear nada.
+ *                Es lo único que autoriza a probar el siguiente candidato.
+ *   `'en-duda'`  puede haber un cobro vivo al otro lado. La cadena SE PARA.
+ *
+ * Quien añada un `{ok:false}` nuevo tiene que elegir, y el compilador se lo va a
+ * exigir. Ante la duda, `'en-duda'`: abrir un cobro de más le cuesta dinero a un
+ * alumno, y no abrirlo solo le cuesta un reintento.
+ */
+export type ChargeFallido = {
+  ok: false;
+  error: string;
+  creado: "nada" | "en-duda";
+};
 
 export type ChargeResult = ChargeEmbebido | ChargeRedirigido | ChargeFallido;
 
@@ -401,6 +427,31 @@ export type WebhookInput = { rawBody: string; signature: string | null };
  * calcula el adaptador ni lo recalcula nadie: `payout_beneficiary` se niega
  * explícitamente a devolver `transfer_amount` por eso mismo.
  */
+/**
+ * LA MARCA QUE IDENTIFICA UNA ORDEN EN EL PANEL DEL PROVEEDOR.
+ *
+ * `EY-<payouts.id>-<intento>`. Vivía en `dlocal-provider.ts` y no es suya: es la
+ * identidad de un payout vista desde fuera, y en cuanto hubo un segundo riel que
+ * la necesita —el `sender_batch_id` de PayPal— duplicarla era garantizar que un
+ * día divergen y el admin busca una cadena que no existe.
+ *
+ * Los tres trozos hacen falta: `EY-` distingue lo nuestro de lo que alguien cree
+ * a mano; `payouts.id` es único por orden y estable entre pasadas; `intento`
+ * separa el payout muerto de un rechazo anterior del que se crea después de un
+ * `manage_payout('retry')`.
+ *
+ * ⚠️ QUÉ HACE CADA PROVEEDOR CON ELLA NO ES LO MISMO, y la diferencia es grande:
+ *   · dLocal Go NO deduplica (medido: dos POST con la misma marca crean dos
+ *     payouts). Ahí la marca sirve para RECONOCER, y quien impide el pago doble
+ *     es el candado de la base.
+ *   · PayPal SÍ deduplica: un `sender_batch_id` repetido devuelve 400 con el
+ *     enlace del lote que ya existe. Ahí la marca IMPIDE el pago doble, y por eso
+ *     el adaptador de PayPal no necesita barrido de huérfanos.
+ */
+export function marcaDe(payoutId: string, intento: number): string {
+  return `EY-${payoutId}-${intento}`;
+}
+
 export type PayoutInput = {
   /** `payouts.id`. Con esto el adaptador saca el beneficiario, y solo con esto. */
   payoutId: string;

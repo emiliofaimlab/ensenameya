@@ -9,12 +9,34 @@ import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { rpcNueva } from "./rpc";
+import { rpcNueva, type FamiliaDeDato } from "./rpc";
 
 type PayoutStatus = Database["public"]["Enums"]["payout_status"];
 
 /** La contraseña literal que exige `manage_payout('devolver')`. */
 const PALABRA_DEVOLVER = "COMPROBADO-SIN-RASTRO";
+
+/**
+ * Qué se le pide de referencia según lo que se acaba de hacer con el dinero.
+ *
+ * ⚠️ El texto ANTERIOR era uno solo y decía «id de la transferencia, del envío
+ * de Zelle/Zinli…»: los tres canales de `payout_manual_channels` son de
+ * Venezuela, y a quien acaba de hacer una transferencia bancaria colombiana
+ * ese ejemplo no le dice nada. `mark_paid` no cambia —guarda lo que se le dé en
+ * `provider_metadata->'manual'->>'referencia'`—; lo que cambia es el ejemplo.
+ */
+const AYUDA_DE_REFERENCIA: Record<FamiliaDeDato, string> = {
+  banco: "número de comprobante de la transferencia",
+  identificador: "id del envío de Zelle/Zinli/Binance…",
+};
+
+/**
+ * Sugerencias de canal, que NO son una lista cerrada: `payouts.provider` es
+ * texto libre y el canal por el que se acaba pagando no siempre es el que el
+ * tutor registró. En la familia bancaria no hay canal que registrar —lo que hay
+ * es una transferencia— así que la sugerencia sale de aquí y no de la BD.
+ */
+const CANALES_DE_BANCO = ["transferencia"];
 
 type Accion = {
   action: string;
@@ -68,6 +90,7 @@ export function PayoutActions({
   payoutId,
   status,
   manual,
+  familia,
   marca,
   canales,
   identificado,
@@ -76,6 +99,17 @@ export function PayoutActions({
   status: PayoutStatus;
   /** ¿esta orden no tiene ejecutor automático? Solo cambia los textos. */
   manual: boolean;
+  /**
+   * Qué clase de destino tiene este riel, para que el formulario hable de lo
+   * que quien paga acaba de hacer. `null` = no se sabe (no hay riel resuelto).
+   *
+   * ⚠️ Se decide con la FAMILIA DE DATO del riel, nunca por país ni por la
+   * clave del proveedor: son cuatro rieles hoy y mañana más, y «lo que pide el
+   * tutor» es la única pregunta que este formulario necesita responder. Una
+   * transferencia bancaria y un envío por Zelle se justifican con referencias
+   * distintas y salen por canales distintos.
+   */
+  familia: FamiliaDeDato | null;
   /** `EY-<payout>-<intento>`: lo que hay que buscar en el panel del proveedor. */
   marca: string;
   /** Canales que el tutor tiene registrados, para sugerirlos sin obligar. */
@@ -91,7 +125,14 @@ export function PayoutActions({
   const [busy, setBusy] = useState(false);
   const [abierta, setAbierta] = useState<string | null>(null);
   const [referencia, setReferencia] = useState("");
-  const [canal, setCanal] = useState(canales.length === 1 ? canales[0] : "");
+  // En la familia bancaria `canales` llega vacío (el tutor no registra canales,
+  // registra una cuenta), así que la sugerencia sale de la constante. Con una
+  // sola sugerencia se prerrellena: es lo que va a ser en el 100 % de los casos
+  // y sigue siendo editable.
+  const sugerencias = familia === "banco" ? CANALES_DE_BANCO : canales;
+  const [canal, setCanal] = useState(
+    sugerencias.length === 1 ? sugerencias[0] : "",
+  );
 
   // 🔴 «Devolver a la cola» se ofrece SOLO sobre órdenes sin identificar, y no
   // por limpieza visual: la contraseña que pide («he buscado la marca en el
@@ -195,7 +236,11 @@ export function PayoutActions({
                 id={`${idBase}-ref`}
                 required
                 autoComplete="off"
-                placeholder="id de la transferencia, del envío de Zelle/Zinli…"
+                placeholder={
+                  familia
+                    ? AYUDA_DE_REFERENCIA[familia]
+                    : "id del movimiento"
+                }
                 value={referencia}
                 onChange={(e) => setReferencia(e.target.value)}
               />
@@ -206,15 +251,13 @@ export function PayoutActions({
                 id={`${idBase}-canal`}
                 list={`${idBase}-canales`}
                 autoComplete="off"
-                placeholder="manual"
+                placeholder={familia === "banco" ? "transferencia" : "manual"}
                 value={canal}
                 onChange={(e) => setCanal(e.target.value)}
               />
-              {/* Sugerencias, no lista cerrada: `payouts.provider` es texto
-                  libre y el canal por el que se acaba pagando no siempre es uno
-                  de los que el tutor registró. */}
+              {/* Sugerencias, no lista cerrada: ver `CANALES_DE_BANCO`. */}
               <datalist id={`${idBase}-canales`}>
-                {canales.map((c) => (
+                {sugerencias.map((c) => (
                   <option key={c} value={c} />
                 ))}
               </datalist>
@@ -351,5 +394,90 @@ function Botones({
         Cancelar
       </Button>
     </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * EL DATO QUE HAY QUE TECLEAR EN LA WEB DE UN BANCO
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Parte un número largo en bloques de cuatro **sin tocar el texto**.
+ *
+ * Solo agrupa lo que es todo dígitos y pasa de ocho: una cuenta brasileña
+ * («12345-6») o uruguaya lleva guiones y ceros de delante que son parte del
+ * formato del banco, y trocear eso es convertir un dato correcto en un dato
+ * ilegible.
+ */
+function bloquesDeCuatro(valor: string): string[] {
+  if (!/^[0-9]{9,}$/.test(valor)) return [valor];
+  return valor.match(/.{1,4}/g) ?? [valor];
+}
+
+/**
+ * 🔴 UN NÚMERO DE CUENTA QUE SE COPIA MAL ES UNA TRANSFERENCIA A OTRA PERSONA.
+ *
+ * Quien mira esta pantalla está a punto de teclear once dígitos en la web de su
+ * banco, y ahí no hay «deshacer»: el dinero sale, y el error no lo paga quien
+ * lo comete. Los dos modos de equivocarse son leerlo mal y teclearlo mal, y se
+ * cierran los dos:
+ *
+ *   · **Leerlo mal** → se pinta en monoespaciada, con cifras de ancho fijo
+ *     (`tabular-nums`) y agrupado en bloques de cuatro, que es la convención
+ *     con la que se leen los IBAN y las tarjetas. ⚠️ Y la agrupación es CSS,
+ *     NO caracteres: son `<span>` con margen, sin un solo espacio metido en el
+ *     texto. Por eso seleccionar y copiar a mano devuelve los dígitos exactos —
+ *     meter espacios de verdad habría sido regalarle al admin un número que
+ *     algunos bancos rechazan y otros aceptan silenciosamente truncado.
+ *   · **Teclearlo mal** → un botón que copia la cadena EXACTA al portapapeles,
+ *     y que dice que lo ha hecho. Si el navegador lo deniega (portapapeles
+ *     bloqueado, contexto no seguro) no se finge que fue bien: se avisa y se
+ *     recuerda que el dato está seleccionable entero.
+ *
+ * ⚠️ Vive en este fichero, que es el único `"use client"` de la carpeta, porque
+ * escribir en el portapapeles es del navegador y la pantalla es un componente
+ * de servidor. El dato en claro llega ya resuelto desde el servidor (regla de
+ * oro 3): esto no consulta nada.
+ */
+export function DatoCopiable({
+  valor,
+  etiqueta,
+}: {
+  valor: string;
+  /** Cómo se llama el dato en el aviso y en el `aria-label` («la cuenta»). */
+  etiqueta: string;
+}) {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(valor);
+      setCopiado(true);
+      window.setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      toast.error(
+        `No se pudo copiar ${etiqueta}: este navegador no da acceso al portapapeles. Pulsa sobre el número —se selecciona entero— y cópialo con el teclado.`,
+      );
+    }
+  }
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="font-mono text-[13.5px] font-semibold text-[#19191f] tabular-nums select-all">
+        {bloquesDeCuatro(valor).map((b, i) => (
+          <span key={i} className={i > 0 ? "ml-[0.45em]" : undefined}>
+            {b}
+          </span>
+        ))}
+      </span>
+      <button
+        type="button"
+        onClick={() => void copiar()}
+        aria-label={`Copiar ${etiqueta}`}
+        className="rounded-[6px] border border-[#d4d4d8] bg-white px-2 py-0.5 text-[11px] text-[#404040] hover:bg-[#f0f0f2]"
+      >
+        {copiado ? "copiado ✓" : "copiar"}
+      </button>
+    </span>
   );
 }

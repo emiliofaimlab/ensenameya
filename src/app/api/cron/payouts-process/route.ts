@@ -188,7 +188,7 @@ function rastroDe(fila: OrdenDePago): Rastro {
  * —es un `LocalProvider`, no sabe pagar— y sin embargo es lo contrario de un
  * callejón sin salida: es una orden que paga una persona.
  */
-function pspDe(clave: string): PspProvider | null {
+function pspDe(clave: string | null): PspProvider | null {
   const p = adapterFor(clave);
   return p.opensRemoteCheckout ? p : null;
 }
@@ -315,9 +315,18 @@ export async function GET(req: Request) {
     // quién la reclamó: si alguien cambia la tabla de ruteo mientras hay órdenes
     // a medias, esas órdenes terminan por donde empezaron. Para una orden nueva
     // se resuelve por `payee_country`, que es la definición de la columna.
+    // ⚠️ C2r · El resolvedor recibe ahora de dónde SALIÓ el dinero, porque con
+    // listas de candidatos la atadura del balance no es una comprobación
+    // posterior sino parte de elegir: descarta a un candidato y deja pasar al
+    // siguiente. Y puede devolver `null` — «ningún candidato puede pagar esta
+    // orden hoy» —, que NO es un fallo: la fila se queda esperando.
     const claveEjecutor = enVueloYa
       ? (fila.provider ?? "simulated")
-      : await payoutProviderFor(fila.payee_country);
+      : await payoutProviderFor(fila.payee_country, fila.funding_provider);
+    // `claveEjecutor` puede ser null desde C2r: «ningún candidato puede pagar
+    // esta orden hoy». `pspDe` ya sabe tratar una clave que no es un PSP, así
+    // que se le pasa el null tal cual y la fila cae en el camino de «sin
+    // ejecutor», que es exactamente lo que significa.
     const psp = pspDe(claveEjecutor);
 
     const base = {
@@ -334,7 +343,7 @@ export async function GET(req: Request) {
     // adaptador de 'manual' existe pero no sabe pagar (`LocalProvider`), así que
     // `pspDe('manual')` devuelve null igual que un typo. Preguntar por la CLASE
     // de riel es lo que separa las dos cosas, y por eso se hace primero.
-    if (rielDePayout(claveEjecutor) === "manual") {
+    if (rielDePayout(claveEjecutor)?.ejecuta === "persona") {
       // Riel manual: NO hay adaptador y no va a haberlo (decisión de producto
       // del 2-sep). La fila se queda intacta —igual que en el caso de abajo— y
       // se cuenta APARTE, porque esto no es un bloqueo: es una orden con riel,
@@ -344,7 +353,11 @@ export async function GET(req: Request) {
       if (simulacro) {
         ensayo.push({
           ...base,
-          haria: "nada: riel manual — la paga una persona desde /admin/payouts",
+          haria: `nada: ${
+            rielDePayout(claveEjecutor)?.dato === "banco"
+              ? "transferencia bancaria a mano"
+              : "riel manual por canal"
+          } — la paga una persona desde /admin/payouts`,
         });
       }
       continue;
@@ -385,7 +398,14 @@ export async function GET(req: Request) {
       // orden es IMPAGABLE: no es que vaya a fallar, es que a ese proveedor no le
       // consta ese importe. Mandarla es pedirle a dLocal Go que saque de su
       // bolsillo lo que cobró Stripe.
-      if (fila.funding_provider !== psp.key) {
+      //
+      // ⚠️ SOLO PARA LOS RIELES ATADOS A UN BALANCE. Esta puerta comparaba sin
+      // excepción, y con eso PayPal y Wise —que se fondean desde NUESTRO banco y
+      // no dependen de quién cobró— se habrían saltado enteros, contados como
+      // «balance ajeno» y sin una sola línea en rojo. `ataduraDeBalance` existe
+      // en el registro de rieles justo para esto y aquí no se consultaba.
+      if (rielDePayout(claveEjecutor)?.ataduraDeBalance !== false
+          && fila.funding_provider !== psp.key) {
         balanceAjeno++;
         if (simulacro) {
           ensayo.push({
@@ -451,11 +471,36 @@ export async function GET(req: Request) {
     // tutor, así que **de la respuesta sale un veredicto y nada más**: ni
     // nombres, ni documento, ni número de cuenta.
     if (simulacro) {
-      const { data: b, error: eB } = await admin.rpc("payout_beneficiary", {
-        p_payout_id: fila.id,
-      });
-      const destino =
-        b && typeof b === "object"
+      // ⚠️ QUÉ RPC SE PREGUNTA DEPENDE DE QUÉ DATO LE PIDE EL RIEL AL TUTOR, y
+      // esto preguntaba SIEMPRE por las coordenadas bancarias. Con PayPal en la
+      // lista (`20260903210000`) el ensayo decía «el tutor no ha registrado sus
+      // datos de cobro» sobre tutores que SÍ tienen su correo declarado —
+      // medido contra dev el 3-sep: val.rios sale con su PayPal en pantalla y
+      // aquí salía como si no tuviera nada.
+      //
+      // El pago real nunca estuvo afectado: esta consulta vive dentro del
+      // simulacro y quien paga es el adaptador, que ya pregunta a la suya. Lo
+      // que estaba roto era el informe — y un informe que acusa al tutor de no
+      // haber rellenado algo que rellenó es peor que no tener informe, porque
+      // manda a soporte a mirar donde no es.
+      // `clave` del riel y no `claveEjecutor`: son el mismo texto, pero esta ya
+      // no es nullable y el canal que se manda es exactamente el que el registro
+      // reconoce, no lo que venía en la fila.
+      const rielEjecutor = rielDePayout(claveEjecutor);
+      const canalIdentificador =
+        rielEjecutor?.dato === "identificador" ? rielEjecutor.clave : null;
+      const { data: b, error: eB } = canalIdentificador
+        ? await admin.rpc("payout_identifier_beneficiary", {
+            p_payout_id: fila.id,
+            p_channel: canalIdentificador,
+          })
+        : await admin.rpc("payout_beneficiary", { p_payout_id: fila.id });
+      // Los rieles de identificador pagan en la moneda del saldo y no convierten:
+      // no hay `currency_to_pay` que mirar, así que el destino es la propia
+      // moneda de la orden y la fila de conversión sale «no hace falta».
+      const destino: string = canalIdentificador
+        ? fila.currency
+        : b && typeof b === "object"
           ? ((b as Record<string, string | null>).currency_to_pay ?? "?")
           : "?";
       ensayo.push({
@@ -939,9 +984,36 @@ export async function GET(req: Request) {
     );
   }
 
+  // ── EL PAGO QUE SALIÓ Y NO LLEGÓ ────────────────────────────────────────
+  //
+  // Va DESPUÉS de la pasada y fuera del bucle a propósito: no es un desenlace de
+  // ninguna orden concreta, es un barrido sobre las que llevan demasiado tiempo
+  // en vuelo. PayPal retiene 30 días un pago cuyo destinatario no lo reclama y
+  // luego lo devuelve; durante ese mes el panel del tutor dice «enviado» y el
+  // dinero no está. Ver la migración `20260903220000`.
+  //
+  // ⚠️ No rompe la pasada si falla. Encolar un aviso es lo MENOS importante que
+  // hace este job: dejar el pago de un tutor a medias por un fallo al avisar
+  // sería cambiar dinero por un correo.
+  let avisadosSinReclamar = 0;
+  try {
+    const { data: avisos, error: eAvisos } = await admin.rpc(
+      "avisar_payouts_sin_reclamar",
+      {},
+    );
+    if (eAvisos) throw eAvisos;
+    avisadosSinReclamar = avisos ?? 0;
+  } catch (e) {
+    console.error("[payouts] no se pudieron encolar los avisos de pago sin reclamar", e);
+    avisadosSinReclamar = -1;   // -1 = no se pudo preguntar; 0 = no había nada
+  }
+
   return NextResponse.json({
     status: "ok",
     revisadas: cola.length,
+    // Cuántos tutores se enteran en esta pasada de que su dinero salió y no ha
+    // llegado. `-1` significa que el barrido falló, no que no hubiera ninguno.
+    avisadosSinReclamar,
     // El dinero que se movió en esta pasada, en unidades menores como en la BD.
     // Es la cifra que debe cuadrar con el panel del proveedor al final del día.
     pagados,

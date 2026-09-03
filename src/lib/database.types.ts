@@ -963,38 +963,41 @@ export type Database = {
       }
       payment_routing_rules: {
         Row: {
-          charge_provider: string
+          charge_providers: string[]
           created_at: string
+          es_por_defecto: boolean
           id: string
           is_active: boolean
           notes: string | null
           payee_country: string | null
           payer_country: string | null
-          payout_provider: string
+          payout_providers: string[]
           priority: number
           updated_at: string
         }
         Insert: {
-          charge_provider: string
+          charge_providers: string[]
           created_at?: string
+          es_por_defecto?: boolean
           id?: string
           is_active?: boolean
           notes?: string | null
           payee_country?: string | null
           payer_country?: string | null
-          payout_provider: string
+          payout_providers: string[]
           priority?: number
           updated_at?: string
         }
         Update: {
-          charge_provider?: string
+          charge_providers?: string[]
           created_at?: string
+          es_por_defecto?: boolean
           id?: string
           is_active?: boolean
           notes?: string | null
           payee_country?: string | null
           payer_country?: string | null
-          payout_provider?: string
+          payout_providers?: string[]
           priority?: number
           updated_at?: string
         }
@@ -2402,6 +2405,10 @@ export type Database = {
         Args: { p_tier_id: string; p_tutor_id: string }
         Returns: string
       }
+      avisar_payouts_sin_reclamar: {
+        Args: { p_dias?: number }
+        Returns: number
+      }
       build_payout_for_tutor: {
         Args: {
           p_retention_days: number
@@ -2571,6 +2578,10 @@ export type Database = {
         Returns: string
       }
       payout_beneficiary: { Args: { p_payout_id: string }; Returns: Json }
+      payout_identifier_beneficiary: {
+        Args: { p_channel: string; p_payout_id: string }
+        Returns: Json
+      }
       payouts_backlog: { Args: never; Returns: Json }
       pending_email_notifications: {
         Args: { p_limit?: number }
@@ -2630,6 +2641,28 @@ export type Database = {
       }
       revoke_calendar_feed_token: { Args: never; Returns: boolean }
       run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
+      ruta_de_pago: {
+        Args: { p_payee: string }
+        Returns: {
+          charge_providers: string[]
+          created_at: string
+          es_por_defecto: boolean
+          id: string
+          is_active: boolean
+          notes: string | null
+          payee_country: string | null
+          payer_country: string | null
+          payout_providers: string[]
+          priority: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "payment_routing_rules"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       search_product_ids_fuzzy: {
         Args: { p_limit?: number; p_q: string }
         Returns: {
@@ -2666,6 +2699,10 @@ export type Database = {
           p_user_id: string
         }
         Returns: Json
+      }
+      set_charge_provider: {
+        Args: { p_payment_id: string; p_provider: string }
+        Returns: undefined
       }
       set_conversation_blocked: {
         Args: {

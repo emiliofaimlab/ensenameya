@@ -1,5 +1,7 @@
 import "server-only";
 
+import { marcaDe } from "./port";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DlocalGoError,
@@ -407,9 +409,8 @@ const PAGINAS_BARRIDO = 40;
  * lo que impide el segundo pago es el candado de la base de datos y el hecho de
  * que una orden reanudada nunca crea nada.
  */
-export function marcaDe(payoutId: string, intento: number): string {
-  return `EY-${payoutId}-${intento}`;
-}
+// `marcaDe()` vive en `port.ts`: la usan dLocal y PayPal, y duplicarla era
+// garantizar que un día divergen. La razón de cada trozo está allí.
 
 /** Lo que `description` admite. Medido: 289 → `7000 … exceeds max length 255`. */
 const MAX_DESCRIPCION = 255;
@@ -1426,14 +1427,40 @@ export const dlocalProvider: PspProvider = {
           ok: false,
           error:
             "dLocal Go dice que este cobro ya existe y no se puede recuperar (order_id duplicado sin referencia guardada)",
+          // El caso más claro de `en-duda` que hay: la API acaba de decir que el
+          // cobro EXISTE. Probar otro proveedor sería abrir un segundo cobro
+          // sabiendo que el primero está vivo.
+          creado: "en-duda",
         };
       }
-      if (e instanceof DlocalGoError) return { ok: false, error: e.message };
+      if (e instanceof DlocalGoError) {
+        // El ÚNICO camino que puede decir 'nada', y solo con la respuesta
+        // delante: un 4xx que no sea un conflicto es dLocal rechazando el
+        // payload —país no servido, moneda, un campo mal— y en ese caso no
+        // llegó a crear nada. Es justamente el caso práctico para el que existe
+        // la cadena de respaldo.
+        //
+        // Todo lo demás —5xx, un 409, cualquier estado raro— es `en-duda`: la
+        // petición pudo llegar y crear el cobro antes de que la respuesta se
+        // torciera.
+        const rechazoLimpio = e.status >= 400 && e.status < 500 && e.status !== 409;
+        return {
+          ok: false,
+          error: e.message,
+          creado: rechazoLimpio ? "nada" : "en-duda",
+        };
+      }
       throw e;
     }
 
     if (!pago.redirect_url) {
-      return { ok: false, error: "dLocal Go no devolvió redirect_url" };
+      // El pago SÍ se creó —`pago` es la respuesta del POST, con su id— y lo
+      // que falta es la URL a la que mandar al alumno. Hay cobro vivo.
+      return {
+        ok: false,
+        error: "dLocal Go no devolvió redirect_url",
+        creado: "en-duda",
+      };
     }
 
     // SELLAR ANTES DE DEVOLVER. Si esto lanza, el checkout falla — a propósito.

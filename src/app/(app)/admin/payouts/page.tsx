@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney } from "@/lib/catalog/format";
 import { nombrePais, PAYOUT_BADGE } from "@/lib/payouts";
-import { rielDePayout, RIEL_MANUAL, type RielDePayout } from "@/lib/payments";
+import { rielDePayout, type Riel } from "@/lib/payments";
 import type { Database, Json } from "@/lib/database.types";
 import {
   PanelCard,
@@ -13,8 +13,15 @@ import {
 import { AdminShell } from "@/components/layout/admin-shell";
 import { AdminFilters } from "../payments/filters";
 import { esperaDesde } from "../tiempo";
-import { PayoutActions } from "./payout-actions";
-import { rpcNueva, type DestinoManual, type DestinosDeTutor } from "./rpc";
+import { DatoCopiable, PayoutActions } from "./payout-actions";
+import {
+  leerBeneficiario,
+  rpcNueva,
+  type DestinoBancario,
+  type DestinoManual,
+  type DestinosDeTutor,
+  type FamiliaDeDato,
+} from "./rpc";
 
 export const metadata = { title: "Payouts · Enséñame Ya" };
 
@@ -58,17 +65,41 @@ const TECHO = 500;
 const SIN_PAIS = "sin-pais";
 
 /**
- * ponytail: TECHO de consultas de destino. `manual_destination` es una RPC por
- * tutor y aquí se llaman todas en paralelo, así que sin tope una vista con
- * doscientas órdenes manuales abriría doscientas llamadas de golpe. El techo es
- * a propósito y NO se sube: el día que haga falta, lo que toca es filtrar (por
- * país o por estado) o pedir los destinos por lotes, que es otra migración.
+ * ponytail: TECHO de consultas de destino. `manual_destination` y
+ * `payout_beneficiary` son RPC de una en una y aquí se llaman todas en
+ * paralelo, así que sin tope una vista con doscientas órdenes manuales abriría
+ * doscientas llamadas de golpe. El techo es a propósito y NO se sube: el día que
+ * haga falta, lo que toca es filtrar (por país o por estado) o pedir los
+ * destinos por lotes, que es otra migración.
  *
- * ⚠️ Vive fuera del componente porque `Destinos` lo NOMBRA en el mensaje de «no
- * se ha consultado»: si el número está en dos sitios, el texto miente el día que
- * uno de los dos cambie.
+ * ⚠️ Se aplica POR FAMILIA de destino, no al total: 25 tutores de riel de canal
+ * MÁS 25 órdenes de riel bancario. Compartir un presupuesto entre las dos
+ * habría hecho que una tanda de órdenes venezolanas dejara sin coordenadas a
+ * las colombianas de la misma pantalla, que es un límite raro de explicar y
+ * peor de depurar.
+ *
+ * ⚠️ Vive fuera del componente porque los dos mensajes de «no se ha
+ * consultado» lo NOMBRAN: si el número está en dos sitios, el texto miente el
+ * día que uno de los dos cambie.
  */
 const TOPE_DESTINOS = 25;
+
+/**
+ * Los tres tipos de cuenta del enum global de dLocal, en castellano.
+ *
+ * ponytail: TECHO de tres valores, y el código se sigue enseñando al lado. No
+ * es una traducción cosmética —quien va a hacer la transferencia tiene que
+ * elegir «ahorros» o «corriente» en la web de su banco, y `SAVINGS` no es una
+ * de las opciones que le ofrece— pero tampoco es un dato nuestro: el que manda
+ * es el que el tutor guardó, así que se pinta también en crudo. Un valor que no
+ * esté aquí (CBU, ALIAS, o uno nuevo) sale tal cual, que es lo correcto:
+ * inventarle un nombre en castellano a un formato argentino sería peor.
+ */
+const TIPO_DE_CUENTA: Record<string, string> = {
+  CHECKING: "corriente",
+  SAVINGS: "ahorros",
+  VISTA: "vista",
+};
 
 /** Suma por moneda de un subconjunto; "—" si no hay nada. */
 function sumLine(rows: { amount: number; currency: string }[]): string {
@@ -85,6 +116,8 @@ type FilaPayout = {
   currency: string;
   amount: number;
   provider: string | null;
+  /** En qué balance está el dinero. Descarta a los rieles atados que no sean él. */
+  funding_provider: string | null;
   provider_payout_id: string | null;
   provider_metadata: Json | null;
   payee_country: string | null;
@@ -99,7 +132,7 @@ type FilaPayout = {
 type ReglaDeRuteo = {
   payee_country: string | null;
   payer_country: string | null;
-  payout_provider: string;
+  payout_providers: string[];
   priority: number;
   is_active: boolean;
 };
@@ -137,26 +170,30 @@ type ReglaDeRuteo = {
  *     declarado país. NO es «a mano»: no hay riel que ejecutar, y pintarlo como
  *     manual mandaría al admin a buscar un destino de cobro que no existe.
  */
-type Riel = {
+type RielEnPantalla = {
   /** Lo que se pinta en la píldora. */
   etiqueta: string;
   /**
-   * La clase de riel según la tabla de ruteo, o `null` si esa clave no nombra
-   * ninguno. `null` también cuando no se ha podido leer la tabla (ver
-   * `resuelto`): son dos «no se sabe» distintos y solo uno es culpa del dato.
+   * El riel según la tabla de ruteo, o `null` si ningún candidato nombra uno.
+   * `null` también cuando no se ha podido leer la tabla (ver `resuelto`): son
+   * dos «no se sabe» distintos y solo uno es culpa del dato.
    */
-  clase: RielDePayout | null;
-  /** ¿tiene que sacarla una persona? Solo `clase === 'manual'`. */
+  riel: Riel | null;
+  /**
+   * ¿tiene que sacarla una persona? Es `riel.ejecuta === 'persona'`, o sea
+   * 'manual' Y 'banco-manual': piden datos distintos al tutor pero los dos los
+   * cierra el admin.
+   */
   manual: boolean;
   /** false cuando no se ha podido leer la tabla de ruteo (sin clave de servicio). */
   resuelto: boolean;
 };
 
-function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): Riel {
+function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): RielEnPantalla {
   // Sin tabla de ruteo no se inventa nada: se dice lo poco que se sabe (quién
   // lo ejecutó, si ya se ejecutó) y la pantalla avisa arriba de por qué.
   if (reglas === null) {
-    return { etiqueta: fila.provider ?? "—", clase: null, manual: false, resuelto: false };
+    return { etiqueta: fila.provider ?? "—", riel: null, manual: false, resuelto: false };
   }
 
   const regla = reglas
@@ -168,18 +205,46 @@ function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): Riel {
     )
     .sort((a, b) => a.priority - b.priority)[0];
 
-  const ejecutor = regla?.payout_provider ?? null;
-  const clase = rielDePayout(ejecutor);
+  // ⚠️ C2r · El ruteo ya no da UN ejecutor sino una LISTA de candidatos.
+  //
+  // 🔴 AQUÍ SE COGÍA «EL PRIMER CANDIDATO CON RIEL RECONOCIDO», Y ESO DEJABA
+  // COLOMBIA FUERA DE LA PANTALLA ENTERA. Su fila es
+  // `{wise, paypal, stripe, banco-manual}` (`20260903140000`), y 'wise' es un
+  // riel perfectamente reconocido —está declarado en `RIELES`— que NO TIENE
+  // ADAPTADOR: `puedePagar()` devuelve false. Así que la píldora decía «wise»,
+  // `ejecuta` era 'proveedor' y `manual` salía false: una orden colombiana que
+  // solo puede pagar una persona se pintaba como automática, no entraba en «Por
+  // pagar a mano» y no se le preguntaba a dónde transferir. El comentario que
+  // había aquí lo llamaba «la preferencia», pero una preferencia que nadie
+  // puede ejecutar no es un ejecutor, y `payments.ts` ya lo dice del revés:
+  // «su sitio en la lista de candidatos no hace nada».
+  //
+  // Se elige con el MISMO bucle que `payoutProviderFor` —riel reconocido, que
+  // pueda pagar hoy, y si está atado a un balance que sea el del dinero de esta
+  // orden— porque tener ese razonamiento en dos sitios es el fallo del que avisa
+  // `20260901210000`: el día que discrepen, uno es el que paga y otro el que se
+  // enseña. Lo que no se replica es la consulta (la fila ya está leída arriba).
+  //
+  // `null` = ningún candidato puede pagar esta orden hoy, que es distinto de «no
+  // hay riel»: aquí se pinta igual («sin ejecutor») porque para quien mira la
+  // cola las dos cosas significan lo mismo — esta orden no sale sola y tampoco
+  // hay a dónde mandarla a mano.
+  const candidatos = regla?.payout_providers ?? [];
+  let riel: Riel | null = null;
+  for (const clave of candidatos) {
+    const r = rielDePayout(clave);
+    if (!r) continue; // typo en la tabla, o 'simulated': no es un riel
+    if (!r.puedePagar()) continue; // declarado y esperando cuenta
+    if (r.ataduraDeBalance && r.clave !== fila.funding_provider) continue;
+    riel = r;
+    break;
+  }
+  const ejecutor = riel?.clave ?? null;
 
   // Lo que dice el RUTEO. Si ya se ejecutó manda `payouts.provider`, que dice
   // quién la sacó DE VERDAD y no tiene por qué ser quien decía la tabla (un
   // `mark_paid` escribe 'zelle' sobre una orden que el ruteo mandaba a 'dlocal').
-  const delRuteo =
-    clase === "banco"
-      ? (ejecutor ?? "—")
-      : clase === "manual"
-        ? RIEL_MANUAL
-        : "sin ejecutor";
+  const delRuteo = riel ? (ejecutor ?? "—") : "sin ejecutor";
 
   // ⚠️ `fila.provider` y el ruteo NO son la misma pregunta, y confundirlos hace
   // que un payout argentino que dLocal rechazó y que se acabó pagando por Zelle
@@ -187,17 +252,20 @@ function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): Riel {
   // que ESA orden tendría que haber salido sola. El ruteo dice por dónde IBA;
   // `provider` dice por dónde SALIÓ. Cuando difieren se enseñan las dos.
   const pagadoPorOtro =
-    clase !== null && fila.provider !== null && fila.provider !== delRuteo;
+    riel !== null && fila.provider !== null && fila.provider !== delRuteo;
 
   return {
     etiqueta:
-      clase === null
+      riel === null
         ? (fila.provider ?? delRuteo)
         : pagadoPorOtro
           ? `${delRuteo} · pagado por ${fila.provider}`
           : delRuteo,
-    clase,
-    manual: clase === "manual",
+    riel,
+    // Pagable a mano es una propiedad del riel, no de su nombre: cubre 'manual'
+    // (canal e identificador) y 'banco-manual' (transferencia bancaria), que
+    // piden datos distintos pero los dos los cierra una persona.
+    manual: riel?.ejecuta === "persona",
     resuelto: true,
   };
 }
@@ -288,7 +356,7 @@ export default async function AdminPayoutsPage({
   const { data, error } = await supabase
     .from("payouts")
     .select(
-      "id, tutor_id, status, currency, amount, provider, provider_payout_id, provider_metadata, payee_country, scheduled_for, paid_at, failed_at, failure_reason, created_at, profiles!payouts_tutor_id_fkey(full_name)",
+      "id, tutor_id, status, currency, amount, provider, funding_provider, provider_payout_id, provider_metadata, payee_country, scheduled_for, paid_at, failed_at, failure_reason, created_at, profiles!payouts_tutor_id_fkey(full_name)",
     )
     .order("created_at", { ascending: false })
     .limit(TECHO + 1); // pide una de más → sabe si se ha quedado corto
@@ -325,7 +393,7 @@ export default async function AdminPayoutsPage({
   if (admin) {
     const { data: rr, error: errRR } = await admin
       .from("payment_routing_rules")
-      .select("payee_country, payer_country, payout_provider, priority, is_active");
+      .select("payee_country, payer_country, payout_providers, priority, is_active");
     if (errRR) errorRuteo = errRR.message;
     else reglas = (rr ?? []) as unknown as ReglaDeRuteo[];
   }
@@ -393,10 +461,32 @@ export default async function AdminPayoutsPage({
   // consultar (error) y consultado sin resultado (el tutor no ha registrado
   // nada). Por eso lo que viaja a la fila es `undefined` / `null` / `[]` y no
   // un `?? null` que los aplasta a dos.
+  //
+  // ⚠️ Y SON DOS FAMILIAS DE DESTINO, NO UNA. Aquí se le preguntaba
+  // `manual_destination` a TODO tutor con una orden a mano, y eso valía mientras
+  // el único riel manual fue Venezuela. Desde `20260903140000` Colombia va por
+  // `banco-manual`: su tutor tiene banco, cédula y número de cuenta guardados en
+  // `tutor_payout_accounts`, y a la RPC de canales no le consta nada de eso —
+  // devolvía `no_data_found` y la fila pintaba «este tutor no ha registrado
+  // ningún destino de cobro manual». O sea que el admin veía «pagable a mano» y
+  // «no hay a dónde pagarle» en la misma fila, y las dos frases eran falsas a la
+  // vez.
+  //
+  // La familia se decide con `rielDePayout(clave)?.dato`, NO por país ni por el
+  // nombre del proveedor: son cuatro rieles hoy y el eje que importa aquí es
+  // qué se le pidió al tutor. Cada una tiene su puerta y ninguna sirve para la
+  // otra:
+  //
+  //   'identificador' → `manual_destination(tutor_id)` · por TUTOR
+  //   'banco'         → `payout_beneficiary(payout_id)` · por PAYOUT
+  const aManoVisibles = visibles.filter(
+    (x) => x.riel.manual && PAGABLES_A_MANO.includes(x.fila.status),
+  );
+
   const tutoresManual = [
     ...new Set(
-      visibles
-        .filter((x) => x.riel.manual && PAGABLES_A_MANO.includes(x.fila.status))
+      aManoVisibles
+        .filter((x) => x.riel.riel?.dato === "identificador")
         .map((x) => x.fila.tutor_id),
     ),
   ];
@@ -423,6 +513,76 @@ export default async function AdminPayoutsPage({
       }
       destinos.set(id, r.data?.destinations ?? []);
     });
+  }
+
+  // ── 5b · Y a dónde TRANSFERIR, para la familia bancaria ───────────────────
+  //
+  // `payout_beneficiary(payout_id)` es la única puerta al número de cuenta
+  // entero: `tutor_payout_accounts.bank_account` y `.beneficiary_document` no
+  // tienen `grant select` para ningún rol, y el `execute` de la función es solo
+  // de `service_role` (`20260901160000` §8). Se resuelve aquí, en el servidor,
+  // y viaja ya resuelto a la fila (regla de oro 3). NO se lee la tabla.
+  //
+  // Va por PAYOUT porque la función valida cosas de la orden —estado ejecutable,
+  // país de destino, que el país de los datos coincida con `payee_country`,
+  // que los datos SIGAN validando contra `payout_country_rules`— así que dos
+  // órdenes del mismo tutor pueden dar respuestas distintas. Ver `./rpc.ts`.
+  //
+  // ponytail: mismo tope y mismo criterio que los canales de arriba, y aplicado
+  // por familia en vez de al total. Son dos colas cortas: 25 tutores + 25
+  // órdenes, no 25 entre las dos. Lo que no se pregunta se DICE en la fila.
+  //
+  // ⚠️ `PAGABLES_A_MANO` incluye 'failed' y 'on_hold', y `payout_beneficiary`
+  // solo construye beneficiario desde 'scheduled' y 'processing'. Esas dos
+  // vuelven con `no-ejecutable` y su mensaje; se preguntan igual, a propósito:
+  // el motivo por el que no se puede leer el destino es lo que el admin tiene
+  // que saber (hay que liberar o reintentar la orden antes de transferir), y
+  // esconderlo dejaría un «Marcar pagado» sin coordenadas y sin explicación.
+  const ordenesBancarias = aManoVisibles
+    .filter((x) => x.riel.riel?.dato === "banco")
+    .map((x) => x.fila);
+  const bancariasAPagar = ordenesBancarias.slice(0, TOPE_DESTINOS);
+
+  const beneficiarios = new Map<string, DestinoBancario>();
+  if (admin && bancariasAPagar.length > 0) {
+    const respuestas = await Promise.all(
+      bancariasAPagar.map((p) => leerBeneficiario(admin, p.id)),
+    );
+    respuestas.forEach((r, i) => beneficiarios.set(bancariasAPagar[i].id, r));
+  }
+
+  // El NOMBRE del banco, que es lo que se busca en la web del banco propio:
+  // `payout_beneficiary` devuelve el `bank_code` (lo que pide el POST de
+  // dLocal) y un código de tres dígitos no le dice nada a quien va a hacer la
+  // transferencia.
+  //
+  // ⚠️ Esta lectura va por el cliente del USUARIO y no por el de servicio, al
+  // revés que las dos de arriba, y es la regla de oro 9 en su forma útil:
+  // `payout_banks` concede `select` a `authenticated` y a nadie más
+  // (`20260901160000:260`), así que con el cliente de servicio esto sería un
+  // `permission denied` en tiempo de ejecución. Su RLS filtra por `is_active`,
+  // así que un banco desactivado no vuelve — y eso también hay que decirlo en
+  // vez de pintar el hueco.
+  const paisesBancarios = [
+    ...new Set(
+      bancariasAPagar
+        .map((p) => p.payee_country)
+        .filter((c): c is string => c !== null),
+    ),
+  ];
+  const nombresDeBanco = new Map<string, string>();
+  let errorBancos: string | null = null;
+  if (paisesBancarios.length > 0) {
+    const { data: bs, error: errBancos } = await supabase
+      .from("payout_banks")
+      .select("country, bank_code, name")
+      .in("country", paisesBancarios);
+    // Regla de oro 10: sin mirar el `error`, un grant que falte se vería igual
+    // que «este país no tiene bancos en el catálogo».
+    if (errBancos) errorBancos = errBancos.message;
+    else {
+      for (const b of bs ?? []) nombresDeBanco.set(`${b.country}|${b.bank_code}`, b.name);
+    }
   }
 
   const fecha = (iso: string) =>
@@ -531,7 +691,7 @@ export default async function AdminPayoutsPage({
             type: "select",
             options: rieles.map((r) => ({
               value: r,
-              label: r === RIEL_MANUAL ? "manual (a mano)" : r,
+              label: rielDePayout(r)?.ejecuta === "persona" ? `${r} (a mano)` : r,
             })),
           },
         ]}
@@ -561,7 +721,20 @@ export default async function AdminPayoutsPage({
               // de las dos es un problema. Aquí `undefined` únicamente puede
               // venir del tope: si faltara la clave de servicio, `reglas` sería
               // null, `riel.manual` false y esta rama ni se pintaría.
-              const dest = pagableAMano ? destinos.get(p.tutor_id) : undefined;
+              // Qué se le pidió al tutor. Cuando la fila es pagable a mano
+              // esto NO puede ser null: `riel.manual` ya exige un riel
+              // reconocido (`ejecuta === 'persona'`), y un riel siempre tiene
+              // familia. Se deja como unión para que el día que aparezca una
+              // tercera familia no compile en silencio.
+              const familia: FamiliaDeDato | null = riel.riel?.dato ?? null;
+              const dest =
+                pagableAMano && familia === "identificador"
+                  ? destinos.get(p.tutor_id)
+                  : undefined;
+              const banco =
+                pagableAMano && familia === "banco"
+                  ? beneficiarios.get(p.id)
+                  : undefined;
               return (
                 <li key={p.id} className="flex flex-col gap-2.5 py-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -631,13 +804,30 @@ export default async function AdminPayoutsPage({
                     {p.failure_reason ? ` · ${p.failure_reason}` : ""}
                   </p>
 
-                  {/* A dónde pagar. Solo para lo que hay que pagar a mano. */}
-                  {pagableAMano ? <Destinos destinos={dest} /> : null}
+                  {/* A dónde pagar. Solo para lo que hay que pagar a mano, y
+                      cada familia con su destino: las dos conviven en la misma
+                      cola —una orden venezolana y una colombiana se ven a la
+                      vez— y ninguna de las dos pintadas sirve para la otra. */}
+                  {pagableAMano ? (
+                    familia === "banco" ? (
+                      <DestinoBanco
+                        destino={banco}
+                        moneda={p.currency}
+                        nombreDelBanco={(pais, code) =>
+                          nombresDeBanco.get(`${pais}|${code}`) ?? null
+                        }
+                        catalogoRoto={errorBancos !== null}
+                      />
+                    ) : (
+                      <Destinos destinos={dest} />
+                    )
+                  ) : null}
 
                   <PayoutActions
                     payoutId={p.id}
                     status={p.status}
                     manual={riel.manual}
+                    familia={familia}
                     marca={marcaDe(p)}
                     identificado={p.provider_payout_id !== null}
                     canales={(dest ?? []).map((d) => d.channel)}
@@ -654,12 +844,14 @@ export default async function AdminPayoutsPage({
           aunque diga lo mismo: ese texto está escrito en segunda persona para el
           TUTOR («el importe se te paga en ARS») y aquí quien lee es quien paga.
           Repetirlo tal cual sería más raro que decirlo bien una vez. */}
-      {/* ⚠️ La condición es `clase === 'banco'` y no `!riel.manual`: desde que
-          hay tres clases de riel, «no manual» incluye también las órdenes SIN
-          ejecutor (el tutor que no ha declarado país), que no pasan por dLocal
-          ni convierten nada. Con la condición vieja, una cola de puras órdenes
-          sin ejecutor pintaba un aviso sobre el tipo de cambio de dLocal. */}
-      {reglas !== null && visibles.some(({ riel }) => riel.clase === "banco") ? (
+      {/* ⚠️ La condición mira la CLAVE del riel y no su familia de dato, y desde
+          C2r eso importa: el aviso habla del tipo de cambio DE dLOCAL, y
+          'banco' incluye ahora también a Wise y al payout directo de Stripe,
+          que no convierten con la tasa de dLocal. Antes decía `clase ===
+          'banco'` para no meter las órdenes sin ejecutor —que era el bug que
+          arregló—, pero se quedó corto en la otra dirección. */}
+      {reglas !== null &&
+      visibles.some(({ riel }) => riel.riel?.clave === "dlocal") ? (
         <p className="text-xs text-[#6b6b6b]">
           En los rieles con conversión —los 7 países de dLocal con moneda local;
           Ecuador no, cobra en USD— el importe de cada fila es lo que{" "}
@@ -724,6 +916,156 @@ function Destinos({ destinos }: { destinos: DestinoManual[] | null | undefined }
         </p>
       ))}
     </div>
+  );
+}
+
+/**
+ * A DÓNDE TRANSFERIR — la otra familia de destino, la que tiene coordenadas
+ * bancarias en vez de un canal y un identificador.
+ *
+ * Es a `DestinoBanco` lo que `Destinos` es al riel de canal, y existe por la
+ * misma razón: sin esto, el admin ve «pagable a mano» y no ve a dónde, así que
+ * la función que abrió `20260903140000` no sirve para nada.
+ *
+ * Mismo criterio de privacidad que la de arriba, y por el mismo motivo: el
+ * documento y el número de cuenta van EN CLARO y sin recortar, porque quien
+ * mira esto está a punto de teclearlos en la web de su banco y un dato de pago
+ * a medias es peor que ninguno. Lo que limita la exposición no es enmascarar,
+ * es preguntar poco: solo se piden para las órdenes VISIBLES que hay que pagar
+ * a mano, nunca para la lista entera.
+ */
+function DestinoBanco({
+  destino,
+  moneda,
+  nombreDelBanco,
+  catalogoRoto,
+}: {
+  /** `undefined` = no se preguntó (tope). Ver los cuatro estados en `./rpc.ts`. */
+  destino: DestinoBancario | undefined;
+  /** `payouts.currency`, para decir si la cuenta es de otra moneda. */
+  moneda: string;
+  /** `payout_banks` ya leído, inyectado: este componente no consulta nada. */
+  nombreDelBanco: (pais: string, bankCode: string) => string | null;
+  /** ¿falló la lectura del catálogo? Cambia por qué falta el nombre. */
+  catalogoRoto: boolean;
+}) {
+  if (destino === undefined) {
+    return (
+      <p className="text-xs text-[#6b6b6b]">
+        Coordenadas bancarias no consultadas: esta vista tiene más de{" "}
+        {TOPE_DESTINOS} órdenes con transferencia pendiente y solo se preguntan
+        las {TOPE_DESTINOS} primeras. Filtra por país o por estado para ver a
+        dónde transferirle.
+      </p>
+    );
+  }
+  if (destino.estado === "error") {
+    return (
+      <p className="text-xs text-[#8a5a12]">
+        No se han podido leer las coordenadas bancarias de esta orden.{" "}
+        <span className="font-mono">{destino.mensaje}</span>
+      </p>
+    );
+  }
+  if (destino.estado === "sin-datos") {
+    return (
+      <p className="text-xs text-[#8f2b2b]">
+        No hay a dónde transferirle todavía: {destino.mensaje}. Hay que pedirle
+        que registre sus datos bancarios antes de marcar nada.
+      </p>
+    );
+  }
+  if (destino.estado === "no-ejecutable") {
+    // El mensaje de la BD entero y tal cual: dice si es el estado de la orden,
+    // el país que no coincide o un dato que dejó de validar, y esas son cuatro
+    // cosas distintas que se arreglan de cuatro maneras. La frase de después es
+    // la única que se añade, y vale para las cuatro.
+    return (
+      <p className="text-xs text-[#8f2b2b]">
+        No se pueden construir sus coordenadas de cobro: {destino.mensaje}. Eso
+        es lo que hay que resolver antes de transferir — y ojo, «Marcar pagado»
+        sigue disponible: si transfieres sin leer esto, estarás cerrando una
+        orden con un destino que la base de datos considera inválido.
+      </p>
+    );
+  }
+
+  const b = destino.datos;
+  const nombre = nombreDelBanco(b.transfer_country, b.bank_code);
+  const tipo = b.bank_account_type;
+  const monedaDeLaCuenta = b.currency_to_pay?.toUpperCase() ?? null;
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[10px] bg-[#f7f7f9] px-3 py-2">
+      <p className="text-[11.5px] text-[#6b6b6b]">Transferir a</p>
+      <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[7.5rem_1fr]">
+        <Campo k="Titular">
+          {b.beneficiary_first_name} {b.beneficiary_last_name}
+        </Campo>
+        <Campo k="Documento">
+          <span className="text-[#6b6b6b]">{b.beneficiary_document_type}</span>{" "}
+          <DatoCopiable valor={b.beneficiary_document} etiqueta="el documento" />
+        </Campo>
+        <Campo k="Banco">
+          {nombre ? (
+            <>
+              <span className="font-semibold">{nombre}</span>{" "}
+              <span className="text-[#6b6b6b]">· código {b.bank_code}</span>
+            </>
+          ) : (
+            <>
+              <span className="font-semibold">código {b.bank_code}</span>{" "}
+              <span className="text-[#8a5a12]">
+                ·{" "}
+                {catalogoRoto
+                  ? "no se pudo leer el catálogo de bancos, así que falta el nombre"
+                  : "el catálogo ya no lo nombra (banco desactivado): confírmalo con el tutor antes de transferir"}
+              </span>
+            </>
+          )}
+        </Campo>
+        {tipo ? (
+          <Campo k="Tipo de cuenta">
+            {TIPO_DE_CUENTA[tipo] ? (
+              <>
+                {TIPO_DE_CUENTA[tipo]}{" "}
+                <span className="text-[#6b6b6b]">({tipo})</span>
+              </>
+            ) : (
+              tipo
+            )}
+          </Campo>
+        ) : null}
+        <Campo k="Cuenta">
+          <DatoCopiable valor={b.bank_account} etiqueta="el número de cuenta" />
+        </Campo>
+        {b.bank_branch ? <Campo k="Sucursal">{b.bank_branch}</Campo> : null}
+      </dl>
+      {/* La moneda, dicha y NO calculada (regla de oro 2): el importe de la
+          fila es lo que sale de Enséñame Ya, en la moneda de la orden, y aquí
+          no se convierte nada — ni con tipo de cambio ni con redondeo. Para el
+          riel bancario manual, quién asume el diferencial sigue SIN DECIDIR
+          (`docs/PAGOS-Y-PAYOUTS.md` §1.1), así que se dice eso y no una cifra. */}
+      {monedaDeLaCuenta && monedaDeLaCuenta !== moneda.toUpperCase() ? (
+        <p className="text-xs text-[#6b6b6b]">
+          La cuenta es en {monedaDeLaCuenta} y la orden está en{" "}
+          {moneda.toUpperCase()}: la conversión la hace quien transfiere, con el
+          tipo de cambio de su banco, y quién asume ese diferencial todavía no
+          está decidido.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Una línea de la ficha: etiqueta y valor. Fragmento, para que manden las
+    columnas del `<dl>` de arriba y no una caja intermedia. */
+function Campo({ k, children }: { k: string; children: React.ReactNode }) {
+  return (
+    <>
+      <dt className="text-[11.5px] text-[#6b6b6b] sm:pt-[3px]">{k}</dt>
+      <dd className="text-[13px] text-[#333333]">{children}</dd>
+    </>
   );
 }
 
