@@ -83,9 +83,23 @@ Dos reglas transversales:
 | **Adaptadores de Wise y payout directo de Stripe** | Dos integraciones. Wise **no tiene credenciales de API**: su cuenta está en KYB y su sandbox V2 no es autoservicio (se pide a `api@wise.com`). La de Stripe sigue esperando su autorización por escrito (§5) |
 | **Elegir entre varios automáticos** | `payout_provider` es hoy un valor fijo por país. La regla 2 lo convierte en «uno de este conjunto». La pieza que compara existe; la que elige entre candidatos, no |
 
-⚠️ **En producción, los 8 países de dLocal siguen cobrando por Stripe**, a propósito: la
-cuenta de PRODUCCIÓN de dLocal está rechazada y ponerla ahí rompería el checkout. El cambio
-está aplicado solo en dev, que es donde se trabaja.
+⚠️ **En producción, los 8 países de dLocal y Venezuela cobran por `simulated`.** Aquí ponía
+«siguen cobrando por Stripe» y era **falso**: verificado el 3-sep-2026 contra la tabla real de
+prod, las diez filas de país llevan `charge_providers = {simulated}` salvo Colombia
+(`{stripe, dlocal}`) y la del «sin declarar» (`{stripe}`). Prod es un *coming soon* sin
+usuarios y nunca tuvo pasarela real ahí. Lo que sigue siendo cierto es el porqué de no poner
+dLocal: su cuenta de PRODUCCIÓN está rechazada.
+
+🔴 **Y esa frase tumbó el despliegue de migraciones a prod (3-sep-2026).** Dos
+autocomprobaciones —`20260903170000` y `20260903180000`— exigían `charge_providers[1] =
+'stripe'` para Venezuela dándola por buena. En prod eso levanta excepción y **aborta la
+corrida entera**: prod se quedó con `120000`–`160000` aplicadas y `170000`–`230000` sin
+aplicar. Ahora comprueban la invariante de verdad (`≠ 'dlocal'`, porque dLocal no cubre
+Venezuela).
+
+**La regla que sale de aquí: una autocomprobación de migración no puede afirmar el estado de
+un ambiente**, solo la invariante que esa migración protege. Lo demás es escribir dev dentro
+de una migración que también corre en prod.
 
 ---
 
