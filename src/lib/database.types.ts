@@ -2574,6 +2574,10 @@ export type Database = {
         Returns: string
       }
       payout_beneficiary: { Args: { p_payout_id: string }; Returns: Json }
+      payout_identifier_beneficiary: {
+        Args: { p_channel: string; p_payout_id: string }
+        Returns: Json
+      }
       payouts_backlog: { Args: never; Returns: Json }
       pending_email_notifications: {
         Args: { p_limit?: number }

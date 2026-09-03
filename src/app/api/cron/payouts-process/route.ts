@@ -398,7 +398,14 @@ export async function GET(req: Request) {
       // orden es IMPAGABLE: no es que vaya a fallar, es que a ese proveedor no le
       // consta ese importe. Mandarla es pedirle a dLocal Go que saque de su
       // bolsillo lo que cobró Stripe.
-      if (fila.funding_provider !== psp.key) {
+      //
+      // ⚠️ SOLO PARA LOS RIELES ATADOS A UN BALANCE. Esta puerta comparaba sin
+      // excepción, y con eso PayPal y Wise —que se fondean desde NUESTRO banco y
+      // no dependen de quién cobró— se habrían saltado enteros, contados como
+      // «balance ajeno» y sin una sola línea en rojo. `ataduraDeBalance` existe
+      // en el registro de rieles justo para esto y aquí no se consultaba.
+      if (rielDePayout(claveEjecutor)?.ataduraDeBalance !== false
+          && fila.funding_provider !== psp.key) {
         balanceAjeno++;
         if (simulacro) {
           ensayo.push({

@@ -427,6 +427,31 @@ export type WebhookInput = { rawBody: string; signature: string | null };
  * calcula el adaptador ni lo recalcula nadie: `payout_beneficiary` se niega
  * explícitamente a devolver `transfer_amount` por eso mismo.
  */
+/**
+ * LA MARCA QUE IDENTIFICA UNA ORDEN EN EL PANEL DEL PROVEEDOR.
+ *
+ * `EY-<payouts.id>-<intento>`. Vivía en `dlocal-provider.ts` y no es suya: es la
+ * identidad de un payout vista desde fuera, y en cuanto hubo un segundo riel que
+ * la necesita —el `sender_batch_id` de PayPal— duplicarla era garantizar que un
+ * día divergen y el admin busca una cadena que no existe.
+ *
+ * Los tres trozos hacen falta: `EY-` distingue lo nuestro de lo que alguien cree
+ * a mano; `payouts.id` es único por orden y estable entre pasadas; `intento`
+ * separa el payout muerto de un rechazo anterior del que se crea después de un
+ * `manage_payout('retry')`.
+ *
+ * ⚠️ QUÉ HACE CADA PROVEEDOR CON ELLA NO ES LO MISMO, y la diferencia es grande:
+ *   · dLocal Go NO deduplica (medido: dos POST con la misma marca crean dos
+ *     payouts). Ahí la marca sirve para RECONOCER, y quien impide el pago doble
+ *     es el candado de la base.
+ *   · PayPal SÍ deduplica: un `sender_batch_id` repetido devuelve 400 con el
+ *     enlace del lote que ya existe. Ahí la marca IMPIDE el pago doble, y por eso
+ *     el adaptador de PayPal no necesita barrido de huérfanos.
+ */
+export function marcaDe(payoutId: string, intento: number): string {
+  return `EY-${payoutId}-${intento}`;
+}
+
 export type PayoutInput = {
   /** `payouts.id`. Con esto el adaptador saca el beneficiario, y solo con esto. */
   payoutId: string;

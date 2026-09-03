@@ -16,7 +16,8 @@
     "check:terms": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/components/legal/terms-content.check.ts",
     "check:ics": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/calendar/ics-format.check.ts",
     "check:chat": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/chat/limits.check.ts",
-    "check:cadena": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/app/api/pagos/checkout/cadena.check.ts"
+    "check:cadena": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/app/api/pagos/checkout/cadena.check.ts",
+    "check:paypal": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/paypal-mapeo.check.ts"
   },
   "dependencies": {
     "@daily-co/daily-js": "^0.91.0",

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { marcaDe } from "./port";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DlocalGoError,
@@ -407,9 +409,8 @@ const PAGINAS_BARRIDO = 40;
  * lo que impide el segundo pago es el candado de la base de datos y el hecho de
  * que una orden reanudada nunca crea nada.
  */
-export function marcaDe(payoutId: string, intento: number): string {
-  return `EY-${payoutId}-${intento}`;
-}
+// `marcaDe()` vive en `port.ts`: la usan dLocal y PayPal, y duplicarla era
+// garantizar que un día divergen. La razón de cada trozo está allí.
 
 /** Lo que `description` admite. Medido: 289 → `7000 … exceeds max length 255`. */
 const MAX_DESCRIPCION = 255;
