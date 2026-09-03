@@ -6,8 +6,13 @@
 > «Infraestructura de Pagos» (Emilio, junio-2026), **cuyo eje de análisis es incorrecto**
 > (ver §9).
 >
+> ⚠️ **El flujo de ruteo vigente es el de §1**, fijado por el cliente el **2026-09-03**.
+> Sustituye a los mapas anteriores de este documento y al del PDF: las secciones §4–§7
+> siguen siendo válidas para los COSTES de cada riel, no para decidir el ruteo.
+>
 > Entregable comercial derivado de este documento:
 > `EnsenameYa-Pagos-y-Payouts.pdf` (10 págs., versión para el cliente).
+> ⚠️ **El PDF describe el mapa anterior**: si se vuelve a enviar, hay que regenerarlo.
 
 **Marcas de confianza usadas en todo el documento:**
 
@@ -19,19 +24,53 @@
 
 ---
 
-## 1 · La decisión, en cinco líneas
+## 1 · El flujo definitivo
 
-- **Cobrar es igual en todo el mundo: Stripe.** Es lo único integrado y probado.
-  dLocal queda como respaldo **solo donde el alumno esté en un país que dLocal cubra**.
-- **Pagar depende del país del TUTOR**, y ahí no hay solución única.
-- **Venezuela** → Airtm o PayPal (automáticos) + Zinli/Binance/Zelle (manuales).
-- **Colombia** → Wise (recomendado), PayPal, o Stripe directo si lo autorizan.
-- **Resto** → dLocal en sus 8 países LATAM; Wise para Europa, EE. UU. y desarrollados.
+> **Decisión del cliente del 2026-09-03. Es la que manda**, y sustituye a cualquier mapa
+> anterior de este documento. Lo que sigue describe el objetivo; §1.1 dice qué parte de esto
+> es hoy código y qué parte no.
 
-⚠️ **La corrección más importante sobre el flujo tal y como se enunció:**
-«dLocal como fallback de cobro para Venezuela» **no es posible**. Venezuela está fuera de
-dLocal también para cobrar (sus 17 países de cobro no la incluyen). Si el alumno es
-venezolano, es **Stripe o nada**.
+| Región | Checkout (cobro al alumno) | Payouts automáticos | Payouts manuales |
+| :-- | :-- | :-- | :-- |
+| **Venezuela** | **Stripe siempre**; si no está disponible, dLocal | Airtm · PayPal | Zinli · Binance · Zelle |
+| **Colombia** | **Stripe siempre**; si no está disponible, dLocal | Wise · PayPal · payout directo de Stripe | — |
+| **Resto del mundo** | **dLocal** donde lo cubra; Stripe donde no lo cubra o no esté disponible | PayPal · Wise · dLocal · Stripe | — |
+
+Dos reglas transversales:
+
+1. **El checkout tiene respaldo.** La pasarela principal de cada región lleva una segunda
+   detrás. Que un cobro no se pueda abrir por una pasarela no debe dejar al alumno sin
+   comprar.
+2. **El payout sale por donde entró el dinero.** De los automáticos de cada región se elige
+   el que corresponda al proveedor que cobró esa reserva. Por eso en Colombia el payout
+   directo de Stripe **no está disponible si el cobro entró por dLocal**: un payout se paga
+   contra el balance del PSP que cobró, y a Stripe no le consta ese importe.
+
+### 1.1 · Qué de esto es código hoy
+
+**Ya funciona:**
+
+- Venezuela cobra por Stripe.
+- Venezuela tiene Zinli, Binance y Zelle como canales manuales, con cierre a mano y
+  comprobante obligatorio.
+- Los 8 países que dLocal paga cobran por dLocal (en dev; en producción no, ver abajo).
+- **La regla 2 está implementada**: la puerta del balance del job compara
+  `payouts.funding_provider` con el ejecutor y rechaza la orden si no coinciden. Es
+  exactamente el mecanismo que hace indisponible el payout de Stripe cuando cobró dLocal.
+
+**Falta, y es desarrollo:**
+
+| Qué | Por qué no está |
+| :-- | :-- |
+| **El respaldo del checkout (regla 1)** | Hoy el ruteo elige UN proveedor por país; si falla, el cobro no se abre. Hay que definir además qué cuenta como «no disponible»: error de la API, país no soportado, o rechazo de la tarjeta |
+| **Colombia** | No tiene fila en `payment_routing_rules`, y sin fila no se puede vender (`create_booking_line` levanta «sin ruta de pago disponible»). Esa tabla no admite inserts desde fuera → migración |
+| **Los otros países que dLocal cobra** | dLocal cobra en ~17 países y la tabla solo nombra 8 más Venezuela. Los que faltan hoy no se pueden vender |
+| **Adaptadores de Airtm, PayPal, Wise y payout directo de Stripe** | Cuatro integraciones. Tres esperan cuenta; la de Stripe espera su autorización por escrito (§5) |
+| **Elegir entre varios automáticos** | `payout_provider` es hoy un valor fijo por país. La regla 2 lo convierte en «uno de este conjunto». La pieza que compara existe; la que elige entre candidatos, no |
+
+⚠️ **En producción, los 8 países de dLocal siguen cobrando por Stripe**, a propósito: la
+cuenta de PRODUCCIÓN de dLocal está rechazada y ponerla ahí rompería el checkout. El cambio
+está aplicado solo en dev, que es donde se trabaja.
 
 ---
 
@@ -82,6 +121,8 @@ cuando el proveedor confirma**, nunca al emitir — ver §8 y `20260901120000`.
 ---
 
 ## 4 · Venezuela
+> El flujo que manda es el de §1. Esta sección explica los COSTES de cada riel, no el ruteo.
+
 
 **Ningún proveedor bancario internacional llega a Venezuela.** Ni Stripe
 (`country_specs/VE` → *«VE is not currently supported»* ✅), ni dLocal, ni Wise, ni
@@ -131,6 +172,8 @@ no puede entrar en el flujo.
 ---
 
 ## 5 · Colombia
+> El flujo que manda es el de §1. Esta sección explica los COSTES de cada riel, no el ruteo.
+
 
 Al contrario que Venezuela, **Colombia tiene banca internacional plenamente operativa**.
 
@@ -178,6 +221,8 @@ por hecho que dLocal Go no pagaba a terceros (sí lo hace). El correo cuesta die
 ---
 
 ## 6 · Resto del mundo
+> El flujo que manda es el de §1. Esta sección explica los COSTES de cada riel, no el ruteo.
+
 
 La diferencia entre grupos **no es geográfica sino de moneda**.
 
@@ -394,11 +439,11 @@ a Stripe (§5). Ninguna de las dos bloquea la fase 1.
 | # | Pregunta | Recomendación | Desbloquea |
 | :-- | :-- | :-- | :-- |
 | ~~1~~ | ~~¿Quién asume el spread FX de dLocal?~~ | ✅ **Resuelta 2-sep-2026: lo asume el tutor** (en contra de la recomendación de este doc, que era lo contrario). Implementada con factor calibrable | — |
-| **1-bis** | 🔴 **¿Por dónde cobramos en los 8 países de dLocal?** Su regla de ruteo dice hoy `charge_provider = stripe` y `payout_provider = dlocal`, y **un payout se paga desde el balance del PSP que cobró**. Verificado EN EJECUCIÓN el 3-sep: la puerta del balance rechaza esas órdenes antes de llamar a nadie. Mientras no cambie, el riel de dLocal **no puede pagar en producción** por bien que estén las cuentas | Cobrar por dLocal en esos 8 países (su `charge_provider` a `dlocal`), o fondear su balance aparte y decidir cómo se entera el job | Los 8 de LATAM. Es el bloqueante real, por delante de los datos que faltan en MX/PY/PE |
-| 2 | ¿Cada cuánto se paga? | Mensual | Calendario de pagos |
-| 3 | ¿Importe mínimo de retiro? | Sí — un payout manual de $8 cuesta más en gestión que el pago | Evita cola antieconómica |
-| 4 | ¿Cuántos canales manuales en VE? | Zinli y Zelle; Binance solo a petición | Formulario del tutor |
-| 5 | ¿Hay alumnos sin tarjeta internacional? | Si sí, PayPal Checkout deja de ser ahorro y pasa a ser **ingresos nuevos** | Decide si se integra PayPal para cobrar |
+| ~~1-bis~~ | ~~¿Por dónde cobramos en los 8 países de dLocal?~~ ✅ **Resuelta 3-sep-2026: donde dLocal cubra, se cobra por dLocal; donde no, Stripe.** Aplicado en dev; en producción no, por la cuenta rechazada. Antes decía: ⚠️ Su regla de ruteo dice hoy `charge_provider = stripe` y `payout_provider = dlocal`, y **un payout se paga desde el balance del PSP que cobró**. Verificado EN EJECUCIÓN el 3-sep: la puerta del balance rechaza esas órdenes antes de llamar a nadie. Mientras no cambie, el riel de dLocal **no puede pagar en producción** por bien que estén las cuentas | Cobrar por dLocal en esos 8 países (su `charge_provider` a `dlocal`), o fondear su balance aparte y decidir cómo se entera el job | Los 8 de LATAM. Es el bloqueante real, por delante de los datos que faltan en MX/PY/PE |
+| ~~2~~ | ~~¿Cada cuánto se paga?~~ | ✅ **Resuelta 3-sep-2026: se queda como está** — lote semanal, lunes 03:00 UTC (`run-payout-batch`). La recomendación de este doc era mensual | — |
+| ~~3~~ | ~~¿Importe mínimo de retiro?~~ | ✅ **Resuelta 3-sep-2026: se queda como está — no hay mínimo.** La recomendación de este doc era ponerlo | — |
+| ~~4~~ | ~~¿Cuántos canales manuales en VE?~~ | ✅ **Resuelta 3-sep-2026: Zinli, Binance y Zelle.** PayPal y Airtm quedan como rieles automáticos, no manuales — sus filas del catálogo están apagadas, no borradas (`20260903120000`) | — |
+| **5** | ⏳ **ÚNICA ABIERTA.** ¿Hay alumnos sin tarjeta internacional? | Si sí, PayPal Checkout deja de ser ahorro y pasa a ser **ingresos nuevos** | Decide si se integra PayPal para cobrar |
 
 ---
 
