@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { simulatedProvider } from "@/lib/payments/simulated-provider";
 import { stripeProvider } from "@/lib/payments/stripe-provider";
 import { dlocalProvider } from "@/lib/payments/dlocal-provider";
+import { paypalProvider } from "@/lib/payments/paypal-provider";
 import type { AnyProvider, LocalProvider, PspProvider } from "@/lib/payments/port";
 
 /**
@@ -172,7 +173,7 @@ export const RIEL_BANCO_MANUAL = "banco-manual";
  * EL REGISTRO DE RIELES. Es la única tabla de verdad sobre qué significa cada
  * clave de `payment_routing_rules.payout_providers`.
  *
- * ⚠️ 'paypal' y 'wise' ESTÁN DECLARADOS Y NO TIENEN ADAPTADOR, y eso es
+ * ⚠️ 'wise' ESTÁ DECLARADO Y NO TIENE ADAPTADOR, y eso es
  * deliberado. Es lo que permite distinguir «riel que existe pero aún no está
  * listo» de «typo en la tabla»: una `s` de más en 'dlocals' no encuentra riel y
  * el país deja de ser servible, mientras que 'wise' sí lo es y su fila se limita
@@ -213,7 +214,9 @@ const RIELES: Record<string, Riel> = {
     dato: "identificador",
     ejecuta: "proveedor",
     ataduraDeBalance: false,
-    puedePagar: () => false,
+    // Ya no es un `false` a mano: tiene adaptador desde el 3-sep-2026, así que
+    // la credencial es el interruptor, como en los otros dos.
+    puedePagar: () => paypalProvider.missingPayoutConfig() === null,
   },
   [RIEL_MANUAL]: {
     clave: RIEL_MANUAL,
@@ -409,6 +412,9 @@ function datoQueSePide(candidatos: string[]): FamiliaDeDato | null {
 const PSPS: Record<string, PspProvider> = {
   [stripeProvider.key]: stripeProvider,
   [dlocalProvider.key]: dlocalProvider,
+  // Solo paga. No cobra ni reembolsa: ninguna fila de ruteo lo nombra en
+  // `charge_providers`, y sus métodos de cobro lo dicen en vez de fingir.
+  [paypalProvider.key]: paypalProvider,
 };
 
 /** Las claves de los PSP reales. La usa el job de reembolsos para filtrar. */
