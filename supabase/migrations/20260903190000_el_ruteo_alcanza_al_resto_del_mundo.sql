@@ -360,7 +360,7 @@ grant  execute on function public.set_charge_provider(uuid, text) to service_rol
 -- 5 · AUTOCOMPROBACIÓN
 -- ════════════════════════════════════════════════════════════════════════════
 do $$
-declare n int; v text[];
+declare n int; v text[]; v_pais char(2);
 begin
   -- 1) Fuera de Venezuela no queda ni un riel manual.
   select count(*) into n from public.payment_routing_rules
@@ -393,15 +393,32 @@ begin
     raise exception 'un tutor sin país declarado resolvió a % en vez de quedarse sin ejecutor', array_to_string(v,',');
   end if;
 
-  -- 5) Los países con fila propia siguen resolviendo a la suya.
-  select charge_providers into v from public.ruta_de_pago('MX');
-  if v[1] <> 'dlocal' then
-    raise exception 'MX dejó de cobrar por dLocal (quedó %)', v[1];
-  end if;
-  select charge_providers into v from public.ruta_de_pago('CO');
-  if v[1] <> 'stripe' then
-    raise exception 'CO dejó de cobrar por Stripe (quedó %)', v[1];
-  end if;
+  -- 5) Los países con fila propia siguen resolviendo a la SUYA y no a la de por
+  --    defecto, que es lo único que esta migración puede romper.
+  --
+  -- ⚠️ ANTES SE EXIGÍA UN PROVEEDOR CONCRETO —'dlocal' para MX— Y ESO ES ESTADO
+  -- DE DEV. En producción los ocho cobran por Stripe (la cuenta de dLocal está
+  -- rechazada), así que allí esto levantaba excepción y tumbaba el despliegue
+  -- entero de migraciones. Y encima comprobaba lo que no era: que MX cobre por
+  -- dLocal no es asunto de `ruta_de_pago()`, es asunto de la fila de MX.
+  --
+  -- Lo que sí es asunto de esta migración: que un país CON fila propia siga
+  -- resolviendo a ella y no se lo lleve por delante la fila por defecto nueva.
+  -- Eso se comprueba comparando con su propia fila, sea cual sea su contenido.
+  declare
+    v_suya text[];
+  begin
+    foreach v_pais in array array['MX', 'CO', 'VE'] loop
+      select charge_providers into v_suya
+        from public.payment_routing_rules
+       where payee_country = v_pais and payer_country is null and not es_por_defecto;
+      select charge_providers into v from public.ruta_de_pago(v_pais);
+      if v is distinct from v_suya then
+        raise exception '% dejó de resolver a su propia fila: la suya dice % y ruta_de_pago devolvió %',
+          v_pais, coalesce(array_to_string(v_suya, ','), 'nada'), coalesce(array_to_string(v, ','), 'nada');
+      end if;
+    end loop;
+  end;
 
   -- 6) Colombia y los ocho quedan solo con automáticos.
   if not exists (select 1 from public.payment_routing_rules

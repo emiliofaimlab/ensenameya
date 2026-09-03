@@ -43,14 +43,22 @@ begin
     raise exception 'VE tenía que seguir {stripe,dlocal} y está %', array_to_string(v_ve, ',');
   end if;
 
-  -- Y los ocho SIGUEN con dLocal delante: es la regla del resto del mundo y no
-  -- la toca ninguna de estas dos migraciones.
-  select count(*) into n
+  -- Y los ocho SIGUEN COMO ESTUVIERAN: esta migración no los toca.
+  --
+  -- ⚠️ AQUÍ SE PEDÍA `charge_providers[1] = 'dlocal'` Y ESO ES ESTADO DE DEV.
+  -- En producción los ocho cobran por Stripe —la cuenta de dLocal está
+  -- rechazada, ver `20260903170000`— así que esta comprobación levantaba
+  -- excepción allí y tumbaba el despliegue ENTERO de migraciones, no solo esta.
+  -- Es el accidente de `2a5c4ed` otra vez.
+  --
+  -- Lo que de verdad hay que comprobar es que los ocho sigan COHERENTES entre
+  -- sí, que es lo que significa «no los toqué». Cuál sea el proveedor lo decide
+  -- el ambiente, y esta migración no opina.
+  select count(distinct charge_providers[1]) into n
     from public.payment_routing_rules
-   where payee_country in ('AR','BR','CL','EC','MX','PE','PY','UY')
-     and charge_providers[1] = 'dlocal';
-  if n <> 8 then
-    raise exception 'solo % de los 8 países de dLocal cobran por dLocal', n;
+   where payee_country in ('AR','BR','CL','EC','MX','PE','PY','UY');
+  if n <> 1 then
+    raise exception 'los 8 países de dLocal dejaron de cobrar todos por lo mismo (% proveedores distintos)', n;
   end if;
 
   raise notice 'CO y VE por stripe → dlocal. Los ocho por dlocal → stripe.';
