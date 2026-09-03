@@ -7,6 +7,7 @@ import type {
   ChargeInput,
   ChargeResult,
   CobroRef,
+  PayoutResult,
   PspProvider,
   RefundInput,
   RefundResult,
@@ -204,6 +205,44 @@ export const stripeProvider: PspProvider = {
    * sería inventarse que el dinero se movió.
    */
   canRefund: isStripeConfigured,
+
+  /**
+   * ⚠️ STRIPE NO PUEDE PAGAR AL TUTOR EN ESTE PROYECTO, Y NO ES CUESTIÓN DE
+   * CREDENCIALES. Pagar a un tercero exige **Connect** —cuentas conectadas bajo
+   * `recipient service agreement`, capability `transfers`—, y Connect exige el
+   * KYC que sigue bloqueado. Poner otra clave no lo arregla.
+   *
+   * Se dice con una frase y no con `null` a propósito: `null` significa «puedo
+   * pagar» y haría que el job intentase ejecutar contra Stripe órdenes que
+   * ningún balance nuestro puede cubrir. Devolver el motivo hace que esas
+   * órdenes se queden en 'scheduled' —nunca 'failed'— y salgan contadas en la
+   * respuesta del job.
+   *
+   * ⚠️ Y no se confunde con `canRefund()`: devolver dinero por Stripe SÍ
+   * funciona hoy (X-01 lo ejercitó el 30-ago). Lo que no existe es la pata de
+   * salida hacia el tutor.
+   */
+  missingPayoutConfig() {
+    return "Stripe no puede ejecutar payouts a terceros aquí: exige Connect, y Connect exige el KYC bloqueado (PAC)";
+  },
+
+  /**
+   * El método existe porque está en el puerto y devuelve la verdad, no una
+   * excepción: el job pregunta `missingPayoutConfig()` antes y no llega nunca
+   * aquí. Si alguien lo llama igualmente, lo que obtiene es el motivo — no un
+   * `throw` que tumbe una pasada entera de la cola por una orden mal rutada.
+   *
+   * El día que Connect exista, aquí van `transfers.create` (a la cuenta
+   * conectada) o `payouts.create`, y el resto del job no se toca.
+   */
+  async payout(): Promise<PayoutResult> {
+    return {
+      estado: "sin-ejecutor",
+      mensaje:
+        "Stripe no ejecuta payouts en este proyecto (requiere Connect + KYC). " +
+        "La orden se queda en la cola: no es un fallo del payout.",
+    };
+  },
 
   async charge(input: ChargeInput): Promise<ChargeResult> {
     const session = await stripe().checkout.sessions.create(

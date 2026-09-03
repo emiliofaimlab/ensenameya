@@ -17,6 +17,22 @@ import {
   type ValoresDeCuenta,
 } from "@/lib/payout-account";
 
+/**
+ * El resumen ENMASCARADO que devuelve `upsert_payout_account`. La función
+ * devuelve más campos (`document_type`, `holder`, `bank_account_type`…); aquí
+ * solo se declaran los cuatro que se pintan, para que quede claro qué se usa.
+ *
+ * ⚠️ `last4` es lo ÚNICO del número de cuenta que sale de la base de datos: es
+ * la columna generada `bank_account_last4`, y `bank_account` no tiene
+ * `grant select` para ningún rol.
+ */
+type ResumenDeCuenta = {
+  country: string;
+  bank_code: string;
+  bank_name: string | null;
+  last4: string;
+};
+
 /** Mismo alto y borde que el desplegable de país, que está justo encima. */
 const CAMPO =
   "h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
@@ -77,17 +93,50 @@ export function PayoutAccountForm({
   // que ya no cobra: no se prerrellena, no se conserva y hay que teclearlo otra
   // vez. Lo que sí se conserva son el nombre y los apellidos, que no cambian al
   // cruzar una frontera.
-  const mismoPais = cuenta?.country === paisDeclarado;
+  //
+  // Esta primera versión es la de la CARGA y solo sirve para inicializar los
+  // campos; la que manda después es `mismoPais`, calculada sobre `guardado`.
+  const mismoPaisAlCargar = cuenta?.country === paisDeclarado;
+
+  /**
+   * ⚠️ LO GUARDADO ES ESTADO, y arreglarlo es media historia.
+   *
+   * `upsert_payout_account` devuelve un resumen ENMASCARADO —`last4`, banco,
+   * país, fecha— y su comentario en `20260901160000` dice para qué: «así el
+   * formulario repinta sin volver a consultar». Este formulario lo TIRABA
+   * (`const { error: err } = await …`) y pedía la página entera otra vez para
+   * volver a leer exactamente lo que la RPC acababa de darle. Resultado: entre
+   * el `Guardando…` y el repintado, la línea de arriba seguía enseñando el
+   * `····1234` viejo, que es justo el dato que el tutor acaba de cambiar y el
+   * único que estaba mirando.
+   */
+  const [guardado, setGuardado] = useState<ResumenDeCuenta | null>(
+    cuenta
+      ? {
+          country: cuenta.country,
+          bank_code: cuenta.bank_code,
+          bank_name:
+            bancos.find((b) => b.bank_code === cuenta.bank_code)?.name ?? null,
+          last4: cuenta.bank_account_last4,
+        }
+      : null,
+  );
+
+  // Y por eso este también es derivado: tras el primer guardado el país de lo
+  // guardado ya coincide con el declarado, así que las pistas de «(guardado) ·
+  // déjalo en blanco para no cambiarlo» aparecen solas, sin recargar.
+  const mismoPais = guardado?.country === paisDeclarado;
 
   const [v, setV] = useState<ValoresDeCuenta>({
     nombre: cuenta?.beneficiary_first_name ?? "",
     apellidos: cuenta?.beneficiary_last_name ?? "",
-    tipoDocumento: (mismoPais ? cuenta?.beneficiary_document_type : "") ?? "",
+    tipoDocumento:
+      (mismoPaisAlCargar ? cuenta?.beneficiary_document_type : "") ?? "",
     documento: "",
-    bankCode: (mismoPais ? cuenta?.bank_code : "") ?? "",
-    tipoCuenta: (mismoPais ? cuenta?.bank_account_type : "") ?? "",
+    bankCode: (mismoPaisAlCargar ? cuenta?.bank_code : "") ?? "",
+    tipoCuenta: (mismoPaisAlCargar ? cuenta?.bank_account_type : "") ?? "",
     cuenta: "",
-    sucursal: (mismoPais ? cuenta?.bank_branch : "") ?? "",
+    sucursal: (mismoPaisAlCargar ? cuenta?.bank_branch : "") ?? "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -113,7 +162,7 @@ export function PayoutAccountForm({
     // contrapartida de que la lectura vaya enmascarada: sin esto, cambiar una
     // letra del apellido obligaría a reteclear el número de cuenta — y reteclear
     // datos bancarios es exactamente como se introducen erratas.
-    const { error: err } = await supabase.rpc("upsert_payout_account", {
+    const { data, error: err } = await supabase.rpc("upsert_payout_account", {
       p_first_name: v.nombre.trim(),
       p_last_name: v.apellidos.trim(),
       p_document_type: v.tipoDocumento,
@@ -132,22 +181,34 @@ export function PayoutAccountForm({
       return;
     }
 
+    // AQUÍ ESTÁ EL USO DEL VALOR DE RETORNO. `data` viene tipado como `Json`
+    // porque `database.types.ts` no sabe qué devuelve una `returns jsonb`, así
+    // que el cast es inevitable; lo que no era inevitable es tirarlo.
+    const resumen = data as unknown as ResumenDeCuenta | null;
+    if (resumen) setGuardado(resumen);
+
     setV((prev) => ({ ...prev, documento: "", cuenta: "" }));
     toast.success("Datos de cobro guardados.");
+    // El `refresh` ya NO es lo que hace correcto este formulario: es lo que pone
+    // al día la píldora «Cuenta de cobro» del bloque de arriba, que la pinta el
+    // servidor. Si tardara o fallara, lo que el tutor ve aquí ya es lo bueno.
     router.refresh();
   }
 
   return (
     <div className="mt-3">
-      {cuenta ? (
+      {guardado ? (
         <p className="mb-3 text-[13px] text-[#6b6b6b]">
           {mismoPais ? (
             <>
               Guardado:{" "}
               <span className="font-semibold text-[#19191f] tabular-nums">
-                {enmascarar(cuenta.bank_account_last4)}
+                {enmascarar(guardado.last4)}
               </span>{" "}
-              · {bancos.find((b) => b.bank_code === cuenta.bank_code)?.name ?? cuenta.bank_code}
+              ·{" "}
+              {guardado.bank_name ??
+                bancos.find((b) => b.bank_code === guardado.bank_code)?.name ??
+                guardado.bank_code}
               . Solo enseñamos los cuatro últimos caracteres; para cambiar la
               cuenta o el documento, escríbelos de nuevo. Si los dejas en blanco,
               se quedan como están.
@@ -155,7 +216,7 @@ export function PayoutAccountForm({
           ) : (
             <>
               Los datos que tienes guardados son de{" "}
-              {etiquetaPaisGuardado ?? cuenta.country} y ahora cobras en{" "}
+              {etiquetaPaisGuardado ?? guardado.country} y ahora cobras en{" "}
               {etiquetaPais}. No se borran, pero no sirven para pagarte allí:
               rellena los de {etiquetaPais}.
             </>
@@ -204,7 +265,7 @@ export function PayoutAccountForm({
         <label className="block">
           <span className="text-xs text-[#6b6b6b]">
             Número de documento
-            {cuenta && mismoPais ? " (guardado)" : ""}
+            {mismoPais ? " (guardado)" : ""}
           </span>
           <input
             className={`mt-1 ${CAMPO}`}
@@ -213,7 +274,7 @@ export function PayoutAccountForm({
             autoComplete="off"
             inputMode="text"
             placeholder={
-              cuenta && mismoPais
+              mismoPais
                 ? "Déjalo en blanco para no cambiarlo"
                 : "Sin puntos ni guiones"
             }
@@ -263,7 +324,7 @@ export function PayoutAccountForm({
         <label className="block sm:col-span-2">
           <span className="text-xs text-[#6b6b6b]">
             {regla.account_label}
-            {cuenta && mismoPais ? " (guardada)" : ""}
+            {mismoPais ? " (guardada)" : ""}
           </span>
           <input
             className={`mt-1 ${CAMPO}`}
@@ -272,7 +333,7 @@ export function PayoutAccountForm({
             autoComplete="off"
             inputMode="text"
             placeholder={
-              cuenta && mismoPais
+              mismoPais
                 ? "Déjalo en blanco para no cambiarla"
                 : regla.account_label
             }

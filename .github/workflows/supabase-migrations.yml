@@ -40,6 +40,22 @@ jobs:
             echo "Cárgalo como Environment secret (ver docs/ENTORNOS.md §3D)."
             exit 0
           fi
-          supabase db push --yes --db-url "$SUPABASE_DB_URL"
+          # ⚠️ `--include-all` NO es una relajación cosmética, y sin él este job
+          # falla en cuanto dos ramas se entrelazan. Pasó el 3-sep-2026: `dev`
+          # tenía aplicada `20260902100000` (grabación) y le llegó después
+          # `20260901210000` (termómetro), con timestamp ANTERIOR porque venía de
+          # otra rama. El CLI se niega —«Found local migration files to be
+          # inserted before the last migration on remote database»— y no aplica
+          # NADA, ni siquiera las que sí van en orden. Producción está hoy en esa
+          # misma situación.
+          #
+          # Lo que se acepta a cambio: una migración puede correr después de otra
+          # con timestamp mayor. Es real, y el repo ya convive con ello —las
+          # migraciones aquí son inmutables y se corrigen con una nueva (regla de
+          # oro 5), así que ninguna depende de ser la última.
+          # ponytail: el techo es ese. La alternativa seria es renumerar al
+          # rebasar, que exige disciplina en cada rama y falla en silencio cuando
+          # alguien la olvida — y ahí el fallo es un despliegue a medias.
+          supabase db push --yes --include-all --db-url "$SUPABASE_DB_URL"
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
