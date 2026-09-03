@@ -201,6 +201,14 @@ flowchart LR
 | **AR·BR·CL·MX·PE·PY·UY** | dLocal | **Sí, recargo del 4,7 %** ✅ | $11,00 | 5,2 % |
 | **España vía PayPal** | PayPal | **Sí, recargo del 3–4 %** | ~$11,00 | 5,2 % |
 
+> 📏 **Primera medida real (3-sep-2026, sandbox).** Un payout de **$15,00 a Ecuador** se
+> ejecutó de punta a punta y dLocal cargó **$15,43 contra el balance, de los cuales $0,43 de
+> comisión**. Es el primer coste medido, no estimado, de todo este documento.
+> ⚠️ **Una sola muestra no distingue comisión fija de porcentual**: $0,43 sobre $15 es un 2,87 %,
+> y si fuera porcentual el payout de $210 costaría ~$6 en vez de los ~$1,50 que estima la tabla
+> de arriba. Hace falta un segundo payout de importe distinto para saberlo. Hasta entonces, las
+> cifras de dLocal de este documento son estimaciones y esta línea es el único dato duro.
+
 ### La lección de Ecuador
 
 Mismo proveedor, mismo importe, mismo proceso — **0,7 % en vez de 5,2 %**, solo porque
