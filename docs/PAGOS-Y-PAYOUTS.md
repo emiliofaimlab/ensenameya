@@ -8,7 +8,9 @@
 >
 > ✅ **PayPal paga (3-sep-2026).** Primer riel de payout automático fuera de dLocal, probado
 > de punta a punta contra el sandbox: job → adaptador → lote creado → fila `processing`.
-> Detalle en §1.1. Y una medida que corrige a este documento: PayPal **retiene como
+> Detalle en §1.1. **Y Venezuela cobra**: una cuenta de sandbox domiciliada en VE recibió
+> un payout con `SUCCESS`, que era la pregunta de la que colgaba automatizar el mercado
+> principal. Y una medida que corrige a este documento: PayPal **retiene como
 > `UNCLAIMED`** un pago a un correo sin cuenta —el lote dice `SUCCESS` y el dinero NO ha
 > llegado—, así que «el lote salió bien» y «el tutor cobró» son cosas distintas.
 >
@@ -413,7 +415,7 @@ responder la pregunta de dLocal.
 | Qué | Con quién | Nota |
 | :-- | :-- | :-- |
 | Autorización de cross-border payouts a CO | **Stripe** | Por escrito. Ver §5 |
-| ¿Admite destinatarios venezolanos? | **PayPal** | ⚠️ **Confirmado por su documentación, NO por una prueba.** Dos lecturas independientes de la tabla de países de PayPal dicen «Venezuela · Send, receive, and withdraw · VE», y ninguna fuente primaria dice lo contrario (los blogs que dicen que no, sí). Sigue sin ejecutarse: el pago de sandbox a un correo sin cuenta acaba `UNCLAIMED` con el LOTE en `SUCCESS`, y eso pasa con cualquier país — no es evidencia de nada. ⚠️ **Y EL SANDBOX NO PUEDE RESPONDERLO, medido el 3-sep:** un payout a una cuenta personal de sandbox **de EE. UU., existente y registrada**, acaba igual que uno a un correo inventado — `UNCLAIMED` con el lote en `SUCCESS`. En el sandbox el destinatario tiene que entrar a aceptar, así que una cuenta venezolana daría lo mismo y no distinguiría nada: **no se pierda tiempo montando esa prueba**. Solo lo responden PayPal por escrito o un payout en vivo, y **producción está fuera de alcance por decisión del 3-sep** |
+| ¿Admite destinatarios venezolanos? | **PayPal** | ✅ **SÍ, ejecutado el 3-sep-2026.** Una cuenta de sandbox **domiciliada en VE** (`Country: VE`, id `BEWSZFK8MDBWU`) recibió $25: lote e item en `SUCCESS`, sin errores. Lo confirman además dos lecturas independientes de su tabla de países («Venezuela · Send, receive, and withdraw · VE»). ⚠️ **Es sandbox**: no demuestra que en vivo no haya una restricción que el sandbox no modela, y eso solo lo cierra un payout real o PayPal por escrito. Pero es la evidencia más fuerte posible sin producción, y **ya no es una suposición a ciegas** |
 | Comisión de cobro negociada | **dLocal** | Depende del volumen |
 | Tarifa real de PayPal Payouts | **PayPal** | Varía por cuenta y país |
 
