@@ -5,6 +5,8 @@ import {
   DlocalGoError,
   aUnidadMayor,
   aUnidadMenor,
+  autocomprobacionDeConversion,
+  convertirImporte,
   crearPayout,
   dlocalgoFetch,
   esCredencialInvalida,
@@ -18,6 +20,9 @@ import {
   listarPayouts,
   recuperarPago,
   recuperarPayout,
+  tasaDeCambio,
+  spreadDeLiquidacion,
+  tasaEfectiva,
   type NuevoPayoutDlocalGo,
   type PagoDlocalGo,
   type PayoutDlocalGo,
@@ -71,6 +76,13 @@ import type {
  *    Unix. Se convierte en `charge`. El enum real es [HOURS, DAYS, MINUTES] y
  *    el valor mínimo es 1 (comprobado: `-5` devuelve «must be greater than or
  *    equal to 1»).
+ *
+ * 6. MONEDA → el puerto paga en `payouts.currency` (USD) y `POST /v1/payouts`
+ *    NO tiene moneda de origen: `transfer_amount` va siempre en
+ *    `currency_to_pay`, y `transfer_currency` se acepta y se ignora (medido).
+ *    Así que la conversión la hace este archivo con la tasa de
+ *    `/v1/currency-exchanges`. Ver el bloque «LA CONVERSIÓN DE MONEDA» en
+ *    `payout`: hasta el 2-sep-2026 esto no se hacía, se frenaba.
  *
  * ── LO QUE ESTE ARCHIVO NO HACE ────────────────────────────────────────────
  * No decide políticas: ni la caducidad (la calcula `api/pagos/checkout`, porque
@@ -403,6 +415,29 @@ export function marcaDe(payoutId: string, intento: number): string {
 const MAX_DESCRIPCION = 255;
 
 /**
+ * La prueba de la aritmética de conversión, corrida UNA vez por arranque y justo
+ * antes del primer payout que de verdad convierte.
+ *
+ * ── POR QUÉ AQUÍ Y NO EN EL `import` ────────────────────────────────────────
+ * Porque `lib/dlocalgo.ts` lo importa también el checkout, y un throw en el
+ * top-level dejaría a los alumnos sin poder pagar por un fallo que solo afecta a
+ * los payouts. Y por qué no en un `*.check.ts` como los otros cuatro del repo:
+ * ese patrón se corre con `node --experimental-strip-types`, que no puede cargar
+ * `lib/dlocalgo.ts` (parameter properties en el constructor de `DlocalGoError`).
+ *
+ * Si falla, lanza. Y que lance está bien: el job trata una excepción sin
+ * clasificar como «orden EN DUDA» y no toca la fila, que es exactamente lo que
+ * hay que hacer cuando la aritmética del dinero no cuadra.
+ */
+let conversionComprobada = false;
+function comprobarConversionUnaVez(): void {
+  if (conversionComprobada) return;
+  const resumen = autocomprobacionDeConversion();
+  conversionComprobada = true;
+  console.info("[C2] aritmética de conversión comprobada —", resumen);
+}
+
+/**
  * De los ocho estados de dLocal Go a los seis de `public.payout_status`.
  *
  * ⚠️ `ON_HOLD` **no** se traduce a nuestro `on_hold`, y es el error más caro que
@@ -438,9 +473,98 @@ function estadoNuestro(estado: string): "paid" | "processing" | "failed" | null 
   }
 }
 
-/** Lo que se guarda en `provider_metadata` y se enseña en el log: sin PII. */
-function detalleDe(p: PayoutDlocalGo): string {
-  return String(p.status ?? "(sin estado)");
+/**
+ * 🔑 EL RASTRO DEL CAMBIO DE MONEDA. Lo que hay que poder contestar el día que
+ * un tutor pregunte «¿por qué me llegaron 199 y no 210?».
+ *
+ * Son los tres datos que hacen falta y ninguno más: con qué tasa se convirtió,
+ * a qué moneda, y cuánto se pidió que le llegara. Sin ellos la respuesta es «no
+ * lo sé», porque la tasa de dLocal cambia cada día y la de hoy no explica un
+ * pago de la semana pasada.
+ */
+type CambioAplicado = {
+  monedaDestino: string;
+  /** La de `/v1/currency-exchanges` EN EL MOMENTO DE CREAR, no la de ahora. */
+  tasa: number;
+  /**
+   * El factor con el que se empeoró la publicada para que el cargo contra el
+   * balance quede en `payouts.amount`. Va en el rastro porque sin él los otros
+   * dos números no explican el importe: la resta entre lo que se mandó y lo que
+   * la tasa publicada habría dado ES este factor, y es lo que hay que recalibrar.
+   */
+  spread: number;
+  /** `tasa × (1 − spread)`. La que se usó de verdad para convertir. */
+  efectiva: number;
+  /** Lo que viajó como `transfer_amount`, en `monedaDestino`. */
+  importeDestino: number;
+  consultadaEn: string;
+};
+
+/**
+ * Lo que se guarda en `provider_metadata` y se enseña en el log: sin PII.
+ *
+ * ⚠️ ES UNA CADENA PORQUE ES EL ÚNICO CANAL QUE HAY. El job copia
+ * `PayoutResult.detalle` a `provider_metadata.c2.proveedor_detalle` y reescribe
+ * el resto del objeto entero en cada desenlace, así que nada que escriba este
+ * archivo por su cuenta en esa columna sobreviviría. Un campo estructurado para
+ * el cambio de moneda exige tocar el `Rastro` del job — está anotado como deuda,
+ * no como olvido.
+ *
+ * Se juntan tres cosas, y las tres son de conciliación:
+ *   · el estado tal como lo nombra dLocal, que es lo que había antes;
+ *   · la tasa y el importe de destino, cuando esta llamada los ha calculado;
+ *   · el cargo REAL contra el balance (`balance_total_amount`), que solo viene
+ *     en el GET y que es la única forma de ver a posteriori cuánto se separó la
+ *     tasa liquidada de la publicada.
+ */
+function detalleDe(p: PayoutDlocalGo, cambio?: CambioAplicado | null): string {
+  const trozos: string[] = [String(p.status ?? "(sin estado)")];
+  if (cambio) {
+    // Los CUATRO números que hacen falta para recalibrar el factor: publicada,
+    // spread aplicado, efectiva e importe mandado. Con el `balance -X` de abajo,
+    // el factor implícito de esta operación es una división.
+    trozos.push(
+      `fx 1 USD = ${cambio.tasa} ${cambio.monedaDestino} (${cambio.consultadaEn}) ` +
+        `−${(cambio.spread * 100).toFixed(2)}% → ${cambio.efectiva.toFixed(6)} ` +
+        `→ ${cambio.importeDestino} ${cambio.monedaDestino} aprox.`,
+    );
+  }
+  if (typeof p.balance_total_amount === "number") {
+    const fee = typeof p.balance_fee_amount === "number" ? ` fee ${p.balance_fee_amount}` : "";
+    trozos.push(`balance -${p.balance_total_amount}${fee}`);
+  }
+  return trozos.join(" · ");
+}
+
+/**
+ * EL AVISO QUE HAY QUE ENSEÑARLE AL TUTOR, y por qué existe.
+ *
+ * Desde el 2-sep-2026 el spread de dLocal lo asume el tutor: fijamos lo que sale
+ * de nuestro balance (`payouts.amount` en USD) y él recibe el equivalente en su
+ * moneda. Como la tasa a la que dLocal liquida no es la que publica —ni la del
+ * día que se creó la orden— el número en moneda local **no se puede prometer**,
+ * y prometerlo es exactamente la reclamación que llega después.
+ *
+ * Devuelve `null` cuando no hay nada que avisar: Ecuador cobra en USD, así que
+ * ahí no hay conversión ninguna y el importe es exacto. Un aviso de «puede
+ * variar» donde no varía nada es ruido que enseña a ignorar los avisos.
+ *
+ * ⚠️ Este módulo es `server-only`: esto se puede leer desde un Server Component,
+ * NO desde uno de cliente. Si la pantalla lo necesita en el navegador, el texto
+ * se copia a un módulo compartido — no se quita el `server-only` de aquí.
+ */
+export function avisoDeImporteAproximado(
+  monedaOrigen: string,
+  monedaDestino: string,
+): string | null {
+  const o = monedaOrigen.toUpperCase();
+  const d = monedaDestino.toUpperCase();
+  if (!d || o === d) return null;
+  return (
+    `El importe se te paga en ${d}. Lo que sale de Enséñame Ya son ${o}, así que ` +
+    `la cantidad en ${d} es aproximada: la fija dLocal con su tipo de cambio el día ` +
+    `que ejecuta la transferencia, y puede no coincidir con la que ves aquí.`
+  );
 }
 
 /**
@@ -586,11 +710,33 @@ async function barrer(input: PayoutInput, marca: string): Promise<Barrido> {
 function elegir(coincidencias: PayoutDlocalGo[], input: PayoutInput, marca: string): Barrido {
   // Un importe que no cuadra con una marca que sí cuadra no es una coincidencia
   // desafortunada: la marca es única por orden e intento. Es no saber qué pasa.
-  const descuadrado = coincidencias.find(
-    (p) =>
-      typeof p.amount === "number" &&
-      aUnidadMenor(p.amount, input.currency) !== input.amountMinor,
-  );
+  //
+  // ── 🔴 PERO SOLO SE PUEDE COTEJAR CUANDO LAS DOS MONEDAS SON LA MISMA ──────
+  //
+  // `p.amount` viene en la moneda del BENEFICIARIO (`currency_to_pay`) e
+  // `input.amountMinor` está en `payouts.currency`, que es USD. Mientras el
+  // freno del tipo de cambio impedía crear payouts en otra moneda, las dos
+  // coincidían siempre y la comparación era correcta por accidente.
+  //
+  // El día que se quitó el freno esa comparación se convirtió en una bomba de
+  // relojería: 9.046,42 UYU ≠ 21.000 centavos de dólar, así que TODA orden
+  // reanudada de los siete países con moneda local habría salido «importe
+  // descuadrado» → `ilegible` → `en-duda`, que es justo la fila que no se
+  // reintenta jamás sola y que solo sale si la mira una persona. Un lote entero
+  // de incidencias falsas, y encima con el pago ya hecho.
+  //
+  // Recalcularlo tampoco vale: la tasa de hoy no es la del día en que se creó el
+  // payout, así que el importe local «correcto» de ayer no se puede reconstruir.
+  // Cuando las monedas difieren no se compara nada — y no hace falta: la marca
+  // de `description` la escribimos nosotros y es única por orden e intento, que
+  // es todo lo que la identidad necesita. El importe solo era un cinturón.
+  const monedaOrden = input.currency.toUpperCase();
+  const descuadrado = coincidencias.find((p) => {
+    if (typeof p.amount !== "number") return false;
+    const monedaPagada = (p.currency_to_pay ?? "").toUpperCase();
+    if (monedaPagada === "" || monedaPagada !== monedaOrden) return false;
+    return aUnidadMenor(p.amount, monedaPagada) !== input.amountMinor;
+  });
   if (descuadrado) {
     return {
       tipo: "ilegible",
@@ -624,10 +770,18 @@ function elegir(coincidencias: PayoutDlocalGo[], input: PayoutInput, marca: stri
  * se escribe en la fila es SIEMPRE el estado del proveedor: adoptar es cómo se
  * llegó al payout, no en qué quedó. Un `adoptado: true` en el log no es un
  * incidente, es el mecanismo antidoble funcionando.
+ *
+ * `cambio` solo lo trae el camino que CREA: es lo que esta llamada calculó y
+ * mandó. Un payout adoptado por el barrido o consultado por su id no lo lleva —
+ * su tasa se anotó el día que se creó y no se reinventa hoy con otra.
  */
-function desenlace(p: PayoutDlocalGo, adoptado: boolean): PayoutResult {
+function desenlace(
+  p: PayoutDlocalGo,
+  adoptado: boolean,
+  cambio?: CambioAplicado | null,
+): PayoutResult {
   const id = idDe(p);
-  const detalle = detalleDe(p);
+  const detalle = detalleDe(p, cambio);
   if (!id) {
     // Sin identificador no hay nada que anotar, y anotar `undefined` es como se
     // pierde un pago. Duda, que es lo que la pasada siguiente sabe barrer.
@@ -823,10 +977,11 @@ export const dlocalProvider: PspProvider = {
 
     // ── Camino 2 · barrer una orden reclamada sin identificador ─────────────
     //
-    // ⚠️ VA ANTES DEL FRENO DEL TIPO DE CAMBIO, Y NO ES CASUAL. Una orden
-    // reclamada ya salió (o pudo salir) bajo las condiciones de ENTONCES;
-    // volver a evaluarlas hoy no cambia lo que el proveedor tenga guardado. Lo
-    // único que importa aquí es averiguar si existe, y eso se pregunta siempre.
+    // ⚠️ VA ANTES DE LA CONVERSIÓN DE MONEDA, Y NO ES CASUAL. Una orden
+    // reclamada ya salió (o pudo salir) con la tasa de ENTONCES; consultar la de
+    // hoy no cambia lo que el proveedor tenga guardado, y desde luego no
+    // autoriza a mandar nada. Lo único que importa aquí es averiguar si existe,
+    // y eso se pregunta siempre.
     if (input.reanudar) {
       const b1 = await barrer(input, marca);
       if (b1.tipo === "encontrado") return desenlace(b1.payout, true);
@@ -846,30 +1001,164 @@ export const dlocalProvider: PspProvider = {
     if (!b) {
       return { estado: "sin-datos", mensaje: "payout_beneficiary no devolvió beneficiario" };
     }
+    const monedaOrigen = input.currency.toUpperCase();
     const monedaDestino = (b.currency_to_pay ?? "").toUpperCase();
-
-    // ── 🔴 EL FRENO DE MANO DEL TIPO DE CAMBIO ──────────────────────────────
-    //
-    // `payouts.currency` es USD y `currency_to_pay` es la moneda del país del
-    // tutor: coinciden en UNO de los ocho países (Ecuador) y en ninguno más.
-    // Para los otros siete hay que convertir, y ahí hay una decisión de producto
-    // SIN RESPONDER: dLocal convierte a una tasa entre 4,6 % y 4,7 % peor que la
-    // que publica su propio `/v1/currency-exchanges`, y se puede fijar lo que
-    // RECIBE el tutor (`currency_to_pay` con importe local) o lo que PAGAMOS
-    // nosotros (USD), nunca las dos. Quién come ese spread —la plataforma o el
-    // tutor— no lo puede decidir este archivo.
-    //
-    // Así que no se decide: no se manda. La orden se queda en la cola, el job la
-    // cuenta y el workflow lo grita. Un payout que sale con una regla inventada
-    // es peor que uno que no sale, porque el error se descubre cuando el tutor
-    // mira su banco.
-    if (monedaDestino !== input.currency.toUpperCase()) {
+    if (!monedaDestino) {
       return {
-        estado: "sin-decidir",
-        mensaje:
-          `este payout exige convertir ${input.currency.toUpperCase()} → ${monedaDestino} ` +
-          `(${input.payeeCountry}) y nadie ha decidido quién asume el spread de dLocal ` +
-          `(~4,6-4,7 % peor que su propio /v1/currency-exchanges). No se manda a propósito.`,
+        estado: "sin-datos",
+        mensaje: "payout_beneficiary no devolvió currency_to_pay: no se sabe en qué moneda pagar",
+      };
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // 🔴 LA CONVERSIÓN DE MONEDA — antes aquí había un freno de mano
+    // ════════════════════════════════════════════════════════════════════════
+    //
+    // Hasta el 2-sep-2026 esto devolvía `sin-decidir` y no llamaba a nadie: la
+    // orden se quedaba `scheduled` porque nadie había decidido quién asume el
+    // spread de dLocal. **Ya está decidido: LO ASUME EL TUTOR.** Fijamos el
+    // importe de ORIGEN —de nuestro balance salen `payouts.amount` dólares— y el
+    // tutor recibe en su moneda lo que eso dé al cambio. No se fija lo que
+    // recibe el beneficiario, y por eso su importe local es APROXIMADO: lo dice
+    // `avisoDeImporteAproximado()`, que es lo que tiene que leer en pantalla.
+    //
+    // ── POR QUÉ HAY QUE CONVERTIR AQUÍ Y NO PEDÍRSELO A LA API ───────────────
+    // Porque `POST /v1/payouts` no tiene moneda de origen. `transfer_amount` va
+    // SIEMPRE en `currency_to_pay`, y `transfer_currency` no existe: mandarlo
+    // devuelve 200 y se ignora (medido). O sea que dejar el importe en dólares
+    // con la etiqueta de la moneda local —que es lo que hacía la línea de abajo
+    // antes de este cambio— no manda 210 dólares: manda 210 pesos.
+    //
+    // ── LA TASA, Y POR QUÉ NO SE USA LA PUBLICADA TAL CUAL ──────────────────
+    // ⚠️ AQUÍ ESTUVO ESCRITO que se mandaba con la tasa publicada y que corregir
+    // el spread sería «inventarse una regla». El razonamiento era bueno y la
+    // conclusión, equivocada: mandar el importe de destino calculado con la tasa
+    // publicada NO es neutral —es fijar lo que recibe el tutor y comernos el
+    // spread nosotros—, o sea exactamente lo contrario de la decisión que se
+    // estaba respetando. Como `POST /v1/payouts` no tiene moneda de origen, no
+    // hay una tercera opción: se elige quién lo asume, y no elegir también elige.
+    //
+    // Se aplica un FACTOR MEDIDO (`spreadDeLiquidacion()`, 4,7 % por defecto,
+    // movible con `DLOCALGO_FX_SPREAD` sin desplegar). Con él, el cargo contra
+    // el balance queda en `payouts.amount` y el spread lo asume el tutor.
+    //
+    // ponytail: el factor es una MEDIA, no la tasa de esta operación — que no se
+    // publica en ningún sitio y solo se puede leer después (`amount` frente a
+    // `balance_total_amount` del payout ya hecho). El techo es que cada pago se
+    // desvía lo que se desvíe el factor, y la recalibración es manual: el detalle
+    // archiva la publicada, el spread, la efectiva y el importe, y con el cargo
+    // real de vuelta el factor implícito es una división. Un lazo que se
+    // repreciara solo pide columna propia y función de reconciliación; no se
+    // escribe hasta que haya payouts completados suficientes para promediar.
+    let cambio: CambioAplicado | null = null;
+    let importeADestino: number;
+
+    if (monedaDestino === monedaOrigen) {
+      // Ecuador, y solo Ecuador de los ocho. No hay conversión, no se consulta
+      // ninguna tasa y no hay nada aproximado que avisar.
+      importeADestino = aUnidadMayor(input.amountMinor, monedaOrigen);
+    } else {
+      // ⚠️ La tabla de tasas SOLO publica pares desde USD (lo dice su doc y lo
+      // confirma la respuesta: `source_currency` es USD en las 17 filas). Si
+      // algún día `payouts.currency` deja de ser USD, no hay con qué convertir y
+      // se dice, en vez de cruzar dos tasas y llamarlo tipo cruzado.
+      if (monedaOrigen !== "USD") {
+        return {
+          estado: "sin-decidir",
+          mensaje:
+            `la orden está en ${monedaOrigen} y /v1/currency-exchanges solo publica tasas ` +
+            `desde USD: no hay con qué convertir a ${monedaDestino} sin inventarse un tipo cruzado`,
+        };
+      }
+
+      // La aritmética que decide cuánto cobra una persona no viaja sin su
+      // prueba. Corre una vez por arranque y ANTES de la primera conversión de
+      // verdad, no en el `import`: un throw en el top-level tumbaría también el
+      // checkout, que no tiene nada que ver con los payouts.
+      comprobarConversionUnaVez();
+
+      let tasa: number | null;
+      try {
+        tasa = await tasaDeCambio(monedaOrigen, monedaDestino);
+      } catch (e) {
+        if (e instanceof DlocalGoError && esCredencialInvalida(e)) {
+          // Consultar tasas no crea nada: la orden puede volver a la cola.
+          return { estado: "sin-credencial", mensaje: e.message, pudoCrear: false };
+        }
+        return {
+          estado: "transitorio",
+          mensaje: `no se pudo consultar el tipo de cambio ${monedaOrigen}→${monedaDestino}: ${
+            e instanceof Error ? e.message : String(e)
+          }`,
+          causa: e,
+        };
+      }
+
+      // ⚠️ AQUÍ LA TASA **SÍ** ES UNA PRECONDICIÓN, y conviene decirlo porque la
+      // intuición es la contraria: para conciliar es información, pero para
+      // MANDAR es el importe. Sin tasa no hay `transfer_amount` que escribir, y
+      // el único sustituto sería inventarse uno. Se devuelve `transitorio`, que
+      // es lo más suave que se puede decir sin mentir: la orden vuelve a la cola
+      // y sale en la pasada siguiente. Donde de verdad no bloquea nada es en
+      // Ecuador, que ni pregunta.
+      if (tasa === null) {
+        return {
+          estado: "transitorio",
+          mensaje:
+            `dLocal no publica tasa ${monedaOrigen}→${monedaDestino} en ` +
+            `/v1/currency-exchanges: sin ella no se puede calcular el importe de destino`,
+          causa: null,
+        };
+      }
+
+      // El factor se lee AQUÍ y no arriba: es una variable de entorno y quien la
+      // cambie tiene que ver el efecto en la siguiente orden, no en el siguiente
+      // arranque del proceso.
+      const spread = spreadDeLiquidacion();
+      const efectiva = tasaEfectiva(tasa, spread);
+      if (efectiva === null) {
+        // No puede pasar —`tasaDeCambio` ya devolvió un número bueno y
+        // `spreadDeLiquidacion` ya validó su rango—, y por eso mismo comprobarlo
+        // es gratis. `transitorio`: no se ha llamado a nadie, la fila vuelve.
+        return {
+          estado: "transitorio",
+          mensaje:
+            `no se pudo aplicar el factor de liquidación (${spread}) a la tasa ${tasa} ` +
+            `${monedaOrigen}→${monedaDestino}: no se manda nada`,
+          causa: null,
+        };
+      }
+
+      const convertido = convertirImporte(input.amountMinor, monedaOrigen, monedaDestino, efectiva);
+      if (convertido === null) {
+        // `convertirImporte` comprueba su propia vuelta. Que se niegue significa
+        // que el número que iba a salir no representa el importe de la orden, y
+        // ese número es lo que acaba en la cuenta de una persona.
+        //
+        // ⚠️ `transitorio` Y NO `en-duda`, aunque la duda suene más prudente: no
+        // se ha llamado a nadie todavía, así que NO puede haber un payout creado
+        // sin identificar — que es lo único que `en-duda` significa, y que
+        // congela la fila hasta que la mire una persona. Aquí la fila vuelve a
+        // la cola intacta y el grito se queda en el log, que es donde tiene que
+        // estar: si esto salta con una tasa buena, el bug es nuestro.
+        return {
+          estado: "transitorio",
+          mensaje:
+            `la conversión de ${input.amountMinor} (${monedaOrigen}) a ${monedaDestino} con ` +
+            `tasa efectiva ${efectiva} (publicada ${tasa} −${(spread * 100).toFixed(2)}%) no cuadra ` +
+            `al comprobarla de vuelta: no se manda nada`,
+          causa: null,
+        };
+      }
+
+      importeADestino = convertido;
+      cambio = {
+        monedaDestino,
+        tasa,
+        spread,
+        efectiva,
+        importeDestino: convertido,
+        consultadaEn: new Date().toISOString(),
       };
     }
 
@@ -887,20 +1176,37 @@ export const dlocalProvider: PspProvider = {
       };
     }
 
-    // El cuerpo es EXACTAMENTE lo que devolvió la base de datos, más el importe y
-    // la marca. Los campos opcionales que vengan a null se OMITEN en vez de
-    // mandarse vacíos.
+    // El cuerpo es EXACTAMENTE lo que devolvió la base de datos, más el importe
+    // ya convertido y la marca.
     //
-    // ⚠️ Y OJO CON OMITIRLOS DE MÁS: medido el 2-sep-2026, un payout a Ecuador
-    // **sin** `bank_account_type` o **sin** `bank_branch` devuelve
-    // `400 {"code":5000,"message":"must not be null"}` — un mensaje que no dice
-    // qué campo falta— aunque `payout_country_rules` diga para EC
-    // `requires_branch = false` y `account_types = '{}'`. Esa fila es de B1 y no
-    // se toca desde aquí, pero el desajuste está medido y hay que resolverlo
-    // antes de que Ecuador —el único país que hoy no necesita decidir el tipo de
-    // cambio— pueda cobrar.
+    // ⚠️ `bank_branch` VA SIEMPRE, AUNQUE SEA VACÍO, y esto cambió el 2-sep-2026
+    // porque antes se omitía cuando venía a null. Medido: la API lo exige en
+    // TODOS los países —también donde `payout_country_rules.requires_branch` es
+    // `false`— y omitirlo devuelve `400 {"code":5000,"message":"must not be
+    // null"}`, un mensaje que ni siquiera dice qué campo falta. La cadena vacía
+    // sí la acepta (payout `47485479591148`, EC, creado con `bank_branch: ""`).
+    // O sea que el país decide si se le PIDE al tutor; no decide si viaja.
+    //
+    // ⚠️ `bank_account_type` SIGUE OMITIÉNDOSE CUANDO NO LO HAY, y ahí no hay
+    // arreglo desde este archivo: la API también lo exige siempre, pero su valor
+    // sale de `payout_country_rules.account_types` y hoy esa lista está VACÍA en
+    // EC, MX, PE y PY, así que el tutor no ha podido elegir ninguno. Sondeado
+    // valor a valor contra el sandbox, lo que acepta cada país es:
+    //     AR → ALIAS, CBU        BR → CHECKING, SAVINGS
+    //     CL → CHECKING, SAVINGS, VISTA
+    //     EC · MX · PE · PY · UY → CHECKING, SAVINGS
+    // Ecuador lo arregla `20260902140000_ecuador_tipo_de_cuenta.sql`. MX, PE y
+    // PY siguen devolviendo el 5000 opaco hasta que sus filas se rellenen, y UY
+    // ofrece solo CHECKING cuando SAVINGS también vale. Es dato, no esquema.
+    //
+    // ⚠️ Y PERÚ NO PUEDE COBRAR NI CON ESO: exige `beneficiary_address_street` y
+    // `_city` (`400 Missing required field: beneficiary.address.street`), que
+    // `tutor_payout_accounts` no guarda. No se inventa una dirección aquí.
     const cuerpo: NuevoPayoutDlocalGo = {
-      transfer_amount: aUnidadMayor(input.amountMinor, monedaDestino),
+      // 🔴 EN LA MONEDA DEL BENEFICIARIO. Antes esta línea mandaba el importe en
+      // dólares con la etiqueta de la moneda local, que es lo que el freno de
+      // arriba impedía que llegara a salir.
+      transfer_amount: importeADestino,
       transfer_country: b.transfer_country ?? input.payeeCountry,
       currency_to_pay: monedaDestino,
       flow_type: b.flow_type ?? "B2C",
@@ -913,20 +1219,24 @@ export const dlocalProvider: PspProvider = {
       beneficiary_document_type: b.beneficiary_document_type ?? "",
       bank_code: b.bank_code ?? "",
       bank_account: b.bank_account ?? "",
+      bank_branch: b.bank_branch ?? "",
       ...(b.bank_account_type ? { bank_account_type: b.bank_account_type } : {}),
-      ...(b.bank_branch ? { bank_branch: b.bank_branch } : {}),
       // 🔑 La llave de todo el mecanismo. No lleva PII.
       description: marca,
     };
 
     try {
-      return desenlace(await crearPayout(cuerpo), false);
+      // `cambio` solo viaja en ESTE desenlace: es la tasa con la que se acaba de
+      // crear el payout, y es lo que el job archiva en `provider_metadata`.
+      return desenlace(await crearPayout(cuerpo), false, cambio);
     } catch (e) {
       if (!(e instanceof DlocalGoError)) {
         // Un fallo de red antes de leer la respuesta es el peor caso posible: la
         // petición pudo llegar. NO se decide nada aquí; se barre.
         const b2 = await barrer(input, marca);
-        if (b2.tipo === "encontrado") return desenlace(b2.payout, true);
+        // Se adopta CON el cambio: la red se cayó después de mandar el POST, así
+        // que el payout que aparece salió con esta tasa y no con otra.
+        if (b2.tipo === "encontrado") return desenlace(b2.payout, true, cambio);
         // ⚠️ `pudoCrear: true` — el POST ya había salido cuando se cayó la red, y
         // el barrido que iba a comprobarlo se quedó sin credencial. La duda sigue.
         if (b2.tipo === "credencial") {
@@ -973,7 +1283,7 @@ export const dlocalProvider: PspProvider = {
       const b3 = await barrer(input, marca);
       if (b3.tipo === "encontrado") {
         // El error mintió: el payout existe. Se adopta y NO se vuelve a mandar.
-        return desenlace(b3.payout, true);
+        return desenlace(b3.payout, true, cambio);
       }
       // ⚠️ `pudoCrear: true` — un 400 puede haber creado el payout (medido), y el
       // barrido que iba a comprobarlo no pudo autenticarse. Nadie toca la fila.

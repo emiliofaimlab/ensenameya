@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { adapterFor, payoutProviderFor } from "@/lib/payments";
+import { adapterFor, payoutProviderFor, rielDePayout } from "@/lib/payments";
 import type { PayoutInput, PayoutResult, PspProvider } from "@/lib/payments/port";
 
 /**
@@ -182,6 +182,11 @@ function rastroDe(fila: OrdenDePago): Rastro {
  * desconocida— cae al proveedor que no sale de casa, que no sabe pagar. Aquí eso
  * significa «esta orden no tiene ejecutor», que es una respuesta legítima y hay
  * que contarla, no un error que reventar.
+ *
+ * ⚠️ NO SIRVE PARA DECIDIR SI LA ORDEN ES UN PROBLEMA, y por eso la llamada de
+ * abajo pregunta antes por `rielDePayout()`. 'manual' también devuelve null aquí
+ * —es un `LocalProvider`, no sabe pagar— y sin embargo es lo contrario de un
+ * callejón sin salida: es una orden que paga una persona.
  */
 function pspDe(clave: string): PspProvider | null {
   const p = adapterFor(clave);
@@ -268,6 +273,20 @@ export async function GET(req: Request) {
   let sinFondos = 0;
   let sinCredencial = 0;
   let sinEjecutor = 0;
+  /**
+   * 🟠 ÓRDENES DE RIEL MANUAL: no son un problema, están esperando a una
+   * persona.
+   *
+   * Hasta el 2-sep este job no distinguía «no hay a dónde pagar» de «lo paga
+   * alguien desde el panel»: las dos caían en `sinEjecutor` porque las dos se
+   * quedan sin adaptador. Con Venezuela ruteada a 'manual'
+   * (`20260902150000`) esa mezcla convierte el log del cron en una mentira —
+   * diría que hay N órdenes impagables cuando lo que hay son N órdenes con
+   * riel, destino declarado por el tutor y un `manage_payout('mark_paid')`
+   * pendiente. Lo avisaba el comentario de `rielDePayout()`: «el job tiene que
+   * contarla aparte».
+   */
+  let esperandoPersona = 0;
   let balanceAjeno = 0;
   let sinPais = 0;
   let descuadrados = 0;
@@ -311,10 +330,30 @@ export async function GET(req: Request) {
       financia: fila.funding_provider,
     };
 
+    // ⚠️ ANTES DE `!psp`, Y EL ORDEN ES LO ÚNICO QUE LO HACE FUNCIONAR: el
+    // adaptador de 'manual' existe pero no sabe pagar (`LocalProvider`), así que
+    // `pspDe('manual')` devuelve null igual que un typo. Preguntar por la CLASE
+    // de riel es lo que separa las dos cosas, y por eso se hace primero.
+    if (rielDePayout(claveEjecutor) === "manual") {
+      // Riel manual: NO hay adaptador y no va a haberlo (decisión de producto
+      // del 2-sep). La fila se queda intacta —igual que en el caso de abajo— y
+      // se cuenta APARTE, porque esto no es un bloqueo: es una orden con riel,
+      // con destino declarado por el tutor y esperando a que el admin la cierre
+      // con `manage_payout(id,'mark_paid',referencia,canal)`.
+      esperandoPersona++;
+      if (simulacro) {
+        ensayo.push({
+          ...base,
+          haria: "nada: riel manual — la paga una persona desde /admin/payouts",
+        });
+      }
+      continue;
+    }
+
     if (!psp) {
-      // 'simulated', null, o una clave sin adaptador. No es un fallo de la
-      // orden: es que a su destino no le corresponde ningún PSP que sepa pagar
-      // (hoy, Venezuela y el tutor que no ha declarado país). La fila se queda
+      // 'simulated', null, o una clave que nadie reconoce. Ahora sí significa lo
+      // que dice: a este destino no le corresponde ningún ejecutor, ni máquina
+      // ni persona. Hoy es el tutor que no ha declarado país. La fila se queda
       // como está y se cuenta.
       sinEjecutor++;
       if (simulacro) ensayo.push({ ...base, haria: "nada: su destino no tiene ejecutor" });
@@ -817,6 +856,16 @@ export async function GET(req: Request) {
     }
   }
 
+  // Una línea, no una por fila: en el log de Actions lo que hace falta saber es
+  // que hay dinero esperando a una persona, no cuáles. Va como `info` a
+  // propósito — un riel manual funcionando no es una incidencia.
+  if (esperandoPersona > 0 && !simulacro) {
+    console.info(
+      "[C2] órdenes en riel manual: no las paga este job, las cierra el admin desde /admin/payouts",
+      { esperandoPersona },
+    );
+  }
+
   // Lo que espera detrás del lote. Es lo que distingue «no hay nada que hacer»
   // de «hay cola y el lote se llenó».
   const { count: enCola } = await admin
@@ -857,6 +906,8 @@ export async function GET(req: Request) {
       revisadas: cola.length,
       // Sin un solo dato del beneficiario: solo el veredicto.
       haria: ensayo,
+      // Las que este job no va a tocar nunca porque las paga una persona.
+      esperandoPersona,
       enCola: enCola ?? 0,
       enVuelo: enVueloTotal ?? 0,
       sinIdentificar: sinIdentificar ?? 0,
@@ -917,6 +968,11 @@ export async function GET(req: Request) {
     difuntos,
     // Reclamadas hace poco: se barren en la pasada siguiente, no antes.
     esperandoBarrido,
+    // 🟠 Riel manual: este job NO las va a pagar nunca y eso es lo correcto.
+    // Esperan a que el admin las cierre desde /admin/payouts. NO es un bloqueo
+    // —por eso está aquí arriba y no dentro de `bloqueos`— pero si sube y no
+    // baja, hay tutores esperando su dinero sin que nadie mire la pantalla.
+    esperandoPersona,
     // Bloqueos que NO son fallos y que ninguna pasada va a resolver sola.
     bloqueos: {
       // Decisión de producto sin responder: quién come el spread del cambio.
@@ -929,7 +985,9 @@ export async function GET(req: Request) {
       sinFondos,
       // Falta la credencial del ejecutor.
       sinCredencial,
-      // Su destino no tiene ningún PSP que sepa pagar (VE, o sin país declarado).
+      // Su destino no tiene ejecutor de ninguna clase: ni PSP que sepa pagar ni
+      // riel manual. Hoy, el tutor que no ha declarado país. Venezuela YA NO
+      // cuenta aquí desde `20260902150000`: se cuenta en `esperandoPersona`.
       sinEjecutor,
       // La orden no tiene país de destino congelado.
       sinPais,

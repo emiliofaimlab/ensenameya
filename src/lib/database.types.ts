@@ -1225,6 +1225,42 @@ export type Database = {
           },
         ]
       }
+      payout_manual_channels: {
+        Row: {
+          channel: string
+          created_at: string
+          handle_label: string
+          handle_pattern: string
+          help: string
+          is_active: boolean
+          label: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          handle_label: string
+          handle_pattern: string
+          help: string
+          is_active?: boolean
+          label: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          handle_label?: string
+          handle_pattern?: string
+          help?: string
+          is_active?: boolean
+          label?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payouts: {
         Row: {
           amount: number
@@ -1879,6 +1915,51 @@ export type Database = {
           },
         ]
       }
+      tutor_manual_payout_destinations: {
+        Row: {
+          channel: string
+          created_at: string
+          handle: string
+          handle_masked: string | null
+          holder_name: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          channel: string
+          created_at?: string
+          handle: string
+          handle_masked?: string | null
+          holder_name: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          handle?: string
+          handle_masked?: string | null
+          holder_name?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_manual_payout_destinations_channel_fkey"
+            columns: ["channel"]
+            isOneToOne: false
+            referencedRelation: "payout_manual_channels"
+            referencedColumns: ["channel"]
+          },
+          {
+            foreignKeyName: "tutor_manual_payout_destinations_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tutor_materials: {
         Row: {
           created_at: string
@@ -2368,6 +2449,7 @@ export type Database = {
         Returns: string
       }
       create_order: { Args: { p_lines: Json }; Returns: string }
+      delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
       enqueue_notification: {
         Args: {
           p_channel: string
@@ -2420,9 +2502,15 @@ export type Database = {
       }
       join_session: { Args: { p_session_id: string }; Returns: Json }
       manage_payout: {
-        Args: { p_action: string; p_payout_id: string }
+        Args: {
+          p_action: string
+          p_canal?: string
+          p_payout_id: string
+          p_referencia?: string
+        }
         Returns: string
       }
+      manual_destination: { Args: { p_tutor_id: string }; Returns: Json }
       mark_conversation_read: {
         Args: { p_conversation_id: string }
         Returns: string
@@ -2483,6 +2571,7 @@ export type Database = {
         Returns: string
       }
       payout_beneficiary: { Args: { p_payout_id: string }; Returns: Json }
+      payouts_backlog: { Args: never; Returns: Json }
       pending_email_notifications: {
         Args: { p_limit?: number }
         Returns: {
@@ -2657,6 +2746,10 @@ export type Database = {
           unread: number
         }[]
       }
+      upsert_manual_destination: {
+        Args: { p_channel: string; p_handle: string; p_holder_name: string }
+        Returns: Json
+      }
       upsert_payout_account: {
         Args: {
           p_account?: string
@@ -2733,12 +2826,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2762,11 +2855,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2787,11 +2880,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2812,11 +2905,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2829,11 +2922,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

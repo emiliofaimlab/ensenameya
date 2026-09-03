@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { simulatedProvider } from "@/lib/payments/simulated-provider";
 import { stripeProvider } from "@/lib/payments/stripe-provider";
 import { dlocalProvider } from "@/lib/payments/dlocal-provider";
-import type { AnyProvider, PspProvider } from "@/lib/payments/port";
+import type { AnyProvider, LocalProvider, PspProvider } from "@/lib/payments/port";
 
 /**
  * EL ENRUTADOR DE PAGOS — el `PaymentRouter` del Doc 6 §6.2, en la forma que el
@@ -82,6 +82,41 @@ export async function activeChargeProvider(
 }
 
 /**
+ * C2 · LA CLASE DE RIEL POR EL QUE SALE EL DINERO — no el ejecutor, la CLASE.
+ *
+ * `payment_routing_rules.payout_provider` es texto libre y sin `check`
+ * (`20260709160000:18`), así que la clave puede decir tres cosas distintas y
+ * hasta hoy solo se distinguían dos:
+ *
+ *   · una clave de PSP ('dlocal', 'stripe') → **riel de banco**: hay un
+ *     adaptador que sabe transferir y el job lo llama solo;
+ *   · 'manual' → **riel manual**: NO hay adaptador y no va a haberlo (decisión
+ *     de producto del 2-sep: no se escriben adaptadores para rieles sin cuenta),
+ *     pero sí hay a dónde pagar — `tutor_manual_payout_destinations`
+ *     (`20260902110000`) y una persona ejecutando desde el panel;
+ *   · 'simulated', `null` o un error de tecleo → **nada**: ese destino no se
+ *     puede pagar por ninguna vía.
+ *
+ * Las dos primeras son países que el tutor SÍ puede declarar. La tercera no.
+ * Antes de esta distinción todo lo que no fuese 'simulated' era servible, así
+ * que una `s` de más en 'dlocals' habría metido el país en el desplegable del
+ * tutor y lo habría dejado atascado más tarde, en el formulario bancario.
+ */
+export type RielDePayout = "banco" | "manual";
+
+/**
+ * La clave que significa «esto lo paga una persona».
+ *
+ * No es un proveedor y no tiene adaptador: es la ausencia de automatismo
+ * ESCRITA, que es justo lo que la distingue de 'simulated' —donde no hay ni
+ * automatismo ni destino— y de un typo.
+ */
+export const RIEL_MANUAL = "manual";
+
+/** Un país que se puede servir, con la clase de riel que le toca. */
+export type PaisDePayout = { code: string; riel: RielDePayout };
+
+/**
  * C2 · `resolvePayout(payee_country)` del Doc 6 §6.2 — QUIÉN SACA EL DINERO.
  *
  * El gemelo de `activeChargeProvider`, y su contrario en la misma fila:
@@ -122,6 +157,13 @@ export async function payoutProviderFor(
   // Sin fila activa no hay ejecutor. Se devuelve 'simulated' —que `adapterFor`
   // resuelve al proveedor que no sale de casa— y el job lo cuenta como orden sin
   // ejecutor en vez de mandarla a cualquiera.
+  //
+  // ⚠️ DESDE EL 2-SEP ESTA FUNCIÓN PUEDE DEVOLVER 'manual' (Venezuela,
+  // `20260902150000`), y eso NO es «no hay ejecutor»: es «el ejecutor es una
+  // persona». Quien la llame para decidir si toca una fila tiene que preguntar
+  // por `rielDePayout()` y no por `adapterFor()`, porque el adaptador de un riel
+  // manual no existe ni va a existir — un payout manual lo cierra el admin con
+  // `manage_payout(id, 'mark_paid', <referencia>, <canal>)` (`20260902120000`).
   return data?.payout_provider ?? "simulated";
 }
 
@@ -135,32 +177,54 @@ export async function payoutProviderFor(
  * TSX se desincroniza el día que alguien active o desactive una fila, y lo que
  * se rompe entonces no es un desplegable: es el checkout de ese tutor.
  *
- * ⚠️ SE EXCLUYE `payout_provider = 'simulated'`, que es lo que separa «tenemos
- * regla» de «podemos pagarte». Hoy eso deja fuera a Venezuela —que conserva
- * fila para no dejar sin vender a quien ya la tenga declarada, pero donde no
- * transfiere ni dLocal Go ni Stripe— y deja fuera a Colombia por no tener fila
- * ninguna. Es el mismo criterio con el que `adapterFor` trata 'simulated': no
- * es un proveedor, es la ausencia de uno.
+ * ⚠️ AQUÍ ESTUVO ESCRITO «se excluye `payout_provider = 'simulated'`», Y ESO
+ * SOLO ERA SUFICIENTE MIENTRAS HUBO UN ÚNICO RIEL. Hoy hay dos —banco y manual—
+ * y la lista ya no puede ser de códigos pelados: **el riel decide qué formulario
+ * se le pinta al tutor**, y son incompatibles. Un país de banco pide CBU/CLABE y
+ * los valida contra `payout_country_rules` + `payout_banks`; Venezuela pide un
+ * correo de PayPal o un teléfono de Zelle, que no caben en esa tabla y que
+ * `20260902110000` guarda en otra. Devolver `['AR','VE']` obligaría a la
+ * pantalla a adivinar cuál es cuál, y adivinar aquí significa enseñarle al tutor
+ * venezolano un desplegable de bancos vacío y un guardado que revienta contra
+ * una FK que no tiene fila para su país.
+ *
+ * ⚠️ Y SE FILTRA POR RIEL CONOCIDO, NO POR «distinto de simulated». Un valor que
+ * no sea ni un PSP del registro ni `RIEL_MANUAL` —un error de tecleo en la
+ * tabla— deja de ser servible en vez de colarse: antes entraba en la lista, el
+ * tutor lo declaraba y el fallo aparecía mucho después, en el job, como una
+ * orden sin ejecutor.
  *
  * También se excluye la fila con `payee_country` null: es la regla del tutor que
  * NO ha declarado país, no un país que se pueda elegir.
  */
-export async function payoutCountries(): Promise<string[]> {
+export async function payoutCountries(): Promise<PaisDePayout[]> {
   const { data } = await createAdminClient()
     .from("payment_routing_rules")
-    .select("payee_country")
+    .select("payee_country, payout_provider")
     .eq("is_active", true)
     .is("payer_country", null)
     .not("payee_country", "is", null)
-    .neq("payout_provider", "simulated")
-    .order("payee_country");
+    // Los dos `order` son deliberados y el segundo no es cosmético: un país
+    // puede tener varias filas activas y la que manda es la de menor
+    // `priority`, exactamente como en `payoutProviderFor`. Sin él, el desempate
+    // sería el que decidiera Postgres y la pantalla podría anunciar un riel
+    // distinto del que va a ejecutar.
+    .order("payee_country")
+    .order("priority");
 
-  const codigos = (data ?? [])
-    .map((r) => r.payee_country)
-    .filter((c): c is string => Boolean(c));
-  // Un país podría tener varias filas activas (distinta prioridad); al tutor se
-  // le ofrece una vez.
-  return [...new Set(codigos)];
+  // Se queda la PRIMERA fila de cada país —la que ganaría el ruteo— y su riel
+  // se resuelve después. Que una fila con la clave rota tape a la siguiente es
+  // lo correcto: si el ruteo va a elegir la rota, el país no es servible por
+  // mucho que exista una fila buena detrás.
+  const gana = new Map<string, string>();
+  for (const r of data ?? []) {
+    if (!r.payee_country || gana.has(r.payee_country)) continue;
+    gana.set(r.payee_country, r.payout_provider);
+  }
+
+  return [...gana]
+    .map(([code, proveedor]) => ({ code, riel: rielDePayout(proveedor) }))
+    .filter((p): p is PaisDePayout => p.riel !== null);
 }
 
 /**
@@ -187,6 +251,61 @@ const PSPS: Record<string, PspProvider> = {
 export const PSP_KEYS: string[] = Object.keys(PSPS);
 
 /**
+ * EL RIEL MANUAL, COMO IDENTIDAD Y NADA MÁS.
+ *
+ * Es un `LocalProvider` porque es literalmente lo que dice la interfaz: un
+ * proveedor que **no sale de casa**. No implementa `payout()` y no lo hará —
+ * escribir un adaptador de PayPal, Airtm o Wise sin cuenta con la que probarlo
+ * es exactamente lo que la decisión del 2-sep prohíbe—, así que el compilador
+ * impide llamarlo igual que impide llamar a `charge()` sobre el simulado.
+ *
+ * ponytail: son dos campos y no va a crecer. El techo es a propósito: el día
+ * que Airtm tenga cuenta, lo que se escribe es un `PspProvider` con su clave
+ * ('airtm'), NO un `payout()` colgado de esta constante. 'manual' seguirá
+ * significando «lo paga una persona», que es un estado permanente del sistema y
+ * no un escalón hacia la automatización.
+ */
+const manualProvider: LocalProvider = {
+  key: RIEL_MANUAL,
+  opensRemoteCheckout: false,
+};
+
+/**
+ * Los que NO salen de casa, por su clave. Existe para que 'manual' se pueda
+ * distinguir de un error de tecleo: los dos caen fuera de `PSPS`, pero solo uno
+ * de los dos significa algo.
+ */
+const LOCALES: Record<string, LocalProvider> = {
+  [simulatedProvider.key]: simulatedProvider,
+  [manualProvider.key]: manualProvider,
+};
+
+/**
+ * De una clave de `payment_routing_rules.payout_provider`, la CLASE de riel —
+ * o `null` si esa clave no nombra ninguno.
+ *
+ * Es la pregunta que hay que hacerse antes de tocar una orden de pago, y no es
+ * la misma que `adapterFor`: el adaptador contesta «quién ejecuta» y aquí `null`
+ * y 'manual' contestarían lo mismo (nadie). Lo que decide qué se hace con la
+ * fila es esto:
+ *
+ *   · `'banco'`  → hay adaptador; el job puede llamarlo.
+ *   · `'manual'` → NO hay adaptador y la orden **no es un problema**: espera a
+ *     una persona. El job tiene que contarla aparte y dejarla como está, no
+ *     mezclarla con las que no tienen a dónde ir.
+ *   · `null`     → 'simulated', `null` o una clave que nadie reconoce. Ese
+ *     destino no se puede pagar por ninguna vía.
+ *
+ * ⚠️ Lee `PSPS`, que se declara arriba y se evalúa al cargar el módulo: aquí no
+ * hay ciclo, solo orden de lectura.
+ */
+export function rielDePayout(clave: string | null): RielDePayout | null {
+  if (!clave) return null;
+  if (clave === RIEL_MANUAL) return "manual";
+  return PSPS[clave] ? "banco" : null;
+}
+
+/**
  * `adapterFor` del Doc 6 §6.3: de una clave de proveedor, su adaptador.
  *
  * La clave que se le pasa en el cobro es `payments.provider` —el snapshot que
@@ -205,9 +324,16 @@ export const PSP_KEYS: string[] = Object.keys(PSPS);
  * Acepta `null` porque `payments.provider` es nullable en el esquema: una fila
  * sin proveedor tampoco es un PSP, y el `!== "stripe"` de antes ya la trataba
  * así.
+ *
+ * ⚠️ 'manual' YA NO CAE AL SIMULADO, aunque el desenlace se le parezca. Los dos
+ * devuelven un proveedor que no sale de casa y con los dos el job se queda sin
+ * ejecutar nada, pero la clave que vuelve es distinta ('manual' vs 'simulated')
+ * y esa diferencia es la que separa «esta orden la paga una persona» de «esta
+ * orden no tiene a dónde ir». Quien necesite decidir con eso NO debe mirar el
+ * adaptador, que es una identidad: debe preguntar a `rielDePayout()`.
  */
 export function adapterFor(key: string | null): AnyProvider {
-  return (key && PSPS[key]) || simulatedProvider;
+  return (key && (PSPS[key] ?? LOCALES[key])) || simulatedProvider;
 }
 
 export type { AnyProvider, PaymentProvider, PspProvider } from "@/lib/payments/port";

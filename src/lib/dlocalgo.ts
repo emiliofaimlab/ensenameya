@@ -208,6 +208,285 @@ export function aUnidadMenor(amount: number, currency: string): number {
 }
 
 /**
+ * ── EL TIPO DE CAMBIO ───────────────────────────────────────────────────────
+ *
+ * `GET /v1/currency-exchanges`. Medido el 2-sep-2026 contra el sandbox, y las
+ * dos cosas medidas importan:
+ *
+ *   · DEVUELVE EL ARRAY ENTERO Y NO ADMITE FILTRO. `?from=USD&to=ARS` y
+ *     `?currency_from=…&currency_to=…` devuelven exactamente la misma lista de
+ *     17 monedas. No hay forma de pedir una sola: se pide todo y se busca.
+ *   · `source_currency` ES SIEMPRE USD, y lo dice su propia documentación. O
+ *     sea que esta tabla NO sabe convertir desde ninguna otra moneda. El día
+ *     que `payouts.currency` deje de ser USD, esto no sirve y hay que decirlo
+ *     en vez de inventar un cruce.
+ *
+ * ⚠️ Y LA ADVERTENCIA MÁS CARA: **esta NO es la tasa a la que dLocal liquida**.
+ * Es la que publica. Medido creando payouts reales en el sandbox y comparando
+ * `amount` (lo que recibe el beneficiario) contra `balance_total_amount −
+ * balance_fee_amount` (lo que nos cobran del balance en USD):
+ *
+ *   430,78 UYU → 10,29 USD  ⇒ 41,86 UYU/USD frente a los 43,0782 publicados (−2,8 %)
+ *    20,00 MXN →  1,13 USD  ⇒ 17,70 MXN/USD frente a los 18,3474 publicados (−3,5 %)
+ *
+ * Esa diferencia es el spread de dLocal, no se publica en ningún endpoint y solo
+ * se puede leer DESPUÉS, en el payout ya creado. Consecuencia práctica, escrita
+ * aquí para que no haya que redescubrirla: convertir con esta tasa fija lo que
+ * RECIBE el tutor, y el cargo real contra nuestro balance sale un 3-5 % por
+ * encima. Ver el bloque de la conversión en `dlocal-provider.ts`.
+ */
+export type TasaDlocalGo = {
+  /** Siempre `USD` (su doc). Se conserva para poder comprobarlo, no por adorno. */
+  source_currency: string;
+  target_currency: string;
+  /** Cuántas unidades de `target_currency` da un `source_currency`. */
+  value: number;
+};
+
+/**
+ * La tabla entera, ya saneada. Devuelve `null` cuando la respuesta no tiene la
+ * forma esperada — y ese `null` **no es una tabla vacía**: es «no sé», igual que
+ * en `listarPayouts`. Las filas con tasa no positiva o no numérica se descartan
+ * una a una: una tasa a 0 convertiría cualquier importe en cero.
+ */
+export async function listarTasasDeCambio(): Promise<TasaDlocalGo[] | null> {
+  const bruto = await dlocalgoFetch<unknown>("GET", "/v1/currency-exchanges");
+  if (!Array.isArray(bruto)) return null;
+  const filas: TasaDlocalGo[] = [];
+  for (const x of bruto) {
+    if (!x || typeof x !== "object") continue;
+    const o = x as Record<string, unknown>;
+    const value = o.value;
+    if (
+      typeof o.source_currency !== "string" ||
+      typeof o.target_currency !== "string" ||
+      typeof value !== "number" ||
+      !Number.isFinite(value) ||
+      value <= 0
+    ) {
+      continue;
+    }
+    filas.push({
+      source_currency: o.source_currency.toUpperCase(),
+      target_currency: o.target_currency.toUpperCase(),
+      value,
+    });
+  }
+  return filas;
+}
+
+/**
+ * La tasa de UN par, o `null` si no la publican (o si no se pudo leer la tabla).
+ * `null` nunca significa 1: significa que no hay conversión que hacer y que
+ * quien llama tiene que decidir sin ella.
+ */
+export async function tasaDeCambio(
+  monedaOrigen: string,
+  monedaDestino: string,
+): Promise<number | null> {
+  const filas = await listarTasasDeCambio();
+  if (filas === null) return null;
+  const o = monedaOrigen.toUpperCase();
+  const d = monedaDestino.toUpperCase();
+  return filas.find((t) => t.source_currency === o && t.target_currency === d)?.value ?? null;
+}
+
+/**
+ * 🔴 LA ARITMÉTICA DE LA CONVERSIÓN. Es la función de este archivo que decide
+ * cuánto dinero recibe una persona, así que va sola y comprueba su propio
+ * resultado antes de devolverlo.
+ *
+ * De `amountMinor` en `monedaOrigen` (unidades MENORES, como en todo el puerto)
+ * a un número en unidades MAYORES de `monedaDestino`, que es lo que
+ * `transfer_amount` espera.
+ *
+ * ⚠️ EL REDONDEO SIGUE AL EXPONENTE DE LA MONEDA DE DESTINO, no a dos decimales
+ * fijos. La doc de dLocal dice «amount decimals: 2» para los ocho países,
+ * incluidos CLP y PYG, pero un guaraní con céntimos no existe: se redondea a
+ * unidad entera donde `exponenteDe` dice 0. Mandar 1.317.710,13 PYG no es un
+ * error de la API, es un importe que no se puede pagar.
+ *
+ * ⚠️ Y LA COMPROBACIÓN DE VUELTA NO ES DECORATIVA. Corre en cada conversión
+ * porque es una división y porque el error que atrapa —haber dividido por la
+ * tasa en vez de multiplicar, o haberla invertido— no se ve leyendo el código:
+ * se ve en el banco del tutor, multiplicado o dividido por mil. Si no cuadra, se
+ * devuelve `null` y NO SE MANDA NADA. Un payout que no sale se arregla.
+ */
+export function convertirImporte(
+  amountMinor: number,
+  monedaOrigen: string,
+  monedaDestino: string,
+  tasa: number,
+): number | null {
+  if (!Number.isInteger(amountMinor) || amountMinor <= 0) return null;
+  if (!Number.isFinite(tasa) || tasa <= 0) return null;
+
+  const mayorOrigen = aUnidadMayor(amountMinor, monedaOrigen);
+  const bruto = mayorOrigen * tasa;
+  if (!Number.isFinite(bruto) || bruto <= 0) return null;
+
+  const factor = exponenteDe(monedaDestino) === 0 ? 1 : 100;
+  const importe = Math.round(bruto * factor) / factor;
+  if (!Number.isFinite(importe) || importe <= 0) return null;
+
+  // La vuelta: dividir por la misma tasa tiene que devolver el importe de
+  // origen, con el margen que el redondeo a la unidad mínima de destino puede
+  // haber comido (media unidad mínima, más una miga de coma flotante).
+  const tolerancia = 0.5 / factor / tasa + 1e-9;
+  if (Math.abs(importe / tasa - mayorOrigen) > tolerancia) return null;
+
+  return importe;
+}
+
+/**
+ * 🔴 EL FACTOR DE LIQUIDACIÓN, Y POR QUÉ ES UNA PERILLA Y NO UNA CONSTANTE.
+ *
+ * dLocal NO liquida a la tasa que publica en `/v1/currency-exchanges`: medido
+ * sobre payouts ya creados, la de liquidación sale entre un 4,6 % y un 4,7 %
+ * peor. Y esa tasa **no existe en ningún endpoint**: solo se puede leer DESPUÉS,
+ * comparando `amount` (lo que recibe el beneficiario) con `balance_total_amount`
+ * (lo que nos cargan del balance) en el payout ya hecho.
+ *
+ * ── QUÉ DECIDE ESTE NÚMERO, QUE NO ES UN DETALLE CONTABLE ───────────────────
+ * `POST /v1/payouts` no tiene moneda de origen: `transfer_amount` va SIEMPRE en
+ * la del beneficiario. O sea que lo único que podemos fijar es lo que RECIBE el
+ * tutor, y lo que nos cobran a nosotros sale de ahí. Convertir con la tasa
+ * publicada equivale a fijar lo que recibe el tutor y comernos el spread — que
+ * es justo lo contrario de la decisión del cliente del 2-sep-2026: **el spread
+ * lo asume el tutor**. Aplicando el factor mandamos un importe de destino algo
+ * menor, y el cargo contra el balance queda en `payouts.amount`.
+ *
+ * ── POR QUÉ SE PUEDE CAMBIAR SIN TOCAR CÓDIGO ──────────────────────────────
+ * Porque es una MEDIDA, no una regla: cambia cuando dLocal cambia sus márgenes,
+ * y se recalibra con datos propios. Cada payout completado deja en el detalle la
+ * tasa publicada, el importe de destino y el cargo real; con esos tres números
+ * el factor implícito es una división. `DLOCALGO_FX_SPREAD` lo mueve sin
+ * desplegar código, y el default es la única medida que teníamos al escribir
+ * esto.
+ *
+ * ponytail: el techo es que el primer pago a cada moneda se desvía lo que se
+ * desvíe el factor, y la corrección es manual (mirar el detalle y ajustar la
+ * variable). Un lazo automático que se repreciara solo necesitaría guardar el
+ * cargo real en columna propia y una función de reconciliación; no se escribe
+ * hasta que haya suficientes payouts completados como para que la media
+ * signifique algo.
+ */
+export const SPREAD_LIQUIDACION_POR_DEFECTO = 0.047;
+
+/** El máximo que se acepta de la variable: por encima, casi seguro es un typo. */
+const SPREAD_MAXIMO = 0.25;
+
+export function spreadDeLiquidacion(): number {
+  const crudo = process.env.DLOCALGO_FX_SPREAD;
+  if (crudo === undefined || crudo.trim() === "") return SPREAD_LIQUIDACION_POR_DEFECTO;
+
+  const v = Number(crudo);
+  // ⚠️ EL RANGO NO ES DECORATIVO. Escribir `4.7` queriendo decir «4,7 %» daría
+  // una tasa efectiva negativa, y un `0.47` mal puesto le mandaría al tutor la
+  // mitad de su dinero sin que nada más se queje. Un valor fuera de rango NO se
+  // interpreta y NO tumba el job: se cae al medido y se grita, porque quedarse
+  // sin pagar por una variable mal escrita es peor que pagar con la medida vieja.
+  if (!Number.isFinite(v) || v < 0 || v > SPREAD_MAXIMO) {
+    console.error(
+      `[C2] DLOCALGO_FX_SPREAD=${JSON.stringify(crudo)} está fuera de [0, ${SPREAD_MAXIMO}]: ` +
+        `se usa el medido (${SPREAD_LIQUIDACION_POR_DEFECTO}). Es una fracción, no un porcentaje.`,
+    );
+    return SPREAD_LIQUIDACION_POR_DEFECTO;
+  }
+  return v;
+}
+
+/**
+ * La tasa publicada, empeorada en `spread`, que es a la que de verdad se
+ * liquida. `null` si alguno de los dos no es un número usable — y entonces no se
+ * manda nada, igual que con `convertirImporte`.
+ */
+export function tasaEfectiva(tasaPublicada: number, spread: number): number | null {
+  if (!Number.isFinite(tasaPublicada) || tasaPublicada <= 0) return null;
+  if (!Number.isFinite(spread) || spread < 0 || spread > SPREAD_MAXIMO) return null;
+  const t = tasaPublicada * (1 - spread);
+  return Number.isFinite(t) && t > 0 ? t : null;
+}
+
+/**
+ * La comprobación ejecutable de lo de arriba. Es dinero: la aritmética no puede
+ * quedarse sin una prueba que falle si se rompe.
+ *
+ * ⚠️ VIVE AQUÍ Y NO EN UN `*.check.ts` como `limits.check.ts` o `ics-format.
+ * check.ts`, y el motivo es concreto: esos ficheros se corren con
+ * `node --experimental-strip-types`, y este módulo no se puede cargar así (el
+ * constructor de `DlocalGoError` usa parameter properties, que el modo
+ * strip-only de Node no soporta). Mientras eso siga siendo verdad, esta función
+ * es la prueba, y se invoca desde `dlocal-provider.ts` la primera vez que se va
+ * a convertir de verdad — o sea, antes de mandar el primer payout de cada
+ * arranque, no en el `import`: un throw en el top-level tumbaría también el
+ * checkout, que no tiene nada que ver con esto.
+ *
+ * Lanza con el caso que falló. Devuelve un resumen si todo cuadra.
+ */
+export function autocomprobacionDeConversion(): string {
+  const debe = (ok: boolean, que: string) => {
+    if (!ok) throw new Error(`autocomprobacionDeConversion: ${que}`);
+  };
+  const casi = (a: number | null, b: number, que: string) => {
+    debe(a !== null && Math.abs(a - b) < 1e-6, `${que} (salió ${a}, se esperaba ${b})`);
+  };
+
+  // Dos decimales, tasa real medida el 2-sep-2026: 210,00 USD × 43,0782.
+  casi(convertirImporte(21000, "USD", "UYU", 43.0782), 9046.42, "USD→UYU de 210,00");
+  // Sin céntimos: el guaraní se redondea a unidad entera, no a dos decimales.
+  casi(convertirImporte(21000, "USD", "PYG", 6274.8105), 1317710, "USD→PYG de 210,00");
+  // Y el peso chileno igual, que es el otro de `SIN_CENTIMOS` que dLocal paga.
+  casi(convertirImporte(21000, "USD", "CLP", 1023.51109), 214937, "USD→CLP de 210,00");
+  // Un céntimo suelto no se pierde por el camino.
+  casi(convertirImporte(1, "USD", "MXN", 18.34736), 0.18, "USD→MXN de 0,01");
+
+  // 🔴 La inversión, que es el error que la comprobación de vuelta existe para
+  // atrapar: con la tasa al revés el resultado NO puede parecerse al bueno.
+  const invertida = convertirImporte(21000, "USD", "UYU", 1 / 43.0782);
+  debe(
+    invertida === null || Math.abs(invertida - 9046.42) > 1,
+    "una tasa invertida tiene que dar otra cosa, no el importe bueno",
+  );
+
+  // Entradas que no son un importe pagable. Ninguna puede devolver un número.
+  debe(convertirImporte(0, "USD", "ARS", 1751.376) === null, "cero no es un importe");
+  debe(convertirImporte(-100, "USD", "ARS", 1751.376) === null, "un importe negativo no se manda");
+  debe(convertirImporte(21000, "USD", "ARS", 0) === null, "una tasa a cero no convierte");
+  debe(convertirImporte(21000, "USD", "ARS", NaN) === null, "una tasa NaN no convierte");
+  debe(convertirImporte(2100.5, "USD", "ARS", 1751.376) === null, "las unidades menores son enteras");
+
+  // ── EL FACTOR DE LIQUIDACIÓN ───────────────────────────────────────────────
+  // 🔴 El caso que decide quién come el spread, con el ejemplo del documento:
+  // 210,00 USD a un tutor mexicano, tasa publicada 18,34736 del 2-sep-2026.
+  //   · Con la tasa publicada salen 3852,95 MXN, y para entregarlos dLocal nos
+  //     carga ~220 USD: el spread lo comemos NOSOTROS.
+  //   · Con la efectiva salen ~3671,86 MXN, que es lo que 210 USD compran de
+  //     verdad: el cargo queda en 210 y el spread lo asume EL TUTOR.
+  const efectivaMxn = tasaEfectiva(18.34736, 0.047);
+  casi(efectivaMxn, 18.34736 * 0.953, "tasa efectiva MXN con 4,7 %");
+  const destinoMxn = convertirImporte(21000, "USD", "MXN", efectivaMxn ?? 0);
+  debe(destinoMxn !== null && destinoMxn < 3852.95, "la efectiva tiene que mandar MENOS que la publicada");
+  casi(destinoMxn, 3671.86, "USD→MXN de 210,00 con el spread al tutor");
+
+  // Un spread de cero es «no corrijas»: la efectiva ES la publicada. Sirve para
+  // apagar la corrección con la variable, sin tocar código.
+  casi(tasaEfectiva(18.34736, 0), 18.34736, "spread 0 no cambia la tasa");
+
+  // 🔴 Lo que la validación de rango existe para atrapar: `4.7` en vez de `0.047`
+  // daría una tasa NEGATIVA, o sea un importe imposible. No puede devolver número.
+  debe(tasaEfectiva(18.34736, 4.7) === null, "un spread fuera de rango no da tasa");
+  debe(tasaEfectiva(18.34736, -0.1) === null, "un spread negativo no da tasa");
+  debe(tasaEfectiva(0, 0.047) === null, "sin tasa publicada no hay efectiva");
+  debe(tasaEfectiva(NaN, 0.047) === null, "una tasa NaN no da efectiva");
+
+  return (
+    "OK · conversión USD→{UYU,PYG,CLP,MXN} con redondeo por exponente y vuelta comprobada, " +
+    "y factor de liquidación aplicado (el spread lo asume el tutor)"
+  );
+}
+
+/**
  * ── LA FIRMA DE LAS NOTIFICACIONES ──────────────────────────────────────────
  *
  * `HMAC-SHA256(API_KEY + rawBody, SECRET_KEY)`, en hexadecimal. La cabecera que
@@ -421,8 +700,50 @@ export function fechaDePayout(p: PayoutDlocalGo): number {
  * `payout_beneficiary(payout_id)` más `transfer_amount`, y esa correspondencia
  * es deliberada: la construye la base de datos, que es quien tiene los datos y
  * quien sabe qué exige cada país. Este archivo no compone beneficiarios.
+ *
+ * ── 🔴 NO EXISTE UNA MONEDA DE ORIGEN, Y ESO DECIDE TODO C2 ─────────────────
+ *
+ * `transfer_amount` va SIEMPRE expresado en `currency_to_pay`. No hay
+ * `transfer_currency` ni ningún otro campo con el que decir «te doy 210 USD de
+ * mi balance, dale al beneficiario lo que eso valga».
+ *
+ * Y no es una lectura de la documentación: se probó. Un POST a UY con
+ * `transfer_currency: "USD"` añadido devolvió 200 y creó el payout con
+ * `amount: 43.08 UYU` — el campo se acepta y **se ignora en silencio**, que es
+ * la peor forma posible de no existir. Quien lo vuelva a intentar creyendo que
+ * fija el origen, mandará 210 unidades de la moneda local en vez de 210 dólares.
+ *
+ * Consecuencia: convertir es obligatorio y la conversión la hacemos NOSOTROS,
+ * con `convertirImporte()` y la tasa de `/v1/currency-exchanges`. Lo que dLocal
+ * cobra después contra el balance sale a SU tasa, que es peor (ver arriba).
+ *
+ * ── LOS TRES CAMPOS QUE LA DOC LLAMA OPCIONALES Y LA API NO ─────────────────
+ * Medido el 2-sep-2026 contra el sandbox:
+ *
+ *   · `bank_branch` es obligatorio EN TODOS LOS PAÍSES, también donde
+ *     `payout_country_rules.requires_branch = false` (EC, MX, CL, PE, PY, AR).
+ *     Omitirlo devuelve `400 {"code":5000,"message":"must not be null"}`, un
+ *     mensaje que no dice qué campo falta. **Pero admite la cadena vacía**: con
+ *     `bank_branch: ""` el payout se crea. Por eso el tipo lo pide siempre.
+ *   · `bank_account_type` es obligatorio EN TODOS LOS PAÍSES, con el mismo 5000
+ *     opaco si falta. El enum completo lo canta la propia API cuando se le manda
+ *     un valor que no reconoce: `[ALIAS, MAESTRA, MASTER, CBU, SAVINGS, SALARY,
+ *     VISTA, CHECKING]`. Lo que acepta cada país, sondeado uno a uno:
+ *       AR → ALIAS, CBU · BR → CHECKING, SAVINGS · CL → CHECKING, SAVINGS, VISTA
+ *       EC · MX · PE · PY · UY → CHECKING, SAVINGS
+ *   · `beneficiary_address_street` / `_city` son obligatorios EN PERÚ
+ *     (`400 Missing required field: beneficiary.address.street`). No están en
+ *     este tipo porque `tutor_payout_accounts` no guarda dirección: PE no puede
+ *     cobrar hasta que alguien la pida y la guarde. Se deja dicho aquí.
+ *
+ * ⚠️ Y HAY UN MÍNIMO: `400 {"code":7000,"message":"Minimum amount for create a
+ * payout is 1 USD"}`. Se evalúa en USD sobre el importe ya convertido, o sea que
+ * es dLocal quien convierte para comprobarlo. Un payout de menos de un dólar es
+ * `rechazado` permanente, y eso es una política de importe mínimo de retiro que
+ * hoy no existe en la base de datos.
  */
 export type NuevoPayoutDlocalGo = {
+  /** ⚠️ EN `currency_to_pay`, nunca en la moneda del balance. Ver arriba. */
   transfer_amount: number;
   transfer_country: string;
   currency_to_pay: string;
@@ -435,7 +756,8 @@ export type NuevoPayoutDlocalGo = {
   bank_code: string;
   bank_account: string;
   bank_account_type?: string | null;
-  bank_branch?: string | null;
+  /** Obligatorio para la API aunque el país no lo use: `""` vale, faltar no. */
+  bank_branch: string;
   /**
    * 🔑 LA MARCA. Texto libre, **máximo 255 caracteres** (medido: 289 devuelve
    * `7000 Field description exceeds max length 255`), y viaja de ida y vuelta

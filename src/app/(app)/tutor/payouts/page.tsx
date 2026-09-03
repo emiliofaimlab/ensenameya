@@ -11,14 +11,20 @@ import {
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
+import { avisoDeImporteAproximado } from "@/lib/payments/dlocal-provider";
 import { WithdrawButton } from "./withdraw-button";
 import { PayoutCountryForm } from "./payout-country-form";
 import { PayoutAccountForm } from "./payout-account-form";
+import { PayoutManualForm } from "./payout-manual-form";
+import { leerCanalesManuales, leerDestinosManuales } from "./rpc";
 import {
   estadoDeLaCuenta,
   type BancoDePais,
+  type CanalManual,
   type CuentaEnmascarada,
+  type DestinoManualEnmascarado,
   type ReglaDePais,
+  type RielDeCobro,
 } from "@/lib/payout-account";
 import { formatPct, tutorTier } from "../tier";
 
@@ -36,6 +42,16 @@ const PAYOUT_PILL: Record<string, PillTone> = {
 
 /** Estados que el Figma lista como "Próximos payouts" (204:2). */
 const UPCOMING = new Set(["scheduled", "processing", "pending"]);
+
+/**
+ * La moneda en la que llevamos el saldo del tutor y en la que se crean los
+ * `payouts`. Es una constante y no una lectura porque hoy `payouts.currency` es
+ * USD en las diez filas de ruteo, y porque el adaptador de dLocal Go reserva su
+ * estado `sin-decidir` justamente para el día que deje de serlo (solo publica
+ * pares DESDE dólar en `/v1/currency-exchanges`). Vive aquí para que el aviso de
+ * cambio de abajo no la escriba dos veces.
+ */
+const MONEDA_DEL_SALDO = "USD";
 
 function moneyLine(list: { currency: string; amount: number }[]): string {
   if (list.length === 0) return "—";
@@ -94,6 +110,8 @@ export default async function TutorPayoutsPage() {
     servibles,
     { data: reglas, error: errorReglas },
     { data: cuentaData, error: errorCuenta },
+    { data: canalesData, error: errorCanales },
+    { data: destinosData, error: errorDestinos },
   ] = await Promise.all([
     supabase.rpc("tutor_balance"),
     supabase
@@ -134,6 +152,14 @@ export default async function TutorPayoutsPage() {
       )
       .eq("tutor_id", userId)
       .maybeSingle(),
+    // C2m · el riel MANUAL, que es el otro sitio donde puede vivir «a dónde
+    // cobra este tutor». Se piden las dos cosas siempre y no solo cuando el país
+    // declarado es de riel manual, por lo mismo que arriba: sin ellas no se
+    // podría decir «los datos que registraste siguen guardados» a quien cambió
+    // de país después de meterlos. Son cinco filas de catálogo y como mucho
+    // cinco de destinos.
+    leerCanalesManuales(supabase),
+    leerDestinosManuales(supabase, userId),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -149,10 +175,11 @@ export default async function TutorPayoutsPage() {
    * a quien sí declaró. Que siga viéndolo es también la única pista de que sus
    * mentorías han dejado de poder venderse.
    */
+  const codigosServibles = servibles.map((p) => p.code);
   const paisesOfrecidos = (
-    paisDeCobro && !servibles.includes(paisDeCobro)
-      ? [...servibles, paisDeCobro]
-      : servibles
+    paisDeCobro && !codigosServibles.includes(paisDeCobro)
+      ? [...codigosServibles, paisDeCobro]
+      : codigosServibles
   ).map((code) => ({ code, label: nombrePais(code) }));
 
   /**
@@ -166,14 +193,50 @@ export default async function TutorPayoutsPage() {
    * falló, no un formulario vacío que sobrescribiría lo que sí tiene guardado.
    */
   const cuenta = (cuentaData ?? null) as CuentaEnmascarada | null;
-  const fallaLaCuenta = Boolean(errorCuenta ?? errorReglas);
+  const canales = canalesData as CanalManual[];
+  const destinos = destinosData as DestinoManualEnmascarado[];
+  const fallaLaCuenta = Boolean(
+    errorCuenta ?? errorReglas ?? errorCanales ?? errorDestinos,
+  );
+
+  /**
+   * C2m · LA CLASE DE RIEL DEL PAÍS DECLARADO — quién le paga y, por tanto, qué
+   * formulario se pinta.
+   *
+   * Sale de `payoutCountries()`, que lo deriva de
+   * `payment_routing_rules.payout_provider`, y NO de una lista de países aquí:
+   * ese es el mismo compromiso que hace que el formulario bancario no tenga un
+   * solo `if (pais === 'MX')`. Venezuela es «manual» porque su fila lo dice
+   * (`20260902150000`), y el día que se abra otro país sin banco lo será sin
+   * tocar este fichero.
+   *
+   * ⚠️ `null` no significa «no tiene riel»: significa que hoy no podemos pagar
+   * allí de ninguna manera —regla desactivada, o un valor que el enrutador no
+   * reconoce— y entonces no se pide ningún dato, porque no se iba a poder usar.
+   */
+  const rielDeclarado: RielDeCobro | null = paisDeCobro
+    ? (servibles.find((p) => p.code === paisDeCobro)?.riel ?? null)
+    : null;
 
   // La regla del país DECLARADO. Si el tutor no ha declarado ninguno no hay
-  // formulario que pintar: el país decide qué campos existen.
+  // formulario que pintar: el país decide qué campos existen. Solo tiene sentido
+  // buscarla para el riel bancario: `payout_country_rules` son las ocho filas de
+  // dLocal, y Venezuela no está ni va a estar.
   const regla =
-    (paisDeCobro
+    (rielDeclarado === "banco" && paisDeCobro
       ? ((reglas ?? []) as ReglaDePais[]).find((r) => r.country === paisDeCobro)
       : undefined) ?? null;
+
+  /**
+   * El riel EFECTIVO. Un país marcado como bancario en la tabla de ruteo pero
+   * sin fila en `payout_country_rules` es una incoherencia de datos, no un
+   * formulario: no sabemos qué campos pedirle ni con qué validarlos, así que se
+   * trata como «todavía no podemos pagar allí» en vez de enseñar un desplegable
+   * de bancos vacío. El riel manual no depende de esa tabla y por eso pasa tal
+   * cual.
+   */
+  const riel: RielDeCobro | null =
+    rielDeclarado === "banco" && !regla ? null : rielDeclarado;
 
   // El catálogo de bancos, solo del país que toca. Va en una segunda vuelta
   // porque depende del país, y son hasta 213 filas (Ecuador): traer los 612 de
@@ -188,14 +251,40 @@ export default async function TutorPayoutsPage() {
     : { data: null };
   const bancos = (bancosData ?? []) as BancoDePais[];
 
+  /** `channel` → `label`. Incluye los canales apagados, a propósito: un destino
+      registrado en uno que Legal cerró ayer tiene que seguir teniendo nombre. */
+  const etiquetaDeCanal = (channel: string) =>
+    canales.find((c) => c.channel === channel)?.label ?? channel;
+
   const estadoCuenta = estadoDeLaCuenta({
     paisDeclarado: paisDeCobro,
-    paisServible: Boolean(regla),
+    riel,
     cuenta,
     nombreDelBanco:
       bancos.find((b) => b.bank_code === cuenta?.bank_code)?.name ?? null,
+    destinos,
+    etiquetaDeCanal,
     nombreDePais: nombrePais,
   });
+
+  /**
+   * ⚠️ EL DIFERENCIAL DE CAMBIO LO ASUME EL TUTOR (decisión del cliente,
+   * 2-sep-2026), y por eso esto se dice en la pantalla y no en un anexo.
+   *
+   * `POST /v1/payouts` de dLocal Go no tiene moneda de origen: el importe va
+   * SIEMPRE en la moneda de destino, así que hay que fijar o lo que recibe el
+   * tutor o lo que sale de nuestro balance, nunca las dos. Se fija lo segundo —
+   * `payouts.amount` en dólares— y la cantidad en moneda local la determina el
+   * tipo de cambio del día que dLocal ejecuta. O sea que el número que el tutor
+   * ve aquí es aproximado, y merece decírselo antes de que registre nada.
+   *
+   * El texto sale del DATO (`payout_country_rules.currency`) y no de un `if` por
+   * país: en Ecuador esa columna es 'USD', no hay conversión y
+   * `avisoDeImporteAproximado` devuelve `null` sin que nadie lo nombre.
+   */
+  const avisoDeCambio = regla
+    ? avisoDeImporteAproximado(MONEDA_DEL_SALDO, regla.currency)
+    : null;
 
   return (
     <TutorShell
@@ -274,7 +363,12 @@ export default async function TutorPayoutsPage() {
               datos, datos de otro país, registrada— y el tutor tiene que poder
               distinguirlas: la cuarta es la única que nadie ve venir. */}
           <div>
-            <dt className="text-xs text-[#6b6b6b]">Cuenta de cobro</dt>
+            {/* La etiqueta sigue al riel, no al país: donde no hay banco no hay
+                «cuenta», hay un correo o un teléfono, y llamarlo cuenta es
+                pedirle al tutor un número que no tiene. */}
+            <dt className="text-xs text-[#6b6b6b]">
+              {riel === "manual" ? "Forma de cobro" : "Cuenta de cobro"}
+            </dt>
             <dd className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
               <StatusPill tone={estadoCuenta.tone}>
                 {estadoCuenta.pill}
@@ -306,12 +400,16 @@ export default async function TutorPayoutsPage() {
           <h3 className="text-sm font-semibold text-[#19191f]">
             ¿En qué país cobras?
           </h3>
+          {/* ⚠️ Aquí ponía «Si el tuyo no está —Venezuela y Colombia, entre
+              otros—», y desde `20260902150000` Venezuela SÍ está: tiene riel
+              manual. Nombrar países en el texto es exactamente lo que la lista
+              evita haciéndose desde `payment_routing_rules`, así que ya no se
+              nombra ninguno. */}
           <p className="mt-1 max-w-[620px] text-[13px] text-[#6b6b6b]">
             De esto depende quién te paga, así que conviene tenerlo puesto antes
-            de la primera liquidación. La lista son los países a los que hoy
-            podemos transferir. Si el tuyo no está —Venezuela y Colombia, entre
-            otros— déjalo sin declarar: sigues vendiendo igual y tu saldo se
-            sigue acumulando.
+            de la primera liquidación. La lista son los países en los que hoy
+            podemos hacerte llegar el dinero. Si el tuyo no está, déjalo sin
+            declarar: sigues vendiendo igual y tu saldo se sigue acumulando.
           </p>
           <PayoutCountryForm
             userId={userId}
@@ -320,10 +418,16 @@ export default async function TutorPayoutsPage() {
           />
         </div>
 
-        {/* B1 · los datos bancarios. Van DEBAJO del país y en este orden porque
-            el país no es un campo más: es el que decide qué campos existen y
-            cómo se validan. Sin país declarado, este bloque no ofrece un
-            formulario que no se podría rellenar — lo explica. */}
+        {/* Los datos de cobro. Van DEBAJO del país y en este orden porque el
+            país no es un campo más: es el que decide QUÉ RIEL le toca y, por
+            tanto, qué campos existen y cómo se validan. Sin país declarado, este
+            bloque no ofrece un formulario que no se podría rellenar — lo
+            explica.
+
+            C2m · y desde el 2-sep hay DOS formularios, no uno con campos
+            opcionales: el bancario de B1 (ocho países de dLocal) y el manual
+            (hoy Venezuela). Cuál se pinta lo decide `riel`, que viene del dato.
+            No hay un solo código de país escrito aquí abajo. */}
         <div className="mt-4 border-t border-[#e0e0e0] pt-4">
           <h3 className="text-sm font-semibold text-[#19191f]">
             Tus datos de cobro
@@ -339,25 +443,56 @@ export default async function TutorPayoutsPage() {
             <p className="mt-2 max-w-[620px] text-[13px] text-[#6b6b6b]">
               Primero dinos en qué país cobras, ahí arriba. Los datos que te
               pidamos dependen de él: en Argentina es un CBU, en México una
-              CLABE, en Brasil hacen falta también la agência… así que hasta que
-              lo declares no hay un formulario que tenga sentido enseñarte.
+              CLABE, en Brasil hacen falta también la agência, y donde no llega
+              ninguna transferencia te preguntamos por un correo o un teléfono…
+              así que hasta que lo declares no hay un formulario que tenga
+              sentido enseñarte.
               {/* Si ya tenía datos guardados, se le dice que siguen ahí. Mismo
                   criterio que `paisesOfrecidos`: nada se borra por un cambio de
                   configuración que él no hizo. */}
               {cuenta
                 ? ` Los datos de ${nombrePais(cuenta.country)} que registraste siguen guardados.`
                 : ""}
+              {destinos.length > 0
+                ? ` Las formas de cobro que registraste (${destinos.map((d) => etiquetaDeCanal(d.channel)).join(", ")}) siguen guardadas.`
+                : ""}
             </p>
-          ) : !regla ? (
+          ) : !riel ? (
             <p className="mt-2 max-w-[620px] text-[13px] text-[#6b6b6b]">
-              Todavía no podemos transferir a {nombrePais(paisDeCobro)}, así que
-              no te pedimos datos bancarios que no íbamos a poder usar. Tu saldo
-              se sigue acumulando y te avisaremos en cuanto se abra.
+              Todavía no podemos hacerte llegar el dinero a{" "}
+              {nombrePais(paisDeCobro)}, así que no te pedimos datos que no
+              íbamos a poder usar. Tu saldo se sigue acumulando y te avisaremos
+              en cuanto se abra.
               {cuenta
                 ? ` Los datos de ${nombrePais(cuenta.country)} que registraste siguen guardados.`
                 : ""}
+              {destinos.length > 0
+                ? ` Las formas de cobro que registraste (${destinos.map((d) => etiquetaDeCanal(d.channel)).join(", ")}) siguen guardadas.`
+                : ""}
             </p>
-          ) : (
+          ) : riel === "manual" ? (
+            <>
+              {/* El tutor que cambió de un país de banco a uno manual: sus datos
+                  bancarios siguen ahí, pero no sirven para pagarle aquí. Mismo
+                  criterio que el mensaje simétrico del formulario bancario. */}
+              {cuenta ? (
+                <p className="mt-2 max-w-[620px] text-[13px] text-[#6b6b6b]">
+                  Los datos bancarios de {nombrePais(cuenta.country)} que
+                  registraste no se borran, pero a {nombrePais(paisDeCobro)} no
+                  llega esa transferencia: dinos aquí abajo a dónde te pagamos.
+                </p>
+              ) : null}
+              <PayoutManualForm
+                // Mismo `key` por país y por el mismo motivo que abajo: el
+                // formulario guarda su estado en `useState` y no se
+                // reinicializa cuando cambian las props.
+                key={paisDeCobro}
+                canales={canales}
+                destinos={destinos}
+                etiquetaPais={nombrePais(paisDeCobro)}
+              />
+            </>
+          ) : regla ? (
             <>
               <p className="mt-1 max-w-[620px] text-[13px] text-[#6b6b6b]">
                 Tienen que ser los de una cuenta a tu nombre en{" "}
@@ -366,6 +501,19 @@ export default async function TutorPayoutsPage() {
                 se rechaza. Los guardamos porque nuestro proveedor de pagos no
                 guarda beneficiarios: hay que mandárselos en cada pago.
               </p>
+
+              {/* ⚠️ El diferencial de cambio. NO es letra pequeña y no va en un
+                  `<span>` de 12px al pie de un campo: es una condición del
+                  cobro, y el tutor tiene que leerla ANTES de registrar nada.
+                  Sale de `regla.currency`, así que en Ecuador —que cobra en
+                  dólares— `avisoDeCambio` es `null` y este bloque no existe,
+                  sin que nadie escriba «si el país es EC». */}
+              {avisoDeCambio ? (
+                <p className="mt-3 max-w-[620px] rounded-[8px] border border-[#e8d5a8] bg-[#fdf7e6] p-3 text-[13px] text-[#19191f]">
+                  {avisoDeCambio}
+                </p>
+              ) : null}
+
               <PayoutAccountForm
                 // ⚠️ `key` por país, y no es decorativo: el formulario guarda su
                 // estado en `useState`, que NO se reinicializa cuando cambian
@@ -386,7 +534,10 @@ export default async function TutorPayoutsPage() {
                 }
               />
             </>
-          )}
+          ) : /* Inalcanzable: `riel` ya vale null cuando es «banco» sin fila en
+                `payout_country_rules`. Está para que TypeScript pueda estrechar
+                `regla`, no porque haya un caso que pintar. */
+          null}
         </div>
       </PanelCard>
 
