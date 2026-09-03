@@ -39,8 +39,12 @@ begin
   if v_co is distinct from array['stripe', 'dlocal'] then
     raise exception 'CO tenía que quedar {stripe,dlocal} y quedó %', array_to_string(v_co, ',');
   end if;
-  if v_ve is distinct from array['stripe', 'dlocal'] then
-    raise exception 'VE tenía que seguir {stripe,dlocal} y está %', array_to_string(v_ve, ',');
+  -- ⚠️ MISMO ARREGLO QUE EN `20260903170000`: aquí se exigía que VE fuese
+  -- exactamente {stripe,dlocal}, y en producción es {simulated}. Lo que esta
+  -- migración puede romper es meterle dLocal delante a un país que dLocal no
+  -- cubre; cuál sea su pasarela lo decide el ambiente.
+  if v_ve[1] = 'dlocal' then
+    raise exception 'VE quedó con dLocal delante, y dLocal no cubre Venezuela';
   end if;
 
   -- Y los ocho SIGUEN COMO ESTUVIERAN: esta migración no los toca.

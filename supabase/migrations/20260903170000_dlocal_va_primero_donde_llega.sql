@@ -69,10 +69,20 @@ begin
       array_to_string(v_co, ','), array_to_string(v_mx, ',');
   end if;
 
-  -- Venezuela sigue con Stripe delante. Si esto salta, alguien aplicó la regla
-  -- general a un país que dLocal no cubre, y ahí no hay nada que voltear.
-  if v_ve[1] <> 'stripe' then
-    raise exception 'VE no puede tener % delante: dLocal no cubre Venezuela', v_ve[1];
+  -- Venezuela NO puede llevar dLocal delante: dLocal no cubre Venezuela, así que
+  -- ahí no hay nada que voltear.
+  --
+  -- ⚠️ AQUÍ SE EXIGÍA `v_ve[1] = 'stripe'` Y ESO ES ESTADO DE DEV. Tumbó el
+  -- despliegue a producción el 3-sep-2026, porque allí VE cobra por
+  -- **'simulated'** — y los ocho países de dLocal también. El CLAUDE.md decía
+  -- que prod cobraba por Stripe y era falso; prod es un *coming soon* y nunca
+  -- tuvo pasarela real en esas filas.
+  --
+  -- La invariante que esta migración protege no es «VE usa Stripe», es «VE no
+  -- usa dLocal». Escribirla como una igualdad convertía un ambiente legítimo en
+  -- un error, y encima abortaba las seis migraciones siguientes.
+  if v_ve[1] = 'dlocal' then
+    raise exception 'VE no puede tener dLocal delante: dLocal no cubre Venezuela';
   end if;
 
   -- Y el payout de Colombia no se ha tocado: dLocal cobra allí pero NO paga.
