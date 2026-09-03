@@ -394,6 +394,7 @@ a Stripe (§5). Ninguna de las dos bloquea la fase 1.
 | # | Pregunta | Recomendación | Desbloquea |
 | :-- | :-- | :-- | :-- |
 | ~~1~~ | ~~¿Quién asume el spread FX de dLocal?~~ | ✅ **Resuelta 2-sep-2026: lo asume el tutor** (en contra de la recomendación de este doc, que era lo contrario). Implementada con factor calibrable | — |
+| **1-bis** | 🔴 **¿Por dónde cobramos en los 8 países de dLocal?** Su regla de ruteo dice hoy `charge_provider = stripe` y `payout_provider = dlocal`, y **un payout se paga desde el balance del PSP que cobró**. Verificado EN EJECUCIÓN el 3-sep: la puerta del balance rechaza esas órdenes antes de llamar a nadie. Mientras no cambie, el riel de dLocal **no puede pagar en producción** por bien que estén las cuentas | Cobrar por dLocal en esos 8 países (su `charge_provider` a `dlocal`), o fondear su balance aparte y decidir cómo se entera el job | Los 8 de LATAM. Es el bloqueante real, por delante de los datos que faltan en MX/PY/PE |
 | 2 | ¿Cada cuánto se paga? | Mensual | Calendario de pagos |
 | 3 | ¿Importe mínimo de retiro? | Sí — un payout manual de $8 cuesta más en gestión que el pago | Evita cola antieconómica |
 | 4 | ¿Cuántos canales manuales en VE? | Zinli y Zelle; Binance solo a petición | Formulario del tutor |
