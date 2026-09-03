@@ -6,6 +6,12 @@
 > «Infraestructura de Pagos» (Emilio, junio-2026), **cuyo eje de análisis es incorrecto**
 > (ver §9).
 >
+> ✅ **PayPal paga (3-sep-2026).** Primer riel de payout automático fuera de dLocal, probado
+> de punta a punta contra el sandbox: job → adaptador → lote creado → fila `processing`.
+> Detalle en §1.1. Y una medida que corrige a este documento: PayPal **retiene como
+> `UNCLAIMED`** un pago a un correo sin cuenta —el lote dice `SUCCESS` y el dinero NO ha
+> llegado—, así que «el lote salió bien» y «el tutor cobró» son cosas distintas.
+>
 > ⚠️ **Airtm queda descartada (3-sep-2026)**: Enséñame Ya es una entidad estadounidense.
 > Era el payout recomendado de Venezuela y el único camino legal a stablecoin que este
 > documento contemplaba, así que **§4 cambia entero**. El mismo día llegaron las credenciales
@@ -71,7 +77,8 @@ Dos reglas transversales:
 | **El respaldo del checkout (regla 1)** | Hoy el ruteo elige UN proveedor por país; si falla, el cobro no se abre. Hay que definir además qué cuenta como «no disponible»: error de la API, país no soportado, o rechazo de la tarjeta |
 | **Colombia** | No tiene fila en `payment_routing_rules`, y sin fila no se puede vender (`create_booking_line` levanta «sin ruta de pago disponible»). Esa tabla no admite inserts desde fuera → migración |
 | **Los otros países que dLocal cobra** | dLocal cobra en ~17 países y la tabla solo nombra 8 más Venezuela. Los que faltan hoy no se pueden vender |
-| **Adaptadores de PayPal, Wise y payout directo de Stripe** | Tres integraciones. **PayPal y Wise ya tienen credenciales (3-sep)**: lo que falta es código, no cuenta. La de Stripe sigue esperando su autorización por escrito (§5) |
+| ~~**Adaptador de PayPal**~~ | ✅ **Hecho el 3-sep-2026** y ejecutado de verdad contra dev: el job creó el lote `FR6E6SEVN4A5E`, $228,75 a un tutor venezolano, y la fila quedó `processing` con su `provider_payout_id`. Falta pedir **Payouts en vivo** a PayPal (lo activa su soporte) y que un destinatario venezolano REAL reciba |
+| **Adaptadores de Wise y payout directo de Stripe** | Dos integraciones. Wise **no tiene credenciales de API**: su cuenta está en KYB y su sandbox V2 no es autoservicio (se pide a `api@wise.com`). La de Stripe sigue esperando su autorización por escrito (§5) |
 | **Elegir entre varios automáticos** | `payout_provider` es hoy un valor fijo por país. La regla 2 lo convierte en «uno de este conjunto». La pieza que compara existe; la que elige entre candidatos, no |
 
 ⚠️ **En producción, los 8 países de dLocal siguen cobrando por Stripe**, a propósito: la
