@@ -413,7 +413,7 @@ responder la pregunta de dLocal.
 | Qué | Con quién | Nota |
 | :-- | :-- | :-- |
 | Autorización de cross-border payouts a CO | **Stripe** | Por escrito. Ver §5 |
-| ¿Admite destinatarios venezolanos? | **PayPal** | **Lo primero que hay que probar.** Sandbox self-serve, respuesta en horas |
+| ¿Admite destinatarios venezolanos? | **PayPal** | ⚠️ **Confirmado por su documentación, NO por una prueba.** Dos lecturas independientes de la tabla de países de PayPal dicen «Venezuela · Send, receive, and withdraw · VE», y ninguna fuente primaria dice lo contrario (los blogs que dicen que no, sí). Sigue sin ejecutarse: el pago de sandbox a un correo sin cuenta acaba `UNCLAIMED` con el LOTE en `SUCCESS`, y eso pasa con cualquier país — no es evidencia de nada. La prueba que falta es un payout a una cuenta de sandbox domiciliada en VE; la definitiva, una en vivo, y **producción está fuera de alcance por decisión del 3-sep** |
 | Comisión de cobro negociada | **dLocal** | Depende del volumen |
 | Tarifa real de PayPal Payouts | **PayPal** | Varía por cuenta y país |
 
