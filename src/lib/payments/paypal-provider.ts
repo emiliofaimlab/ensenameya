@@ -331,7 +331,19 @@ export function urlDeConexionPaypal(opts: { returnUrl: string; state: string }):
     flowEntry: "static",
     client_id: clientId,
     response_type: "code",
-    scope: "openid https://uri.paypal.com/services/paypal-attributes",
+    // 🔴 `paypalattributes` VA SIN GUION. Con guion PayPal responde «invalid
+    // scope» y no lo dice hasta que el tutor ya está en su pantalla, así que
+    // parece un fallo de configuración del panel y no lo es. Medido el
+    // 4-sep-2026: las cinco variantes probadas y solo la del guion falla.
+    //
+    // `profile` y `email` van porque el destino se crea con el nombre y el
+    // correo que firma PayPal, sin que el tutor teclee nada.
+    scope: [
+      "openid",
+      "profile",
+      "email",
+      "https://uri.paypal.com/services/paypalattributes",
+    ].join(" "),
     redirect_uri: opts.returnUrl,
     state: opts.state,
   });
