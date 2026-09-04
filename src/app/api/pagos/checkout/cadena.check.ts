@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { cadenaDeCobro, porQueNadie, recorreLaCadena, type Salida } from "./cadena.ts";
+import { cadenaDeCobro, nuncaLlego, porQueNadie, recorreLaCadena, type Salida } from "./cadena.ts";
 
 /**
  * Comprobación de la cadena de respaldo del cobro. Sin framework: se corre con
@@ -185,6 +185,34 @@ const ABRE = (quien: string): Salida<string> => ({ tipo: "abierto", cobro: quien
   assert.equal(r.estado, "nadie");
   assert.deepEqual(s.llamados, []);
   assert.ok(porQueNadie(r.intentos).length > 0, "la cadena vacía tiene que explicarse");
+}
+
+// `nuncaLlego`: la línea entre «no se envió» y «no sabemos». Es lo que decide si
+// un dLocal caído deja pasar a Stripe o deja al alumno sin comprar.
+{
+  const caido = Object.assign(new TypeError("fetch failed"), {
+    cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
+  });
+  assert.equal(nuncaLlego(caido), true, "un socket rechazado no pudo abrir ningún cobro");
+
+  const dns = Object.assign(new TypeError("fetch failed"), {
+    cause: Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" }),
+  });
+  assert.equal(nuncaLlego(dns), true, "si el DNS no resuelve, no se envió nada");
+
+  // 🔴 Los que NO pueden caer al siguiente: la petición ya salió.
+  const cortado = Object.assign(new TypeError("fetch failed"), {
+    cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+  });
+  assert.equal(nuncaLlego(cortado), false, "un reset ocurre DESPUÉS de enviar: puede haber cobro");
+
+  const tarde = Object.assign(new TypeError("fetch failed"), {
+    cause: Object.assign(new Error("headers timeout"), { code: "UND_ERR_HEADERS_TIMEOUT" }),
+  });
+  assert.equal(nuncaLlego(tarde), false, "un timeout de respuesta no descarta el cobro");
+
+  assert.equal(nuncaLlego(new Error("500 del proveedor")), false, "un 5xx llegó por definición");
+  assert.equal(nuncaLlego(null), false);
 }
 
 console.log("cadena.check.ts · ok");

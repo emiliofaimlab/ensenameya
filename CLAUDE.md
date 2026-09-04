@@ -116,8 +116,10 @@ Ninguna falta de clave rompe la app: el camino se cae al simulado o la cola se q
 
 | Integración | Hoy | Interruptor |
 | :-- | :-- | :-- |
-| **Stripe** (`lib/stripe.ts`) | *test mode*, probado de punta a punta contra la preview: Session creada → expirada desde la API → webhook firmado → reserva `cancelled`. API fijada a mano a `2026-07-29.dahlia`. | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET`, y la fila de `payment_routing_rules` (ya un `UPDATE`, no una migración) |
-| **DLocal** | sin cuenta — **rechazada** | — |
+| **Stripe** (`lib/stripe.ts`) | *test mode*, probado de punta a punta contra la preview: Session creada → expirada desde la API → webhook firmado → reserva `cancelled`. API fijada a mano a `2026-07-29.dahlia`. | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET`, y la fila de `payment_routing_rules` — ⚠️ **que se toca con una MIGRACIÓN, no con un `UPDATE`**: aquí ponía lo contrario y esa frase es la causa de que dev y producción llevaran semanas ruteando distinto (`20260904190000`) |
+| **DLocal** (`lib/dlocalgo.ts`) | ✅ **cuenta APROBADA: sandbox y producción, las dos operativas** (confirmado por el cliente el 4-sep-2026). Adaptador de cobro, webhook firmado y payout escritos y verificados contra sandbox. ⚠️ Esta fila dijo durante un mes «sin cuenta — rechazada»: era un rechazo viejo, ya resuelto, y lo repetían seis documentos | `DLOCALGO_API_KEY` + `DLOCALGO_SECRET_KEY` (+ `DLOCALGO_API_BASE` para apuntar a producción) y su fila de `payment_routing_rules` |
+| **PayPal** (`lib/payments/paypal-provider.ts`) | ✅ riel de **payout**, verificado de punta a punta contra sandbox (lote `FR6E6SEVN4A5E`; y un destinatario domiciliado en VE en `SUCCESS`). No cobra: `payment_routing_rules` no lo nombra en ningún `charge_providers` | `PAYPAL_CLIENT_ID` + `PAYPAL_SECRET` (+ `PAYPAL_API_URL` para producción) |
+| **Wise** | ⏳ **lo único que sigue esperando cuenta.** KYB en curso; el sandbox V2 no es autoservicio (se pide a `api@wise.com`). Sin credenciales no hay adaptador | — |
 | **Correo** (`lib/email.ts` → **Resend**) | plantillas y job listos; sin clave la cola ni se toca | `RESEND_API_KEY` |
 | **Grabación de Daily** | ⚠️ **contratada y funcionando** — esta fila decía «add-on sin contratar → hoy no hay nada que borrar» y era falso: `GET api.daily.co/v1/recordings` devuelve **2 grabaciones `finished`** (14-ago, 13 s y 33 s). No hay tabla ni URL guardada **a propósito**: se consultan a Daily en el momento (`lib/daily.ts`). ⚠️ **Y la regla cambió el 2-sep: se graba SIEMPRE.** Esta fila decía que RN-42 exigía el sí de las dos partes y que «lo normal es que una sesión no tenga vídeo». El cliente lo reformuló —**obligatoria y notificada**— y por eso la casilla de la sala pasó de «Acepto» a «Entiendo». `recording_allowed()` devuelve `true` desde `20260902100000`. ⚠️ Y el fallo que tapaba esa premisa: `enable_recording:"cloud"` solo enciende el BOTÓN de grabar, no graba — por eso había 12 salas y 2 grabaciones. Quien arranca es `start_cloud_recording` en el token (`mintToken`); Daily no tiene propiedad de sala para esto. El nombre de sala se **lee** de `sessions.daily_room_name`; derivarlo otra vez es lo que hacía fallar a US-1802 en silencio | `DAILY_API_KEY` |
 | **Referral Factory** | ⚠️ campaña viva (**50297, la única**) pero **SIN atribución de ninguna clase** — esta fila decía «atribución por email» y era falso: esa vía no existe en el código y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea**. Lo único que hace la app es **pintar el enlace/embed** de la campaña (`lib/referral.ts`); quién trajo a quién se queda entero en RF, y ni siquiera eso: sus dos únicos referidos se metieron a mano por API. La cookie `ey-ref` existe y funciona, pero espera un `?ref=` que RF no manda | `NEXT_PUBLIC_REFERRAL_URL` · `NEXT_PUBLIC_REFERRAL_EMBED_URL` — el interruptor real es la **URL**, no la clave |
@@ -260,10 +262,15 @@ C-03→DP-03, C-04→DP-06, C-05→DP-08, C-10→DP-04, C-11→DP-05, C-15→DP-
 cliente responda se consumen como **configuración** (regla de oro 8), no como código.
 El **detalle técnico** sigue viviendo en los Docs 0–9, que **mandan en lo técnico**.
 
-⚠️ **Dos webs de la misma marca sin conectar, y eso bloquea el PSP.** `ensenameya.com` es
-una landing de GoDaddy que **no enlaza a la app** (vive en `ensenameya.vercel.app`), cada una
-con su juego de términos. dLocal **rechazó la cuenta** y no se sabe qué URL presentó el
-cliente. Ningún merge lo arregla: es DNS y negocio.
+⚠️ **Dos webs de la misma marca sin conectar.** `ensenameya.com` es una landing de GoDaddy
+que **no enlaza a la app** (vive en `ensenameya.vercel.app`), cada una con su juego de
+términos. Se resuelve con la **migración de dominio**, que es DNS y negocio, no un merge.
+✅ **Ya no bloquea a ningún PSP**: dLocal aprobó la cuenta (sandbox y producción). Aquí ponía
+que la había rechazado y llevaba semanas siendo falso.
+
+⚠️ **Nada está en producción y nadie conoce el sitio.** Todo el trabajo —pagos incluidos— se
+hace y se prueba contra **dev**. Lo que haya en las tablas de prod no es una medida de nada;
+se enciende después de la migración de dominio.
 
 ## Skills del proyecto
 

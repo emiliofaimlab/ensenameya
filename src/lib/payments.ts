@@ -107,7 +107,21 @@ export async function chargeProvidersFor(
  * que una `s` de más en 'dlocals' habría metido el país en el desplegable del
  * tutor y lo habría dejado atascado más tarde, en el formulario bancario.
  */
-export type FamiliaDeDato = "banco" | "identificador";
+export type FamiliaDeDato = "banco" | "identificador" | "conectada";
+
+/**
+ * ⚠️ 'conectada' ES UNA TERCERA FAMILIA Y NO UN 'banco' RARO, aunque el dinero
+ * acabe en un banco igual. La diferencia no es cosmética: en las otras dos el
+ * tutor nos ENTREGA un dato que guardamos (un CBU, un correo de PayPal); en
+ * esta no nos entrega nada — se da de alta en Stripe, le da sus coordenadas a
+ * ELLOS y lo único que vuelve es un identificador de cuenta que escribimos
+ * nosotros, no él.
+ *
+ * Meterla en 'banco' habría pintado el formulario bancario de dLocal a un tutor
+ * cuyo payout no lo usa: campos rellenos, guardados, validados… y un payout que
+ * no los mira. Es exactamente el fallo que `datoQueSePide` existe para evitar,
+ * un piso más abajo.
+ */
 
 /** Quién mueve el dinero cuando llega el momento. */
 export type QuienEjecuta = "proveedor" | "persona";
@@ -187,12 +201,14 @@ export const RIEL_BANCO_MANUAL = "banco-manual";
 const RIELES: Record<string, Riel> = {
   [stripeProvider.key]: {
     clave: stripeProvider.key,
-    dato: "banco",
+    // Connect: el tutor no nos da coordenadas, se da de alta en Stripe.
+    dato: "conectada",
     ejecuta: "proveedor",
     ataduraDeBalance: true,
-    // Hoy devuelve siempre una frase («exige Connect, y Connect exige el KYC
-    // bloqueado»), así que este riel nunca puede pagar. Se pregunta igual, para
-    // que el día que se autorice no haya que tocar esto.
+    // ⚠️ Desde el 4-sep-2026 esto puede devolver `true`: el adaptador de Connect
+    // existe. Aquí ponía que «este riel nunca puede pagar» porque
+    // `missingPayoutConfig()` devolvía siempre una frase sobre un KYC que ya no
+    // bloquea nada.
     puedePagar: () => stripeProvider.missingPayoutConfig() === null,
   },
   [dlocalProvider.key]: {

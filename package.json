@@ -9,7 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:push": "npx supabase db push",
-    "db:types": "npx supabase gen types typescript --linked > src/lib/database.types.ts.tmp && grep -q 'export type Database' src/lib/database.types.ts.tmp && mv src/lib/database.types.ts.tmp src/lib/database.types.ts || (rm -f src/lib/database.types.ts.tmp; echo '✗ db:types falló — database.types.ts NO se ha tocado'; exit 1)",
+    "db:types": "npx supabase gen types typescript --linked > src/lib/database.types.ts.tmp && grep -q 'export type Database' src/lib/database.types.ts.tmp && mv src/lib/database.types.ts.tmp src/lib/database.types.ts || (rm -f src/lib/database.types.ts.tmp; echo '\u2717 db:types fall\u00f3 \u2014 database.types.ts NO se ha tocado'; exit 1)",
     "db:seed": "bash -c 'set -a; . ./.env.local; set +a; PATH=\"/opt/homebrew/opt/libpq/bin:$PATH\" psql \"$SUPABASE_DB_URL\" -v ON_ERROR_STOP=1 -f supabase/seed/dev-poblar.sql'",
     "db:seed:imagenes": "node supabase/seed/dev-imagenes.mjs",
     "check:email": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/email-templates.check.ts",
@@ -17,7 +17,8 @@
     "check:ics": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/calendar/ics-format.check.ts",
     "check:chat": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/chat/limits.check.ts",
     "check:cadena": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/app/api/pagos/checkout/cadena.check.ts",
-    "check:paypal": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/paypal-mapeo.check.ts"
+    "check:paypal": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/paypal-mapeo.check.ts",
+    "check:connect": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/connect-mapeo.check.ts"
   },
   "dependencies": {
     "@daily-co/daily-js": "^0.91.0",

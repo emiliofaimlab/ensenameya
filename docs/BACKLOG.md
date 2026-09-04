@@ -399,8 +399,8 @@ sus **5 pasos** (`tutor-onboarding-form.tsx`, pasos 1–5) desde IV-02, y el gat
 27-jul (`66f70e0`). Lo único abierto de dev son los **5 tickets del Sprint 6 AC**, bloqueados por
 cuentas y claves de Stripe/DLocal — **no por la decisión**, que C-01 ya cerró. ⚠️ **Corrección del
 7-ago:** ese bloqueo era **medio bloqueo**. El *sandbox* de Stripe no exige KYC, así que `PAC-01`
-(`EY-93`) y `PAC-03` (`EY-95`) **están construidas y probadas en test mode**; lo que sigue parado es
-DLocal —cuenta **rechazada**— y los payouts. Ver §4.5.
+(`EY-93`) y `PAC-03` (`EY-95`) **están construidas y probadas en test mode**; lo que seguía parado era
+DLocal. ✅ **Superado el 4-sep-2026: su cuenta está aprobada, sandbox y producción.** Ver §4.5.
 
 ### 4.1 Tracks paralelos (fuera de S1–S4)
 
@@ -409,7 +409,7 @@ No consumen SP de los sprints de dev. Se filtran en Jira por label.
 | Track | Épica | Jira | Estado | Nota |
 | :-- | :-- | :-- | :-- | :-- |
 | `Sprint-Diseño` | EP-19 | EY-88…91 (DS-01…04) | **In Review** (Diana Rivera) | Entregable Figma, no código. Precede al rediseño visual de pantallas ya construidas. |
-| `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) + `EY-147` | 🟡 **A medias** (antes: 🔒 bloqueada) — hoy **Sprint 6 AC**, vencido el 31-jul y aún abierto | C-01 **decidido: DLocal + Stripe** (resuelta, no bloquea). "Con una cuenta Stripe en *test mode* la mitad es ejecutable" → **se ejecutó el 6-ago**: `PAC-01` y `PAC-03` funcionan de punta a punta contra Stripe. 🔒 Siguen bloqueados **DLocal entero** (cuenta **rechazada**) y los **payouts** (Connect exige KYC). Ver §4.5. |
+| `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) + `EY-147` | 🟡 **A medias** (antes: 🔒 bloqueada) — hoy **Sprint 6 AC**, vencido el 31-jul y aún abierto | C-01 **decidido: DLocal + Stripe** (resuelta, no bloquea). "Con una cuenta Stripe en *test mode* la mitad es ejecutable" → **se ejecutó el 6-ago**: `PAC-01` y `PAC-03` funcionan de punta a punta contra Stripe. ✅ **DLocal desbloqueado el 4-sep-2026** (cuenta aprobada, sandbox y producción) y su adaptador está escrito. De los payouts, PayPal y dLocal ya ejecutan; falta Wise (sin credenciales) y el payout directo de Stripe (Connect). Ver §4.5. |
 | `Sprint-Mejoras-UX` | EP-21 | EY-98…101 (UX-201…204) | ✅ **Done** (ninguna aparece ya entre los `To Do`/`In Review`) | Redefinía US-201/202/203 — **ya ejecutado**, ver aviso abajo. |
 | `Sprint-Integracion-Visual` | EP-22 | EY-103…108 (IV-01…06) | **Las 6 IV en `Done` desde el 27-jul** · en prod 2026-07-22 | **Código.** Aplica el Figma sobre pantallas ya funcionales. Ver §4.2. |
 | — | EP-23 | EY-111…118 (DD-01…08) | **Las 8 cerradas**: DD-01/02/07/08 en `Done`, DD-03/04/05/06 en `In Review` | Huecos de modelo destapados por EP-22. Ver §4.3 y §4.4. |
@@ -1096,10 +1096,11 @@ no puede depender de quién mira) y el **icono de categoría deja de vivir en el
 `categories.icon` (`20260805120000`), elegible desde el modal del panel, con la paleta de
 `category-icons.ts` como **lista blanca y menú a la vez**. Toca `US-1102`.
 
-**7) dLocal rechazó la cuenta.** Sin saber qué URL presentó el cliente. El problema de fondo **no lo
-arregla ningún merge**: `ensenameya.com` es una landing de GoDaddy que **no enlaza a la app**, que vive
-en `ensenameya.vercel.app`. Son **dos webs de la misma marca sin conectar, con dos juegos de términos**
-(§4.3, DD-06). Es DNS y negocio, y **bloquea el PSP**.
+**7) ~~dLocal rechazó la cuenta.~~** ✅ **Resuelto: cuenta aprobada, sandbox y producción**
+(4-sep-2026). Lo que queda de este punto es lo otro: `ensenameya.com` es una landing de GoDaddy que
+**no enlaza a la app**, que vive en `ensenameya.vercel.app` — **dos webs de la misma marca con dos
+juegos de términos** (§4.3, DD-06). Se cierra con la **migración de dominio**, y ya no bloquea a
+ningún PSP.
 
 ---
 

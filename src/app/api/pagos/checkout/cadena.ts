@@ -161,3 +161,43 @@ export function porQueNadie(intentos: Intento[]): string {
   if (intentos.length === 0) return "no hay ninguna pasarela configurada para este destino";
   return intentos.map((i) => `${i.clave}: ${i.motivo}`).join(" · ");
 }
+
+/**
+ * ¿Este error demuestra que la petición NUNCA LLEGÓ al proveedor?
+ *
+ * Existe por la regla del cliente (4-sep-2026): «si dLocal está caído por fallo
+ * de sistema, mostramos Stripe». `recorreLaCadena` paraba en TODO lo que
+ * lanzara, así que un dLocal apagado dejaba al alumno con un 503 y Stripe
+ * intacto detrás — el respaldo no respaldaba justo en el caso para el que se
+ * escribió.
+ *
+ * 🔴 LA LÍNEA NO ES «FALLÓ» / «NO FALLÓ», ES «SE ENVIÓ» / «NO SE ENVIÓ», y hay
+ * que mantenerla ahí. `fetch` de Node envuelve los errores de socket en
+ * `TypeError: fetch failed` con el motivo real en `cause.code`. Los de FASE DE
+ * CONEXIÓN —DNS que no resuelve, puerto cerrado, no se pudo abrir el socket—
+ * ocurren ANTES de mandar un solo byte: ahí no hay cobro posible y caer al
+ * siguiente candidato es seguro.
+ *
+ * Lo que NO entra, y es deliberado: timeouts de respuesta, `ECONNRESET` y
+ * cualquier 5xx. En esos la petición ya salió y el cobro pudo abrirse; probar
+ * otra pasarela sería arriesgar DOS cobros vivos, que es lo que paga el alumno.
+ *
+ * ponytail: una lista de códigos, no una taxonomía de errores de red. El techo
+ * es que solo cubre el caído de verdad; si un día hace falta cubrir también el
+ * «responde 503 desde su balanceador», eso pide idempotencia en el adaptador
+ * primero, no un código más en esta lista.
+ */
+export function nuncaLlego(e: unknown): boolean {
+  const codigo = (e as { cause?: { code?: unknown } })?.cause?.code;
+  return typeof codigo === "string" && CODIGOS_DE_CONEXION.has(codigo);
+}
+
+const CODIGOS_DE_CONEXION = new Set([
+  "ECONNREFUSED",          // el puerto está cerrado: no hay nadie escuchando
+  "ENOTFOUND",             // el DNS no resuelve su dominio
+  "EAI_AGAIN",             // fallo temporal de DNS
+  "EHOSTUNREACH",          // no hay ruta hasta su host
+  "ENETUNREACH",           // no hay red
+  "UND_ERR_CONNECT_TIMEOUT", // se agotó abriendo el socket, antes de enviar
+  "CERT_HAS_EXPIRED",      // su TLS caducó: el handshake no llegó a completarse
+]);

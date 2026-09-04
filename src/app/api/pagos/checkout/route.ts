@@ -8,7 +8,7 @@ import type { Json } from "@/lib/database.types";
 import { HOLD_POLICY } from "@/lib/policy";
 import { ensureCustomer, esCustomerInexistente, siteUrl } from "@/lib/stripe";
 
-import { cadenaDeCobro, porQueNadie, recorreLaCadena, type Salida } from "./cadena";
+import { cadenaDeCobro, nuncaLlego, porQueNadie, recorreLaCadena, type Salida } from "./cadena";
 
 /**
  * EP-20 / PAC-01 · abre el checkout de Stripe para una reserva y devuelve su
@@ -712,10 +712,13 @@ export async function POST(req: Request) {
       // a poder mirar quien investigue— y hacia fuera va un mensaje sin
       // interioridades del proveedor.
       console.error(`[pagos/checkout] ${quien} lanzó al abrir el cobro:`, e);
-      return {
-        tipo: "en-duda",
-        mensaje: `'${quien}' no respondió y la petición pudo llegar`,
-      };
+      // …salvo que el error demuestre que NO llegó. Un proveedor caído —socket
+      // rechazado, DNS muerto— no ha podido abrir nada, y ese es exactamente el
+      // caso para el que existe la cadena de respaldo. `nuncaLlego` guarda la
+      // línea entre «no se envió» y «no sabemos».
+      return nuncaLlego(e)
+        ? { tipo: "descartado", motivo: `'${quien}' no está accesible (no llegó a recibir la petición)` }
+        : { tipo: "en-duda", mensaje: `'${quien}' no respondió y la petición pudo llegar` };
     }
   };
 

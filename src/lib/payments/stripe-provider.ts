@@ -2,11 +2,23 @@ import "server-only";
 
 import type Stripe from "stripe";
 
-import { isStripeConfigured, publishableKey, stripe } from "@/lib/stripe";
+import {
+  crearTransferencia,
+  cuentaConectadaLista,
+  isStripeConfigured,
+  publishableKey,
+  recuperarTransferencia,
+  stripe,
+  transferenciaPorMarca,
+} from "@/lib/stripe";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { estadoDeTransferencia, verdictoDeTransferencia } from "./connect-mapeo";
+import { marcaDe } from "./port";
 import type {
   ChargeInput,
   ChargeResult,
   CobroRef,
+  PayoutInput,
   PayoutResult,
   PspProvider,
   RefundInput,
@@ -175,6 +187,64 @@ function traducirTipo(
   }
 }
 
+/**
+ * De una `Transfer` de Stripe al desenlace del puerto.
+ *
+ * 🔴 UNA TRANSFERENCIA CREADA ES 'enviado', NUNCA 'pagado', y esa línea es la
+ * misma que ya respeta dLocal Go. `transfers.create` mueve el dinero de nuestro
+ * balance al de la cuenta conectada del tutor: es suyo, pero **no está en su
+ * banco** — eso lo hace después Stripe, con el calendario de payout de esa
+ * cuenta. Escribir 'paid' aquí dispararía NTF-12 («se pagó tu liquidación»)
+ * antes de que el tutor pueda ver un euro, que es exactamente el correo que C1
+ * tuvo que desarmar por mandarse sin que el dinero se moviera.
+ *
+ * ponytail: no se persigue el payout de dentro de la cuenta conectada. El techo
+ * es que 'paid' no llega solo por este riel; quien lo quiera, consulta
+ * `payouts.list({stripeAccount})` y es otra historia.
+ */
+function desenlaceDe(t: Stripe.Transfer, adoptado: boolean): PayoutResult {
+  switch (estadoDeTransferencia(t)) {
+    case "difunta":
+      return {
+        estado: "difunto",
+        payoutId: t.id,
+        detalle: "transfer.reversed",
+        mensaje: "la transferencia se revirtió entera: no pagó y no va a pagar",
+      };
+    case "revertida-en-parte":
+      // ⚠️ NO es 'difunto'. Parte del dinero llegó, así que reintentarla entera
+      // pagaría de más. Se queda en vuelo y la mira una persona.
+      return {
+        estado: "enviado",
+        payoutId: t.id,
+        detalle: `revertida en parte (${t.amount_reversed} de ${t.amount}) — requiere revisión manual`,
+        adoptado,
+      };
+    case "viva":
+      return {
+        estado: "enviado",
+        payoutId: t.id,
+        detalle: adoptado ? "adoptada por su transfer_group" : "transferencia creada",
+        adoptado,
+      };
+  }
+}
+
+/**
+ * El `acct_…` al que va esta orden. Sale de la RPC y no de un `select`: la
+ * función revalida que el payout sea ejecutable antes de soltar el dato, igual
+ * que `payout_beneficiary` con el número de cuenta de dLocal.
+ */
+async function destinoConnect(payoutId: string): Promise<string | null> {
+  const { data, error } = await createAdminClient()
+    .rpc("destino_connect", { p_payout_id: payoutId });
+  // ⚠️ Se MIRA el error (regla de oro 10). Sin esto, una RPC caída se leería
+  // como «el tutor no tiene cuenta» y la orden se quedaría esperando para
+  // siempre por un motivo falso.
+  if (error) throw new Error(`destino_connect: ${error.message}`);
+  return data ?? null;
+}
+
 export const stripeProvider: PspProvider = {
   key: "stripe",
   opensRemoteCheckout: true,
@@ -207,41 +277,134 @@ export const stripeProvider: PspProvider = {
   canRefund: isStripeConfigured,
 
   /**
-   * ⚠️ STRIPE NO PUEDE PAGAR AL TUTOR EN ESTE PROYECTO, Y NO ES CUESTIÓN DE
-   * CREDENCIALES. Pagar a un tercero exige **Connect** —cuentas conectadas bajo
-   * `recipient service agreement`, capability `transfers`—, y Connect exige el
-   * KYC que sigue bloqueado. Poner otra clave no lo arregla.
+   * ⚠️ AQUÍ PONÍA QUE STRIPE NO PODÍA PAGAR «Y NO ES CUESTIÓN DE CREDENCIALES»,
+   * porque Connect exigía un KYC bloqueado. Esa premisa era de agosto y ya no
+   * se sostiene: la cuenta de Stripe está operativa en sandbox y producción, y
+   * lo único que Connect necesita de nosotros es la misma `STRIPE_API_KEY`.
    *
-   * Se dice con una frase y no con `null` a propósito: `null` significa «puedo
-   * pagar» y haría que el job intentase ejecutar contra Stripe órdenes que
-   * ningún balance nuestro puede cubrir. Devolver el motivo hace que esas
-   * órdenes se queden en 'scheduled' —nunca 'failed'— y salgan contadas en la
-   * respuesta del job.
-   *
-   * ⚠️ Y no se confunde con `canRefund()`: devolver dinero por Stripe SÍ
-   * funciona hoy (X-01 lo ejercitó el 30-ago). Lo que no existe es la pata de
-   * salida hacia el tutor.
+   * Lo que SÍ hace falta por tutor —una cuenta conectada dada de alta— no se
+   * responde aquí y no puede: esta pregunta es del JOB, no de una orden. Si la
+   * cuenta del tutor no existe o no está lista, lo dice `payout()` con
+   * `sin-datos`, que deja la fila quieta y contada en vez de parar el lote
+   * entero por una persona.
    */
   missingPayoutConfig() {
-    return "Stripe no puede ejecutar payouts a terceros aquí: exige Connect, y Connect exige el KYC bloqueado (PAC)";
+    return isStripeConfigured() ? null : "falta STRIPE_API_KEY";
   },
 
   /**
-   * El método existe porque está en el puerto y devuelve la verdad, no una
-   * excepción: el job pregunta `missingPayoutConfig()` antes y no llega nunca
-   * aquí. Si alguien lo llama igualmente, lo que obtiene es el motivo — no un
-   * `throw` que tumbe una pasada entera de la cola por una orden mal rutada.
+   * ── EL PAYOUT POR CONNECT ───────────────────────────────────────────────
    *
-   * El día que Connect exista, aquí van `transfers.create` (a la cuenta
-   * conectada) o `payouts.create`, y el resto del job no se toca.
+   * Aquí vivía el stub que devolvía `sin-ejecutor`. Ahora paga.
+   *
+   * ⚠️ ESTE RIEL NO REEMPLAZA A PAYPAL, CUBRE LO QUE PAYPAL NO. Existe por
+   * Colombia y por el resto del mundo, y sobre todo por una asimetría medida el
+   * 4-sep-2026: dLocal COBRA en Colombia y su `POST /v1/payouts` responde
+   * `7000 Payout is not enabled for country CO`. Cobrar y pagar no son la misma
+   * lista de países.
+   *
+   * ⚠️ Y SOLO SIRVE SI EL COBRO ENTRÓ POR STRIPE. `ataduraDeBalance` es `true`
+   * para este riel (`lib/payments.ts`) y la puerta del balance del job descarta
+   * la orden antes de llegar aquí si el dinero está en el balance de otro. No
+   * es una limitación de este archivo: una transferencia sale del saldo de
+   * Stripe, y a Stripe no le consta lo que cobró dLocal.
+   *
+   * ── POR QUÉ NO HAY BARRIDO DE PÁGINAS ──────────────────────────────────
+   *
+   * Porque esta API sí tiene idempotencia. La marca (`EY-<payout>-<intento>`)
+   * viaja como `idempotencyKey` Y como `transfer_group`, así que:
+   *
+   *   · crear dos veces devuelve la MISMA transferencia, no dos;
+   *   · y si la clave caducó (24 h), `transferenciaPorMarca` la encuentra en
+   *     una sola llamada con un filtro exacto.
+   *
+   * Eso es lo que permite devolver `sin-rastro` —la salida que autoriza a
+   * mandar el pago otra vez— con una prueba y no con una corazonada. El
+   * adaptador de dLocal Go necesita 300 líneas para esto mismo porque su API no
+   * ofrece ni una de las dos cosas.
    */
-  async payout(): Promise<PayoutResult> {
-    return {
-      estado: "sin-ejecutor",
-      mensaje:
-        "Stripe no ejecuta payouts en este proyecto (requiere Connect + KYC). " +
-        "La orden se queda en la cola: no es un fallo del payout.",
-    };
+  async payout(input: PayoutInput): Promise<PayoutResult> {
+    const marca = marcaDe(input.payoutId, input.intento);
+
+    try {
+      // ── 1 · una orden ya en vuelo: se sigue, no se crea ───────────────────
+      if (input.providerPayoutId) {
+        return desenlaceDe(await recuperarTransferencia(input.providerPayoutId), false);
+      }
+
+      // ── 2 · una orden reclamada sin identificador: se busca por la marca ──
+      // Nunca se crea en este camino. Si la pasada anterior llegó a crear la
+      // transferencia, está aquí; si no, la lista vacía lo demuestra.
+      if (input.reanudar) {
+        const hallada = await transferenciaPorMarca(marca);
+        return hallada
+          ? desenlaceDe(hallada, true)
+          : {
+              estado: "sin-rastro",
+              mensaje: `no existe ninguna transferencia con transfer_group='${marca}': la creación anterior no cuajó`,
+            };
+      }
+
+      // ── 3 · primer intento ────────────────────────────────────────────────
+      // 🔴 EL DESTINO NO SALE DE ESTE PROCESO. Lo da `destino_connect`, que
+      // revalida la orden dentro de la base: sin esa RPC habría que darle a
+      // `service_role` un grant sobre `tutor_profiles` (regla de oro 9) para
+      // leer un identificador de pago.
+      const destino = await destinoConnect(input.payoutId);
+      if (!destino) {
+        return {
+          estado: "sin-datos",
+          mensaje:
+            "el tutor no ha dado de alta su cuenta de Stripe (Connect). " +
+            "La orden espera: no es un fallo del payout.",
+        };
+      }
+
+      const lista = await cuentaConectadaLista(destino);
+      if (!lista.lista) {
+        // ⚠️ `sin-datos` y no `rechazado`: un alta a medias se completa sola en
+        // cuanto el tutor termine, y enterrar la orden en 'failed' por eso
+        // obligaría a un admin a resucitarla a mano.
+        return {
+          estado: "sin-datos",
+          mensaje: `la cuenta conectada del tutor todavía no puede recibir: ${lista.pendiente}`,
+        };
+      }
+
+      const t = await crearTransferencia({
+        amountMinor: input.amountMinor,
+        currency: input.currency,
+        destination: destino,
+        marca,
+        descripcion: `Ensename Ya · liquidacion ${marca}`,
+      });
+      return desenlaceDe(t, false);
+    } catch (e) {
+      const err = e as { type?: string; code?: string; statusCode?: number; message?: string };
+      const veredicto = verdictoDeTransferencia(err);
+      const mensaje = `Stripe Connect: ${err.code ?? err.type ?? "error"} — ${err.message ?? "sin detalle"}`;
+
+      switch (veredicto) {
+        case "sin-credencial":
+          // `pudoCrear: false` — un 401/403 lo devuelve la propia llamada, así
+          // que no se creó nada y la fila puede volver a la cola intacta.
+          return { estado: "sin-credencial", mensaje, pudoCrear: false };
+        case "sin-fondos":
+          return { estado: "sin-fondos", mensaje };
+        case "sin-datos":
+          // La capability se cayó entre la comprobación y la transferencia. La
+          // fila espera; no es un fallo del payout.
+          return { estado: "sin-datos", mensaje };
+        case "rechazado":
+          return { estado: "rechazado", mensaje, causa: e };
+        case "transitorio":
+          // ⚠️ Y aquí NO hace falta `en-duda`. En dLocal Go un timeout deja la
+          // duda de si el payout se creó; con la clave de idempotencia puesta,
+          // la pasada siguiente repite la misma llamada y Stripe devuelve la
+          // transferencia que hubiera creado, si la creó. La duda no existe.
+          return { estado: "transitorio", mensaje, causa: e };
+      }
+    }
   },
 
   async charge(input: ChargeInput): Promise<ChargeResult> {

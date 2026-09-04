@@ -45,3 +45,9 @@ next-env.d.ts
 
 # salida de la skill graphify (regenerable, no se versiona)
 /graphify-out
+
+# Volcados de variables de entorno. `.env*` NO los cubre: no llevan punto
+# delante. Se coló uno en un commit local el 4-sep-2026 (sin empujar) con la
+# service_role y las claves de Stripe y dLocal dentro.
+env.txt
+*env*.txt

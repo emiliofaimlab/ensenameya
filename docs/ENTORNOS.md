@@ -242,10 +242,10 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
 - [x] Endpoint del webhook registrado y probado de punta a punta (§5).
 - [x] `payment_routing_rules` de **dev** en `'stripe'` — hoy es un `UPDATE`, no una migración (§1).
 - [ ] `sk_live_`, KYC y **payouts** (Connect exige KYC): bloqueados por el cliente.
-- [ ] **DLocal**: la cuenta fue **rechazada**, sin saber qué URL presentó el cliente. El problema de
-  fondo no es de configuración: `ensenameya.com` es una landing de GoDaddy que **no enlaza a la app**
-  (que vive en `ensenameya.vercel.app`), o sea dos webs de la misma marca con dos juegos de términos.
-  Esto **no lo arregla ningún merge**: es DNS y negocio.
+- [x] **DLocal**: ✅ **cuenta aprobada — sandbox y producción** (cliente, 4-sep-2026). Aquí ponía que
+  fue rechazada: era un rechazo de agosto, ya resuelto. Sigue pendiente la **migración de dominio**
+  (`ensenameya.com` es una landing de GoDaddy que no enlaza a la app), pero eso ya no bloquea a ningún
+  PSP.
 
 ### G) Correo — Resend (C-11/DP-05) — [x] cuenta creada y clave puesta (17-ago)
 - [x] Proveedor **decidido: Resend**, por un motivo operativo — es el único de los tres candidatos

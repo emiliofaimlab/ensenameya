@@ -2099,6 +2099,7 @@ export type Database = {
           rating_count: number
           search_text: string | null
           socials: Json
+          stripe_connect_account_id: string | null
           teaching_level: Database["public"]["Enums"]["teaching_level"] | null
           tier_id: string | null
           updated_at: string
@@ -2120,6 +2121,7 @@ export type Database = {
           rating_count?: number
           search_text?: string | null
           socials?: Json
+          stripe_connect_account_id?: string | null
           teaching_level?: Database["public"]["Enums"]["teaching_level"] | null
           tier_id?: string | null
           updated_at?: string
@@ -2141,6 +2143,7 @@ export type Database = {
           rating_count?: number
           search_text?: string | null
           socials?: Json
+          stripe_connect_account_id?: string | null
           teaching_level?: Database["public"]["Enums"]["teaching_level"] | null
           tier_id?: string | null
           updated_at?: string
@@ -2457,6 +2460,7 @@ export type Database = {
       }
       create_order: { Args: { p_lines: Json }; Returns: string }
       delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
+      destino_connect: { Args: { p_payout_id: string }; Returns: string }
       enqueue_notification: {
         Args: {
           p_channel: string
