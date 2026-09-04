@@ -190,17 +190,28 @@ function traducirTipo(
 /**
  * De una `Transfer` de Stripe al desenlace del puerto.
  *
- * 🔴 UNA TRANSFERENCIA CREADA ES 'enviado', NUNCA 'pagado', y esa línea es la
- * misma que ya respeta dLocal Go. `transfers.create` mueve el dinero de nuestro
- * balance al de la cuenta conectada del tutor: es suyo, pero **no está en su
- * banco** — eso lo hace después Stripe, con el calendario de payout de esa
- * cuenta. Escribir 'paid' aquí dispararía NTF-12 («se pagó tu liquidación»)
- * antes de que el tutor pueda ver un euro, que es exactamente el correo que C1
- * tuvo que desarmar por mandarse sin que el dinero se moviera.
+ * 🔴 UNA TRANSFERENCIA VIVA ES 'pagado', Y AQUÍ DECÍA LO CONTRARIO.
  *
- * ponytail: no se persigue el payout de dentro de la cuenta conectada. El techo
- * es que 'paid' no llega solo por este riel; quien lo quiera, consulta
- * `payouts.list({stripeAccount})` y es otra historia.
+ * Este comentario sostenía que una transferencia creada es 'enviado' y nunca
+ * 'pagado', porque el dinero está en la cuenta conectada del tutor y no en su
+ * banco. El razonamiento suena bien y es **incoherente con PayPal**, que es el
+ * otro riel de este mismo sistema: allí un item `SUCCESS` significa que el
+ * dinero está en el saldo de PayPal del tutor —tampoco en su banco— y eso sí lo
+ * escribimos 'paid'.
+ *
+ * Son el mismo estado: el dinero es del tutor, en su cuenta del proveedor.
+ * Medirlos con reglas distintas tenía una consecuencia concreta y mala: los
+ * payouts de Stripe **no se cerraban nunca**. Se quedaban en 'processing' para
+ * siempre, el tutor no veía «Pagado» y `payouts_backlog()` los contaba como
+ * sospechosos de no estar conciliados.
+ *
+ * ⚠️ Y no hay un estado intermedio que perderse, al revés que en PayPal:
+ * `transfers.create` mueve el dinero en el acto. No existe el equivalente al
+ * `UNCLAIMED` que nos tuvo toda la tarde del 4-sep, porque no hay nada que el
+ * destinatario tenga que reclamar.
+ *
+ * ponytail: no se persigue el payout de dentro de la cuenta conectada al banco
+ * del tutor. El techo es ese, y es el mismo que aceptamos en PayPal.
  */
 function desenlaceDe(t: Stripe.Transfer, adoptado: boolean): PayoutResult {
   switch (estadoDeTransferencia(t)) {
@@ -222,7 +233,7 @@ function desenlaceDe(t: Stripe.Transfer, adoptado: boolean): PayoutResult {
       };
     case "viva":
       return {
-        estado: "enviado",
+        estado: "pagado",
         payoutId: t.id,
         detalle: adoptado ? "adoptada por su transfer_group" : "transferencia creada",
         adoptado,
