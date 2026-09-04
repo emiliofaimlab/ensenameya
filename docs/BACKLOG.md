@@ -21,7 +21,8 @@
 > Diseño UX/UI y Contenido** (pre-desarrollo), que el docx original no traía. Este `.md` lo refleja.
 >
 > **Sync 2026-07-14:** Jira añadió tres épicas que el docx v1.0 no traía: **EP-19** (diseño UI, track
-> paralelo), **EP-20** (activación comercial: DLocal + Stripe reales, **bloqueada** por credenciales)
+> paralelo), **EP-20** (activación comercial: DLocal + Stripe reales — ✅ **desbloqueada el 4-sep-2026**,
+> las dos cuentas operativas)
 > y **EP-21** (UX del onboarding del tutor). No pertenecen a los sprints S1–S4 de dev; se rastrean
 > por **label de Jira** (`Sprint-Diseño`, `Sprint-Activacion-Comercial`, `Sprint-Mejoras-UX`), no por
 > el campo Sprint. Ver §4.1.
@@ -53,7 +54,9 @@
 >
 > ⚠️ ~~**Sigue sin haber nada de esto en producción.**~~ **Desplegado el 26-ago** (`main` =
 > `3fca8b2`). El párrafo describía el estado al 7-ago, cuando `main` seguía en `57edfa9` y faltaban
-> 20 migraciones. Al **30-ago** quedan **7** por aplicar y `dev` va 52 commits por delante.
+> 20 migraciones. ✅ **Al 4-sep-2026 las dos ramas están ALINEADAS** (`main` = `6cff50d`): cero commits y
+> cero migraciones de diferencia. Antes decía: «al 30-ago quedan 7 por aplicar y `dev` va 52
+> commits por delante».
 
 ---
 
@@ -81,7 +84,7 @@
 | EP-17 | Chat de la Reserva (v3) | S | 13 | S3 |
 | EP-18 | Grabación de la Sesión (v3) | S | 13 | S4 |
 | EP-19 | Diseño UI — Implementación Visual · Jira EY-87 | M | — | Track diseño (paralelo) |
-| EP-20 | Activación Comercial — DLocal + Stripe reales · Jira EY-92 | M | — | 🔒 Bloqueada (credenciales) |
+| EP-20 | Activación Comercial — DLocal + Stripe reales · Jira EY-92 | M | — | ✅ Desbloqueada (4-sep-2026): las dos cuentas operativas |
 | EP-21 | UX Onboarding Continuo del Tutor · Jira EY-97 | S | — | Track UX (paralelo) |
 | EP-22 | Sprint Integración Visual — Look & Feel · Jira EY-102 | M | — | Track visual (paralelo, **dev**) |
 | EP-23 | Datos que el diseño necesita y no existen · Jira EY-110 | S | — | Derivada de EP-22 |
@@ -1068,7 +1071,9 @@ Bypass* de Vercel → reserva `cancelled`, pago `failed`, `pending_webhooks=0`. 
 - **Fuera de alcance a propósito:** reembolsos por webhook (`US-704`). `refund_payment` arrastra el
   mismo bug de `has_role('admin')` que tenía `confirm_payment`, y arreglarlo bien exige decidir quién
   es la fuente de verdad del reembolso.
-- 🔒 **Sigue bloqueado:** **DLocal entero** (sin cuenta) y los **payouts** de EP-10 (Connect exige KYC).
+- ~~🔒 **Sigue bloqueado:** DLocal entero (sin cuenta) y los payouts de EP-10 (Connect exige KYC).~~
+  ✅ **Las dos cosas cayeron:** dLocal con cuenta aprobada, y los payouts ejecutando por PayPal
+  (3-sep) y Stripe Connect (4-sep-2026). Queda **Wise**, que sigue sin credenciales de API.
 
 **4) Referidos — el hallazgo que cambia el alcance de EP-13.** Está contado entero en el 🔴 de EP-13
 (§2). Resumen para el tablero: **`EY-79` (`US-1302`) hay que rehacerlo** —la atribución pasa a ser por

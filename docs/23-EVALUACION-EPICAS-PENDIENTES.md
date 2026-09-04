@@ -193,13 +193,13 @@ idempotencia del camino del dinero**. Barato de escribir; caro de descubrir tard
 
 ### 23.3.4 · Lo que **no** hay que rehacer, y conviene decirlo
 
-- **Los payouts no salen hoy de Postgres.** `process_scheduled_payouts` marca `provider =
-  'simulated'` y `paid_at = now()` sin llamar a nadie
-  ([`20260716140000:165-187`](../supabase/migrations/20260716140000_ep10_payouts.sql)). El puerto de
-  pagos **no tiene** método `payout()` y está explicado por qué
-  ([`src/lib/payments/port.ts:15-23`](../src/lib/payments/port.ts)). Así que repartir un cobro entre
-  dos tutores **no es hoy un problema de Stripe Connect**: es un problema de modelo de datos. Con
-  el diseño A, deja de serlo.
+- ~~**Los payouts no salen hoy de Postgres.**~~ ⚠️ **Caducado (4-sep-2026).** Cuando se escribió
+  esto era cierto y ya no: el puerto **sí tiene** `payout()`, hay job
+  (`/api/cron/payouts-process`) y **tres rieles que ejecutan de verdad** — dLocal Go, PayPal
+  (`FR6E6SEVN4A5E`, 3-sep) y **Stripe Connect** (`tr_1UBxVvHLJB7CRIwfB3VzPYpX`, 4-sep).
+  **Pero la conclusión de este punto NO cambia, y es lo que importa aquí:** repartir un cobro entre
+  dos tutores sigue sin ser un problema de Stripe Connect — es un problema de modelo de datos
+  (`payout_items.payment_id` es `unique`). Con el diseño A, deja de serlo.
 - Con el diseño A, **`payouts`, `payout_items`, `build_payout_for_tutor`, `tutor_balance`,
   `manage_payout`, `request_withdrawal` y el clawback de US-704 no se tocan.**
 
@@ -592,7 +592,7 @@ Honestidad sobre los huecos. Nada de esto se ha rellenado con suposiciones.
 | :-- | :-- | :-- |
 | El texto exacto de las nueve fichas y de `EY-174` | No están en el repo; `docs/BACKLOG.md` no las recoge | Leerlas en Jira |
 | Cada cuánto releen Google y Apple un calendario suscrito | Es comportamiento de terceros, no del repo | Prueba real con las dos aplicaciones antes de prometer plazos |
-| Si `payments` de Stripe permite el reparto por línea con un solo cargo cuando llegue Connect | Connect está bloqueado por KYC y no hay adaptador de payouts en el repo | Cuenta de Connect operativa. **Hoy es irrelevante**: los payouts no salen de Postgres |
+| Si `payments` de Stripe permite el reparto por línea con un solo cargo | ⚠️ **La columna de la derecha caducó el 4-sep-2026**: Connect **no** está bloqueado por KYC (nunca lo estuvo para el acuerdo *recipient*) y **sí** hay adaptador de payouts. Lo que sigue en pie es que el reparto por línea no lo resuelve Connect | Sigue siendo irrelevante para EP-25: el límite es `payout_items.payment_id unique`, no el PSP |
 | Si la anonimización debe tocar el esquema `auth` desde SQL o ir por la API de administración | Hay precedente de las dos formas; el repo no ha tenido que elegir todavía | Media jornada de prueba y una decisión de equipo |
 | El estado real de las nueve en Jira frente a `dev` | El propio `CLAUDE.md` avisa de que Jira va por detrás | Un repaso de Jira con el git log delante |
 

@@ -2,7 +2,8 @@
 
 > MVP web: marketplace de tutorías **1:1 en vivo** (alumno ↔ tutor) con reservas,
 > pagos (**capa agnóstica** por geografía; proveedor **decidido: DLocal + Stripe** —
-> **Stripe ya cobra en *test mode***, DLocal sigue sin cuenta), videollamada (Daily)
+> **Stripe y dLocal cobran los dos**, con cuenta aprobada en sandbox y producción;
+> los payouts salen por **PayPal** y **Stripe Connect**), videollamada (Daily)
 > y panel admin. **Monorepo:** frontend Next.js + backend Supabase en este mismo repo.
 
 ## Planificación — qué construir y en qué orden
@@ -25,16 +26,27 @@ quedaron cortos; el marco actual salió de la reunión del 24-jul). En Jira: **9
 - **El PR #11 ya se mergeó** (`1a36da2`): Sprint 7 completo y Sprint 8 casi, las 15
   historias están en `dev` aunque en Jira sigan en `In Review`. El detalle, tanda a tanda
   y con SHA, está en `docs/PLAN-DESARROLLO.md`.
-- ~~**Queda UN merge: `dev` → `main`.**~~ ✅ **Se hizo el 26-ago** (`main` = `3fca8b2`): las
-  legales, Stripe, el correo y la purga están desplegados. Al **30-ago** `dev` va **52 commits**
-  y **7 migraciones** por delante (prod tiene 111 de 118) — un merge de una semana, no de dos
-  meses. ⚠️ Ese merge fue también lo que dio **reloj** a los dos crons de Actions, que a partir
-  del 27 fallaron en rojo cada pocas horas hasta el 30 (ver más abajo).
+- ✅ **`dev` y `main` están ALINEADAS (4-sep-2026, `main` = `6cff50d`).** Cero commits de
+  diferencia y cero migraciones pendientes: el CI las aplicó las cuatro a producción sin un
+  error (run `#33881321906`). Verificado además contra prod, no supuesto: `/terms` responde
+  **200** —llevaba meses en 404— y `/api/tutor/stripe-connect` responde 405 a un GET, o sea
+  que la ruta está desplegada.
+  ⚠️ **Y lo que hacía que las dos bases NO coincidieran no era el merge.** Era que el ruteo de
+  pagos se tocaba con `UPDATE`s a mano en dev, que nunca existieron como fichero: dev cobraba
+  por dLocal y prod por `simulated`, y no había nada que aplicar. Lo arregla
+  `20260904190000`, que declara el ruteo entero. **Tocar `payment_routing_rules` es una
+  migración**, no un `UPDATE` (regla de oro 5).
+  ⚠️ Prod tiene ahora las mismas pasarelas que dev **con claves de *test mode***
+  (`docs/ENTORNOS.md` §3). Se aceptó a sabiendas: el sitio no está lanzado. El interruptor de
+  cobrar de verdad son las claves de Vercel, no esta tabla.
 - **Sprint 6 AC:** la pata de **Stripe** está hecha (PAC-01 y PAC-03 en *test mode*, aunque
   en Jira sigan `To Do`). La premisa de la épica —"no empezar hasta tener AMBAS cuentas"—
   era falsa: el sandbox de Stripe da Sessions, webhooks firmados y reembolsos con solo
-  registrar el email; el KYC solo bloquea *live mode*. Siguen bloqueados **DLocal** entero
-  (sin cuenta) y los payouts (Connect exige KYC).
+  registrar el email; el KYC solo bloquea *live mode*. ✅ **Y desde el 4-sep-2026 no queda
+  nada bloqueado ahí**: dLocal tiene cuenta aprobada (sandbox y producción) y los payouts
+  ejecutan por **PayPal** y **Stripe Connect**. El «Connect exige KYC» que ponía aquí era una
+  premisa de agosto: se probó y no se sostiene (`POST /v1/accounts` con acuerdo *recipient*
+  devuelve 200 en 28 de 31 países). El único riel que espera cuenta es **Wise**.
 - Quedan 5 historias nuevas sin empezar: `EY-148` (RF-03) en Sprint 8, y sin sprint
   `EY-149` (RF-04), `EY-150` (RF-05), `EY-151` (NTF-21) y `EY-153` (SUP-01).
 
@@ -61,7 +73,7 @@ sacados de las migraciones, reembolsos de `lib/policy.ts`. Ojo: **el cliente ya 
 términos publicados en `ensenameya.com` (GoDaddy, marzo-2026), de donde salen el buzón
 oficial **info@ensenameya.com** y su §8 de responsabilidad. Divergimos a propósito en dos
 puntos: el suyo nombra "Stripe o Mercado Pago" y deja los reembolsos vagos, cuando **RN-37
-ya es código**. En prod siguen siendo 404.
+ya es código**. ✅ En prod ya NO son 404: verificado el 4-sep, `/terms` responde 200.
 
 ⚠️ **`EY-109` (buscar sin tildes) se arregló DOS veces.** El intento del 21-jul no
 funcionó; el bueno es del **27-jul** (commit `b032cc5`, migraciones `20260727120000` y

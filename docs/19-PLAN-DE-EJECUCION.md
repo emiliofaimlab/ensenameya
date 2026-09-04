@@ -1,5 +1,22 @@
 # DOC 19 — Plan de ejecución (agosto–septiembre 2026)
 
+> 🔴 **AVISO DE VIGENCIA (4-sep-2026) — lee esto antes que nada de abajo.**
+> Este documento es una **foto de su fecha** y no se reescribe: es el registro de lo que se
+> pensó ese día. Pero **el bloque de pagos que lo ordenaba entero ya no es cierto**, y no en
+> un matiz:
+>
+> | Lo que este doc da por bloqueado | La realidad |
+> | :-- | :-- |
+> | dLocal sin cuenta / rechazada / esperando revisión del sitio | ✅ **Cuenta aprobada, sandbox y producción.** Adaptador de cobro, webhook y payout escritos |
+> | «No hay ni una línea de dLocal en el repo» | ✅ `src/lib/dlocalgo.ts` + `src/lib/payments/dlocal-provider.ts` |
+> | Payouts bloqueados porque «Connect exige KYC» | ✅ **PayPal paga** (3-sep) y **Stripe Connect paga** (4-sep, `tr_1UBxVvHLJB7CRIwfB3VzPYpX`) |
+> | Producción con las legales en 404 | ✅ `/terms` responde **200** |
+> | `dev` por delante de `main` | ✅ **Alineadas** (`main` = `6cff50d`) |
+>
+> El estado vigente de pagos vive en **`docs/PAGOS-Y-PAYOUTS.md`** (§9.1 y §9.2 traen las
+> coberturas **medidas** contra las API, que es lo que corrigió casi todo esto).
+
+
 > **Qué es esto.** La continuación ejecutable del **Doc 18**. Coge todo lo que se pidió la semana
 > pasada —los requisitos de dLocal Go, el correo de Néstor sobre los términos, la lista de Verónica
 > del lado tutor y el Word de contenido de Ennis— lo **contrasta contra el código de `dev`** y lo
@@ -640,9 +657,15 @@ conversión era el tutor que **aún no tiene el rol** (perfil pendiente), no el 
 
 ### Bloque 5 · Después de que dLocal apruebe
 
-**N-09 (payouts).** No es «conectar el sandbox»: **no existe adaptador de payouts**. Con dLocal Go
+~~**N-09 (payouts).** No es «conectar el sandbox»: no existe adaptador de payouts. Con dLocal Go
 aprobado se construye contra dLocal; con Stripe haría falta Connect entero, que exige KYC. **L, y
-empieza cuando dLocal responda.**
+empieza cuando dLocal responda.**~~
+
+✅ **HECHO, y las dos premisas eran falsas (4-sep-2026).** Hay **tres** adaptadores de payout
+—dLocal Go, PayPal y **Stripe Connect**— con job propio (`/api/cron/payouts-process`). Y «Connect
+entero, que exige KYC» no era así: para el acuerdo *recipient* basta la `STRIPE_API_KEY` que ya
+había. Medido, no leído: `tr_1UBxVvHLJB7CRIwfB3VzPYpX`, $228,75 a una cuenta conectada colombiana.
+Esto **no esperó a dLocal**, y esa dependencia era el error de este punto.
 
 > ⚠️ Los jobs de payout son **pg_cron dentro de Postgres**, no crons de Vercel: grepear el repo no
 > los encuentra. Un saldo sembrado para la demo **se convierte solo en «Ya pagado»** en el siguiente
