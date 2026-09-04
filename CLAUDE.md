@@ -2,7 +2,8 @@
 
 > MVP web: marketplace de tutorías **1:1 en vivo** (alumno ↔ tutor) con reservas,
 > pagos (**capa agnóstica** por geografía; proveedor **decidido: DLocal + Stripe** —
-> **Stripe ya cobra en *test mode***, DLocal sigue sin cuenta), videollamada (Daily)
+> **Stripe y dLocal cobran los dos**, con cuenta aprobada en sandbox y producción;
+> los payouts salen por **PayPal** y **Stripe Connect**), videollamada (Daily)
 > y panel admin. **Monorepo:** frontend Next.js + backend Supabase en este mismo repo.
 
 ## Planificación — qué construir y en qué orden
@@ -41,8 +42,11 @@ quedaron cortos; el marco actual salió de la reunión del 24-jul). En Jira: **9
 - **Sprint 6 AC:** la pata de **Stripe** está hecha (PAC-01 y PAC-03 en *test mode*, aunque
   en Jira sigan `To Do`). La premisa de la épica —"no empezar hasta tener AMBAS cuentas"—
   era falsa: el sandbox de Stripe da Sessions, webhooks firmados y reembolsos con solo
-  registrar el email; el KYC solo bloquea *live mode*. Siguen bloqueados **DLocal** entero
-  (sin cuenta) y los payouts (Connect exige KYC).
+  registrar el email; el KYC solo bloquea *live mode*. ✅ **Y desde el 4-sep-2026 no queda
+  nada bloqueado ahí**: dLocal tiene cuenta aprobada (sandbox y producción) y los payouts
+  ejecutan por **PayPal** y **Stripe Connect**. El «Connect exige KYC» que ponía aquí era una
+  premisa de agosto: se probó y no se sostiene (`POST /v1/accounts` con acuerdo *recipient*
+  devuelve 200 en 28 de 31 países). El único riel que espera cuenta es **Wise**.
 - Quedan 5 historias nuevas sin empezar: `EY-148` (RF-03) en Sprint 8, y sin sprint
   `EY-149` (RF-04), `EY-150` (RF-05), `EY-151` (NTF-21) y `EY-153` (SUP-01).
 

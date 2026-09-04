@@ -240,8 +240,14 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
   cuentas"): con solo registrar el email hay Sessions, webhooks **firmados**, rechazos, expiraciones
   y reembolsos. El KYC solo bloquea **live mode**.
 - [x] Endpoint del webhook registrado y probado de punta a punta (§5).
-- [x] `payment_routing_rules` de **dev** en `'stripe'` — hoy es un `UPDATE`, no una migración (§1).
-- [ ] `sk_live_`, KYC y **payouts** (Connect exige KYC): bloqueados por el cliente.
+- [x] `payment_routing_rules` — ⚠️ **se toca con una MIGRACIÓN, no con un `UPDATE`**. Aquí ponía lo
+  contrario y esa frase es la causa de que dev y producción llevaran semanas ruteando distinto: los
+  `UPDATE` de dev no existían como fichero, así que no había nada que aplicar en prod. Lo cierra
+  `20260904190000`, que declara el ruteo entero país por país (regla de oro 5).
+- [x] **Payouts** — ✅ **ejecutan**: PayPal (3-sep) y **Stripe Connect** (4-sep-2026). El «Connect exige KYC»
+  que bloqueaba esta línea era falso: `POST /v1/accounts` con acuerdo *recipient* devuelve 200 desde
+  nuestra cuenta en 28 de 31 países probados. Ver `docs/PAGOS-Y-PAYOUTS.md` §9.2.
+- [ ] `sk_live_` y el KYC de *live mode*: sigue siendo del cliente.
 - [x] **DLocal**: ✅ **cuenta aprobada — sandbox y producción** (cliente, 4-sep-2026). Aquí ponía que
   fue rechazada: era un rechazo de agosto, ya resuelto. Sigue pendiente la **migración de dominio**
   (`ensenameya.com` es una landing de GoDaddy que no enlaza a la app), pero eso ya no bloquea a ningún
@@ -447,8 +453,10 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
 **Ramas y despliegue al 30-ago — el merge grande YA SE HIZO.** `main` está en **`3fca8b2`**
 (**26-ago**), no en `57edfa9`: todo lo de agosto —Stripe, correo, legales, `/contacto`, reembolsos,
 purga de grabaciones, `vercel.json` y los dos workflows de cron— está desplegado, y por eso los
-crons empezaron a tener reloj (y a fallar en rojo) el 27. `dev` va hoy **52 commits por delante**
-con **7 migraciones** sin aplicar en prod (111 aplicadas de 118):
+crons empezaron a tener reloj (y a fallar en rojo) el 27. ⚠️ Lo que seguía —«`dev` va hoy 52
+commits por delante con 7 migraciones sin aplicar»— era del **30-ago**. ✅ **Al 4-sep-2026 las dos ramas
+están ALINEADAS** (`main` = `6cff50d`, cero commits y cero migraciones de diferencia; el CI las
+aplicó todas, run `#33881321906`). Lo de abajo se conserva como el relato de aquel día:
 
 ```
 20260827200000_m02_retira_el_auto_aceptar_global.sql
@@ -466,10 +474,13 @@ que describía este párrafo.
 El merge **`dev` → `main`** es el que dispara el job de migraciones de prod. Ojo con el orden de
 siempre: la app nueva contra el esquema viejo revienta.
 
-**Migraciones por ambiente (30-ago).** **dev al día**: 118/118 aplicadas, la última
-`20260828183000_cierre_automatico_de_sesiones_nunca_corrio.sql`. **prod tiene 111**: le faltan las 7
-de arriba, porque el CI solo las aplica al mergear a `main`. El workflow de migraciones lleva
-**22/22 corridas en verde**.
+**Migraciones por ambiente (4-sep-2026).** ✅ **Los dos ambientes al día y con lo MISMO aplicado.** El
+merge de hoy llevó cuatro a producción sin un error —`20260904140000`, `160000`, `170000` y
+`190000`— y la última de ellas trae una autocomprobación que exige fila de ruteo activa para los
+**19 países** más la de por defecto: si a prod le faltara una, ese run estaría en rojo. Está en
+verde, así que las dos tablas de ruteo coinciden por construcción, no por inspección.
+
+Antes decía (30-ago): «dev al día 118/118, **prod tiene 111**, le faltan las 7 de arriba».
 
 *Última edición: 2026-08-30 — `APP_BASE_URL` + `CRON_SECRET` dados de alta en GitHub tras 30
 corridas en rojo; corregido que a Vercel le faltaba `CRON_SECRET` (ya estaba); cadencia real de los

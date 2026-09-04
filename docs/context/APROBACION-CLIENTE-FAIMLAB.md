@@ -1,5 +1,21 @@
 # Enséñame Ya — Validación y Aprobación del Cliente
 
+> ℹ️ **ESTADO DE LAS DECISIONES (4-sep-2026).** Este documento es la **v1 para firma** (9-jun-2026)
+> y no se reescribe. Lo que ha cambiado desde entonces en sus `C-xx`:
+>
+> | | Estado |
+> | :-- | :-- |
+> | **C-01** proveedores | ✅ **dLocal + Stripe**, los dos con cuenta operativa (sandbox y producción). Payouts por PayPal y Stripe Connect |
+> | **C-03** reembolsos | ✅ RN-37 — ≥24 h 100 %, <24 h alumno 50 %, tutor 100 %. Es código (`lib/policy.ts`) |
+> | **C-11** correo | ✅ **Resend** |
+> | **C-14** KYC | ✅ 7 documentos (`20260715130000`) |
+> | **C-13** mercado | ⏳ **El único bloqueante de negocio que queda** |
+>
+> Ojo a un párrafo de §«proveedor por país» que este doc da por bueno y **es falso**: dice que
+> Venezuela «requeriría un riel USDT y una entidad fuera». **No**: Venezuela cobra por Stripe y
+> cobra por PayPal, las dos cosas verificadas. El mapa vigente está en `docs/PAGOS-Y-PAYOUTS.md`.
+
+
 > **Documento comercial / de aprobación.** Conversión fiel a Markdown del PDF
 > `APROBACION-CLIENTE-FAIMLAB.pdf` (v1 · 2026-06-09). Resumen **completo y no técnico**
 > para revisión y firma del cliente. El **detalle técnico** vive en los Docs 0–9 +

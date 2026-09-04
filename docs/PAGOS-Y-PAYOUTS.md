@@ -74,7 +74,9 @@ Dos reglas transversales:
 - Venezuela cobra por Stripe.
 - Venezuela tiene Zinli, Binance y Zelle como canales manuales, con cierre a mano y
   comprobante obligatorio.
-- Los 8 países que dLocal paga cobran por dLocal (en dev; en producción no, ver abajo).
+- **Los 18 países que dLocal COBRA** cobran por dLocal, con Stripe de respaldo — no los 8 que paga:
+  son dos listas distintas y la diferencia son diez países (§9.1). ✅ **Y desde el 4-sep-2026 también en
+  producción**: `20260904190000` declara el ruteo entero, así que las dos bases dicen lo mismo.
 - **La regla 2 está implementada**: la puerta del balance del job compara
   `payouts.funding_provider` con el ejecutor y rechaza la orden si no coinciden. Es
   exactamente el mecanismo que hace indisponible el payout de Stripe cuando cobró dLocal.

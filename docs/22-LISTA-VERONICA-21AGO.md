@@ -1,5 +1,22 @@
 # DOC 22 — La lista consolidada de Verónica, verificada contra el código
 
+> 🔴 **AVISO DE VIGENCIA (4-sep-2026) — lee esto antes que nada de abajo.**
+> Este documento es una **foto de su fecha** y no se reescribe: es el registro de lo que se
+> pensó ese día. Pero **el bloque de pagos que lo ordenaba entero ya no es cierto**, y no en
+> un matiz:
+>
+> | Lo que este doc da por bloqueado | La realidad |
+> | :-- | :-- |
+> | dLocal sin cuenta / rechazada / esperando revisión del sitio | ✅ **Cuenta aprobada, sandbox y producción.** Adaptador de cobro, webhook y payout escritos |
+> | «No hay ni una línea de dLocal en el repo» | ✅ `src/lib/dlocalgo.ts` + `src/lib/payments/dlocal-provider.ts` |
+> | Payouts bloqueados porque «Connect exige KYC» | ✅ **PayPal paga** (3-sep) y **Stripe Connect paga** (4-sep, `tr_1UBxVvHLJB7CRIwfB3VzPYpX`) |
+> | Producción con las legales en 404 | ✅ `/terms` responde **200** |
+> | `dev` por delante de `main` | ✅ **Alineadas** (`main` = `6cff50d`) |
+>
+> El estado vigente de pagos vive en **`docs/PAGOS-Y-PAYOUTS.md`** (§9.1 y §9.2 traen las
+> coberturas **medidas** contra las API, que es lo que corrigió casi todo esto).
+
+
 > **Qué es esto.** Los **34 puntos** del correo de Verónica del 21-ago («Lista pendientes — Enséñame
 > Ya»), contrastados **uno a uno contra el código de `dev`** y ordenados por prioridad. No es una
 > traducción de la lista a tickets: seis puntos ya están hechos, siete piden deshacer algo que el

@@ -277,10 +277,10 @@ entró en el barrido.
 
 ### 4.1 Antes de abrir
 
-- [ ] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`). Al
-      **30-ago** faltan **7** (prod tiene 111 de 118), de `20260827200000_m02_retira_el_auto_aceptar_global`
-      a `20260828183000_cierre_automatico_de_sesiones_nunca_corrio`. Las 30 que listaba este punto
-      entraron con el merge del **26-ago** (`3fca8b2`): vuelve a ser un merge de una semana.
+- [x] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`).
+      ✅ **Al 4-sep-2026 no falta ninguna**: `main` = `6cff50d` y las dos ramas están alineadas. El run
+      `#33881321906` aplicó las cuatro últimas sin error. Antes decía: «al 30-ago faltan 7 (prod
+      tiene 111 de 118)».
 - [ ] **`npm run db:types` regenerado** y sin cambios pendientes en el PR.
 - [ ] **`lint` + `typecheck` + `build`** en verde.
 - [ ] **Cuenta de admin sembrada** en prod (`supabase/seed/admin-bootstrap.sql`) — y **completar su
@@ -299,10 +299,13 @@ entró en el barrido.
       qué versión y qué idioma. ⚠️ **Las cuentas anteriores al 17-ago no tienen fila** — aceptaron una
       casilla que no dejaba rastro, y de un texto distinto. Decidir antes de abrir si se les vuelve a
       pedir (lo contempla el §34) o se da por buena la anterior.
-- [ ] **Fila de `payment_routing_rules` en prod** apuntando al proveedor que toque. En dev está en
-      `'stripe'`; cambiarla es un `UPDATE`, no una migración. ⚠️ Desde el 17-ago **producción ya tiene
-      `STRIPE_API_KEY`, y es de *test mode*** — si esa fila entrara en `'stripe'` sin cambiar la clave,
-      producción aceptaría tarjetas de prueba y no cobraría ni una real.
+- [x] **`payment_routing_rules` en prod** — ✅ **alineada con dev el 4-sep-2026** por `20260904190000`.
+      ⚠️ **Y aquí estaba escrito el bug de proceso**: «cambiarla es un `UPDATE`, no una migración».
+      Eso es exactamente lo que hizo que las dos bases divergieran durante semanas — los `UPDATE` de
+      dev no existían como fichero. **Ahora es una migración declarativa** (regla de oro 5).
+      ⚠️ El aviso que sí sigue vivo: **producción tiene `STRIPE_API_KEY` de *test mode***, así que
+      acepta la tarjeta 4242 y no cobra nada. Se asumió a sabiendas —el sitio no está lanzado— y el
+      interruptor de cobrar de verdad son las claves de Vercel, no esta tabla.
 - [ ] **Cola de correo vieja vaciada** antes de dar reloj a Actions — §4.6. Es lo único de esta lista
       que hay que hacer **en un orden concreto** y que no se puede deshacer.
 
@@ -408,9 +411,11 @@ nada**, porque un cron que no llega a ninguna parte se parece a un cron que no t
 ### 4.4 Lo que sigue simulado
 
 - **Cobros** — **ya no del todo**: Stripe funciona de punta a punta en **test mode** (§2) y la fila
-  de ruteo de dev está en `'stripe'`. Falta el salto a `sk_live_`, que sí exige KYC. **DLocal sigue
-  entero sin empezar** —no hay cuenta, la solicitud fue **rechazada**— y **los payouts también**,
-  porque Connect exige verificación.
+  de ruteo de dev está en `'stripe'`. Falta el salto a `sk_live_`, que sí exige KYC.
+  ✅ **Lo demás de este punto ya no es cierto y se corrige (4-sep-2026)**: dLocal tiene cuenta aprobada
+  (sandbox y producción) con adaptador de cobro, webhook y payout; y los payouts ejecutan por PayPal
+  y por Stripe Connect. «Connect exige verificación» era una premisa de agosto que se probó y no se
+  sostiene.
 - **Correo** — **C-11 resuelta: Resend**, y el envío es real (`/api/cron/notifications-send`). Se
   eligió por un motivo operativo, no de gusto: es el único de los tres candidatos que deja enviar y
   probar **sin dominio verificado**, y el dominio propio sigue bloqueado. Lo que falta es la
