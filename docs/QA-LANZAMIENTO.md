@@ -431,10 +431,12 @@ guiones— y `join_session` la crea como `'ey-' || replace(id::text,'-','')` —
 coincidían nunca** y no se encontraba ninguna grabación. Ahora se lee `sessions.daily_room_name` en
 vez de volver a derivar el nombre por segunda vez.
 
-**Y el bloqueo de dLocal no lo arregla ningún merge.** Rechazaron la cuenta y no se sabe qué URL
-presentó el cliente, pero el problema de fondo se ve a simple vista: `ensenameya.com` es una landing
-de GoDaddy que **no enlaza a la app** —que vive en `ensenameya.vercel.app`—; dos webs de la misma
-marca sin conectar, con dos juegos de términos. Eso es DNS y negocio, no código.
+**~~Y el bloqueo de dLocal no lo arregla ningún merge.~~** ✅ **No hay tal bloqueo: la cuenta de
+dLocal está aprobada, sandbox y producción** (4-sep-2026); el rechazo era de agosto y se resolvió.
+Lo que sigue abierto es lo otro que decía este párrafo: `ensenameya.com` es una landing de GoDaddy
+que **no enlaza a la app** —que vive en `ensenameya.vercel.app`—; dos webs de la misma marca sin
+conectar, con dos juegos de términos. Se cierra con la **migración de dominio**: DNS y negocio, no
+código.
 
 ### 4.5 Decisiones del cliente que siguen abiertas
 

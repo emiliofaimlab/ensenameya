@@ -785,8 +785,8 @@ cruza una segunda categoría en `CategoryExplorer`. Verificar y cerrar.
   a comprobarlo. La otra copia de esta premisa vivía en `src/lib/payments/port.ts:6-13` y también
   está corregida.
   Estado real: hay cuenta, hay claves en `.env.local`, y el adaptador está escrito y verificado
-  contra el sandbox (`src/lib/payments/dlocal-provider.ts`). Lo que SIGUE bloqueado es la cuenta de
-  **producción** de dLocal, que fue rechazada — y eso es negocio y DNS, no integración.
+  contra el sandbox (`src/lib/payments/dlocal-provider.ts`). ✅ **Y la cuenta de producción también
+  está aprobada** (cliente, 4-sep-2026): aquí ponía que fue rechazada y llevaba semanas siendo falso.
 → **Decisión para Jose:** si se abre una cuenta Stripe en test mode, Sprint 6 AC pasa de 0 a ~50%
 ejecutable en paralelo. Si no, los 5 tickets se quedan quietos y no se toca nada (nada de adaptadores
 especulativos "para cuando lleguen las claves": eso es la regla de oro 8).
@@ -976,7 +976,7 @@ de los cuatro se queda `To Do` hasta que haya contrato.
 | Go de coste de grabación en Daily + dónde se guardan | `EY-85/86` | Cliente / Emilio |
 | Diseños responsive tablet/escritorio | `EY-82` | Diana |
 | ~~Texto legal de términos, privacidad y cookies~~ → ✅ **redactado el 6-ago** contra lo que el código hace. Lo que falta ahora es una **decisión de negocio**: `ensenameya.com` publica otros términos desde marzo | `EY-116` | Cliente |
-| Cuentas + API keys reales DLocal y Stripe | Cerrar Sprint 6 AC | Cliente (Veronica lo pide) — ⚠️ **dLocal rechazó la cuenta** (ver 5–6 de agosto) |
+| ~~Cuentas + API keys reales DLocal y Stripe~~ | Cerrar Sprint 6 AC | ✅ **Las dos, con sandbox y producción** (4-sep-2026). Queda **Wise**, que sigue en KYB |
 
 ---
 
@@ -1401,11 +1401,13 @@ ficción** — GitHub entrega una corrida cada **2-6 horas** (`docs/ENTORNOS.md`
 ⚠️ De paso: `.env.example` **no documenta `STRIPE_WEBHOOK_SECRET` ni `RESEND_API_KEY`**, aunque el
 código las usa.
 
-### 🚫 dLocal rechazó la cuenta
+### ✅ dLocal: cuenta aprobada (sandbox y producción)
 
-Sin saber qué URL presentó el cliente. El problema de fondo no es el formulario: **`ensenameya.com` es
-una landing de GoDaddy que no enlaza a la app**, que vive en `ensenameya.vercel.app`. Dos webs de la
-misma marca sin conectar, con **dos juegos de términos**. Ningún merge lo arregla: es DNS y negocio.
+Confirmado por el cliente el **4-sep-2026**. Aquí ponía «dLocal rechazó la cuenta» y describía un
+rechazo de agosto que ya se resolvió; esa frase se propagó a seis documentos. Lo que sigue abierto es
+otra cosa: **`ensenameya.com` es una landing de GoDaddy que no enlaza a la app**, que vive en
+`ensenameya.vercel.app` — dos webs de la misma marca con **dos juegos de términos**. Se cierra con la
+migración de dominio, y ya no bloquea a ningún PSP.
 
 ### 📌 Qué falta para encender (7-ago)
 
@@ -1419,7 +1421,9 @@ misma marca sin conectar, con **dos juegos de términos**. Ningún merge lo arre
 | Referidos (`EY-78`/`EY-79`) | `NEXT_PUBLIC_REFERRAL_URL` en Vercel (lo único que enciende algo: pinta el bloque). ⚠️ **La atribución no es «rehacerla por email»: es hacerla, y aún no se sabe cómo** — RF no manda código de vuelta y su API tampoco recibe hoy a nadie desde aquí. Decisión de producto antes que código (C-10) | Jose / Cliente |
 | Términos de la campaña de RF | están sin rellenar (plantilla con corchetes) | Cliente / Jose |
 | Cobro real (live mode) | `sk_live_` — o sea el KYC de Stripe del cliente | Cliente |
-| DLocal + payouts | cuenta (rechazada) y contrato; Connect exige KYC | Cliente / Veronica |
+| ~~DLocal~~ | ✅ cuenta aprobada (sandbox y producción), 4-sep-2026 | — |
+| Payout directo de Stripe | adaptador de **Connect** (no escrito) | Jose |
+| Payouts por **Wise** | credenciales de API: KYB en curso, sandbox V2 no autoservicio | Cliente / Wise |
 | ~~Grabación (`EY-85/86`)~~ | ~~el add-on de Daily (go de coste)~~ → ✅ **contratado y verificado el 31-ago**. Sale de la lista de bloqueos | ~~Cliente / Emilio~~ |
 | Un solo contrato legal | decidir qué pasa con los términos de `ensenameya.com` (marzo) y con `ensenameya.com` → app | Negocio |
 | Sentry (`EY-80`) | el DSN | Jose |

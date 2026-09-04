@@ -14,6 +14,13 @@
 > `UNCLAIMED`** un pago a un correo sin cuenta —el lote dice `SUCCESS` y el dinero NO ha
 > llegado—, así que «el lote salió bien» y «el tutor cobró» son cosas distintas.
 >
+> ✅ **dLocal: cuenta APROBADA, sandbox y producción** (cliente, 4-sep-2026). Este documento
+> repitió en cuatro sitios que su cuenta de producción estaba rechazada — venía de un rechazo
+> de agosto que ya se resolvió. **No hay ningún PSP bloqueado por cuenta salvo Wise.**
+>
+> ⚠️ **Nada de esto está en producción, y es deliberado.** El sitio no está lanzado; todo el
+> trabajo de pagos se hace contra **dev**. Prod se configura tras la migración de dominio.
+>
 > ⚠️ **Airtm queda descartada (3-sep-2026)**: Enséñame Ya es una entidad estadounidense.
 > Era el payout recomendado de Venezuela y el único camino legal a stablecoin que este
 > documento contemplaba, así que **§4 cambia entero**. El mismo día llegaron las credenciales
@@ -79,16 +86,17 @@ Dos reglas transversales:
 | **El respaldo del checkout (regla 1)** | Hoy el ruteo elige UN proveedor por país; si falla, el cobro no se abre. Hay que definir además qué cuenta como «no disponible»: error de la API, país no soportado, o rechazo de la tarjeta |
 | **Colombia** | No tiene fila en `payment_routing_rules`, y sin fila no se puede vender (`create_booking_line` levanta «sin ruta de pago disponible»). Esa tabla no admite inserts desde fuera → migración |
 | **Los otros países que dLocal cobra** | dLocal cobra en ~17 países y la tabla solo nombra 8 más Venezuela. Los que faltan hoy no se pueden vender |
-| ~~**Adaptador de PayPal**~~ | ✅ **Hecho el 3-sep-2026** y ejecutado de verdad contra dev: el job creó el lote `FR6E6SEVN4A5E`, $228,75 a un tutor venezolano, y la fila quedó `processing` con su `provider_payout_id`. Falta pedir **Payouts en vivo** a PayPal (lo activa su soporte) y que un destinatario venezolano REAL reciba |
-| **Adaptadores de Wise y payout directo de Stripe** | Dos integraciones. Wise **no tiene credenciales de API**: su cuenta está en KYB y su sandbox V2 no es autoservicio (se pide a `api@wise.com`). La de Stripe sigue esperando su autorización por escrito (§5) |
+| ~~**Adaptador de PayPal**~~ | ✅ **Hecho el 3-sep-2026** y ejecutado de verdad contra dev: el job creó el lote `FR6E6SEVN4A5E`, $228,75 a un tutor venezolano, y la fila quedó `processing` con su `provider_payout_id`. En dev no falta nada. Lo de «vivo» es post-lanzamiento y va con la migración de dominio |
+| **Adaptador de Wise** | Wise **no tiene credenciales de API**: su cuenta está en KYB y su sandbox V2 no es autoservicio (se pide a `api@wise.com`). Es lo único que sigue bloqueado por una cuenta |
+| **Adaptador de payout directo de Stripe** | `stripeProvider.payout()` es un stub que devuelve `sin-ejecutor`. Es una integración de **Stripe Connect**, un producto aparte del cobro: la cuenta de Stripe está bien (sandbox y producción) y eso no lo cambia. Solo aplica a Colombia y resto del mundo, y solo si el cobro entró por Stripe |
 | **Elegir entre varios automáticos** | `payout_provider` es hoy un valor fijo por país. La regla 2 lo convierte en «uno de este conjunto». La pieza que compara existe; la que elige entre candidatos, no |
 
-⚠️ **En producción, los 8 países de dLocal y Venezuela cobran por `simulated`.** Aquí ponía
-«siguen cobrando por Stripe» y era **falso**: verificado el 3-sep-2026 contra la tabla real de
-prod, las diez filas de país llevan `charge_providers = {simulated}` salvo Colombia
-(`{stripe, dlocal}`) y la del «sin declarar» (`{stripe}`). Prod es un *coming soon* sin
-usuarios y nunca tuvo pasarela real ahí. Lo que sigue siendo cierto es el porqué de no poner
-dLocal: su cuenta de PRODUCCIÓN está rechazada.
+ℹ️ **En producción las filas de país cobran por `simulated`, y no significa nada.** El sitio
+**no está lanzado y nadie sabe que existe**: todo se construye y se prueba en **dev**, y prod
+se configura después de la migración de dominio. Encenderlo es un `UPDATE` de
+`payment_routing_rules`, no desarrollo.
+✅ Aquí ponía que dLocal no estaba en prod «porque su cuenta de PRODUCCIÓN está rechazada».
+**Es falso: la cuenta está aprobada, sandbox y producción** (cliente, 4-sep-2026).
 
 🔴 **Y esa frase tumbó el despliegue de migraciones a prod (3-sep-2026).** Dos
 autocomprobaciones —`20260903170000` y `20260903180000`— exigían `charge_providers[1] =
@@ -213,7 +221,7 @@ flowchart LR
   S --> C["Cuenta EY<br/>en dólares"]
   C --> W["Wise ★ RECOMENDADO<br/>a cuenta bancaria en COP<br/>$2,06"]
   C --> PP["PayPal<br/>incluye conversión<br/>$4,20+"]
-  C -.-> ST["Stripe directo a banco<br/>pendiente de autorización<br/>coste ❓"]
+  C -.-> ST["Stripe directo a banco (Connect)<br/>sin adaptador<br/>coste ❓"]
   W --> T["Tutor"]
   PP --> T
   ST --> T
@@ -428,7 +436,7 @@ responder la pregunta de dLocal.
 
 | Qué | Con quién | Nota |
 | :-- | :-- | :-- |
-| Autorización de cross-border payouts a CO | **Stripe** | Por escrito. Ver §5 |
+| Cross-border payouts a CO con **Connect** | **Stripe** | ⚠️ **No es «autorización para usar Stripe»** —la cuenta está operativa, sandbox y producción—: es que su API dice 120 países con CO incluida y su página de «Limitations» dice lo contrario. Un correo de diez minutos antes de escribir un adaptador de Connect. Ver §5 |
 | ¿Admite destinatarios venezolanos? | **PayPal** | ✅ **SÍ, ejecutado el 3-sep-2026.** Una cuenta de sandbox **domiciliada en VE** (`Country: VE`, id `BEWSZFK8MDBWU`) recibió $25: lote e item en `SUCCESS`, sin errores. Lo confirman además dos lecturas independientes de su tabla de países («Venezuela · Send, receive, and withdraw · VE»). ⚠️ **Es sandbox**: no demuestra que en vivo no haya una restricción que el sandbox no modela, y eso solo lo cierra un payout real o PayPal por escrito. Pero es la evidencia más fuerte posible sin producción, y **ya no es una suposición a ciegas** |
 | Comisión de cobro negociada | **dLocal** | Depende del volumen |
 | Tarifa real de PayPal Payouts | **PayPal** | Varía por cuenta y país |
@@ -453,23 +461,23 @@ después congele la cuenta con dinero de tutores dentro. Por eso la prueba de sa
 
 | Fase | Qué | Por qué en este orden |
 | :-- | :-- | :-- |
-| **1** | Payouts **manuales** operativos en Venezuela | Lo más rápido. La deuda con tutores que ya trabajaron no espera a una integración |
-| **2** | **PayPal** automático en Venezuela | Convierte el manual en automático en el mercado principal. Descartada Airtm, es el único candidato — y solo si la prueba de §9 sale bien |
+| ~~**1**~~ | ✅ Payouts **manuales** operativos en Venezuela (Zinli · Binance · Zelle) | Hecho |
+| ~~**2**~~ | ✅ **PayPal** automático en Venezuela | Hecho el 3-sep: adaptador + job ejecutados contra sandbox, y un destinatario domiciliado en VE en `SUCCESS` |
 | **3** | **Wise** para Colombia + resto del mundo | Un solo desarrollo cubre CO, ES, Europa y EE. UU. Mejor retorno por hora |
-| **4** | **dLocal** para los 8 países LATAM | Ya está desarrollado. Solo espera la decisión del spread |
+| ~~**4**~~ | ✅ **dLocal** para los 8 países LATAM | Adaptador escrito, spread decidido (lo asume el tutor) y cuenta aprobada en sandbox y producción |
+| **5** | **PayPal Checkout** (cobrar, no solo pagar) | Lo único de pagos que no tiene ni una línea. Depende de la decisión de negocio 5 |
 
-**Antes de la fase 2**, y en paralelo a todo: la prueba de sandbox de PayPal (§9) y el correo
-a Stripe (§5). Ninguna de las dos bloquea la fase 1.
+De las cuatro fases originales queda **la 3 (Wise)**, y es lo único parado por una cuenta.
 
-⚠️ **Con las credenciales de Wise y PayPal (3-sep) las fases 2 y 3 dejan de estar bloqueadas
-por cuentas.** Lo que las separa del código es la prueba de §9 para la 2 y nada para la 3.
+⚠️ **Wise sigue sin credenciales de API** (KYB en curso; su sandbox V2 se pide a `api@wise.com`).
+Es el único riel que espera a alguien de fuera.
 
 ### Decisiones de negocio pendientes
 
 | # | Pregunta | Recomendación | Desbloquea |
 | :-- | :-- | :-- | :-- |
 | ~~1~~ | ~~¿Quién asume el spread FX de dLocal?~~ | ✅ **Resuelta 2-sep-2026: lo asume el tutor** (en contra de la recomendación de este doc, que era lo contrario). Implementada con factor calibrable | — |
-| ~~1-bis~~ | ~~¿Por dónde cobramos en los 8 países de dLocal?~~ ✅ **Resuelta 3-sep-2026: donde dLocal cubra, se cobra por dLocal; donde no, Stripe.** Aplicado en dev; en producción no, por la cuenta rechazada. Antes decía: ⚠️ Su regla de ruteo dice hoy `charge_provider = stripe` y `payout_provider = dlocal`, y **un payout se paga desde el balance del PSP que cobró**. Verificado EN EJECUCIÓN el 3-sep: la puerta del balance rechaza esas órdenes antes de llamar a nadie. Mientras no cambie, el riel de dLocal **no puede pagar en producción** por bien que estén las cuentas | Cobrar por dLocal en esos 8 países (su `charge_provider` a `dlocal`), o fondear su balance aparte y decidir cómo se entera el job | Los 8 de LATAM. Es el bloqueante real, por delante de los datos que faltan en MX/PY/PE |
+| ~~1-bis~~ | ~~¿Por dónde cobramos en los 8 países de dLocal?~~ ✅ **Resuelta 3-sep-2026: donde dLocal cubra, se cobra por dLocal; donde no, Stripe.** Aplicado en dev; prod se configura tras la migración de dominio. Antes decía: ⚠️ Su regla de ruteo dice hoy `charge_provider = stripe` y `payout_provider = dlocal`, y **un payout se paga desde el balance del PSP que cobró**. Verificado EN EJECUCIÓN el 3-sep: la puerta del balance rechaza esas órdenes antes de llamar a nadie. Resuelto: hoy `charge_providers` de esos países empieza por `dlocal`, así que su balance sí financia el payout | Cobrar por dLocal en esos 8 países (su `charge_provider` a `dlocal`), o fondear su balance aparte y decidir cómo se entera el job | Los 8 de LATAM. Es el bloqueante real, por delante de los datos que faltan en MX/PY/PE |
 | ~~2~~ | ~~¿Cada cuánto se paga?~~ | ✅ **Resuelta 3-sep-2026: se queda como está** — lote semanal, lunes 03:00 UTC (`run-payout-batch`). La recomendación de este doc era mensual | — |
 | ~~3~~ | ~~¿Importe mínimo de retiro?~~ | ✅ **Resuelta 3-sep-2026: se queda como está — no hay mínimo.** La recomendación de este doc era ponerlo | — |
 | ~~4~~ | ~~¿Cuántos canales manuales en VE?~~ | ✅ **Resuelta 3-sep-2026: Zinli, Binance y Zelle.** PayPal queda como riel automático, no manual — su fila del catálogo está apagada, no borrada (`20260903120000`). La de Airtm también, y ahí se queda: descartada el 3-sep | — |
