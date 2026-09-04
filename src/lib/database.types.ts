@@ -2471,6 +2471,7 @@ export type Database = {
         Returns: string
       }
       create_order: { Args: { p_lines: Json }; Returns: string }
+      datos_de_cobro_del_tutor: { Args: { p_tutor: string }; Returns: Json }
       delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
       destino_connect: { Args: { p_payout_id: string }; Returns: string }
       enqueue_notification: {
