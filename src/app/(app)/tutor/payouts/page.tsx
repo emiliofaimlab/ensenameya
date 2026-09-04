@@ -16,6 +16,7 @@ import { WithdrawButton } from "./withdraw-button";
 import { PayoutCountryForm } from "./payout-country-form";
 import { PayoutAccountForm } from "./payout-account-form";
 import { ConnectAlta } from "./connect-alta";
+import { PaypalConectar } from "./paypal-conectar";
 import { PayoutManualForm } from "./payout-manual-form";
 import { leerCanalesManuales, leerDestinosManuales } from "./rpc";
 import {
@@ -476,6 +477,16 @@ export default async function TutorPayoutsPage() {
             <ConnectAlta yaTieneCuenta={Boolean(perfil?.stripe_connect_account_id)} />
           ) : riel === "identificador" ? (
             <>
+              {/* Va PRIMERO, antes del formulario: es el camino que entrega.
+                  Solo cuando PayPal está entre los canales del país — en los
+                  otros (Zelle, Zinli) no hay nada que conectar. */}
+              {canales.some((c) => c.channel === "paypal") ? (
+                <PaypalConectar
+                  conectada={destinos.some(
+                    (d) => d.channel === "paypal" && Boolean(d.verified_account_id),
+                  )}
+                />
+              ) : null}
               {/* El tutor que cambió de un país de banco a uno manual: sus datos
                   bancarios siguen ahí, pero no sirven para pagarle aquí. Mismo
                   criterio que el mensaje simétrico del formulario bancario. */}

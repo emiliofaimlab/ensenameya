@@ -7,6 +7,8 @@ import {
   aDecimal,
   desenlace,
   loteYaExistente,
+  receptorDe,
+  type BeneficiarioPaypal,
   type LotePaypal,
 } from "./paypal-mapeo";
 import type {
@@ -223,7 +225,15 @@ export const paypalProvider: PspProvider = {
       return { estado: "rechazado", mensaje: eBenef.message, causa: eBenef };
     }
 
-    const b = benef as { holder_name: string; handle: string };
+    // 🔑 A QUIÉN Y CÓMO. La cuenta conectada gana al correo siempre: ver
+    // `receptorDe`, que lleva la medición del 4-sep escrita al lado.
+    const receptor = receptorDe(benef as BeneficiarioPaypal);
+    if (!receptor) {
+      return {
+        estado: "sin-datos",
+        mensaje: "el tutor no tiene ni cuenta de PayPal conectada ni correo de cobro",
+      };
+    }
 
     try {
       const lote = (await paypalFetch("/v1/payments/payouts", {
@@ -235,8 +245,8 @@ export const paypalProvider: PspProvider = {
           },
           items: [
             {
-              recipient_type: "EMAIL",
-              receiver: b.handle,
+              recipient_type: receptor.recipient_type,
+              receiver: receptor.receiver,
               amount: { value: aDecimal(input.amountMinor), currency: input.currency },
               sender_item_id: input.payoutId,
             },
@@ -287,3 +297,110 @@ export const paypalProvider: PspProvider = {
     }
   },
 };
+
+/**
+ * ── LOG IN WITH PAYPAL: CONECTAR LA CUENTA DEL TUTOR ────────────────────────
+ *
+ * Existe por lo que se midió el 4-sep: pagar a un correo tecleado no entrega si
+ * ese correo no está confirmado, y eso no se puede saber al guardarlo. Aquí el
+ * tutor entra en PayPal, PayPal nos firma quién es, y nos quedamos con su
+ * `payer_id` — que sí entrega.
+ *
+ * Son dos funciones y ninguna clase: una construye la URL a la que se le manda
+ * y la otra canjea lo que trae de vuelta.
+ */
+
+/** El dominio de la web de PayPal, deducido del de la API. */
+function webDePaypal(): string {
+  return API.includes("sandbox") ? "https://www.sandbox.paypal.com" : "https://www.paypal.com";
+}
+
+/**
+ * A dónde se manda al tutor. `state` viaja de ida y vuelta sin tocar: es lo
+ * único que impide que el callback acepte un código traído por cualquiera.
+ *
+ * ⚠️ `openid` NO basta. El `payer_id` viene con `paypal-attributes`, y ese
+ * atributo hay que marcarlo además en el panel de la app («Log in with PayPal»
+ * → Account ID). Sin él PayPal devuelve el perfil sin id y no hay nada que
+ * guardar — el callback lo detecta y lo dice.
+ */
+export function urlDeConexionPaypal(opts: { returnUrl: string; state: string }): string | null {
+  const clientId = process.env.PAYPAL_CLIENT_ID;
+  if (!clientId) return null;
+  const q = new URLSearchParams({
+    flowEntry: "static",
+    client_id: clientId,
+    response_type: "code",
+    scope: "openid https://uri.paypal.com/services/paypal-attributes",
+    redirect_uri: opts.returnUrl,
+    state: opts.state,
+  });
+  return `${webDePaypal()}/connect?${q.toString()}`;
+}
+
+/** Lo que PayPal nos cuenta del tutor. `payerId` es lo único imprescindible. */
+export type CuentaPaypalConectada = {
+  payerId: string;
+  email: string | null;
+  nombre: string | null;
+};
+
+/**
+ * Canjea el `code` del callback y devuelve la identidad.
+ *
+ * ⚠️ El token que sale de aquí es DEL TUTOR, no nuestro, y no se guarda: se usa
+ * para una llamada y se tira. Lo que se conserva es el `payer_id`, que no es un
+ * secreto — es a dónde se paga.
+ */
+export async function canjearCodigoPaypal(
+  code: string,
+  returnUrl: string,
+): Promise<CuentaPaypalConectada> {
+  const id = process.env.PAYPAL_CLIENT_ID ?? "";
+  const secreto = process.env.PAYPAL_SECRET ?? "";
+  if (!id || !secreto) throw new Error("faltan PAYPAL_CLIENT_ID / PAYPAL_SECRET");
+
+  const basic = Buffer.from(`${id}:${secreto}`).toString("base64");
+  const tokenRes = await fetch(`${API}/v1/oauth2/token`, {
+    method: "POST",
+    headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: returnUrl,
+    }).toString(),
+    cache: "no-store",
+  });
+  const token = (await tokenRes.json()) as { access_token?: string; error_description?: string };
+  if (!tokenRes.ok || !token.access_token) {
+    throw new Error(`PayPal no canjeó el código: ${token.error_description ?? tokenRes.status}`);
+  }
+
+  // `schema=paypalv1.1` es el que trae `payer_id`. Sin ese parámetro la
+  // respuesta es el perfil OpenID estándar, que no lo lleva.
+  const infoRes = await fetch(`${API}/v1/identity/oauth2/userinfo?schema=paypalv1.1`, {
+    headers: { Authorization: `Bearer ${token.access_token}` },
+    cache: "no-store",
+  });
+  const info = (await infoRes.json()) as {
+    payer_id?: string;
+    user_id?: string;
+    name?: string;
+    emails?: { value?: string; primary?: boolean; confirmed?: boolean }[];
+  };
+  if (!infoRes.ok) throw new Error(`PayPal no devolvió el perfil: ${infoRes.status}`);
+
+  // `user_id` viene como URI («…/user/…/<payer_id>»); `payer_id` va suelto
+  // cuando el atributo Account ID está marcado en la app. Se acepta cualquiera
+  // de los dos para no depender de un formato que no controlamos.
+  const payerId = info.payer_id?.trim() || info.user_id?.split("/").pop()?.trim() || "";
+  if (!payerId) {
+    throw new Error(
+      "PayPal no devolvió el identificador de cuenta. Falta marcar el atributo " +
+        "«Account ID» en Log in with PayPal, en el panel de la app.",
+    );
+  }
+
+  const principal = info.emails?.find((e) => e.primary) ?? info.emails?.[0];
+  return { payerId, email: principal?.value?.trim() ?? null, nombre: info.name?.trim() ?? null };
+}

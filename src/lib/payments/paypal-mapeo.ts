@@ -108,3 +108,41 @@ export function desenlace(lote: LotePaypal, marca: string, adoptado: boolean): P
   }
 }
 
+
+
+/**
+ * ── A QUIÉN SE LE PAGA, Y CON QUÉ FORMA DE IDENTIFICARLO ────────────────────
+ *
+ * 🔴 SE PREFIERE EL ID CONECTADO AL CORREO, SIEMPRE, y no es una opinión:
+ *
+ *     receptor = correo tecleado   → UNCLAIMED  (4 de 4, 4-sep-2026)
+ *     receptor = id de cuenta      → SUCCESS    (inmediato, misma cuenta)
+ *
+ * Un correo solo entrega si está CONFIRMADO en una cuenta de PayPal, y eso no
+ * se puede comprobar al guardarlo. El id lo firma PayPal en el OAuth: existe,
+ * es de esa persona y entrega.
+ *
+ * ⚠️ El correo NO desaparece. Es el respaldo de quien no conecte su cuenta, y
+ * la única razón de que esta función tenga dos ramas en vez de una.
+ */
+export type BeneficiarioPaypal = {
+  holder_name?: string | null;
+  handle?: string | null;
+  verified_account_id?: string | null;
+};
+
+export type Receptor =
+  | { recipient_type: "PAYPAL_ID"; receiver: string; conectada: true }
+  | { recipient_type: "EMAIL"; receiver: string; conectada: false };
+
+export function receptorDe(b: BeneficiarioPaypal): Receptor | null {
+  const id = b.verified_account_id?.trim();
+  if (id) return { recipient_type: "PAYPAL_ID", receiver: id, conectada: true };
+
+  const correo = b.handle?.trim();
+  if (correo) return { recipient_type: "EMAIL", receiver: correo, conectada: false };
+
+  // Ni una cosa ni la otra: quien llame tiene que devolver `sin-datos`, no
+  // inventarse un receptor. Un payout a la nada es dinero perdido de verdad.
+  return null;
+}

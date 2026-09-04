@@ -348,6 +348,12 @@ export type DestinoManualEnmascarado = {
   /** `jo····@gmail.com` o `····1234`. Nunca el identificador entero. */
   handle_masked: string;
   updated_at: string;
+  /**
+   * El id de la cuenta CONECTADA por OAuth, si la hay. `null` = el tutor
+   * escribió el dato a mano. No se enmascara porque no es un secreto: es a
+   * dónde se paga, y la pantalla lo usa solo para saber si está conectada.
+   */
+  verified_account_id?: string | null;
 };
 
 /** Los valores que teclea el tutor, antes de mandarlos a la RPC. */

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
-import { PaypalError, aDecimal, desenlace, loteYaExistente, type LotePaypal } from "./paypal-mapeo.ts";
+import {
+  receptorDe, PaypalError, aDecimal, desenlace, loteYaExistente, type LotePaypal } from "./paypal-mapeo.ts";
 
 /**
  * Comprobación del mapeo de PayPal. Sin framework: `npm run check:paypal`.
@@ -86,5 +87,31 @@ assert.equal(loteYaExistente(new Error("red")), null);
 assert.equal(aDecimal(4750), "47.50");
 assert.equal(aDecimal(100), "1.00");
 assert.equal(aDecimal(1), "0.01");
+
+// ── A quién se le paga ─────────────────────────────────────────────────────
+// La cuenta conectada gana al correo SIEMPRE: el correo puede estar sin
+// confirmar y entonces el pago no llega, aunque el lote diga SUCCESS.
+assert.deepEqual(
+  receptorDe({ handle: "tutor@ejemplo.com", verified_account_id: "BEWSZFK8MDBWU" }),
+  { recipient_type: "PAYPAL_ID", receiver: "BEWSZFK8MDBWU", conectada: true },
+  "con cuenta conectada se paga al id, no al correo",
+);
+
+// Sin conectar, el correo es el respaldo y sigue funcionando.
+assert.deepEqual(
+  receptorDe({ handle: "tutor@ejemplo.com", verified_account_id: null }),
+  { recipient_type: "EMAIL", receiver: "tutor@ejemplo.com", conectada: false },
+);
+
+// Espacios: un id " " no es un id.
+assert.equal(receptorDe({ handle: "  ", verified_account_id: "   " }), null);
+assert.deepEqual(receptorDe({ handle: " a@b.com ", verified_account_id: "  " }), {
+  recipient_type: "EMAIL", receiver: "a@b.com", conectada: false,
+});
+
+// 🔴 Sin nada, NULL. Quien llame devuelve 'sin-datos'; inventarse un receptor
+// es mandar dinero a la nada.
+assert.equal(receptorDe({}), null);
+assert.equal(receptorDe({ handle: null, verified_account_id: null }), null);
 
 console.log("✅ mapeo de PayPal: 'pagado' solo con SUCCESS, y el duplicado se reconoce.");

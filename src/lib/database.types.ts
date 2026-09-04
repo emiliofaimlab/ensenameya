@@ -1927,6 +1927,7 @@ export type Database = {
           holder_name: string
           tutor_id: string
           updated_at: string
+          verified_account_id: string | null
         }
         Insert: {
           channel: string
@@ -1936,6 +1937,7 @@ export type Database = {
           holder_name: string
           tutor_id: string
           updated_at?: string
+          verified_account_id?: string | null
         }
         Update: {
           channel?: string
@@ -1945,6 +1947,7 @@ export type Database = {
           holder_name?: string
           tutor_id?: string
           updated_at?: string
+          verified_account_id?: string | null
         }
         Relationships: [
           {
@@ -2429,6 +2432,15 @@ export type Database = {
       }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
+      conectar_cuenta_paypal: {
+        Args: {
+          p_email: string
+          p_holder: string
+          p_payer_id: string
+          p_tutor: string
+        }
+        Returns: undefined
+      }
       confirm_order_payment: {
         Args: { p_event_id?: string; p_order_id: string; p_success?: boolean }
         Returns: Json
