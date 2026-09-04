@@ -282,6 +282,29 @@ export type PaisDePayout = { code: string; dato: FamiliaDeDato };
  * `payeeCountry` null es el tutor que no ha declarado país; tiene su propia fila
  * con `payout_provider='simulated'`, que es la ausencia de ejecutor.
  */
+/**
+ * Lo mismo que `datos_de_cobro_del_tutor` pero para varios tutores de una vez.
+ * Existe para el panel de admin, que pinta una cola entera: preguntar fila a
+ * fila sería una consulta por orden.
+ *
+ * Un tutor que no conteste queda con todo a false, que es el fallo seguro: se
+ * pinta «sin ejecutor» en vez de prometer un riel que quizá no puede pagarle.
+ */
+export async function datosDeCobroDeVarios(
+  tutorIds: string[],
+): Promise<Map<string, DatosDeCobro>> {
+  const unicos = [...new Set(tutorIds.filter(Boolean))];
+  const admin = createAdminClient();
+  const pares = await Promise.all(
+    unicos.map(async (id) => {
+      const { data, error } = await admin.rpc("datos_de_cobro_del_tutor", { p_tutor: id });
+      if (error) throw new Error(`datos_de_cobro_del_tutor(${id}): ${error.message}`);
+      return [id, data as unknown as DatosDeCobro] as const;
+    }),
+  );
+  return new Map(pares);
+}
+
 export async function payoutProviderFor(
   payeeCountry: string | null,
   fundingProvider: string | null,
