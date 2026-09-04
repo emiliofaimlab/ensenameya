@@ -510,7 +510,7 @@ devuelve `enviado` y nunca `pagado`.
 | **dLocal · cobro** | ✅ **hoy** | Compra por la interfaz → `DP-253836`, $45,00 → webhook → pago `paid`, reserva `confirmed` |
 | **dLocal · reembolso** | ✅ **hoy** | Cancelación a >24 h → cola → job → **`REF-1991` `SUCCESS`** en dLocal, $45,00 (RN-37 al 100 %) |
 | **dLocal · payout** | ✅ | `73128925947501`, $15,00, `paid` (3-sep) |
-| **PayPal · payout** | ⚠️ **a medias** | Lote `FR6E6SEVN4A5E` creado, pero el item quedó `UNCLAIMED` / `RECEIVER_UNREGISTERED`: el correo del tutor no tiene cuenta de PayPal. **El lote dice `SUCCESS` y el tutor no cobró.** Falta repetirlo contra una cuenta de sandbox registrada |
+| **PayPal · payout** | ✅ el riel · ⚠️ la entrega | Dos lotes creados por el job (`FR6E6SEVN4A5E` y, tras el reintento, `VXMFYXXG3RY56`) y el **camino de recuperación entero ejercitado** (ver §9.4). Lo que NO se ha visto es a un destinatario cobrar: PayPal retiene el dinero hasta que el tutor lo reclama |
 | **PayPal · cobro** | — | No se integra: decisión del cliente del 4-sep |
 | **Wise** | — | Sin credenciales de API |
 
@@ -532,6 +532,42 @@ pagar, PayPal iba antes en las **18** listas y a PayPal no lo frena la puerta de
 improbable. Lo arregla `20260904210000`: los atados van primero (si el dinero no es suyo, se
 apartan solos en la misma pasada) y **Brasil sale de la lista de Stripe**, porque Connect no
 admite cuentas *recipient* brasileñas desde una plataforma estadounidense.
+
+### 9.4 · PayPal: el lote dice `SUCCESS` y el tutor no ha cobrado (medido dos veces)
+
+🔴 **Es el hallazgo de producto más importante de la ronda, y no es un fallo del código.**
+Un payout de PayPal por correo **no llega solo**. El destinatario tiene que reclamarlo, y hasta
+que lo haga el dinero se queda retenido —30 días— y luego vuelve. Los dos modos de fallo, los
+dos medidos, y **en los dos el lote informa `SUCCESS`**:
+
+| Motivo | Qué significa | Medido |
+| :-- | :-- | :-- |
+| `RECEIVER_UNREGISTERED` | El correo no tiene cuenta de PayPal | 3-sep, lote `FR6E6SEVN4A5E` |
+| `RECEIVER_UNCONFIRMED` | La cuenta existe **y está verificada**, pero ese correo no está confirmado en ella | 4-sep, lote `VXMFYXXG3RY56` |
+
+⚠️ **«Verificada» y «correo confirmado» no son lo mismo**, y la segunda es la que manda: la
+cuenta de sandbox `sb-dnutt…@personal.example.com` figura como *Verified* en el panel de PayPal
+y su payout sigue `UNCLAIMED`.
+
+**Consecuencia para el producto, que no está especificada en ningún sitio:** al tutor hay que
+**decirle que tiene un pago esperando y que entre en PayPal a reclamarlo**. Sin eso, un tutor
+que registró un correo sin cuenta —o con el correo sin confirmar— ve «pago enviado» y no cobra
+en 30 días. Hoy no hay aviso para eso.
+
+✅ **Lo que el sistema sí hace bien, y es lo que impide que esto sea un desastre:** la fila se
+queda en `processing` y **nunca** pasa a `paid`, así que NTF-12 («se pagó tu liquidación») no se
+dispara. Es exactamente la regla del puerto —`enviado` ≠ `pagado`— haciendo su trabajo.
+
+**Y el camino de recuperación, ejercitado entero (4-sep):**
+
+| Paso | Resultado |
+| :-- | :-- |
+| Se cancela el item no reclamado en PayPal | `UNCLAIMED` → `RETURNED`, el dinero vuelve |
+| Pasada del job | lo clasifica **`difunto` solo**: fila a `scheduled`, `provider_payout_id` borrado, `intento` a **2** y el lote muerto archivado en `intentos_muertos` |
+| Pasada siguiente | crea un lote **nuevo** con la marca del intento 2 (`VXMFYXXG3RY56`), al destino corregido |
+
+Eso cierra el bucle silencioso que documenta `PayoutResult.difunto`: sin `intento`, el barrido
+del segundo intento encontraría el cadáver del primero y lo daría por bueno para siempre.
 
 ### ❓ Pendiente de confirmar
 
