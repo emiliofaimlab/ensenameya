@@ -510,7 +510,7 @@ devuelve `enviado` y nunca `pagado`.
 | **dLocal · cobro** | ✅ **hoy** | Compra por la interfaz → `DP-253836`, $45,00 → webhook → pago `paid`, reserva `confirmed` |
 | **dLocal · reembolso** | ✅ **hoy** | Cancelación a >24 h → cola → job → **`REF-1991` `SUCCESS`** en dLocal, $45,00 (RN-37 al 100 %) |
 | **dLocal · payout** | ✅ | `73128925947501`, $15,00, `paid` (3-sep) |
-| **PayPal · payout** | ✅ el riel · ⚠️ la entrega | Dos lotes creados por el job (`FR6E6SEVN4A5E` y, tras el reintento, `VXMFYXXG3RY56`) y el **camino de recuperación entero ejercitado** (ver §9.4). Lo que NO se ha visto es a un destinatario cobrar: PayPal retiene el dinero hasta que el tutor lo reclama |
+| **PayPal · payout** | ✅ **CERRADO** | Recorrido entero con dinero moviéndose: el tutor conecta su cuenta por OAuth → retira → job → lote `DRM7SBVWEX65G` → PayPal responde **`item: SUCCESS`** → segunda pasada → fila **`paid`** y NTF-12 encolado. Repetido dos veces (`4U4DQPGVPL3NS`). El camino de recuperación también está ejercitado (§9.4) |
 | **PayPal · cobro** | — | No se integra: decisión del cliente del 4-sep |
 | **Wise** | — | Sin credenciales de API |
 
@@ -533,7 +533,21 @@ improbable. Lo arregla `20260904210000`: los atados van primero (si el dinero no
 apartan solos en la misma pasada) y **Brasil sale de la lista de Stripe**, porque Connect no
 admite cuentas *recipient* brasileñas desde una plataforma estadounidense.
 
-### 9.4 · PayPal: el lote dice `SUCCESS` y el tutor no ha cobrado (medido dos veces)
+### 9.4 · PayPal: por qué se paga a la cuenta conectada y no al correo
+
+> ✅ **RESUELTO EL 4-SEP-2026.** El tutor conecta su cuenta con «Log in with PayPal», nos
+> quedamos con su identificador, y el pago entra. Lo que sigue es el porqué — y el porqué
+> importa, porque el camino del correo **sigue existiendo** como respaldo para quien no
+> conecte su cuenta, y ahí el fallo de abajo se puede repetir.
+>
+> **El marcador de la jornada, contra el mismo sandbox:**
+>
+> | Cómo se manda | Resultado |
+> | :-- | :-- |
+> | Al correo que teclea el tutor | `UNCLAIMED` · **5 de 5** |
+> | Al identificador de la cuenta conectada | `SUCCESS` · **3 de 3** |
+
+#### Lo que falla cuando se paga a un correo (medido dos veces)
 
 🔴 **Es el hallazgo de producto más importante de la ronda, y no es un fallo del código.**
 Un payout de PayPal por correo **no llega solo**. El destinatario tiene que reclamarlo, y hasta
