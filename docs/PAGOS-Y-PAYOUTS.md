@@ -83,9 +83,9 @@ Dos reglas transversales:
 
 | Qué | Por qué no está |
 | :-- | :-- |
-| **El respaldo del checkout (regla 1)** | Hoy el ruteo elige UN proveedor por país; si falla, el cobro no se abre. Hay que definir además qué cuenta como «no disponible»: error de la API, país no soportado, o rechazo de la tarjeta |
-| **Colombia** | No tiene fila en `payment_routing_rules`, y sin fila no se puede vender (`create_booking_line` levanta «sin ruta de pago disponible»). Esa tabla no admite inserts desde fuera → migración |
-| **Los otros países que dLocal cobra** | dLocal cobra en ~17 países y la tabla solo nombra 8 más Venezuela. Los que faltan hoy no se pueden vender |
+| ~~**El respaldo del checkout (regla 1)**~~ | ✅ **Hecho.** `charge_providers` es una lista ordenada y la recorre `cadena.ts`. Y «no disponible» ya está definido: falta de credencial o rechazo limpio del payload → **se cae al siguiente**; proveedor **caído** (socket rechazado, DNS muerto: la petición no llegó a salir) → **se cae al siguiente** desde el 4-sep; timeout, `ECONNRESET` o 5xx → **se para en 503**, porque el cobro pudo abrirse y dos cobros vivos los paga el alumno. El rechazo de la tarjeta no entra aquí: ocurre después, con el cobro ya abierto, y su respuesta es otra tarjeta, no otra pasarela |
+| ~~**Colombia**~~ | ✅ Tiene fila, y desde el 4-sep con dLocal **primero** (dLocal sí cubre CO: medido) |
+| ~~**Los otros países que dLocal cobra**~~ | ✅ **Resuelto el 4-sep midiendo, no deduciendo** (§9.1): dLocal cobra en **18** países, no en 17 ni en 8. Se añadieron los nueve que faltaban y Venezuela dejó de llevar dLocal de respaldo, que era imposible. Y ningún país «no se puede vender»: desde `20260903190000` los que no tienen fila caen en la fila por defecto (Stripe) |
 | ~~**Adaptador de PayPal**~~ | ✅ **Hecho el 3-sep-2026** y ejecutado de verdad contra dev: el job creó el lote `FR6E6SEVN4A5E`, $228,75 a un tutor venezolano, y la fila quedó `processing` con su `provider_payout_id`. En dev no falta nada. Lo de «vivo» es post-lanzamiento y va con la migración de dominio |
 | **Adaptador de Wise** | Wise **no tiene credenciales de API**: su cuenta está en KYB y su sandbox V2 no es autoservicio (se pide a `api@wise.com`). Es lo único que sigue bloqueado por una cuenta |
 | **Adaptador de payout directo de Stripe** | `stripeProvider.payout()` es un stub que devuelve `sin-ejecutor`. Es una integración de **Stripe Connect**, un producto aparte del cobro: la cuenta de Stripe está bien (sandbox y producción) y eso no lo cambia. Solo aplica a Colombia y resto del mundo, y solo si el cobro entró por Stripe |
@@ -432,6 +432,27 @@ responder la pregunta de dLocal.
 - `tutor_payout_accounts` ya guarda nombre, documento fiscal, banco, cuenta y tipo de cuenta
   → **cubre Colombia y España sin cambio de esquema**.
 
+### 9.1 · La cobertura de cobro de dLocal, medida (4-sep-2026)
+
+`POST /v1/payments` del sandbox, 47 países, importe de $30 en USD. **No es su documentación:
+es su API contestando.** ✅
+
+| | Países |
+| :-- | :-- |
+| **Cobra (200)** — 18 | AR · BO · BR · CL · CO · CR · DO · EC · GT · MX · PA · PE · PY · UY · **ID · KE · MY · NG** |
+| **No cobra (400 `5000`)** | **VE** · SV · NI · HN · JM · TT · toda Europa · el resto de Asia y África |
+| **Conoce el país pero no ofrece con qué pagar (400 `5010`)** | US · ES · PH |
+| **Paga (payouts)** — solo 8 | AR · BR · CL · EC · MX · PE · PY · UY |
+
+⚠️ **Cobrar y pagar no son la misma lista, y la diferencia son diez países.** En BO, CO, CR,
+DO, GT, PA, ID, KE, MY y NG dLocal cobra y **no** paga. No es un problema: PayPal y Wise se
+fondean desde nuestro banco y **no están atados al balance de quien cobró**
+(`ataduraDeBalance` en `lib/payments.ts`), así que ahí el payout va por PayPal. La atadura
+solo aplica a dLocal y Stripe entre sí.
+
+⚠️ **Y Venezuela no la cubre dLocal ni para cobrar ni para pagar**, aunque su fila llevaba
+`dlocal` de respaldo hasta el 4-sep. Migración `20260904140000`.
+
 ### ❓ Pendiente de confirmar
 
 | Qué | Con quién | Nota |
@@ -465,7 +486,7 @@ después congele la cuenta con dinero de tutores dentro. Por eso la prueba de sa
 | ~~**2**~~ | ✅ **PayPal** automático en Venezuela | Hecho el 3-sep: adaptador + job ejecutados contra sandbox, y un destinatario domiciliado en VE en `SUCCESS` |
 | **3** | **Wise** para Colombia + resto del mundo | Un solo desarrollo cubre CO, ES, Europa y EE. UU. Mejor retorno por hora |
 | ~~**4**~~ | ✅ **dLocal** para los 8 países LATAM | Adaptador escrito, spread decidido (lo asume el tutor) y cuenta aprobada en sandbox y producción |
-| **5** | **PayPal Checkout** (cobrar, no solo pagar) | Lo único de pagos que no tiene ni una línea. Depende de la decisión de negocio 5 |
+| ~~**5**~~ | ~~**PayPal Checkout**~~ | ❌ **Descartado por el cliente el 4-sep-2026.** PayPal paga; no cobra |
 
 De las cuatro fases originales queda **la 3 (Wise)**, y es lo único parado por una cuenta.
 
@@ -481,7 +502,7 @@ Es el único riel que espera a alguien de fuera.
 | ~~2~~ | ~~¿Cada cuánto se paga?~~ | ✅ **Resuelta 3-sep-2026: se queda como está** — lote semanal, lunes 03:00 UTC (`run-payout-batch`). La recomendación de este doc era mensual | — |
 | ~~3~~ | ~~¿Importe mínimo de retiro?~~ | ✅ **Resuelta 3-sep-2026: se queda como está — no hay mínimo.** La recomendación de este doc era ponerlo | — |
 | ~~4~~ | ~~¿Cuántos canales manuales en VE?~~ | ✅ **Resuelta 3-sep-2026: Zinli, Binance y Zelle.** PayPal queda como riel automático, no manual — su fila del catálogo está apagada, no borrada (`20260903120000`). La de Airtm también, y ahí se queda: descartada el 3-sep | — |
-| **5** | ⏳ **ÚNICA ABIERTA.** ¿Hay alumnos sin tarjeta internacional? | Si sí, PayPal Checkout deja de ser ahorro y pasa a ser **ingresos nuevos** | Decide si se integra PayPal para cobrar |
+| ~~5~~ | ~~¿Hay alumnos sin tarjeta internacional?~~ ✅ **Resuelta 4-sep-2026: NO habrá PayPal Checkout.** PayPal se queda como riel de payout y no se integra para cobrar | — |
 
 ---
 
