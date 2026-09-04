@@ -238,6 +238,14 @@ export function estadoDeLaCuenta(args: {
     return { tone: "amber", pill: "Pendiente", detalle: null };
   }
 
+  // Connect: no hay nada guardado de nuestro lado que enseñar. Lo que decide si
+  // el tutor está listo vive EN STRIPE, así que esta función no puede
+  // responderlo sin una llamada — y no la hace: la pantalla pinta la tarjeta de
+  // alta, que sí pregunta.
+  if (riel === "conectada") {
+    return { tone: "amber", pill: "Alta en Stripe", detalle: null };
+  }
+
   if (riel === "identificador") {
     if (destinos.length === 0) {
       return { tone: "amber", pill: "Sin datos", detalle: null };
@@ -308,7 +316,7 @@ export function estadoDeLaCuenta(args: {
  * necesita saber es qué campos pintar, no quién ejecuta — así que es el mismo
  * par que `FamiliaDeDato` en `@/lib/payments`, del que sale por `payoutCountries()`.
  */
-export type RielDeCobro = "banco" | "identificador";
+export type RielDeCobro = "banco" | "identificador" | "conectada";
 
 /** Una fila de `payout_manual_channels`, tal y como la sirve PostgREST. */
 export type CanalManual = {

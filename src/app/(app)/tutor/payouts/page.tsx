@@ -15,6 +15,7 @@ import { avisoDeImporteAproximado } from "@/lib/payments/dlocal-provider";
 import { WithdrawButton } from "./withdraw-button";
 import { PayoutCountryForm } from "./payout-country-form";
 import { PayoutAccountForm } from "./payout-account-form";
+import { ConnectAlta } from "./connect-alta";
 import { PayoutManualForm } from "./payout-manual-form";
 import { leerCanalesManuales, leerDestinosManuales } from "./rpc";
 import {
@@ -126,7 +127,7 @@ export default async function TutorPayoutsPage() {
     // `service_role` no tiene grant sobre esta tabla (regla de oro 9).
     supabase
       .from("tutor_profiles")
-      .select("payout_country")
+      .select("payout_country, stripe_connect_account_id")
       .eq("profile_id", userId)
       .maybeSingle(),
     // Y a dónde podemos transferir de verdad, según `payment_routing_rules`.
@@ -470,6 +471,9 @@ export default async function TutorPayoutsPage() {
                 ? ` Las formas de cobro que registraste (${destinos.map((d) => etiquetaDeCanal(d.channel)).join(", ")}) siguen guardadas.`
                 : ""}
             </p>
+          ) : riel === "conectada" ? (
+            /* Connect. No hay formulario: el alta es en Stripe. */
+            <ConnectAlta yaTieneCuenta={Boolean(perfil?.stripe_connect_account_id)} />
           ) : riel === "identificador" ? (
             <>
               {/* El tutor que cambió de un país de banco a uno manual: sus datos

@@ -28,6 +28,12 @@ const PALABRA_DEVOLVER = "COMPROBADO-SIN-RASTRO";
 const AYUDA_DE_REFERENCIA: Record<FamiliaDeDato, string> = {
   banco: "número de comprobante de la transferencia",
   identificador: "id del envío de Zelle/Zinli/Binance…",
+  // ⚠️ 'conectada' no debería llegar aquí —un payout por Connect lo ejecuta
+  // Stripe, no una persona— pero el `Record` la exige y poner un texto es más
+  // barato que un tipo parcial. Si aparece en pantalla, lo que hay que mirar no
+  // es este texto: es por qué un riel automático acabó en el formulario de
+  // marcar a mano.
+  conectada: "id de la transferencia de Stripe (tr_…)",
 };
 
 /**

@@ -88,7 +88,7 @@ Dos reglas transversales:
 | ~~**Los otros países que dLocal cobra**~~ | ✅ **Resuelto el 4-sep midiendo, no deduciendo** (§9.1): dLocal cobra en **18** países, no en 17 ni en 8. Se añadieron los nueve que faltaban y Venezuela dejó de llevar dLocal de respaldo, que era imposible. Y ningún país «no se puede vender»: desde `20260903190000` los que no tienen fila caen en la fila por defecto (Stripe) |
 | ~~**Adaptador de PayPal**~~ | ✅ **Hecho el 3-sep-2026** y ejecutado de verdad contra dev: el job creó el lote `FR6E6SEVN4A5E`, $228,75 a un tutor venezolano, y la fila quedó `processing` con su `provider_payout_id`. En dev no falta nada. Lo de «vivo» es post-lanzamiento y va con la migración de dominio |
 | **Adaptador de Wise** | Wise **no tiene credenciales de API**: su cuenta está en KYB y su sandbox V2 no es autoservicio (se pide a `api@wise.com`). Es lo único que sigue bloqueado por una cuenta |
-| **Adaptador de payout directo de Stripe** | `stripeProvider.payout()` es un stub que devuelve `sin-ejecutor`. Es una integración de **Stripe Connect**, un producto aparte del cobro: la cuenta de Stripe está bien (sandbox y producción) y eso no lo cambia. Solo aplica a Colombia y resto del mundo, y solo si el cobro entró por Stripe |
+| ~~**Adaptador de payout directo de Stripe**~~ | ✅ **Escrito y ejecutado el 4-sep-2026** (§9.2). Transferencia real en *test mode*: `tr_1UBxVvHLJB7CRIwfB3VzPYpX`, $228,75 a una cuenta conectada **colombiana**. Falta que un tutor de verdad complete su alta |
 | **Elegir entre varios automáticos** | `payout_provider` es hoy un valor fijo por país. La regla 2 lo convierte en «uno de este conjunto». La pieza que compara existe; la que elige entre candidatos, no |
 
 ℹ️ **En producción las filas de país cobran por `simulated`, y no significa nada.** El sitio
@@ -243,9 +243,19 @@ flowchart LR
 incluida**, con el formato bancario colombiano documentado (cuentas conectadas bajo
 *recipient service agreement*, capability única `transfers`). ✅
 
-**Pero la página de documentación dice en «Limitations» lo contrario que su propia API.**
-No se puede deducir cuál manda para nuestra cuenta: hay que **pedirle a Stripe un sí por
-escrito** antes de escribir el adaptador.
+~~**Pero la página de documentación dice en «Limitations» lo contrario que su propia API.**
+No se puede deducir cuál manda para nuestra cuenta: hay que pedirle a Stripe un sí por
+escrito antes de escribir el adaptador.~~
+
+✅ **RESUELTO EL 4-SEP-2026, Y NO POR CORREO: EJECUTANDO.** No hacía falta preguntar nada —
+se podía probar. `POST /v1/accounts` con `country=CO`, capability `transfers` y
+`tos_acceptance[service_agreement]=recipient` devuelve **200** desde nuestra cuenta, y la
+transferencia a esa cuenta conectada también (§9.2). La página de «Limitations» no manda:
+manda la API.
+
+⚠️ **Es *test mode*.** Lo que demuestra es que la plataforma US puede crear cuentas
+*recipient* colombianas y transferirles; lo que no demuestra es que en vivo no haya una
+revisión adicional. Pero ya no es una pregunta abierta con un adaptador esperando detrás.
 
 > ¿Puede nuestra cuenta —Ensename Ya, LLC, Florida— crear cuentas conectadas de
 > *cross-border payouts* con beneficiarios en Colombia, bajo el *recipient service
@@ -453,11 +463,41 @@ solo aplica a dLocal y Stripe entre sí.
 ⚠️ **Y Venezuela no la cubre dLocal ni para cobrar ni para pagar**, aunque su fila llevaba
 `dlocal` de respaldo hasta el 4-sep. Migración `20260904140000`.
 
+### 9.2 · Stripe Connect: cobertura y mecanismo, medidos (4-sep-2026)
+
+*Test mode*, contra la cuenta real. Es lo que sostiene al adaptador
+`stripeProvider.payout()`.
+
+| | Países |
+| :-- | :-- |
+| **Acepta cuenta *recipient*** — 28 de 31 probados | AR · BO · CL · CO · CR · DO · EC · GT · MX · PA · PE · PY · UY · ES · PT · DE · FR · IT · GB · NG · KE · ID · MY · IN · PH · CA · AU · JP |
+| **No** | **BR** — «recipient ToS not supported for platforms in US creating accounts in BR» · **VE** — «not currently supported by Stripe» · **US** — el acuerdo *recipient* no vale para el país de la propia plataforma |
+
+**Y el mecanismo entero, ejecutado:**
+
+| Qué | Resultado |
+| :-- | :-- |
+| `accounts.create` CO, capability `transfers` | ✅ `acct_1UBxVrQlMq1v7pQw`, `transfers: active` |
+| `transfers.create` $228,75 | ✅ `tr_1UBxVvHLJB7CRIwfB3VzPYpX` — **el dinero se movió** |
+| La MISMA `Idempotency-Key` otra vez | ✅ devuelve **la misma** transferencia, no una segunda |
+| `transfers.list` por `transfer_group` | ✅ la encuentra en una llamada, sin paginar |
+| Ídem con una marca inexistente | ✅ **0 resultados** — `sin-rastro` es demostrable |
+
+🔑 **Las dos últimas filas son por qué este adaptador es un tercio del de dLocal Go.** Con
+idempotencia y `transfer_group` no hay barrido de páginas, no hay `en-duda` por no poder
+demostrar nada, y devolver una orden a la cola se apoya en una prueba y no en una corazonada.
+
+⚠️ **Lo que NO cubre esta prueba:** el `external_account` de la cuenta conectada (el paso de
+su saldo a su banco) devolvió 400 pidiendo `account_type` para Colombia. No es código
+nuestro —esos datos se los da el tutor a Stripe en su alta— pero significa que **«transferencia
+creada» no es «el tutor cobró»**, igual que el `UNCLAIMED` de PayPal. Por eso el adaptador
+devuelve `enviado` y nunca `pagado`.
+
 ### ❓ Pendiente de confirmar
 
 | Qué | Con quién | Nota |
 | :-- | :-- | :-- |
-| Cross-border payouts a CO con **Connect** | **Stripe** | ⚠️ **No es «autorización para usar Stripe»** —la cuenta está operativa, sandbox y producción—: es que su API dice 120 países con CO incluida y su página de «Limitations» dice lo contrario. Un correo de diez minutos antes de escribir un adaptador de Connect. Ver §5 |
+| ~~Cross-border payouts a CO con **Connect**~~ ✅ **Resuelto ejecutando el 4-sep (§9.2)**, no por correo | ~~Stripe~~ | ⚠️ **No era «autorización para usar Stripe»** —la cuenta está operativa, sandbox y producción—: es que su API dice 120 países con CO incluida y su página de «Limitations» dice lo contrario. Un correo de diez minutos antes de escribir un adaptador de Connect. Ver §5 |
 | ¿Admite destinatarios venezolanos? | **PayPal** | ✅ **SÍ, ejecutado el 3-sep-2026.** Una cuenta de sandbox **domiciliada en VE** (`Country: VE`, id `BEWSZFK8MDBWU`) recibió $25: lote e item en `SUCCESS`, sin errores. Lo confirman además dos lecturas independientes de su tabla de países («Venezuela · Send, receive, and withdraw · VE»). ⚠️ **Es sandbox**: no demuestra que en vivo no haya una restricción que el sandbox no modela, y eso solo lo cierra un payout real o PayPal por escrito. Pero es la evidencia más fuerte posible sin producción, y **ya no es una suposición a ciegas** |
 | Comisión de cobro negociada | **dLocal** | Depende del volumen |
 | Tarifa real de PayPal Payouts | **PayPal** | Varía por cuenta y país |
@@ -484,14 +524,16 @@ después congele la cuenta con dinero de tutores dentro. Por eso la prueba de sa
 | :-- | :-- | :-- |
 | ~~**1**~~ | ✅ Payouts **manuales** operativos en Venezuela (Zinli · Binance · Zelle) | Hecho |
 | ~~**2**~~ | ✅ **PayPal** automático en Venezuela | Hecho el 3-sep: adaptador + job ejecutados contra sandbox, y un destinatario domiciliado en VE en `SUCCESS` |
-| **3** | **Wise** para Colombia + resto del mundo | Un solo desarrollo cubre CO, ES, Europa y EE. UU. Mejor retorno por hora |
+| **3** | ~~**Wise** para Colombia + resto del mundo~~ → **Stripe Connect lo cubrió el 4-sep** | Connect acepta cuentas *recipient* en 28 países, CO y ES incluidas (§9.2). Wise sigue pendiente de credenciales, pero **ya no bloquea ningún mercado**: pasa de «lo que desbloquea el mundo» a «un riel más barato para cuando llegue» |
 | ~~**4**~~ | ✅ **dLocal** para los 8 países LATAM | Adaptador escrito, spread decidido (lo asume el tutor) y cuenta aprobada en sandbox y producción |
 | ~~**5**~~ | ~~**PayPal Checkout**~~ | ❌ **Descartado por el cliente el 4-sep-2026.** PayPal paga; no cobra |
 
 De las cuatro fases originales queda **la 3 (Wise)**, y es lo único parado por una cuenta.
 
-⚠️ **Wise sigue sin credenciales de API** (KYB en curso; su sandbox V2 se pide a `api@wise.com`).
-Es el único riel que espera a alguien de fuera.
+⚠️ **Wise sigue sin credenciales de API** (KYB en curso; su sandbox V2 se pide a `api@wise.com`),
+y es el único riel que espera a alguien de fuera — pero desde el 4-sep **no bloquea ningún
+mercado**: entre PayPal y Stripe Connect están cubiertos Venezuela, Colombia y el resto del
+mundo. Wise entra cuando entre, por coste.
 
 ### Decisiones de negocio pendientes
 

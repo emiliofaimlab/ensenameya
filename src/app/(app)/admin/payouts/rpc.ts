@@ -125,11 +125,16 @@ export type DestinosParaPagar = DestinoManual[] | null;
  * ⚠️ Se repite a mano en vez de importar `FamiliaDeDato` de `@/lib/payments`, y
  * es el mismo motivo por el que lo repite `src/lib/payout-account.ts`: ese
  * módulo lleva `import "server-only"` y este lo consume también el componente
- * `"use client"` de al lado. La unión es de dos valores y la asignación se hace
- * en la pantalla (servidor), donde sí está el tipo de verdad: el día que el
- * enrutador añada una tercera familia, esa asignación deja de compilar.
+ * `"use client"` de al lado. La asignación se hace en la pantalla (servidor),
+ * donde sí está el tipo de verdad: cuando el enrutador añadió la tercera
+ * familia ('conectada', 4-sep-2026) esa asignación dejó de compilar, que es
+ * justo para lo que se escribió así.
+ *
+ * ⚠️ 'conectada' NO LLEGA A ESTA PANTALLA HOY y aun así está en la unión: sus
+ * ramas son todas de pago A MANO (`ejecuta === 'persona'`) y Connect lo ejecuta
+ * el proveedor. Los `familia === "banco"` de aquí simplemente no casan.
  */
-export type FamiliaDeDato = "banco" | "identificador";
+export type FamiliaDeDato = "banco" | "identificador" | "conectada";
 
 /**
  * El beneficiario de UN payout, tal y como lo devuelve

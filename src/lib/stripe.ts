@@ -355,3 +355,119 @@ export async function recuperarSesionDeAlta(
 export async function permitirReutilizacion(paymentMethodId: string): Promise<void> {
   await stripe().paymentMethods.update(paymentMethodId, { allow_redisplay: "always" });
 }
+
+/**
+ * ── CONNECT · LO QUE HACE FALTA PARA PAGARLE A UN TUTOR ─────────────────────
+ *
+ * Cuatro llamadas y ninguna más. Viven aquí y no en el adaptador por el mismo
+ * invariante que el resto del archivo: las llamadas al SDK están en `lib/`, la
+ * decisión de qué significa cada respuesta está en el puerto.
+ *
+ * ⚠️ EL ACUERDO ES `recipient`, Y ESO CAMBIA QUÉ ES LA CUENTA. Bajo el
+ * *recipient service agreement* la cuenta conectada solo puede RECIBIR
+ * transferencias y pagarse a sí misma al banco: no cobra, no tiene panel de
+ * Stripe y no es un comercio. Es lo correcto para un tutor —no vende nada a
+ * través de nuestra plataforma con su propia cuenta— y es además lo que hace
+ * que baste con la capability `transfers`, sin el KYC completo de un comercio.
+ */
+
+/**
+ * Crea la cuenta conectada de un tutor. Devuelve el `acct_…`.
+ *
+ * ⚠️ EL PAÍS SE CONGELA AQUÍ Y STRIPE NO LO DEJA CAMBIAR. Si un tutor se muda,
+ * la cuenta vieja no vale y hay que crear otra — por eso el país sale del
+ * `payout_country` que él mismo declaró y no de una IP ni de su zona horaria.
+ */
+export async function crearCuentaConectada(opts: {
+  country: string;
+  email: string | null;
+}): Promise<string> {
+  const cuenta = await stripe().accounts.create({
+    type: "express",
+    country: opts.country.toUpperCase(),
+    ...(opts.email ? { email: opts.email } : {}),
+    // Solo recibir. Nada de `card_payments`: este tutor no cobra por su cuenta.
+    capabilities: { transfers: { requested: true } },
+    tos_acceptance: { service_agreement: "recipient" },
+  });
+  return cuenta.id;
+}
+
+/**
+ * El enlace de alta que el tutor tiene que abrir. Caduca en minutos y es de un
+ * solo uso: se pide uno nuevo cada vez que pulsa, y por eso este helper no
+ * cachea nada.
+ */
+export async function enlaceDeAltaConectada(opts: {
+  account: string;
+  returnUrl: string;
+}): Promise<string> {
+  const enlace = await stripe().accountLinks.create({
+    account: opts.account,
+    // Las dos al mismo sitio: la pantalla de payouts ya sabe leer el estado de
+    // la cuenta y decir si el alta quedó a medias.
+    refresh_url: opts.returnUrl,
+    return_url: opts.returnUrl,
+    type: "account_onboarding",
+  });
+  return enlace.url;
+}
+
+/** ¿Puede esta cuenta recibir dinero ya? Es lo único que se le pregunta. */
+export async function cuentaConectadaLista(account: string): Promise<{
+  lista: boolean;
+  pendiente: string | null;
+}> {
+  const c = await stripe().accounts.retrieve(account);
+  if (c.capabilities?.transfers === "active") return { lista: true, pendiente: null };
+  const falta = c.requirements?.currently_due ?? [];
+  return {
+    lista: false,
+    pendiente: falta.length > 0 ? falta.join(", ") : "Stripe sigue revisando el alta",
+  };
+}
+
+/**
+ * La transferencia. `idempotencyKey` es LA MARCA del payout, y es lo que hace
+ * que este riel no necesite el barrido de páginas que sí necesita dLocal Go:
+ * repetir esta llamada con la misma clave devuelve la misma transferencia.
+ *
+ * `transfer_group` lleva también la marca, y no es duplicar por duplicar: la
+ * clave de idempotencia caduca a las 24 h y el grupo no, así que una orden que
+ * se reanuda dos días después todavía se puede encontrar por él.
+ */
+export async function crearTransferencia(opts: {
+  amountMinor: number;
+  currency: string;
+  destination: string;
+  marca: string;
+  descripcion: string;
+}): Promise<Stripe.Transfer> {
+  return await stripe().transfers.create(
+    {
+      amount: opts.amountMinor,
+      currency: opts.currency.toLowerCase(),
+      destination: opts.destination,
+      transfer_group: opts.marca,
+      description: opts.descripcion,
+      metadata: { marca: opts.marca },
+    },
+    { idempotencyKey: opts.marca },
+  );
+}
+
+/**
+ * Busca por la marca. UNA llamada, sin paginar: el filtro es exacto y la marca
+ * es única por (payout, intento), así que una lista vacía DEMUESTRA que no se
+ * creó nada — que es la palabra cara del puerto y la única que autoriza a
+ * devolver una orden a la cola.
+ */
+export async function transferenciaPorMarca(marca: string): Promise<Stripe.Transfer | null> {
+  const lista = await stripe().transfers.list({ transfer_group: marca, limit: 2 });
+  return lista.data[0] ?? null;
+}
+
+/** Una transferencia concreta, para seguir una orden que ya está en vuelo. */
+export async function recuperarTransferencia(id: string): Promise<Stripe.Transfer> {
+  return await stripe().transfers.retrieve(id);
+}
