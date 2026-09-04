@@ -558,6 +558,24 @@ en 30 días. Hoy no hay aviso para eso.
 queda en `processing` y **nunca** pasa a `paid`, así que NTF-12 («se pagó tu liquidación») no se
 dispara. Es exactamente la regla del puerto —`enviado` ≠ `pagado`— haciendo su trabajo.
 
+**La prueba que lo separa todo (4-sep, misma cuenta, con minutos de diferencia):**
+
+| Cómo se manda | Destino | Resultado |
+| :-- | :-- | :-- |
+| `recipient_type: PAYPAL_ID` | `BEWSZFK8MDBWU` | ✅ **item `SUCCESS`**, $1,00 **entregado** |
+| `recipient_type: EMAIL` | `sb-dnutt…@personal.example.com` | ⚠️ item `UNCLAIMED`, `RECEIVER_UNCONFIRMED` |
+
+O sea que **el riel entrega** —no es un problema de nuestra integración, ni de la cuenta, ni
+del país— y lo que falla es **la entrega por correo a una dirección sin confirmar**. El $25 que
+esa misma cuenta sí recibió el 3-sep aparece en su historial como «Pago recibido»; los $228,75
+por correo no aparecen en ninguna parte, porque un `UNCLAIMED` no está en la cuenta del
+destinatario: está esperando a que lo reclame.
+
+⚠️ **No se cambia el adaptador a `PAYPAL_ID`, y es deliberado.** Un tutor sabe su correo; su id
+de cuenta de PayPal no lo sabe nadie y no se le puede pedir. `EMAIL` es lo correcto para el
+producto. Lo que hay que arreglar no es cómo se manda, es **avisar al tutor cuando su pago
+queda esperando** — que es lo que no existe.
+
 **Y el camino de recuperación, ejercitado entero (4-sep):**
 
 | Paso | Resultado |
