@@ -495,6 +495,44 @@ nuestro —esos datos se los da el tutor a Stripe en su alta— pero significa q
 creada» no es «el tutor cobró»**, igual que el `UNCLAIMED` de PayPal. Por eso el adaptador
 devuelve `enviado` y nunca `pagado`.
 
+### 9.3 · Qué se ha ejercitado DE PUNTA A PUNTA (4-sep-2026)
+
+> **Qué cuenta como «de punta a punta» aquí:** que lo haya movido **nuestro código** —el
+> checkout, el adaptador, el job— y que el **proveedor lo confirme** después con su propio
+> identificador. Llamar a la API con un script NO cuenta: prueba el riel, no la integración.
+> La distinción no es teórica, ver el 🔴 de abajo.
+
+| Camino | Estado | La prueba |
+| :-- | :-- | :-- |
+| **Stripe · cobro** | ✅ | 33 pagos con `pi_…`; Session → webhook firmado → reserva |
+| **Stripe · reembolso** | ✅ | 2 ejecutados (30-ago, $47,50) |
+| **Stripe · payout (Connect)** | ✅ **hoy** | Job → adaptador → `tr_1UByB3HLJB7CRIwf7DyCA2OK`, $16,50 a EC. Segunda pasada: `enviados: 0`, sigue habiendo **una** transferencia |
+| **dLocal · cobro** | ✅ **hoy** | Compra por la interfaz → `DP-253836`, $45,00 → webhook → pago `paid`, reserva `confirmed` |
+| **dLocal · reembolso** | ✅ **hoy** | Cancelación a >24 h → cola → job → **`REF-1991` `SUCCESS`** en dLocal, $45,00 (RN-37 al 100 %) |
+| **dLocal · payout** | ✅ | `73128925947501`, $15,00, `paid` (3-sep) |
+| **PayPal · payout** | ⚠️ **a medias** | Lote `FR6E6SEVN4A5E` creado, pero el item quedó `UNCLAIMED` / `RECEIVER_UNREGISTERED`: el correo del tutor no tiene cuenta de PayPal. **El lote dice `SUCCESS` y el tutor no cobró.** Falta repetirlo contra una cuenta de sandbox registrada |
+| **PayPal · cobro** | — | No se integra: decisión del cliente del 4-sep |
+| **Wise** | — | Sin credenciales de API |
+
+🔴 **Y el aviso que sale de haberlo hecho: las cuatro filas de `payments` que decían
+`provider = 'dlocal'` eran MENTIRA.** Llevan identificadores `pi_…` —de Stripe— y son del
+12-ago, tres semanas antes de que existiera el adaptador de dLocal: son filas de semilla
+reetiquetadas. Leer `provider` sin mirar la forma del identificador daba «dLocal ya cobra»
+cuando no había cobrado nunca. **El identificador es el que no miente.**
+
+⚠️ **El único tramo que no es real es el transporte del webhook de dLocal**, y solo porque
+`localhost` no es alcanzable desde fuera: se le hace la llamada al endpoint local con su firma.
+No cambia nada de lo que se prueba — **nuestro webhook no se cree el cuerpo que recibe**, le
+repregunta el estado a `GET /v1/payments/{id}`, así que la verdad la sigue diciendo dLocal.
+
+⚠️ **Y un fallo que este ejercicio destapó y que estaba en producción:** el enrutador **no podía
+elegir Stripe jamás** para pagar. `payoutProviderFor` se queda con el primer candidato que puede
+pagar, PayPal iba antes en las **18** listas y a PayPal no lo frena la puerta del balance
+—`ataduraDeBalance = false`—, así que un riel atado colocado detrás es inalcanzable, no
+improbable. Lo arregla `20260904210000`: los atados van primero (si el dinero no es suyo, se
+apartan solos en la misma pasada) y **Brasil sale de la lista de Stripe**, porque Connect no
+admite cuentas *recipient* brasileñas desde una plataforma estadounidense.
+
 ### ❓ Pendiente de confirmar
 
 | Qué | Con quién | Nota |
