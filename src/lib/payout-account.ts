@@ -220,6 +220,12 @@ export function estadoDeLaCuenta(args: {
   etiquetaDeCanal: (channel: string) => string;
   /** `nombrePais`, inyectado: este módulo no lo importa (ver la cabecera). */
   nombreDePais: (code: string) => string;
+  /**
+   * Riel 'conectada': ¿puede la cuenta del tutor recibir YA? Lo dice Stripe, no
+   * nuestra base —tener un `acct_…` guardado no significa que el alta esté
+   * terminada—, así que lo resuelve quien llama.
+   */
+  conectada?: boolean;
 }): { tone: PillTone; pill: string; detalle: string | null } {
   const {
     paisDeclarado,
@@ -229,6 +235,7 @@ export function estadoDeLaCuenta(args: {
     destinos,
     etiquetaDeCanal,
     nombreDePais,
+    conectada = false,
   } = args;
 
   if (!paisDeclarado) {
@@ -238,12 +245,17 @@ export function estadoDeLaCuenta(args: {
     return { tone: "amber", pill: "Pendiente", detalle: null };
   }
 
-  // Connect: no hay nada guardado de nuestro lado que enseñar. Lo que decide si
-  // el tutor está listo vive EN STRIPE, así que esta función no puede
-  // responderlo sin una llamada — y no la hace: la pantalla pinta la tarjeta de
-  // alta, que sí pregunta.
+  // Connect: aquí no hay nada guardado de nuestro lado que mirar — lo que
+  // decide si el tutor puede cobrar vive EN STRIPE. Por eso entra `conectada`,
+  // que la pantalla resuelve preguntándoselo.
+  //
+  // ⚠️ Antes esto devolvía SIEMPRE «Alta en Stripe», también a quien ya la había
+  // terminado: se le decía que le faltaba algo cuando no le faltaba nada, y el
+  // botón de al lado le ofrecía «continuar» un alta ya completa.
   if (riel === "conectada") {
-    return { tone: "amber", pill: "Alta en Stripe", detalle: null };
+    return conectada
+      ? { tone: "green", pill: "Conectada", detalle: "Tu cuenta de Stripe puede recibir pagos." }
+      : { tone: "amber", pill: "Falta el alta", detalle: null };
   }
 
   if (riel === "identificador") {

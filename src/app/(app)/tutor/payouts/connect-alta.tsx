@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
  * momento de pulsar y no al pintar la página. Un enlace traído en el render
  * estaría muerto para cuando alguien lo mirase.
  */
-export function ConnectAlta({ yaTieneCuenta }: { yaTieneCuenta: boolean }) {
+export function ConnectAlta({ yaTieneCuenta, lista }: { yaTieneCuenta: boolean; lista: boolean }) {
   const [cargando, setCargando] = useState(false);
   const router = useRouter();
 
@@ -64,19 +64,35 @@ export function ConnectAlta({ yaTieneCuenta }: { yaTieneCuenta: boolean }) {
   return (
     <div className="mt-3 max-w-[620px]">
       <p className="text-[13px] text-[#6b6b6b]">
-        Tu dinero sale por Stripe. Para recibirlo tienes que darte de alta en
-        ellos una vez: te pedirán tus datos y tu cuenta bancaria{" "}
-        <strong className="font-semibold text-[#19191f]">
-          directamente a ti
-        </strong>
-        , y nosotros no llegamos a verlos.
+        {lista ? (
+          <>
+            Tu cuenta de Stripe está lista y puede recibir pagos. Tu dinero irá
+            ahí en cuanto se liquide tu saldo.
+          </>
+        ) : (
+          <>
+            Tu dinero sale por Stripe. Para recibirlo tienes que darte de alta en
+            ellos una vez: te pedirán tus datos y tu cuenta bancaria{" "}
+            <strong className="font-semibold text-[#19191f]">
+              directamente a ti
+            </strong>
+            , y nosotros no llegamos a verlos.
+          </>
+        )}
       </p>
-      <Button className="mt-3" onClick={abrir} disabled={cargando}>
+      <Button
+        className="mt-3"
+        onClick={abrir}
+        disabled={cargando}
+        variant={lista ? "outline" : "default"}
+      >
         {cargando
           ? "Abriendo…"
-          : yaTieneCuenta
-            ? "Continuar el alta en Stripe"
-            : "Darme de alta en Stripe"}
+          : lista
+            ? "Ver o cambiar mi cuenta de Stripe"
+            : yaTieneCuenta
+              ? "Continuar el alta en Stripe"
+              : "Darme de alta en Stripe"}
       </Button>
     </div>
   );
