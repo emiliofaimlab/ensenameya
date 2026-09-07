@@ -26,11 +26,14 @@ quedaron cortos; el marco actual salió de la reunión del 24-jul). En Jira: **9
 - **El PR #11 ya se mergeó** (`1a36da2`): Sprint 7 completo y Sprint 8 casi, las 15
   historias están en `dev` aunque en Jira sigan en `In Review`. El detalle, tanda a tanda
   y con SHA, está en `docs/PLAN-DESARROLLO.md`.
-- ✅ **`dev` y `main` están ALINEADAS (4-sep-2026, `main` = `6cff50d`).** Cero commits de
-  diferencia y cero migraciones pendientes: el CI las aplicó las cuatro a producción sin un
-  error (run `#33881321906`). Verificado además contra prod, no supuesto: `/terms` responde
-  **200** —llevaba meses en 404— y `/api/tutor/stripe-connect` responde 405 a un GET, o sea
-  que la ruta está desplegada.
+- ✅ **`dev` y `main` están ALINEADAS (7-sep-2026, `main` = `03e5323`).** Contenido idéntico
+  (`git diff origin/dev origin/main` vacío) y cero migraciones pendientes: el PR #12 llevó los
+  11 commits de PayPal y payouts, y el CI aplicó sus tres migraciones a producción sin un error
+  (run `#34126503234`). Verificado además contra prod, no supuesto: `/terms` responde **200**
+  —llevaba meses en 404— y `/api/tutor/paypal-connect` y `/api/tutor/stripe-connect` responden
+  405 a un GET, o sea que las rutas están desplegadas.
+  ⚠️ **Y esta línea caduca sola.** Decía `6cff50d` / 4-sep y el 7-sep ya era falsa: `dev` iba
+  11 commits por delante. Antes de fiarse, `git rev-list --left-right --count dev...main`.
   ⚠️ **Y lo que hacía que las dos bases NO coincidieran no era el merge.** Era que el ruteo de
   pagos se tocaba con `UPDATE`s a mano en dev, que nunca existieron como fichero: dev cobraba
   por dLocal y prod por `simulated`, y no había nada que aplicar. Lo arregla
