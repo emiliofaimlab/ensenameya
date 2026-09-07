@@ -6,6 +6,9 @@ import { stripeProvider } from "@/lib/payments/stripe-provider";
 import { dlocalProvider } from "@/lib/payments/dlocal-provider";
 import { paypalProvider } from "@/lib/payments/paypal-provider";
 import type { AnyProvider, LocalProvider, PspProvider } from "@/lib/payments/port";
+import { rielSirveParaEsteTutor, type DatosDeCobro } from "@/lib/payments/riel-viable";
+export { rielSirveParaEsteTutor };
+export type { DatosDeCobro };
 
 /**
  * EL ENRUTADOR DE PAGOS — el `PaymentRouter` del Doc 6 §6.2, en la forma que el
@@ -279,9 +282,33 @@ export type PaisDePayout = { code: string; dato: FamiliaDeDato };
  * `payeeCountry` null es el tutor que no ha declarado país; tiene su propia fila
  * con `payout_provider='simulated'`, que es la ausencia de ejecutor.
  */
+/**
+ * Lo mismo que `datos_de_cobro_del_tutor` pero para varios tutores de una vez.
+ * Existe para el panel de admin, que pinta una cola entera: preguntar fila a
+ * fila sería una consulta por orden.
+ *
+ * Un tutor que no conteste queda con todo a false, que es el fallo seguro: se
+ * pinta «sin ejecutor» en vez de prometer un riel que quizá no puede pagarle.
+ */
+export async function datosDeCobroDeVarios(
+  tutorIds: string[],
+): Promise<Map<string, DatosDeCobro>> {
+  const unicos = [...new Set(tutorIds.filter(Boolean))];
+  const admin = createAdminClient();
+  const pares = await Promise.all(
+    unicos.map(async (id) => {
+      const { data, error } = await admin.rpc("datos_de_cobro_del_tutor", { p_tutor: id });
+      if (error) throw new Error(`datos_de_cobro_del_tutor(${id}): ${error.message}`);
+      return [id, data as unknown as DatosDeCobro] as const;
+    }),
+  );
+  return new Map(pares);
+}
+
 export async function payoutProviderFor(
   payeeCountry: string | null,
   fundingProvider: string | null,
+  tutorId: string | null,
 ): Promise<string | null> {
   // Mismo resolvedor que el cobro, y por el mismo motivo: el desempate entre la
   // fila del país y la de por defecto vive en `ruta_de_pago()` y en ningún otro
@@ -298,6 +325,22 @@ export async function payoutProviderFor(
   // sirve: las dos cosas significan «esta orden espera», y el job las cuenta.
   const candidatos = data?.payout_providers ?? [];
 
+  // 🔑 QUÉ TIENE REGISTRADO ESTE TUTOR. Sin esto el resolvedor elige el primer
+  // riel que puede pagar EN GENERAL, que no es lo mismo que poder pagarle A ÉL
+  // — ver `rielSirveParaEsteTutor`.
+  //
+  // Sin tutor no se puede preguntar, y entonces NO se filtra: quien llame así
+  // obtiene el comportamiento de antes. Hoy no llama nadie.
+  let datos: DatosDeCobro | null = null;
+  if (tutorId) {
+    const { data: crudo, error } = await createAdminClient()
+      .rpc("datos_de_cobro_del_tutor", { p_tutor: tutorId });
+    // Se mira el error (regla de oro 10): tratar un fallo como «no tiene nada»
+    // dejaría la orden esperando por un motivo falso.
+    if (error) throw new Error(`datos_de_cobro_del_tutor: ${error.message}`);
+    datos = crudo as unknown as DatosDeCobro;
+  }
+
   for (const clave of candidatos) {
     const riel = RIELES[clave];
     // Clave desconocida (un typo) o 'simulated': no es un riel. Se salta, y si
@@ -309,6 +352,9 @@ export async function payoutProviderFor(
     // cómo se desincronizan. Un riel atado solo sirve si el dinero está en SU
     // balance; uno fondeado aparte no depende de quién cobró.
     if (riel.ataduraDeBalance && riel.clave !== fundingProvider) continue;
+    // Y lo último: que ESTE tutor le haya dado lo que necesita. Un riel que no
+    // puede pagarle a él no es un candidato, es una orden atascada en silencio.
+    if (datos && !rielSirveParaEsteTutor(riel, datos)) continue;
     return riel.clave;
   }
 

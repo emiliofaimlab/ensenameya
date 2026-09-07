@@ -322,7 +322,7 @@ export async function GET(req: Request) {
     // orden hoy» —, que NO es un fallo: la fila se queda esperando.
     const claveEjecutor = enVueloYa
       ? (fila.provider ?? "simulated")
-      : await payoutProviderFor(fila.payee_country, fila.funding_provider);
+      : await payoutProviderFor(fila.payee_country, fila.funding_provider, fila.tutor_id);
     // `claveEjecutor` puede ser null desde C2r: «ningún candidato puede pagar
     // esta orden hoy». `pspDe` ya sabe tratar una clave que no es un PSP, así
     // que se le pasa el null tal cual y la fila cae en el camino de «sin

@@ -89,7 +89,7 @@ Dos reglas transversales:
 | ~~**Colombia**~~ | ✅ Tiene fila, y desde el 4-sep con dLocal **primero** (dLocal sí cubre CO: medido) |
 | ~~**Los otros países que dLocal cobra**~~ | ✅ **Resuelto el 4-sep midiendo, no deduciendo** (§9.1): dLocal cobra en **18** países, no en 17 ni en 8. Se añadieron los nueve que faltaban y Venezuela dejó de llevar dLocal de respaldo, que era imposible. Y ningún país «no se puede vender»: desde `20260903190000` los que no tienen fila caen en la fila por defecto (Stripe) |
 | ~~**Adaptador de PayPal**~~ | ✅ **Hecho el 3-sep-2026** y ejecutado de verdad contra dev: el job creó el lote `FR6E6SEVN4A5E`, $228,75 a un tutor venezolano, y la fila quedó `processing` con su `provider_payout_id`. En dev no falta nada. Lo de «vivo» es post-lanzamiento y va con la migración de dominio |
-| **Adaptador de Wise** | Wise **no tiene credenciales de API**: su cuenta está en KYB y su sandbox V2 no es autoservicio (se pide a `api@wise.com`). Es lo único que sigue bloqueado por una cuenta |
+| **Adaptador de Wise** | ✅ **Ya no está bloqueado por credenciales (4-sep-2026)**: hay token y su API responde —perfiles, saldos y presupuestos—, así que el camino de pago está abierto. Medido: **$150 → 456.354,38 COP con $4,06 de comisión**. Queda escribir el adaptador, y contar con que crear la transferencia exige **SCA** (firmar con una clave registrada en la cuenta) |
 | ~~**Adaptador de payout directo de Stripe**~~ | ✅ **Escrito y ejecutado el 4-sep-2026** (§9.2). Transferencia real en *test mode*: `tr_1UBxVvHLJB7CRIwfB3VzPYpX`, $228,75 a una cuenta conectada **colombiana**. Falta que un tutor de verdad complete su alta |
 | **Elegir entre varios automáticos** | `payout_provider` es hoy un valor fijo por país. La regla 2 lo convierte en «uno de este conjunto». La pieza que compara existe; la que elige entre candidatos, no |
 
@@ -494,6 +494,112 @@ su saldo a su banco) devolvió 400 pidiendo `account_type` para Colombia. No es 
 nuestro —esos datos se los da el tutor a Stripe en su alta— pero significa que **«transferencia
 creada» no es «el tutor cobró»**, igual que el `UNCLAIMED` de PayPal. Por eso el adaptador
 devuelve `enviado` y nunca `pagado`.
+
+### 9.3 · Qué se ha ejercitado DE PUNTA A PUNTA (4-sep-2026)
+
+> **Qué cuenta como «de punta a punta» aquí:** que lo haya movido **nuestro código** —el
+> checkout, el adaptador, el job— y que el **proveedor lo confirme** después con su propio
+> identificador. Llamar a la API con un script NO cuenta: prueba el riel, no la integración.
+> La distinción no es teórica, ver el 🔴 de abajo.
+
+| Camino | Estado | La prueba |
+| :-- | :-- | :-- |
+| **Stripe · cobro** | ✅ | 33 pagos con `pi_…`; Session → webhook firmado → reserva |
+| **Stripe · reembolso** | ✅ | 2 ejecutados (30-ago, $47,50) |
+| **Stripe · payout (Connect)** | ✅ **hoy** | Job → adaptador → `tr_1UByB3HLJB7CRIwf7DyCA2OK`, $16,50 a EC. Segunda pasada: `enviados: 0`, sigue habiendo **una** transferencia |
+| **dLocal · cobro** | ✅ **hoy** | Compra por la interfaz → `DP-253836`, $45,00 → webhook → pago `paid`, reserva `confirmed` |
+| **dLocal · reembolso** | ✅ **hoy** | Cancelación a >24 h → cola → job → **`REF-1991` `SUCCESS`** en dLocal, $45,00 (RN-37 al 100 %) |
+| **dLocal · payout** | ✅ | `73128925947501`, $15,00, `paid` (3-sep) |
+| **PayPal · payout** | ✅ **CERRADO** | Recorrido entero con dinero moviéndose: el tutor conecta su cuenta por OAuth → retira → job → lote `DRM7SBVWEX65G` → PayPal responde **`item: SUCCESS`** → segunda pasada → fila **`paid`** y NTF-12 encolado. Repetido dos veces (`4U4DQPGVPL3NS`). El camino de recuperación también está ejercitado (§9.4) |
+| **PayPal · cobro** | — | No se integra: decisión del cliente del 4-sep |
+| **Wise** | — | Sin credenciales de API |
+
+🔴 **Y el aviso que sale de haberlo hecho: las cuatro filas de `payments` que decían
+`provider = 'dlocal'` eran MENTIRA.** Llevan identificadores `pi_…` —de Stripe— y son del
+12-ago, tres semanas antes de que existiera el adaptador de dLocal: son filas de semilla
+reetiquetadas. Leer `provider` sin mirar la forma del identificador daba «dLocal ya cobra»
+cuando no había cobrado nunca. **El identificador es el que no miente.**
+
+⚠️ **El único tramo que no es real es el transporte del webhook de dLocal**, y solo porque
+`localhost` no es alcanzable desde fuera: se le hace la llamada al endpoint local con su firma.
+No cambia nada de lo que se prueba — **nuestro webhook no se cree el cuerpo que recibe**, le
+repregunta el estado a `GET /v1/payments/{id}`, así que la verdad la sigue diciendo dLocal.
+
+⚠️ **Y un fallo que este ejercicio destapó y que estaba en producción:** el enrutador **no podía
+elegir Stripe jamás** para pagar. `payoutProviderFor` se queda con el primer candidato que puede
+pagar, PayPal iba antes en las **18** listas y a PayPal no lo frena la puerta del balance
+—`ataduraDeBalance = false`—, así que un riel atado colocado detrás es inalcanzable, no
+improbable. Lo arregla `20260904210000`: los atados van primero (si el dinero no es suyo, se
+apartan solos en la misma pasada) y **Brasil sale de la lista de Stripe**, porque Connect no
+admite cuentas *recipient* brasileñas desde una plataforma estadounidense.
+
+### 9.4 · PayPal: por qué se paga a la cuenta conectada y no al correo
+
+> ✅ **RESUELTO EL 4-SEP-2026.** El tutor conecta su cuenta con «Log in with PayPal», nos
+> quedamos con su identificador, y el pago entra. Lo que sigue es el porqué — y el porqué
+> importa, porque el camino del correo **sigue existiendo** como respaldo para quien no
+> conecte su cuenta, y ahí el fallo de abajo se puede repetir.
+>
+> **El marcador de la jornada, contra el mismo sandbox:**
+>
+> | Cómo se manda | Resultado |
+> | :-- | :-- |
+> | Al correo que teclea el tutor | `UNCLAIMED` · **5 de 5** |
+> | Al identificador de la cuenta conectada | `SUCCESS` · **3 de 3** |
+
+#### Lo que falla cuando se paga a un correo (medido dos veces)
+
+🔴 **Es el hallazgo de producto más importante de la ronda, y no es un fallo del código.**
+Un payout de PayPal por correo **no llega solo**. El destinatario tiene que reclamarlo, y hasta
+que lo haga el dinero se queda retenido —30 días— y luego vuelve. Los dos modos de fallo, los
+dos medidos, y **en los dos el lote informa `SUCCESS`**:
+
+| Motivo | Qué significa | Medido |
+| :-- | :-- | :-- |
+| `RECEIVER_UNREGISTERED` | El correo no tiene cuenta de PayPal | 3-sep, lote `FR6E6SEVN4A5E` |
+| `RECEIVER_UNCONFIRMED` | La cuenta existe **y está verificada**, pero ese correo no está confirmado en ella | 4-sep, lote `VXMFYXXG3RY56` |
+
+⚠️ **«Verificada» y «correo confirmado» no son lo mismo**, y la segunda es la que manda: la
+cuenta de sandbox `sb-dnutt…@personal.example.com` figura como *Verified* en el panel de PayPal
+y su payout sigue `UNCLAIMED`.
+
+**Consecuencia para el producto, que no está especificada en ningún sitio:** al tutor hay que
+**decirle que tiene un pago esperando y que entre en PayPal a reclamarlo**. Sin eso, un tutor
+que registró un correo sin cuenta —o con el correo sin confirmar— ve «pago enviado» y no cobra
+en 30 días. Hoy no hay aviso para eso.
+
+✅ **Lo que el sistema sí hace bien, y es lo que impide que esto sea un desastre:** la fila se
+queda en `processing` y **nunca** pasa a `paid`, así que NTF-12 («se pagó tu liquidación») no se
+dispara. Es exactamente la regla del puerto —`enviado` ≠ `pagado`— haciendo su trabajo.
+
+**La prueba que lo separa todo (4-sep, misma cuenta, con minutos de diferencia):**
+
+| Cómo se manda | Destino | Resultado |
+| :-- | :-- | :-- |
+| `recipient_type: PAYPAL_ID` | `BEWSZFK8MDBWU` | ✅ **item `SUCCESS`**, $1,00 **entregado** |
+| `recipient_type: EMAIL` | `sb-dnutt…@personal.example.com` | ⚠️ item `UNCLAIMED`, `RECEIVER_UNCONFIRMED` |
+
+O sea que **el riel entrega** —no es un problema de nuestra integración, ni de la cuenta, ni
+del país— y lo que falla es **la entrega por correo a una dirección sin confirmar**. El $25 que
+esa misma cuenta sí recibió el 3-sep aparece en su historial como «Pago recibido»; los $228,75
+por correo no aparecen en ninguna parte, porque un `UNCLAIMED` no está en la cuenta del
+destinatario: está esperando a que lo reclame.
+
+⚠️ **No se cambia el adaptador a `PAYPAL_ID`, y es deliberado.** Un tutor sabe su correo; su id
+de cuenta de PayPal no lo sabe nadie y no se le puede pedir. `EMAIL` es lo correcto para el
+producto. Lo que hay que arreglar no es cómo se manda, es **avisar al tutor cuando su pago
+queda esperando** — que es lo que no existe.
+
+**Y el camino de recuperación, ejercitado entero (4-sep):**
+
+| Paso | Resultado |
+| :-- | :-- |
+| Se cancela el item no reclamado en PayPal | `UNCLAIMED` → `RETURNED`, el dinero vuelve |
+| Pasada del job | lo clasifica **`difunto` solo**: fila a `scheduled`, `provider_payout_id` borrado, `intento` a **2** y el lote muerto archivado en `intentos_muertos` |
+| Pasada siguiente | crea un lote **nuevo** con la marca del intento 2 (`VXMFYXXG3RY56`), al destino corregido |
+
+Eso cierra el bucle silencioso que documenta `PayoutResult.difunto`: sin `intento`, el barrido
+del segundo intento encontraría el cadáver del primero y lo daría por bueno para siempre.
 
 ### ❓ Pendiente de confirmar
 

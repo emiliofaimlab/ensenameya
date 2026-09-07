@@ -15,7 +15,9 @@ import { avisoDeImporteAproximado } from "@/lib/payments/dlocal-provider";
 import { WithdrawButton } from "./withdraw-button";
 import { PayoutCountryForm } from "./payout-country-form";
 import { PayoutAccountForm } from "./payout-account-form";
+import { cuentaConectadaLista } from "@/lib/stripe";
 import { ConnectAlta } from "./connect-alta";
+import { PaypalConectar } from "./paypal-conectar";
 import { PayoutManualForm } from "./payout-manual-form";
 import { leerCanalesManuales, leerDestinosManuales } from "./rpc";
 import {
@@ -168,6 +170,19 @@ export default async function TutorPayoutsPage() {
   const upcoming = (payouts ?? []).filter((p) => UPCOMING.has(p.status));
   const history = (payouts ?? []).filter((p) => !UPCOMING.has(p.status));
 
+  /**
+   * ¿Puede la cuenta conectada del tutor recibir YA?
+   *
+   * ⚠️ NO SE DEDUCE DE TENER UN `acct_…` GUARDADO, y esa fue la confusión: un
+   * tutor con el alta TERMINADA veía «Alta en Stripe» y un botón que le ofrecía
+   * «continuar» algo que ya había acabado. Quien lo sabe es Stripe, así que se
+   * le pregunta — una llamada, y solo si hay cuenta que preguntar.
+   */
+  const cuentaConectada = perfil?.stripe_connect_account_id ?? null;
+  const connectLista = cuentaConectada
+    ? (await cuentaConectadaLista(cuentaConectada)).lista
+    : false;
+
   const paisDeCobro = perfil?.payout_country ?? null;
   /**
    * Lo que ofrece el desplegable. Si el tutor tiene declarado un país que hoy ya
@@ -266,6 +281,7 @@ export default async function TutorPayoutsPage() {
     destinos,
     etiquetaDeCanal,
     nombreDePais: nombrePais,
+    conectada: connectLista,
   });
 
   /**
@@ -473,9 +489,19 @@ export default async function TutorPayoutsPage() {
             </p>
           ) : riel === "conectada" ? (
             /* Connect. No hay formulario: el alta es en Stripe. */
-            <ConnectAlta yaTieneCuenta={Boolean(perfil?.stripe_connect_account_id)} />
+            <ConnectAlta yaTieneCuenta={Boolean(cuentaConectada)} lista={connectLista} />
           ) : riel === "identificador" ? (
             <>
+              {/* Va PRIMERO, antes del formulario: es el camino que entrega.
+                  Solo cuando PayPal está entre los canales del país — en los
+                  otros (Zelle, Zinli) no hay nada que conectar. */}
+              {canales.some((c) => c.channel === "paypal") ? (
+                <PaypalConectar
+                  conectada={destinos.some(
+                    (d) => d.channel === "paypal" && Boolean(d.verified_account_id),
+                  )}
+                />
+              ) : null}
               {/* El tutor que cambió de un país de banco a uno manual: sus datos
                   bancarios siguen ahí, pero no sirven para pagarle aquí. Mismo
                   criterio que el mensaje simétrico del formulario bancario. */}

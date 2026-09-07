@@ -3,7 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatMoney } from "@/lib/catalog/format";
 import { nombrePais, PAYOUT_BADGE } from "@/lib/payouts";
-import { rielDePayout, type Riel } from "@/lib/payments";
+import {
+  datosDeCobroDeVarios,
+  rielDePayout,
+  rielSirveParaEsteTutor,
+  type DatosDeCobro,
+  type Riel,
+} from "@/lib/payments";
 import type { Database, Json } from "@/lib/database.types";
 import {
   PanelCard,
@@ -189,7 +195,11 @@ type RielEnPantalla = {
   resuelto: boolean;
 };
 
-function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): RielEnPantalla {
+function rielDe(
+  fila: FilaPayout,
+  reglas: ReglaDeRuteo[] | null,
+  datos: Map<string, DatosDeCobro>,
+): RielEnPantalla {
   // Sin tabla de ruteo no se inventa nada: se dice lo poco que se sabe (quién
   // lo ejecutó, si ya se ejecutó) y la pantalla avisa arriba de por qué.
   if (reglas === null) {
@@ -236,6 +246,12 @@ function rielDe(fila: FilaPayout, reglas: ReglaDeRuteo[] | null): RielEnPantalla
     if (!r) continue; // typo en la tabla, o 'simulated': no es un riel
     if (!r.puedePagar()) continue; // declarado y esperando cuenta
     if (r.ataduraDeBalance && r.clave !== fila.funding_provider) continue;
+    // 🔴 Y LA CUARTA CONDICIÓN, que faltaba aquí y en `payoutProviderFor`: que
+    // este tutor le haya dado a ESE riel lo que necesita. Sin ella la cola
+    // pintaba «paypal» para una venezolana que había registrado Zinli — y el
+    // job, con el mismo bucle, elegía lo mismo y dejaba la orden atascada.
+    const d = datos.get(fila.tutor_id);
+    if (d && !rielSirveParaEsteTutor(r, d)) continue;
     riel = r;
     break;
   }
@@ -399,7 +415,10 @@ export default async function AdminPayoutsPage({
   }
 
   // ── 3 · Riel por fila, y de ahí todo lo demás ─────────────────────────────
-  const conRiel = todas.map((p) => ({ fila: p, riel: rielDe(p, reglas) }));
+  // Qué tiene registrado cada tutor de la cola. Se pide una sola vez para
+  // todos: el riel que se pinta depende de esto, igual que el que ejecuta.
+  const datosDeCobro = await datosDeCobroDeVarios(todas.map((p) => p.tutor_id));
+  const conRiel = todas.map((p) => ({ fila: p, riel: rielDe(p, reglas, datosDeCobro) }));
 
   const paises = [
     ...new Set(todas.map((p) => p.payee_country).filter((c): c is string => !!c)),

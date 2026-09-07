@@ -109,7 +109,9 @@ export async function leerDestinosManuales(
 ): Promise<{ data: unknown[]; error: ErrorPostgrest | null }> {
   const { data, error } = await (cliente as LectorDeTablas)
     .from("tutor_manual_payout_destinations")
-    .select("channel, holder_name, handle_masked, updated_at")
+    // `verified_account_id` NO es un secreto: es a dónde se paga, y el tutor
+    // tiene que poder ver si su cuenta está conectada o solo tecleada.
+    .select("channel, holder_name, handle_masked, updated_at, verified_account_id")
     .eq("tutor_id", tutorId);
   return { data: (data ?? []) as unknown[], error };
 }
