@@ -573,20 +573,31 @@ export default async function TutorPayoutsPage() {
         <dl className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)]">
           <div>
             <dt className="text-xs text-[#6b6b6b]">País de cobro</dt>
-            <dd className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
+            {/* ⚠️ AQUÍ HABÍA UN PÁRRAFO Y AHORA HAY UN ENLACE. Explicaba que el
+                país sale de la zona horaria y que se cambia en la cuenta; tres
+                líneas para decir algo que solo importa cuando el país está mal.
+                Lo que NO se puede quitar es la salida: desde `20260908130000`
+                el tutor no tiene grant sobre `payout_country`, así que sin este
+                enlace uno con el país equivocado no tiene por dónde arreglarlo.
+                La explicación cabe en el `title`; la acción, en una palabra. */}
+            <dd className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-[#19191f]">
               {paisDeCobro ? (
                 <>
                   {nombrePais(paisDeCobro)}
                   {familias.length === 0 ? (
-                    <>
-                      {" "}
-                      <StatusPill tone="amber">Sin cobertura</StatusPill>
-                    </>
+                    <StatusPill tone="amber">Sin cobertura</StatusPill>
                   ) : null}
                 </>
               ) : (
                 <StatusPill tone="amber">Sin determinar</StatusPill>
               )}
+              <a
+                href="/account"
+                title="Tu país de cobro sale de la zona horaria de tu perfil. Cámbiala en tu cuenta."
+                className="text-[12px] font-semibold text-[#0068d0] underline underline-offset-2"
+              >
+                Cambiar
+              </a>
             </dd>
           </div>
           <div>
@@ -622,28 +633,6 @@ export default async function TutorPayoutsPage() {
           ) : null}
         </dl>
 
-        {/* A0 · EL PAÍS YA NO SE ELIGE AQUÍ, y decir de dónde sale no es un
-            detalle de cortesía: es lo que convierte un dato que el tutor no
-            puede tocar en uno que sí, porque le enseña dónde se toca.
-
-            ⚠️ El `border-t` va en el DIV, no en el `<p>`. Estaba en el párrafo,
-            que lleva `max-w-[70ch]`: la línea medía lo que medía el texto y se
-            cortaba a dos tercios de la tarjeta, como si el bloque estuviera
-            roto. El ancho máximo es para LEER; el separador separa la tarjeta
-            entera. */}
-        <div className="mt-4 border-t border-[#e0e0e0] pt-4">
-        <p className="max-w-[70ch] text-[13px] leading-[1.6] text-[#4d4d4d]">
-          Tu país de cobro sale de la zona horaria de tu perfil, la misma con la
-          que publicas tus horarios, así que no hay nada que rellenar aquí.{" "}
-          <a
-            href="/account"
-            className="font-semibold text-[#0068d0] underline underline-offset-2"
-          >
-            Si no es donde cobras, cámbiala en tu cuenta
-          </a>
-          .
-        </p>
-        </div>
       </PanelCard>
 
       {/* 🔑 El radiogroup. */}
@@ -685,14 +674,11 @@ export default async function TutorPayoutsPage() {
           </p>
         ) : (
           <>
-            <p className="mt-2 max-w-[72ch] text-[13px] leading-[1.6] text-[#4d4d4d]">
-              Elige por dónde quieres que te paguemos y rellena sus datos.{" "}
-              <strong className="font-semibold text-[#19191f]">
-                Con una basta
-              </strong>
-              ; si dejas más de una completa, nos queda alternativa el día que la
-              primera no sirva. Puedes cambiar de opinión cuando quieras.
-            </p>
+            {/* ⚠️ Sin párrafo de introducción. Decía «elige por dónde quieres
+                que te paguemos», que es exactamente lo que ya dice el título de
+                la tarjeta, y remataba con dos frases que la propia lista
+                demuestra: los radios enseñan que se elige UNA y las píldoras,
+                cuáles están completas. Prosa que describe lo que se ve. */}
             <MetodosDeCobro
               tarjetas={tarjetas}
               preferida={preferida}

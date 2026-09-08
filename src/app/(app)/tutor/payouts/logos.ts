@@ -17,13 +17,21 @@
  * dejaría negros. Con máscara, el fichero decide la FORMA y esta tabla el
  * color, que es justo el reparto que hace falta.
  *
- * ⚠️ ZINLI NO ESTÁ, y no es un olvido: no existe en simple-icons (404 medido el
- * 8-sep-2026) y no se inventa un logo aproximado, que es peor que no ponerlo.
- * Sin entrada aquí la tarjeta cae al monograma, que es un respaldo con pinta de
- * intencionado. Para arreglarlo basta con dejar `zinli.svg` en la carpeta y
- * añadir su color abajo — sin tocar ningún componente.
+ * ── DOS MODOS, Y LOS DECIDE `color` ────────────────────────────────────────
+ *
+ *   CON color  → el SVG es una silueta monocroma (las de simple-icons vienen
+ *                sin `fill`) y se pinta con `mask`: el fichero da la FORMA y
+ *                esta tabla el color.
+ *   SIN color  → el SVG ya trae sus colores dentro y se pinta con `<img>`, tal
+ *                cual. Es lo que hace falta para un logo de más de un color,
+ *                que con máscara saldría plano.
+ *
+ * ⚠️ ZINLI llegó por el segundo camino: no existe en simple-icons (404 medido
+ * el 8-sep-2026), así que su SVG es el que entregó el cliente —cuadrado morado
+ * con la Z verde— y por eso va sin `color`. Antes de tenerlo, su tarjeta caía
+ * al monograma en vez de a un logo aproximado, que habría sido peor.
  */
-export const LOGOS: Record<string, { src: string; color: string }> = {
+export const LOGOS: Record<string, { src: string; color?: string }> = {
   // Los cuatro hex son los que publica simple-icons como color oficial de cada
   // marca. No se ajustan «para que peguen»: un logo con el color cambiado deja
   // de ser el logo.
@@ -31,6 +39,8 @@ export const LOGOS: Record<string, { src: string; color: string }> = {
   stripe: { src: "/img/payout/stripe.svg", color: "#635BFF" },
   binance: { src: "/img/payout/binance.svg", color: "#F0B90B" },
   zelle: { src: "/img/payout/zelle.svg", color: "#6D1ED4" },
+  // Sin `color`: su SVG ya trae los dos (morado #5333B5 y verde #33CC99).
+  zinli: { src: "/img/payout/zinli.svg" },
   // 'banco' NO lleva logo de marca a propósito: la tarjeta de transferencia
   // cubre a dLocal y a Wise a la vez y no dice cuál usamos, porque al tutor no
   // le cambia nada. Poner el de uno de los dos sería prometerle un corresponsal.

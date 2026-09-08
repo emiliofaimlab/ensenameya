@@ -29,7 +29,7 @@ export type TarjetaMetodo = {
    * de ninguna marca —cubre a dLocal y a Wise sin decir cuál—, y Zinli, que no
    * publica un SVG que podamos usar. Los dos caen al monograma.
    */
-  logo: { src: string; color: string } | null;
+  logo: { src: string; color?: string } | null;
   /** El respaldo cuando no hay logo. Dos letras del propio nombre. */
   monograma: string;
   /** Una línea, o vacío si la tarjeta se explica sola. Nunca un párrafo: eso
@@ -222,7 +222,16 @@ export function MetodosDeCobro({
                         : "border-[#ececec] bg-[#fafafa]",
                     )}
                   >
-                    {t.logo ? (
+                    {t.logo && !t.logo.color ? (
+                      // Logo que ya trae sus colores: se pinta tal cual. Una
+                      // máscara lo aplanaría a un solo tono.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={t.logo.src}
+                        alt=""
+                        className="size-[26px] rounded-[6px]"
+                      />
+                    ) : t.logo ? (
                       <span
                         className="size-[22px]"
                         style={{
