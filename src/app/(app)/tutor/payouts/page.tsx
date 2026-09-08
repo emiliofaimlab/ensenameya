@@ -356,7 +356,12 @@ export default async function TutorPayoutsPage() {
         // Sin logo a propósito: no es de ninguna marca. Ver `logos.ts`.
         logo: null,
         monograma: "TR",
-        descripcion: `A tu cuenta en ${nombrePais(paisDeCobro!)}, en ${regla?.currency ?? MONEDA_DEL_SALDO}. Tiene que estar a tu nombre: el titular y el documento se comprueban contra el banco y, si no coinciden, la transferencia se rechaza.`,
+        // ⚠️ UNA LÍNEA. Aquí había un párrafo de tres —titular, documento, qué
+        // pasa si no coinciden— y multiplicado por cinco tarjetas convertía la
+        // pantalla en un muro. Lo que importa AL ELEGIR es dónde y en qué
+        // moneda cae el dinero; el resto se lee al rellenar, que es cuando
+        // sirve, y por eso baja al bloque del formulario.
+        descripcion: `A tu cuenta en ${nombrePais(paisDeCobro!)}, en ${regla?.currency ?? MONEDA_DEL_SALDO}${avisoDeCambio ? " (importe aproximado)" : ""}.`,
         automatico: m.automatico,
         listo: cuentaDeEstePais,
         detalle: cuentaDeEstePais
@@ -364,7 +369,11 @@ export default async function TutorPayoutsPage() {
           : cuenta
             ? `Tienes datos de ${nombrePais(cuenta.country)} guardados, pero a ${nombrePais(paisDeCobro!)} no llega esa transferencia.`
             : null,
-        aviso: avisoDeCambio ? { texto: avisoDeCambio, tono: "warn" } : null,
+        // El aviso del cambio se va al formulario: es una condición que hay que
+        // leer ANTES de registrar nada, y abrir el formulario ES antes. En la
+        // tarjeta se queda el «(importe aproximado)» de la línea de arriba, que
+        // es lo que hace falta para comparar métodos.
+        aviso: null,
         subtarea: faltaDireccion
           ? "Con tu dirección y tu teléfono se abre una segunda ruta a esta misma cuenta, que nos sale más barata. Sin ellos te seguimos pagando igual."
           : null,
@@ -378,8 +387,7 @@ export default async function TutorPayoutsPage() {
         nombre: "Cuenta bancaria vía Stripe",
         logo: LOGOS.stripe ?? null,
         monograma: "ST",
-        descripcion:
-          "Te das de alta en Stripe una vez y ellos te ingresan en tu banco. Los datos bancarios se los das a ellos: nosotros no llegamos a verlos.",
+        descripcion: "Te das de alta en Stripe y ellos te ingresan en tu banco.",
         automatico: m.automatico,
         listo: connectLista,
         detalle: connectLista
@@ -395,8 +403,15 @@ export default async function TutorPayoutsPage() {
       };
     }
 
-    // Los dos casos de identificador —PayPal y los canales manuales— comparten
-    // catálogo, así que su descripción sale de `payout_manual_channels.help`.
+    // ⚠️ LOS CANALES MANUALES NO LLEVAN DESCRIPCIÓN EN LA TARJETA, y no se
+    // pierde nada: `payout_manual_channels.help` —que es donde vive la
+    // explicación buena, y es DATO— ya se pinta dentro del formulario, justo
+    // encima del campo, que es donde el tutor la necesita. Repetirla aquí
+    // alargaba la pantalla con el mismo texto dos veces.
+    //
+    // PayPal es la excepción y por un motivo, no por gusto: su tarjeta no abre
+    // ningún formulario (solo conecta), así que si no dice nada aquí no lo dice
+    // en ninguna parte. Una línea.
     const canal = canales.find((c) => c.channel === m.canal);
     const destino = destinoDe(m.canal!);
     const conectadaPorOauth = Boolean(destino?.verified_account_id);
@@ -405,24 +420,20 @@ export default async function TutorPayoutsPage() {
       nombre: canal?.label ?? m.clave,
       logo: LOGOS[m.clave] ?? null,
       monograma: monograma(canal?.label ?? m.clave),
-      descripcion: canal?.help ?? "",
+      descripcion:
+        m.clave === "paypal" ? "A tu saldo de PayPal, en dólares." : "",
       automatico: m.automatico,
       listo: destino !== null,
       detalle: destino
         ? `${conectadaPorOauth ? "Cuenta conectada" : "Registrada"} · ${destino.handle_masked}`
         : null,
-      // ⚠️ El aviso de PayPal no es literatura: medido el 4-sep-2026, cuatro
-      // payouts a un correo escrito a mano acabaron `UNCLAIMED` y el mismo pago
-      // al id de la cuenta conectada salió `SUCCESS` al instante. Se enseña
-      // mientras NO esté conectada, que es cuando el riesgo existe.
-      aviso:
-        m.clave === "paypal" && !conectadaPorOauth
-          ? {
-              texto:
-                "Conecta tu cuenta en vez de escribir el correo a mano: un pago a un correo que no está confirmado en PayPal se queda esperando y vuelve a los 30 días sin llegarte.",
-              tono: "info",
-            }
-          : null,
+      // ⚠️ SE FUE EL AVISO DE PAYPAL, y no por recortar: avisaba de un riesgo
+      // que la pantalla ya no ofrece. Decía «conecta tu cuenta en vez de
+      // escribir el correo a mano» cuando el campo de correo desapareció de
+      // esta tarjeta — o sea, advertía de un camino que no existe. Lo que sí
+      // sigue vivo es la razón de que no exista, y está escrita donde importa:
+      // en la cabecera de `paypal-conectar.tsx`.
+      aviso: null,
       subtarea: null,
       // 🔑 PayPal se CONECTA y no se teclea. Los otros canales —Zinli, Binance,
       // Zelle— son al revés: no hay nada que conectar, solo un identificador que
@@ -442,7 +453,20 @@ export default async function TutorPayoutsPage() {
   for (const m of metodos) {
     if (m.clave === "banco" && regla && paisDeCobro) {
       formularios.banco = (
-        <PayoutAccountForm
+        <>
+          <p className="mt-3 max-w-[62ch] text-[12.5px] leading-[1.55] text-[#4d4d4d]">
+            Tienen que ser los de una cuenta a tu nombre en{" "}
+            {nombrePais(paisDeCobro)}: el titular y el documento se comprueban
+            contra el banco, y si no coinciden la transferencia se rechaza.
+          </p>
+          {/* La condición del cambio, aquí y no en la tarjeta: es lo que hay
+              que leer antes de registrar coordenadas, y este es el momento. */}
+          {avisoDeCambio ? (
+            <p className="mt-2 max-w-[62ch] rounded-[8px] border border-[#e8d5a8] bg-[#fdf7e6] p-3 text-[12.5px] leading-[1.55] text-[#19191f]">
+              {avisoDeCambio}
+            </p>
+          ) : null}
+          <PayoutAccountForm
           // ⚠️ `key` por país, y no es decorativo: el formulario guarda su
           // estado en `useState`, que NO se reinicializa cuando cambian las
           // props. Sin esto, cambiar de país dejaría dentro el banco del
@@ -453,8 +477,9 @@ export default async function TutorPayoutsPage() {
           cuenta={cuenta}
           paisDeclarado={paisDeCobro}
           etiquetaPais={nombrePais(paisDeCobro)}
-          etiquetaPaisGuardado={cuenta ? nombrePais(cuenta.country) : null}
-        />
+            etiquetaPaisGuardado={cuenta ? nombrePais(cuenta.country) : null}
+          />
+        </>
       );
     } else if (m.clave === "stripe") {
       acciones.stripe = (

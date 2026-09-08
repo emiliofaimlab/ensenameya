@@ -32,6 +32,8 @@ export type TarjetaMetodo = {
   logo: { src: string; color: string } | null;
   /** El respaldo cuando no hay logo. Dos letras del propio nombre. */
   monograma: string;
+  /** Una línea, o vacío si la tarjeta se explica sola. Nunca un párrafo: eso
+      vive dentro del formulario, que es donde el tutor lo necesita. */
   descripcion: string;
   /** Proveedor (el job) o persona. Es lo único comparable que se puede prometer. */
   automatico: boolean;
@@ -158,6 +160,21 @@ export function MetodosDeCobro({
   // tabla que sí pueda es uno de estos.
   const respaldo = listas.find((t) => t.clave !== elegida) ?? null;
 
+  /**
+   * La única frase que se gana su sitio: la que avisa de que lo que va a pasar
+   * NO es lo que el radio parece decir. Los estados evidentes —elegiste una y
+   * está completa, o no has elegido y hay alguna lista— no llevan nada: eso ya
+   * lo cuentan la píldora de la tarjeta y la ficha de «Cómo cobras».
+   */
+  const aviso =
+    laElegida && !laElegida.listo
+      ? respaldo
+        ? `Hasta que completes ${laElegida.nombre}, te pagamos por ${respaldo.nombre}.`
+        : `Completa ${laElegida.nombre} para que podamos pagarte. Tu saldo se sigue acumulando.`
+      : listas.length === 0
+        ? "Aún no podemos pagarte: completa una. Tu saldo se sigue acumulando."
+        : null;
+
   return (
     <div>
       <ul
@@ -178,12 +195,12 @@ export function MetodosDeCobro({
                   : "border-[#e0e0e0] hover:border-[#949494]",
               )}
             >
-              <div className="flex flex-wrap items-start gap-3 p-4 sm:flex-nowrap sm:gap-4">
-                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 sm:gap-4">
+              <div className="flex flex-wrap items-center gap-3 p-3.5 sm:flex-nowrap sm:gap-4">
+                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 sm:gap-4">
                   <input
                     type="radio"
                     name="metodo-de-cobro"
-                    className="mt-0.5 size-5 shrink-0 accent-brand"
+                    className="size-5 shrink-0 accent-brand"
                     checked={marcada}
                     disabled={guardando}
                     onChange={() => elegir(t.clave)}
@@ -246,9 +263,15 @@ export function MetodosDeCobro({
                         {t.automatico ? "Automático" : "Lo envía una persona"}
                       </StatusPill>
                     </span>
-                    <span className="mt-1.5 block max-w-[54ch] text-[12.5px] leading-[1.55] text-[#4d4d4d]">
-                      {t.descripcion}
-                    </span>
+                    {/* Cadena vacía = esta tarjeta no necesita explicarse: su
+                        nombre y sus dos píldoras ya lo dicen, y lo largo vive
+                        dentro de su formulario. Sin este `if` quedaba un span
+                        vacío con su margen, o sea aire de más por tarjeta. */}
+                    {t.descripcion ? (
+                      <span className="mt-1.5 block max-w-[56ch] text-[12.5px] leading-[1.5] text-[#4d4d4d]">
+                        {t.descripcion}
+                      </span>
+                    ) : null}
                     {t.detalle ? (
                       <span className="mt-2 inline-block rounded-[6px] border border-[#e0e0e0] bg-muted px-2.5 py-1 text-[12.5px] tabular-nums text-[#19191f]">
                         {t.detalle}
@@ -307,79 +330,21 @@ export function MetodosDeCobro({
         })}
       </ul>
 
-      {/* 🔑 LA FRASE QUE DICE LA VERDAD. El enrutador no obedece a ciegas: la
-          preferencia reordena y después filtra. Si el tutor eligió algo que
-          todavía no puede pagar, esto lo dice — y dice por dónde va a cobrar
-          mientras tanto, que es lo que de verdad quiere saber. */}
-      <p className="mt-4 max-w-[72ch] rounded-[8px] border border-[#e0e0e0] bg-muted px-3.5 py-3 text-[12.5px] leading-[1.6] text-[#4d4d4d]">
-        {laElegida === null ? (
-          listas.length > 0 ? (
-            <>
-              Todavía no has elegido, así que lo decidimos nosotros y hoy te
-              pagaríamos por{" "}
-              <strong className="font-semibold text-[#19191f]">
-                {listas[0].nombre}
-              </strong>
-              . Marca una si prefieres otra.
-            </>
-          ) : (
-            <>
-              Todavía no podemos pagarte: no has completado ninguna.{" "}
-              <strong className="font-semibold text-[#19191f]">
-                Tu saldo se sigue acumulando
-              </strong>{" "}
-              mientras tanto.
-            </>
-          )
-        ) : laElegida.listo ? (
-          <>
-            Cobras por{" "}
-            <strong className="font-semibold text-[#19191f]">
-              {laElegida.nombre}
-            </strong>
-            .{" "}
-            {respaldo ? (
-              <>
-                Si algún día no se puede, lo intentamos por{" "}
-                <strong className="font-semibold text-[#19191f]">
-                  {respaldo.nombre}
-                </strong>{" "}
-                sin que tengas que hacer nada.
-              </>
-            ) : (
-              <>
-                Es la única que tienes completa, así que no hay alternativa si
-                algún día falla: completa otra y te cubrimos.
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            Elegiste{" "}
-            <strong className="font-semibold text-[#19191f]">
-              {laElegida.nombre}
-            </strong>{" "}
-            pero te faltan datos.{" "}
-            {respaldo ? (
-              <>
-                Mientras tanto te pagamos por{" "}
-                <strong className="font-semibold text-[#19191f]">
-                  {respaldo.nombre}
-                </strong>
-                ; en cuanto la completes, pasamos a pagarte por ahí.
-              </>
-            ) : (
-              <>
-                Y no tenemos ninguna otra completa, así que{" "}
-                <strong className="font-semibold text-[#19191f]">
-                  hoy no podemos pagarte
-                </strong>
-                . Tu saldo se sigue acumulando.
-              </>
-            )}
-          </>
-        )}
-      </p>
+      {/* 🔑 SOLO CUANDO DICE ALGO QUE LAS TARJETAS NO DICEN.
+
+          Aquí había un párrafo que se pintaba SIEMPRE y que casi siempre
+          repetía lo que ya se ve: si el radio está marcado en una tarjeta con
+          la píldora «Completo», escribir «cobras por X» debajo no añade nada,
+          solo alarga la pantalla.
+
+          Lo que las tarjetas NO pueden contar es el desfase entre lo que el
+          tutor eligió y lo que va a pasar de verdad — porque el enrutador
+          reordena candidatos pero después filtra, así que una elección sin
+          completar se cae al siguiente riel. Eso, y solo eso, se dice aquí, en
+          una línea. Cuando no hay desfase no hay caja. */}
+      {aviso ? (
+        <p className="mt-3 text-[12.5px] leading-[1.55] text-[#4d4d4d]">{aviso}</p>
+      ) : null}
     </div>
   );
 }
