@@ -979,7 +979,7 @@ de los cuatro se queda `To Do` hasta que haya contrato.
 | Go de coste de grabación en Daily + dónde se guardan | `EY-85/86` | Cliente / Emilio |
 | Diseños responsive tablet/escritorio | `EY-82` | Diana |
 | ~~Texto legal de términos, privacidad y cookies~~ → ✅ **redactado el 6-ago** contra lo que el código hace. Lo que falta ahora es una **decisión de negocio**: `ensenameya.com` publica otros términos desde marzo | `EY-116` | Cliente |
-| ~~Cuentas + API keys reales DLocal y Stripe~~ | Cerrar Sprint 6 AC | ✅ **Las dos, con sandbox y producción** (4-sep-2026). Queda **Wise**, que sigue en KYB |
+| ~~Cuentas + API keys reales DLocal y Stripe~~ | Cerrar Sprint 6 AC | ✅ **Las dos, con sandbox y producción** (4-sep-2026). ⚠️ Aquí ponía «queda **Wise**, que sigue en KYB» y ya era falso al escribirlo: su token responde desde el **4-sep** —sin sandbox y sin esperar al KYB— y el **adaptador está escrito desde el 7-sep**. **No queda ninguna cuenta por conseguir.** Lo que le falta a Wise es **saldo**: `balances` devuelve `[]`, así que el fondeo falla hasta que se abra y se fondee un balance en USD — gestión, no código |
 
 ---
 
@@ -1428,8 +1428,8 @@ migración de dominio, y ya no bloquea a ningún PSP.
 | Términos de la campaña de RF | están sin rellenar (plantilla con corchetes) | Cliente / Jose |
 | Cobro real (live mode) | `sk_live_` — o sea el KYC de Stripe del cliente | Cliente |
 | ~~DLocal~~ | ✅ cuenta aprobada (sandbox y producción), 4-sep-2026 | — |
-| Payout directo de Stripe | adaptador de **Connect** (no escrito) | Jose |
-| Payouts por **Wise** | credenciales de API: KYB en curso, sandbox V2 no autoservicio | Cliente / Wise |
+| ~~Payout directo de Stripe~~ | ⚠️ **Esta fila decía «adaptador de Connect (no escrito)» y caducó el 4-sep**, tres días antes de que nadie la releyera. El adaptador existe y movió dinero: transferencia real en *test mode* `tr_1UBxVvHLJB7CRIwfB3VzPYpX`, $228,75 a una cuenta conectada **colombiana** (el mismo día y el mismo commit que el resto de §9.2 de `PAGOS-Y-PAYOUTS.md`). Y no era un bloqueo *externo* ni cuando se escribió: no esperaba a nadie de fuera. Lo único que falta es que **un tutor de verdad complete su alta de Connect**, que no es una tarea de esta tabla | ~~Jose~~ |
+| Payouts por **Wise** | ⚠️ **Esta fila decía «credenciales de API: KYB en curso, sandbox V2 no autoservicio», y las dos mitades caducaron.** El token vive contra `api.transferwise.com` desde el **4-sep** (no hizo falta sandbox) y el **adaptador se escribió el 7-sep**: cinco países servibles (**CO, AR, MX, CL, UY**; ni VE ni PA, que devuelven 422 `error.route.not.supported`, y BR apagado a propósito por los códigos de banco). Lo que bloquea ya no es una credencial sino el **saldo**: `GET /v4/profiles/136151426/balances` devuelve `[]`, o sea que el paso de fondear la transferencia falla hasta que alguien **abra y fondee un balance en USD**. ⚠️ Y por eso Wise **no está probado con dinero moviéndose**, al revés que PayPal | Cliente (abrir y fondear el balance) — ya **no** Wise |
 | ~~Grabación (`EY-85/86`)~~ | ~~el add-on de Daily (go de coste)~~ → ✅ **contratado y verificado el 31-ago**. Sale de la lista de bloqueos | ~~Cliente / Emilio~~ |
 | Un solo contrato legal | decidir qué pasa con los términos de `ensenameya.com` (marzo) y con `ensenameya.com` → app | Negocio |
 | Sentry (`EY-80`) | el DSN | Jose |

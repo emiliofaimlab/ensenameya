@@ -19,6 +19,8 @@
     "check:cadena": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/app/api/pagos/checkout/cadena.check.ts",
     "check:paypal": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/paypal-mapeo.check.ts",
     "check:connect": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/connect-mapeo.check.ts",
+    "check:wise": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/wise-mapeo.check.ts",
+    "check:metodo": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/metodo-preferido.check.ts",
     "check:riel": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/riel-viable.check.ts"
   },
   "dependencies": {

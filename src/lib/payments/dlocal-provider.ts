@@ -553,6 +553,17 @@ function detalleDe(p: PayoutDlocalGo, cambio?: CambioAplicado | null): string {
  * ⚠️ Este módulo es `server-only`: esto se puede leer desde un Server Component,
  * NO desde uno de cliente. Si la pantalla lo necesita en el navegador, el texto
  * se copia a un módulo compartido — no se quita el `server-only` de aquí.
+ *
+ * ⚠️ Y YA NO NOMBRA A dLOCAL, aunque siga viviendo en su adaptador. Aquí ponía
+ * «la fija dLocal con su tipo de cambio» y eso se volvió falso el 7-sep-2026, el
+ * día que el formulario bancario empezó a pintarse en países que NO pagan por
+ * dLocal: la fila viva de Colombia rutea `stripe>wise>paypal` y no lo nombra en
+ * ninguna posición, así que a un tutor colombiano se le estaba diciendo el
+ * nombre del proveedor equivocado. Quién ejecuta lo decide `payoutProviderFor`
+ * al liquidar y esta función no lo sabe; lo que sí es verdad en los cuatro
+ * rieles es que la tasa la pone quien hace la transferencia el día que la hace.
+ * Lo que se avisa —que el número en moneda local no se puede prometer— no
+ * cambia.
  */
 export function avisoDeImporteAproximado(
   monedaOrigen: string,
@@ -563,8 +574,9 @@ export function avisoDeImporteAproximado(
   if (!d || o === d) return null;
   return (
     `El importe se te paga en ${d}. Lo que sale de Enséñame Ya son ${o}, así que ` +
-    `la cantidad en ${d} es aproximada: la fija dLocal con su tipo de cambio el día ` +
-    `que ejecuta la transferencia, y puede no coincidir con la que ves aquí.`
+    `la cantidad en ${d} es aproximada: la fija quien ejecuta la transferencia, ` +
+    `con su tipo de cambio y el día que la hace, y puede no coincidir con la que ` +
+    `ves aquí.`
   );
 }
 

@@ -24,7 +24,28 @@ import { Button } from "@/components/ui/button";
  * momento de pulsar y no al pintar la página. Un enlace traído en el render
  * estaría muerto para cuando alguien lo mirase.
  */
-export function ConnectAlta({ yaTieneCuenta, lista }: { yaTieneCuenta: boolean; lista: boolean }) {
+export function ConnectAlta({
+  yaTieneCuenta,
+  lista,
+  esLaUnicaVia,
+}: {
+  yaTieneCuenta: boolean;
+  lista: boolean;
+  /**
+   * ⚠️ ¿ES STRIPE LO ÚNICO POR LO QUE SE LE PUEDE PAGAR EN SU PAÍS?
+   *
+   * El texto de abajo decía «Tu dinero sale por Stripe» en absoluto, y hasta el
+   * 7-sep-2026 eso era verdad siempre que este bloque se pintaba: solo aparecía
+   * en los países cuya única familia era 'conectada'. Desde que la pantalla
+   * pinta varias familias, esta tarjeta le sale también a Argentina, Chile,
+   * Ecuador, México, Perú, Paraguay y Uruguay, **donde el primer riel de su fila
+   * es dLocal y no Stripe** (`payment_routing_rules`: `dlocal>stripe>paypal>
+   * wise`), y a Colombia, donde Stripe es uno de tres. Prometerle a un
+   * ecuatoriano que su dinero sale por Stripe es decirle por dónde cobra
+   * equivocándose de riel.
+   */
+  esLaUnicaVia: boolean;
+}) {
   const [cargando, setCargando] = useState(false);
   const router = useRouter();
 
@@ -66,13 +87,21 @@ export function ConnectAlta({ yaTieneCuenta, lista }: { yaTieneCuenta: boolean; 
       <p className="text-[13px] text-[#6b6b6b]">
         {lista ? (
           <>
-            Tu cuenta de Stripe está lista y puede recibir pagos. Tu dinero irá
-            ahí en cuanto se liquide tu saldo.
+            Tu cuenta de Stripe está lista y puede recibir pagos.{" "}
+            {/* Mismo motivo que abajo: «tu dinero irá ahí» solo es cierto
+                cuando Stripe es la única vía de su país. Donde hay varias, cuál
+                se usa lo decide el enrutador al liquidar. */}
+            {esLaUnicaVia
+              ? "Tu dinero irá ahí en cuanto se liquide tu saldo."
+              : "Es una de las vías por las que podemos pagarte."}
           </>
         ) : (
           <>
-            Tu dinero sale por Stripe. Para recibirlo tienes que darte de alta en
-            ellos una vez: te pedirán tus datos y tu cuenta bancaria{" "}
+            {esLaUnicaVia
+              ? "Tu dinero sale por Stripe."
+              : "Por esta vía el dinero sale por Stripe."}{" "}
+            Para recibirlo tienes que darte de alta en ellos una vez: te pedirán
+            tus datos y tu cuenta bancaria{" "}
             <strong className="font-semibold text-[#19191f]">
               directamente a ti
             </strong>

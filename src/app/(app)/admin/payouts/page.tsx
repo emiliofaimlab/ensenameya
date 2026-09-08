@@ -10,6 +10,7 @@ import {
   type DatosDeCobro,
   type Riel,
 } from "@/lib/payments";
+import { ordenaPorPreferencia } from "@/lib/payments/metodo-preferido";
 import type { Database, Json } from "@/lib/database.types";
 import {
   PanelCard,
@@ -141,6 +142,16 @@ type ReglaDeRuteo = {
   payout_providers: string[];
   priority: number;
   is_active: boolean;
+  /**
+   * ⚠️ «CUALQUIER OTRO PAÍS» — la fila que cubre a España, EE. UU. y a todo
+   * destino sin regla propia (`20260903190000`). Sin esta columna la resolución
+   * de abajo filtraba por `payee_country` exacto y no encontraba nada para
+   * ellos: la cola pintaba «sin ejecutor» en órdenes que el job paga por Stripe
+   * tan tranquilo. Es el mismo agujero que tenía `payoutCountries()` en la
+   * pantalla del tutor, y por el mismo motivo — leer la tabla a mano en vez de
+   * preguntar por `ruta_de_pago()`.
+   */
+  es_por_defecto: boolean;
 };
 
 /**
@@ -206,28 +217,47 @@ function rielDe(
     return { etiqueta: fila.provider ?? "—", riel: null, manual: false, resuelto: false };
   }
 
-  const regla = reglas
-    .filter(
-      (r) =>
-        r.is_active &&
-        r.payer_country === null &&
-        r.payee_country === fila.payee_country,
-    )
-    .sort((a, b) => a.priority - b.priority)[0];
+  // Los DOS pasos de `ruta_de_pago()`, en el mismo orden: la fila propia del
+  // país y, si no la tiene, la de por defecto. El `not es_por_defecto` del
+  // primer filtro no es cosmético — esa fila también lleva `payee_country` null
+  // y sin él se llevaría por delante a la del «sin país declarado», que
+  // significa otra cosa.
+  const regla =
+    reglas
+      .filter(
+        (r) =>
+          r.is_active &&
+          r.payer_country === null &&
+          !r.es_por_defecto &&
+          r.payee_country === fila.payee_country,
+      )
+      .sort((a, b) => a.priority - b.priority)[0] ??
+    reglas.find((r) => r.is_active && r.es_por_defecto);
 
   // ⚠️ C2r · El ruteo ya no da UN ejecutor sino una LISTA de candidatos.
   //
   // 🔴 AQUÍ SE COGÍA «EL PRIMER CANDIDATO CON RIEL RECONOCIDO», Y ESO DEJABA
   // COLOMBIA FUERA DE LA PANTALLA ENTERA. Su fila es
-  // `{wise, paypal, stripe, banco-manual}` (`20260903140000`), y 'wise' es un
-  // riel perfectamente reconocido —está declarado en `RIELES`— que NO TIENE
-  // ADAPTADOR: `puedePagar()` devuelve false. Así que la píldora decía «wise»,
-  // `ejecuta` era 'proveedor' y `manual` salía false: una orden colombiana que
-  // solo puede pagar una persona se pintaba como automática, no entraba en «Por
-  // pagar a mano» y no se le preguntaba a dónde transferir. El comentario que
-  // había aquí lo llamaba «la preferencia», pero una preferencia que nadie
-  // puede ejecutar no es un ejecutor, y `payments.ts` ya lo dice del revés:
-  // «su sitio en la lista de candidatos no hace nada».
+  // `{wise, paypal, stripe, banco-manual}` (`20260903140000`), y 'wise' era
+  // entonces un riel perfectamente reconocido —declarado en `RIELES`— que NO
+  // TENÍA ADAPTADOR: `puedePagar()` devolvía false. Así que la píldora decía
+  // «wise», `ejecuta` era 'proveedor' y `manual` salía false: una orden
+  // colombiana que solo podía pagar una persona se pintaba como automática, no
+  // entraba en «Por pagar a mano» y no se le preguntaba a dónde transferir. El
+  // comentario que había aquí lo llamaba «la preferencia», pero una preferencia
+  // que nadie puede ejecutar no es un ejecutor, y `payments.ts` ya lo dice del
+  // revés: «su sitio en la lista de candidatos no hace nada».
+  //
+  // ⚠️ EL EJEMPLO CADUCÓ, EL FALLO NO. Wise tiene adaptador desde el 7-sep-2026
+  // y paga a Colombia, así que hoy ese caso concreto sale automático y por el
+  // riel bueno. Se deja escrito porque la trampa es de la FORMA del bucle, no de
+  // Wise: cualquier candidato reconocido que hoy no pueda ejecutar —un riel
+  // nuevo aún sin adaptador, uno al que le falte la credencial, uno atado a un
+  // balance que no es el de esta orden, o uno al que este tutor no le ha dado
+  // sus datos— vuelve a producir exactamente la misma mentira si se elige por
+  // «reconocido» en vez de por «puede pagar ESTA orden». Y el ejemplo vivo de
+  // que sigue pasando es el 🔴 de cuatro líneas más abajo, que es del 4-sep y va
+  // de una tutora venezolana con Zinli.
   //
   // Se elige con el MISMO bucle que `payoutProviderFor` —riel reconocido, que
   // pueda pagar hoy, y si está atado a un balance que sea el del dinero de esta
@@ -239,18 +269,30 @@ function rielDe(
   // hay riel»: aquí se pinta igual («sin ejecutor») porque para quien mira la
   // cola las dos cosas significan lo mismo — esta orden no sale sola y tampoco
   // hay a dónde mandarla a mano.
-  const candidatos = regla?.payout_providers ?? [];
+  //
+  // 🔑 Y DESDE EL 8-SEP-2026, EN EL MISMO ORDEN QUE EL JOB. `payoutProviderFor`
+  // reordena los candidatos con `tutor_payout_preferences` antes de recorrerlos;
+  // si aquí no se hiciera lo mismo, esta cola enseñaría el riel de la tabla y el
+  // job pagaría por el que el tutor eligió. Es exactamente la discrepancia
+  // contra la que avisa el párrafo de arriba, con un dato nuevo.
+  const d = datos.get(fila.tutor_id);
+  const candidatos = ordenaPorPreferencia(
+    (regla?.payout_providers ?? [])
+      .map((clave) => rielDePayout(clave))
+      .filter((r): r is Riel => Boolean(r)),
+    d?.metodo_preferido ?? null,
+  );
   let riel: Riel | null = null;
-  for (const clave of candidatos) {
-    const r = rielDePayout(clave);
-    if (!r) continue; // typo en la tabla, o 'simulated': no es un riel
-    if (!r.puedePagar()) continue; // declarado y esperando cuenta
+  for (const r of candidatos) {
+    // Declarado pero sin con qué ejecutar hoy: sin adaptador, o con adaptador y
+    // sin credencial. Ponía «esperando cuenta», que era el caso de agosto y ya
+    // no existe: no queda ningún riel esperando a nadie de fuera.
+    if (!r.puedePagar()) continue;
     if (r.ataduraDeBalance && r.clave !== fila.funding_provider) continue;
     // 🔴 Y LA CUARTA CONDICIÓN, que faltaba aquí y en `payoutProviderFor`: que
     // este tutor le haya dado a ESE riel lo que necesita. Sin ella la cola
     // pintaba «paypal» para una venezolana que había registrado Zinli — y el
     // job, con el mismo bucle, elegía lo mismo y dejaba la orden atascada.
-    const d = datos.get(fila.tutor_id);
     if (d && !rielSirveParaEsteTutor(r, d)) continue;
     riel = r;
     break;
@@ -409,7 +451,7 @@ export default async function AdminPayoutsPage({
   if (admin) {
     const { data: rr, error: errRR } = await admin
       .from("payment_routing_rules")
-      .select("payee_country, payer_country, payout_providers, priority, is_active");
+      .select("payee_country, payer_country, payout_providers, priority, is_active, es_por_defecto");
     if (errRR) errorRuteo = errRR.message;
     else reglas = (rr ?? []) as unknown as ReglaDeRuteo[];
   }
@@ -838,7 +880,12 @@ export default async function AdminPayoutsPage({
                         catalogoRoto={errorBancos !== null}
                       />
                     ) : (
-                      <Destinos destinos={dest} />
+                      <Destinos
+                        destinos={dest}
+                        preferido={
+                          datosDeCobro.get(p.tutor_id)?.metodo_preferido ?? null
+                        }
+                      />
                     )
                   ) : null}
 
@@ -868,7 +915,15 @@ export default async function AdminPayoutsPage({
           'banco' incluye ahora también a Wise y al payout directo de Stripe,
           que no convierten con la tasa de dLocal. Antes decía `clase ===
           'banco'` para no meter las órdenes sin ejecutor —que era el bug que
-          arregló—, pero se quedó corto en la otra dirección. */}
+          arregló—, pero se quedó corto en la otra dirección.
+          ⚠️ Y desde el 7-sep-2026 esa distinción dejó de ser hipotética: Wise
+          ejecuta de verdad (CO, AR, MX, CL, UY) y **también convierte**, solo
+          que al tipo medio de mercado y con la comisión explícita en el
+          presupuesto, en vez de con el spread estimado de dLocal. Quien la come
+          es el mismo —el tutor, decisión del 2-sep—, así que el día que se
+          quiera avisar también de esa conversión es un texto NUEVO y no ampliar
+          la condición de abajo: decir «el tipo de cambio de dLocal» sobre una
+          transferencia de Wise sería falso. */}
       {reglas !== null &&
       visibles.some(({ riel }) => riel.riel?.clave === "dlocal") ? (
         <p className="text-xs text-[#6b6b6b]">
@@ -888,7 +943,21 @@ export default async function AdminPayoutsPage({
  * mira esta pantalla está a punto de copiarlo en Zelle o en Zinli, y un dato de
  * pago a medias es peor que ninguno.
  */
-function Destinos({ destinos }: { destinos: DestinoManual[] | null | undefined }) {
+function Destinos({
+  destinos,
+  preferido,
+}: {
+  destinos: DestinoManual[] | null | undefined;
+  /**
+   * 🔑 EL CANAL QUE EL TUTOR ELIGIÓ (`tutor_payout_preferences.method`).
+   *
+   * Sin esto el radio del tutor no significaba nada para los canales que paga
+   * una persona: el job no los ejecuta, así que el único sitio donde su
+   * elección podía convertirse en un pago es esta lista. Un tutor con Zinli y
+   * Zelle registrados dependía de con cuál se topara antes quien mira.
+   */
+  preferido: string | null;
+}) {
   // No se preguntó: la vista trae más órdenes manuales de las que se consultan
   // de una vez. Es una limitación de la pantalla, no un dato roto del tutor —
   // decirlo con el texto del error de abajo es lo que hacía que el admin viera
@@ -920,9 +989,21 @@ function Destinos({ destinos }: { destinos: DestinoManual[] | null | undefined }
   }
   return (
     <div className="flex flex-col gap-1 rounded-[10px] bg-[#f7f7f9] px-3 py-2">
-      <p className="text-[11.5px] text-[#6b6b6b]">Pagar a</p>
+      <p className="text-[11.5px] text-[#6b6b6b]">
+        {destinos.some((d) => d.channel === preferido)
+          ? "Pagar a — el tutor prefiere la marcada"
+          : "Pagar a"}
+      </p>
       {destinos.map((d) => (
         <p key={d.channel} className="text-[13px] text-[#333333]">
+          {d.channel === preferido ? (
+            <span
+              className="font-semibold text-[#237847]"
+              title="El tutor eligió cobrar por aquí"
+            >
+              ★{" "}
+            </span>
+          ) : null}
           <span className="font-semibold">{d.label}</span> ·{" "}
           <span className="font-mono select-all">{d.handle}</span> ·{" "}
           {d.holder_name}
@@ -934,6 +1015,16 @@ function Destinos({ destinos }: { destinos: DestinoManual[] | null | undefined }
           )}
         </p>
       ))}
+      {/* Que el tutor prefiera un canal que no tiene registrado es posible: la
+          preferencia se guarda al marcar el radio, no al rellenar el dato. Se
+          dice, porque si no el admin pagaría al primero de la lista sin saber
+          que el tutor pidió otra cosa. */}
+      {preferido && !destinos.some((d) => d.channel === preferido) ? (
+        <p className="mt-1 text-[11.5px] text-[#8a5a12]">
+          El tutor eligió cobrar por otra vía y todavía no ha registrado sus
+          datos. Págale por una de las de arriba.
+        </p>
+      ) : null}
     </div>
   );
 }

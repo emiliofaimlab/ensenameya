@@ -7,9 +7,11 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
+  avisoDeDireccion,
   enmascarar,
   normalizaCuenta,
   normalizaDocumento,
+  normalizaTelefono,
   validarCuenta,
   type BancoDePais,
   type CuentaEnmascarada,
@@ -20,17 +22,34 @@ import {
 /**
  * El resumen ENMASCARADO que devuelve `upsert_payout_account`. La función
  * devuelve más campos (`document_type`, `holder`, `bank_account_type`…); aquí
- * solo se declaran los cuatro que se pintan, para que quede claro qué se usa.
+ * solo se declaran los que se pintan, para que quede claro qué se usa.
  *
  * ⚠️ `last4` es lo ÚNICO del número de cuenta que sale de la base de datos: es
  * la columna generada `bank_account_last4`, y `bank_account` no tiene
- * `grant select` para ningún rol.
+ * `grant select` para ningún rol. La dirección y el teléfono, en cambio, vuelven
+ * enteros: los cuatro están en el `grant select` de `authenticated`
+ * (`20260907120000`) porque el tutor tiene que poder releerlos y corregirlos.
  */
 type ResumenDeCuenta = {
   country: string;
   bank_code: string;
   bank_name: string | null;
   last4: string;
+  address_line: string | null;
+  city: string | null;
+  postcode: string | null;
+  phone: string | null;
+  /**
+   * El veredicto del SERVIDOR sobre si a este tutor se le puede pagar por
+   * transferencia internacional: `wise_puede_pagar_a()`, que mira cuatro cosas
+   * más que la dirección (banco traducido, tipo de cuenta en AR, tipo de
+   * documento en UY) y cuyo `execute` es solo de `service_role`.
+   *
+   * `null` = la RPC todavía no ha contestado en esta sesión. Es el estado de la
+   * primera carga, donde lo único que hay son columnas leídas de la tabla, y por
+   * eso no se puede prometer nada todavía.
+   */
+  wise_listo: boolean | null;
 };
 
 /** Mismo alto y borde que el desplegable de país, que está justo encima. */
@@ -118,6 +137,16 @@ export function PayoutAccountForm({
           bank_name:
             bancos.find((b) => b.bank_code === cuenta.bank_code)?.name ?? null,
           last4: cuenta.bank_account_last4,
+          address_line: cuenta.beneficiary_address_line,
+          city: cuenta.beneficiary_city,
+          postcode: cuenta.beneficiary_postcode,
+          phone: cuenta.beneficiary_phone,
+          // ⚠️ `null` y no `false`. Con `false` la pantalla le diría a un tutor
+          // que ya tiene los cuatro campos rellenos que no podemos pagarle por
+          // esa vía, cuando lo cierto es que nadie se lo ha preguntado todavía:
+          // quien lo sabe es `wise_puede_pagar_a()`, que es `service_role` y no
+          // se puede llamar desde aquí. Lo contesta la RPC al guardar.
+          wise_listo: null,
         }
       : null,
   );
@@ -137,6 +166,20 @@ export function PayoutAccountForm({
     tipoCuenta: (mismoPaisAlCargar ? cuenta?.bank_account_type : "") ?? "",
     cuenta: "",
     sucursal: (mismoPaisAlCargar ? cuenta?.bank_branch : "") ?? "",
+    // ⚠️ ESTOS CUATRO SÍ SE PRERRELLENAN, al revés que `documento` y `cuenta`.
+    // No es una excepción a la máscara: aquellos vuelven de la base como
+    // `····1234` porque sus columnas no tienen `grant select` para nadie, así
+    // que no hay nada que poner en el campo. La dirección y el teléfono vuelven
+    // enteros, y dejarlos en blanco obligaría a reteclearlos cada vez que el
+    // tutor corrige una letra de su apellido.
+    //
+    // Y siguen la misma regla de país que el resto: una dirección de Argentina
+    // no es la dirección de nadie en México, así que si el tutor cambió de país
+    // después de registrarla, se teclea de nuevo.
+    direccion: (mismoPaisAlCargar ? cuenta?.beneficiary_address_line : "") ?? "",
+    ciudad: (mismoPaisAlCargar ? cuenta?.beneficiary_city : "") ?? "",
+    codigoPostal: (mismoPaisAlCargar ? cuenta?.beneficiary_postcode : "") ?? "",
+    telefono: (mismoPaisAlCargar ? cuenta?.beneficiary_phone : "") ?? "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -147,6 +190,20 @@ export function PayoutAccountForm({
   };
 
   const tiposDocumento = Object.keys(regla.document_patterns);
+
+  /**
+   * Para qué sirven la dirección y el teléfono, y qué le falta al tutor.
+   *
+   * Se calcula sobre `guardado` y no sobre `v`: lo que interesa es qué hay EN LA
+   * BASE, no lo que hay a medio teclear en el campo. Y se pasa `null` cuando lo
+   * guardado es de otro país, por lo mismo que esos campos no se prerrellenan:
+   * una dirección de Argentina no cuenta como dirección para cobrar en México.
+   */
+  const avisoDireccion = avisoDeDireccion({
+    regla,
+    guardado: mismoPais ? guardado : null,
+    nombreDelPais: etiquetaPais,
+  });
 
   async function guardar() {
     const fallo = validarCuenta(regla, bancos, v, mismoPais, etiquetaPais);
@@ -171,6 +228,22 @@ export function PayoutAccountForm({
       p_account: normalizaCuenta(v.cuenta) || undefined,
       p_account_type: v.tipoCuenta || undefined,
       p_branch: v.sucursal.trim() || undefined,
+      // Los cuatro de la dirección van con el MISMO sufijo `|| undefined`, y por
+      // el mismo motivo: en blanco significan «deja el que ya está». Aquí es
+      // menos evidente que en el documento porque estos campos vienen
+      // prerrellenados —lo normal es que lleguen con algo—, pero el tutor puede
+      // borrarlos, y borrarlos no es pedir que se anulen: para eso está el
+      // `coalesce` de la RPC, que los conserva.
+      //
+      // ⚠️ Sin `|| undefined` esto mandaría `""`, que en la RPC pasa por
+      // `nullif(btrim(…), '')` → null → `coalesce` con lo anterior. Llegaría al
+      // mismo sitio por casualidad; se escribe explícito porque lo que hace
+      // correcta la llamada es la intención, no que dos normalizaciones
+      // coincidan.
+      p_address_line: v.direccion.trim() || undefined,
+      p_city: v.ciudad.trim() || undefined,
+      p_postcode: v.codigoPostal.trim() || undefined,
+      p_phone: normalizaTelefono(v.telefono) || undefined,
     });
     setBusy(false);
 
@@ -187,7 +260,22 @@ export function PayoutAccountForm({
     const resumen = data as unknown as ResumenDeCuenta | null;
     if (resumen) setGuardado(resumen);
 
-    setV((prev) => ({ ...prev, documento: "", cuenta: "" }));
+    // `documento` y `cuenta` se vacían porque lo guardado ya no se puede volver
+    // a leer: lo que queda de ellos es `····1234`. La dirección y el teléfono
+    // hacen lo contrario y se REPINTAN con lo que devolvió la RPC — que puede no
+    // ser lo que hay en el campo: si el tutor lo dejó en blanco, lo que quedó
+    // guardado es lo anterior, y enseñarle el hueco sería enseñarle un borrado
+    // que no ha ocurrido. Es el mismo motivo por el que este formulario dejó de
+    // tirar el valor de retorno.
+    setV((prev) => ({
+      ...prev,
+      documento: "",
+      cuenta: "",
+      direccion: resumen?.address_line ?? prev.direccion,
+      ciudad: resumen?.city ?? prev.ciudad,
+      codigoPostal: resumen?.postcode ?? prev.codigoPostal,
+      telefono: resumen?.phone ?? prev.telefono,
+    }));
     toast.success("Datos de cobro guardados.");
     // El `refresh` ya NO es lo que hace correcto este formulario: es lo que pone
     // al día la píldora «Cuenta de cobro» del bloque de arriba, que la pinta el
@@ -362,6 +450,97 @@ export function PayoutAccountForm({
             />
           </label>
         ) : null}
+
+        {/* ── Dirección y teléfono del titular ────────────────────────────────
+            Los únicos campos OPCIONALES de este formulario, y por eso son los
+            únicos que llevan su propio encabezado y su propia explicación: al
+            resto no hay nada que explicarle —sin banco no hay transferencia—,
+            pero un campo que se puede dejar en blanco y no dice para qué sirve
+            se queda en blanco siempre. Y si se queda en blanco, `banco_wise` es
+            false para todo el mundo y el riel de Wise está encendido y vacío,
+            que es literalmente el estado del que sale esta pantalla.
+
+            ⚠️ Y no llevan asterisco ni «(obligatorio)» a propósito: la base no
+            los exige (`20260907120000` los dejó nullable a conciencia) y
+            pintarlos como obligatorios aquí le bloquearía el guardado a los
+            ocho países que hoy cobran por dLocal sin ellos. */}
+        <div className="sm:col-span-2 mt-2">
+          <p className="text-[13px] font-semibold text-[#19191f]">
+            Dirección y teléfono del titular{" "}
+            <span className="font-normal text-[#6b6b6b]">(opcional)</span>
+          </p>
+          <p className="mt-1 max-w-[620px] text-[12px] text-[#6b6b6b]">
+            {avisoDireccion}
+          </p>
+        </div>
+
+        <label className="block sm:col-span-2">
+          <span className="text-xs text-[#6b6b6b]">Calle y número</span>
+          <input
+            className={`mt-1 ${CAMPO}`}
+            value={v.direccion}
+            disabled={busy}
+            autoComplete="off"
+            maxLength={255}
+            placeholder="Calle 12 #4-56, apto 301"
+            onChange={(e) => set("direccion")(e.target.value)}
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-xs text-[#6b6b6b]">Ciudad</span>
+          <input
+            className={`mt-1 ${CAMPO}`}
+            value={v.ciudad}
+            disabled={busy}
+            autoComplete="off"
+            maxLength={255}
+            onChange={(e) => set("ciudad")(e.target.value)}
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-xs text-[#6b6b6b]">Código postal</span>
+          <input
+            className={`mt-1 ${CAMPO}`}
+            value={v.codigoPostal}
+            disabled={busy}
+            autoComplete="off"
+            maxLength={32}
+            onChange={(e) => set("codigoPostal")(e.target.value)}
+          />
+          {/* Se pide también donde no se usa a diario, y decirlo evita el
+              «esto en mi país no existe» que acaba en un campo vacío. */}
+          <span className="mt-1 block text-[12px] text-[#6b6b6b]">
+            Si en tu ciudad no se usa, pon el de tu zona o el de la oficina de
+            correos más cercana.
+          </span>
+        </label>
+
+        <label className="block">
+          <span className="text-xs text-[#6b6b6b]">Teléfono</span>
+          {/* ⚠️ ESTE ES EL ÚNICO DE LOS CUATRO SIN `maxLength`, Y NO ES UN
+              DESCUIDO: `normalizaTelefono` quita los puntos DESPUÉS de teclear,
+              así que un tope de 20 aquí cortaría «+57 (300) 123.456.789» —21
+              caracteres con puntos, 18 sin ellos— por el final y le comería un
+              dígito al número sin decir nada. Un teléfono truncado en silencio
+              es peor que un mensaje de error: `validarCuenta` ya rechaza el que
+              se pase de 20 ya normalizado, y ahí sí se ve por qué. */}
+          <input
+            className={`mt-1 ${CAMPO}`}
+            value={v.telefono}
+            disabled={busy}
+            autoComplete="off"
+            inputMode="tel"
+            placeholder="+57 300 123 4567"
+            onChange={(e) => set("telefono")(e.target.value)}
+          />
+          {/* El `check` de la columna no admite puntos; `normalizaTelefono` los
+              quita antes de mandarlos, así que aquí no se le riñe por ellos. */}
+          <span className="mt-1 block text-[12px] text-[#6b6b6b]">
+            El del titular de la cuenta, con prefijo del país.
+          </span>
+        </label>
       </div>
 
       {error ? (

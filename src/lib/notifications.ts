@@ -40,7 +40,10 @@ const TEXT: Record<string, string> = {
   payout_paid: "Se pagó tu liquidación",
   recording_ready: "La grabación de tu mentoría ya está disponible",
   payout_issue: "Una liquidación necesita atención",
-  payout_unclaimed: "Tu liquidación está esperando a que la reclames",
+  // NTF-23 · el RESPALDO, que es el texto de los rieles que no son PayPal. El
+  // de PayPal lo pone `textoPayoutSinLlegar` desde el payload: «que la
+  // reclames» solo es cierto ahí. Ver el comentario de esa función.
+  payout_unclaimed: "Tu liquidación está tardando más de lo normal",
   // NTF-21 · el canal de este aviso es `email`, pero la campana pinta TODAS las
   // filas de `notifications` sin mirar el canal, así que también sale aquí. Sin
   // esta línea diría "Novedad en tu cuenta (NTF-21)".
@@ -113,11 +116,29 @@ function textoAdmin(payload: Record<string, unknown> | null): string | null {
     : limpio;
 }
 
+/**
+ * NTF-23 · ⚠️ «QUE LA RECLAMES» SOLO ES CIERTO EN PAYPAL, y la campana pinta
+ * esta fila igual que el correo la manda.
+ *
+ * El barrido que la encola (`avisar_payouts_sin_reclamar`) no filtra por riel a
+ * propósito, así que desde que Wise paga (`20260907120000`) esta línea le salía
+ * a un tutor con cuenta bancaria — al que nadie le ha pedido que reclame nada,
+ * porque en una transferencia no hay nada que reclamar. Se decide por el
+ * `provider` que la migración `20260907140000` metió en el payload; sin él cae
+ * al texto neutro del mapa, que es cierto en cualquier riel.
+ */
+function textoPayoutSinLlegar(payload: Record<string, unknown> | null): string | null {
+  return payload?.provider === "paypal"
+    ? "Tu liquidación está esperando a que la reclames"
+    : null;
+}
+
 export function toNotice(row: NotificationRow): AppNotice {
   return {
     id: row.id,
     text:
       (row.template === "admin_message" ? textoAdmin(row.payload) : null) ??
+      (row.template === "payout_unclaimed" ? textoPayoutSinLlegar(row.payload) : null) ??
       TEXT[row.template] ??
       `Novedad en tu cuenta (${row.type})`,
     href: rutaFor(row.template, row.payload),

@@ -16,7 +16,10 @@
 >
 > ✅ **dLocal: cuenta APROBADA, sandbox y producción** (cliente, 4-sep-2026). Este documento
 > repitió en cuatro sitios que su cuenta de producción estaba rechazada — venía de un rechazo
-> de agosto que ya se resolvió. **No hay ningún PSP bloqueado por cuenta salvo Wise.**
+> de agosto que ya se resolvió. ⚠️ Aquí ponía «**no hay ningún PSP bloqueado por cuenta salvo
+> Wise**», y esa excepción también caducó: Wise tiene **token desde el 4-sep** y **adaptador
+> desde el 7-sep**. **Hoy no hay ningún PSP bloqueado por cuenta.** Lo que le falta a Wise es
+> **saldo**, que no es lo mismo — ver su fila en §9.3.
 >
 > ⚠️ **Nada de esto está en producción, y es deliberado.** El sitio no está lanzado; todo el
 > trabajo de pagos se hace contra **dev**. Prod se configura tras la migración de dominio.
@@ -25,7 +28,8 @@
 > Era el payout recomendado de Venezuela y el único camino legal a stablecoin que este
 > documento contemplaba, así que **§4 cambia entero**. El mismo día llegaron las credenciales
 > de **Wise Business y PayPal Business**: los dos rieles dejan de esperar cuenta y pasan a
-> esperar adaptador.
+> esperar adaptador. ✅ **Y los dos adaptadores ya están escritos**: PayPal el 3-sep (cerrado
+> con dinero moviéndose el 4) y **Wise el 7-sep**.
 >
 > ⚠️ **El flujo de ruteo vigente es el de §1**, fijado por el cliente el **2026-09-03**.
 > Sustituye a los mapas anteriores de este documento y al del PDF: las secciones §4–§7
@@ -89,7 +93,7 @@ Dos reglas transversales:
 | ~~**Colombia**~~ | ✅ Tiene fila, y desde el 4-sep con dLocal **primero** (dLocal sí cubre CO: medido) |
 | ~~**Los otros países que dLocal cobra**~~ | ✅ **Resuelto el 4-sep midiendo, no deduciendo** (§9.1): dLocal cobra en **18** países, no en 17 ni en 8. Se añadieron los nueve que faltaban y Venezuela dejó de llevar dLocal de respaldo, que era imposible. Y ningún país «no se puede vender»: desde `20260903190000` los que no tienen fila caen en la fila por defecto (Stripe) |
 | ~~**Adaptador de PayPal**~~ | ✅ **Hecho el 3-sep-2026** y ejecutado de verdad contra dev: el job creó el lote `FR6E6SEVN4A5E`, $228,75 a un tutor venezolano, y la fila quedó `processing` con su `provider_payout_id`. En dev no falta nada. Lo de «vivo» es post-lanzamiento y va con la migración de dominio |
-| **Adaptador de Wise** | ✅ **Ya no está bloqueado por credenciales (4-sep-2026)**: hay token y su API responde —perfiles, saldos y presupuestos—, así que el camino de pago está abierto. Medido: **$150 → 456.354,38 COP con $4,06 de comisión**. Queda escribir el adaptador, y contar con que crear la transferencia exige **SCA** (firmar con una clave registrada en la cuenta) |
+| ~~**Adaptador de Wise**~~ | ✅ **Escrito el 7-sep-2026** (`lib/payments/wise-provider.ts` + `wise-mapeo.ts`, `npm run check:wise`). Cuatro pasos —presupuesto, alta del destinatario, transferencia, fondeo—, cinco países servibles (**CO, AR, MX, CL, UY**) e idempotencia por UUIDv5 derivado de (payout, intento), porque `customerTransactionId` exige un UUID canónico y la marca `EY-…` del proyecto devuelve 422. Y el **SCA** que esta fila daba por seguro **no aplica**: medido, esta cuenta no lo pide, así que `WISE_PRIVATE_KEY` es opcional. ⚠️ **Lo que NO está es probado con dinero moviéndose**: el saldo es **cero** (§9.3), o sea que el paso de fondear falla y hace falta abrir y fondear un balance en USD — gestión, no código |
 | ~~**Adaptador de payout directo de Stripe**~~ | ✅ **Escrito y ejecutado el 4-sep-2026** (§9.2). Transferencia real en *test mode*: `tr_1UBxVvHLJB7CRIwfB3VzPYpX`, $228,75 a una cuenta conectada **colombiana**. Falta que un tutor de verdad complete su alta |
 | **Elegir entre varios automáticos** | `payout_provider` es hoy un valor fijo por país. La regla 2 lo convierte en «uno de este conjunto». La pieza que compara existe; la que elige entre candidatos, no |
 
@@ -461,6 +465,10 @@ DO, GT, PA, ID, KE, MY y NG dLocal cobra y **no** paga. No es un problema: PayPa
 fondean desde nuestro banco y **no están atados al balance de quien cobró**
 (`ataduraDeBalance` en `lib/payments.ts`), así que ahí el payout va por PayPal. La atadura
 solo aplica a dLocal y Stripe entre sí.
+⚠️ **Y de esos diez, Wise solo sirve en CO** — no en los otros nueve. Nombrarlo aquí junto a
+PayPal sugería que cubría la lista entera y no es así: **Panamá devuelve 422
+`error.route.not.supported`** (medido el 7-sep, igual que Venezuela), y del resto ninguno tiene
+`wise_account_type`. Los cinco países que Wise puede pagar hoy son **CO, AR, MX, CL y UY**.
 
 ⚠️ **Y Venezuela no la cubre dLocal ni para cobrar ni para pagar**, aunque su fila llevaba
 `dlocal` de respaldo hasta el 4-sep. Migración `20260904140000`.
@@ -512,7 +520,7 @@ devuelve `enviado` y nunca `pagado`.
 | **dLocal · payout** | ✅ | `73128925947501`, $15,00, `paid` (3-sep) |
 | **PayPal · payout** | ✅ **CERRADO** | Recorrido entero con dinero moviéndose: el tutor conecta su cuenta por OAuth → retira → job → lote `DRM7SBVWEX65G` → PayPal responde **`item: SUCCESS`** → segunda pasada → fila **`paid`** y NTF-12 encolado. Repetido dos veces (`4U4DQPGVPL3NS`). El camino de recuperación también está ejercitado (§9.4) |
 | **PayPal · cobro** | — | No se integra: decisión del cliente del 4-sep |
-| **Wise** | — | Sin credenciales de API |
+| **Wise · payout** | 🟡 **a medias** | Adaptador escrito el 7-sep y su mapeo comprobado (`npm run check:wise`), pero **el dinero no se ha movido**: el saldo de la cuenta es **cero** —`GET /v4/profiles/136151426/balances` → `[]`, y con eso la opción `BALANCE` llega `disabled: true` en todos los presupuestos—, así que presupuesto, alta de destinatario y creación de la transferencia funcionan y el **fondeo** no. ⚠️ Esta fila decía «— · Sin credenciales de API», y llevaba desde el 4-sep siendo falsa. Por el criterio de arriba esto **no cuenta como punta a punta**: lo que falta es abrir y fondear un balance en USD, que es gestión |
 
 🔴 **Y el aviso que sale de haberlo hecho: las cuatro filas de `payments` que decían
 `provider = 'dlocal'` eran MENTIRA.** Llevan identificadores `pi_…` —de Stripe— y son del
@@ -632,16 +640,31 @@ después congele la cuenta con dinero de tutores dentro. Por eso la prueba de sa
 | :-- | :-- | :-- |
 | ~~**1**~~ | ✅ Payouts **manuales** operativos en Venezuela (Zinli · Binance · Zelle) | Hecho |
 | ~~**2**~~ | ✅ **PayPal** automático en Venezuela | Hecho el 3-sep: adaptador + job ejecutados contra sandbox, y un destinatario domiciliado en VE en `SUCCESS` |
-| **3** | ~~**Wise** para Colombia + resto del mundo~~ → **Stripe Connect lo cubrió el 4-sep** | Connect acepta cuentas *recipient* en 28 países, CO y ES incluidas (§9.2). Wise sigue pendiente de credenciales, pero **ya no bloquea ningún mercado**: pasa de «lo que desbloquea el mundo» a «un riel más barato para cuando llegue» |
+| ~~**3**~~ | ~~**Wise** para Colombia + resto del mundo~~ → **Stripe Connect lo cubrió el 4-sep**, y **Wise tiene adaptador desde el 7-sep** | Connect acepta cuentas *recipient* en 28 países, CO y ES incluidas (§9.2), así que esta fase nunca llegó a bloquear un mercado. Wise entró después por coste: **CO, AR, MX, CL y UY**. ⚠️ Aquí ponía «sigue pendiente de credenciales» y eso caducó el 4-sep; lo que queda hoy es **fondear el saldo**, no una cuenta |
 | ~~**4**~~ | ✅ **dLocal** para los 8 países LATAM | Adaptador escrito, spread decidido (lo asume el tutor) y cuenta aprobada en sandbox y producción |
 | ~~**5**~~ | ~~**PayPal Checkout**~~ | ❌ **Descartado por el cliente el 4-sep-2026.** PayPal paga; no cobra |
 
-De las cuatro fases originales queda **la 3 (Wise)**, y es lo único parado por una cuenta.
+✅ **Las cuatro fases originales están cerradas.** Aquí ponía que quedaba «**la 3 (Wise)**, y es
+lo único parado por una cuenta»: se escribió el 3-sep y ya era falso el 4, cuando llegó el token.
 
-⚠️ **Wise sigue sin credenciales de API** (KYB en curso; su sandbox V2 se pide a `api@wise.com`),
-y es el único riel que espera a alguien de fuera — pero desde el 4-sep **no bloquea ningún
-mercado**: entre PayPal y Stripe Connect están cubiertos Venezuela, Colombia y el resto del
-mundo. Wise entra cuando entre, por coste.
+⚠️ **Y este párrafo decía que «Wise sigue sin credenciales de API» (KYB en curso; sandbox V2 a
+petición por `api@wise.com`). Las dos cosas caducaron**: el token vive contra
+`api.transferwise.com` desde el **4-sep** —no hizo falta sandbox— y el **adaptador está escrito
+desde el 7-sep**, con cinco países servibles (**CO, AR, MX, CL, UY**). Ningún riel espera ya a
+alguien de fuera.
+
+⚠️ **Lo que sí queda, y es de otra naturaleza: el saldo está a cero.**
+`GET /v4/profiles/136151426/balances` devuelve `[]` (medido el 7-sep), así que la opción de pago
+`BALANCE` llega `disabled: true` y el **cuarto paso —fondear la transferencia— va a fallar** hasta
+que alguien abra una cuenta multidivisa en USD y la fondee. Es **gestión, no código**: el
+adaptador está escrito para que ese día no haya que tocar nada. Y por eso **Wise no está probado
+de punta a punta**, al contrario que PayPal, donde el dinero sí se movió (§9.3).
+
+⚠️ **Wise no llega a todas partes.** Medido el 7-sep contra la API: **Venezuela y Panamá
+devuelven 422 `error.route.not.supported`** —no cotizan, así que Wise no es una alternativa allí
+y VE sigue siendo PayPal o manual— y **Brasil está apagado a propósito**, porque sus códigos de
+banco no encajan con los que lleva `payout_banks.wise_bank_code`. Los países servibles son los
+que tienen `payout_country_rules.wise_account_type`: **CO, AR, MX, CL y UY**.
 
 ### Decisiones de negocio pendientes
 

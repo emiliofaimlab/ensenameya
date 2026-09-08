@@ -47,6 +47,9 @@ código; ausentes, la función se apaga sola en vez de romper:
 | `STRIPE_API_KEY` | Cobro real con Stripe (EP-20) · **reembolsos reales** (X-01, §4) | No se instancia el cliente, el checkout sigue por el camino simulado y la cola de reembolsos **no se toca** (queda `pending`) |
 | `RESEND_API_KEY` | Envío real de correo (US-1201) y del formulario de contacto (DL-01) | La cola se queda en `pending` (no `failed`) y el mensaje de contacto se guarda en `contact_messages` pero no sale |
 | `EMAIL_FROM` | Remitente propio | `Enséñame Ya <onboarding@resend.dev>`, que funciona sin dominio verificado |
+| `WISE_API_TOKEN` | El **riel de payout de Wise** (`lib/payments/wise-provider.ts`, desde el 7-sep-2026): payouts automáticos a **CO, AR, MX, CL y UY**. Está en `.env.local`; **falta en Vercel** | `missingPayoutConfig()` devuelve `falta WISE_API_TOKEN`, `puedePagar()` da false y el resolvedor **se salta a Wise sin ruido**: la orden se paga por el siguiente candidato del país, o se queda `scheduled`. No hay error, y ese silencio es a propósito (regla de «poner la variable es el despliegue») |
+| `WISE_PRIVATE_KEY` | **OPCIONAL, y hoy no hace falta.** Solo la firma **SCA** de Wise: una clave RSA privada cuya pública se sube en *Settings → API tokens*. **Medido el 7-sep: esta cuenta NO está sujeta a SCA**, así que `missingPayoutConfig()` no la exige y el riel funciona sin ella | Nada, mientras Wise no pida SCA. Si algún día lo pidiera, `wiseFetch` lo dice **con el nombre de la variable** en vez de dejar morir la orden con un 403 mudo — que es el motivo de que la comprobación exista aunque la variable no |
+| `WISE_API_URL` | **OPCIONAL.** Apuntar a otro host de Wise. Sin ella, `https://api.transferwise.com` — el de **producción**, que es contra el que se midió todo: no hizo falta sandbox | La API real de Wise |
 | `NEXT_PUBLIC_SITE_URL` | Base absoluta de `success_url`/`cancel_url` de Stripe | Desde EX-07 (17-ago) se deduce por entorno: producción → `VERCEL_PROJECT_PRODUCTION_URL`, preview → `VERCEL_BRANCH_URL` (alias fijo de rama). En local, `http://localhost:3000` |
 
 > ⚠️ **`RESEND_API_KEY` ya no basta, por sí sola, para vaciar la cola de correo** — y eso cambia un
@@ -209,6 +212,16 @@ público: sin `CRON_SECRET` los **tres** jobs programados responden **503** y no
   `NEXT_PUBLIC_REFERRAL_URL_TUTOR` (ver la matriz de §1). ⚠️ `REFERRAL_FACTORY_API_KEY` **sale de
   esta lista**: no la lee ningún fichero de `src/`, así que subirla no habilita nada y sugiere una
   atribución de referidos que no existe (1-sep, `QA-LANZAMIENTO.md` §4.5).
+- [ ] Scope **Preview y Production**: falta `WISE_API_TOKEN`, que enciende el riel de payout de
+  Wise (CO, AR, MX, CL, UY). Hoy solo está en `.env.local`, así que **el riel existe en el código y
+  no en el despliegue**: sin la variable `puedePagar()` da false y las órdenes de esos países se
+  pagan por el siguiente candidato o se quedan `scheduled`, sin un solo error.
+  ⚠️ **Subirla no basta para que el dinero salga.** El saldo de la cuenta de Wise es **cero**
+  (`GET /v4/profiles/136151426/balances` → `[]`, medido el 7-sep), y el cuarto paso del riel es
+  fondear la transferencia desde ese saldo: hasta que alguien abra y fondee un balance en **USD**,
+  la orden se queda viva en `incoming_payment_waiting` y el job reintenta el fondeo en cada pasada.
+  Eso es gestión, no configuración. Y es la razón de que Wise sea el único riel **no probado de
+  punta a punta con dinero moviéndose**, al contrario que PayPal.
 - [ ] Tras dar de alta cualquiera: **Redeploy**. Vercel no las aplica al despliegue ya construido (§1).
 
 ### D) GitHub — Environments (CI de migraciones) — [x] hecho, salvo branch protection

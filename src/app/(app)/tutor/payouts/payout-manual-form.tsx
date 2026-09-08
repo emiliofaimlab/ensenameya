@@ -77,6 +77,8 @@ export function PayoutManualForm({
   canales,
   destinos,
   etiquetaPais,
+  esLaUnicaVia,
+  canalFijo,
 }: {
   /** El catálogo ENTERO, apagados incluidos: hacen falta para nombrar lo guardado. */
   canales: CanalManual[];
@@ -84,6 +86,39 @@ export function PayoutManualForm({
   destinos: DestinoManualEnmascarado[];
   /** Nombre del país ya resuelto en el servidor (aquí no se importa `nombrePais`). */
   etiquetaPais: string;
+  /**
+   * ⚠️ ¿ES ESTE FORMULARIO LO ÚNICO QUE SE LE OFRECE EN SU PAÍS?
+   *
+   * Existe porque la frase de arriba —«a X no llega ninguna transferencia
+   * bancaria internacional»— dejó de ser cierta el 7-sep-2026 y estuvo en
+   * pantalla contradiciéndose a sí misma. Hasta ese día este formulario solo se
+   * pintaba en Venezuela, donde la frase es verdad y es además el motivo de que
+   * el formulario exista. Desde que la pantalla pinta VARIAS familias, un tutor
+   * colombiano la leía a diez líneas de un formulario de transferencia bancaria
+   * a Colombia y del párrafo que le ofrece cobrar por transferencia
+   * internacional (Wise). Medido en el render real: `/tutor/payouts` con
+   * `payout_country='CO'` decía las dos cosas en la misma tarjeta.
+   *
+   * Lo que NO se hace es borrar la frase: en Venezuela sigue siendo lo único que
+   * explica por qué aquí se pide un correo y no un número de cuenta.
+   */
+  esLaUnicaVia: boolean;
+  /**
+   * ⚠️ EL CANAL YA LO ELIGIÓ LA TARJETA, y por eso este formulario deja de
+   * tener desplegable.
+   *
+   * Desde el 8-sep-2026 la pantalla pinta UNA tarjeta por canal —Zinli, Zelle,
+   * Binance— con su radio, porque para el tutor son tres sitios distintos con
+   * tres datos distintos. Dejar además un `<select>` aquí dentro sería un
+   * segundo selector del mismo canal dentro del primero: el tutor podría marcar
+   * el radio de Zinli y guardar un Zelle, y lo que quedaría guardado
+   * contradiría a la tarjeta que abrió.
+   *
+   * Sin este prop el formulario se comporta como antes (desplegable con todos
+   * los canales activos), que es lo que sigue haciendo falta si algún día se
+   * pinta suelto.
+   */
+  canalFijo?: string;
 }) {
   const router = useRouter();
 
@@ -101,7 +136,9 @@ export function PayoutManualForm({
   // como mucho otras cinco; memorizar eso cuesta más líneas de las que ahorra, y
   // además `canales` llega serializado desde el servidor, así que cambia de
   // identidad en cada render y la memoria no se aprovecharía igual.
-  const activos = canales.filter((c) => c.is_active);
+  const activos = canales.filter(
+    (c) => c.is_active && (!canalFijo || c.channel === canalFijo),
+  );
   const porClave = new Map<string, CanalManual>(
     canales.map((c) => [c.channel, c]),
   );
@@ -114,9 +151,9 @@ export function PayoutManualForm({
     const i = canales.findIndex((c) => c.channel === channel);
     return i === -1 ? canales.length : i;
   };
-  const ordenada = [...lista].sort(
-    (a, b) => posicion(a.channel) - posicion(b.channel),
-  );
+  const ordenada = [...lista]
+    .filter((d) => !canalFijo || d.channel === canalFijo)
+    .sort((a, b) => posicion(a.channel) - posicion(b.channel));
 
   const [v, setV] = useState<ValoresDeDestino>({
     canal: activos[0]?.channel ?? "",
@@ -232,10 +269,20 @@ export function PayoutManualForm({
   return (
     <div className="mt-3">
       <p className="max-w-[620px] text-[13px] text-[#6b6b6b]">
-        A {etiquetaPais} no llega ninguna transferencia bancaria internacional,
-        así que te pagamos a la cuenta que nos digas. Tiene que estar{" "}
-        <strong>a tu nombre</strong>: no podemos pagar a la cuenta de otra
-        persona. Cada forma de cobro te dice abajo cómo funciona.
+        {esLaUnicaVia ? (
+          <>
+            A {etiquetaPais} no llega ninguna transferencia bancaria
+            internacional, así que te pagamos a la cuenta que nos digas.
+          </>
+        ) : (
+          // Sin premisa sobre el país: aquí es UNA de las vías que se le
+          // ofrecen, y afirmar que no le llega una transferencia sería negar el
+          // formulario bancario que tiene justo encima.
+          <>Por esta vía te pagamos a la cuenta que nos digas.</>
+        )}{" "}
+        Tiene que estar <strong>a tu nombre</strong>: no podemos pagar a la
+        cuenta de otra persona.{" "}
+        {canalFijo ? "Abajo te decimos qué dato necesitamos." : "Cada forma de cobro te dice abajo cómo funciona."}
       </p>
 
       {ordenada.length > 0 ? (
@@ -286,32 +333,41 @@ export function PayoutManualForm({
           lo maneja— pero sí cambia el texto de abajo, que atribuía la elección
           a una persona. Quién elige de verdad es el orden de
           `payment_routing_rules.payout_providers`. */}
+      {/* ⚠️ Aquí ponía «si prefieres que sea siempre la misma, retira las
+          demás», y desde el 8-sep-2026 eso es un consejo para un problema que
+          ya no existe: el radio de cada tarjeta DICE cuál va primero, y las
+          otras se quedan como respaldo en vez de estorbar. Borrar un destino
+          para que mande otro era pedirle al tutor que se quedara sin
+          alternativa para poder elegir. */}
       {ordenada.length > 1 ? (
         <p className="mt-2 max-w-[620px] text-[13px] text-[#6b6b6b]">
           Tienes {ordenada.length} formas de cobro registradas. Usamos una sola
-          por pago, empezando por la de arriba; si esa no llega, la siguiente. Si
-          prefieres que sea siempre la misma, retira las demás.
+          por pago: la que hayas marcado arriba, y si esa no llega, otra de las
+          que tengas completas.
         </p>
       ) : null}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="block">
-          <span className="text-xs text-[#6b6b6b]">
-            {ordenada.length > 0 ? "Añadir o cambiar" : "¿Por dónde cobras?"}
-          </span>
-          <select
-            className={`mt-1 ${CAMPO}`}
-            value={v.canal}
-            disabled={busy !== null}
-            onChange={(e) => elegirCanal(e.target.value)}
-          >
-            {activos.map((c) => (
-              <option key={c.channel} value={c.channel}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* Con canal fijo no hay desplegable: lo eligió la tarjeta de arriba. */}
+        {canalFijo ? null : (
+          <label className="block">
+            <span className="text-xs text-[#6b6b6b]">
+              {ordenada.length > 0 ? "Añadir o cambiar" : "¿Por dónde cobras?"}
+            </span>
+            <select
+              className={`mt-1 ${CAMPO}`}
+              value={v.canal}
+              disabled={busy !== null}
+              onChange={(e) => elegirCanal(e.target.value)}
+            >
+              {activos.map((c) => (
+                <option key={c.channel} value={c.channel}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className="block">
           <span className="text-xs text-[#6b6b6b]">Nombre del titular</span>

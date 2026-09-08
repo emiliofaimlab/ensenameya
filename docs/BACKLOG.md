@@ -412,7 +412,7 @@ No consumen SP de los sprints de dev. Se filtran en Jira por label.
 | Track | Épica | Jira | Estado | Nota |
 | :-- | :-- | :-- | :-- | :-- |
 | `Sprint-Diseño` | EP-19 | EY-88…91 (DS-01…04) | **In Review** (Diana Rivera) | Entregable Figma, no código. Precede al rediseño visual de pantallas ya construidas. |
-| `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) + `EY-147` | 🟡 **A medias** (antes: 🔒 bloqueada) — hoy **Sprint 6 AC**, vencido el 31-jul y aún abierto | C-01 **decidido: DLocal + Stripe** (resuelta, no bloquea). "Con una cuenta Stripe en *test mode* la mitad es ejecutable" → **se ejecutó el 6-ago**: `PAC-01` y `PAC-03` funcionan de punta a punta contra Stripe. ✅ **DLocal desbloqueado el 4-sep-2026** (cuenta aprobada, sandbox y producción) y su adaptador está escrito. De los payouts, PayPal y dLocal ya ejecutan; falta Wise (sin credenciales) y el payout directo de Stripe (Connect). Ver §4.5. |
+| `Sprint-Activacion-Comercial` | EP-20 | EY-93…96 (PAC-01…04) + `EY-147` | 🟡 **A medias** (antes: 🔒 bloqueada) — hoy **Sprint 6 AC**, vencido el 31-jul y aún abierto | C-01 **decidido: DLocal + Stripe** (resuelta, no bloquea). "Con una cuenta Stripe en *test mode* la mitad es ejecutable" → **se ejecutó el 6-ago**: `PAC-01` y `PAC-03` funcionan de punta a punta contra Stripe. ✅ **DLocal desbloqueado el 4-sep-2026** (cuenta aprobada, sandbox y producción) y su adaptador está escrito. De los payouts ejecutan **los cuatro**: dLocal, PayPal (3-sep), Stripe Connect (4-sep) y **Wise (7-sep)**. ⚠️ Aquí ponía «falta Wise (sin credenciales) y el payout directo de Stripe (Connect)»: lo de Connect caducó el 4-sep y lo de las credenciales de Wise también —su token responde desde ese mismo día—. Ojo con el matiz: Wise tiene adaptador y cinco países (CO, AR, MX, CL, UY), pero **el saldo de la cuenta es cero**, así que el fondeo falla y **no está probado con dinero moviéndose**. Ver §4.5. |
 | `Sprint-Mejoras-UX` | EP-21 | EY-98…101 (UX-201…204) | ✅ **Done** (ninguna aparece ya entre los `To Do`/`In Review`) | Redefinía US-201/202/203 — **ya ejecutado**, ver aviso abajo. |
 | `Sprint-Integracion-Visual` | EP-22 | EY-103…108 (IV-01…06) | **Las 6 IV en `Done` desde el 27-jul** · en prod 2026-07-22 | **Código.** Aplica el Figma sobre pantallas ya funcionales. Ver §4.2. |
 | — | EP-23 | EY-111…118 (DD-01…08) | **Las 8 cerradas**: DD-01/02/07/08 en `Done`, DD-03/04/05/06 en `In Review` | Huecos de modelo destapados por EP-22. Ver §4.3 y §4.4. |
@@ -1073,7 +1073,11 @@ Bypass* de Vercel → reserva `cancelled`, pago `failed`, `pending_webhooks=0`. 
   es la fuente de verdad del reembolso.
 - ~~🔒 **Sigue bloqueado:** DLocal entero (sin cuenta) y los payouts de EP-10 (Connect exige KYC).~~
   ✅ **Las dos cosas cayeron:** dLocal con cuenta aprobada, y los payouts ejecutando por PayPal
-  (3-sep) y Stripe Connect (4-sep-2026). Queda **Wise**, que sigue sin credenciales de API.
+  (3-sep) y Stripe Connect (4-sep-2026). ⚠️ Y aquí ponía «queda **Wise**, que sigue sin
+  credenciales de API»: caducó a las pocas horas de escribirse. Wise tiene **token desde el
+  4-sep** y **adaptador desde el 7-sep** (CO, AR, MX, CL, UY). Lo que le queda no es una
+  credencial sino **saldo** —`balances` devuelve `[]`— y por eso es el único riel **sin probar
+  con dinero moviéndose**.
 
 **4) Referidos — el hallazgo que cambia el alcance de EP-13.** Está contado entero en el 🔴 de EP-13
 (§2). Resumen para el tablero: **`EY-79` (`US-1302`) hay que rehacerlo** —la atribución pasa a ser por

@@ -721,7 +721,73 @@ nuevo**: tabla, migración y decisión de si sale de la comisión o del neto del
 
 ---
 
-*Se actualiza en cada pasada de QA. Última edición: **2026-09-01** — §4.5 rehecha (la atribución de
+### 4.9 🟡 Wise de punta a punta — el camino recorrido, el dinero no (7-sep)
+
+El riel de payout de Wise se escribió el **7-sep-2026** y se ejercitó contra
+`api.transferwise.com` con el token real y el perfil business `136151426`, creando y cancelando
+**una transferencia de verdad** (`2357375084`, USD→GBP). No es una lectura de la documentación:
+cada fila de abajo es una respuesta HTTP.
+
+| Paso | Llamada | Resultado medido |
+| :-- | :-- | :-- |
+| 1 · Presupuesto | `POST /v3/profiles/136151426/quotes` | 200 · comisión $0,69 · `payIn: BALANCE` llega **`disabled: true`** con `error.payInmethod.disabled` |
+| 2 · Destinatario | `POST /v1/accounts` | 200 · el cuerpo que produce `cuentaDeWise()` lo acepta Wise tal cual |
+| 3 · Requisitos | `POST /v1/transfer-requirements` | 200 · `reference` máx **18** en ese corredor |
+| 4 · Transferencia | `POST /v1/transfers` | 200 · nace en `incoming_payment_waiting` |
+| 5 · Fondeo | `POST /v3/…/transfers/{id}/payments` | **422** `{"status":"REJECTED","errorCode":"balance.payment-option-unavailable"}` |
+| 6 · Barrido | `GET /v1/transfers?profile=…` | la reencuentra por su `customerTransactionId` |
+| 7 · Idempotencia | `POST /v1/transfers` repetido | **devuelve la MISMA transferencia** |
+| 8 · Limpieza | `PUT /…/cancel` + `DELETE /v1/accounts/{id}` | 200 · no queda nada vivo en la cuenta |
+
+**🟢 El paso 7 despeja la única duda que quedaba del contrato.** Wise exige repetir el mismo
+`customerTransactionId` para reintentar, pero un presupuesto solo sirve para una transferencia y
+caduca a los 30 minutos: un reintento tardío llega con el mismo identificador y un presupuesto
+**distinto**, y su documentación no dice qué pasa entonces. Pasa que devuelve la que ya existía. La
+idempotencia aguanta el caso del job, que es el único que importa — y con ella, `uuidDePago()`
+(UUIDv5 determinista de `payout` + `intento`) es lo que impide pagar dos veces.
+
+**🔴 Lo que NO está probado es el dinero, y no lo va a estar hasta que alguien fondee la cuenta.**
+`GET /v4/profiles/136151426/balances` devuelve `[]`: cero balances, ninguna moneda abierta. Por eso
+el paso 5 rechaza y por eso el `payIn BALANCE` del paso 1 llega deshabilitado. **Ningún tutor ha
+cobrado por Wise**, al contrario que por PayPal (§ `docs/PAGOS-Y-PAYOUTS.md` §9.4). Abrir y fondear
+un balance USD es una gestión, no una tarea de código: el adaptador ya deja la transferencia viva en
+`incoming_payment_waiting` y reintenta el fondeo en cada pasada del job.
+
+**Dos hallazgos que no están en la documentación de Wise y que costaron un fallo cada uno:**
+
+1. **El rechazo del fondeo es un 422, no un 201 con `status: REJECTED`.** Escrito según la
+   documentación, `fondear()` lanzaba y «no hay saldo» se clasificaba como error transitorio en vez
+   de `sin-fondos`. Corregido leyendo el cuerpo del error (`wise-provider.ts`).
+2. **Colombia exige «abono automático»** activado en la cuenta del beneficiario. Wise rechaza el
+   destinatario con `NOT_VALID` sobre `accountNumber` si el banco no lo tiene puesto. Es un
+   requisito del tutor y **hoy la pantalla no se lo dice**.
+
+**El ruteo, verificado contra dev con un escenario colombiano** (insertado y borrado):
+
+| Escenario | `banco` | `banco_wise` | Riel |
+| :-- | :-- | :-- | :-- |
+| Bancolombia, sin dirección ni teléfono | `true` | `false` | cobra por la vía de siempre |
+| Los mismos datos + dirección y teléfono | `true` | `true` | **Wise** |
+| Con dirección, pero banco Itaú (que Wise no cubre) | `true` | `false` | cobra por la vía de siempre |
+
+Es el filtro que impide repetir el fallo del tutor venezolano con Zinli: que un riel *pueda* pagar
+y que pueda pagarle *a esta persona* son dos preguntas distintas.
+
+**Lo que queda antes de dar el riel por cerrado:**
+
+- [ ] **Abrir y fondear un balance USD** en el perfil `136151426`. Sin esto no paga, y punto.
+- [ ] **`WISE_API_TOKEN` en Vercel** (Production y Preview). Hoy solo está en `.env.local`, así que
+      en producción `missingPayoutConfig()` devuelve que falta y el resolvedor **salta el riel en
+      silencio** — que es el fallo seguro, pero es un riel apagado.
+- [ ] **Un payout real a un tutor de CO, AR, MX, CL o UY**, con `outgoing_payment_sent` y NTF-12.
+- [ ] **Avisar del «abono automático»** en la pantalla del tutor colombiano.
+- [ ] **Seguir mirando los `paid`.** Ningún estado de Wise es irreversible: los rebotes llegan
+      «hasta varias semanas después» y `charged_back` puede venir desde cualquier estado. Hoy no hay
+      webhook de cambio de estado, así que un payout marcado `paid` que rebote no se entera nadie.
+
+---
+
+*Se actualiza en cada pasada de QA. Última edición: **2026-09-07** — §4.9 nueva con el riel de Wise ejercitado contra la API real (los ocho pasos, la idempotencia despejada y los dos hallazgos que no están en su documentación), y lo que falta para cerrarlo. Edición previa el **2026-09-01** — §4.5 rehecha (la atribución de
 referidos no existe: `ref_email` era falso, mapa fichero:línea de lo que sí hay y verificación contra
 la campaña real de RF), §4.2 con `REFERRAL_FACTORY_API_KEY` degradada a «no la lee nadie», y §4.8
 nueva desmintiendo los splits de referidos de `EY-209`. Edición previa el **2026-08-31** — §4.7 con el ciclo de la baja de cuenta con dinero en vuelo ejercitado de punta a punta (recolección, ensayo, barrido real, desactivación y cancelación), el mapa de privilegios de `service_role` por operación, y el hueco de cobertura que deja la regla de oro 2. Edición previa el **2026-08-17** — superficies nuevas del día

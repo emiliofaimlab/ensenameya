@@ -125,11 +125,60 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
   // No se le dice «tu correo está mal», porque no lo sabemos: `UNCLAIMED`
   // también sale si simplemente aún no ha entrado a aceptarlo. Se le dice el
   // hecho y qué comprobar.
-  payout_unclaimed: (p) => ({
-    asunto: "Tu liquidación está esperando a que la reclames",
-    cuerpo: `Enviamos tu liquidación${importe(p, "amount") && ` de ${importe(p, "amount")}`} pero todavía no ha llegado a tu cuenta de PayPal. Suele pasar cuando el correo que nos diste no es el de tu cuenta PayPal, o cuando aún no has entrado a aceptar el pago. Comprueba el correo que tienes registrado con nosotros. Si nadie lo reclama, PayPal nos lo devuelve a los 30 días y tendremos que pagártelo de otra forma.`,
-    cta: "Revisar mis datos de cobro",
-  }),
+  //
+  // 🔴 Y POR QUÉ RAMIFICA POR PROVEEDOR (7-sep-2026). Hasta hoy este cuerpo era
+  // uno solo y estaba escrito ENTERO para PayPal, mientras el barrido que lo
+  // encola (`avisar_payouts_sin_reclamar`) no filtra por riel a propósito: su
+  // migración dice «si mañana otro riel deja un pago colgado igual, este aviso
+  // ya lo cubre» (`20260903220000:34-36`). Ese mañana llegó con Wise
+  // (`20260907120000`): su transferencia se crea y se queda en `processing`
+  // hasta que se fondea, o sea indefinidamente con el saldo a cero. Al día 7 un
+  // tutor colombiano al que le pagamos POR TRANSFERENCIA BANCARIA recibía un
+  // correo diciéndole que revisara el correo de su cuenta de PayPal, que no
+  // tiene, por un dinero que en su riel nadie tiene que reclamar.
+  //
+  // ⚠️ Y LA PRIMERA FRASE ERA FALSA AHÍ. Decía «Enviamos tu liquidación»: en
+  // PayPal es verdad (el lote sale en `SUCCESS` y el pago queda `UNCLAIMED`),
+  // pero en Wise la transferencia está creada y el dinero NO ha salido. La
+  // frase de arranque se comparte y por eso dice lo único cierto en los dos
+  // rieles: que lleva N días en curso y no ha llegado.
+  //
+  // ⚠️ SIN `provider` SE TRATA COMO «NO ES PAYPAL», y es lo correcto: el cuerpo
+  // neutro es cierto en cualquier riel —incluido PayPal— y el de PayPal solo lo
+  // es en PayPal. `payouts.provider` es nullable (riel manual, reintento del
+  // admin), y avisos viejos con el payload antiguo no hay: medido en dev el
+  // 7-sep, `notifications` con `type = 'NTF-23'` devuelve 0 filas.
+  payout_unclaimed: (p) => {
+    // A variables antes de mirarlas: el payload es `Record<string, unknown>` y
+    // el estrechamiento no sobrevive de otra forma (mismo motivo que en
+    // `admin_message`).
+    const riel = p?.provider;
+    const dias = p?.dias;
+    const cuanto = importe(p, "amount") ? ` de ${importe(p, "amount")}` : "";
+    const tiempo = typeof dias === "number" ? `más de ${dias} días` : "varios días";
+    // La frase que abre los dos cuerpos. Cierta con el pago enviado y sin
+    // reclamar, y cierta con la transferencia creada y sin fondear.
+    const enCurso = `Tu liquidación${cuanto} lleva ${tiempo} en curso y todavía no ha llegado a tu cuenta`;
+
+    if (riel === "paypal") {
+      return {
+        asunto: "Tu liquidación está esperando a que la reclames",
+        cuerpo: `${enCurso} de PayPal. Suele pasar cuando el correo que nos diste no es el de tu cuenta de PayPal, o cuando aún no has entrado a aceptar el pago. Comprueba el correo que tienes registrado con nosotros. Si nadie lo reclama, PayPal nos lo devuelve a los 30 días y tendremos que pagártelo de otra forma.`,
+        cta: "Revisar mis datos de cobro",
+      };
+    }
+
+    // El resto de rieles: banco (Wise, dLocal), cuenta conectada de Stripe,
+    // riel manual. En ninguno hay nada que reclamar ni datos que revisar —los
+    // que dio ya sirvieron para emitir la orden—, así que pedírselo sería
+    // mandarlo a arreglar algo que no está roto. Lo único que le toca saber es
+    // que su dinero está señalado y que lo estamos siguiendo.
+    return {
+      asunto: "Tu liquidación está tardando más de lo normal",
+      cuerpo: `${enCurso}. La orden está emitida y la estamos siguiendo; no tienes que hacer nada por tu parte. Te avisamos en cuanto se cierre, y si sigue sin aparecer escríbenos a info@ensenameya.com y la revisamos.`,
+      cta: "Ver mis cobros",
+    };
+  },
 
   // NTF-21 (EY-151). ⚠️ NI EL MENSAJE NI QUIÉN LO ESCRIBE: el payload que deja
   // el trigger trae solo el id del hilo, a propósito (ver la migración

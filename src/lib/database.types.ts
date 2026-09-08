@@ -1115,6 +1115,7 @@ export type Database = {
           name: string
           rejects_cpf: boolean
           updated_at: string
+          wise_bank_code: string | null
         }
         Insert: {
           bank_code: string
@@ -1124,6 +1125,7 @@ export type Database = {
           name: string
           rejects_cpf?: boolean
           updated_at?: string
+          wise_bank_code?: string | null
         }
         Update: {
           bank_code?: string
@@ -1133,6 +1135,7 @@ export type Database = {
           name?: string
           rejects_cpf?: boolean
           updated_at?: string
+          wise_bank_code?: string | null
         }
         Relationships: [
           {
@@ -1158,6 +1161,7 @@ export type Database = {
           notas: string
           requires_branch: boolean
           updated_at: string
+          wise_account_type: string | null
         }
         Insert: {
           account_help: string
@@ -1172,6 +1176,7 @@ export type Database = {
           notas: string
           requires_branch?: boolean
           updated_at?: string
+          wise_account_type?: string | null
         }
         Update: {
           account_help?: string
@@ -1186,6 +1191,7 @@ export type Database = {
           notas?: string
           requires_branch?: boolean
           updated_at?: string
+          wise_account_type?: string | null
         }
         Relationships: []
       }
@@ -1888,6 +1894,21 @@ export type Database = {
           },
         ]
       }
+      timezone_countries: {
+        Row: {
+          country: string
+          timezone: string
+        }
+        Insert: {
+          country: string
+          timezone: string
+        }
+        Update: {
+          country?: string
+          timezone?: string
+        }
+        Relationships: []
+      }
       tutor_categories: {
         Row: {
           category_id: string
@@ -2021,10 +2042,14 @@ export type Database = {
           bank_account_type: string | null
           bank_branch: string | null
           bank_code: string
+          beneficiary_address_line: string | null
+          beneficiary_city: string | null
           beneficiary_document: string
           beneficiary_document_type: string
           beneficiary_first_name: string
           beneficiary_last_name: string
+          beneficiary_phone: string | null
+          beneficiary_postcode: string | null
           country: string
           created_at: string
           tutor_id: string
@@ -2036,10 +2061,14 @@ export type Database = {
           bank_account_type?: string | null
           bank_branch?: string | null
           bank_code: string
+          beneficiary_address_line?: string | null
+          beneficiary_city?: string | null
           beneficiary_document: string
           beneficiary_document_type: string
           beneficiary_first_name: string
           beneficiary_last_name: string
+          beneficiary_phone?: string | null
+          beneficiary_postcode?: string | null
           country: string
           created_at?: string
           tutor_id: string
@@ -2051,10 +2080,14 @@ export type Database = {
           bank_account_type?: string | null
           bank_branch?: string | null
           bank_code?: string
+          beneficiary_address_line?: string | null
+          beneficiary_city?: string | null
           beneficiary_document?: string
           beneficiary_document_type?: string
           beneficiary_first_name?: string
           beneficiary_last_name?: string
+          beneficiary_phone?: string | null
+          beneficiary_postcode?: string | null
           country?: string
           created_at?: string
           tutor_id?: string
@@ -2077,6 +2110,35 @@ export type Database = {
           },
           {
             foreignKeyName: "tutor_payout_accounts_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tutor_payout_preferences: {
+        Row: {
+          created_at: string
+          method: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          method: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          method?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_payout_preferences_tutor_id_fkey"
             columns: ["tutor_id"]
             isOneToOne: true
             referencedRelation: "profiles"
@@ -2582,6 +2644,7 @@ export type Database = {
         Args: { p_student_id: string; p_tutor_id: string }
         Returns: boolean
       }
+      pais_de_cobro_por_zona: { Args: { p_timezone: string }; Returns: string }
       payout_account_check: {
         Args: {
           p_account: string
@@ -2595,6 +2658,7 @@ export type Database = {
         Returns: string
       }
       payout_beneficiary: { Args: { p_payout_id: string }; Returns: Json }
+      payout_beneficiary_wise: { Args: { p_payout_id: string }; Returns: Json }
       payout_identifier_beneficiary: {
         Args: { p_channel: string; p_payout_id: string }
         Returns: Json
@@ -2808,15 +2872,20 @@ export type Database = {
         Args: {
           p_account?: string
           p_account_type?: string
+          p_address_line?: string
           p_bank_code: string
           p_branch?: string
+          p_city?: string
           p_document?: string
           p_document_type: string
           p_first_name: string
           p_last_name: string
+          p_phone?: string
+          p_postcode?: string
         }
         Returns: Json
       }
+      wise_puede_pagar_a: { Args: { p_tutor: string }; Returns: boolean }
     }
     Enums: {
       account_deletion_request_status: "pending" | "completed" | "cancelled"

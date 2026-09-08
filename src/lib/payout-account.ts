@@ -46,6 +46,17 @@ export type ReglaDePais = {
   document_patterns: Record<string, string>;
   requires_branch: boolean;
   branch_pattern: string | null;
+  /**
+   * `null` = por este país no se puede pagar con transferencia internacional
+   * (Wise), y no es un hueco pendiente: lo dice la columna homónima de
+   * `payout_country_rules` (`20260907120000`), medida corredor a corredor. Hoy
+   * solo CO, AR, MX, CL y UY la tienen puesta.
+   *
+   * Aquí NO se usa para rutear nada —eso lo decide el servidor con
+   * `wise_puede_pagar_a()`— sino para no prometerle a un tutor de Brasil una vía
+   * que en Brasil no existe cuando rellena su dirección.
+   */
+  wise_account_type: string | null;
 };
 
 /** Un banco del catálogo, para el desplegable. */
@@ -72,6 +83,22 @@ export type CuentaEnmascarada = {
   bank_account_type: string | null;
   bank_branch: string | null;
   updated_at: string;
+  /**
+   * La dirección y el teléfono del BENEFICIARIO (`20260907120000`). Vuelven EN
+   * CLARO y no enmascarados, y eso no es una grieta en la máscara de PII: los
+   * cuatro entran en el `grant select` de `authenticated` a propósito, porque
+   * son datos que el tutor tiene que poder releer y corregir. Los que siguen
+   * fuera del grant son los dos de siempre —`bank_account` y
+   * `beneficiary_document`—, que son los que valen para mover dinero.
+   *
+   * `null` = ese tutor todavía no lo ha rellenado. No es un error: las cuatro
+   * columnas nacieron nullable para no romperle el guardado a los ocho países
+   * que hoy cobran por dLocal sin necesitarlas.
+   */
+  beneficiary_address_line: string | null;
+  beneficiary_city: string | null;
+  beneficiary_postcode: string | null;
+  beneficiary_phone: string | null;
 };
 
 /** Los valores que teclea el tutor, antes de mandarlos a la RPC. */
@@ -86,6 +113,21 @@ export type ValoresDeCuenta = {
   /** Vacío = «deja la que ya está guardada». */
   cuenta: string;
   sucursal: string;
+  /**
+   * Los cuatro que pide Wise en TODOS sus corredores y dLocal en Perú. Son
+   * OPCIONALES —ni la tabla ni la RPC los exigen— y por eso `validarCuenta` solo
+   * los mira cuando traen algo: exigirlos aquí dejaría sin poder guardar a todo
+   * el que ya cobra por dLocal sin ellos, que es justo lo que la migración se
+   * negó a hacer poniéndolos `not null`.
+   *
+   * Vacío = «deja el que ya está guardado», igual que `documento` y `cuenta`.
+   * A diferencia de aquellos, estos SÍ se prerrellenan: vuelven en claro de la
+   * base y no hay nada que enmascarar.
+   */
+  direccion: string;
+  ciudad: string;
+  codigoPostal: string;
+  telefono: string;
 };
 
 /**
@@ -114,6 +156,40 @@ export function normalizaDocumento(v: string): string {
 export function normalizaCuenta(v: string): string {
   return v.replace(/\s/g, "");
 }
+
+/**
+ * El teléfono del beneficiario, normalizado EXACTAMENTE como lo hace
+ * `upsert_payout_account`: fuera los puntos y fuera los bordes, y nada más
+ * (`regexp_replace(…, '[.]', '', 'g')` seguido de `btrim`).
+ *
+ * Ni un carácter más: el `+`, los espacios, los paréntesis y los guiones son
+ * parte de lo que el `check` de la columna acepta —y de lo que acepta Wise, cuyo
+ * propio ejemplo es "21 5555 5555" y no un E.164—, así que quitarlos aquí sería
+ * inventarse una regla más estricta que la del destinatario. Los puntos sí se
+ * van porque el `check` no los admite y la gente los escribe sin pensar; si no
+ * se limpiasen aquí, «+57 300.123.4567» daría error de formato después de
+ * pulsar Guardar y no mientras se teclea.
+ */
+export function normalizaTelefono(v: string): string {
+  return v.replace(/\./g, "").trim();
+}
+
+/**
+ * El espejo del `check` de `tutor_payout_accounts.beneficiary_phone`, copiado
+ * carácter a carácter de `20260907120000`: empieza por dígito o `+`, y de 7 a 20
+ * caracteres en total. Se escribe aquí y no se deriva de nada porque esta regla
+ * NO viaja en `payout_country_rules` —es de la columna, igual para los ocho
+ * países—, así que no hay fila de la que leerla.
+ */
+const TELEFONO_BENEFICIARIO = /^[0-9+][0-9 ()-]{6,19}$/;
+
+/**
+ * Los tres largos que declaran los `check` de las columnas de dirección. Mismo
+ * motivo que arriba: son de la columna y no del país.
+ */
+const MAX_DIRECCION = 255;
+const MAX_CIUDAD = 255;
+const MAX_CODIGO_POSTAL = 32;
 
 /**
  * El espejo de `payout_account_check`, con las regex que vienen de la BD.
@@ -187,7 +263,129 @@ export function validarCuenta(
     }
   }
 
+  // ── Dirección y teléfono ────────────────────────────────────────────────
+  //
+  // ⚠️ AQUÍ NO HAY UN SOLO `return "Falta…"`, Y ESO ES LA REGLA, NO UN OLVIDO.
+  // Las cuatro columnas nacieron nullable (`20260907120000`) y la RPC se niega
+  // expresamente a exigirlas: «exigirla rompería el guardado a los ocho países
+  // que hoy cobran por dLocal sin necesitarla, y a los tutores que ya tienen su
+  // fila». Un `if (!direccion) return …` aquí volvería a cerrar esa puerta desde
+  // el navegador, con el agravante de que el fallo se vería en el formulario y
+  // la causa estaría en un fichero que nadie relaciona con dLocal.
+  //
+  // Lo que sí se hace es comprobar lo que el tutor SÍ escribe, para que un largo
+  // o un formato malo se vean mientras teclea. Sin esto el mensaje que le llega
+  // es el genérico del bloque `exception` de la RPC («los datos de cobro no
+  // tienen el formato que pide CO»), que existe para no publicar la fila entera
+  // en el log y por eso no puede decirle qué campo mirar.
+  if (valores.direccion.trim().length > MAX_DIRECCION) {
+    return `La dirección no puede pasar de ${MAX_DIRECCION} caracteres.`;
+  }
+  if (valores.ciudad.trim().length > MAX_CIUDAD) {
+    return `La ciudad no puede pasar de ${MAX_CIUDAD} caracteres.`;
+  }
+  if (valores.codigoPostal.trim().length > MAX_CODIGO_POSTAL) {
+    return `El código postal no puede pasar de ${MAX_CODIGO_POSTAL} caracteres.`;
+  }
+  const telefono = normalizaTelefono(valores.telefono);
+  if (telefono && !TELEFONO_BENEFICIARIO.test(telefono)) {
+    return "El teléfono tiene que empezar por un número o por «+» y medir entre 7 y 20 caracteres. Se admiten espacios, paréntesis y guiones.";
+  }
+
   return null;
+}
+
+/**
+ * Qué le decimos al tutor sobre la dirección y el teléfono, que es lo único que
+ * distingue estos cuatro campos del resto del formulario: los demás los pide el
+ * banco y sin ellos no cobra; estos son opcionales y hay que explicar para qué
+ * sirven o se quedan en blanco para siempre — y entonces el riel de Wise está
+ * encendido y vacío, que es exactamente el estado del que sale esta pantalla.
+ *
+ * ⚠️ NO REIMPLEMENTA `wise_puede_pagar_a()`, y no puede: esa función mira además
+ * el banco traducido, el tipo de cuenta de Argentina y el tipo de documento de
+ * Uruguay, y su `execute` es solo de `service_role`. Lo que sabe este módulo es
+ * (a) si el país tiene vía —`wise_account_type`, que sí es legible— y (b) cuáles
+ * de los cuatro campos están guardados. Cuando la RPC ya ha contestado,
+ * `wise_listo` manda sobre las dos cosas: es el veredicto del servidor y aquí
+ * solo se pinta.
+ *
+ * `wise_listo: null` es «todavía no lo ha dicho nadie» —la primera carga de la
+ * página, donde solo hay columnas leídas—, y por eso ese caso NO promete nada.
+ *
+ * ⚠️ Y `wise_listo: true` tampoco significa que hoy el dinero salga por ahí:
+ * dice que los DATOS del tutor le sirven a Wise, no que Wise vaya a pagar. Para
+ * eso hacen falta dos cosas más que no se preguntan desde aquí y que el 7-sep
+ * NO se cumplían: `WISE_API_TOKEN` en el despliegue (solo está en `.env.local`,
+ * `docs/ENTORNOS.md` §1) y saldo en la cuenta (`balances` devuelve `[]`, así que
+ * el fondeo falla — `docs/PAGOS-Y-PAYOUTS.md` §9.3). Sin el token el resolvedor
+ * salta el riel sin ruido y el tutor cobra por el de siempre, que es por lo que
+ * esta frase no miente hoy; el día que el token esté y el saldo no, sí mentiría.
+ */
+export function avisoDeDireccion(args: {
+  regla: ReglaDePais;
+  guardado: {
+    address_line: string | null;
+    city: string | null;
+    postcode: string | null;
+    phone: string | null;
+    wise_listo: boolean | null;
+  } | null;
+  /** Ya resuelto por quien llama; ver la cabecera del fichero. */
+  nombreDelPais: string;
+}): string {
+  const { regla, guardado, nombreDelPais } = args;
+
+  // Brasil, Ecuador, Perú y Paraguay: son los CUATRO países con fila en
+  // `payout_country_rules` y `wise_account_type` a null, o sea los únicos que
+  // llegan aquí sin vía. Decirle a uno de ellos «te falta el código postal para
+  // que podamos pagarte por transferencia internacional» sería mentirle a quien
+  // no puede cobrar así de ninguna manera. Se piden igual porque dLocal los exige en Perú
+  // (`dlocal-provider.ts:1203-1205`) y porque el país puede entrar mañana.
+  //
+  // ⚠️ Venezuela NO entra en esta lista aunque Wise tampoco le pague (422
+  // `error.route.not.supported`, medido el 7-sep): no tiene fila en
+  // `payout_country_rules` —«no está ni va a estar», `page.tsx`— y su riel es
+  // manual, así que este formulario ni se pinta y esta función no se llama.
+  // Nombrarla aquí sugería un caso que no existe.
+  if (!regla.wise_account_type) {
+    return `En ${nombreDelPais} estos datos no cambian por dónde te pagamos, así que puedes dejarlos en blanco. Los guardamos porque hay bancos y países que los exigen para aceptar la transferencia.`;
+  }
+
+  const faltan = [
+    guardado?.address_line ? null : "la dirección",
+    guardado?.city ? null : "la ciudad",
+    guardado?.postcode ? null : "el código postal",
+    guardado?.phone ? null : "el teléfono",
+  ].filter((x): x is string => x !== null);
+
+  // ⚠️ NINGUNA DE ESTAS FRASES PROMETE QUE LLEGUE ANTES, y eso es a propósito:
+  // lo que está MEDIDO de Wise es el coste —$2,06 por payout a Colombia, «5× más
+  // barato que dLocal» (`docs/PAGOS-Y-PAYOUTS.md` §5 y §7)— y de los plazos no
+  // hay una sola medición en el proyecto. Aquí ponía «que llega antes» y «la vía
+  // más rápida»: es la clase de frase que un tutor recuerda cuando su
+  // transferencia tarda cuatro días.
+  if (faltan.length > 0) {
+    return `Con ${enumera(faltan)} podemos pagarte por transferencia internacional, que nos cuesta bastante menos. Sin ${faltan.length === 4 ? "ellos" : "eso"} cobras igual, por la vía de siempre.`;
+  }
+
+  if (guardado?.wise_listo === true) {
+    return "Listos: con estos datos ya podemos pagarte por transferencia internacional.";
+  }
+  if (guardado?.wise_listo === false) {
+    // El servidor ha dicho que no y el tutor no tiene nada más que rellenar: lo
+    // que falla es su banco, su tipo de cuenta o su tipo de documento, y eso no
+    // se arregla en este formulario. Se le dice que no pierde nada, que es lo
+    // único accionable.
+    return "Guardados. Por tu banco y tu tipo de cuenta seguimos pagándote por la vía de siempre, así que no cambia nada para ti.";
+  }
+  return "Ya los tienes guardados. Los usamos para pagarte por transferencia internacional cuando tu banco lo permite.";
+}
+
+/** «la dirección, la ciudad y el teléfono». Sin coma de Oxford, que en castellano no se pone. */
+function enumera(partes: string[]): string {
+  if (partes.length <= 1) return partes[0] ?? "";
+  return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
 }
 
 /**

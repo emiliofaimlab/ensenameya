@@ -14,7 +14,24 @@
 export type DatosDeCobro = {
   conectada: boolean;
   banco: boolean;
+  /**
+   * ⚠️ WISE PIDE MÁS QUE COORDENADAS BANCARIAS, y por eso esto va aparte de
+   * `banco` en vez de estrecharlo. Un tutor puede tener su cuenta registrada
+   * —y cobrar por dLocal con ella— y aun así no ser pagable por Wise: le falta
+   * la dirección o el teléfono, su país no está cubierto (Venezuela y Panamá no
+   * cotizan siquiera), o su banco no está entre los que Wise conoce. Lo calcula
+   * `wise_puede_pagar_a()`, que es la única definición de esa pregunta.
+   */
+  banco_wise: boolean;
   canales: string[];
+  /**
+   * 🔑 POR DÓNDE PREFIERE COBRAR ÉL. `null` = no ha elegido, y entonces manda el
+   * orden de `payment_routing_rules`, que es como funcionaba esto antes del
+   * 8-sep-2026. Lo consume `ordenaPorPreferencia` (`metodo-preferido.ts`), que
+   * REORDENA candidatos: los filtros de aquí abajo se aplican después igual, así
+   * que preferir un método sin completar sus datos no atasca ninguna orden.
+   */
+  metodo_preferido: string | null;
 };
 
 /**
@@ -48,7 +65,11 @@ export function rielSirveParaEsteTutor(riel: RielMinimo, datos: DatosDeCobro): b
     case "conectada":
       return datos.conectada;
     case "banco":
-      return datos.banco;
+      // Los dos rieles de banco automáticos leen la MISMA fila y no les vale lo
+      // mismo: a dLocal le basta con que exista, y Wise necesita además
+      // dirección, teléfono, país cubierto y un banco de su lista. Es la misma
+      // asimetría que abajo separa a PayPal del resto de identificadores.
+      return riel.clave === "wise" ? datos.banco_wise : datos.banco;
     case "identificador":
       // El riel de PayPal quiere SU canal. Cualquier otro riel de identificador
       // —hoy solo el manual— se conforma con uno que no sea el de PayPal: es
