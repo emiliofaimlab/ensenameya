@@ -22,6 +22,7 @@ import { ConnectAlta } from "./connect-alta";
 import { PaypalConectar } from "./paypal-conectar";
 import { PayoutManualForm } from "./payout-manual-form";
 import { MetodosDeCobro, type TarjetaMetodo } from "./metodos-de-cobro";
+import { LOGOS } from "./logos";
 import { leerCanalesManuales, leerDestinosManuales } from "./rpc";
 import {
   type BancoDePais,
@@ -352,6 +353,8 @@ export default async function TutorPayoutsPage() {
       return {
         clave: "banco",
         nombre: "Transferencia bancaria",
+        // Sin logo a propósito: no es de ninguna marca. Ver `logos.ts`.
+        logo: null,
         monograma: "TR",
         descripcion: `A tu cuenta en ${nombrePais(paisDeCobro!)}, en ${regla?.currency ?? MONEDA_DEL_SALDO}. Tiene que estar a tu nombre: el titular y el documento se comprueban contra el banco y, si no coinciden, la transferencia se rechaza.`,
         automatico: m.automatico,
@@ -365,6 +368,7 @@ export default async function TutorPayoutsPage() {
         subtarea: faltaDireccion
           ? "Con tu dirección y tu teléfono se abre una segunda ruta a esta misma cuenta, que nos sale más barata. Sin ellos te seguimos pagando igual."
           : null,
+        conectar: false,
       };
     }
 
@@ -372,6 +376,7 @@ export default async function TutorPayoutsPage() {
       return {
         clave: "stripe",
         nombre: "Cuenta bancaria vía Stripe",
+        logo: LOGOS.stripe ?? null,
         monograma: "ST",
         descripcion:
           "Te das de alta en Stripe una vez y ellos te ingresan en tu banco. Los datos bancarios se los das a ellos: nosotros no llegamos a verlos.",
@@ -384,6 +389,9 @@ export default async function TutorPayoutsPage() {
             : null,
         aviso: null,
         subtarea: null,
+        // Con Connect no hay formulario que pintar: el tutor le da sus
+        // coordenadas a Stripe, no a nosotros.
+        conectar: true,
       };
     }
 
@@ -395,6 +403,7 @@ export default async function TutorPayoutsPage() {
     return {
       clave: m.clave,
       nombre: canal?.label ?? m.clave,
+      logo: LOGOS[m.clave] ?? null,
       monograma: monograma(canal?.label ?? m.clave),
       descripcion: canal?.help ?? "",
       automatico: m.automatico,
@@ -415,6 +424,10 @@ export default async function TutorPayoutsPage() {
             }
           : null,
       subtarea: null,
+      // 🔑 PayPal se CONECTA y no se teclea. Los otros canales —Zinli, Binance,
+      // Zelle— son al revés: no hay nada que conectar, solo un identificador que
+      // el tutor escribe, así que esos sí llevan formulario.
+      conectar: m.clave === "paypal",
     };
   });
 
@@ -424,6 +437,8 @@ export default async function TutorPayoutsPage() {
    * el catálogo de bancos, las reglas del país y los nombres resueltos.
    */
   const formularios: Record<string, React.ReactNode> = {};
+  /** La acción de los que se conectan: su botón, sin recuadro ni párrafo. */
+  const acciones: Record<string, React.ReactNode> = {};
   for (const m of metodos) {
     if (m.clave === "banco" && regla && paisDeCobro) {
       formularios.banco = (
@@ -442,20 +457,28 @@ export default async function TutorPayoutsPage() {
         />
       );
     } else if (m.clave === "stripe") {
-      formularios.stripe = (
+      acciones.stripe = (
         <ConnectAlta
           yaTieneCuenta={Boolean(cuentaConectada)}
           lista={connectLista}
           esLaUnicaVia={metodos.length === 1}
+          compacto
+        />
+      );
+    } else if (m.clave === "paypal") {
+      // ⚠️ NI UN CAMPO DE CORREO. Aquí se pintaba `PayoutManualForm` debajo del
+      // botón «por si no quiere conectar», y eso era ofrecerle la vía que NO
+      // entrega: cuatro pagos a un correo tecleado, cuatro `UNCLAIMED`
+      // (medido el 4-sep-2026). La tarjeta de PayPal es un botón.
+      acciones.paypal = (
+        <PaypalConectar
+          conectada={Boolean(destinoDe("paypal")?.verified_account_id)}
+          compacto
         />
       );
     } else if (m.canal && paisDeCobro) {
       formularios[m.clave] = (
         <>
-          {/* Va PRIMERO, antes del formulario: es el camino que entrega. */}
-          {m.clave === "paypal" ? (
-            <PaypalConectar conectada={Boolean(destinoDe("paypal")?.verified_account_id)} />
-          ) : null}
           <PayoutManualForm
             key={`${paisDeCobro}-${m.canal}`}
             canales={canalesOfrecidos}
@@ -522,10 +545,10 @@ export default async function TutorPayoutsPage() {
       {/* Cómo cobras (204:54) — R29-03b. */}
       <PanelCard>
         <h2 className="text-base font-semibold text-[#19191f]">Cómo cobras</h2>
-        <dl className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)]">
           <div>
             <dt className="text-xs text-[#6b6b6b]">País de cobro</dt>
-            <dd className="mt-1 text-sm text-[#19191f]">
+            <dd className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
               {paisDeCobro ? (
                 <>
                   {nombrePais(paisDeCobro)}
@@ -543,13 +566,13 @@ export default async function TutorPayoutsPage() {
           </div>
           <div>
             <dt className="text-xs text-[#6b6b6b]">Cuándo</dt>
-            <dd className="mt-1 text-sm text-[#19191f]">
+            <dd className="mt-1.5 text-sm text-[#19191f]">
               Lote semanal, los lunes
             </dd>
           </div>
           <div>
             <dt className="text-xs text-[#6b6b6b]">Forma preferida</dt>
-            <dd className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
+            <dd className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
               {preferida ? (
                 <StatusPill tone="blue">
                   {tarjetas.find((t) => t.clave === preferida)?.nombre ?? preferida}
@@ -566,9 +589,9 @@ export default async function TutorPayoutsPage() {
           {tier ? (
             <div>
               <dt className="text-xs text-[#6b6b6b]">Tu nivel</dt>
-              <dd className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
+              <dd className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#19191f]">
                 <StatusPill tone="blue">{tier.name}</StatusPill>
-                Te quedas con el {formatPct(tier.splitPct)}
+                <span>Te quedas con el {formatPct(tier.splitPct)}</span>
               </dd>
             </div>
           ) : null}
@@ -576,8 +599,15 @@ export default async function TutorPayoutsPage() {
 
         {/* A0 · EL PAÍS YA NO SE ELIGE AQUÍ, y decir de dónde sale no es un
             detalle de cortesía: es lo que convierte un dato que el tutor no
-            puede tocar en uno que sí, porque le enseña dónde se toca. */}
-        <p className="mt-4 max-w-[70ch] border-t border-[#e0e0e0] pt-4 text-[13px] leading-[1.6] text-[#4d4d4d]">
+            puede tocar en uno que sí, porque le enseña dónde se toca.
+
+            ⚠️ El `border-t` va en el DIV, no en el `<p>`. Estaba en el párrafo,
+            que lleva `max-w-[70ch]`: la línea medía lo que medía el texto y se
+            cortaba a dos tercios de la tarjeta, como si el bloque estuviera
+            roto. El ancho máximo es para LEER; el separador separa la tarjeta
+            entera. */}
+        <div className="mt-4 border-t border-[#e0e0e0] pt-4">
+        <p className="max-w-[70ch] text-[13px] leading-[1.6] text-[#4d4d4d]">
           Tu país de cobro sale de la zona horaria de tu perfil, la misma con la
           que publicas tus horarios, así que no hay nada que rellenar aquí.{" "}
           <a
@@ -588,6 +618,7 @@ export default async function TutorPayoutsPage() {
           </a>
           .
         </p>
+        </div>
       </PanelCard>
 
       {/* 🔑 El radiogroup. */}
@@ -641,6 +672,7 @@ export default async function TutorPayoutsPage() {
               tarjetas={tarjetas}
               preferida={preferida}
               formularios={formularios}
+              acciones={acciones}
             />
           </>
         )}

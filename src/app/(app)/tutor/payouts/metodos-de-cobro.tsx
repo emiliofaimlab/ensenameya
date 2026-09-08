@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { LandmarkIcon } from "lucide-react";
+
 import { createClient } from "@/lib/supabase/client";
 import { StatusPill } from "@/components/layout/panel-shell";
 import { cn } from "@/lib/utils";
@@ -21,7 +23,14 @@ export type TarjetaMetodo = {
   /** Lo que se guarda en `tutor_payout_preferences.method`. */
   clave: string;
   nombre: string;
-  /** Dos letras. No es el logo de la marca: ver el porqué en la lista de abajo. */
+  /**
+   * El logo OFICIAL de la marca, cuando lo hay (`logos.ts`). `null` en dos
+   * casos distintos y los dos a propósito: la transferencia bancaria, que no es
+   * de ninguna marca —cubre a dLocal y a Wise sin decir cuál—, y Zinli, que no
+   * publica un SVG que podamos usar. Los dos caen al monograma.
+   */
+  logo: { src: string; color: string } | null;
+  /** El respaldo cuando no hay logo. Dos letras del propio nombre. */
   monograma: string;
   descripcion: string;
   /** Proveedor (el job) o persona. Es lo único comparable que se puede prometer. */
@@ -34,6 +43,19 @@ export type TarjetaMetodo = {
   aviso: { texto: string; tono: "warn" | "info" } | null;
   /** Media tarea suelta: hoy solo Wise pidiendo dirección y teléfono. */
   subtarea: string | null;
+  /**
+   * 🔑 ¿SE CONECTA EN VEZ DE RELLENARSE?
+   *
+   * PayPal y Stripe sí, y por eso NO tienen formulario: en los dos el dato de
+   * cobro se lo da el tutor A ELLOS, no a nosotros. En PayPal escribir el correo
+   * a mano llegó a ser posible y está medido lo que pasaba — cuatro pagos a un
+   * correo, cuatro `UNCLAIMED`; el mismo pago a la cuenta conectada, `SUCCESS`
+   * al instante— así que ofrecer las dos vías era ofrecer una que no entrega.
+   *
+   * Zinli, Binance y Zelle son al revés: no hay nada que conectar, solo un
+   * identificador que el tutor teclea. Esos sí llevan formulario.
+   */
+  conectar: boolean;
 };
 
 /**
@@ -67,12 +89,20 @@ export function MetodosDeCobro({
   tarjetas,
   preferida,
   formularios,
+  acciones,
 }: {
   tarjetas: TarjetaMetodo[];
   /** La vigente, ya descartada si apunta a un método que este país no ofrece. */
   preferida: string | null;
-  /** El formulario de cada método, renderizado en el servidor. */
+  /** El formulario de cada método CON formulario, renderizado en el servidor. */
   formularios: Record<string, React.ReactNode>;
+  /**
+   * El botón de conectar de los que no tienen formulario. Va en la esquina
+   * derecha de la tarjeta, en el sitio donde los otros tienen «Configurar»: es
+   * la única acción que existe para ellos, así que esconderla detrás de un
+   * desplegable sería un clic de más para llegar a lo mismo.
+   */
+  acciones: Record<string, React.ReactNode>;
 }) {
   const router = useRouter();
   // Optimista: el radio se mueve al pulsar y no cuando vuelve el servidor. Si
@@ -88,8 +118,10 @@ export function MetodosDeCobro({
     setElegida(clave);
     setGuardando(true);
     // Una tarjeta a medias se abre sola al elegirla: el siguiente paso del tutor
-    // es rellenarla, y hacerle buscar el botón sería un clic de castigo.
-    if (!tarjetas.find((t) => t.clave === clave)?.listo) setAbierta(clave);
+    // es rellenarla, y hacerle buscar el botón sería un clic de castigo. Las de
+    // conectar no se abren porque no tienen nada que abrir.
+    const t = tarjetas.find((x) => x.clave === clave);
+    if (t && !t.listo && !t.conectar) setAbierta(clave);
 
     const supabase = createClient();
     const { data: sesion } = await supabase.auth.getUser();
@@ -156,19 +188,47 @@ export function MetodosDeCobro({
                     disabled={guardando}
                     onChange={() => elegir(t.clave)}
                   />
-                  {/* Monograma y no logo: el Figma no trae marcas de terceros y
-                      meter el azul de PayPal o el morado de Stripe rompería la
-                      paleta en la única pantalla donde conviven cinco. */}
+                  {/* El logo OFICIAL de la marca, en SU color. El azulejo se
+                      queda neutro —y no se tiñe al marcarse— porque un logo
+                      recoloreado deja de ser el logo: lo que dice «elegida» es
+                      el borde de la tarjeta y el radio, no la marca ajena.
+
+                      ⚠️ Va con `mask` y no con `<img>`: los SVG de simple-icons
+                      no traen `fill`, así que un `<img>` los pintaría negros. El
+                      fichero pone la forma y `logos.ts` el color. */}
                   <span
                     aria-hidden="true"
                     className={cn(
-                      "grid size-10 shrink-0 place-items-center rounded-[10px] text-[13px] font-bold",
+                      "grid size-10 shrink-0 place-items-center rounded-[10px] border",
                       marcada
-                        ? "bg-brand-muted text-[#0068d0]"
-                        : "bg-[#f0f0f0] text-[#19191f]",
+                        ? "border-[#b6dbff] bg-white"
+                        : "border-[#ececec] bg-[#fafafa]",
                     )}
                   >
-                    {t.monograma}
+                    {t.logo ? (
+                      <span
+                        className="size-[22px]"
+                        style={{
+                          backgroundColor: t.logo.color,
+                          maskImage: `url(${t.logo.src})`,
+                          WebkitMaskImage: `url(${t.logo.src})`,
+                          maskRepeat: "no-repeat",
+                          WebkitMaskRepeat: "no-repeat",
+                          maskPosition: "center",
+                          WebkitMaskPosition: "center",
+                          maskSize: "contain",
+                          WebkitMaskSize: "contain",
+                        }}
+                      />
+                    ) : t.clave === "banco" ? (
+                      // La transferencia no es de ninguna marca: cubre a dLocal
+                      // y a Wise sin decir cuál. Glifo genérico, color de la casa.
+                      <LandmarkIcon className="size-[19px] text-brand" strokeWidth={1.9} />
+                    ) : (
+                      <span className="text-[13px] font-bold text-[#19191f]">
+                        {t.monograma}
+                      </span>
+                    )}
                   </span>
                   <span className="min-w-0">
                     <span className="flex flex-wrap items-center gap-2">
@@ -197,14 +257,22 @@ export function MetodosDeCobro({
                   </span>
                 </label>
 
-                <button
-                  type="button"
-                  aria-expanded={desplegada}
-                  onClick={() => setAbierta(desplegada ? null : t.clave)}
-                  className="h-11 shrink-0 rounded-[8px] border border-[#949494] bg-card px-4 text-[13px] font-semibold text-[#19191f] transition-colors hover:bg-[#f5f5f5]"
-                >
-                  {desplegada ? "Cerrar" : t.listo ? "Editar" : "Configurar"}
-                </button>
+                {/* 🔑 Los de conectar NO despliegan nada: su única acción es
+                    el botón que los lleva a PayPal o a Stripe, y va aquí, donde
+                    los otros tienen «Configurar». Esconderlo detrás de un
+                    desplegable sería un clic de más para llegar a lo mismo. */}
+                {t.conectar ? (
+                  <span className="shrink-0">{acciones[t.clave] ?? null}</span>
+                ) : (
+                  <button
+                    type="button"
+                    aria-expanded={desplegada}
+                    onClick={() => setAbierta(desplegada ? null : t.clave)}
+                    className="h-11 shrink-0 rounded-[8px] border border-[#949494] bg-card px-4 text-[13px] font-semibold text-[#19191f] transition-colors hover:bg-[#f5f5f5]"
+                  >
+                    {desplegada ? "Cerrar" : t.listo ? "Editar" : "Configurar"}
+                  </button>
+                )}
               </div>
 
               {t.aviso ? (
@@ -229,7 +297,7 @@ export function MetodosDeCobro({
                 </div>
               ) : null}
 
-              {desplegada ? (
+              {desplegada && !t.conectar ? (
                 <div className="border-t border-[#e0e0e0] px-4 pb-4">
                   {formularios[t.clave] ?? null}
                 </div>

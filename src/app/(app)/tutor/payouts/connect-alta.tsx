@@ -28,9 +28,18 @@ export function ConnectAlta({
   yaTieneCuenta,
   lista,
   esLaUnicaVia,
+  compacto = false,
 }: {
   yaTieneCuenta: boolean;
   lista: boolean;
+  /**
+   * Mismo motivo que en `PaypalConectar`: en la lista de métodos la tarjeta ya
+   * dice qué es el alta de Stripe y que los datos bancarios se los queda ellos,
+   * así que aquí sobra el párrafo y se queda el botón. Con Connect NO hay
+   * formulario que ofrecer —el tutor le da sus coordenadas a Stripe, no a
+   * nosotros—, así que esta es literalmente la única acción de esa tarjeta.
+   */
+  compacto?: boolean;
   /**
    * ⚠️ ¿ES STRIPE LO ÚNICO POR LO QUE SE LE PUEDE PAGAR EN SU PAÍS?
    *
@@ -80,6 +89,25 @@ export function ConnectAlta({
     } finally {
       setCargando(false);
     }
+  }
+
+  if (compacto) {
+    return (
+      <Button
+        className="h-11 rounded-[8px] px-4"
+        onClick={abrir}
+        disabled={cargando}
+        variant={lista ? "outline" : "default"}
+      >
+        {cargando
+          ? "Abriendo…"
+          : lista
+            ? "Ver en Stripe"
+            : yaTieneCuenta
+              ? "Continuar alta"
+              : "Empezar alta"}
+      </Button>
+    );
   }
 
   return (

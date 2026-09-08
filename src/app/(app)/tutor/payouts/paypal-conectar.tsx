@@ -17,10 +17,25 @@ import { Button } from "@/components/ui/button";
  * comprobar cuando el tutor lo escribe — se descubre semanas después, cuando el
  * dinero vuelve.
  *
- * Se deja el formulario debajo igualmente: quien no quiera conectar su cuenta
- * tiene que poder cobrar.
+ * ⚠️ Y DESDE EL 8-SEP-2026 NO HAY FORMULARIO DEBAJO. Aquí ponía que «se deja
+ * el formulario igualmente: quien no quiera conectar su cuenta tiene que poder
+ * cobrar», y esa frase describía una salida que no salía a ningún sitio: el
+ * pago al correo tecleado se queda `UNCLAIMED` y vuelve a los 30 días. Ofrecer
+ * las dos vías no era dar una alternativa, era dejar elegir la que no entrega.
+ * La tarjeta de PayPal es ahora este botón y nada más.
  */
-export function PaypalConectar({ conectada }: { conectada: boolean }) {
+export function PaypalConectar({
+  conectada,
+  compacto = false,
+}: {
+  conectada: boolean;
+  /**
+   * En la lista de métodos la tarjeta ya explica qué es PayPal y en qué moneda
+   * se cobra, así que aquí sobra el recuadro con su párrafo: se queda el botón,
+   * que es la acción. Sin este modo el mismo texto salía dos veces seguidas.
+   */
+  compacto?: boolean;
+}) {
   const [cargando, setCargando] = useState(false);
 
   async function conectar() {
@@ -40,6 +55,19 @@ export function PaypalConectar({ conectada }: { conectada: boolean }) {
     } finally {
       setCargando(false);
     }
+  }
+
+  if (compacto) {
+    return (
+      <Button
+        className="h-11 rounded-[8px] px-4"
+        onClick={conectar}
+        disabled={cargando}
+        variant={conectada ? "outline" : "default"}
+      >
+        {cargando ? "Abriendo…" : conectada ? "Cambiar cuenta" : "Conectar"}
+      </Button>
+    );
   }
 
   return (
