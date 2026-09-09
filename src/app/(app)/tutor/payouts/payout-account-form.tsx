@@ -40,6 +40,13 @@ type ResumenDeCuenta = {
   postcode: string | null;
   phone: string | null;
   /**
+   * El estado o provincia, que solo se pide donde el corredor lo exige
+   * (`20260910150000`). Vuelve de la RPC porque el tutor NO lo puede releer en la
+   * primera carga: la consulta de `page.tsx` no trae esa columna, así que sin
+   * esto el campo quedaría vacío para siempre después de guardar.
+   */
+  state: string | null;
+  /**
    * El veredicto del SERVIDOR sobre si a este tutor se le puede pagar por
    * transferencia internacional: `wise_puede_pagar_a()`, que mira cuatro cosas
    * más que la dirección (banco traducido, tipo de cuenta en AR, tipo de
@@ -55,6 +62,43 @@ type ResumenDeCuenta = {
 /** Mismo alto y borde que el desplegable de país, que está justo encima. */
 const CAMPO =
   "h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
+/**
+ * CÓMO SE LLAMA EL SEGUNDO NÚMERO DEL BANCO, según el formato del país.
+ *
+ * `bank_branch` era la agência de Brasil y la sucursal de Uruguay; desde
+ * `20260910150000` es también el sort code británico, el número de ruta ACH
+ * estadounidense, el BSB australiano, el IFSC indio y el BIC de los países que
+ * Wise solo alcanza por SWIFT. Llamarlo «Sucursal / agência» a un tutor de
+ * Londres es pedirle un dato que no existe.
+ *
+ * ⚠️ ESTO ES ROTULACIÓN, NO VALIDACIÓN. El formato sigue saliendo de
+ * `regla.branch_pattern`, que vive en la base de datos: aquí no hay una sola
+ * expresión regular, y no debe haberla. La clave es `wise_account_type`, que
+ * llega en la fila de reglas y ya la selecciona `page.tsx`.
+ *
+ * ⚠️ Y vive en el TSX y no en la tabla porque `payout_country_rules` no tiene
+ * columna de rótulo para este campo, y añadírsela habría obligado a tocar la
+ * consulta de `page.tsx` y el tipo `ReglaDePais`. Es el sitio menos malo, no el
+ * ideal: si algún día se añade `branch_label`, esto se borra.
+ */
+/**
+ * ⚠️ AQUÍ VIVÍA UN `Record<>` CON EL RÓTULO DE CADA FORMATO —sort code, ABA,
+ * BSB, IFSC, BIC— y se fue a `payout_country_rules.branch_label`/`branch_help`
+ * (`20260910170000`). El motivo es el mismo por el que `account_label` ya
+ * estaba allí: si el texto que lee el tutor y la regla que valida su cuenta
+ * (`branch_pattern`) viven en ficheros distintos, se desincronizan y el que se
+ * entera es él, tres semanas después. Y de paso abrir un país vuelve a ser UNA
+ * FILA, también en lo que se lee en pantalla.
+ */
+
+/**
+ * Los dos formatos que exigen estado o provincia, medido y no documentado:
+ * `POST /v1/accounts` de tipo `aba` y `australian` devuelve
+ * `422 address.state = "Please enter a state."` sin él (`20260910150000`).
+ * En el resto de países no se pregunta, porque en el resto no se manda.
+ */
+const PIDEN_ESTADO = new Set(["aba", "australian"]);
 
 /**
  * B1 · Los datos con los que se le paga al tutor.
@@ -88,6 +132,7 @@ const CAMPO =
  */
 export function PayoutAccountForm({
   regla,
+  ipDelTutor,
   bancos,
   cuenta,
   paisDeclarado,
@@ -95,6 +140,15 @@ export function PayoutAccountForm({
   etiquetaPaisGuardado,
 }: {
   regla: ReglaDePais;
+  /**
+   * 🔑 LA IP DESDE LA QUE SE ACEPTA, resuelta EN EL SERVIDOR. Stripe la exige
+   * junto con la fecha (`tos_acceptance.ip`) y el navegador no puede saber la
+   * suya: lo que él dijera sería lo que él quisiera decir. La lee `page.tsx` de
+   * la cabecera de la petición. `null` cuando no se pudo resolver, y entonces
+   * la casilla no sella nada — mejor no pagar por esa vía que guardar un
+   * consentimiento sin poder probar de dónde vino.
+   */
+  ipDelTutor: string | null;
   bancos: BancoDePais[];
   /** Lo guardado, enmascarado. `null` = todavía nada. */
   cuenta: CuentaEnmascarada | null;
@@ -116,6 +170,33 @@ export function PayoutAccountForm({
   // Esta primera versión es la de la CARGA y solo sirve para inicializar los
   // campos; la que manda después es `mismoPais`, calculada sobre `guardado`.
   const mismoPaisAlCargar = cuenta?.country === paisDeclarado;
+
+  /**
+   * ¿HAY BANCO QUE ELEGIR, O LO IDENTIFICA EL PROPIO NÚMERO DE CUENTA?
+   *
+   * En un país de IBAN no hay lista de bancos: el IBAN lleva el banco dentro, y
+   * lo mismo pasa con el número de ruta, el sort code, el BSB, el IFSC y el BIC.
+   * Pero `tutor_payout_accounts.bank_code` es `not null` y tiene FK contra
+   * `payout_banks`, así que `20260910150000` siembra UNA fila centinela por país.
+   *
+   * Un desplegable con una sola opción es una pregunta que no lo es, así que
+   * cuando el catálogo trae un solo banco se elige solo y no se pinta. La señal
+   * es el tamaño del catálogo y no una lista de países aquí dentro: el día que
+   * uno de estos países reciba bancos de verdad, el desplegable vuelve solo.
+   */
+  const bancoUnico = bancos.length === 1 ? bancos[0] : null;
+  const hayCatalogo = bancos.length > 1;
+
+  /** El rótulo del segundo número del banco, según el formato del país. */
+  // El rótulo y la ayuda salen de la fila del país. `?? 'Sucursal'` es la red
+  // para un país que pida segundo dato y no tenga rótulo: la migración lo
+  // impide con una autocomprobación, así que esto no debería alcanzarse nunca.
+  const segundoNumero = {
+    etiqueta: regla.branch_label ?? "Sucursal",
+    ayuda: regla.branch_help ?? "",
+  };
+
+  const pideEstado = PIDEN_ESTADO.has(regla.wise_account_type ?? "");
 
   /**
    * ⚠️ LO GUARDADO ES ESTADO, y arreglarlo es media historia.
@@ -141,6 +222,11 @@ export function PayoutAccountForm({
           city: cuenta.beneficiary_city,
           postcode: cuenta.beneficiary_postcode,
           phone: cuenta.beneficiary_phone,
+          // Desde el 10-sep la consulta de `page.tsx` SÍ trae
+          // `beneficiary_state`, así que en la primera carga ya se sabe si hay
+          // uno guardado y el campo arranca relleno. Antes esto era `null` con
+          // un comentario que decía que no se podía saber.
+          state: cuenta.beneficiary_state,
           // ⚠️ `null` y no `false`. Con `false` la pantalla le diría a un tutor
           // que ya tiene los cuatro campos rellenos que no podemos pagarle por
           // esa vía, cuando lo cierto es que nadie se lo ha preguntado todavía:
@@ -162,7 +248,12 @@ export function PayoutAccountForm({
     tipoDocumento:
       (mismoPaisAlCargar ? cuenta?.beneficiary_document_type : "") ?? "",
     documento: "",
-    bankCode: (mismoPaisAlCargar ? cuenta?.bank_code : "") ?? "",
+    // Si el país tiene un solo banco, se elige aquí: el desplegable no se pinta y
+    // sin esto `validarCuenta` diría «Elige tu banco» sin banco que elegir.
+    bankCode:
+      (mismoPaisAlCargar ? cuenta?.bank_code : null) ??
+      bancoUnico?.bank_code ??
+      "",
     tipoCuenta: (mismoPaisAlCargar ? cuenta?.bank_account_type : "") ?? "",
     cuenta: "",
     sucursal: (mismoPaisAlCargar ? cuenta?.bank_branch : "") ?? "",
@@ -181,6 +272,32 @@ export function PayoutAccountForm({
     codigoPostal: (mismoPaisAlCargar ? cuenta?.beneficiary_postcode : "") ?? "",
     telefono: (mismoPaisAlCargar ? cuenta?.beneficiary_phone : "") ?? "",
   });
+  /**
+   * El estado va APARTE de `v` y no dentro de `ValoresDeCuenta`, que es un tipo
+   * de `src/lib/payout-account.ts`: ese módulo es el espejo de
+   * `payout_account_check`, y el estado no pasa por esa validación —la base lo
+   * deja nullable y la RPC no lo exige— así que meterlo ahí habría obligado a
+   * tocar `validarCuenta` para que lo ignorase. Lo que sí se valida es su forma,
+   * unas líneas más abajo, antes de llamar a la RPC.
+   */
+  const [estado, setEstado] = useState(
+    (mismoPaisAlCargar ? cuenta?.beneficiary_state : "") ?? "",
+  );
+  /**
+   * 🔑 LOS DOS DATOS QUE PIDE STRIPE (dictado, decisión D-1). Van aparte de `v`
+   * por lo mismo que `estado`: `ValoresDeCuenta` es el espejo de
+   * `payout_account_check`, y estos dos no pasan por esa validación —la base los
+   * deja nullable y ningún otro riel los usa—, así que meterlos ahí obligaría a
+   * tocar `validarCuenta` para que los ignorase.
+   *
+   * ⚠️ LA FECHA NO SE RELEE. `beneficiary_dob` no tiene `grant select` para
+   * `authenticated` a propósito: es un dato personal y ninguna pantalla necesita
+   * devolvérselo al navegador. El campo arranca en blanco también para quien ya
+   * la dio, y en blanco significa «conserva la guardada» — lo hace el `coalesce`
+   * de la RPC, igual que con el documento y el número de cuenta.
+   */
+  const [nacimiento, setNacimiento] = useState("");
+  const [acepta, setAcepta] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -206,6 +323,54 @@ export function PayoutAccountForm({
   });
 
   async function guardar() {
+    // ── El segundo número del banco, ANTES de `validarCuenta` ───────────────
+    //
+    // `validarCuenta` ya comprueba este campo contra `regla.branch_pattern`, y
+    // eso no se duplica aquí. Lo que se adelanta es el MENSAJE: el suyo dice
+    // «Falta la sucursal, que en este país es obligatoria», que es correcto en
+    // Brasil y desconcertante en Londres, donde el campo es el sort code. Vive
+    // en `src/lib/payout-account.ts`, que no se puede rotular por país porque no
+    // sabe cuál es el rótulo. Así que el error específico se da aquí y el suyo
+    // queda como red.
+    if (regla.requires_branch) {
+      const suc = v.sucursal.trim();
+      if (!suc) {
+        setError(`Falta el ${segundoNumero.etiqueta}. ${segundoNumero.ayuda}`);
+        return;
+      }
+      if (regla.branch_pattern && !new RegExp(regla.branch_pattern).test(suc)) {
+        setError(
+          `El ${segundoNumero.etiqueta} no tiene el formato correcto. ${segundoNumero.ayuda}`,
+        );
+        return;
+      }
+    }
+
+    // ── El estado, donde el corredor lo exige ───────────────────────────────
+    //
+    // El `check` de la columna es `^[A-Za-z]{2,3}$` y la RPC lo pasa a mayúsculas.
+    // Se valida aquí porque el mensaje de la RPC no puede decir qué campo mirar:
+    // su bloque `exception` existe para NO publicar la fila en el log.
+    //
+    // Y no se exige cuando ya hay una fila guardada de este mismo país: en blanco
+    // significa «deja el que ya está», igual que el documento y la cuenta. Es la
+    // única forma de que funcione, porque la pantalla no puede releerlo.
+    if (pideEstado) {
+      const est = estado.trim();
+      if (!est && !mismoPais) {
+        setError(
+          "Falta el estado o provincia: sin él no se puede hacer la transferencia en tu país.",
+        );
+        return;
+      }
+      if (est && !/^[A-Za-z]{2,3}$/.test(est)) {
+        setError(
+          "El estado va en su código corto, de dos o tres letras (FL, CA, NSW).",
+        );
+        return;
+      }
+    }
+
     const fallo = validarCuenta(regla, bancos, v, mismoPais, etiquetaPais);
     if (fallo) {
       setError(fallo);
@@ -228,6 +393,15 @@ export function PayoutAccountForm({
       p_account: normalizaCuenta(v.cuenta) || undefined,
       p_account_type: v.tipoCuenta || undefined,
       p_branch: v.sucursal.trim() || undefined,
+      // 🔑 Los dos de la ruta extra (decisión D-1). En blanco = «conserva lo
+      // guardado», igual que el documento: el `coalesce` de la RPC lo respeta,
+      // así que editar la cuenta sin volver a marcar la casilla NO borra una
+      // aceptación ya dada.
+      p_dob: nacimiento || undefined,
+      // ⚠️ Solo viaja si la casilla está marcada. La RPC sella la hora con
+      // `now()` únicamente cuando recibe IP, así que sin marcar no se guarda
+      // ninguna aceptación — que es el fallo correcto.
+      p_tos_ip: acepta && ipDelTutor ? ipDelTutor : undefined,
       // Los cuatro de la dirección van con el MISMO sufijo `|| undefined`, y por
       // el mismo motivo: en blanco significan «deja el que ya está». Aquí es
       // menos evidente que en el documento porque estos campos vienen
@@ -244,6 +418,13 @@ export function PayoutAccountForm({
       p_city: v.ciudad.trim() || undefined,
       p_postcode: v.codigoPostal.trim() || undefined,
       p_phone: normalizaTelefono(v.telefono) || undefined,
+      // El estado, con el mismo `|| undefined` y el mismo significado: en blanco
+      // es «deja el que ya está». Aquí es la regla la que hace que el formulario
+      // funcione, no una comodidad: la pantalla no puede releer esta columna en la
+      // primera carga, así que llega vacía casi siempre y sin el `coalesce` de la
+      // RPC cada guardado borraría el estado del tutor de EE. UU. — y con él, su
+      // riel de cobro.
+      p_state: estado.trim() || undefined,
     });
     setBusy(false);
 
@@ -276,6 +457,10 @@ export function PayoutAccountForm({
       codigoPostal: resumen?.postcode ?? prev.codigoPostal,
       telefono: resumen?.phone ?? prev.telefono,
     }));
+    // Y el estado, igual que la dirección: se repinta con lo que quedó GUARDADO,
+    // que puede no ser lo que hay en el campo. Es además el único momento en el
+    // que la pantalla llega a saberlo.
+    if (resumen?.state) setEstado(resumen.state);
     toast.success("Datos de cobro guardados.");
     // El `refresh` ya NO es lo que hace correcto este formulario: es lo que pone
     // al día la píldora «Cuenta de cobro» del bloque de arriba, que la pinta el
@@ -292,11 +477,18 @@ export function PayoutAccountForm({
               Guardado:{" "}
               <span className="font-semibold text-[#19191f] tabular-nums">
                 {enmascarar(guardado.last4)}
-              </span>{" "}
-              ·{" "}
-              {guardado.bank_name ??
-                bancos.find((b) => b.bank_code === guardado.bank_code)?.name ??
-                guardado.bank_code}
+              </span>
+              {/* El nombre del banco solo cuando el tutor lo eligió. Donde el
+                  catálogo es una sola fila centinela, ese nombre no es
+                  información: es el mismo texto para todos. */}
+              {hayCatalogo
+                ? ` · ${
+                    guardado.bank_name ??
+                    bancos.find((b) => b.bank_code === guardado.bank_code)
+                      ?.name ??
+                    guardado.bank_code
+                  }`
+                : ""}
               . Solo enseñamos los cuatro últimos caracteres; para cambiar la
               cuenta o el documento, escríbelos de nuevo. Si los dejas en blanco,
               se quedan como están.
@@ -370,22 +562,30 @@ export function PayoutAccountForm({
           />
         </label>
 
-        <label className="block">
-          <span className="text-xs text-[#6b6b6b]">Banco</span>
-          <select
-            className={`mt-1 ${CAMPO}`}
-            value={v.bankCode}
-            disabled={busy}
-            onChange={(e) => set("bankCode")(e.target.value)}
-          >
-            <option value="">Elige tu banco…</option>
-            {bancos.map((b) => (
-              <option key={b.bank_code} value={b.bank_code}>
-                {b.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {/* El desplegable solo donde hay bancos entre los que elegir. Donde el
+            número de cuenta identifica al banco —IBAN, número de ruta, sort code,
+            BSB, IFSC, BIC— el catálogo es una sola fila centinela
+            (`20260910150000`) y preguntar por ella es pedirle al tutor que
+            confirme lo único que puede contestar. Se elige en el estado inicial
+            del formulario y no se pinta nada. */}
+        {hayCatalogo ? (
+          <label className="block">
+            <span className="text-xs text-[#6b6b6b]">Banco</span>
+            <select
+              className={`mt-1 ${CAMPO}`}
+              value={v.bankCode}
+              disabled={busy}
+              onChange={(e) => set("bankCode")(e.target.value)}
+            >
+              <option value="">Elige tu banco…</option>
+              {bancos.map((b) => (
+                <option key={b.bank_code} value={b.bank_code}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         {/* Solo los países cuyo subconjunto de `bank_account_type` documenta
             dLocal. Donde no lo documenta (`account_types` vacío) no se pregunta
@@ -425,31 +625,156 @@ export function PayoutAccountForm({
                 ? "Déjalo en blanco para no cambiarla"
                 : regla.account_label
             }
+            aria-describedby="ayuda-cuenta"
             onChange={(e) => set("cuenta")(e.target.value)}
           />
-          <span className="mt-1 block text-[12px] text-[#6b6b6b]">
+          <span
+            id="ayuda-cuenta"
+            className="mt-1 block text-[12px] text-[#6b6b6b]"
+          >
             {regla.account_help}
           </span>
         </label>
 
-        {/* Solo Brasil y Uruguay lo documentan. Ver `requires_branch` en la
-            migración: el resto de países no manda sucursal porque su número de
-            cuenta ya la lleva dentro, y eso está pendiente de probar en el
-            sandbox de dLocal. */}
+        {/* EL SEGUNDO NÚMERO DEL BANCO. Era «la sucursal» cuando solo lo pedían
+            Brasil y Uruguay; desde `20260910150000` es también el sort code, el
+            número de ruta, el BSB, el IFSC y el BIC. Qué es en cada país lo dice
+            `wise_account_type`; el formato, `branch_pattern`. Los países cuyo
+            número de cuenta lleva el banco dentro (CBU, CLABE, CCI, IBAN) no lo
+            piden y aquí no se pinta. */}
         {regla.requires_branch ? (
           <label className="block">
             <span className="text-xs text-[#6b6b6b]">
-              Sucursal / agência
+              {segundoNumero.etiqueta}
             </span>
             <input
               className={`mt-1 ${CAMPO}`}
               value={v.sucursal}
               disabled={busy}
               autoComplete="off"
+              aria-describedby={
+                segundoNumero.ayuda ? "ayuda-segundo-numero" : undefined
+              }
               onChange={(e) => set("sucursal")(e.target.value)}
             />
+            {segundoNumero.ayuda ? (
+              <span
+                id="ayuda-segundo-numero"
+                className="mt-1 block text-[12px] text-[#6b6b6b]"
+              >
+                {segundoNumero.ayuda}
+              </span>
+            ) : null}
           </label>
         ) : null}
+
+        {/* EL ESTADO O PROVINCIA. Solo dos corredores lo exigen —Estados Unidos y
+            Australia— y ninguno lo documenta: lo dice el 422 de
+            `POST /v1/accounts`. Donde no se pide, no se pregunta: un campo
+            «Estado» en el formulario de un tutor de Madrid es un campo que se
+            queda vacío y se lleva la atención del que sí importa. */}
+        {pideEstado ? (
+          <label className="block">
+            <span className="text-xs text-[#6b6b6b]">
+              Estado o provincia
+              {mismoPais ? " (guardado)" : ""}
+            </span>
+            <input
+              className={`mt-1 ${CAMPO}`}
+              value={estado}
+              disabled={busy}
+              autoComplete="address-level1"
+              maxLength={3}
+              placeholder={
+                mismoPais ? "Déjalo en blanco para no cambiarlo" : "FL"
+              }
+              aria-describedby="ayuda-estado"
+              onChange={(e) => {
+                setEstado(e.target.value);
+                setError(null);
+              }}
+            />
+            <span
+              id="ayuda-estado"
+              className="mt-1 block text-[12px] text-[#6b6b6b]"
+            >
+              El código corto, de dos o tres letras. Tu banco no acepta la
+              transferencia sin él.
+            </span>
+          </label>
+        ) : null}
+
+        {/* ── Lo que pide una de las rutas de pago ────────────────────────────
+
+            🔑 DOS CAMPOS, Y EL TUTOR NO SABE PARA QUIÉN SON. Los exige Stripe
+            para poder pagarle sin que él se dé de alta en ningún sitio (dictado
+            del 9-sep, decisión D-1). El texto NO nombra a Stripe: es la misma
+            promesa que el resto de la pantalla —«jamás se enterará si fue hecho
+            con wise, con dlocal o con stripe»— y por eso habla de «las
+            plataformas con las que trabajamos», que es lo que de verdad pasa.
+
+            Y son opcionales aquí, como la dirección: sin ellos el tutor sigue
+            cobrando por dLocal, por Wise o por PayPal. Lo único que pierde es
+            una ruta. */}
+        <div className="mt-5 border-t border-[#efefef] pt-4">
+          <p className="text-[13px] font-medium text-[#333333]">
+            Para abrirte más rutas de pago
+          </p>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-[#6b6b6b]">
+            Opcional. Con estos dos datos podemos pagarte por más vías y elegir
+            la que menos comisión te cueste. Sin ellos te seguimos pagando
+            igual.
+          </p>
+
+          <label className="mt-3 block">
+            <span className="text-xs text-[#6b6b6b]">
+              Fecha de nacimiento{guardado ? " (guardada)" : ""}
+            </span>
+            <input
+              type="date"
+              className={`mt-1 ${CAMPO}`}
+              value={nacimiento}
+              disabled={busy}
+              autoComplete="bday"
+              aria-describedby="ayuda-nacimiento"
+              onChange={(e) => {
+                setNacimiento(e.target.value);
+                setError(null);
+              }}
+            />
+            <span
+              id="ayuda-nacimiento"
+              className="mt-1 block text-[12px] text-[#6b6b6b]"
+            >
+              {guardado
+                ? "Déjala en blanco para no cambiarla."
+                : "La del titular de la cuenta, que eres tú."}
+            </span>
+          </label>
+
+          <label className="mt-3 flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 accent-brand"
+              checked={acepta}
+              disabled={busy}
+              aria-describedby="ayuda-acepta"
+              onChange={(e) => {
+                setAcepta(e.target.checked);
+                setError(null);
+              }}
+            />
+            <span className="text-[12px] leading-relaxed text-[#6b6b6b]">
+              Autorizo a Enséñame Ya a crear a mi nombre las cuentas de cobro
+              necesarias en las plataformas de pago con las que trabaja, y
+              acepto sus condiciones de uso para recibir mis pagos.
+            </span>
+          </label>
+          <span id="ayuda-acepta" className="sr-only">
+            Sin esta autorización seguimos pagándote por las vías que ya tienes
+            configuradas.
+          </span>
+        </div>
 
         {/* ── Dirección y teléfono del titular ────────────────────────────────
             Los únicos campos OPCIONALES de este formulario, y por eso son los

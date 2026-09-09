@@ -87,13 +87,47 @@ export type BeneficiarioWise = {
   currency_to_pay: string;
   account_holder_name: string;
   legal_type: string;
+  /**
+   * El banco con el nombre que le da Wise, traducido desde nuestro catálogo
+   * (`payout_banks.wise_bank_code`). Solo lo usan los cuatro países que tienen
+   * catálogo: Colombia, Chile, Uruguay y —el día que se verifique— Brasil.
+   */
   wise_bank_code: string | null;
+  /**
+   * 🔑 EL OTRO NÚMERO DEL BANCO, EL QUE TECLEA EL TUTOR. Es `bank_branch` en la
+   * base, y según el tipo de cuenta significa cosas distintas: el sort code
+   * británico, el número de ruta ACH estadounidense, el BSB australiano, el IFSC
+   * indio o el BIC/SWIFT de los países que Wise solo alcanza por SWIFT.
+   *
+   * ⚠️ NO es un sustituto de `wise_bank_code` ni al revés: aquel es una
+   * TRADUCCIÓN de nuestro catálogo (existe donde hay lista de bancos y sabemos
+   * cómo los llama Wise), este es un DATO DEL TUTOR (existe donde no hay lista
+   * posible). Medido el 9-sep-2026: el número de ruta de un mismo banco
+   * estadounidense cambia por estado —021000021 y 322271627 son los dos de
+   * Chase— y el de *wire* lo rechaza Wise, así que un catálogo «un banco = un
+   * número» habría dado por bueno el equivocado. Y del BIC no hay lista pública:
+   * Wise valida contra su directorio y devuelve 422 al que no conoce, que es la
+   * red que hace seguro pedírselo al tutor.
+   */
+  bank_branch: string | null;
   bank_account: string;
   bank_account_type: string | null;
   document_type: string;
   document: string;
   phone: string | null;
-  address: { country: string; city: string; firstLine: string; postCode: string };
+  address: {
+    country: string;
+    city: string;
+    firstLine: string;
+    postCode: string;
+    /**
+     * Estado o provincia, en el código corto. Solo DOS corredores lo exigen y
+     * ninguno lo documenta: medido, `aba` (Estados Unidos) y `australian`
+     * devuelven `422 address.state = "Please enter a state."` sin él y 200 con
+     * él. Null en los demás países, y entonces no se manda.
+     */
+    state?: string | null;
+  };
 };
 
 /** El cuerpo del POST /v1/accounts, ya montado. */
@@ -114,7 +148,25 @@ export type CuentaWise = {
 const TIPOS = new Set([
   "colombia", "argentina", "mexican", "chile", "uruguay",
   "brazil", "iban", "aba", "swift_code",
+  // Los siete del 10-sep-2026, cada uno con un 200 de POST /v1/accounts detrás.
+  "sort_code", "costa_rica", "australian", "indian",
+  "emirates", "israeli_local", "turkish_earthport",
 ]);
+
+/**
+ * Los tipos cuyo banco se identifica con el SEGUNDO NÚMERO que teclea el tutor
+ * (`bank_branch`), y no con una traducción de nuestro catálogo.
+ *
+ * Sin él no se construye la cuenta, igual que sin `wise_bank_code` donde sí hay
+ * catálogo: mandar un `details` al que le falta el identificador del banco es un
+ * 422, pero uno con el identificador MAL es dinero a otra parte.
+ */
+const NECESITA_SEGUNDO_NUMERO = new Set([
+  "sort_code", "aba", "australian", "indian", "swift_code",
+]);
+
+/** Los dos corredores que exigen `address.state`. Medido, no documentado. */
+const NECESITA_ESTADO = new Set(["aba", "australian"]);
 
 /**
  * El vocabulario de documentos de cada corredor. El nuestro sale de
@@ -130,6 +182,11 @@ const DOCUMENTOS: Record<string, Record<string, string>> = {
   // CC/CE son los dos que sembramos; Wise admite además TI y PAS.
   colombia: { CC: "CC", CE: "CE", TI: "TI", PASS: "PAS" },
   uruguay: { CI: "NATIONAL_ID", RUT: "BUSINESS_ID" },
+  // Costa Rica es el ÚNICO de los países nuevos cuyo corredor manda el documento
+  // del tutor. Sus tres valores son NATIONAL_ID_CARD, FOREIGN_ID y BUSINESS_ID;
+  // el tercero (cédula jurídica) no se ofrece porque el legalType que admite el
+  // corredor es PRIVATE y los tutores son personas físicas.
+  costa_rica: { CI: "NATIONAL_ID_CARD", DIMEX: "FOREIGN_ID" },
 };
 
 /** CHECKING/SAVINGS/VISTA nuestros → los literales que espera cada corredor. */
@@ -171,7 +228,7 @@ export function cuentaDeWise(
     return { motivo: `wise no tiene mapeo para el tipo de cuenta '${tipo}'` };
   }
 
-  const address = {
+  const address: Record<string, string> = {
     country: b.address.country,
     city: b.address.city,
     firstLine: b.address.firstLine,
@@ -179,6 +236,15 @@ export function cuentaDeWise(
   };
   if (!address.country || !address.city || !address.firstLine || !address.postCode) {
     return { motivo: "faltan campos de la dirección del beneficiario" };
+  }
+  // ⚠️ El estado se añade SOLO donde hace falta y solo si lo hay. Mandarlo donde
+  // el corredor no lo pide es un campo desconocido en `details`; no mandarlo
+  // donde sí lo pide es el 422 que tuvo cerrado a Estados Unidos.
+  if (NECESITA_ESTADO.has(tipo)) {
+    if (!b.address.state) {
+      return { motivo: `falta el estado de la dirección, que '${tipo}' exige` };
+    }
+    address.state = b.address.state;
   }
 
   const base = {
@@ -189,11 +255,19 @@ export function cuentaDeWise(
     legalType: b.legal_type,
   };
   const tipoCuenta = traducir(TIPOS_DE_CUENTA[tipo], b.bank_account_type);
-  // 'brazil' no está en la lista aunque también identifique el banco por código:
-  // tiene su propia negativa más abajo, con el motivo de verdad.
-  const necesitaBanco = ["colombia", "chile", "uruguay", "aba", "swift_code"];
+
+  // Dos formas de identificar al banco y dos negativas distintas, porque el
+  // arreglo es distinto: la primera se arregla mapeando un banco en nuestro
+  // catálogo, la segunda la arregla el tutor tecleando su número.
+  //
+  // 'brazil' no está en la primera lista aunque también identifique el banco por
+  // código: tiene su propia negativa más abajo, con el motivo de verdad.
+  const necesitaBanco = ["colombia", "chile", "uruguay"];
   if (necesitaBanco.includes(tipo) && !b.wise_bank_code) {
     return { motivo: `el banco del tutor no tiene código de wise para '${tipo}'` };
+  }
+  if (NECESITA_SEGUNDO_NUMERO.has(tipo) && !b.bank_branch) {
+    return { motivo: `falta el código de banco que '${tipo}' pide junto a la cuenta` };
   }
 
   switch (tipo) {
@@ -269,16 +343,60 @@ export function cuentaDeWise(
       // la sucursal a la RPC y escribir este `case`. Adivinar la mitad ahora
       // dejaría un mapeo que parece listo y paga al banco equivocado.
       return { motivo: "el riel de wise para Brasil no está escrito (ver 20260907120000)" };
+    // ── Los cuatro tipos en los que la cuenta ES un IBAN ────────────────────
+    //
+    // Cuatro `case` y no uno con cuatro alias porque el `type` que viaja a Wise
+    // es distinto en cada uno —y `base.type` ya lo lleva—, pero el `details` es
+    // literalmente el mismo: el IBAN identifica banco y cuenta, así que no hay
+    // código de banco, ni tipo de cuenta, ni sucursal que mandar. El BIC es
+    // opcional para Wise y no se pide.
     case "iban":
-      // Europa: la cuenta ES el IBAN. El BIC es opcional para Wise.
+    case "emirates":
+    case "israeli_local":
+    case "turkish_earthport":
       return { cuenta: { ...base, details: { IBAN: b.bank_account, address } } };
+
+    case "costa_rica": {
+      // El único de los nuevos que manda el documento del tutor, con el mismo
+      // patrón que Uruguay: si Wise no conoce ese tipo, NO se traduce a uno
+      // parecido.
+      const doc = traducir(DOCUMENTOS.costa_rica, b.document_type);
+      if (!doc) {
+        return { motivo: `wise no admite el documento '${b.document_type}' en Costa Rica` };
+      }
+      return {
+        cuenta: {
+          ...base,
+          details: {
+            IBAN: b.bank_account,
+            idDocumentType: doc,
+            idDocumentNumber: b.document,
+            address,
+          },
+        },
+      };
+    }
+
+    // ── Los cinco tipos con DOS números: la cuenta y el código del banco ────
+    case "sort_code":
+      return {
+        cuenta: {
+          ...base,
+          details: { sortCode: b.bank_branch, accountNumber: b.bank_account, address },
+        },
+      };
+
     case "aba": {
+      // ⚠️ `abartn` sale de `bank_branch` y NO de `wise_bank_code`, que es de
+      // donde lo leía este `case` cuando se escribió sin poderlo probar. El
+      // número de ruta de un mismo banco cambia por estado y el de *wire* lo
+      // rechaza Wise: no es un dato de catálogo, es un dato del tutor.
       if (!tipoCuenta) return { motivo: "falta el tipo de cuenta, que la ACH exige" };
       return {
         cuenta: {
           ...base,
           details: {
-            abartn: b.wise_bank_code,
+            abartn: b.bank_branch,
             accountNumber: b.bank_account,
             accountType: tipoCuenta,
             address,
@@ -286,14 +404,42 @@ export function cuentaDeWise(
         },
       };
     }
-    default:
-      // swift_code: el comodín. Solo cuenta, BIC y dirección.
+
+    case "australian":
       return {
         cuenta: {
           ...base,
-          details: { accountNumber: b.bank_account, swiftCode: b.wise_bank_code, address },
+          details: { bsbCode: b.bank_branch, accountNumber: b.bank_account, address },
         },
       };
+
+    case "indian":
+      return {
+        cuenta: {
+          ...base,
+          details: { ifscCode: b.bank_branch, accountNumber: b.bank_account, address },
+        },
+      };
+
+    case "swift_code":
+      // El comodín internacional: cuenta, BIC y dirección. El BIC lo teclea el
+      // tutor —no hay catálogo público y Wise valida contra el suyo—, así que
+      // sale de `bank_branch`.
+      return {
+        cuenta: {
+          ...base,
+          details: {
+            accountNumber: b.bank_account,
+            swiftCode: b.bank_branch,
+            address,
+          },
+        },
+      };
+
+    default:
+      // Inalcanzable: `TIPOS` ya filtró arriba. Está aquí para que añadir un tipo
+      // a `TIPOS` sin escribir su `case` sea una negativa y no un `details` vacío.
+      return { motivo: `wise no tiene mapeo escrito para el tipo '${tipo}'` };
   }
 }
 
