@@ -646,19 +646,25 @@ export default async function TutorHomePage() {
                           la fila que más se pulsa. Los botones de texto que
                           había aquí antes sí eran `<Link>`; al pasarlos a
                           icono se había perdido la navegación de cliente. */}
+                      {/* ⚠️ La cámara SE SUMA al ojo, no lo sustituye. Aquí
+                          había un ternario, así que en la única fila donde el
+                          tutor tiene prisa —la que ya tiene sala abierta— se
+                          quedaba sin «Ver reserva». G-04 lo separa: el ojo va
+                          «en toda sesión/reserva futura y pasada» y la cámara
+                          «solo cuando roomOpen». Reservas ya lo hacía bien, con
+                          sus dos celdas de rejilla; esta pantalla no. */}
                       {roomOpen(s) ? (
                         <PanelIconButton asChild label="Entrar a la sala" tone="primary">
                           <Link href={`/room/${s.id}`}>
                             <VideoIcon className="size-[17px]" />
                           </Link>
                         </PanelIconButton>
-                      ) : (
-                        <PanelIconButton asChild label="Ver reserva">
-                          <Link href={`/tutor/reservas/${s.booking_id}`}>
-                            <EyeIcon className="size-4" />
-                          </Link>
-                        </PanelIconButton>
-                      )}
+                      ) : null}
+                      <PanelIconButton asChild label="Ver reserva">
+                        <Link href={`/tutor/reservas/${s.booking_id}`}>
+                          <EyeIcon className="size-4" />
+                        </Link>
+                      </PanelIconButton>
                     </div>
                   </li>
                 ))}

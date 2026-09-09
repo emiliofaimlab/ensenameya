@@ -25,11 +25,22 @@ import { cn } from "@/lib/utils";
  *   · `gris`    — subnivel del menú y resto de chips: informa, no reclama.
  *   · `activo`  — dentro de un chip seleccionado (fondo azul): blanco translúcido.
  */
+/**
+ * ⚠️ EL GROSOR VA CON EL TONO, NO CON EL TAMAÑO. Antes el peso vivía en las
+ * clases de `size` —`font-bold` en la base y `font-semibold` solo en la rama de
+ * 18 px— así que el contador de un chip de filtro heredaba el 700 de la
+ * categoría del menú. La lista aprobada los separa a propósito: G-02 pide 700
+ * para el círculo naranja de la categoría y 600 para el subnivel; G-03 pide
+ * **600 para el círculo gris del chip** y deja el naranja como la única
+ * excepción que reclama atención. Con el peso en el tono, cada uno sale como
+ * pide su regla y no hay forma de que un tamaño nuevo se lleve el grosor de
+ * otro sitio.
+ */
 const CONTADOR_TONO = {
-  naranja: "bg-primary text-white",
-  gris: "bg-[#ebebeb] text-[#6b6b6b]",
-  suave: "bg-[#e6edf5] text-[#4d4d4d]",
-  activo: "bg-white/28 text-white",
+  naranja: "bg-primary font-bold text-white",
+  gris: "bg-[#ebebeb] font-semibold text-[#6b6b6b]",
+  suave: "bg-[#e6edf5] font-semibold text-[#4d4d4d]",
+  activo: "bg-white/28 font-bold text-white",
 } as const;
 
 export function PanelCounter({
@@ -51,8 +62,8 @@ export function PanelCounter({
     <span
       aria-hidden
       className={cn(
-        "inline-block shrink-0 rounded-full text-center font-bold tabular-nums",
-        size === 20 ? "min-w-5 px-1 text-[11px] leading-5" : "min-w-[18px] px-1 text-[10.5px] leading-[18px] font-semibold",
+        "inline-block shrink-0 rounded-full text-center tabular-nums",
+        size === 20 ? "min-w-5 px-1 text-[11px] leading-5" : "min-w-[18px] px-1 text-[10.5px] leading-[18px]",
         CONTADOR_TONO[tone],
         className,
       )}

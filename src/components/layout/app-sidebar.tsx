@@ -54,6 +54,17 @@ export type SidebarItem = {
    * nivel sería volver a las tres filas que se acaban de quitar.
    */
   children?: { href: string; label: string }[];
+  /**
+   * Con qué palabra se lee el contador de esta categoría.
+   *
+   * Por defecto «pendientes», que es lo que un contador significa (regla 1 de
+   * `lib/tutor/sidebar-badges.ts`: un número es trabajo que espera). «Mis
+   * mentorías» es la única excepción y la lista aprobada la pide así: su número
+   * es el REPARTO DEL CATÁLOGO (activas + pausadas + borradores), no una
+   * bandeja. Anunciar «Mis mentorías, 3 pendientes» a un tutor cuyas tres
+   * mentorías están publicadas y al día es sencillamente falso.
+   */
+  contadorSufijo?: { uno: string; varios: string };
 };
 
 type Item = SidebarItem;
@@ -100,6 +111,7 @@ export const TUTOR_ITEMS: Item[] = [
     href: "/tutor/products",
     label: "Mis mentorías",
     icon: BookOpenIcon,
+    contadorSufijo: { uno: "mentoría", varios: "mentorías" },
     children: [
       { href: "/tutor/products?f=activas", label: "Activas" },
       { href: "/tutor/products?f=pausadas", label: "Pausadas" },
@@ -264,6 +276,32 @@ function rutaDe(href: string): string {
 }
 
 /**
+ * ¿Este subnivel es la página en la que estás?
+ *
+ * Solo lo son los que llevan a una RUTA PROPIA (hoy únicamente «Verificación»,
+ * dentro de «Mi cuenta»). Los otros dos tipos no se marcan nunca:
+ *
+ * · **Anclas** (`/tutor#por-atender`) — llevan a un bloque de la página en la
+ *   que ya estás; marcarlas diría que la página actual es otra.
+ * · **Filtros** (`/tutor/products?f=activas`) — igual, y además aquí estaba el
+ *   fallo: `rutaDe()` recorta la `?query`, así que en `/tutor/products` los
+ *   TRES filtros colapsaban al mismo `pathname` y se encendían a la vez, con
+ *   sus tres `aria-current="page"`, mientras la categoría —que sí es la página
+ *   actual— se quedaba sin ninguno. Medido el 9-sep-2026: cuatro en
+ *   `/tutor/reservas` contando el chip «Todas».
+ *
+ * Y no se arregla leyendo la query, se arregla NO marcándolos: las capturas
+ * aprobadas pintan la categoría resaltada y sus filtros en gris
+ * (`reservas-propuesta.png`). Además la información no se pierde —qué filtro
+ * está puesto lo dicen los chips de la propia pantalla, que es donde el tutor
+ * está mirando— y así el menú no depende de `useSearchParams`, que arrastraría
+ * un `<Suspense>` a cada pantalla que lo monta.
+ */
+function esSubnivelActivo(href: string, pathname: string): boolean {
+  return !/[#?]/.test(href) && href === pathname;
+}
+
+/**
  * Contadores por `href` (petición del cliente, 28-ago: «que en un badge al lado
  * de reportes, incidentes, etc salga un número»).
  *
@@ -395,9 +433,7 @@ export function AppSidebar({
           // El resaltado VISUAL de la categoría no se toca: ahí sí es correcto
           // —dice dónde estás dentro del menú— y `active` sigue igual. Lo que
           // se corrige es solo lo que se ANUNCIA.
-          const hijoActivo = hijos.some(
-            (c) => !c.href.includes("#") && rutaDe(c.href) === pathname,
-          );
+          const hijoActivo = hijos.some((c) => esSubnivelActivo(c.href, pathname));
           return (
             <li key={href}>
               <Link
@@ -406,7 +442,11 @@ export function AppSidebar({
                 aria-current={active && !hijoActivo ? "page" : undefined}
                 aria-label={
                   pendientes > 0
-                    ? `${label}, ${pendientes} ${pendientes === 1 ? "pendiente" : "pendientes"}`
+                    ? `${label}, ${pendientes} ${
+                        pendientes === 1
+                          ? (item.contadorSufijo?.uno ?? "pendiente")
+                          : (item.contadorSufijo?.varios ?? "pendientes")
+                      }`
                     : undefined
                 }
                 className={cn(
@@ -456,12 +496,21 @@ export function AppSidebar({
                     `min-w` en vez de ancho fijo: "99+" son tres caracteres y
                     una píldora cuadrada los cortaría. */}
                 {/* G-02 · círculo de 20 px NARANJA, el mismo de la campana:
-                    es lo que reclama atención. Sobre el chip activo (que en
-                    móvil va relleno de azul) el naranja se ve igual, así que
-                    no cambia de color como hacía antes. */}
+                    es lo que reclama atención.
+                    ⚠️ Y SIGUE NARANJA EN LA FILA ACTIVA. Aquí ponía
+                    `tone={active ? "activo" : "naranja"}` con un comentario que
+                    afirmaba justo lo contrario de lo que hacía el código («no
+                    cambia de color»). El translúcido sobre la fila azul deja el
+                    número en 2,62:1 —peor que el 2,89 del naranja— y lo hace
+                    precisamente en la fila que el tutor está mirando. Las dos
+                    capturas aprobadas que lo enseñan (`dashboard-propuesta.png`
+                    y `reservas-propuesta.png`) lo pintan naranja, y G-02 no
+                    contempla excepción por estado activo: G-03 sí la escribe
+                    para los chips, que es la prueba de que la lista sabe
+                    decirlo cuando la quiere. */}
                 <PanelCounter
                   value={pendientes}
-                  tone={active ? "activo" : "naranja"}
+                  tone="naranja"
                   className="ml-auto"
                 />
               </Link>
@@ -472,9 +521,8 @@ export function AppSidebar({
               {hijos.length ? (
                 <ul className="mt-1 ml-4 border-l border-[#e0e0e0] max-md:hidden">
                   {hijos.map((c) => {
-                    // Solo las RUTAS se marcan; las anclas no (ver el tipo).
-                    const hijoActivo =
-                      !c.href.includes("#") && rutaDe(c.href) === pathname;
+                    // Ver `esSubnivelActivo`: ni anclas ni filtros se marcan.
+                    const hijoActivo = esSubnivelActivo(c.href, pathname);
                     const n = badges?.[c.href] ?? 0;
                     return (
                       <li key={c.href}>
@@ -484,7 +532,13 @@ export function AppSidebar({
                           className={cn(
                             "flex min-h-[26px] items-center gap-2 py-0.5 pl-3 text-xs transition-colors",
                             hijoActivo
-                              ? "font-semibold text-brand"
+                              ? // `brand-foreground` (#036fda, 4,9:1 sobre
+                                // blanco) y no `brand` (#0080ff, 3,80:1): son
+                                // 12 px, o sea texto pequeño, y AA pide 4,5.
+                                // A ojo es el mismo azul y el token existe
+                                // justo para esto (mismo criterio que los chips
+                                // de filtro y la tarjeta de soporte).
+                                "font-semibold text-brand-foreground"
                               : "text-[#595959] hover:text-foreground",
                           )}
                         >

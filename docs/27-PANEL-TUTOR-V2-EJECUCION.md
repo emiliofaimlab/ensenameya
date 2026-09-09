@@ -398,3 +398,92 @@ G-07 conserva lo que la lista no menciona— pero `cuenta-hoy.png`, que retrata 
 también lo pinta naranja, así que parece una convención del artifact y no un cambio pedido. Si de
 verdad se quiere naranja, no es solo ese botón: es decidir cuál es el color del botón primario en
 todo el panel.
+
+---
+
+## 27b.9 · La auditoría del 9-sep: ¿quedó igual a lo que aprobó Emilio?
+
+Terminado y mergeado el paquete, se auditó el **estado final** contra
+`docs/27-PANEL-TUTOR-V2-CAMBIOS-APROBADOS.md`, sección por sección. Quince agentes: ocho auditores
+—uno por sección, solo lectura—, un **refutador independiente** por cada sección con hallazgos
+negativos, y un **crítico de completitud** que buscó lo que ninguno miró. Cero caídas.
+
+El refutador no es ceremonia: **tumbó 2 de los 9 incumplimientos** que los auditores daban por
+buenos, y los dos con la referencia en la mano.
+
+### Resultado por sección
+
+| § | Pantalla | Cumple | Divergencia documentada | Fallo | Sin poder ver |
+| :-- | :-- | --: | --: | --: | --: |
+| 0 | Reglas globales | 13 | 3 | 5 | 1 |
+| 1 | Dashboard | 22 | 4 | 1 | 3 |
+| 2 | Mis mentorías | 10 | 4 | 2 | 1 |
+| 3 | Disponibilidad | 11 | 1 | 0 | 0 |
+| 4 | Reservas | 13 | 1 | 2 | 1 |
+| 5 | Mis pagos | 18 | 4 | 0 | 2 |
+| 6 | Verificación | 16 | 3 | 0 | 0 |
+| 7 | Mi cuenta | 15 | 4 | 1 | 1 |
+| — | Crítico (lo que nadie miró) | 13 | 1 | 1 | 1 |
+
+**131 puntos verificados con medida.** Los «fallo» de la tabla son los que el auditor levantó; dos
+cayeron después en la refutación y el resto se corrigió el mismo día (abajo).
+
+### Los dos falsos positivos, y por qué importan
+
+- **El borde azul de «Por atender» desaparece con la lista vacía.** No es un fallo: esa condición
+  está copiada **carácter por carácter de la implementación de referencia que mandó Emilio**
+  (`paquete/27-panel-tutor-v2/page.tsx:285-287`, con su comentario «Solo se monta con pendientes»).
+  La app va incluso más lejos que su referencia: él quita la tarjeta entera y aquí se conserva
+  porque es el destino del ancla `/tutor#por-atender` del menú.
+- **Los botones de las filas de cobro se pintan distinto.** El auditor comparaba estados que no son
+  comparables: en `payouts-propuesta.png` solo UNA fila está «Sin conectar» y las otras dos llevan
+  estrella + «Editar», que es exactamente lo que pinta el código. Y §5.4 no menciona variante de
+  botón.
+
+### Lo que se arregló ese mismo día
+
+| Qué | Antes | Ahora |
+| :-- | :-- | :-- |
+| Subniveles marcados como página actual | 3 en Mentorías, 4 en Reservas | 1 por pantalla, y el correcto |
+| Contador de la categoría activa | blanco translúcido, 2,62:1 | naranja `#fe6a00`, como la captura |
+| Contador del chip de filtro | peso 700 | peso 600 (G-03), el resto ya cuadraba |
+| Chips con el catálogo vacío | ocultos | los cuatro, como en Reservas |
+| Ojo «Ver reserva» en el dashboard | lo sustituía la cámara | siempre; la cámara se suma |
+| Subnivel activo | `text-brand` 3,80:1 | `text-brand-foreground` 4,90:1 |
+| «Mis mentorías, 3 pendientes» | decía «pendientes» de un catálogo al día | «3 mentorías» |
+
+⚠️ **El fallo del menú era MÍO y de ayer.** El arreglo de `aria-current` del 8-sep dejó escrito en
+este documento «exactamente uno por pantalla, y el correcto» — y esa comprobación no cubrió las
+categorías cuyos hijos llevan `?query`. `rutaDe()` recorta la query, así que los tres filtros de
+`/tutor/products` colapsaban al mismo `pathname` y se encendían a la vez, mientras la categoría
+—que sí era la página actual— se quedaba sin marca. Una frase de un doc no es una comprobación.
+
+Y no se arregló leyendo la query, sino **no marcando los filtros**: las capturas aprobadas pintan la
+categoría resaltada y sus filtros en gris (`reservas-propuesta.png`), qué filtro está puesto ya lo
+dicen los chips de la propia pantalla, y así el menú no arrastra un `<Suspense>` a las 40 pantallas
+que lo montan.
+
+### Lo que NO se arregló, y por qué
+
+- **G-06 · la usuaria de ejemplo no es «Diana».** `grep -rn "Diana" supabase/` da cero: el seed
+  reutiliza a la tutora de pruebas que ya tenía datos. Hacerlo bien sería aprobar a la Diana Rivera
+  que existe en dev y trasladarle reservas, sesiones y mentorías. Es tocar datos de un entorno
+  compartido por una cuestión de nomenclatura. **Decisión de Jose.**
+- **§9 · la comparación visual pantalla a pantalla.** No existe ni una captura de comparación, y no
+  puede existir desde aquí: el panel del navegador está oculto en la sesión, así que todo lo
+  verificado son medidas del DOM. La tiene que hacer una persona.
+- **§9 · un PR por pantalla.** Se entregó en tres commits directos sobre `dev`. El ORDEN sí se
+  respetó (menú → dashboard/reservas/pagos → las cuatro restantes); lo que se perdió es el punto de
+  control por pantalla.
+
+### Dos cosas que conviene saber antes de comparar con las capturas
+
+1. **La fila activa del menú.** La app la pinta con fondo azul y texto blanco; el artifact la pinta
+   como tarjeta blanca con texto azul — **también en su vista «Hoy»**, que retrata el código
+   anterior. O sea que es una convención del artifact, no un cambio pedido (G-07), pero quien
+   compare píxel a píxel lo leerá como un fallo.
+2. **Y de ahí sale una pregunta para Emilio.** El contador de la fila activa se puso naranja porque
+   G-02 lo pide sin excepción y las dos capturas lo pintan así — pero en esas capturas la fila es
+   BLANCA. Sobre nuestra fila azul, naranja y azul tienen casi la misma luminosidad (**1,32:1**), de
+   modo que el círculo se distingue por tono y no por claridad. Las dos cosas van juntas en su
+   diseño: o el contador naranja sobre fila azul, o adoptar también la fila blanca.

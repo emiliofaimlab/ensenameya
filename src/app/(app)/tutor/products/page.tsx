@@ -205,9 +205,16 @@ export default async function TutorProductsPage({
 
       {/* §2.2 + G-03 · chips con contador. El contador se cuenta sobre la lista
           ENTERA, no sobre la filtrada: un contador que solo sabe de lo que ya
-          se ve no sirve para decidir a qué chip ir. Server-render puro. */}
-      {todas.length ? (
-        <nav aria-label="Filtrar mentorías" className="flex flex-wrap gap-2">
+          se ve no sirve para decidir a qué chip ir. Server-render puro.
+
+          ⚠️ Se pintan SIEMPRE, también con el catálogo vacío. Aquí había un
+          `{todas.length ? …}` que los escondía, y no estaba escrito en ninguna
+          parte por qué: §2.2 no lo pide y manda mirar a Reservas («estado en la
+          URL como en Reservas»), que los pinta sin condición. Con cero
+          mentorías no se ve un «0 0 0 0» —`PanelCounter` no pinta el cero— sino
+          las cuatro etiquetas, que es lo mismo que ve un tutor sin reservas en
+          la otra pantalla. */}
+      <nav aria-label="Filtrar mentorías" className="flex flex-wrap gap-2">
           {FILTROS.map((x) => {
             const on = x.id === filtro.id;
             const total = todas.filter((p) => x.match(p.status)).length;
@@ -253,8 +260,7 @@ export default async function TutorProductsPage({
               </Link>
             );
           })}
-        </nav>
-      ) : null}
+      </nav>
 
       {error ? (
         <PanelCard className="border-[#f0bfbf] bg-[#fdf5f5]">
