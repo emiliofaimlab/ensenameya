@@ -515,9 +515,22 @@ export function DlocalEmbed({
         return;
       }
 
-      // Su checkout alojado es la salida: se va, no se pinta un error.
-      if (salida.estado === "no-transparente" && salida.redirectUrl) {
-        irAPagar(salida.redirectUrl);
+      /**
+       * 🔴 SU CHECKOUT ALOJADO ES LA SALIDA, Y SE USA AUNQUE dLocal NO NOS
+       * DEVUELVA LA URL.
+       *
+       * Aquí se exigía `salida.redirectUrl`. Cuando el servidor no consigue
+       * releer el cobro para sacarla (`recuperarPago` falla), devuelve el mismo
+       * mensaje —«No podemos cobrar aquí mismo. Te llevamos a la pasarela para
+       * terminar.»— con `redirectUrl` a `undefined`, así que esta rama no
+       * entraba y el alumno leía que lo llevábamos a algún sitio mientras se
+       * quedaba exactamente donde estaba, con el reloj del hold corriendo.
+       *
+       * `urlDeRespaldo` es la URL alojada que `interpretar()` EXIGE en la
+       * respuesta del checkout, así que siempre hay destino.
+       */
+      if (salida.estado === "no-transparente") {
+        irAPagar(salida.redirectUrl ?? urlDeRespaldo);
         return;
       }
       // Ya se cobró (el webhook llegó primero, u otra pestaña pagó).
@@ -531,11 +544,43 @@ export function DlocalEmbed({
       // datos» genérico en un formulario de pago es un abandono.
       const mensaje = salida.error ?? "No se pudo completar el pago.";
       const campoConError = salida.campo;
-      if (campoConError) {
+      /**
+       * 🔴 SOLO SE CUELGA DEL CAMPO SI EL CAMPO ESTÁ EN PANTALLA.
+       *
+       * `salida.campo` sale de un `/Missing field:\s*(\w+)/` sobre el mensaje
+       * de dLocal, y ese grupo puede ser cualquier cosa: `clientEmail`,
+       * `country`, `deviceId`, `installments`… o `clientDocumentType`, que en
+       * Ecuador NO se pinta porque tiene un solo valor y se rellena solo.
+       *
+       * Cuando el nombre no corresponde a ningún campo visible, `setErrores`
+       * escribía en una clave que nadie renderiza y `errorGeneral` se quedaba a
+       * null: el alumno pulsaba «Pagar», el botón se rehabilitaba y **no salía
+       * ni un mensaje**. Silencio absoluto en una pantalla de pago.
+       *
+       * Y cuando el campo es de los que rellenamos NOSOTROS (`DEL_SERVIDOR`),
+       * la culpa no es suya: decirle «revisa el formulario» es mandarlo a
+       * corregir algo que no puede tocar.
+       */
+      const enPantalla =
+        !!campoConError &&
+        !DEL_SERVIDOR.has(campoConError) &&
+        !!document.getElementById(idCampo(campoConError));
+
+      if (enPantalla) {
         setErrores((p) => ({ ...p, [campoConError]: mensaje }));
         document.getElementById(idCampo(campoConError))?.focus();
       } else {
-        setErrorGeneral(mensaje);
+        if (campoConError) {
+          console.error("[dlocal-embed] dLocal señala un campo que no está en pantalla:", {
+            campo: campoConError,
+            mensaje,
+          });
+        }
+        setErrorGeneral(
+          campoConError
+            ? "No pudimos completar el pago con estos datos. Vuelve a intentarlo o paga en la pasarela."
+            : mensaje,
+        );
       }
     } catch (e) {
       // Lo que lanza aquí es casi siempre la tokenización: tarjeta incompleta,

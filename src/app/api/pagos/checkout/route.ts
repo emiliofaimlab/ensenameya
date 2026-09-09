@@ -725,21 +725,50 @@ export async function POST(req: Request) {
     // `./cadena.ts`. Reintentar es recargar la pantalla, y entonces el cobro
     // que quizá se abrió se reencuentra por su lado —`refGuardada` en dLocal, la
     // clave de idempotencia en Stripe— en vez de duplicarse.
+    // ⚠️ Mismo criterio que abajo: `recorrido.mensaje` nombra al proveedor
+    // («'stripe' no respondió y la petición pudo llegar»), y el alumno no sabe
+    // ni tiene por qué saber quién es 'stripe'. Al log entero, fuera una frase
+    // suya.
+    console.error("[pagos/checkout] la cadena se paró en seco:", {
+      sujeto: cobrar.reservas,
+      porQue: recorrido.mensaje,
+    });
     return NextResponse.json(
-      { error: `${recorrido.mensaje}. Vuelve a intentarlo en un momento.` },
+      {
+        error:
+          "No pudimos completar el pago ahora mismo. Espera un momento y vuelve a intentarlo; si ves un cargo, no lo repitas y escríbenos.",
+      },
       { status: 503 },
     );
   }
 
   if (recorrido.estado === "nadie") {
-    // ⚠️ EL 503 DICE QUÉ LE FALTABA A CADA UNO, y por eso `chargeProvidersFor`
-    // no filtra por disponibilidad: es lo que hace DEPURABLE encender un
-    // proveedor. «No se pudo cobrar» obliga a adivinar entre una clave que
-    // falta, una regla mal escrita y un país sin cobertura.
-    //
-    // Y sigue sin caer al simulado: una cadena agotada es un error de
-    // configuración, no una invitación a fingir un cobro.
-    return NextResponse.json({ error: porQueNadie(recorrido.intentos) }, { status: 503 });
+    /**
+     * ⚠️ EL DETALLE DE QUÉ LE FALTÓ A CADA CANDIDATO VA AL LOG, NO AL NAVEGADOR.
+     *
+     * `porQueNadie` compone «stripe: Stripe no configurado (falta
+     * STRIPE_API_KEY) · dlocal: dLocal Go no configurado (faltan
+     * DLOCALGO_API_KEY / DLOCALGO_SECRET_KEY)». Eso es exactamente lo que hace
+     * DEPURABLE encender un proveedor —y por eso `chargeProvidersFor` no filtra
+     * por disponibilidad— pero iba tal cual al `error` de la respuesta, que las
+     * tres pantallas de cobro pintan verbatim. O sea: los nombres de nuestras
+     * variables de entorno, en la pantalla de alguien que intenta pagar.
+     *
+     * Se conserva entero donde sirve (el log del servidor) y hacia fuera va una
+     * frase que el alumno pueda usar. Sigue sin caer al simulado: una cadena
+     * agotada es un error de configuración, no una invitación a fingir un cobro.
+     */
+    console.error("[pagos/checkout] ningún proveedor pudo abrir el cobro:", {
+      sujeto: cobrar.reservas,
+      porQue: porQueNadie(recorrido.intentos),
+    });
+    return NextResponse.json(
+      {
+        error:
+          "No pudimos abrir el pago ahora mismo. Vuelve a intentarlo en unos minutos; si sigue igual, escríbenos a info@ensenameya.com.",
+      },
+      { status: 503 },
+    );
   }
 
   const cobro = recorrido.cobro;

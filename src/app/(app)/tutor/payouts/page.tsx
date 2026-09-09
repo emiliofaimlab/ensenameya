@@ -662,14 +662,38 @@ export default async function TutorPayoutsPage() {
     hasAvailable && !preferida && tarjetas.length > 0
       ? hayAlgunaLista
         ? {
-            titulo: `Tienes ${moneyLine(balance.available)} listos y aún no elegiste tu método preferido`,
-            detalle: `El pago del lunes ${diaDelProximoLote()} saldrá «por decidir» hasta que elijas uno. Un clic y listo.`,
+            /**
+             * 🔴 AQUÍ SE AMENAZABA CON ALGO QUE PASA IGUAL SI EL TUTOR OBEDECE.
+             *
+             * Decía: «El pago del lunes N saldrá «por decidir» hasta que elijas
+             * uno». Es falso por partida doble, y las dos están medidas:
+             *
+             *   · `build_payout_for_tutor` deja `provider` a null A PROPÓSITO
+             *     («lo escribe quien ejecute»), así que TODA orden nace sin riel
+             *     y la columna dice «Por decidir» haya preferencia o no. Elegir
+             *     método no cambia esa celda.
+             *   · Sin preferencia el pago NO se bloquea: `ordenaPorPreferencia`
+             *     devuelve la lista intacta y el enrutador paga igual, eligiendo
+             *     el riel más barato que llegue a su país.
+             *
+             * Era una caja roja sobre dinero inventando una consecuencia para
+             * forzar un clic. Ahora dice lo que de verdad gana el tutor al
+             * elegir, y deja de ser una alarma.
+             */
+            titulo: `Tienes ${moneyLine(balance.available)} listos para cobrar`,
+            detalle:
+              "Si eliges tu cuenta preferida lo intentaremos por ahí primero; si no, elegimos nosotros la vía más barata que llegue a tu país.",
             boton: "Elegir método",
+            urgente: false,
           }
         : {
+            // Esta rama SÍ es urgente y su texto sí es cierto: sin ninguna
+            // cuenta completa no hay riel que pueda ejecutar, y el dinero se
+            // queda esperando de verdad.
             titulo: `Tienes ${moneyLine(balance.available)} listos y todavía no tienes dónde cobrarlos`,
-            detalle: `El pago del lunes ${diaDelProximoLote()} saldrá «por decidir» hasta que conectes una cuenta.`,
-            boton: "Conectar una cuenta",
+            detalle: `El pago del lunes ${diaDelProximoLote()} no podrá salir hasta que completes una cuenta de cobro.`,
+            boton: "Completar una cuenta",
+            urgente: true,
           }
       : null;
 
@@ -686,7 +710,16 @@ export default async function TutorPayoutsPage() {
           lote del lunes iba a salir «Por decidir» sin que nada se lo dijera.
           Qué dice exactamente y cuándo se calla, arriba en `avisoDeSaldo`. */}
       {avisoDeSaldo ? (
-        <PanelCard className="border-[1.5px] border-[#f0bfbf] bg-[#fff8f8]">
+        <PanelCard
+          className={
+            // Rojo solo cuando de verdad hay algo parado. La rama de «elige tu
+            // preferida» es una sugerencia, no una alarma: pintarla igual que la
+            // otra le quita el peso a la que sí importa.
+            avisoDeSaldo.urgente
+              ? "border-[1.5px] border-[#f0bfbf] bg-[#fff8f8]"
+              : "border-[1.5px] border-[#e0e0e0] bg-muted"
+          }
+        >
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
             <div className="min-w-0">
               <p className="text-[15px] font-bold text-[#19191f]">

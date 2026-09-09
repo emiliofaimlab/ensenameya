@@ -704,11 +704,21 @@ export async function POST(req: Request) {
 
       // Cuando la salida es su checkout alojado, se devuelve la URL: convierte un
       // formulario roto en el checkout de siempre.
+      //
+      // ⚠️ Y SI NO SE PUEDE RELEER, NO PASA NADA: el navegador tiene su propia
+      // copia. `interpretar()` exige `redirectUrl` en la respuesta del checkout
+      // y `dlocal-embed` la guarda en `urlDeRespaldo`, así que la rama
+      // `no-transparente` navega igual. Antes esta ausencia dejaba al alumno
+      // leyendo «Te llevamos a la pasarela» sin que lo llevara nadie.
       let redirectUrl: string | undefined;
       if (motivo.clase === "alojado") {
         try {
           redirectUrl = (await recuperarPago(resuelto.dp)).redirect_url;
-        } catch {
+        } catch (relectura) {
+          console.error(
+            `[confirmar-dlocal] no se pudo releer ${resuelto.dp} para sacar su checkout alojado; el navegador usará su copia:`,
+            relectura,
+          );
           redirectUrl = undefined;
         }
       }
