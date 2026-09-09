@@ -21,7 +21,16 @@ export function PageLoading() {
   return (
     <div
       role="status"
-      className="flex min-h-[60svh] flex-col items-center justify-center"
+      /* ⚠️ `min-h-svh` Y `flex-1`, las dos, y ninguna es de adorno.
+         `flex-1` estira hasta el pie cuando hay hueco. `min-h-svh` es la que
+         arregla el salto que reportó el cliente: con una altura menor, el pie
+         se pintaba VISIBLE durante la carga y se iba al fondo en cuanto llegaba
+         el contenido —que casi siempre es más alto que la pantalla—. Ocupando
+         una pantalla entera, el pie queda fuera de vista durante la espera, que
+         es justo donde estará después: no se mueve nada.
+         Y hace de red donde no hay padre flexible del que estirarse: `(auth)` y
+         `(recovery)` no tienen `<main>` propio. */
+      className="flex min-h-svh flex-1 flex-col items-center justify-center"
     >
       <Image
         src="/img/logo-ya.svg"
@@ -34,7 +43,7 @@ export function PageLoading() {
         // lo trata como imagen diferida y el hueco se queda vacío justo el rato
         // que esto viene a cubrir.
         priority
-        className="h-14 w-auto animate-pulse motion-reduce:animate-none"
+        className="h-14 w-auto animate-latido-carga motion-reduce:animate-none"
       />
       <span className="sr-only">Cargando…</span>
     </div>

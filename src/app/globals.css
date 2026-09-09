@@ -176,6 +176,11 @@
   }
   html {
     @apply font-sans;
+    /* El hueco de la barra de scroll se reserva SIEMPRE. Sin esto, pasar de una
+       pantalla con scroll a otra sin él (o al revés) ensancha la página unos
+       15 px de golpe y todo el contenido se desplaza en horizontal. Se nota
+       sobre todo al navegar, que es cuando más cambia la altura. */
+    scrollbar-gutter: stable;
   }
 }
 /* Carrusel de testimonios de P01 (`testimonials.tsx`): la pista va duplicada y
@@ -205,6 +210,30 @@
       transform: scale(1.45);
     }
   }
+  /* El latido del isotipo mientras carga una pantalla (`page-loading.tsx`).
+     Va DENTRO de `@theme` por la misma razón que las de arriba. */
+  @keyframes latido-carga {
+    0% {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+/* ⚠️ EL RETARDO ES EL PUNTO, no el latido.
+   Casi todas las navegaciones se resuelven en menos de lo que tarda esto en
+   empezar, así que el logo NO llega a verse y el cambio de pantalla es limpio.
+   Solo aparece cuando la espera se nota de verdad, que es cuando hace falta
+   decir «sigo aquí». Sin el retardo, una navegación de 60 ms daba un parpadeo
+   —peor que no poner nada—, y es lo que hacía que la pantalla «saltara».
+   `backwards` mantiene la opacidad 0 del primer fotograma DURANTE el retardo:
+   sin él el logo se pinta opaco desde el ms 0 y el retardo no sirve de nada. */
+.animate-latido-carga {
+  animation: latido-carga 420ms ease-out 220ms backwards;
 }
 
 .animate-marquee {

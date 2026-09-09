@@ -32,7 +32,12 @@ export default async function PublicLayout({
         notices={notices}
         cartCount={carrito}
       />
-      <main className="flex-1">{children}</main>
+      {/* `flex flex-col` (y no solo `flex-1`) para que la pantalla de carga
+          pueda estirarse hasta el pie con `flex-1`. Sin esto medía lo que
+          midiera su contenido —el logo y poco más—, el pie se subía a media
+          pantalla y bajaba de golpe al llegar el contenido: el salto que
+          reportó el cliente. Los layouts de `(app)` y `(checkout)` ya eran así. */}
+      <main className="flex flex-1 flex-col">{children}</main>
       {/* Solo se pinta con sesión (lo decide el propio launcher). */}
       <ChatLauncher />
       <SiteFooter />
