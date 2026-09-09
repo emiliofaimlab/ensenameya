@@ -182,6 +182,20 @@
        sobre todo al navegar, que es cuando más cambia la altura. */
     scrollbar-gutter: stable;
   }
+  /* Y como el hueco YA está reservado, la barra no desaparece nunca al abrir un
+     desplegable o un diálogo. Radix (react-remove-scroll-bar) no lo sabe y
+     compensa igual con `margin-right: 15px !important` sobre el body: compensa
+     algo que no ha pasado, la página se estrecha 15 px y todo el contenido
+     centrado salta a la izquierda. Se le quita la compensación.
+     ponytail: una regla en vez de `modal={false}` en cada menú — así vale
+     también para diálogos y sheets.
+     ⚠️ Tiene que quedarse DENTRO de `@layer base`: su `<style>` se inyecta al
+     final del `<head>`, después del nuestro, y solo gana porque un `!important`
+     dentro de una capa manda sobre uno que está fuera de toda capa. Sacar esta
+     regla de la capa la deja sin efecto. */
+  body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
 }
 /* Carrusel de testimonios de P01 (`testimonials.tsx`): la pista va duplicada y
    se desplaza medio ancho, así el bucle no tiene costura.
