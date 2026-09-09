@@ -1,317 +1,271 @@
 # Enséñame Ya — Manual del proyecto
 
-> MVP web: marketplace de tutorías **1:1 en vivo** (alumno ↔ tutor) con reservas,
-> pagos (**capa agnóstica** por geografía; proveedor **decidido: DLocal + Stripe** —
-> **el cobro lo decide el país del ALUMNO** y el payout el del TUTOR — ver
-> `docs/DICTADO-PAGOS.md`), videollamada (Daily)
-> y panel admin. **Monorepo:** frontend Next.js + backend Supabase en este mismo repo.
+> MVP web: marketplace de tutorías **1:1 en vivo** (alumno ↔ tutor) con reservas, pagos,
+> videollamada (Daily) y panel admin. **Monorepo:** frontend Next.js + backend Supabase
+> en este mismo repo.
 
-## Planificación — qué construir y en qué orden
-
-- **`docs/BACKLOG.md`** — backlog vigente (24 épicas / 87 historias), **espejo de Jira**. Manda en *qué y cuándo*.
-- **`docs/PLAN-DESARROLLO.md`** — estado de ejecución (hecho / en curso / pendiente). **El más fiel al día de hoy.**
-- **`docs/QA-LANZAMIENTO.md`** — matriz de RLS **ejecutada**, idempotencia de webhooks, barrido responsive y checklist de lanzamiento (US-1602).
-- **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
-- **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (sin local) en Supabase + Vercel, flujo de trabajo y checklist (US-1603).
-- **`docs/DICTADO-PAGOS.md`** — 🔴 **MANDA EN TODO LO DE COBRO Y PAYOUT** (9-sep-2026, aprobado
-  por el cliente). El cobro se rutea por el país del **alumno**, el payout por el del **tutor**;
-  el checkout vive siempre dentro del sitio; el tutor ve dos tarjetas —PayPal y Banco— y detrás
-  de Banco compiten Wise, dLocal y Stripe sin que él lo sepa; los manuales son **solo Venezuela**.
-  Deroga cualquier cosa que digan los Docs 0–9, este fichero o los comentarios del código.
-  Avance de la implementación en **`docs/RUTA-DICTADO-PAGOS.md`**.
-- **`docs/PAGOS-Y-PAYOUTS.md`** — ⚠️ **derogado en lo que toca al RUTEO** por el dictado; sigue
-  mandando en el **coste** de cada tramo. Mapa de rutas de pago por país, coste real de cada tramo y
-  quién asume cada comisión (2026-09-02). **Manda en todo lo de pagos y payouts**: sustituye al
-  PDF «Infraestructura de Pagos» (jun-2026), cuyo eje de análisis es incorrecto.
-
-### Dónde estamos (2026-08-07)
-
-**Sprints abiertos: 6 AC · 7 · 8** (los cuatro originales S1–S4 hace tiempo que se
-quedaron cortos; el marco actual salió de la reunión del 24-jul). En Jira: **95 Done ·
-15 In Review · 10 To Do** sin contar épicas.
-
-- **El PR #11 ya se mergeó** (`1a36da2`): Sprint 7 completo y Sprint 8 casi, las 15
-  historias están en `dev` aunque en Jira sigan en `In Review`. El detalle, tanda a tanda
-  y con SHA, está en `docs/PLAN-DESARROLLO.md`.
-- ✅ **`dev` y `main` están ALINEADAS (7-sep-2026, `main` = `03e5323`).** Contenido idéntico
-  (`git diff origin/dev origin/main` vacío) y cero migraciones pendientes: el PR #12 llevó los
-  11 commits de PayPal y payouts, y el CI aplicó sus tres migraciones a producción sin un error
-  (run `#34126503234`). Verificado además contra prod, no supuesto: `/terms` responde **200**
-  —llevaba meses en 404— y `/api/tutor/paypal-connect` respondía
-  405 a un GET, o sea que las rutas están desplegadas. (`/api/tutor/stripe-connect` se borró
-  con el dictado del 9-sep-2026.)
-  ⚠️ **Y esta línea caduca sola.** Decía `6cff50d` / 4-sep y el 7-sep ya era falsa: `dev` iba
-  11 commits por delante. Antes de fiarse, `git rev-list --left-right --count dev...main`.
-  ⚠️ **Y lo que hacía que las dos bases NO coincidieran no era el merge.** Era que el ruteo de
-  pagos se tocaba con `UPDATE`s a mano en dev, que nunca existieron como fichero: dev cobraba
-  por dLocal y prod por `simulated`, y no había nada que aplicar. Lo arregla
-  `20260904190000`, que declara el ruteo entero. **Tocar `payment_routing_rules` es una
-  migración**, no un `UPDATE` (regla de oro 5).
-  ⚠️ Prod tiene ahora las mismas pasarelas que dev **con claves de *test mode***
-  (`docs/ENTORNOS.md` §3). Se aceptó a sabiendas: el sitio no está lanzado. El interruptor de
-  cobrar de verdad son las claves de Vercel, no esta tabla.
-- **Sprint 6 AC:** la pata de **Stripe** está hecha (PAC-01 y PAC-03 en *test mode*, aunque
-  en Jira sigan `To Do`). La premisa de la épica —"no empezar hasta tener AMBAS cuentas"—
-  era falsa: el sandbox de Stripe da Sessions, webhooks firmados y reembolsos con solo
-  registrar el email; el KYC solo bloquea *live mode*. ✅ **Y desde el 4-sep-2026 no queda
-  nada bloqueado ahí**: dLocal tiene cuenta aprobada (sandbox y producción).
-  ⚠️ **Y desde el dictado del 9-sep-2026, los payouts YA NO ejecutan por Stripe Connect.**
-  Aquí ponía que sí, y esa frase la deroga `docs/DICTADO-PAGOS.md`: la cuenta conectada
-  desapareció de la pantalla del tutor y `stripe` salió de las 18 filas de `payout_providers`
-  que lo nombraban (`20260910130000`). Hoy los payouts ejecutan por **PayPal**, **dLocal** y
-  **Wise**; Stripe vuelve como tercer riel de la tarjeta de Banco cuando se apruebe la
-  decisión D-1 — está medido que funciona (`POST /v1/accounts` con acuerdo *recipient*,
-  54 de 60 países probados el 9-sep), lo que falta es la decisión de negocio. ⚠️ **Y ya no queda ningún riel esperando cuenta.** Aquí
-  ponía «el único riel que espera cuenta es **Wise**» y contradecía a la fila de Wise de la
-  tabla de integraciones de este mismo fichero, que lo daba por desbloqueado el 4-sep. Wise
-  tiene token, **adaptador desde el 7-sep** y cinco países. Lo que le falta no es una cuenta:
-  es **saldo** — `GET /v4/profiles/136151426/balances` devuelve `[]`, así que el paso de
-  fondear la transferencia falla hasta que alguien abra y fondee un balance en USD. Eso es
-  gestión, no código.
-- Quedan 5 historias nuevas sin empezar: `EY-148` (RF-03) en Sprint 8, y sin sprint
-  `EY-149` (RF-04), `EY-150` (RF-05), `EY-151` (NTF-21) y `EY-153` (SUP-01).
-
-**EP-22 · Integración Visual** (`EY-102` / IV-01…06) — el Figma aplicado sobre el frontend
-ya construido. **Las 6 en producción desde el 2026-07-22** (PR #6→dev, #7→main) y **en
-`Done` en Jira desde el 27-jul**. Detalle en `docs/BACKLOG.md` §4.2. Ojo: el Figma **no
-tiene design system ni diseño móvil**; el responsive de tablet/escritorio sigue esperando
-diseños de Diana (decisión 24).
-
-**Acuerdos del 17-jul aplicados**: chat de Daily apagado (`enable_chat:false`, su chat se
-cobra aparte), prefijo `chat_` en adjuntos y **switch de panel** alumno/tutor/admin.
-La **purga del chat volvió a estar activa** (decisión 22 del cliente: 30 días + descarga
-previa) — migración `20260729180000`, junto con `US-1702`, que es la descarga.
-
-**EP-23 · Datos que el diseño necesita** (`EY-110` / DD-01…08) — de los 8 huecos **queda
-uno**: DD-07 (bandeja de mensajería). DD-01/02 cerradas el 23-jul, DD-03 y DD-04 el
-29-jul (DD-04 rehecho el 4-ago como rango continuo sobre la vista `tutors_public`), DD-05
-resuelta por la decisión 26, DD-06 (legales) el 29-jul —aunque las páginas no dejaron de
-ser 404 hasta el 5-ago— y DD-08 con su seed.
-
-**Legales** — `/terms`, `/privacy` y `/cookies` (texto compartido en
-`src/components/legal/legal-doc.tsx`) describen lo que la plataforma hace de verdad: plazos
-sacados de las migraciones, reembolsos de `lib/policy.ts`. Ojo: **el cliente ya tenía**
-términos publicados en `ensenameya.com` (GoDaddy, marzo-2026), de donde salen el buzón
-oficial **info@ensenameya.com** y su §8 de responsabilidad. Divergimos a propósito en dos
-puntos: el suyo nombra "Stripe o Mercado Pago" y deja los reembolsos vagos, cuando **RN-37
-ya es código**. ✅ En prod ya NO son 404: verificado el 4-sep, `/terms` responde 200.
-
-⚠️ **`EY-109` (buscar sin tildes) se arregló DOS veces.** El intento del 21-jul no
-funcionó; el bueno es del **27-jul** (commit `b032cc5`, migraciones `20260727120000` y
-`20260727130000`). Si lees "corregido el 21-jul" en algún doc viejo, es esto.
-
-⚠️ **La atribución de referidos NO EXISTE, y la explicación que daba este párrafo era
-falsa.** La observación se mantiene y es correcta: Referral Factory **no manda al referido a
-la app con un código** — lo lleva a una **página de oferta alojada por RF** y no ofrece
-parámetro de código. Lo que era mentira es lo que venía después: **`ref_email` no existe ni
-existió nunca**, y esa frase la repetían cuatro documentos. `grep -rn "ref_email" src/
-supabase/` devuelve **cero**, y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea de
-código** — solo aparece en docs. Lo único implementado es exactamente el mecanismo que este
-párrafo declaraba inviable: el proxy guarda el `?ref=` en la cookie `ey-ref`
-(`src/lib/supabase/middleware.ts:76-83`), que viaja al metadata del alta y la aterriza
-`handle_new_user` en `profiles.referral_code` (`20260817130000`). Y **ese `?ref=` no llega
-nunca**: verificado el 1-sep contra la campaña real (50297) — ni su config de API ni la
-página que ve el referido mencionan `ensenameya` por ningún lado, así que no hay redirección
-de vuelta que pueda traer nada. Se ve en los dos extremos: **0 de 39 perfiles de dev** tienen
-`referral_code`, y en RF los únicos dos referidos con `referrer_id` se dieron de alta a mano
-por su API (`source: "Api"`), ninguno `qualified`. Remate: `referral_code` **no lo lee nadie**
-— se escribe en tres sitios, se anula en la baja de cuenta y no entra en ningún cálculo.
-Atribuir referidos está **entero por hacer**, no a medias (`EY-79`/US-1302 está `In Review`
-contra una premisa que no se cumple). Su integración nativa con Stripe sí califica y
-descalifica sola → **`EY-148` (RF-03) probablemente sobra**; comprobarlo antes de escribir
-nada.
+⚠️ **Este fichero describe cómo se construye, no qué se ha construido.** El relato de
+ejecución vive en `docs/PLAN-DESARROLLO.md` y el qué/cuándo en `docs/BACKLOG.md`. Si aquí
+aparece una fecha o un estado, sospecha: este repo tiene un historial de repetir la misma
+afirmación falsa en media docena de documentos durante semanas. **Ante cualquier duda manda
+el código**, y en el esquema, la migración.
 
 ## Stack
 
-- **Frontend:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · React 19 → deploy en **Vercel**.
-- **Backend:** **Supabase** — Postgres + RLS, Auth (email + Google OAuth), Storage. El código server-side propio vive en **Route Handlers** de Next (`src/app/api/`), no en Edge Functions: se decidió así en `20260717120000` y todo lo nuevo lo sigue.
-- **Sin stack local:** la app corre en local (`npm run dev`) contra la **BD de dev cloud**; deploy en Vercel (`main`→prod, `dev`/PR→preview). Detalle y flujo en `docs/ENTORNOS.md`.
+- **Frontend:** Next.js 16 (App Router) · TypeScript · Tailwind v4 · React 19 → **Vercel**.
+- **Backend:** **Supabase** — Postgres + RLS, Auth (email + Google OAuth), Storage.
+  **No hay Edge Functions**: todo el código server-side propio son **Route Handlers** de
+  Next (`src/app/api/`) y Server Components. Se decidió en `20260717120000`.
+- **Sin stack local:** `npm run dev` corre contra la **BD de dev cloud**; deploy en Vercel
+  (`main`→prod, `dev`/PR→preview). Detalle en `docs/ENTORNOS.md`.
 
-## Comandos (rutina diaria)
+## Comandos
 
 ```bash
-npm run dev        # frontend → http://localhost:3000 (contra dev cloud)
+npm run dev        # → http://localhost:3000 (contra dev cloud)
 ```
 
 | Comando | Para qué |
 | :-- | :-- |
 | `npm run db:push` | Aplica migraciones al proyecto **dev** enlazado |
-| `npm run db:types` | Regenera `src/lib/database.types.ts` (requiere link) |
+| `npm run db:types` | Regenera `src/lib/database.types.ts` (aborta sin tocar el fichero si falla) |
 | `npm run lint` · `npm run typecheck` | Lint y typecheck |
+| `npm run check:*` | **Diez comprobaciones ejecutables** sin red ni credenciales: `email`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel` |
 
-Enlace único del CLI a dev (pide access token): `npx supabase link --project-ref lbtpnszjjsxbeileqsja`.
-Tras cambiar el esquema: `npm run db:push` **y** `npm run db:types`. A **prod** llega por **CI** al mergear a `main`.
-
-## Integraciones — la credencial es el interruptor
-
-Ninguna falta de clave rompe la app: el camino se cae al simulado o la cola se queda
-`pending` (nunca `failed`). **Poner la variable es el despliegue.**
-
-| Integración | Hoy | Interruptor |
-| :-- | :-- | :-- |
-| **Stripe** (`lib/stripe.ts`) | **COBRA** en *test mode*, probado de punta a punta contra la preview: Session creada → expirada desde la API → webhook firmado → reserva `cancelled`. API fijada a mano a `2026-07-29.dahlia`. Cobra donde el país del **alumno** lo rutea: Venezuela y todo el mundo fuera de los 18 de dLocal. ⚠️ **NO PAGA**: desde el dictado del 9-sep-2026 salió de `payout_providers` y `RIELES.stripe.puedePagar` devuelve `false` a propósito (decisión D-1 pendiente). Vuelve como tercer riel de la tarjeta de Banco, no como cuenta conectada | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET`, y la fila de `payment_routing_rules` — ⚠️ **que se toca con una MIGRACIÓN, no con un `UPDATE`**: aquí ponía lo contrario y esa frase es la causa de que dev y producción llevaran semanas ruteando distinto (`20260904190000`) |
-| **DLocal** (`lib/dlocalgo.ts`) | ✅ **cuenta APROBADA: sandbox y producción, las dos operativas** (confirmado por el cliente el 4-sep-2026). Adaptador de cobro, webhook firmado y payout escritos y verificados contra sandbox. ✅ **CHECKOUT TRANSPARENTE ACTIVO desde el 10-sep-2026**: el formulario de tarjeta se monta DENTRO del sitio. La vía es `allow_transparent` en el `POST /v1/payments` y luego `GET /v1/checkout/{token}` → `POST /v1/checkout/prepare-confirm` → `POST /v1/checkout/confirm`, **en ese orden** (saltarse el primero da un 500; saltarse el segundo, un 406). No es el `direct:true` que se probó en septiembre. ⚠️ **La clave del tokenizador NO es nuestra**: está hardcodeada en el SDK de dLocal Go y `DLOCALGO_SMARTFIELDS_KEY` no sirve para tokenizar. ⚠️ Y el cobro transparente **exige el país del pagador**: sin él, `400 5000 «Empty country not allowed»`. Paga a 8 países; Perú entró el 10-sep al mandarle la dirección que ya se guardaba. ⚠️ Esta fila dijo durante un mes «sin cuenta — rechazada»: era un rechazo viejo, ya resuelto, y lo repetían seis documentos | `DLOCALGO_API_KEY` + `DLOCALGO_SECRET_KEY` (+ `DLOCALGO_API_BASE` para apuntar a producción) y su fila de `payment_routing_rules` |
-| **PayPal** (`lib/payments/paypal-provider.ts`) | ✅ **CERRADO el 4-sep-2026**: recorrido entero con dinero moviéndose —conectar cuenta → retirar → job → `item: SUCCESS` → fila `paid` → NTF-12—, repetido dos veces. ⚠️ **Se paga al identificador de la cuenta CONECTADA, no al correo**: al correo quedó `UNCLAIMED` 5 de 5 veces, con el lote informando `SUCCESS` igualmente (`docs/PAGOS-Y-PAYOUTS.md` §9.4). El correo sigue como respaldo y ahí ese fallo se puede repetir. No cobra: no está en ningún `charge_providers` | `PAYPAL_CLIENT_ID` + `PAYPAL_SECRET` (+ `PAYPAL_API_URL` para producción) |
-| **Wise** (`lib/payments/wise-provider.ts`) | ✅ **Token vivo el 4-sep-2026 y ADAPTADOR ESCRITO el 7-sep**: cuatro pasos —presupuesto, alta del destinatario, transferencia y fondeo—, idempotencia por UUIDv5 derivado de (payout, intento) y mapeo por país en `lib/payments/wise-mapeo.ts` (`npm run check:wise`). Paga a **CO, AR, MX, CL y UY**, que son los países con `payout_country_rules.wise_account_type`. **No paga a Venezuela ni a Panamá** (422 `error.route.not.supported`, medido) y **Brasil está apagado a propósito**: sus códigos de banco no encajan con los de la tabla. ⚠️ **Y NO está probado de punta a punta con dinero moviéndose**, al revés que PayPal: los tres primeros pasos van y el **fondeo** falla si la cuenta no tiene saldo. 🔑 **Eso NO es un límite del diseño**: desde el dictado del 9-sep-2026, operaciones fondea las cuentas todos los días antes del ciclo de payouts, así que un saldo a cero es una tarea pendiente de ese día y no un motivo para no ofrecer el riel. El adaptador ya lo aguanta (la transferencia se queda en `incoming_payment_waiting` y el job reintenta el fondeo). ⚠️ Y **paga a mucho más que 5 países**: `GET /v1/currency-pairs` devuelve **103 monedas destino** (EUR→`iban`, GBP→`sort_code`, USD→`aba`, medido). Lo que limita a 5 es nuestra tabla `payout_country_rules`, no Wise — abrirla es la fase 3 de `docs/RUTA-DICTADO-PAGOS.md`. ⚠️ Esta fila dijo primero «espera cuenta» y luego «espera adaptador»: las dos caducaron | `WISE_API_TOKEN`. `WISE_PRIVATE_KEY` es **opcional** — medido: esta cuenta no está sujeta a SCA; si algún día lo estuviera, `wiseFetch` lo dice con ese nombre en vez de morir con un 403 mudo |
-| **Correo** (`lib/email.ts` → **Resend**) | plantillas y job listos; sin clave la cola ni se toca | `RESEND_API_KEY` |
-| **Grabación de Daily** | ⚠️ **contratada y funcionando** — esta fila decía «add-on sin contratar → hoy no hay nada que borrar» y era falso: `GET api.daily.co/v1/recordings` devuelve **2 grabaciones `finished`** (14-ago, 13 s y 33 s). No hay tabla ni URL guardada **a propósito**: se consultan a Daily en el momento (`lib/daily.ts`). ⚠️ **Y la regla cambió el 2-sep: se graba SIEMPRE.** Esta fila decía que RN-42 exigía el sí de las dos partes y que «lo normal es que una sesión no tenga vídeo». El cliente lo reformuló —**obligatoria y notificada**— y por eso la casilla de la sala pasó de «Acepto» a «Entiendo». `recording_allowed()` devuelve `true` desde `20260902100000`. ⚠️ Y el fallo que tapaba esa premisa: `enable_recording:"cloud"` solo enciende el BOTÓN de grabar, no graba — por eso había 12 salas y 2 grabaciones. Quien arranca es `start_cloud_recording` en el token (`mintToken`); Daily no tiene propiedad de sala para esto. El nombre de sala se **lee** de `sessions.daily_room_name`; derivarlo otra vez es lo que hacía fallar a US-1802 en silencio | `DAILY_API_KEY` |
-| **Referral Factory** | ⚠️ campaña viva (**50297, la única**) pero **SIN atribución de ninguna clase** — esta fila decía «atribución por email» y era falso: esa vía no existe en el código y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea**. Lo único que hace la app es **pintar el enlace/embed** de la campaña (`lib/referral.ts`); quién trajo a quién se queda entero en RF, y ni siquiera eso: sus dos únicos referidos se metieron a mano por API. La cookie `ey-ref` existe y funciona, pero espera un `?ref=` que RF no manda | `NEXT_PUBLIC_REFERRAL_URL` · `NEXT_PUBLIC_REFERRAL_EMBED_URL` — el interruptor real es la **URL**, no la clave |
-
-**TRES jobs y dos sitios**, los tres exigen `CRON_SECRET` y fallan cerrado (503) sin ella:
-`/api/cron/recordings-purge` por **Vercel Cron** (`vercel.json`, diario 04:00), y
-`/api/cron/notifications-send` y `/api/cron/refunds-process` por **GitHub Actions** — Vercel
-Hobby limita los crons a uno al día, y un aviso de "te quedan 24 h para aceptar" que llega
-mañana no sirve.
-⚠️ `process_notifications()` **ya solo informa**; antes marcaba toda la cola como `sent` sin
-enviar nada. El envío real es el job.
-
-⚠️ **`recordings_purged_at` a `null` en las 12 sesiones con sala NO es un job roto.** Es lo
-correcto: la sala más antigua terminó el **14-ago**, así que con la retención de 30 días la
-primera purga vence el **13-sep** y `recordings-purge` no ha tenido nunca nada que hacer.
-Lo que sigue sin demostrarse es que funcione **cuando le toque** — el día que empiece a haber
-vencimientos hay que mirarlo, porque esa retención es la que prometen las páginas legales.
-
-⚠️ **La cadencia de los programados de GitHub es una ficción.** Los dos `cron` piden 5 y 15
-minutos; lo que GitHub entrega, medido sobre las corridas reales del 27 al 30-ago, es **una cada
-2-6 horas** (15 corridas en 3,5 días, no ~1.000). Sigue siendo mejor que el único cron diario de
-Vercel Hobby, que es el motivo por el que están aquí, pero no se puede planificar con "5 minutos":
-los comentarios de cabecera de `notifications-cron.yml` y `refunds-cron.yml` lo dicen y se
-quedaron cortos.
-
-**Configurado el 2026-08-30, tras 30 corridas en rojo:** en GitHub la variable `APP_BASE_URL`
-(`https://ensenameya.vercel.app`) y el secret `CRON_SECRET`. Faltaban SOLO ahí — no en Vercel: la
-pasada de verificación devolvió `status:"ok"` en los dos endpoints, o sea que prod ya tenía
-`CRON_SECRET`, `STRIPE_API_KEY` **y** `RESEND_API_KEY` (si faltaran, la respuesta sería
-`sin-stripe` / `sin-proveedor`). Este párrafo decía lo contrario y mandaba a buscar donde no era.
-Sin verificar siguen `NEXT_PUBLIC_REFERRAL_URL` y `REFERRAL_FACTORY_API_KEY`.
-
-⚠️ **Verde no es lo mismo que útil.** Los dos relojes apuntan a **producción**, donde las dos
-colas están **vacías**. Y la de correo de **dev** también, desde el 30-ago: eran **336** avisos
-`pending` del 11-ago en adelante y se cerraron como `failed` (`docs/QA-LANZAMIENTO.md` §4.6).
-✅ **Y X-01 se ejercitó el 30-ago**: los 2 `refund_requests` que esperaban en dev se ejecutaron
-contra Stripe *test mode* — $47,50, 50 % y 100 % de RN-37, cuadrando cola / `refunds_backlog()` /
-Stripe / `payments`. El dinero **sí se mueve**. Lo que sigue sin pasar es que **nadie ha visto
-llegar un correo de la cola**. ⚠️ Y salió un desfase al hacerlo: **NTF-10 avisa cuando el reembolso
-se PIDE, no cuando el dinero se mueve** (lo encola `20260716170000` en el camino de cancelación; el
-job no encola nada). A esos dos alumnos se les dijo «procesado» el 17 y el 27-ago y el dinero salió
-el 30. Con el cron corriendo la ventana baja a horas; cambiar cuándo se avisa es decisión de
-producto. ⚠️ **La cola de dev volverá a llenarse**: el
-seed usa `@ensenameya.dev`, un dominio sin MX, y 187 de las 336 iban ahí. Hasta que eso cambie,
-§4.6 hay que repetirlo antes de apuntar un reloj a dev.
-El endpoint de Stripe apunta a la preview con `?x-vercel-protection-bypass=…`: sin eso
-Deployment Protection devuelve 302 antes de que corra nuestro código.
+Enlace del CLI a dev: `npx supabase link --project-ref lbtpnszjjsxbeileqsja`.
+Tras tocar el esquema: `npm run db:push` **y** `npm run db:types`. A prod llega por **CI**
+al mergear a `main`.
 
 ## Reglas de oro (no romper)
 
-1. **RLS default-deny.** Toda tabla nueva nace con `enable row level security` + políticas explícitas. Sin política = nadie ve nada (a propósito). Olvidarla "falla abierto" → fuga (RISK-13).
-2. **El dinero es server-side.** Escritura en `payments`/`payouts`/etc. solo con `service_role`, desde los Route Handlers. Nunca desde el cliente: `confirm_payment` es **solo del webhook**, y lo que le queda a `authenticated` es `confirm_simulated_payment`, que exige ser dueño **y** `payments.provider = 'simulated'`. El importe sale siempre de `payments.gross_amount`, jamás del navegador. (S-15 / RN-26)
-3. **`service_role` jamás en el cliente** ni en variables `NEXT_PUBLIC_*`. El navegador usa la ANON/publishable key (sujeta a RLS).
-4. **Fechas en UTC** en la BD; se renderizan en la **hora local** del usuario. (RN-01 / RN-02 → RISK-12)
-5. **Migraciones = fuente de verdad** del esquema (`supabase/migrations/`). No se cambia el esquema a mano en la nube; se versiona en git.
-6. **Tipos generados:** tras tocar el esquema, `npm run db:types`. No editar `database.types.ts` a mano.
-7. **Operaciones con snapshots financieros** (p. ej. crear `booking`) van por **función controlada / Route Handler**, no por insert directo del cliente. (cierra H-2)
-8. **Nada de inventar decisiones pendientes** (DP-xx): se consumen como configuración, no como código acoplado. Ver Doc 9.
-9. ⚠️ **`service_role` se salta la RLS, pero NO los `grant` de tabla.** Con "auto-expose new tables" OFF, un job con `service_role` come `permission denied` **en tiempo de ejecución** —no en el build, no en el typecheck— hasta que su migración declare `grant … to service_role`. Mordió **tres veces el 6-ago**: `sessions` (`20260806140000`), `payments`/`profiles` (`20260806170000`) y `payment_routing_rules` (`20260806180000`). Tabla que toque un job = grant explícito, en la misma migración.
-10. ⚠️ **Una tabla puente nueva vuelve AMBIGUOS los embeds de PostgREST entre las dos tablas que une**, y la consulta entera se cae con `PGRST201` — no se degrada. `tutor_views` (EY-186, `20260827140000`) une `profiles` y `tutor_profiles`, que ya tenían FK directa: desde ese día `.select("…, profiles(full_name)")` sobre `tutor_profiles` **devolvía error**, y la cola de aprobación del admin enseñaba «(0)» en los tres chips con 11 tutores esperando (28-ago). Se nombra la FK: `profiles!tutor_profiles_profile_id_fkey(…)`. Y **si la consulta alimenta una cola, se mira el `error`**: `const { data } = …` convierte el fallo en una lista vacía, que es una mentira creíble.
-11. ⚠️ **Un job de `pg_cron` que falla no se lo dice a nadie.** No hay build en rojo, ni 500 en Vercel, ni fila en `notifications`: el error se queda en `cron.job_run_details`, y hay que ir a mirarla. `close_expired_sessions()` acumuló **12.446 fallos seguidos y cero éxitos entre el 16-jul y el 28-ago** por un `case` sin `::session_status` —el enum no acepta `text`— mientras el cierre manual del tutor seguía funcionando y tapaba el agujero. Y de esa función cuelga `bookings.completed_at`, o sea el payout. **Tras tocar una función que corre por cron, se mira su última corrida**: `select j.jobname, d.status, d.return_message from cron.job_run_details d join cron.job j using (jobid) order by d.start_time desc limit 5;` — y ojo, escribirla bien no basta: `create or replace` valida la sintaxis, no ejecuta el cuerpo (el fallo sobrevivió a una reescritura entera de la función en `20260820190000`). Y los jobs no viven todos en el mismo sitio: `vercel.json`, `.github/workflows/` y **dentro de la propia BD** — antes de dar uno por inexistente, `grep -rn "cron.schedule" supabase/migrations/`
-   — que devuelve **ocho** jobs de pg_cron, no uno.
-   ⚠️ **Y «arreglado» significa arreglado en `dev`.** El mismo fallo corría en **producción**, donde
-   llegó a **12.778** corridas rojas: siguió cayendo dos días después de que la migración existiera
-   en `dev`, hasta el merge del 30-ago (último fallo 19:25, migración 19:28, cinco éxitos seguidos
-   después). Un `pg_cron` roto se arregla cuando la migración **aterriza en su ambiente**, no cuando
-   se escribe.
-   ⚠️ **Y no basta con leer las últimas N filas** de `cron.job_run_details`: solo salen los jobs
-   frecuentes. Los cuatro diarios/semanal (`run-payout-batch` es dinero; `purge-expired-messages`
-   sostiene la retención que prometen los legales) quedan fuera de la ventana y pueden llevar semanas
-   rotos. Agregar por `jobname` y `status`, no leer las diez últimas.
+1. **RLS default-deny.** Toda tabla nueva nace con `enable row level security` + políticas
+   explícitas. Sin política = nadie ve nada, a propósito. Olvidarla "falla abierto" (RISK-13).
+2. **El dinero es server-side.** Escritura en `payments`/`payouts` solo con `service_role`
+   desde Route Handlers. `confirm_payment` es **solo del webhook**; a `authenticated` le queda
+   `confirm_simulated_payment`, que exige ser dueño **y** `provider = 'simulated'`. El importe
+   sale de `payments.gross_amount`, jamás del navegador. (S-15 / RN-26)
+3. **`service_role` jamás en el cliente** ni en `NEXT_PUBLIC_*`. Vive en
+   `src/lib/supabase/admin.ts` y lo importan solo Route Handlers y Server Components. La regla
+   no es "nunca en una pantalla": es **nunca en el navegador**.
+4. **Fechas en UTC** en la BD; se renderizan en la hora local del usuario. Herramientas:
+   `src/lib/tz.ts` y `getViewerTimezone()`/`getUserTimezone()` de `src/lib/auth/server.ts`.
+   (RN-01 / RN-02 → RISK-12)
+5. **Migraciones = fuente de verdad** del esquema. No se cambia el esquema a mano en la nube.
+   ⚠️ **Tocar `payment_routing_rules` es una MIGRACIÓN, no un `UPDATE`**: hacerlo a mano es lo
+   que tuvo a dev y prod ruteando pagos distinto durante semanas (`20260904190000`).
+6. **Tipos generados:** tras tocar el esquema, `npm run db:types`. No editar
+   `database.types.ts` a mano.
+7. **Snapshots financieros** (crear `booking`) van por función controlada / Route Handler,
+   no por insert directo del cliente. (cierra H-2)
+8. **Nada de inventar decisiones pendientes** (DP-xx): se consumen como configuración.
+9. ⚠️ **`service_role` se salta la RLS, pero NO los `grant` de tabla.** Con "auto-expose new
+   tables" OFF, un job con `service_role` come `permission denied` **en tiempo de ejecución**
+   —no en el build, no en el typecheck— hasta que su migración declare
+   `grant … to service_role`. Mordió tres veces el 6-ago. Hoy lo hacen 61 de las 177
+   migraciones. Tabla que toque un job = grant explícito, en la misma migración.
+10. ⚠️ **Una tabla puente nueva vuelve AMBIGUOS los embeds de PostgREST** entre las dos tablas
+    que une, y la consulta se cae con `PGRST201` — no se degrada. `tutor_views`
+    (`20260827140000`) dejó la cola de aprobación del admin enseñando "(0)" con 11 tutores
+    esperando. Se nombra la FK: `profiles!tutor_profiles_profile_id_fkey(…)`. Y **si la
+    consulta alimenta una cola, se mira el `error`**: `const { data } = …` convierte el fallo
+    en una lista vacía, que es una mentira creíble.
+11. ⚠️ **Un job de `pg_cron` que falla no se lo dice a nadie.** No hay build en rojo ni 500 en
+    Vercel: el error se queda en `cron.job_run_details`. `close_expired_sessions()` acumuló
+    **12.446 fallos seguidos** entre el 16-jul y el 28-ago por un `case` sin `::session_status`,
+    mientras el cierre manual del tutor tapaba el agujero — y de esa función cuelga
+    `bookings.completed_at`, o sea el payout. Tras tocar una función que corre por cron, se
+    mira su última corrida. Y `create or replace` **valida la sintaxis, no ejecuta el cuerpo**:
+    el fallo sobrevivió a una reescritura entera.
+    ⚠️ **Agregar por `jobname` y `status`, no leer las diez últimas filas**: los jobs diarios
+    y semanales quedan fuera de esa ventana y pueden llevar semanas rotos.
+    ⚠️ **Y "arreglado" significa arreglado en su AMBIENTE**: el mismo fallo siguió cayendo en
+    producción dos días después de existir la migración en `dev`.
+12. ⚠️ **Añadir un argumento a una RPC es `drop function` + `create`, JAMÁS
+    `create or replace`.** PostgreSQL crea una **sobrecarga** y PostgREST responde `PGRST203`.
+    `20260910190000` lo hizo y rompió el formulario bancario del tutor **solo cuando el campo
+    opcional iba vacío** (supabase-js no serializa `undefined` → menos argumentos → ambiguo),
+    o sea justo al revés de lo que promete la pantalla. Lo arregla `20260910220000`. Y ojo:
+    un `drop` se lleva por delante los `grant execute`, que hay que reponer.
+
+## Patrón RLS
+
+- Propiedad: `using ( (select auth.uid()) = <owner_col> )` — el `select` ayuda al planner.
+- Rol admin: `public.has_role('admin')` (SECURITY DEFINER **de un argumento**, evita recursión).
+- Alta de perfil + rol `alumno` al registrarse (trigger `handle_new_user`).
+- **Grants:** "auto-expose new tables" está **OFF** → cada tabla declara sus `grant`
+  (públicas→`anon`, privadas→`authenticated`) junto a sus políticas, **y también para
+  `service_role`** (regla 9).
+- ⚠️ **Vistas: `with (security_invoker = true)` SIEMPRE.** Sin eso una vista corre con los
+  privilegios de su dueño y publica lo que las políticas tapaban. Precedente: `tutors_public`
+  (`20260804120000`). Y **columnas explícitas, nunca `tabla.*`**: lo que se añada mañana a la
+  tabla no debe colarse solo en una superficie pública.
+- **El alta de `admin` va fuera del cliente** (RN-31/S-31): `user_roles` no tiene políticas de
+  escritura a propósito.
+
+## Convenciones de esquema
+
+- **Dinero en `bigint`** (unidades mínimas) + `currency` ISO-4217 al lado. Nunca `float`.
+- **`timestamptz` siempre**, en UTC.
+- **`provider` es `text`, no un enum**, para no acoplar el esquema a la lista de PSPs.
+- **Baja lógica sobre borrado físico** donde haya rastro financiero o legal.
+- `comment on table` / `comment on column` es como este repo transporta el porqué: lo hacen
+  85 de las 177 migraciones.
+
+## Pagos — manda el dictado
+
+🔴 **`docs/DICTADO-PAGOS.md` es la única verdad sobre cobro y payout** (aprobado por el
+cliente, 9-sep-2026). Deroga los Docs 0–9, este fichero y los comentarios del código.
+Las dos reglas que hay que tener presentes:
+
+1. **El cobro lo decide el país del ALUMNO**
+   (`ruta_de_pago(payer_country).charge_providers`); el payout, el del **TUTOR**
+   (`ruta_de_pago(payee_country).payout_providers`). La misma fila responde a las dos
+   preguntas: lo que cambia es la clave de búsqueda.
+2. **El tutor ve dos tarjetas: PayPal y Banco.** Detrás de Banco compiten **Wise, dLocal y
+   Stripe** y él no ve a ninguno. Los canales manuales (Zinli, Zelle, Binance) son **solo
+   Venezuela**, y lo son porque es el único país que ninguno de los tres alcanza.
+
+El **coste** de cada tramo y quién asume cada comisión sigue mandándolo
+`docs/PAGOS-Y-PAYOUTS.md`; su parte de ruteo está derogada.
+
+## Integraciones — la credencial es el interruptor
+
+Ninguna falta de clave rompe la app: el camino se cae al siguiente candidato o la cola se
+queda `pending` (nunca `failed`). **Poner la variable es el despliegue.**
+
+| Integración | Hoy | Interruptor |
+| :-- | :-- | :-- |
+| **Stripe** (`lib/stripe.ts`) | **Cobra y paga.** Cobra donde el país del alumno lo rutea (Venezuela y todo lo que quede fuera de los 18 de dLocal). Paga como **tercer riel de la tarjeta de Banco** —cuenta `recipient` creada por nosotros con los datos que teclea el tutor, nunca un onboarding de Connect—, siempre **después de Wise** en el orden. API fijada a `2026-07-29.dahlia` | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET` + `STRIPE_PUBLISHABLE_KEY` (sin esta última **no se pinta el formulario de pago**) |
+| **dLocal Go** (`lib/dlocalgo.ts`) | Cuenta aprobada en sandbox y producción. **Checkout transparente**: el formulario de tarjeta se monta DENTRO del sitio. La vía es `allow_transparent` en el `POST /v1/payments` y luego `GET /v1/checkout/{token}` → `POST /v1/checkout/prepare-confirm` → `POST /v1/checkout/confirm`, **en ese orden** (saltarse el primero da 500; el segundo, 406). ⚠️ La clave del tokenizador **no es nuestra**: está hardcodeada en el SDK de dLocal Go, y `DLOCALGO_SMARTFIELDS_KEY` no sirve para tokenizar. ⚠️ El cobro transparente **exige el país del pagador**: sin él, `400 5000 «Empty country not allowed»` | `DLOCALGO_API_KEY` + `DLOCALGO_SECRET_KEY` (+ `DLOCALGO_API_BASE` para producción) |
+| **PayPal** (`lib/payments/paypal-provider.ts`) | Paga, con dinero moviéndose de verdad. ⚠️ **Se paga al identificador de la cuenta CONECTADA, no al correo**: al correo quedó `UNCLAIMED` 5 de 5 veces, con el lote informando `SUCCESS` igualmente. El correo sigue como respaldo y ahí ese fallo se puede repetir. **No cobra** | `PAYPAL_CLIENT_ID` + `PAYPAL_SECRET` (+ `PAYPAL_API_URL`) |
+| **Wise** (`lib/payments/wise-provider.ts`) | Paga. Cuatro pasos —presupuesto, alta del destinatario, transferencia y fondeo— con idempotencia por UUIDv5 de (payout, intento) y mapeo en `lib/payments/wise-mapeo.ts` (`npm run check:wise`). Alcanza los países de `payout_country_rules`, hoy **55**, por formato de cuenta (iban, swift, sort_code, aba…). **No paga a Venezuela**; Brasil está apagado a propósito (sus códigos de banco no encajan). ⚠️ El fondeo falla si la cuenta no tiene saldo — eso **no es un límite del diseño**: operaciones fondea las cuentas antes de cada ciclo, y el adaptador aguanta (`incoming_payment_waiting` + reintento) | `WISE_API_TOKEN`. `WISE_PRIVATE_KEY` es **opcional**: esta cuenta no está sujeta a SCA, y si algún día lo estuviera `wiseFetch` lo dice por su nombre en vez de morir con un 403 mudo |
+| **Correo** (`lib/email.ts` → **Resend**) | Plantillas y job listos; sin clave la cola ni se toca | `RESEND_API_KEY` |
+| **Daily** (`lib/daily.ts`) | Grabación contratada y **obligatoria** (RN-42 reformulada el 2-sep: se graba siempre y se avisa; por eso la casilla de la sala dice "Entiendo", no "Acepto"). ⚠️ **`enable_recording:"cloud"` solo enciende el BOTÓN, no graba**: quien arranca es `start_cloud_recording` en el token (`mintToken`); Daily no tiene propiedad de sala para esto. El nombre de sala se **lee** de `sessions.daily_room_name` — derivarlo otra vez es lo que hacía fallar a US-1802 en silencio. No hay tabla de grabaciones a propósito: se consultan a Daily en el momento | `DAILY_API_KEY` |
+| **Referral Factory** (`lib/referral.ts`) | ⚠️ Campaña viva (**50297**) pero **sin atribución de ninguna clase**. La app solo pinta el enlace/embed; quién trajo a quién se queda entero en RF. La cookie `ey-ref` existe y funciona, pero espera un `?ref=` que RF **no manda**: su página de oferta no redirige de vuelta. Atribuir referidos está **entero por hacer** | `NEXT_PUBLIC_REFERRAL_URL` · `NEXT_PUBLIC_REFERRAL_EMBED_URL` — el interruptor es la **URL**, no la clave |
+
+## Los jobs — cinco endpoints y tres sitios
+
+Todos exigen `CRON_SECRET` y fallan cerrado (503) sin ella.
+
+| Endpoint | Reloj | Cadencia pedida |
+| :-- | :-- | :-- |
+| `/api/cron/recordings-purge` | **Vercel Cron** (`vercel.json`) | `0 4 * * *` |
+| `/api/cron/notifications-send` | GitHub Actions | `*/5 * * * *` |
+| `/api/cron/refunds-process` | GitHub Actions | `7,22,37,52 * * * *` |
+| `/api/cron/payouts-process` | GitHub Actions | `13 * * * *` — **esto es dinero** |
+| `/api/cuenta/eliminar/barrido` | GitHub Actions | `37 5 * * *` — ⚠️ **no cuelga de `/api/cron/`**, al revés que sus tres hermanas |
+
+⚠️ **La cadencia de GitHub es una ficción.** Medido sobre corridas reales: entrega **una cada
+2-6 horas**, no cada 5 minutos. Sigue siendo mejor que el único cron diario que permite Vercel
+Hobby —que es el motivo de que estén ahí—, pero no se puede planificar con "5 minutos".
+
+**Y en la propia BD hay NUEVE jobs de `pg_cron`** que `grep` en el repo sí encuentra, pero solo
+si lo buscas: `close-expired-sessions`, `expire-stale-bookings`, `process-notifications`,
+`process-payouts`, `run-payout-batch`, `purge-expired-messages`, `purge-contact-messages`,
+`purge-tutor-views`, `complete-pending-account-deletions`. Antes de dar uno por inexistente:
+`grep -rn "cron.schedule" supabase/migrations/`.
+
+⚠️ `process_notifications()` **ya solo informa**; antes marcaba toda la cola como `sent` sin
+enviar nada. El envío real es el job HTTP.
 
 ## Dónde está cada cosa
 
 ```
-src/app/                      rutas y páginas (App Router)
+src/app/                      rutas y páginas — TODAS dentro de un grupo:
+                              (app) (auth) (checkout) (public) (recovery) (room)
 src/app/api/                  todo el código server-side (Route Handlers)
-src/app/api/pagos/checkout    crea la Checkout Session de Stripe
+src/app/api/pagos/checkout    abre el cobro por el riel que decide el país del ALUMNO
 src/app/api/webhooks/stripe   webhook firmado (cuerpo crudo, 400 si la firma falla)
-src/app/api/cron/             jobs: recordings-purge (Vercel) · notifications-send (Actions)
+src/app/api/cron/             notifications-send · payouts-process · recordings-purge
+                              · refunds-process
 src/app/(public)/terms|privacy|cookies  páginas legales (DD-06)
-src/components/legal/legal-doc.tsx      texto legal compartido + buzón oficial
 src/proxy.ts                  refresco de sesión (convención Next 16)
+src/lib/auth/server.ts        getSessionContext() · requireUser() · requireRole()
+                              ⚠️ la vía ÚNICA de validar sesión en una pantalla
 src/lib/supabase/client.ts    cliente navegador (ANON + RLS)
 src/lib/supabase/server.ts    cliente Server Components (ANON + RLS, async)
-src/lib/supabase/admin.ts     cliente `service_role` — solo server, ojo regla de oro 9
-src/lib/supabase/middleware.ts helper de sesión usado por proxy.ts
-src/lib/stripe.ts             cliente de Stripe (server-only, versión de API fijada)
-src/lib/payments.ts           registro de RIELES y PSPS: quién cobra y quién paga por país
-src/lib/payments/             un adaptador por riel: stripe · dlocal · paypal · wise · simulated
-src/lib/payments/*-mapeo.ts   la parte PURA de cada adaptador (sin `server-only`), con su
-                              comprobación ejecutable al lado: `*-mapeo.check.ts`
-src/lib/email.ts              adaptador de correo — cambiar de proveedor es esta función
+src/lib/supabase/admin.ts     cliente `service_role` — solo server, ojo regla 9
+src/lib/stripe.ts             cliente de Stripe (server-only, versión fijada)
+src/lib/payments.ts           registro de RIELES: quién cobra y quién paga por país
+src/lib/payments/             un adaptador por riel: stripe · dlocal · paypal · wise
+                              · simulated
+src/lib/payments/*-mapeo.ts   la parte PURA de tres de ellos (paypal, stripe-payout, wise),
+                              con su comprobación al lado: `*-mapeo.check.ts`
 src/lib/policy.ts             reembolsos RN-37 (los legales leen de aquí)
+src/lib/company.ts            datos fiscales de la sociedad — fuente de verdad
 src/lib/database.types.ts     tipos generados (no editar a mano)
 supabase/migrations/          esquema versionado (fuente de verdad)
-supabase/config.toml          config del CLI de Supabase (link, migraciones)
+supabase/seed/                sembrado de dev
 vercel.json                   Vercel Cron (purga de grabaciones)
-.github/workflows/            CI, migraciones a prod y cron de notificaciones
-docs/BACKLOG.md               backlog vigente (sprints, espejo de Jira)
-docs/PLAN-DESARROLLO.md       estado de ejecución por sprint (el más fiel)
-docs/QA-LANZAMIENTO.md        matriz de RLS ejecutada + checklist de lanzamiento
-docs/ENTORNOS.md              ambientes dev + prod cloud (Supabase + Vercel), sin local
-docs/DICTADO-PAGOS.md         🔴 MANDA en cobro y payout (9-sep-2026, aprobado)
-docs/RUTA-DICTADO-PAGOS.md    avance de su implementación, con casillas
-docs/PAGOS-Y-PAYOUTS.md       fees reales y quién asume qué (el RUTEO lo deroga el dictado)
-docs/context/                 docs técnicos (Docs 0–9 + adenda + revisión + aprobación cliente)
+.github/workflows/            CI · migraciones a prod · CUATRO relojes de cron
 ```
 
-## Patrón RLS (referencia rápida)
+## Rendimiento — lo que ya se aprendió a golpes
 
-- Propiedad: `using ( (select auth.uid()) = <owner_col> )` (el `select` ayuda al planner).
-- Rol admin: helper `public.has_role('admin')` (SECURITY DEFINER, evita recursión).
-- Alta de perfil + rol `alumno` automática al registrarse (trigger `handle_new_user`).
-- **Grants:** los proyectos tienen "auto-expose new tables" **OFF** → cada tabla expuesta al cliente declara sus `grant` (públicas→`anon`, privadas→`authenticated`) junto a sus políticas. RLS sigue siendo la barrera default-deny. Y esos `grant` hacen falta **también para `service_role`** → regla de oro 9.
-- ⚠️ **Vistas: `with (security_invoker = true)` SIEMPRE.** Una vista corre por defecto con los privilegios de **su dueño**, así que sin eso se salta la RLS de las tablas que envuelve y publica lo que esas políticas tapaban. Con el invoker puesto, mandan las políticas de siempre. Precedente: `tutors_public` (`20260804120000`). Y columnas explícitas, no `tabla.*`: lo que se añada mañana a la tabla no debe colarse solo en una superficie pública.
-- **Docs vs código:** los Docs 0–9 son el **objetivo** (p. ej. nombran el enum `user_role` y `has_role(uid, role)` de dos args); el **código manda** en nombres concretos (enum real `app_role`, `has_role('admin')` de un arg). Ante divergencia, gana la migración.
+⚠️ **No valides la sesión con `auth.getUser()` en una pantalla.** Son 250-400 ms de viaje a
+la API de Auth y se estaba haciendo hasta cuatro veces por pantalla: era la causa de la
+lentitud que reportó el cliente. Usa `getSessionContext()` / `requireUser()` /
+`requireRole()` de `src/lib/auth/server.ts`, que van por `getClaims()` + `cache()`.
+Hoy 51 de los 79 `page.tsx`/`layout.tsx` lo hacen así.
 
-## Contexto profundo (lee el doc relevante, no los 12)
+⚠️ **Toda ruta con datos lleva su `loading.tsx`.** Su ausencia es lo que medía "~700 ms
+congelado → 60 ms", y es lo que permite a Next prefetchear rutas dinámicas.
 
-| Doc | Cubre |
-| :-- | :-- |
-| 00 | Glosario y modelo conceptual (**manda en lo conceptual**) |
-| 01 / 02 / 03 | Modelo de datos / máquinas de estado / roles y RLS |
-| 04 / 05 | Mapa de pantallas y flujos / spec por pantalla |
-| 06 / 07 | Arquitectura de pagos e integraciones / matriz de notificaciones |
-| 08 / 09 | Backlog (⚠️ superado por `docs/BACKLOG.md`; conserva la matriz de trazabilidad §8.4) / riesgos y decisiones pendientes |
-| `REVISION-docs-1-3.md` → **Anexo A** | Arquitectura del proyecto |
+⚠️ **Perfila con `npm run build`, no con `next dev`**, que engaña. Y mira la **profundidad**
+de la cascada de consultas, no cuántas hay.
 
-Todos en `docs/context/`.
+## Legales
 
-**Visión comercial / aprobación del cliente:** `APROBACION-CLIENTE-FAIMLAB.md`
-(v1 · 2026-06-09) — resumen **completo y no técnico** para firma del cliente:
-perfiles, ~49 pantallas, flujos FL-01…05, procesos de pago por geografía y
-**15 decisiones a confirmar `C-01…C-15`**. **Resueltas: C-01** (proveedor → DLocal +
-Stripe; Stripe ya opera en *test mode*, DLocal no), **C-03** (reembolsos → RN-37:
-≥24h=100%, <24h alumno=50%, tutor=100%; ver adenda §6), **C-11** (correo → **Resend**: es el
-único de los tres candidatos que deja enviar y probar **sin dominio verificado**, y el
-dominio propio sigue bloqueado) y **C-14** (7 documentos de KYC, migración
-`20260715130000`). El bloqueante de negocio que queda es **C-13** (mercado/Venezuela y
-métodos de pago); el resto tienen default operable — ver el tracker de
-`docs/PLAN-DESARROLLO.md`.
+`/terms`, `/privacy` y `/cookies` (texto compartido en `src/components/legal/legal-doc.tsx`)
+describen lo que la plataforma hace de verdad: plazos sacados de las migraciones, reembolsos
+de `lib/policy.ts`, datos fiscales de `lib/company.ts`. **Los redacta el cliente**, no nosotros;
+lo único que hacemos es avisar cuando el código los deja obsoletos.
 
-Los `C-xx` son la cara-cliente de las `DP-xx`/supuestos (C-01→DP-01, C-02→DP-02,
-C-03→DP-03, C-04→DP-06, C-05→DP-08, C-10→DP-04, C-11→DP-05, C-15→DP-07); cuando el
-cliente responda se consumen como **configuración** (regla de oro 8), no como código.
-El **detalle técnico** sigue viviendo en los Docs 0–9, que **mandan en lo técnico**.
+El cliente ya tenía términos publicados en `ensenameya.com` (GoDaddy, marzo-2026), de donde
+sale el buzón **info@ensenameya.com**. Divergimos a propósito en dos puntos: el suyo nombra
+"Stripe o Mercado Pago" y deja los reembolsos vagos, cuando **RN-37 ya es código**.
 
 ⚠️ **Dos webs de la misma marca sin conectar.** `ensenameya.com` es una landing de GoDaddy
 que **no enlaza a la app** (vive en `ensenameya.vercel.app`), cada una con su juego de
-términos. Se resuelve con la **migración de dominio**, que es DNS y negocio, no un merge.
-✅ **Ya no bloquea a ningún PSP**: dLocal aprobó la cuenta (sandbox y producción). Aquí ponía
-que la había rechazado y llevaba semanas siendo falso.
+términos. Se resuelve con la migración de dominio, que es DNS y negocio, no un merge.
 
-⚠️ **Nada está en producción y nadie conoce el sitio.** Todo el trabajo —pagos incluidos— se
-hace y se prueba contra **dev**. Lo que haya en las tablas de prod no es una medida de nada;
-se enciende después de la migración de dominio.
+⚠️ **Producción no tiene usuarios**, pero **sí tiene código y migraciones desplegadas**. No es
+lo mismo: el orden de las migraciones importa igual, y lo que se rompa ahí está roto de verdad.
+El interruptor de cobrar dinero real son las claves de Vercel, no las tablas.
+
+## Planificación
+
+- **`docs/PLAN-DESARROLLO.md`** — estado de ejecución. El relato de qué se hizo y cuándo.
+- **`docs/BACKLOG.md`** — el qué y el cuándo (espejo de Jira), con criterios de aceptación.
+- **`docs/QA-LANZAMIENTO.md`** — matriz de RLS **ejecutada**, idempotencia de webhooks y
+  checklist de lanzamiento.
+- **`docs/ENTORNOS.md`** — ambientes dev + prod cloud, qué variable va en qué entorno.
+- **`docs/DICTADO-PAGOS.md`** — 🔴 manda en cobro y payout.
+- **`docs/PAGOS-Y-PAYOUTS.md`** — coste real de cada tramo y quién asume cada comisión.
+- **`docs/ACCESO-ADMIN-DEV.md`** — cómo entrar como admin en dev.
+
+## Contexto profundo (lee el doc relevante, no los diez)
+
+| Doc | Cubre |
+| :-- | :-- |
+| `context/00` | Glosario y modelo conceptual (**manda en lo conceptual**) |
+| `context/02` | Máquinas de estado |
+| `context/04` | Mapa de pantallas y flujos |
+| `context/06` | Arquitectura de integraciones (⚠️ su parte de pagos la deroga el dictado) |
+| `context/07` | Matriz de notificaciones |
+| `context/09` | Riesgos y decisiones pendientes |
+| `context/ADENDA-BACKLOG-v1.md` | Deltas del backlog v1.0 (RN-37..44, NTF-17..20, `pending_acceptance`) |
+| `context/APROBACION-CLIENTE-FAIMLAB.md` | Alcance comercial y las decisiones `C-01…C-15` |
+
+⚠️ **El modelo de datos NO se lee en un `.md`**: está generado y siempre al día en
+`src/lib/database.types.ts`. Y los permisos concretos se leen en las políticas de las
+migraciones, no en prosa.
+
+**Los `C-xx` son la cara-cliente de las `DP-xx`**; cuando el cliente responde se consumen como
+**configuración** (regla 8), no como código acoplado. **C-14** quedó en **6 documentos de KYC**
+—cv, título, identidad, certificado, diploma y corte de notas— no en 7.
 
 ## Skills del proyecto
 
-- `/nueva-migracion` — migración + RLS siguiendo el patrón del proyecto.
+- `/nueva-migracion` — migración + RLS siguiendo el patrón de la casa.
 - `/nueva-pantalla` — página Next.js con las convenciones de arriba.
