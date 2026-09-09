@@ -66,17 +66,18 @@ export default async function AppHome() {
   const tz = await getUserTimezone();
   const supabase = await createClient();
 
-  const [
-    { data: profile },
-    { data: openRows },
-    sugerencias,
-    misTutores,
-    historial,
-  ] = await Promise.all([
+  // ⚠️ LAS RESERVAS Y SUS FICHAS DE TUTOR VAN JUNTAS, EN LA MISMA RAMA. Las
+  // fichas solo dependen de las reservas, pero se resolvían DESPUÉS de este
+  // `Promise.all` entero, o sea después de la más lenta de las sugerencias:
+  // medido, arrancaban en el ms 709 de un render de 952 ms para tardar 86.
+  // Metidas en su propia rama, corren en paralelo con todo lo demás.
+  const [{ data: profile }, { open, fichas }, sugerencias, misTutores, historial] =
+    await Promise.all([
     // El nombre sale del PERFIL, no de `user_metadata`: el metadata es un
     // espejo que se queda viejo si el perfil cambia después.
     supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
-    supabase
+    (async () => {
+      const { data: openRows } = await supabase
       .from("bookings")
       .select(
         // B-2 · las columnas de ventana viajan con la sesión: sin ellas
@@ -91,7 +92,26 @@ export default async function AppHome() {
       // `.limit(6)` una clase de ahora mismo comprada hace un mes ni siquiera
       // llegaba, y ningún orden posterior la puede subir. Se traen 30 y se
       // recorta a 6 abajo, ya ordenadas por proximidad.
-      .limit(30),
+      .limit(30);
+      // En curso primero, luego las próximas por fecha y hora
+      // (`porProximidad`). El `.slice(0, 6)` va DESPUÉS de ordenar y antes de
+      // todo lo demás: las seis que se pintan son también las que cuentan para
+      // el saludo y para las fichas de tutor, como hasta ahora.
+      const open = (openRows ?? []).sort(porProximidad).slice(0, 6);
+      // `tutorCards` y no `tutorNames`: es la MISMA consulta con cuatro
+      // columnas más (avatar, titular, valoración). B1.10 las trajo para el
+      // bloque de tutores recientes; ese bloque ahora sale de `TutoresCard`,
+      // pero las fichas se siguen necesitando aquí para el «con Fulanito» de
+      // cada fila y su enlace (V-6), así que la consulta se queda tal cual.
+      //
+      // Ya solo se piden para las reservas VIVAS: las terminadas las resuelve
+      // `historialDelAlumno`, que trae las suyas.
+      const fichas = await tutorCards(
+        supabase,
+        open.map((b) => b.products?.tutor_id),
+      );
+      return { open, fichas };
+    })(),
     // N-30 · va DENTRO del mismo `Promise.all` a propósito: resuelve sus
     // propias consultas (intereses, oferta y catálogo) y encadenarla después
     // de las reservas sumaría su latencia a la de la pantalla para nada.
@@ -107,23 +127,6 @@ export default async function AppHome() {
     historialDelAlumno(user.id),
   ]);
 
-  // En curso primero, luego las próximas por fecha y hora (`porProximidad`).
-  // El `.slice(0, 6)` va DESPUÉS de ordenar y antes de todo lo demás: las seis
-  // que se pintan son también las que cuentan para el saludo y para las fichas
-  // de tutor, como hasta ahora.
-  const open = (openRows ?? []).sort(porProximidad).slice(0, 6);
-  // `tutorCards` y no `tutorNames`: es la MISMA consulta con cuatro columnas
-  // más (avatar, titular, valoración). B1.10 las trajo para el bloque de
-  // tutores recientes; ese bloque ahora sale de `TutoresCard`, pero las fichas
-  // se siguen necesitando aquí para el «con Fulanito» de cada fila y su enlace
-  // (V-6), así que la consulta se queda tal cual.
-  //
-  // Ya solo se piden para las reservas VIVAS: las terminadas las resuelve
-  // `historialDelAlumno`, que trae las suyas.
-  const fichas = await tutorCards(
-    supabase,
-    open.map((b) => b.products?.tutor_id),
-  );
   const nombreDelTutor = (id: string | null | undefined) =>
     (id ? fichas.get(id)?.displayName : null) ?? undefined;
 

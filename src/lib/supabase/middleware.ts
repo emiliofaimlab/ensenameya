@@ -67,7 +67,7 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANTE: no insertar lógica entre createServerClient y getUser().
   // getUser() valida el token contra el servidor de Auth y renueva la sesión.
-  await supabase.auth.getUser();
+  await supabase.auth.getClaims();
 
   // US-1302 · el `?ref=` de Referral Factory puede llegar a CUALQUIER página
   // (el enlace que comparte el referidor suele apuntar al home, no a /signup).

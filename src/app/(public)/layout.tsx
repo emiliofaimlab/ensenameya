@@ -1,7 +1,7 @@
 import { getSessionContext } from "@/lib/auth/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
-import { listNotices } from "@/lib/notifications-server";
 import { cartCount } from "@/lib/cart/resolve";
+import { listConversations } from "@/components/chat/conversations";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { ChatLauncher } from "@/components/chat/chat-launcher";
@@ -12,12 +12,15 @@ export default async function PublicLayout({
   children: React.ReactNode;
 }) {
   // Roles además del usuario: el header necesita saber a qué panel enlazar.
-  const { user, roles, fullName, avatarPath } = await getSessionContext();
-  // US-1203: sin sesión no hay avisos que pedir (la campana ni se monta).
-  const notices = user ? await listNotices(user.id) : [];
+  // US-1203: los avisos vienen en el MISMO viaje que roles y perfil
+  // (`session_bootstrap`); sin sesión llegan vacíos y la campana ni se monta.
+  const { user, roles, fullName, avatarPath, notices } =
+    await getSessionContext();
   // EY-177 · el contador del carrito. Se lee de la cookie, no de la base, así
   // que no cuesta un viaje y funciona igual SIN sesión — que es el caso que
   // importa: un anónimo puede apuntar mentorías antes de registrarse.
+  // Mismo empujón que en `(app)`: la burbuja la pide al final del árbol.
+  if (user) void listConversations().catch(() => {});
   const carrito = await cartCount();
   return (
     <div className="flex min-h-svh flex-col">

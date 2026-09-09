@@ -1,8 +1,7 @@
-import type { User } from "@supabase/supabase-js";
-
 import type { HeaderUser } from "@/components/layout/site-header";
 import { storageUrl } from "@/lib/catalog/format";
 import { panelsFor, pickHome, type AppRole } from "./roles";
+import type { SessionUser } from "./server";
 
 /**
  * Reduce el `User` de Supabase a lo que el header necesita (nada sensible).
@@ -18,7 +17,7 @@ import { panelsFor, pickHome, type AppRole } from "./roles";
  * escriben, que es lo que dejaba a algunas cuentas enseñando el correo.
  */
 export function toHeaderUser(
-  user: User | null,
+  user: SessionUser | null,
   roles: AppRole[] = [],
   profile: { fullName?: string | null; avatarPath?: string | null } = {},
 ): HeaderUser | null {

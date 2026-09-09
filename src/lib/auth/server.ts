@@ -3,9 +3,13 @@ import "server-only";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 
 import { createClient } from "@/lib/supabase/server";
+import {
+  toNotice,
+  type AppNotice,
+  type NotificationRow,
+} from "@/lib/notifications";
 import { TZ_COOKIE } from "@/lib/tz";
 import { pickHome, type AppRole } from "./roles";
 
@@ -15,8 +19,21 @@ import { pickHome, type AppRole } from "./roles";
  * el `service_role` jamás se usa aquí.
  */
 
+/**
+ * Lo que de verdad se usa del usuario en toda la app (`id`, `email` y el
+ * `user_metadata` del alta). Era el `User` entero de supabase-js, y traerlo
+ * costaba un `auth.getUser()` — un viaje de red al servidor de Auth por cada
+ * pantalla. Los tres campos viajan YA dentro del JWT, así que con la firma
+ * verificada salen gratis. Ver la nota de `getSessionContext`.
+ */
+export type SessionUser = {
+  id: string;
+  email: string | null;
+  user_metadata: Record<string, unknown>;
+};
+
 type SessionContext = {
-  user: User | null;
+  user: SessionUser | null;
   roles: AppRole[];
   onboardingComplete: boolean;
   /**
@@ -27,41 +44,81 @@ type SessionContext = {
    */
   fullName: string | null;
   avatarPath: string | null;
+  /** `profiles.timezone` crudo. Viaja aquí para que `zonaDelPerfil()` no repita
+   *  el `auth.getUser()` + consulta que esta función ya hizo. */
+  timezone: string | null;
+  /** Los avisos de la campana. Vienen en el MISMO viaje que roles y perfil
+   *  (`session_bootstrap`); el layout ya no los pide por separado. */
+  notices: AppNotice[];
 };
 
-/** Lee el usuario validado (auth server), sus roles y el flag de onboarding. */
-export async function getSessionContext(): Promise<SessionContext> {
+/**
+ * Lee el usuario validado (auth server), sus roles y el flag de onboarding.
+ *
+ * ⚠️ `cache()` NO es un adorno: sin él esto se ejecutaba ENTERO una vez por
+ * llamante y `auth.getUser()` es un viaje de red al servidor de Auth (medido:
+ * 250–400 ms). En una navegación al panel había como mínimo tres —layout,
+ * página y `zonaDelPerfil()`— más el del proxy: ~1 s de revalidar al mismo
+ * usuario antes de mirar un solo dato de la pantalla. `cache()` es por request,
+ * así que dos requests distintos siguen validando de verdad.
+ */
+export const getSessionContext = cache(async (): Promise<SessionContext> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // ⚠️ `getClaims()`, NO `getUser()`. Este proyecto firma con **ES256** y
+  // publica su JWKS, así que la librería verifica la firma EN LOCAL (medido:
+  // 17 ms contra los ~300 ms del viaje al servidor de Auth). Es la misma
+  // garantía criptográfica, no un `getSession()` a ciegas: un token manipulado
+  // no pasa la verificación. Si algún día el proyecto volviera a HS256, la
+  // propia librería cae sola al viaje de red — más lento, nunca inseguro.
+  const { data: verificado } = await supabase.auth.getClaims();
+  const claims = verificado?.claims;
+  const user: SessionUser | null = claims
+    ? {
+        id: claims.sub,
+        email: claims.email ?? null,
+        user_metadata: (claims.user_metadata ?? {}) as Record<string, unknown>,
+      }
+    : null;
 
-  const empty = { fullName: null, avatarPath: null };
+  const empty = {
+    fullName: null,
+    avatarPath: null,
+    timezone: null,
+    notices: [] as AppNotice[],
+  };
   if (!user)
     return { user: null, roles: [], onboardingComplete: false, ...empty };
 
-  // RLS ya limita a las filas propias; los filtros son explícitos para leer la
-  // intención. Roles + flag de onboarding en paralelo.
-  const [{ data: roleRows }, { data: profile }] = await Promise.all([
-    supabase.from("user_roles").select("role").eq("user_id", user.id),
-    supabase
-      .from("profiles")
-      .select("onboarding_complete, full_name, avatar_path")
-      .eq("id", user.id)
-      .maybeSingle(),
-  ]);
+  // Roles + perfil + avisos EN UN VIAJE (`20260909120000`). Eran tres consultas
+  // y dos peldaños de latencia —los avisos necesitan el id que devuelven las
+  // otras dos—, y los pagaba entera cada pantalla con sesión. La RLS sigue
+  // delante: la función es `security invoker`.
+  const { data } = await supabase.rpc("session_bootstrap");
+  const boot = (data ?? {}) as {
+    roles?: AppRole[];
+    profile?: {
+      onboarding_complete: boolean;
+      full_name: string | null;
+      avatar_path: string | null;
+      timezone: string | null;
+    } | null;
+    notices?: NotificationRow[];
+  };
+  const profile = boot.profile ?? null;
 
   return {
     user,
-    roles: (roleRows ?? []).map((r) => r.role),
+    roles: boot.roles ?? [],
     onboardingComplete: profile?.onboarding_complete ?? false,
     fullName: profile?.full_name ?? null,
     avatarPath: profile?.avatar_path ?? null,
+    timezone: profile?.timezone ?? null,
+    notices: (boot.notices ?? []).map(toNotice),
   };
-}
+});
 
 /** Usuario actual o `null` (sin redirección). */
-export async function getUser(): Promise<User | null> {
+export async function getUser(): Promise<SessionUser | null> {
   return (await getSessionContext()).user;
 }
 
@@ -104,17 +161,10 @@ async function zonaDelNavegador(): Promise<string | null> {
 
 /** `profiles.timezone` del usuario en sesión, solo si está configurada. */
 async function zonaDelPerfil(): Promise<string | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-  const { data } = await supabase
-    .from("profiles")
-    .select("timezone")
-    .eq("id", user.id)
-    .maybeSingle();
-  return zonaConfigurada(data?.timezone);
+  // Sale del contexto memoizado: pedirlo por separado eran otro viaje al
+  // servidor de Auth y otra consulta a `profiles` para leer una columna que ya
+  // venía en la misma fila.
+  return zonaConfigurada((await getSessionContext()).timezone);
 }
 
 /**
@@ -153,7 +203,7 @@ export async function getUserRoles(): Promise<AppRole[]> {
  * (`?next=`, SCR-AU01). Devuelve el contexto con `user` no nulo.
  */
 export async function requireUser(): Promise<
-  { user: User } & Omit<SessionContext, "user">
+  { user: SessionUser } & Omit<SessionContext, "user">
 > {
   const ctx = await getSessionContext();
   if (!ctx.user) {
@@ -199,7 +249,7 @@ export async function requireGuest(): Promise<void> {
  */
 export async function requireRole(
   role: AppRole,
-): Promise<{ user: User; roles: AppRole[] }> {
+): Promise<{ user: SessionUser; roles: AppRole[] }> {
   const ctx = await requireUser();
   if (!ctx.roles.includes(role)) redirect(pickHome(ctx.roles));
   return ctx;

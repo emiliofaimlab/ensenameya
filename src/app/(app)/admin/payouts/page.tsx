@@ -406,18 +406,56 @@ export default async function AdminPayoutsPage({
 
   const [tz, supabase] = await Promise.all([getUserTimezone(), createClient()]);
 
+  // El cliente de servicio se crea aquí arriba porque es SINCRÓNICO: así su
+  // consulta de ruteo puede salir junto a la de la cola en vez de detrás.
+  // ⚠️ Y si falta la clave, `createAdminClient()` LANZA. Antes esta pantalla no
+  // la necesitaba, así que reventar por eso sería romper el panel de admin en
+  // cualquier entorno sin `SUPABASE_SERVICE_ROLE_KEY`. Se degrada diciendo qué
+  // falta: sin riel no se puede filtrar por riel, pero la cola se sigue viendo.
+  let admin: ReturnType<typeof createAdminClient> | null = null;
+  let faltaServicio: string | null = null;
+  try {
+    admin = createAdminClient();
+  } catch (e) {
+    faltaServicio = e instanceof Error ? e.message : String(e);
+  }
+
   // ── 1 · La cola entera (con techo), SIN filtrar ───────────────────────────
   // Una sola consulta para las cifras y para la lista: así no pueden discrepar.
   // Los tres filtros se aplican en memoria más abajo — el del riel no se puede
   // hacer en SQL (es derivado) y partirlo en «dos en SQL y uno aquí» solo
   // conseguiría que las tarjetas contaran un conjunto y la lista otro.
-  const { data, error } = await supabase
+  //
+  // ── 2 · El ruteo va EN EL MISMO VIAJE ─────────────────────────────────────
+  // `payment_routing_rules` NO tiene grant para `authenticated` (su comentario
+  // de `20260709160000` lo dice: solo admin por RLS, y el runtime la lee dentro
+  // de las RPC). El único rol con `select` es `service_role`
+  // (`20260806180000`), así que esta lectura va por el cliente de servicio —
+  // igual que la de destinos de abajo, que no tiene otra puerta.
+  //
+  // No depende de la cola, y esperaba a que volviera: era un peldaño de
+  // latencia de balde en la pantalla más lenta del admin.
+  const [{ data, error }, ruteo] = await Promise.all([
+    supabase
     .from("payouts")
     .select(
       "id, tutor_id, status, currency, amount, provider, funding_provider, provider_payout_id, provider_metadata, payee_country, scheduled_for, paid_at, failed_at, failure_reason, created_at, profiles!payouts_tutor_id_fkey(full_name)",
     )
     .order("created_at", { ascending: false })
-    .limit(TECHO + 1); // pide una de más → sabe si se ha quedado corto
+    .limit(TECHO + 1), // pide una de más → sabe si se ha quedado corto
+    admin
+      ? admin
+          .from("payment_routing_rules")
+          .select(
+            "payee_country, payer_country, payout_providers, priority, is_active, es_por_defecto",
+          )
+      : Promise.resolve(null),
+  ]);
+
+  const reglas = ruteo && !ruteo.error
+    ? ((ruteo.data ?? []) as unknown as ReglaDeRuteo[])
+    : null;
+  const errorRuteo = ruteo?.error?.message ?? null;
 
   if (error) {
     throw new Error(`No se pudo leer la cola de payouts: ${error.message}`);
@@ -438,24 +476,6 @@ export default async function AdminPayoutsPage({
   // la necesitaba, así que reventar por eso sería romper el panel de admin en
   // cualquier entorno sin `SUPABASE_SERVICE_ROLE_KEY`. Se degrada diciendo qué
   // falta: sin riel no se puede filtrar por riel, pero la cola se sigue viendo.
-  let admin: ReturnType<typeof createAdminClient> | null = null;
-  let faltaServicio: string | null = null;
-  try {
-    admin = createAdminClient();
-  } catch (e) {
-    faltaServicio = e instanceof Error ? e.message : String(e);
-  }
-
-  let reglas: ReglaDeRuteo[] | null = null;
-  let errorRuteo: string | null = null;
-  if (admin) {
-    const { data: rr, error: errRR } = await admin
-      .from("payment_routing_rules")
-      .select("payee_country, payer_country, payout_providers, priority, is_active, es_por_defecto");
-    if (errRR) errorRuteo = errRR.message;
-    else reglas = (rr ?? []) as unknown as ReglaDeRuteo[];
-  }
-
   // ── 3 · Riel por fila, y de ahí todo lo demás ─────────────────────────────
   // Qué tiene registrado cada tutor de la cola. Se pide una sola vez para
   // todos: el riel que se pinta depende de esto, igual que el que ejecuta.

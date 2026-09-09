@@ -2768,6 +2768,7 @@ export type Database = {
         Args: { p_end: string; p_start: string }
         Returns: unknown
       }
+      session_bootstrap: { Args: never; Returns: Json }
       session_live_window: {
         Args: { p_end: string; p_start: string }
         Returns: unknown

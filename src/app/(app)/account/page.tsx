@@ -27,7 +27,17 @@ export default async function AccountPage() {
   // fila de `tutor_profiles`. Se lee su `approval_status` (y no el booleano de
   // `hasTutorProfile()`) porque la tarjeta distingue «en revisión» de
   // «rechazado». Las dos consultas van juntas: no dependen una de otra.
-  const [{ data: profile }, { data: tutorProfile }] = await Promise.all([
+  // ⚠️ LAS CINCO JUNTAS, y no por gusto: encadenadas eran cuatro peldaños de
+  // latencia (perfil → token → estado de baja → menú) y esta pantalla tardaba
+  // 1.122 ms, de los que ~400 ms eran solo esperar en fila. Ninguna necesita el
+  // resultado de la anterior.
+  const [
+    [{ data: profile }, { data: tutorProfile }],
+    { data: feedToken },
+    { data: estadoBaja },
+    { items, badges },
+  ] = await Promise.all([
+    Promise.all([
     supabase
       .from("profiles")
       .select("full_name, timezone, avatar_path")
@@ -38,36 +48,32 @@ export default async function AccountPage() {
       .select("approval_status")
       .eq("profile_id", user.id)
       .maybeSingle(),
+    ]),
+    // EY-188 · ¿ya hay suscripción de calendario? Se LEE, no se crea: si esta
+    // llamada emitiera el token, todo el que abre su cuenta acabaría con un
+    // secreto vivo que nunca pidió. Crearlo es un clic explícito de la tarjeta.
+    supabase.rpc("my_calendar_feed_token"),
+    // ⚠️ Esto SÍ se pide en cada carga, a diferencia de los bloqueos de la baja,
+    // que el diálogo consulta solo al abrirse. La diferencia es que aquí no se
+    // pregunta «¿podrías darte de baja?» —eso solo le interesa a quien va a
+    // pulsar el botón— sino «¿está tu cuenta desactivada AHORA MISMO?». Una
+    // cuenta desactivada tiene que decirlo en cuanto la abres: si hay que pulsar
+    // algo para enterarse, la persona no se entera.
+    //
+    // Es una RPC de esta migración, así que todavía no está en los tipos
+    // generados: `rpcNueva` es la puerta estrecha hasta el próximo `db:types`.
+    // Un fallo aquí NO rompe la pantalla — se pinta como cuenta activa, que es
+    // el caso de casi todo el mundo, y la verdad sigue estando en el diálogo.
+    rpcNueva<EstadoBaja>(supabase, "my_account_deletion_state"),
+    // El menú lateral es el del panel del rol (undefined = alumno por defecto).
+    // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
+    panelMenu(user.id, roles),
   ]);
 
   const avatarUrl = storageUrl("avatars", profile?.avatar_path);
 
-  // EY-188 · ¿ya hay suscripción de calendario? Se LEE, no se crea: si esta
-  // llamada emitiera el token, todo el que abre su cuenta acabaría con un
-  // secreto vivo que nunca pidió. Crearlo es un clic explícito de la tarjeta.
-  const { data: feedToken } = await supabase.rpc(
-    "my_calendar_feed_token",
-  );
 
-  // ⚠️ Esto SÍ se pide en cada carga, a diferencia de los bloqueos de la baja,
-  // que el diálogo consulta solo al abrirse. La diferencia es que aquí no se
-  // pregunta «¿podrías darte de baja?» —eso solo le interesa a quien va a
-  // pulsar el botón— sino «¿está tu cuenta desactivada AHORA MISMO?». Una
-  // cuenta desactivada tiene que decirlo en cuanto la abres: si hay que pulsar
-  // algo para enterarse, la persona no se entera.
-  //
-  // Es una RPC de esta migración, así que todavía no está en los tipos
-  // generados: `rpcNueva` es la puerta estrecha hasta el próximo `db:types`.
-  // Un fallo aquí NO rompe la pantalla — se pinta como cuenta activa, que es
-  // el caso de casi todo el mundo, y la verdad sigue estando en el diálogo.
-  const { data: estadoBaja } = await rpcNueva<EstadoBaja>(
-    supabase,
-    "my_account_deletion_state",
-  );
 
-  // El menú lateral es el del panel del rol (undefined = alumno por defecto).
-  // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
-  const { items, badges } = await panelMenu(user.id, roles);
 
   return (
     <PanelShell

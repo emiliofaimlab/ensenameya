@@ -248,11 +248,6 @@ export default async function TutorPayoutsPage() {
 
   const paisDeCobro = perfil?.payout_country ?? null;
 
-  // 🔑 Lo que se puede hacer por ESTE país, preguntándoselo al enrutador. Va en
-  // segunda vuelta porque depende de `payout_country`, que sale de la consulta
-  // de arriba.
-  const { rieles, familias: familiasDelPais } = await rielesDelPais(paisDeCobro);
-
   /**
    * ¿Puede la cuenta conectada del tutor recibir YA?
    *
@@ -262,9 +257,20 @@ export default async function TutorPayoutsPage() {
    * llamada, y solo si hay cuenta que preguntar.
    */
   const cuentaConectada = perfil?.stripe_connect_account_id ?? null;
-  const connectLista = cuentaConectada
-    ? (await cuentaConectadaLista(cuentaConectada)).lista
-    : false;
+
+  // Las dos en segunda vuelta porque las dos dependen del perfil de arriba —
+  // pero NO una de la otra, y encadenadas eran dos peldaños: el enrutador va a
+  // la base y la cuenta conectada va a la API de Stripe, que es el viaje más
+  // lento de la pantalla.
+  // 🔑 `rielesDelPais`: lo que se puede hacer por ESTE país, preguntándoselo al
+  // enrutador.
+  const [{ rieles, familias: familiasDelPais }, connectLista] =
+    await Promise.all([
+      rielesDelPais(paisDeCobro),
+      cuentaConectada
+        ? cuentaConectadaLista(cuentaConectada).then((r) => r.lista)
+        : Promise.resolve(false),
+    ]);
 
   /**
    * ⚠️ Se miran los `error`, no solo los `data` (regla de oro 10). Un

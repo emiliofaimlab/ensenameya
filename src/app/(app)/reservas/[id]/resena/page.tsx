@@ -36,8 +36,10 @@ export default async function ReviewPage({
       .eq("id", id)
       .maybeSingle(),
     // Cómo quedaría su firma. Lo enmascara la misma función que usa la RPC, así
+    // que lo que ve aquí es exactamente lo que se publicaría. `?? ""` no cambia
+    // nada: la función hace `coalesce(p_name, '')` y devuelve null igual.
     // que lo que ve aquí es exactamente lo que se publicaría.
-    supabase.rpc("mask_person_name", { p_name: user.user_metadata?.full_name ?? null }),
+    supabase.rpc("mask_person_name", { p_name: (user.user_metadata?.full_name as string | undefined) ?? "" }),
   ]);
 
   if (!booking) notFound();

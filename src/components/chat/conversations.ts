@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { asRpc, type ConversationRow } from "./rpc";
 import { toConversation, type Conversation } from "./types";
@@ -22,13 +24,22 @@ import { toConversation, type Conversation } from "./types";
  * `server-only`. El porqué largo está en la cabecera de `types.ts`.
  */
 
-/** La bandeja completa, ya ordenada por actividad (lo hace la función SQL). */
-export async function listConversations(): Promise<Conversation[]> {
+/**
+ * La bandeja completa, ya ordenada por actividad (lo hace la función SQL).
+ *
+ * `cache()` por dos razones. La primera es la de siempre: la burbuja flotante y
+ * la bandeja de `/chat` la piden las dos en el mismo render. La segunda importa
+ * más — permite **precargarla** desde el layout (`void listConversations()`),
+ * que es lo que la saca del último peldaño: `ChatLauncher` la pide desde dentro
+ * de `AppChrome`, así que sin precarga no arrancaba hasta que la pantalla
+ * entera había terminado. Medido en `/tutor/payouts`: empezaba en el ms 415.
+ */
+export const listConversations = cache(async (): Promise<Conversation[]> => {
   const supabase = await createClient();
   const { data, error } = await asRpc(supabase).rpc("my_conversations");
   if (error) return [];
   return ((data ?? []) as ConversationRow[]).map(toConversation);
-}
+});
 
 /**
  * Una conversación por id. Se filtra sobre la bandeja en vez de pedir la fila
