@@ -3,17 +3,31 @@ import "server-only";
 import type Stripe from "stripe";
 
 import {
+  actualizarCuentaDeDestinatario,
+  adjuntarCuentaBancaria,
+  crearCuentaDeDestinatario,
   crearTransferencia,
-  cuentaConectadaLista,
   isStripeConfigured,
   publishableKey,
+  recuperarCuentaDeDestinatario,
   recuperarTransferencia,
   stripe,
   transferenciaPorMarca,
 } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { estadoDeTransferencia, verdictoDeTransferencia } from "./connect-mapeo";
 import { marcaDe } from "./port";
+import {
+  claveDeCuenta,
+  cuerpoDeTransferencia,
+  desenlaceDeTransferencia,
+  estadoDeLaCuenta,
+  parametrosDeCuenta,
+  parametrosDeCuentaBancaria,
+  parametrosDelTitular,
+  veredictoDeFallo,
+  yaTieneEstaCuenta,
+  type BeneficiarioStripe,
+} from "./stripe-payout-mapeo";
 import type {
   ChargeInput,
   ChargeResult,
@@ -144,6 +158,27 @@ function esFalloTransitorio(e: unknown): boolean {
   );
 }
 
+/** Lo que se puede contar de un error sin filtrar nada del beneficiario. */
+function mensajeDe(e: unknown): string {
+  return e instanceof Error ? e.message : "error desconocido";
+}
+
+/**
+ * Las frases de `payout_beneficiary_stripe` que significan «este tutor todavía no
+ * puede cobrar por aquí», no «esta orden está muerta».
+ *
+ * ⚠️ SON LAS DE *ESA* FUNCIÓN Y NO LAS DE OTRA. Copiar el regex de Wise o de
+ * PayPal no casaría con ninguna, todas caerían en `rechazado`, y `rechazado`
+ * escribe 'failed' y manda NTF-16 a un tutor cuyo único pecado es no haber puesto
+ * su fecha de nacimiento — que es un campo OPCIONAL del formulario justamente
+ * porque sin él se sigue cobrando por dLocal, Wise o PayPal.
+ *
+ * Lo que NO entra aquí, a propósito: «no existe el payout» y «el payout está en X
+ * y no se puede ejecutar». Esas dos no las arregla nadie rellenando nada.
+ */
+const FRASES_SIN_DATOS =
+  /no tiene cuenta bancaria registrada|no hay reglas de cobro para|falta la fecha de nacimiento del titular|no ha aceptado las condiciones/i;
+
 /**
  * El `pi_…` del evento. Llega como id en los eventos de Session, pero puede
  * venir expandido si algún día se pide con `expand`; y en una Session expirada
@@ -187,75 +222,6 @@ function traducirTipo(
   }
 }
 
-/**
- * De una `Transfer` de Stripe al desenlace del puerto.
- *
- * 🔴 UNA TRANSFERENCIA VIVA ES 'pagado', Y AQUÍ DECÍA LO CONTRARIO.
- *
- * Este comentario sostenía que una transferencia creada es 'enviado' y nunca
- * 'pagado', porque el dinero está en la cuenta conectada del tutor y no en su
- * banco. El razonamiento suena bien y es **incoherente con PayPal**, que es el
- * otro riel de este mismo sistema: allí un item `SUCCESS` significa que el
- * dinero está en el saldo de PayPal del tutor —tampoco en su banco— y eso sí lo
- * escribimos 'paid'.
- *
- * Son el mismo estado: el dinero es del tutor, en su cuenta del proveedor.
- * Medirlos con reglas distintas tenía una consecuencia concreta y mala: los
- * payouts de Stripe **no se cerraban nunca**. Se quedaban en 'processing' para
- * siempre, el tutor no veía «Pagado» y `payouts_backlog()` los contaba como
- * sospechosos de no estar conciliados.
- *
- * ⚠️ Y no hay un estado intermedio que perderse, al revés que en PayPal:
- * `transfers.create` mueve el dinero en el acto. No existe el equivalente al
- * `UNCLAIMED` que nos tuvo toda la tarde del 4-sep, porque no hay nada que el
- * destinatario tenga que reclamar.
- *
- * ponytail: no se persigue el payout de dentro de la cuenta conectada al banco
- * del tutor. El techo es ese, y es el mismo que aceptamos en PayPal.
- */
-function desenlaceDe(t: Stripe.Transfer, adoptado: boolean): PayoutResult {
-  switch (estadoDeTransferencia(t)) {
-    case "difunta":
-      return {
-        estado: "difunto",
-        payoutId: t.id,
-        detalle: "transfer.reversed",
-        mensaje: "la transferencia se revirtió entera: no pagó y no va a pagar",
-      };
-    case "revertida-en-parte":
-      // ⚠️ NO es 'difunto'. Parte del dinero llegó, así que reintentarla entera
-      // pagaría de más. Se queda en vuelo y la mira una persona.
-      return {
-        estado: "enviado",
-        payoutId: t.id,
-        detalle: `revertida en parte (${t.amount_reversed} de ${t.amount}) — requiere revisión manual`,
-        adoptado,
-      };
-    case "viva":
-      return {
-        estado: "pagado",
-        payoutId: t.id,
-        detalle: adoptado ? "adoptada por su transfer_group" : "transferencia creada",
-        adoptado,
-      };
-  }
-}
-
-/**
- * El `acct_…` al que va esta orden. Sale de la RPC y no de un `select`: la
- * función revalida que el payout sea ejecutable antes de soltar el dato, igual
- * que `payout_beneficiary` con el número de cuenta de dLocal.
- */
-async function destinoConnect(payoutId: string): Promise<string | null> {
-  const { data, error } = await createAdminClient()
-    .rpc("destino_connect", { p_payout_id: payoutId });
-  // ⚠️ Se MIRA el error (regla de oro 10). Sin esto, una RPC caída se leería
-  // como «el tutor no tiene cuenta» y la orden se quedaría esperando para
-  // siempre por un motivo falso.
-  if (error) throw new Error(`destino_connect: ${error.message}`);
-  return data ?? null;
-}
-
 export const stripeProvider: PspProvider = {
   key: "stripe",
   opensRemoteCheckout: true,
@@ -289,132 +255,408 @@ export const stripeProvider: PspProvider = {
 
   /**
    * ⚠️ AQUÍ PONÍA QUE STRIPE NO PODÍA PAGAR «Y NO ES CUESTIÓN DE CREDENCIALES»,
-   * porque Connect exigía un KYC bloqueado. Esa premisa era de agosto y ya no
-   * se sostiene: la cuenta de Stripe está operativa en sandbox y producción, y
-   * lo único que Connect necesita de nosotros es la misma `STRIPE_API_KEY`.
+   * porque Connect exigía un KYC bloqueado. Esa premisa era de agosto y ya no se
+   * sostiene: la cuenta de Stripe está operativa en sandbox y producción, y lo
+   * único que este riel necesita de nosotros es la misma `STRIPE_API_KEY` — la
+   * misma que cobra y la misma que reembolsa.
    *
-   * Lo que SÍ hace falta por tutor —una cuenta conectada dada de alta— no se
-   * responde aquí y no puede: esta pregunta es del JOB, no de una orden. Si la
-   * cuenta del tutor no existe o no está lista, lo dice `payout()` con
-   * `sin-datos`, que deja la fila quieta y contada en vez de parar el lote
-   * entero por una persona.
+   * Y desde el 10-sep-2026 tampoco hace falta nada POR TUTOR antes de pagar: la
+   * cuenta de destinatario la crea `payout()` con los datos que el tutor teclea en
+   * nuestro formulario. Si le faltan la fecha de nacimiento o la aceptación —los
+   * dos campos opcionales—, lo dice `payout()` con `sin-datos`, que deja la fila
+   * quieta y contada en vez de parar el lote entero por una persona.
    */
   missingPayoutConfig() {
     return isStripeConfigured() ? null : "falta STRIPE_API_KEY";
   },
 
   /**
-   * ── EL PAYOUT POR CONNECT ───────────────────────────────────────────────
+   * ── EL PAYOUT · STRIPE VUELVE, Y EL TUTOR NO LO VE ──────────────────────
    *
-   * Aquí vivía el stub que devolvía `sin-ejecutor`. Ahora paga.
+   * 🔑 LA DIFERENCIA CON LO QUE SE BORRÓ EL 9-SEP NO ES EL CÓDIGO, ES QUIÉN DA
+   * DE ALTA LA CUENTA. Aquí vivían ~130 líneas que resolvían la cuenta conectada
+   * del tutor con `destino_connect`: el tutor se daba de alta EN Stripe, veía su
+   * marca y les entregaba a ELLOS sus coordenadas. Eso no vuelve, y su
+   * `destino_connect` no se usa.
    *
-   * ⚠️ ESTE RIEL NO REEMPLAZA A PAYPAL, CUBRE LO QUE PAYPAL NO. Existe por
-   * Colombia y por el resto del mundo, y sobre todo por una asimetría medida el
-   * 4-sep-2026: dLocal COBRA en Colombia y su `POST /v1/payouts` responde
-   * `7000 Payout is not enabled for country CO`. Cobrar y pagar no son la misma
-   * lista de países.
+   * Lo que vuelve —decisión D-1, **aprobada por el cliente el 10-sep-2026**— es
+   * otra cosa: **la cuenta la creamos nosotros** con los datos que el tutor
+   * teclea en NUESTRO formulario. En su historial pone «Transferencia bancaria»,
+   * igual que dLocal y que Wise, y el nombre de Stripe no aparece en ningún sitio.
+   *
+   * ── LA RECETA SON TRES LLAMADAS Y UNA TRANSFERENCIA ─────────────────────
+   *
+   *   1. `POST /v1/accounts`                        — cuenta de destinatario
+   *   2. `POST /v1/accounts/{id}`                   — titular + aceptación
+   *   3. `POST /v1/accounts/{id}/external_accounts` — su cuenta bancaria
+   *   4. `POST /v1/transfers`                       — el dinero
+   *
+   * Verificada de punta a punta contra *test mode* el 10-sep-2026 en España
+   * (`transfers: active`, `payouts_enabled: true`, `currently_due: []`, y una
+   * transferencia creada) y país por país en catorce sitios más.
+   *
+   * 🔑 Y LO QUE PIDE CADA PAÍS ES DISTINTO, ASÍ QUE NO HAY MAPA POR PAÍS. España
+   * y México no piden nada más; Colombia y Chile piden `individual.id_number`;
+   * Panamá pide `address.line1` y `.city`; seis países exigen `routing_number` en
+   * la cuenta bancaria. Se manda TODO lo que devuelve la RPC y **quien decide qué
+   * falta es Stripe**, en `requirements.currently_due`. Un mapa nuestro sería una
+   * segunda lista de países que mantener sincronizada con la suya, que es el
+   * error que este proyecto ya pagó con `wise_account_type`.
+   *
+   * ⚠️ COLOMBIA Y CHILE NO SE PUEDEN PAGAR TODAVÍA, y no por el código: sus
+   * cuentas bancarias exigen `account_type` y `payout_beneficiary_stripe` no lo
+   * devuelve. El desenlace es `sin-datos` —la orden espera y baja al siguiente
+   * candidato, que es Wise, que sí les llega— y se arregla con una migración, no
+   * aquí. Está escrito en `stripe-payout-mapeo.ts` con la medición al lado.
+   *
+   * ⚠️ US Y BR NO SE PUEDEN CREAR, y no es un fallo: nuestra plataforma es
+   * estadounidense y el acuerdo `recipient` no vale de US a US/BR (mensaje
+   * literal de la API). El veredicto es `sin-datos`, la orden sigue viva y la
+   * paga Wise, que es el único riel que llega a los dos.
    *
    * ⚠️ Y SOLO SIRVE SI EL COBRO ENTRÓ POR STRIPE. `ataduraDeBalance` es `true`
    * para este riel (`lib/payments.ts`) y la puerta del balance del job descarta
-   * la orden antes de llegar aquí si el dinero está en el balance de otro. No
-   * es una limitación de este archivo: una transferencia sale del saldo de
-   * Stripe, y a Stripe no le consta lo que cobró dLocal.
+   * la orden antes de llegar aquí si el dinero está en el balance de otro. No es
+   * una limitación de este archivo: una transferencia sale del saldo de Stripe, y
+   * a Stripe no le consta lo que cobró dLocal.
    *
    * ── POR QUÉ NO HAY BARRIDO DE PÁGINAS ──────────────────────────────────
    *
-   * Porque esta API sí tiene idempotencia. La marca (`EY-<payout>-<intento>`)
-   * viaja como `idempotencyKey` Y como `transfer_group`, así que:
+   * Porque esta API sí tiene idempotencia. La marca (`EY-<payout>-<intento>`,
+   * la de `port.marcaDe`) viaja como `Idempotency-Key` Y como `transfer_group`:
    *
-   *   · crear dos veces devuelve la MISMA transferencia, no dos;
-   *   · y si la clave caducó (24 h), `transferenciaPorMarca` la encuentra en
-   *     una sola llamada con un filtro exacto.
+   *   · crear dos veces devuelve la MISMA transferencia, no dos (medido);
+   *   · y si la clave caducó (24 h), `transferenciaPorMarca` la encuentra en una
+   *     sola llamada con un filtro exacto, y una lista vacía DEMUESTRA que no se
+   *     creó nada — medido: `transfer_group` inexistente → `[]`, `has_more:false`.
    *
-   * Eso es lo que permite devolver `sin-rastro` —la salida que autoriza a
-   * mandar el pago otra vez— con una prueba y no con una corazonada. El
-   * adaptador de dLocal Go necesita 300 líneas para esto mismo porque su API no
-   * ofrece ni una de las dos cosas.
+   * Eso es lo que permite devolver `sin-rastro` —la única salida que autoriza a
+   * mandar el pago otra vez— con una prueba y no con una corazonada. El adaptador
+   * de dLocal Go necesita 300 líneas para esto mismo porque su API no ofrece ni
+   * una de las dos cosas.
    */
   async payout(input: PayoutInput): Promise<PayoutResult> {
+    // LA MARCA, de `port.marcaDe` y no de una copia local: es la misma cadena que
+    // dLocal escribe en `description` y PayPal en `sender_batch_id`, y tener dos
+    // definiciones de ella sería tener dos formas de no encontrar un pago.
     const marca = marcaDe(input.payoutId, input.intento);
 
-    try {
-      // ── 1 · una orden ya en vuelo: se sigue, no se crea ───────────────────
-      if (input.providerPayoutId) {
-        return desenlaceDe(await recuperarTransferencia(input.providerPayoutId), false);
+    /**
+     * 🔴 EL BARRIDO. Es lo que separa «no se creó nada» de «no lo sé», y esa
+     * diferencia es la que autoriza a volver a mandar un pago.
+     *
+     * `dudaReal` dice si en este camino PUDO crearse una transferencia sin que
+     * nos enterásemos. Cuando no pudo —solo se estaba consultando—, un fallo del
+     * barrido es `transitorio` y la orden vuelve a la cola intacta; cuando sí
+     * pudo, es `en-duda` y la fila se queda quieta hasta que la mire una persona.
+     * Confundirlos es elegir pagar dos veces o congelar dinero.
+     */
+    const barrer = async (dudaReal: boolean): Promise<PayoutResult> => {
+      try {
+        const tr = await transferenciaPorMarca(marca);
+        if (tr) return desenlaceDeTransferencia(tr, true);
+        return {
+          estado: "sin-rastro",
+          mensaje: `no hay ninguna transferencia con transfer_group ${marca}`,
+        };
+      } catch (e) {
+        if (veredictoDeFallo(e) === "sin-credencial") {
+          return { estado: "sin-credencial", mensaje: mensajeDe(e), pudoCrear: dudaReal };
+        }
+        if (!dudaReal) return { estado: "transitorio", mensaje: mensajeDe(e), causa: e };
+        return {
+          estado: "en-duda",
+          mensaje: `falló el barrido que comprobaba si ${marca} llegó a crearse: ${mensajeDe(e)}`,
+          causa: e,
+        };
       }
+    };
 
-      // ── 2 · una orden reclamada sin identificador: se busca por la marca ──
-      // Nunca se crea en este camino. Si la pasada anterior llegó a crear la
-      // transferencia, está aquí; si no, la lista vacía lo demuestra.
-      if (input.reanudar) {
-        const hallada = await transferenciaPorMarca(marca);
-        return hallada
-          ? desenlaceDe(hallada, true)
-          : {
-              estado: "sin-rastro",
-              mensaje: `no existe ninguna transferencia con transfer_group='${marca}': la creación anterior no cuajó`,
+    // ── Camino 1 · la orden ya tiene identidad ──────────────────────────────
+    // Se pregunta por ella y se sigue su estado. Consultar no crea nada, así que
+    // cualquier fallo del momento devuelve la fila a la cola intacta.
+    if (input.providerPayoutId) {
+      try {
+        const tr = await recuperarTransferencia(input.providerPayoutId);
+        return desenlaceDeTransferencia(tr, false);
+      } catch (e) {
+        const v = veredictoDeFallo(e);
+        if (v === "sin-credencial") {
+          return { estado: "sin-credencial", mensaje: mensajeDe(e), pudoCrear: false };
+        }
+        if (v !== "no-existe") {
+          return { estado: "transitorio", mensaje: mensajeDe(e), causa: e };
+        }
+        // ⚠️ EL `tr_…` ANOTADO NO EXISTE EN STRIPE. Pasa de verdad: se borran los
+        // datos de prueba del sandbox, se cambia de cuenta. NO se da por perdido
+        // —eso mandaría el pago otra vez sin prueba— sino que se barre por la
+        // marca, que es lo único que puede demostrar algo. Si el barrido no
+        // encuentra nada, `sin-rastro` limpia el identificador fantasma y la
+        // orden vuelve a la cola. Mismo criterio que `esCustomerInexistente`.
+      }
+      return await barrer(false);
+    }
+
+    // ── Camino 2 · se reclamó antes y no sabemos si llegó a crearse ─────────
+    //
+    // 🔴 AQUÍ NO SE CREA NADA. Una pasada anterior ganó esta fila y pudo llegar a
+    // llamar a Stripe. Reintentar la creación sería elegir pagar dos veces; lo
+    // único honesto es buscar la marca y adoptar lo que haya.
+    if (input.reanudar) return await barrer(true);
+
+    // ── Camino 3 · crear ────────────────────────────────────────────────────
+    const admin = createAdminClient();
+
+    // ⚠️ QUIÉN ES EL TUTOR HACE FALTA ANTES QUE NADA, y por dos motivos: su
+    // cuenta de destinatario se REUSA entre liquidaciones (vive en
+    // `tutor_profiles.stripe_connect_account_id`) y la clave de idempotencia de
+    // la creación va por tutor, no por payout.
+    const { data: orden, error: eOrden } = await admin
+      .from("payouts")
+      .select("tutor_id")
+      .eq("id", input.payoutId)
+      .maybeSingle();
+    if (eOrden || !orden?.tutor_id) {
+      // No se ha llamado a nadie. `transitorio` y no `rechazado`: si esto falla,
+      // falla para todas las órdenes y el problema es nuestro, no de la orden.
+      return {
+        estado: "transitorio",
+        mensaje: `no se pudo leer el tutor del payout: ${eOrden?.message ?? "la fila no está"}`,
+        causa: eOrden,
+      };
+    }
+    const tutorId = orden.tutor_id;
+
+    // ⚠️ EL BENEFICIARIO NO SALE DE AQUÍ. Se pide a `payout_beneficiary_stripe`,
+    // viaja al cuerpo de las llamadas y ahí muere: no se devuelve, no se registra
+    // y no entra en ningún mensaje de error. Un número de cuenta en un log es PII
+    // en un log.
+    const { data: benef, error: eBenef } = await admin.rpc("payout_beneficiary_stripe", {
+      p_payout_id: input.payoutId,
+    });
+
+    if (eBenef) {
+      // ⚠️ REGLA DE ORO 9 DISFRAZADA DE PROBLEMA DEL TUTOR. Un 42501 aquí no es
+      // «este tutor no rellenó el formulario»: es que a `service_role` le falta el
+      // `execute` y NINGUNA orden se va a pagar. Confundirlos dejaría la cola
+      // entera parada con un mensaje que culpa a los tutores.
+      const esPermiso =
+        (eBenef as { code?: string }).code === "42501" ||
+        /permission denied|not allowed/i.test(eBenef.message);
+      if (esPermiso) {
+        return {
+          estado: "transitorio",
+          mensaje: `payout_beneficiary_stripe no es ejecutable por service_role (regla de oro 9): ${eBenef.message}`,
+          causa: eBenef,
+        };
+      }
+      if (FRASES_SIN_DATOS.test(eBenef.message)) {
+        return { estado: "sin-datos", mensaje: eBenef.message };
+      }
+      return { estado: "rechazado", mensaje: eBenef.message, causa: eBenef };
+    }
+
+    const b = benef as unknown as BeneficiarioStripe;
+
+    // 🔑 LOS DOS CUERPOS SE MONTAN **ANTES** DE LLAMAR A STRIPE, y el orden
+    // importa: si con lo que el tutor tiene registrado no se puede describir ni el
+    // titular ni la cuenta bancaria, no tiene ningún sentido haber creado una
+    // cuenta de destinatario que se quedaría vacía para siempre en el panel.
+    const titular = parametrosDelTitular(b, Math.floor(Date.now() / 1000));
+    if ("motivo" in titular) return { estado: "sin-datos", mensaje: titular.motivo };
+    const banco = parametrosDeCuentaBancaria(b);
+    if ("motivo" in banco) return { estado: "sin-datos", mensaje: banco.motivo };
+
+    /**
+     * Deja la cuenta de destinatario del tutor lista para recibir, o dice por qué
+     * no. Devuelve la cuenta, o el desenlace que le corresponde a la orden.
+     *
+     * ⚠️ EL DESTINO SALE SIEMPRE DE `cuenta.id` Y NO DE UNA VARIABLE APARTE. Con
+     * tres ramas —reusar la guardada, crear una nueva, reemplazar una fantasma—
+     * un identificador que se va reasignando es la forma de transferir al
+     * `acct_…` de otro momento. Aquí el objeto y su id son la misma cosa.
+     */
+    const asegurarCuenta = async (): Promise<{ cuenta: Stripe.Account } | PayoutResult> => {
+      try {
+        const { data: perfil, error: ePerfil } = await admin
+          .from("tutor_profiles")
+          .select("stripe_connect_account_id")
+          .eq("profile_id", tutorId)
+          .maybeSingle();
+        if (ePerfil) {
+          return {
+            estado: "transitorio",
+            mensaje: `no se pudo leer la cuenta de destinatario del tutor (¿grant de columna?): ${ePerfil.message}`,
+            causa: ePerfil,
+          };
+        }
+
+        const guardada = perfil?.stripe_connect_account_id ?? null;
+        let previa: Stripe.Account | null = null;
+        if (guardada) {
+          try {
+            previa = await recuperarCuentaDeDestinatario(guardada);
+          } catch (e) {
+            if (veredictoDeFallo(e) !== "no-existe") throw e;
+            // La cuenta guardada ya no existe (sandbox borrado, cuenta eliminada
+            // a mano). Sin esta rama ese tutor no volvería a cobrar NUNCA por
+            // este riel: cada pasada preguntaría por un `acct_…` fantasma. Es el
+            // mismo criterio que `esCustomerInexistente` con las fichas de
+            // cliente, y por la misma razón: el id que guardamos lo reusamos a
+            // ciegas en cada pasada.
+            console.warn(
+              "[C2] la cuenta de destinatario guardada no existe en Stripe: se crea otra",
+              { payout: input.payoutId, cuentaFantasma: guardada },
+            );
+          }
+        }
+
+        let cuenta: Stripe.Account;
+        if (previa) {
+          cuenta = previa;
+        } else {
+          cuenta = await crearCuentaDeDestinatario(
+            parametrosDeCuenta(b, tutorId),
+            claveDeCuenta(tutorId),
+          );
+
+          // 🔴 SE ANOTA ANTES DE SEGUIR. Si esto no cuaja, la cuenta existe en
+          // Stripe y esta base no lo sabe: la clave de idempotencia la
+          // reencuentra durante 24 h, pero pasado ese plazo se crearía una
+          // segunda. No es dinero, así que se para aquí con `transitorio` y se
+          // deja dicho en el log CON el `acct_…` dentro, que es lo que permite
+          // arreglarlo a mano.
+          const { error: eGuardar } = await admin
+            .from("tutor_profiles")
+            .update({ stripe_connect_account_id: cuenta.id })
+            .eq("profile_id", tutorId);
+          if (eGuardar) {
+            console.error("[C2] 🔴 cuenta de destinatario creada y NO anotada", {
+              payout: input.payoutId,
+              tutor: tutorId,
+              cuenta: cuenta.id,
+              error: eGuardar.message,
+            });
+            return {
+              estado: "transitorio",
+              mensaje: `se creó la cuenta ${cuenta.id} y no se pudo anotar: ${eGuardar.message}`,
+              causa: eGuardar,
             };
-      }
+          }
+        }
 
-      // ── 3 · primer intento ────────────────────────────────────────────────
-      // 🔴 EL DESTINO NO SALE DE ESTE PROCESO. Lo da `destino_connect`, que
-      // revalida la orden dentro de la base: sin esa RPC habría que darle a
-      // `service_role` un grant sobre `tutor_profiles` (regla de oro 9) para
-      // leer un identificador de pago.
-      const destino = await destinoConnect(input.payoutId);
-      if (!destino) {
-        return {
-          estado: "sin-datos",
-          mensaje:
-            "el tutor no ha dado de alta su cuenta de Stripe (Connect). " +
-            "La orden espera: no es un fallo del payout.",
-        };
-      }
+        // ── ¿Puede recibir ya? ─────────────────────────────────────────────
+        let estado = estadoDeLaCuenta(cuenta);
+        if (!estado.lista) {
+          // Los datos del titular se remandan tal cual: es un `update` con los
+          // mismos valores, o sea idempotente, y es lo que arregla al tutor que
+          // completó su fecha de nacimiento después de que la cuenta existiera.
+          cuenta = await actualizarCuentaDeDestinatario(cuenta.id, titular.params);
 
-      const lista = await cuentaConectadaLista(destino);
-      if (!lista.lista) {
-        // ⚠️ `sin-datos` y no `rechazado`: un alta a medias se completa sola en
-        // cuanto el tutor termine, y enterrar la orden en 'failed' por eso
-        // obligaría a un admin a resucitarla a mano.
-        return {
-          estado: "sin-datos",
-          mensaje: `la cuenta conectada del tutor todavía no puede recibir: ${lista.pendiente}`,
-        };
-      }
+          // ⚠️ LA CUENTA BANCARIA **SOLO SI NO ESTÁ YA**. `POST
+          // …/external_accounts` no es idempotente: llamarlo otra vez adjunta
+          // una segunda copia del mismo IBAN.
+          if (!yaTieneEstaCuenta(cuenta, b)) {
+            await adjuntarCuentaBancaria(cuenta.id, banco.params);
+            // Se relee: `payouts_enabled` cambia al adjuntar la cuenta y el
+            // objeto que teníamos es de antes de adjuntarla.
+            cuenta = await recuperarCuentaDeDestinatario(cuenta.id);
+          }
+          estado = estadoDeLaCuenta(cuenta);
+        }
 
-      const t = await crearTransferencia({
-        amountMinor: input.amountMinor,
-        currency: input.currency,
-        destination: destino,
-        marca,
-        descripcion: `Ensename Ya · liquidacion ${marca}`,
-      });
-      return desenlaceDe(t, false);
+        if (!estado.lista) {
+          // 🔴 NO SE TRANSFIERE A UNA CUENTA QUE NO PUEDE SACAR EL DINERO AL
+          // BANCO. Medido: sin cuenta bancaria adjunta, `transfers` llega a
+          // `active` con `payouts_enabled: false`. Transferir ahí escribiría
+          // 'paid' y mandaría NTF-12 «Se pagó tu liquidación» con el dinero
+          // atrapado en un saldo que el tutor no ve y del que no puede sacarlo.
+          //
+          // Y las dos salidas NO son la misma: lo que falta un dato lo arregla el
+          // tutor en el formulario (`sin-datos`), y lo que está en revisión lo
+          // arregla el tiempo (`transitorio`).
+          return estado.enRevision
+            ? { estado: "transitorio", mensaje: estado.motivo, causa: null }
+            : { estado: "sin-datos", mensaje: estado.motivo };
+        }
+
+        return { cuenta };
+      } catch (e) {
+        const v = veredictoDeFallo(e);
+        if (v === "sin-credencial") {
+          // Nada de esto crea una transferencia, así que la orden vuelve intacta.
+          return { estado: "sin-credencial", mensaje: mensajeDe(e), pudoCrear: false };
+        }
+        // `sin-datos` es el camino de US y BR (el acuerdo `recipient` no vale de
+        // una plataforma estadounidense) y también el de un dato del tutor que
+        // Stripe valida y rechaza —un código postal español de seis cifras, un
+        // `routing_number` que falta—. La orden espera y baja al siguiente
+        // candidato; no muere.
+        if (v === "sin-datos") return { estado: "sin-datos", mensaje: mensajeDe(e) };
+        // ⚠️ `no-existe` AQUÍ NO PUEDE SER `rechazado`, que escribiría 'failed' y
+        // mandaría NTF-16. Significa que la cuenta desapareció entre dos llamadas
+        // —el `retrieve` que la vio y el `update` que ya no—, y eso se arregla
+        // solo: la pasada siguiente entra por la rama de la cuenta fantasma y crea
+        // otra. Sin esta línea, borrar una cuenta a mano en el panel enterraría la
+        // liquidación de ese tutor.
+        if (v === "transitorio" || v === "no-existe") {
+          return { estado: "transitorio", mensaje: mensajeDe(e), causa: e };
+        }
+        return { estado: "rechazado", mensaje: mensajeDe(e), causa: e };
+      }
+    };
+
+    const resuelta = await asegurarCuenta();
+    // `estado` lo lleva todo desenlace del puerto y no lo lleva la cuenta: es la
+    // misma clase de unión discriminada que el resto del módulo.
+    if ("estado" in resuelta) return resuelta;
+    const cuenta = resuelta.cuenta;
+
+    // ── La transferencia ────────────────────────────────────────────────────
+    try {
+      const tr = await crearTransferencia(
+        cuerpoDeTransferencia({
+          marca,
+          amountMinor: input.amountMinor,
+          // La moneda del SALDO (`payouts.currency`), no la del tutor: una
+          // transferencia mueve dinero dentro de Stripe. Convertir a su moneda es
+          // cosa del payout que la cuenta conectada hace a su banco.
+          currency: input.currency,
+          destino: cuenta.id,
+        }),
+      );
+      return desenlaceDeTransferencia(tr, false);
     } catch (e) {
-      const err = e as { type?: string; code?: string; statusCode?: number; message?: string };
-      const veredicto = verdictoDeTransferencia(err);
-      const mensaje = `Stripe Connect: ${err.code ?? err.type ?? "error"} — ${err.message ?? "sin detalle"}`;
-
-      switch (veredicto) {
-        case "sin-credencial":
-          // `pudoCrear: false` — un 401/403 lo devuelve la propia llamada, así
-          // que no se creó nada y la fila puede volver a la cola intacta.
-          return { estado: "sin-credencial", mensaje, pudoCrear: false };
-        case "sin-fondos":
-          return { estado: "sin-fondos", mensaje };
-        case "sin-datos":
-          // La capability se cayó entre la comprobación y la transferencia. La
-          // fila espera; no es un fallo del payout.
-          return { estado: "sin-datos", mensaje };
-        case "rechazado":
-          return { estado: "rechazado", mensaje, causa: e };
-        case "transitorio":
-          // ⚠️ Y aquí NO hace falta `en-duda`. En dLocal Go un timeout deja la
-          // duda de si el payout se creó; con la clave de idempotencia puesta,
-          // la pasada siguiente repite la misma llamada y Stripe devuelve la
-          // transferencia que hubiera creado, si la creó. La duda no existe.
-          return { estado: "transitorio", mensaje, causa: e };
+      const v = veredictoDeFallo(e);
+      if (v === "sin-credencial") {
+        // ⚠️ `pudoCrear: true`: la credencial pudo caerse DESPUÉS del POST, y en
+        // ese caso la duda es real. La fila no se toca.
+        return { estado: "sin-credencial", mensaje: mensajeDe(e), pudoCrear: true };
       }
+      if (v === "sin-fondos") {
+        // No es un fallo permanente: es dinero que se debe y que saldrá cuando
+        // operaciones retire el saldo de Stripe. Marcarlo 'failed' sería
+        // enterrarlo.
+        return { estado: "sin-fondos", mensaje: mensajeDe(e) };
+      }
+      if (v === "no-existe") {
+        // El destino desapareció entre el `retrieve` y el `POST`. Se arregla solo
+        // en la pasada siguiente, que crea otra cuenta y la reanota.
+        return {
+          estado: "transitorio",
+          mensaje: `la cuenta de destinatario ${cuenta.id} no existe al transferir: ${mensajeDe(e)}`,
+          causa: e,
+        };
+      }
+      if (v === "transitorio") {
+        // ⚠️ AQUÍ NO SE PUEDE DEVOLVER LA ORDEN A LA COLA A CIEGAS: un timeout
+        // puede dejar una transferencia creada que nadie ha anotado, y la clave de
+        // idempotencia solo la protege 24 h. Por eso se barre ANTES de rendirse:
+        // `barrer(true)` adopta lo que haya y solo devuelve `sin-rastro` cuando ha
+        // demostrado que no hay nada.
+        return await barrer(true);
+      }
+      return { estado: "rechazado", mensaje: mensajeDe(e), causa: e };
     }
   },
 
