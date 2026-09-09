@@ -429,9 +429,33 @@ export function PayoutAccountForm({
     setBusy(false);
 
     if (err) {
-      // El mensaje de la RPC ya está escrito para el tutor («El CBU no tiene el
-      // formato que pide AR…»), así que se enseña tal cual en vez de traducirlo.
-      setError(err.message || "No se pudieron guardar tus datos de cobro.");
+      /**
+       * ⚠️ NO TODO ERROR DE LA RPC ESTÁ ESCRITO PARA EL TUTOR, y darlo por hecho
+       * costó una pantalla rota el 10-sep-2026.
+       *
+       * Los `raise exception` de `upsert_payout_account` sí lo están («El CBU no
+       * tiene el formato que pide AR…») y esos se enseñan tal cual: dicen qué
+       * campo corregir mejor de lo que lo diría un texto genérico.
+       *
+       * Lo que NO se puede enseñar es lo que viene de la infraestructura. Un
+       * `PGRST203` —dos funciones con el mismo nombre y PostgREST sin poder
+       * elegir— pintaba 600 caracteres en inglés con los nombres de los
+       * parámetros SQL dentro, encima de la pantalla del dinero del tutor. Y era
+       * un fallo NUESTRO, no un dato mal escrito por él.
+       *
+       * La regla: los `check_violation` (23514) y los que levanta la propia
+       * función son suyos; el resto es nuestro y va al log.
+       */
+      const esNuestro =
+        !err.code || err.code.startsWith("PGRST") || !err.code.startsWith("23");
+      if (esNuestro) {
+        console.error("[payouts] la RPC de datos de cobro falló:", err);
+        setError(
+          "No pudimos guardar tus datos de cobro ahora mismo. Vuelve a intentarlo; si sigue igual, escríbenos.",
+        );
+      } else {
+        setError(err.message || "No se pudieron guardar tus datos de cobro.");
+      }
       return;
     }
 
@@ -461,7 +485,23 @@ export function PayoutAccountForm({
     // que puede no ser lo que hay en el campo. Es además el único momento en el
     // que la pantalla llega a saberlo.
     if (resumen?.state) setEstado(resumen.state);
-    toast.success("Datos de cobro guardados.");
+    /**
+     * 🔴 SI LA AUTORIZACIÓN NO SE PUDO SELLAR, SE DICE. No se guarda callando.
+     *
+     * `p_tos_ip` solo viaja si hay IP, y la IP puede faltar (sin
+     * `x-forwarded-for` ni `x-real-ip` — el caso de `npm run dev`, o un proxy
+     * que no la ponga). Es la decisión correcta: mejor no guardar un
+     * consentimiento que no podemos probar de dónde vino. Lo que estaba mal era
+     * el silencio: el tutor marcaba la casilla, leía «Datos de cobro guardados»
+     * y se iba creyendo abierta una ruta de cobro que no lo estaba.
+     */
+    if (acepta && !ipDelTutor) {
+      toast.warning(
+        "Guardamos tus datos, pero no pudimos registrar tu autorización. Vuelve a marcarla en un momento para abrir esa vía de cobro.",
+      );
+    } else {
+      toast.success("Datos de cobro guardados.");
+    }
     // El `refresh` ya NO es lo que hace correcto este formulario: es lo que pone
     // al día la píldora «Cuenta de cobro» del bloque de arriba, que la pinta el
     // servidor. Si tardara o fallara, lo que el tutor ve aquí ya es lo bueno.
