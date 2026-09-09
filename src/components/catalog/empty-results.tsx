@@ -21,6 +21,8 @@ export function EmptyResults({
   categories,
   hrefFor = (slug) => `/categories/${slug}`,
   action,
+  layout,
+  variant,
   className,
 }: {
   /** Qué no se encontró, con las palabras de la pantalla que lo dice. */
@@ -34,6 +36,18 @@ export function EmptyResults({
   hrefFor?: (slug: string) => string;
   /** La salida directa: quitar los filtros, salir de la categoría, ampliar. */
   action?: { href: string; label: string };
+  /**
+   * Van tal cual a `CategoryIconChips` (correo de Verónica, 3-sep-2026: los
+   * chips «solo una línea, slider»). Las pantallas públicas —P04/P05/P06/P09,
+   * cuyo padre es el `Container`— pasan `layout="strip" variant="text"`: en
+   * móvil no hay hover que despliegue el nombre de un ícono, así que la
+   * burbuja enseña el nombre y la fila sangra hasta el borde. Por defecto se
+   * queda lo de hoy (envolver, íconos), y es a propósito: «Mis reservas» la
+   * monta dentro de un `PanelCard` con su propio padding, donde el sangrado
+   * de la tira (−20 px) se saldría de la tarjeta.
+   */
+  layout?: "wrap" | "strip";
+  variant?: "icon" | "text";
   className?: string;
 }) {
   return (
@@ -67,6 +81,8 @@ export function EmptyResults({
             categories={categories}
             hrefFor={hrefFor}
             tone="light"
+            layout={layout}
+            variant={variant}
           />
         </>
       ) : null}

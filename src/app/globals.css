@@ -231,3 +231,54 @@
     animation: none;
   }
 }
+
+/* Tira desplazable (correo de Verónica del 3-sep-2026 y Figma «Mobile y
+   Tablet» P01/P04/P06): UNA sola fila que se desplaza en horizontal, sin
+   envolver nunca. Es lo que el Figma dibuja para los chips de categoría y para
+   las tarjetas destacadas del home a 390 — y lo que la cliente tachó en rojo
+   cuando los chips ocupaban dos líneas.
+
+   Sin JavaScript a propósito: `overflow-x: auto` + `scroll-snap` ya dan el
+   arrastre táctil, la inercia y el anclaje, y el teclado funciona solo (al
+   tabular, el enlace enfocado se trae a la vista él mismo). La barra va oculta
+   porque la señal de «hay más» es el último hijo asomando cortado por la
+   derecha, no una barra de 4 px dentro de un hero azul.
+   `overscroll-behavior-x: contain` para que llegar al final de la tira no se
+   convierta en un «atrás» del navegador en iOS. `proximity` y no `mandatory`:
+   con chips de anchos distintos, `mandatory` no deja parar en medio y da
+   tirones al soltar el dedo.
+
+   ── SANGRADO HASTA EL BORDE (lo pone el consumidor, no esta utilidad) ──────
+   Para que el último chip asome cortado por el borde del viewport, la tira
+   tiene que salirse del padding de `Container` y recuperarlo por dentro, y
+   `scroll-padding` tiene que igualar ese padding para que el anclaje alinee
+   el chip con el contenido y no con el borde de la pantalla:
+
+     max-lg:scroll-strip -mx-5 px-5 scroll-px-5 sm:-mx-6 sm:px-6 sm:scroll-px-6
+     md:-mx-8 md:px-8 md:scroll-px-8 lg:mx-0 lg:px-0 lg:flex-wrap
+
+   Los tres pares (5 / 6 / 8) son exactamente los `px-*` de `Container`
+   (`container.tsx`): si cambian allí, cambian aquí. `lg:mx-0 lg:px-0` porque
+   el escritorio no se toca (R1, Doc 24 §24.2): desde 1024 la fila vuelve a
+   envolver como hoy.
+
+   ⚠️ Un contenedor con scroll RECORTA lo que asoma fuera de sus hijos —el
+   anillo de foco incluido—. Si los hijos llevan `ring`/`outline` de foco,
+   déjales aire con `py-1 -my-1` (4 px de más por dentro, cero de más por
+   fuera). Y NO combinarla con `justify-center`: en una fila que se desborda,
+   centrar deja el principio de la tira fuera de alcance. */
+@utility scroll-strip {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  & > * {
+    flex-shrink: 0;
+    scroll-snap-align: start;
+  }
+}
