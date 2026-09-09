@@ -92,10 +92,17 @@ export default async function SearchPage({
             ¿Qué meta vas a conquistar hoy?
           </h1>
 
-          {/* Form GET nativo: navega a /search?q=… sin JS. */}
+          {/* Form GET nativo: navega a /search?q=… sin JS.
+
+              Móvil (correo de Verónica, 3-sep-2026: «Buscar moverlo abajo,
+              alargar botón y centrar»): por debajo de `sm` el botón va debajo
+              del input, los dos a ancho completo. Medido en el Figma «P09 ·
+              hero-busqueda» (PNG a escala 2, ÷2): input y botón de 350×51 con
+              10 px entre ellos, radio ≈12 y rótulo «Buscar» de 15 px. Se
+              redondea a 52 (el escritorio sigue en 54, R1). */}
           <form
             action="/search"
-            className="mt-4 flex w-full max-w-[720px] gap-2.5"
+            className="mt-4 flex w-full max-w-[720px] flex-col gap-2.5 sm:flex-row"
           >
             {/* Al refinar la búsqueda se conserva el ámbito con el que llegaste. */}
             {cat ? <input type="hidden" name="cat" value={cat} /> : null}
@@ -110,31 +117,57 @@ export default async function SearchPage({
                 defaultValue={query}
                 placeholder="¿Qué meta vas a conquistar hoy?"
                 aria-label="Buscar"
-                className="h-[54px] w-full rounded-[12px] bg-background pr-3 pl-11 text-base text-[#2e2e2e] placeholder:text-[#737373] focus-visible:outline-none"
+                className="h-[52px] w-full rounded-[12px] bg-background pr-3 pl-11 text-base text-[#2e2e2e] placeholder:text-[#737373] focus-visible:outline-none sm:h-[54px]"
               />
             </div>
             <Button
               type="submit"
-              className="h-[54px] rounded-[12px] px-7 text-[15px]"
+              className="h-[52px] w-full rounded-[12px] px-7 text-[15px] font-semibold sm:h-[54px] sm:w-auto sm:font-medium"
             >
               Buscar
             </Button>
           </form>
 
           {/* El Figma fija cinco búsquedas inventadas; aquí van las categorías
-              reales, que además llevan a una búsqueda que devuelve algo. */}
-          <p className="mt-5 flex flex-wrap items-center justify-center gap-2 text-[13px]">
-            <span className="font-medium">Búsquedas frecuentes:</span>
-            {categories.slice(0, 5).map((c) => (
-              <Link
-                key={c.slug}
-                href={`/search?q=${encodeURIComponent(c.name)}`}
-                className="rounded-full bg-brand-foreground px-3 py-1.5 font-medium transition-opacity hover:opacity-90"
-              >
-                {c.name}
-              </Link>
-            ))}
-          </p>
+              reales, que además llevan a una búsqueda que devuelve algo.
+
+              Móvil (Verónica, 3-sep: «Búsqueda frecuente centrar» y
+              «categorías solo una línea y slider»): por debajo de `lg` el
+              rótulo va centrado en su propia línea y los chips debajo en UNA
+              fila con scroll que sangra hasta el borde (Figma «P09 ·
+              hero-busqueda»: rótulo centrado, chips de 30 de alto a 8 px, el
+              último cortado por la derecha). El truco del centrado: la tira
+              (`scroll-strip`) tiene UN hijo, la `<ul>`, con `mx-auto` — si
+              cabe, los márgenes automáticos la centran; si desborda, el
+              espacio libre es negativo, los márgenes valen 0 y la fila
+              arranca por la izquierda y se desplaza. Sin JS. Desde `lg` el
+              rótulo y los chips vuelven a la misma línea centrada de hoy
+              (R1: idéntico mientras quepan en una línea, que a 1024 sobra). */}
+          <nav
+            aria-label="Búsquedas frecuentes"
+            className="mt-5 flex flex-col items-center gap-2 text-[13px] max-lg:self-stretch lg:flex-row lg:flex-wrap lg:justify-center"
+          >
+            <p className="font-medium">Búsquedas frecuentes:</p>
+            <div className="max-lg:scroll-strip -mx-5 -my-1 px-5 py-1 scroll-px-5 max-lg:self-stretch sm:-mx-6 sm:px-6 sm:scroll-px-6 md:-mx-8 md:px-8 md:scroll-px-8 lg:mx-0 lg:my-0 lg:flex lg:px-0 lg:py-0">
+              <ul className="mx-auto flex gap-2">
+                {categories.slice(0, 5).map((c) => (
+                  <li key={c.slug}>
+                    {/* El chip mide 32 (el Figma, 30) y el mínimo táctil es 40:
+                        el `before:` estira la zona de toque 4 px por arriba y
+                        por abajo sin mover un píxel de lo que se ve —los
+                        `py-1 -my-1` de la tira son justo ese aire—. Solo bajo
+                        `lg`: en escritorio no hace falta. */}
+                    <Link
+                      href={`/search?q=${encodeURIComponent(c.name)}`}
+                      className="relative flex rounded-full bg-brand-foreground px-3 py-1.5 font-medium whitespace-nowrap transition-opacity hover:opacity-90 max-lg:before:absolute max-lg:before:inset-x-0 max-lg:before:-inset-y-1"
+                    >
+                      {c.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </nav>
         </Container>
       </div>
 
@@ -166,15 +199,30 @@ export default async function SearchPage({
                 ) : null}
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              {/* Móvil (Verónica, 3-sep: «brinca al elegir opción», sobre las
+                  pestañas): por debajo de `sm` la fila es la del Figma «P09 ·
+                  tabs-sort» —el segmented en una tira con scroll que se corta
+                  por el borde derecho, y «Ordenar por» DEBAJO, a la derecha—.
+                  Desde `sm` vuelve la fila de hoy (pestañas a la izquierda,
+                  orden a la derecha, envolviendo si no cabe). */}
+              <div className="mt-4 flex flex-col gap-3.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
                 {/* Segmented control del Figma, igual que en P06. */}
                 <div
                   role="tablist"
                   aria-label="Tipo de resultado"
                   // US-1601: a 360 px las cuatro pestañas suman más que la
                   // pantalla y sacaban scroll horizontal a TODA la página.
-                  // Se deja que envuelvan; en desktop cabe en una fila igual.
-                  className="flex flex-wrap gap-0.5 rounded-[10px] bg-[#ededed] p-1"
+                  // Entonces se dejaron envolver (dos filas: la queja de
+                  // Verónica). Ahora, bajo `sm`, la caja gris ES el contenedor
+                  // con scroll (`scroll-strip`): sangra hasta el borde por la
+                  // derecha (`-mr-5`, el padding del `Container`) y repone
+                  // ese sangrado como padding interior (`pr-6` = 20 + los 4
+                  // de la caja) para que la última pestaña llegue a verse
+                  // entera al final del recorrido. En desktop envuelve como
+                  // siempre. Las pestañas vuelven a `px-4.5` también en móvil
+                  // (medido 18,5 en el Figma): el `px-3` era solo para que
+                  // cupieran, y ya no hace falta.
+                  className="flex gap-0.5 rounded-[10px] bg-[#ededed] p-1 max-sm:scroll-strip max-sm:-mr-5 max-sm:pr-6 sm:flex-wrap"
                 >
                   {(
                     [
@@ -189,7 +237,11 @@ export default async function SearchPage({
                       role="tab"
                       aria-selected={tab === id}
                       href={hrefFor({ tab: id, sort })}
-                      className={`rounded-[8px] px-3 py-2 text-sm font-medium transition-colors sm:px-4.5 ${
+                      // `scroll={false}`: cambiar de pestaña no sube al
+                      // principio de la página. `py-2.5` bajo `sm`: 40 px de
+                      // alto por tacto (el Figma da 39).
+                      scroll={false}
+                      className={`rounded-[8px] px-4.5 py-2.5 text-sm font-medium whitespace-nowrap transition-colors sm:py-2 ${
                         tab === id
                           ? "bg-card text-[#19191f] shadow-[0_1px_3px_rgb(0_0_0/0.1)]"
                           : "text-[#5c5c5c] hover:text-foreground"
@@ -201,8 +253,8 @@ export default async function SearchPage({
                 </div>
 
                 {/* ponytail: `<details>` nativo, igual que en el resto del sitio. */}
-                <details name="orden" className="group relative">
-                  <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-[#595959] marker:hidden">
+                <details name="orden" className="group relative max-sm:self-end">
+                  <summary className="flex min-h-10 cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-[#595959] marker:hidden sm:min-h-0">
                     Ordenar por: {SORTS.find((s) => s.value === sort)!.label}
                     <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
                   </summary>
@@ -211,6 +263,7 @@ export default async function SearchPage({
                       <li key={s.value}>
                         <Link
                           href={hrefFor({ tab, sort: s.value })}
+                          scroll={false}
                           className="block rounded-[6px] px-3 py-2 text-[13.5px] hover:bg-muted"
                         >
                           {s.label}
@@ -240,6 +293,8 @@ export default async function SearchPage({
                       : undefined
                   }
                   categories={categories}
+                  layout="strip"
+                  variant="text"
                 />
               ) : null}
 
@@ -305,11 +360,20 @@ export default async function SearchPage({
       </Container>
 
       {/* "Explorar por categoría" (386:2658): bloque oscuro con los recuentos
-          reales de tutores por categoría. */}
+          reales de tutores por categoría.
+
+          Móvil (Verónica, 3-sep: «en diseño se divide en cuadros pequeños —
+          me gusta más—, como está actualmente ocupa demasiado espacio»): dos
+          columnas por debajo de `sm`. Medido en el Figma «P09 · Categorías
+          destacadas» (÷2): tarjetas de 165 a 16 px, radio 16, padding 20,
+          ícono en cuadrado de 48 con radio 12, nombre 15 px semibold, recuento
+          13 px #666. El fondo oscuro se queda (el frame lo pinta blanco, pero
+          es lo que hay en escritorio y lo que Verónica vio). Desde `sm` las
+          3/6 columnas y los tamaños de hoy (R1). */}
       <div className="bg-[#14141a] text-white">
         <Container className="py-14">
           <h2 className="text-[23px] font-semibold">Explorar por categoría</h2>
-          <ul className="mt-8 grid gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <ul className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {categories.slice(0, 6).map((c) => {
               const Icon = categoryIcon(c.icon);
               return (
@@ -318,13 +382,13 @@ export default async function SearchPage({
                     href={`/categories/${c.slug}`}
                     className="flex h-full flex-col items-center gap-2 rounded-[16px] bg-card p-5 text-center transition-transform hover:-translate-y-0.5"
                   >
-                    <span className="grid size-12 place-items-center rounded-full bg-brand-muted text-brand">
+                    <span className="grid size-12 place-items-center rounded-[12px] bg-brand-muted text-brand sm:rounded-full">
                       <Icon className="size-5" />
                     </span>
-                    <p className="text-[13.5px] font-semibold text-[#14141a]">
+                    <p className="text-[15px] font-semibold text-[#14141a] sm:text-[13.5px]">
                       {c.name}
                     </p>
-                    <p className="text-[11.5px] text-[#666666]">
+                    <p className="text-[13px] text-[#666666] sm:text-[11.5px]">
                       {c.tutors} {c.tutors === 1 ? "tutor" : "tutores"}
                     </p>
                   </Link>

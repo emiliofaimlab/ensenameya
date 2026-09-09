@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import type { CategoryTag } from "@/lib/catalog/queries";
 import { SESION_INDIVIDUAL } from "@/lib/booking";
+import { cn } from "@/lib/utils";
 
 export type ProductFilterState = {
   cat?: string;
@@ -47,39 +48,65 @@ export const LANGUAGES = [
 ];
 
 /**
+ * Los seis grupos del panel, en el orden del Figma. Viven fuera del componente
+ * porque los pintan DOS superficies: este panel lateral desde `lg` y las
+ * píldoras desplegables de `FilterPills` por debajo (Verónica, 3-sep-2026).
+ * Una sola lista = un solo sitio donde añadir un filtro mañana.
+ */
+export function productFilterGroups(categories: CategoryTag[]): {
+  title: string;
+  key: keyof ProductFilterState;
+  options: { id: string; label: string }[];
+}[] {
+  return [
+    {
+      title: "Categoría",
+      key: "cat",
+      options: categories.map((c) => ({ id: c.slug, label: c.name })),
+    },
+    { title: "Tipo de mentoría", key: "model", options: MODELS },
+    { title: "Nivel", key: "level", options: LEVELS },
+    { title: "Idioma", key: "lang", options: LANGUAGES },
+    { title: "Precio", key: "price", options: PRICE_RANGES },
+    { title: "Duración", key: "sessions", options: SESSION_RANGES },
+  ];
+}
+
+/**
  * Filtros de P05. Todo va por URL (sin JS) y todo se filtra en la BD: precio,
  * sesiones, nivel e idioma son columnas de `products`.
  *
  * Nivel e idioma son los de LA MENTORÍA (DD-03), no los del tutor: un tutor de
  * nivel avanzado (`tutor_profiles.teaching_level`, IV-02) puede publicar una
  * clase básica.
+ *
+ * `className`: la página lo esconde por debajo de `lg` (`hidden lg:block`) y
+ * monta en su lugar las píldoras de `FilterPills` — a 390 px las 22 casillas
+ * ocupaban más de una pantalla antes de la primera mentoría (correo de
+ * Verónica, 3-sep-2026, IMG_4116). Desde 1024 no cambia nada (R1).
  */
 export function ProductFilters({
   categories,
   active,
   hrefFor,
+  className,
 }: {
   categories: CategoryTag[];
   active: ProductFilterState;
   hrefFor: (next: ProductFilterState) => string;
+  className?: string;
 }) {
-  const groups = [
-    {
-      title: "Categoría",
-      key: "cat" as const,
-      options: categories.map((c) => ({ id: c.slug, label: c.name })),
-    },
-    { title: "Tipo de mentoría", key: "model" as const, options: MODELS },
-    { title: "Nivel", key: "level" as const, options: LEVELS },
-    { title: "Idioma", key: "lang" as const, options: LANGUAGES },
-    { title: "Precio", key: "price" as const, options: PRICE_RANGES },
-    { title: "Duración", key: "sessions" as const, options: SESSION_RANGES },
-  ];
+  const groups = productFilterGroups(categories);
 
   const anyActive = Object.values(active).some(Boolean);
 
   return (
-    <aside className="h-fit rounded-[16px] border border-[#dbdbdb] bg-card p-[22px] lg:sticky lg:top-24">
+    <aside
+      className={cn(
+        "h-fit rounded-[16px] border border-[#dbdbdb] bg-card p-[22px] lg:sticky lg:top-24",
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-lg font-bold">Filtros</h2>
         {anyActive ? (

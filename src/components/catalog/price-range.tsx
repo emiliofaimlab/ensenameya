@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Slider } from "radix-ui";
 
@@ -75,12 +76,25 @@ export function PriceRange({
       <div className="flex items-baseline justify-between gap-2">
         <p className="text-sm font-bold text-[#242424]">Inversión por sesión</p>
         {value ? (
-          <a
+          // Por debajo de `lg` este control vive en el panel táctil de las
+          // píldoras (P04 móvil) y «Quitar» medía 18 px de alto: el padding
+          // vertical lo lleva a 44 y el margen negativo devuelve exactamente
+          // esos píxeles, así que el título no se mueve ni un píxel (el
+          // margin box sigue siendo de 18). `px-2 -mr-2`: 8 px de área a cada
+          // lado con el texto pegado al borde derecho, como antes.
+          //
+          // `<Link scroll={false}>` y no un `<a>`: en el panel móvil el alumno
+          // está a media página, y una recarga completa lo devolvía al
+          // principio — la queja literal de Verónica (3-sep). El `key` del
+          // padre remonta el deslizador al cambiar la URL, así que no hace
+          // falta recargar para que se reinicie.
+          <Link
             href={hrefFor({})}
-            className="text-[12px] font-medium text-muted-foreground hover:text-foreground"
+            scroll={false}
+            className="text-[12px] font-medium text-muted-foreground hover:text-foreground max-lg:-my-[13px] max-lg:-mr-2 max-lg:px-2 max-lg:py-[13px]"
           >
             Quitar
-          </a>
+          </Link>
         ) : null}
       </div>
 
@@ -122,8 +136,11 @@ export function PriceRange({
             // no significa nada para quien filtra: el valor real es el precio.
             aria-valuetext={formatMoney(precio(pos[i]), "USD")}
             // El punto mide 16 px, por debajo de los 24 que pide WCAG 2.5.8;
-            // el `before` agranda el área tocable sin engordar el dibujo.
-            className="relative block size-4 rounded-full border-2 border-brand bg-card shadow-sm before:absolute before:-inset-2 before:content-[''] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            // el `before` agranda el área tocable sin engordar el dibujo:
+            // 44 px por debajo de `lg` (el mínimo táctil del proyecto, ahora
+            // que el deslizador va en el panel de las píldoras) y 32 desde
+            // 1024, como siempre (R1).
+            className="relative block size-4 rounded-full border-2 border-brand bg-card shadow-sm before:absolute before:-inset-3.5 before:content-[''] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none lg:before:-inset-2"
           />
         ))}
       </Slider.Root>

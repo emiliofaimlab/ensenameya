@@ -3,8 +3,10 @@ import Link from "next/link";
 import type { AvailabilityFilter, CategoryTag } from "@/lib/catalog/queries";
 import { PriceRange } from "@/components/catalog/price-range";
 import { LANGUAGES } from "@/components/catalog/product-filters";
+import { cn } from "@/lib/utils";
 
-const AVAILABILITY: { value: AvailabilityFilter; label: string }[] = [
+/** Exportado: las píldoras móviles de P04 pintan la misma lista (Verónica, 3-sep). */
+export const AVAILABILITY: { value: AvailabilityFilter; label: string }[] = [
   { value: "today", label: "Hoy" },
   { value: "week", label: "Esta semana" },
   { value: "weekend", label: "Fines de semana" },
@@ -17,6 +19,11 @@ const AVAILABILITY: { value: AvailabilityFilter; label: string }[] = [
  * "Idioma del tutor" se deriva de las clases que publica (DD-03): no hay
  * columna de idioma en el tutor, y lo que el alumno pregunta de verdad es si
  * DA CLASES en ese idioma.
+ *
+ * `className`: la página lo esconde por debajo de `lg` (`hidden lg:block`) y
+ * pone en su lugar las píldoras desplegables de `FilterPills` — a 390 px este
+ * panel medía 831 px de alto ANTES del primer resultado (correo de Verónica,
+ * 3-sep-2026, IMG_4113). Desde 1024 no cambia nada (R1).
  */
 export function TutorFilters({
   categories,
@@ -28,6 +35,7 @@ export function TutorFilters({
   priceBaseHref,
   language,
   hrefFor,
+  className,
 }: {
   categories: CategoryTag[];
   activeSlug?: string;
@@ -48,6 +56,7 @@ export function TutorFilters({
     pmax?: number;
     lang?: string;
   }) => string;
+  className?: string;
 }) {
   /** Una opción del panel: casilla + etiqueta, con el estado en la URL. */
   const Option = ({
@@ -78,7 +87,12 @@ export function TutorFilters({
   );
 
   return (
-    <aside className="h-fit rounded-[16px] border border-[#dbdbdb] bg-card p-[22px] lg:sticky lg:top-24">
+    <aside
+      className={cn(
+        "h-fit rounded-[16px] border border-[#dbdbdb] bg-card p-[22px] lg:sticky lg:top-24",
+        className,
+      )}
+    >
       <div className="flex items-center justify-between gap-4">
         <h2 className="text-lg font-bold">Filtros</h2>
         {activeSlug || minRating || availability || price || language ? (

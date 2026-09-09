@@ -8,6 +8,7 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import { EmptyResults } from "@/components/catalog/empty-results";
+import { FilterPills, type FilterPill } from "@/components/catalog/filter-pills";
 import { Pager } from "@/components/catalog/pager";
 import { ProductCard } from "@/components/catalog/product-card";
 import { TutorCard } from "@/components/catalog/tutor-card";
@@ -162,15 +163,24 @@ export async function CategoryExplorer({
       ? "Asegura los resultados que deseas de la mano de tutores validados, enfocados en lo que quieres conquistar."
       : "Elige por dónde empezar. Cada categoría reúne mentorías con una meta concreta y tutores verificados listos para acompañarte en vivo.");
 
-  /** Desplegables de filtro de la fila horizontal (386:1558). */
-  const dropdowns = [
+  /**
+   * Desplegables de filtro de la fila horizontal (386:1558). Los MISMOS datos
+   * alimentan dos pintados: los `<details>` de escritorio y, por debajo de
+   * `lg`, las píldoras de `FilterPills` (correo de Verónica, 3-sep-2026:
+   * «opciones solo una línea en slider y dropdown»). De ahí el tipo
+   * `FilterPill` y el `active` de cada opción, que es la casilla marcada del
+   * panel móvil; los `<details>` lo ignoran.
+   */
+  const dropdowns: FilterPill[] = [
     {
+      key: "tema",
       label: "Temas",
       current: categories.find((c) => c.slug === active.tema)?.name,
       options: categories
         .filter((c) => c.slug !== slug)
         .map((c) => ({
           label: c.name,
+          active: active.tema === c.slug,
           href: buildHref({
             ...active,
             tab,
@@ -180,10 +190,12 @@ export async function CategoryExplorer({
         })),
     },
     {
+      key: "price",
       label: "Precio",
       current: PRICE_RANGES.find((r) => r.id === active.price)?.label,
       options: PRICE_RANGES.map((r) => ({
         label: r.label,
+        active: active.price === r.id,
         href: buildHref({
           ...active,
           tab,
@@ -193,10 +205,12 @@ export async function CategoryExplorer({
       })),
     },
     {
+      key: "sessions",
       label: "Duración",
       current: SESSION_RANGES.find((r) => r.id === active.sessions)?.label,
       options: SESSION_RANGES.map((r) => ({
         label: r.label,
+        active: active.sessions === r.id,
         href: buildHref({
           ...active,
           tab,
@@ -206,10 +220,12 @@ export async function CategoryExplorer({
       })),
     },
     {
+      key: "model",
       label: "Tipo",
       current: MODELS.find((m) => m.id === active.model)?.label,
       options: MODELS.map((m) => ({
         label: m.label,
+        active: active.model === m.id,
         href: buildHref({
           ...active,
           tab,
@@ -220,10 +236,12 @@ export async function CategoryExplorer({
     },
     // DD-03 · los mismos dos que P05, aquí como desplegables de la fila.
     {
+      key: "level",
       label: "Nivel",
       current: LEVELS.find((l) => l.id === active.level)?.label,
       options: LEVELS.map((l) => ({
         label: l.label,
+        active: active.level === l.id,
         href: buildHref({
           ...active,
           tab,
@@ -233,10 +251,12 @@ export async function CategoryExplorer({
       })),
     },
     {
+      key: "lang",
       label: "Idioma",
       current: LANGUAGES.find((l) => l.id === active.lang)?.label,
       options: LANGUAGES.map((l) => ({
         label: l.label,
+        active: active.lang === l.id,
         href: buildHref({
           ...active,
           tab,
@@ -316,14 +336,26 @@ export async function CategoryExplorer({
 
           {/* Acotada al módulo (24-jul), y el módulo depende de dónde estés:
               en el índice buscas CATEGORÍAS; dentro de una, lo que el
-              explorador muestre (mentorías o tutores) de esa categoría. */}
+              explorador muestre (mentorías o tutores) de esa categoría.
+
+              ── MÓVIL (correo de Verónica, 3-sep-2026: «en diseño va abajo
+              centrado - se puede ajustar así para que vaya acorde a otras
+              páginas») ── Por debajo de `sm` el botón va DEBAJO del input, a
+              ancho completo, y la tarjeta blanca que los envolvía desaparece:
+              el input es la caja blanca (Figma «P06 · hero-mobile»: input y
+              botón de 350 de ancho, radio 10, apilados). Las alturas NO son
+              las de ese frame (input 38, botón 40, 8 px entre ellos, rótulo
+              13 px): son las del sistema que pide Verónica —«acorde a otras
+              páginas»—, que es el buscador de P01/P04/P05: 46 / 46 / 12 y
+              rótulo 15 px semibold (Doc 24 §24.3); un input de 38 queda por
+              debajo del mínimo táctil. Desde `sm` vuelve la tarjeta de hoy. */}
           <form
             action="/search"
-            className="mt-6 flex max-w-[720px] gap-1.5 rounded-[10px] bg-card p-[5px]"
+            className="mt-6 flex max-w-[720px] flex-col gap-3 sm:flex-row sm:gap-1.5 sm:rounded-[10px] sm:bg-card sm:p-[5px]"
           >
             <input type="hidden" name="tab" value={slug ? tab : "categorias"} />
             {slug ? <input type="hidden" name="cat" value={slug} /> : null}
-            <div className="relative flex-1">
+            <div className="relative flex-1 max-sm:rounded-[10px] max-sm:bg-card">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#6b6b6b]" />
               <input
                 type="search"
@@ -334,12 +366,15 @@ export async function CategoryExplorer({
                     : "Busca un tema, tutor o curso…"
                 }
                 aria-label="Buscar"
-                className="h-11 w-full bg-transparent pr-3 pl-10 text-[13.5px] text-foreground placeholder:text-[#6b6b6b] focus-visible:outline-none"
+                // El anillo de foco solo en móvil: ahí el input es la caja
+                // blanca suelta sobre la foto; en la tarjeta de escritorio no
+                // lo había y no se toca (R1).
+                className="h-[46px] w-full bg-transparent pr-3 pl-10 text-[13.5px] text-foreground placeholder:text-[#6b6b6b] focus-visible:outline-none max-sm:rounded-[10px] max-sm:focus-visible:ring-2 max-sm:focus-visible:ring-brand sm:h-11"
               />
             </div>
             <Button
               type="submit"
-              className="h-11 rounded-[10px] px-6 text-[13.5px]"
+              className="h-[46px] w-full rounded-[10px] px-6 text-[15px] font-semibold sm:h-11 sm:w-auto sm:text-[13.5px] sm:font-medium"
             >
               Buscar
             </Button>
@@ -347,20 +382,43 @@ export async function CategoryExplorer({
 
           {/* Categorías colapsadas a ícono; se despliegan al hover y la activa
               va fija (patrón del home, acuerdo 24-jul). Sin corte "ver más":
-              esta pantalla ES el índice de todas. */}
+              esta pantalla ES el índice de todas.
+
+              Móvil (Verónica, 3-sep: «eliminar 2 líneas, hacer slider
+              categorías» y «la pantalla brinca cuando se elige una
+              categoría»): `layout="strip"` = UNA fila con scroll que sangra
+              hasta el borde por debajo de `lg`; `scroll={false}` = elegir
+              categoría no devuelve al principio de la página (medido antes:
+              scrollY 420 → 0). Se quedan los ÍCONOS: es lo que dibuja el
+              Figma «P06 · hero-mobile» (círculos de 36 a 8 px, 10 px bajo el
+              botón) y no pidió nombres aquí. `lg:` restituye los 14 px y los
+              20 de hoy (R1). ⚠️ `mt-1.5` y no `mt-2.5`: la tira lleva
+              `py-1 -my-1` (aire para el anillo de foco), y un `mt-*` propio
+              PISA ese −4 de arriba en vez de sumarse — medido: con `mt-2.5`
+              los círculos quedaban a 14 del botón, no a 10. */}
           <CategoryIconChips
-            className="mt-5 gap-3.5"
+            className="max-lg:mt-1.5 lg:mt-5 lg:gap-3.5"
             categories={categories}
             activeSlug={slug}
             hrefFor={categoryHref}
             limit={0}
+            layout="strip"
+            scroll={false}
           />
         </Container>
       </section>
 
       <Container>
         <Section>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Verónica, 3-sep («subir: ordenar»): pestañas y «Ordenar» en la
+              MISMA fila también en móvil (Figma «P06 · tabs-filters», frame
+              00: segmented de 178 + desplegable a la derecha). Sin `flex-wrap`:
+              lo que hacía bajar el orden a una segunda línea. Cabe a 375
+              porque por debajo de `sm` las pestañas se compactan a `px-4`
+              (medido 15-16 en el Figma; hoy `px-5`) y el desplegable dice solo
+              «Ordenar»: con «Ordenar: Más relevantes» el propio frame del
+              Figma mide 358 y ya no cabe en los 350 de contenido. */}
+          <div className="flex items-center justify-between gap-3">
             {/* Segmented control del Figma: caja gris con la activa en blanco. */}
             <div
               role="tablist"
@@ -376,7 +434,11 @@ export async function CategoryExplorer({
                   role="tab"
                   aria-selected={tab === t.id}
                   href={buildHref({ ...active, sort, tab: t.id })}
-                  className={`rounded-[8px] px-5 py-2 text-sm font-medium transition-colors ${
+                  // Cambiar de pestaña tampoco sube al principio (misma queja
+                  // que en el buscador). `py-2.5` bajo `sm`: 40 px de alto por
+                  // tacto (el Figma da 38 en una caja de 46).
+                  scroll={false}
+                  className={`rounded-[8px] px-4 py-2.5 text-sm font-medium transition-colors sm:px-5 sm:py-2 ${
                     tab === t.id
                       ? "bg-card text-[#19191f] shadow-[0_1px_3px_rgb(0_0_0/0.1)]"
                       : "text-[#666666] hover:text-foreground"
@@ -390,23 +452,46 @@ export async function CategoryExplorer({
             {tab === "productos" ? (
               // `name` = acordeón exclusivo nativo: abrir uno cierra los demás
               // del grupo, así los paneles no se pisan entre sí.
-              <details name="explorador" className="group relative">
-                <summary className="flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border border-[#d1d1d1] px-3.5 text-[13.5px] font-medium text-[#474747] marker:hidden">
-                  Ordenar:{" "}
-                  {SORTS.find((s) => s.value === (sort ?? "recent"))!.label}
+              <details name="explorador" className="group relative shrink-0">
+                <summary
+                  className={`flex h-10 cursor-pointer list-none items-center gap-1.5 rounded-[8px] border px-3.5 text-[13.5px] font-medium marker:hidden sm:h-[38px] ${
+                    // En móvil el rótulo no dice qué orden hay puesto, así que
+                    // la píldora se pinta en azul cuando no es el de siempre,
+                    // como hacen las de filtro con algo elegido. Desde `sm` el
+                    // rótulo ya lo dice y el borde es el de hoy.
+                    sort && sort !== "recent"
+                      ? "max-sm:border-brand max-sm:text-brand sm:border-[#d1d1d1] sm:text-[#474747]"
+                      : "border-[#d1d1d1] text-[#474747]"
+                  }`}
+                >
+                  <span className="sm:hidden">Ordenar</span>
+                  <span className="hidden sm:inline">
+                    Ordenar:{" "}
+                    {SORTS.find((s) => s.value === (sort ?? "recent"))!.label}
+                  </span>
                   <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
                 </summary>
                 <ul className="absolute right-0 z-10 mt-1 w-60 rounded-[8px] border bg-card p-1 shadow-md">
-                  {SORTS.map((s) => (
-                    <li key={s.value}>
-                      <Link
-                        href={buildHref({ ...active, tab, sort: s.value })}
-                        className="block rounded-[6px] px-3 py-2 text-[13.5px] hover:bg-muted"
-                      >
-                        {s.label}
-                      </Link>
-                    </li>
-                  ))}
+                  {SORTS.map((s) => {
+                    const current = s.value === (sort ?? "recent");
+                    return (
+                      <li key={s.value}>
+                        {/* La marca de «este es el puesto» solo bajo `sm`, que
+                            es donde el rótulo no lo dice; en escritorio la
+                            lista es la de hoy. */}
+                        <Link
+                          href={buildHref({ ...active, tab, sort: s.value })}
+                          scroll={false}
+                          aria-current={current ? "true" : undefined}
+                          className={`block rounded-[6px] px-3 py-2 text-[13.5px] hover:bg-muted ${
+                            current ? "max-sm:font-semibold max-sm:text-brand" : ""
+                          }`}
+                        >
+                          {s.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
                 </ul>
               </details>
             ) : null}
@@ -414,47 +499,69 @@ export async function CategoryExplorer({
 
           {/* Filtros en fila (P06 no tiene panel lateral). "Nivel" e "Idioma"
               del Figma se quedan fuera: son DD-03 (`EY-113`), el producto no
-              tiene esas columnas. */}
+              tiene esas columnas.
+
+              Verónica, 3-sep («opciones solo una línea en slider y
+              dropdown»): por debajo de `lg` la fila es `FilterPills` —una
+              tira con scroll y UN panel debajo, con los mismos `dropdowns`—;
+              los `<details>` de hoy se quedan para escritorio (`hidden
+              lg:flex`, R1). */}
           {tab === "productos" ? (
-            <div className="mt-5 flex flex-wrap items-center gap-2.5">
-              {dropdowns.map((d) => (
-                <details key={d.label} name="explorador" className="group relative">
-                  <summary
-                    className={`flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border px-3.5 text-[13.5px] font-medium marker:hidden ${
-                      d.current
-                        ? "border-brand text-brand"
-                        : "border-[#d1d1d1] text-[#474747]"
-                    }`}
+            <>
+              <FilterPills
+                className="mt-5 lg:hidden"
+                ariaLabel="Filtros de mentorías"
+                clearHref={buildHref({ tab, sort })}
+                filters={dropdowns}
+              />
+              <div className="mt-5 hidden flex-wrap items-center gap-2.5 lg:flex">
+                {dropdowns.map((d) => (
+                  <details key={d.key} name="explorador" className="group relative">
+                    <summary
+                      className={`flex h-[38px] cursor-pointer list-none items-center gap-1.5 rounded-[8px] border px-3.5 text-[13.5px] font-medium marker:hidden ${
+                        d.current
+                          ? "border-brand text-brand"
+                          : "border-[#d1d1d1] text-[#474747]"
+                      }`}
+                    >
+                      {d.current ?? d.label}
+                      <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <ul className="absolute left-0 z-10 mt-1 w-56 rounded-[8px] border bg-card p-1 shadow-md">
+                      {d.options?.map((o) => (
+                        <li key={o.label}>
+                          <Link
+                            href={o.href}
+                            scroll={false}
+                            className="block rounded-[6px] px-3 py-2 text-[13.5px] hover:bg-muted"
+                          >
+                            {o.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ))}
+                {anyFilter ? (
+                  <Link
+                    href={buildHref({ tab, sort })}
+                    scroll={false}
+                    className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
                   >
-                    {d.current ?? d.label}
-                    <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
-                  </summary>
-                  <ul className="absolute left-0 z-10 mt-1 w-56 rounded-[8px] border bg-card p-1 shadow-md">
-                    {d.options.map((o) => (
-                      <li key={o.label}>
-                        <Link
-                          href={o.href}
-                          className="block rounded-[6px] px-3 py-2 text-[13.5px] hover:bg-muted"
-                        >
-                          {o.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
-              {anyFilter ? (
-                <Link
-                  href={buildHref({ tab, sort })}
-                  className="text-[13px] font-medium text-muted-foreground hover:text-foreground"
-                >
-                  Limpiar
-                </Link>
-              ) : null}
-            </div>
+                    Limpiar
+                  </Link>
+                ) : null}
+              </div>
+            </>
           ) : null}
 
-          <div className="mt-6">
+          {/* `id` + `scroll-mt`: el `Pager` ancla aquí al cambiar de página en
+              vez de subir al principio (ver pager.tsx: 173 px de cabecera
+              sticky a 390, 73 desde 1024). Hoy Matemáticas tiene 2 productos
+              con `PAGE_SIZE = 12`, o sea UNA página y el paginador no se
+              pinta —«no hay selector de página» no era un fallo—; queda listo
+              para cuando haya más. */}
+          <div id="resultados" className="mt-6 scroll-mt-44 lg:scroll-mt-24">
             {tab === "productos" ? (
               products.products.length === 0 ? (
                 // RV-11 · mismo estado vacío que el buscador (ver EmptyResults).
@@ -472,6 +579,8 @@ export async function CategoryExplorer({
                   }
                   categories={categories}
                   hrefFor={categoryHref}
+                  layout="strip"
+                  variant="text"
                 />
               ) : (
                 <div className="grid gap-[25px] sm:grid-cols-2 lg:grid-cols-3">
@@ -491,6 +600,8 @@ export async function CategoryExplorer({
                 }
                 categories={categories}
                 hrefFor={categoryHref}
+                layout="strip"
+                variant="text"
               />
             ) : (
               <div className="grid gap-[25px] sm:grid-cols-2 lg:grid-cols-3">
@@ -505,6 +616,7 @@ export async function CategoryExplorer({
               hasMore={tab === "productos" ? products.hasMore : tutors.hasMore}
               totalPages={Math.max(1, Math.ceil(total / PAGE_SIZE))}
               hrefFor={(n) => buildHref({ ...active, tab, sort, page: n })}
+              targetId="resultados"
             />
           </div>
         </Section>
