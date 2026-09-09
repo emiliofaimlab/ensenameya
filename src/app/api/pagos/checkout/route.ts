@@ -249,15 +249,20 @@ type Cobro = {
    * y pagable en el otro proveedor.
    */
   cobrador: string | null;
-  /** `payments.payer_country`, si se congeló. dLocal lo usa; Stripe lo ignora. */
-  payerCountry: string | null;
   /**
-   * Los países de cobro (`payments.payee_country`) de las líneas, sin repetir.
-   * Es la clave con la que `chargeProvidersFor` resuelve la cadena, igual que
-   * `create_booking_line` resolvió el snapshot. `null` es un país legítimo: el
-   * tutor que no lo ha declarado, que tiene su propia fila en la tabla.
+   * 🔑 `payments.payer_country`: desde dónde paga el alumno, congelado al crear
+   * la reserva. Es DOS cosas a la vez desde el dictado del 9-sep-2026:
+   *
+   *   · la clave con la que `chargeProvidersFor` resuelve la cadena de cobro,
+   *     igual que `create_booking_line` resolvió el snapshot;
+   *   · el `country` que el adaptador de dLocal necesita para cobrar.
+   *
+   * Es UNO y no una lista, y esa es la simplificación entera de la fase: un
+   * pedido tiene N tutores pero **un solo alumno**, así que ya no hay nada que
+   * intersecar. `null` es un valor legítimo —zona horaria no deducible— y rutea
+   * por la fila por defecto, que cobra igual.
    */
-  payeeCountries: (string | null)[];
+  payerCountry: string | null;
   /**
    * Las reservas cuya fila de `payments` hay que anotar: una para una reserva
    * suelta, N para un pedido. Todas comparten cobro, así que todas comparten
@@ -328,7 +333,7 @@ export async function POST(req: Request) {
     const { data: payment } = await admin
       .from("payments")
       .select(
-        "id, provider, gross_amount, currency, payer_country, payee_country, provider_metadata",
+        "id, provider, gross_amount, currency, payer_country, provider_metadata",
       )
       .eq("booking_id", id)
       .maybeSingle();
@@ -350,7 +355,6 @@ export async function POST(req: Request) {
       provider: payment.provider,
       cobrador: cobradorAnotado(metadata),
       payerCountry: payment.payer_country,
-      payeeCountries: [payment.payee_country],
       reservas: [id],
       metadata,
       creadoEn: booking.created_at,
@@ -403,7 +407,7 @@ export async function POST(req: Request) {
     const { data: pagos } = await admin
       .from("payments")
       .select(
-        "booking_id, provider, gross_amount, currency, payer_country, payee_country, provider_metadata",
+        "booking_id, provider, gross_amount, currency, payer_country, provider_metadata",
       )
       .in(
         "booking_id",
@@ -442,7 +446,6 @@ export async function POST(req: Request) {
        * cualquiera sería cobrar la mentoría de otro tutor por una pasarela que
        * su país no rutea. Se intersecan más abajo.
        */
-      payeeCountries: [...new Set((pagos ?? []).map((p) => p.payee_country))],
       reservas: filas.map((b) => b.id),
       metadata: objeto(porReserva.get(filas[0]!.id)?.provider_metadata),
       creadoEn: order.created_at,
@@ -461,33 +464,26 @@ export async function POST(req: Request) {
   const cobrar = resuelto;
 
   /**
-   * EL RESPALDO QUE **TODAS** LAS LÍNEAS AUTORIZAN.
+   * 🔑 UN SOLO ALUMNO, UNA SOLA RUTA — el simplificador del dictado.
    *
-   * Con una reserva suelta hay un país y esto devuelve su lista tal cual. Con un
-   * pedido puede haber varios (ver `payeeCountries`), y entonces se interseca
-   * conservando el orden del primero: un candidato que la regla de otra línea no
-   * nombra no es un respaldo, es cobrarle la mentoría de ese tutor por una
-   * pasarela que su país no rutea — y con ella un `payments.provider` que miente
-   * sobre de qué balance sale su payout.
+   * Aquí vivía `ruteoComun()`, que resolvía la lista de CADA tutor del pedido y
+   * las intersecaba conservando el orden de la primera. Existía porque el cobro
+   * se ruteaba por el país del tutor y un pedido tiene N tutores: un candidato
+   * que la regla de otra línea no nombraba no era un respaldo válido.
    *
-   * La cabeza sobrevive siempre a la intersección: `create_order` obliga a que
-   * todas las líneas compartan `payments.provider`, que es `charge_providers[1]`
-   * de cada una. Lo que se puede quedar por el camino es el respaldo, y quedarse
-   * sin respaldo es exactamente el comportamiento de ayer.
+   * Con el cobro ruteado por el país del ALUMNO esa función se queda sin
+   * trabajo: un pedido tiene un solo pagador, así que hay una sola lista y no
+   * hay nada que intersecar. Se borra entera en vez de dejarla intersecando un
+   * array de un elemento consigo mismo.
+   *
+   * ⚠️ SE RESUELVE LA LISTA ENTERA, NO «EL PROVEEDOR». `chargeProvidersFor` no
+   * filtra por disponibilidad a propósito: quien cobra necesita saber qué se
+   * intentó, porque eso es lo que acaba en el 503.
    */
-  const ruteoComun = async (paises: (string | null)[]): Promise<string[]> => {
-    const listas = await Promise.all(paises.map((p) => chargeProvidersFor(p)));
-    const [primera = [], ...resto] = listas;
-    return primera.filter((clave) => resto.every((otra) => otra.includes(clave)));
-  };
-
-  // ⚠️ SE RESUELVE LA LISTA ENTERA, NO «EL PROVEEDOR». `chargeProvidersFor` no
-  // filtra por disponibilidad a propósito: quien cobra necesita saber qué se
-  // intentó, porque eso es lo que acaba en el 503.
   const cadena = cadenaDeCobro({
     cobrador: cobrar.cobrador,
     snapshot: cobrar.provider,
-    ruteo: await ruteoComun(cobrar.payeeCountries),
+    ruteo: await chargeProvidersFor(cobrar.payerCountry),
   });
 
   // El ruteo manda, y manda la CABEZA de la cadena — que en el caso normal es el
@@ -849,12 +845,24 @@ export async function POST(req: Request) {
   }
 
   /**
-   * A2 · EL COBRO QUE NO SE MONTA, SE VISITA.
+   * A2 · EL COBRO QUE NO SE MONTA, SE VISITA — y desde el dictado de pagos del
+   * 9-sep-2026 (§2, punto 2) esto es la EXCEPCIÓN, no el camino de dLocal.
    *
-   * dLocal Go no tiene formulario embebible (SmartFields exige que su soporte
-   * lo habilite; `direct: true` se ignora hoy), así que su cobro es una URL a la
-   * que hay que mandar a la persona. El navegador la reconoce por `modo` y
-   * navega.
+   * ⚠️ AQUÍ ESTUVO ESCRITO QUE «dLocal Go NO TIENE FORMULARIO EMBEBIBLE» Y ERA
+   * FALSO: aquella prueba miraba `direct`, un campo de solo lectura, en vez de
+   * `allow_transparent`. Con el parámetro correcto dLocal monta sus campos de
+   * tarjeta dentro de nuestra pantalla igual que Stripe, y eso es lo que
+   * devuelve el bloque `transparente` de abajo.
+   *
+   * Este camino se sigue usando en tres casos reales, todos medidos:
+   *   · el cobro se abrió SIN país del pagador (`allow_transparent` sin
+   *     `country` es un 400: «Empty country not allowed for transparent
+   *     checkout»), o sea las reservas anteriores a la fase 1 del dictado;
+   *   · la cuenta no tiene el transparente activo (929, o `subType != TRANSPARENT
+   *     _CHECKOUT`) — el estado esperado de PRODUCCIÓN hasta que dLocal lo
+   *     habilite;
+   *   · un medio local (PIX, boleto, efectivo), que solo existe en su
+   *     formulario alojado (D-3).
    *
    * ⚠️ `modo` VIAJA SIEMPRE, TAMBIÉN EN EL CAMINO EMBEBIDO, y esa es la mitad
    * del arreglo. Las tres pantallas de cobro decidían con
@@ -867,6 +875,31 @@ export async function POST(req: Request) {
   if (cobro.modo === "redireccion") {
     return NextResponse.json({
       modo: "redireccion",
+      redirectUrl: cobro.redirectUrl,
+      retencionHasta: retencion,
+    });
+  }
+
+  /**
+   * EL TRANSPARENTE DE dLOCAL — el formulario se monta aquí dentro.
+   *
+   * ⚠️ `checkoutToken` **NO VIAJA AL NAVEGADOR**, y no es un olvido. El único
+   * sitio donde se necesita es el servidor, confirmando el cobro, y allí se
+   * relee del `DP-…` de `payments.provider_payment_id` con `service_role`
+   * (regla de oro 2, dictado §6). Mandarlo aquí solo serviría para que mañana
+   * alguien lo aceptara DE VUELTA en `confirmar-dlocal` «porque ya lo teníamos»,
+   * que es exactamente la puerta que esa ruta cierra. El navegador identifica su
+   * cobro con el `bookingId` / `orderId` que ya tiene.
+   *
+   * `redirectUrl` sí viaja: es la salida de respaldo si el formulario no
+   * arranca, y el enlace a «otros medios de pago» del día que se resuelva D-3.
+   */
+  if (cobro.modo === "transparente") {
+    return NextResponse.json({
+      modo: "transparente",
+      // Pública y NO NUESTRA: es la clave de plataforma del tokenizador de
+      // dLocal Go, hardcodeada en su propio SDK. Ver `ChargeTransparente`.
+      publicKey: cobro.publicKey,
       redirectUrl: cobro.redirectUrl,
       retencionHasta: retencion,
     });

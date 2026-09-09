@@ -62,21 +62,24 @@ export type { DatosDeCobro };
  * «el primero que se puede», esa información se perdería aquí y el error final
  * sería «no se pudo cobrar» sin más.
  *
- * ⚠️ HAY QUE PASARLE EL PAÍS DEL TUTOR, y desde A0 (`20260901140000`) no es
- * opcional. Hasta esa migración la tabla tenía UNA fila y mirar «la activa» sin
- * filtrar daba siempre la respuesta correcta por accidente; ahora tiene diez —
- * ocho países de dLocal Go, Venezuela y la del tutor que aún no ha declarado
- * país— y un `order by priority limit 1` sin filtro devolvería la de cualquiera.
- * Se filtra exactamente igual que `create_booking_line`, que es lo que de verdad
- * congela `payments.provider`: si esta función y la RPC no coinciden, la
- * pantalla promete una pasarela y cobra otra.
+ * 🔑 HAY QUE PASARLE EL PAÍS DEL **ALUMNO**, y esto cambió con el dictado del
+ * 9-sep-2026 (`docs/DICTADO-PAGOS.md`). Antes se le pasaba el del TUTOR, y esa
+ * es exactamente la premisa que el dictado deroga: quién cobra lo decide desde
+ * dónde paga quien paga, no dónde vive quien recibe.
  *
- * `payeeCountry` null NO es «da igual el país»: es el tutor que no lo ha
- * declarado, y tiene su propia fila (`payee_country` null). Por eso el filtro es
- * `.is(...)` y no «sin filtro».
+ * Es la misma clave que congela `create_booking_line` en `payments.payer_country`
+ * y la misma que valida `set_charge_provider`. Las tres tienen que mirar el
+ * mismo país: si esta función y la RPC no coinciden, la pantalla promete una
+ * pasarela y cobra otra.
+ *
+ * `payerCountry` null NO es «da igual el país»: es el alumno cuya zona horaria
+ * no se pudo traducir a uno (su zona es 'UTC', o no está en `timezone_countries`).
+ * Tiene su propia fila y rutea `{stripe}`, o sea que **puede pagar igual** — la
+ * migración lo fija con una autocomprobación para que nadie lo mueva a
+ * 'simulated' sin darse cuenta de que eso lo dejaría sin poder comprar.
  */
 export async function chargeProvidersFor(
-  payeeCountry: string | null,
+  payerCountry: string | null,
 ): Promise<string[]> {
   // ⚠️ `ruta_de_pago()` y no un `select` sobre la tabla, y no es un detalle de
   // estilo: desde el 3-sep el desempate tiene DOS pasos —la fila del país, y si
@@ -84,18 +87,50 @@ export async function chargeProvidersFor(
   // mundo— y ese desempate vive en la función. Replicarlo aquí es cómo las dos
   // copias se desincronizan y el ruteo pasa a depender de quién preguntó.
   const { data } = await createAdminClient()
+    // ⚠️ EL ARGUMENTO SE LLAMA `p_payee` Y AQUÍ LE LLEGA EL PAÍS DEL **ALUMNO**,
+    // y no es un error: la función busca «la fila de este país», y desde el
+    // dictado el cobro pregunta por el país del pagador. El nombre del parámetro
+    // se queda porque renombrarlo obligaría a reescribir la firma —y con ella
+    // los grants y `payoutProviderFor`, que sí le pasa el del tutor— para no
+    // cambiar ni un comportamiento.
+    //
     // ⚠️ El `as string` NO tapa un fallo: `ruta_de_pago(char(2))` acepta null y
-    // tiene una rama para él (la fila del tutor que aún no ha declarado país).
-    // Lo que no lo expresa es el tipo GENERADO, que marca todo argumento sin
-    // defecto como no nulo. Sin `.maybeSingle()`: la función devuelve un
-    // registro compuesto, no un conjunto de filas.
-    .rpc("ruta_de_pago", { p_payee: payeeCountry as string });
+    // tiene una rama para él. Lo que no lo expresa es el tipo GENERADO, que
+    // marca todo argumento sin defecto como no nulo. Sin `.maybeSingle()`: la
+    // función devuelve un registro compuesto, no un conjunto de filas.
+    .rpc("ruta_de_pago", { p_payee: payerCountry as string });
 
   // Sin regla no se puede reservar (`create_booking` lanza RN-33). Se devuelve
   // el simulado a secas —el camino conservador de siempre: enseñar el aviso
   // antes que fingir un cobro— y NO una lista con respaldo, porque el respaldo
   // de una regla que no existe sería inventarse una.
   return data?.charge_providers ?? ["simulated"];
+}
+
+/**
+ * 🔑 DE QUÉ PAÍS PAGA ESTA PERSONA — la misma cuenta que hace la reserva.
+ *
+ * Existe para que la PANTALLA de checkout y `create_booking_line` no puedan dar
+ * respuestas distintas. La pantalla promete una pasarela antes de que el alumno
+ * pulse; la RPC congela la que de verdad va a cobrar. Si cada una dedujera el
+ * país por su cuenta, la pantalla diría dLocal y el cobro se abriría por Stripe.
+ *
+ * ⚠️ SE LE PASA `profiles.timezone` EN CRUDO, no `getUserTimezone()`, y la
+ * diferencia importa: aquel helper cae a la cookie `ey-tz` del navegador cuando
+ * el perfil no tiene zona, y la RPC —que corre en el servidor, dentro de una
+ * transacción— no puede ver esa cookie. Usar el helper aquí haría que la
+ * pantalla dedujera Ecuador por la cookie y la reserva dedujera null por el
+ * perfil: dos pasarelas distintas para el mismo cobro.
+ *
+ * `null` (sin sesión, o zona sin traducir) es un valor legítimo: rutea por la
+ * fila por defecto, que cobra por Stripe.
+ */
+export async function paisDelPagador(timezone: string | null): Promise<string | null> {
+  if (!timezone) return null;
+  const { data } = await createAdminClient().rpc("pais_de_cobro_por_zona", {
+    p_timezone: timezone,
+  });
+  return data ?? null;
 }
 
 /**
@@ -119,20 +154,24 @@ export async function chargeProvidersFor(
  * que una `s` de más en 'dlocals' habría metido el país en el desplegable del
  * tutor y lo habría dejado atascado más tarde, en el formulario bancario.
  */
-export type FamiliaDeDato = "banco" | "identificador" | "conectada";
+export type FamiliaDeDato = "banco" | "identificador";
 
 /**
- * ⚠️ 'conectada' ES UNA TERCERA FAMILIA Y NO UN 'banco' RARO, aunque el dinero
- * acabe en un banco igual. La diferencia no es cosmética: en las otras dos el
- * tutor nos ENTREGA un dato que guardamos (un CBU, un correo de PayPal); en
- * esta no nos entrega nada — se da de alta en Stripe, le da sus coordenadas a
- * ELLOS y lo único que vuelve es un identificador de cuenta que escribimos
- * nosotros, no él.
+ * 🔑 SON DOS FAMILIAS Y NO TRES desde el dictado del 9-sep-2026.
  *
- * Meterla en 'banco' habría pintado el formulario bancario de dLocal a un tutor
- * cuyo payout no lo usa: campos rellenos, guardados, validados… y un payout que
- * no los mira. Es exactamente el fallo que `familiasQueSePiden` existe para
- * evitar, un piso más abajo.
+ * Aquí había una tercera, 'conectada', para el alta de Stripe Connect: el tutor
+ * no nos entregaba coordenadas, se daba de alta EN Stripe y lo único que volvía
+ * era un identificador de cuenta. El dictado la elimina entera —el tutor no
+ * vuelve a ver el nombre de Stripe— y con ella se fueron sus cuatro
+ * declaraciones repetidas a mano y sus cinco ramas.
+ *
+ * ⚠️ BORRARLA A MEDIAS ROMPE LA PANTALLA DEL TUTOR SIN ROMPER LA COMPILACIÓN.
+ * Las declaraciones estaban repetidas a propósito (este módulo lleva
+ * `server-only` y los puros no pueden importarlo), así que la incoherencia no
+ * la ve el typecheck: si un riel se quedara con `dato: "conectada"` sin su rama,
+ * el bucle de `metodosDelPais` lo trataría como 'identificador' y la pantalla
+ * pintaría tarjetas de Zinli y Zelle a quien no debe. Va todo en el mismo
+ * commit, y `npm run check:metodo` y `check:riel` lo fijan sin red.
  */
 
 /** Quién mueve el dinero cuando llega el momento. */
@@ -229,14 +268,24 @@ export const RIEL_BANCO_MANUAL = "banco-manual";
 const RIELES: Record<string, Riel> = {
   [stripeProvider.key]: {
     clave: stripeProvider.key,
-    // Connect: el tutor no nos da coordenadas, se da de alta en Stripe.
-    dato: "conectada",
+    // 🔑 'banco' desde el dictado, no 'conectada'. Cuando Stripe vuelva a pagar
+    // lo hará con las coordenadas que el tutor teclea en NUESTRO formulario, sin
+    // que él vea Stripe por ningún lado — que es lo que pide el punto 3b.
+    dato: "banco",
     ejecuta: "proveedor",
     ataduraDeBalance: true,
-    // ⚠️ Desde el 4-sep-2026 esto puede devolver `true`: el adaptador de Connect
-    // existe. Aquí ponía que «este riel nunca puede pagar» porque
-    // `missingPayoutConfig()` devolvía siempre una frase sobre un KYC que ya no
-    // bloquea nada.
+    // Ya no es un `false` a mano: **la decisión D-1 se aprobó el 10-sep-2026** y
+    // el adaptador está escrito desde ese día (`payments/stripe-provider.ts`), así
+    // que la credencial es el interruptor, como en los otros tres. Aquí ponía
+    // `() => false` porque D-1 «todavía no está tomada»; esa frase caducó.
+    //
+    // ⚠️ Que el riel pueda pagar NO significa que pueda pagarle a cualquiera, y
+    // aquí eso es más cierto que en ningún otro: Stripe exige fecha de nacimiento
+    // y aceptación de condiciones —los dos campos OPCIONALES del formulario— y no
+    // puede crear la cuenta en Estados Unidos ni en Brasil. Sin esos datos el
+    // adaptador devuelve `sin-datos`, que deja la orden esperando. Ese segundo
+    // filtro **todavía no existe** en `rielSirveParaEsteTutor`, que para este riel
+    // se conforma con `datos.banco`: ver el PENDIENTE de la fase 5.
     puedePagar: () => stripeProvider.missingPayoutConfig() === null,
   },
   [dlocalProvider.key]: {
@@ -475,12 +524,11 @@ function rielesQuePuedenPagar(candidatos: string[]): Riel[] {
  * sin repetir. Es la respuesta a la pregunta que la pantalla necesitaba hacer y
  * no podía: no «cuál le pido», sino «cuáles le sirven».
  *
- * Colombia es el caso que lo obligó: `{stripe, wise, paypal}` son
- * 'conectada' + 'banco' + 'identificador', y pedir solo la primera dejaba el
- * riel de Wise —que es de banco— sin manera de existir, porque el único sitio
- * desde el que se escriben coordenadas bancarias es el formulario que no se
- * pintaba. Con la lista entera, un país mixto ofrece las dos o tres vías y con
- * completar UNA el tutor ya cobra.
+ * Colombia es el caso que lo obligó: sus candidatos mezclan familias, y pedir
+ * solo la del primero dejaba al riel de Wise —que es de banco— sin manera de
+ * existir, porque el único sitio desde el que se escriben coordenadas bancarias
+ * es el formulario que no se pintaba. Con la lista entera, un país mixto ofrece
+ * las dos vías y con completar UNA el tutor ya cobra.
  *
  * Lista vacía = ningún candidato puede pagar. Ese país NO se le ofrece al tutor,
  * porque ofrecérselo es prometerle un cobro que no se puede ejecutar.
@@ -522,9 +570,9 @@ export function canalesServibles(rieles: string[], canales: string[]): string[] 
   return canales.filter((canal) =>
     identificadores.some((riel) =>
       rielSirveParaEsteTutor(riel, {
-        conectada: false,
         banco: false,
         banco_wise: false,
+        banco_stripe: false,
         canales: [canal],
         // No interviene: `rielSirveParaEsteTutor` no mira la preferencia. Aquí
         // se pregunta si el riel PODRÍA usar ese canal, no si alguien lo quiere.
