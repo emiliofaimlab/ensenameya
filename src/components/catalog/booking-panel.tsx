@@ -364,7 +364,9 @@ export async function BookingPanel({
                 return (
                   <span
                     key={i}
-                    className="grid h-[38px] place-items-center text-[13px] text-[#bfbfbf]"
+                    // Mismo alto que los días pulsables: si no, la rejilla del
+                    // mes cambia de altura según cuántos días haya libres.
+                    className="grid h-10 place-items-center text-[13px] text-[#bfbfbf]"
                   >
                     {d}
                   </span>
@@ -387,7 +389,11 @@ export async function BookingPanel({
                   })}
                   scroll={false}
                   aria-current={isSelected ? "date" : undefined}
-                  className={`grid h-[38px] place-items-center rounded-full text-[13px] transition-colors ${
+                  // 40 px de alto (la celda mide 42,9 de ancho, así que cabe):
+                  // los días del calendario son el control que más se toca de
+                  // esta pantalla y se quedaban dos píxeles por debajo del
+                  // mínimo táctil del proyecto.
+                  className={`grid h-10 place-items-center rounded-full text-[13px] transition-colors ${
                     isSelected
                       ? "bg-brand font-bold text-white"
                       : "text-[#212121] hover:bg-muted"
@@ -703,7 +709,16 @@ export async function BookingPanel({
         posible —que aparezca «Ir al carrito» la primera vez— y encima ocurre
         HACIA ABAJO, sin desplazar al botón principal.
       */}
-      <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 max-lg:pe-[72px] lg:static">
+      {/* ⚠️ `[overflow-anchor:none]` NO es adorno: sin él, elegir una mentoría
+          en el selector movía la página 179 px hacia abajo. Chrome ancla el
+          scroll al elemento que tiene delante cuando el contenido de arriba
+          cambia de alto (el calendario y los horarios se rehacen al cambiar de
+          mentoría), y esta barra `sticky` era justo el ancla: la seguía, y el
+          calendario acababa debajo de la cabecera de 173 px. Es el mismo
+          «brinca» que Verónica denuncia en los chips y en el paginador, en su
+          tercera forma. Apagando el anclaje en la barra, el ancla vuelve a ser
+          el contenido y la página se queda donde estaba. */}
+      <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 [overflow-anchor:none] max-lg:pe-[72px] lg:static">
         {chosen && sesionesPorReserva(chosen) > 1 ? (
           /* PAQUETE · no pasa por el carrito desde aquí (ver arriba). El botón
              se queda igual que siempre: bloqueado sin hora, y con hora lleva al

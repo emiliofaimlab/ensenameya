@@ -84,13 +84,36 @@ export function ContactTutor({
   // El nombre de pila basta y cabe mejor. Si viene vacío, "al tutor".
   const nombreCorto = tutorName.trim().split(/\s+/)[0] || "al tutor";
 
+  /**
+   * Verónica 3-sep (P07): en móvil el botón baja al borde izquierdo, bajo los
+   * metadatos, y por debajo de sm toma la forma del botón secundario del Figma
+   * P07 («Enviar mensaje», el mismo gesto dentro del panel de reserva a 390):
+   * ancho completo, 52 px de alto, radio 8 y etiqueta de 15 px semibold
+   * centrada (medido sobre el PNG a escala 2: caja 314x52, borde #ebebeb). Aquí
+   * queda en el hero y no en el panel por EY-194 (ver cabecera): mover el botón
+   * de sitio es una decisión del cliente, no de maquetación.
+   *
+   * Entre sm y lg (tablets, que también son táctiles) no vuelve el botón de
+   * 32 px: se queda a ancho de contenido pero con 44 px de alto (`h-11`), más
+   * padding y la misma etiqueta de 15 px. Desde lg es el botón de siempre (R1).
+   * Las dos ramas (con y sin sesión) comparten las clases.
+   *
+   * El foco: el anillo del `Button` es el azul de marca al 50 %, y sobre el
+   * hero azul de la ficha no se ve (1,05:1 medido). Como este botón vive
+   * SIEMPRE sobre ese hero, el anillo y el borde de foco pasan al gris de
+   * primer plano, que contrasta contra el azul (≥ 4,3:1) y contra el relleno
+   * blanco del botón. Es solo el estado de foco: en reposo no cambia nada.
+   */
+  const claseMovil =
+    "gap-2 max-sm:h-[52px] max-sm:w-full sm:max-lg:h-11 sm:max-lg:px-6 max-lg:text-[15px] max-lg:font-semibold focus-visible:border-foreground focus-visible:ring-foreground/60";
+
   if (anonimo) {
     return (
       <SignupDialog
         titulo="Crea tu cuenta para escribirle"
         descripcion={`Pregúntale a ${nombreCorto} lo que necesites antes de reservar`}
       >
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className={claseMovil}>
           <MessageCircleIcon className="size-4" />
           Escribir a {nombreCorto}
         </Button>
@@ -129,7 +152,7 @@ export function ContactTutor({
   return (
     <Button
       variant="outline"
-      className="gap-2"
+      className={claseMovil}
       disabled={busy}
       onClick={() => void escribir()}
     >
