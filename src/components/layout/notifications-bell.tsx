@@ -190,7 +190,16 @@ export function NotificationsBell({
         <Button
           variant="ghost"
           size="icon"
-          className="relative rounded-full"
+          // Verónica (3-sep-2026, captura 29): la fila con sesión a 390 «no
+          // existe en diseño; mejor 2 botones, notificaciones a la izquierda y
+          // usuario a la derecha, sin que estén unidos». El borde que llevaba la
+          // fila entera pasa a cada control: aquí un círculo de 42 —el alto de
+          // la píldora del avatar de AL02— con el mismo #e0e0e0 (`border-border`)
+          // y, de paso, 42 px de objetivo táctil. Desde 768 vuelve a ser el
+          // ícono pelado de 32 que ya había: esa fila nunca llevó borde y la
+          // píldora del avatar tiene el suyo. `size-[42px]` pisa el `size-8` de
+          // `size="icon"` (cn/twMerge se queda con el último).
+          className="relative size-[42px] rounded-full border-border md:size-8 md:border-transparent"
           aria-label={
             unread > 0 ? `Avisos (${unread} sin leer)` : "Avisos"
           }

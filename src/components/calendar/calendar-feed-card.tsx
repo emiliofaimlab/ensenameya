@@ -118,9 +118,12 @@ export function CalendarFeedCard({
         Sincroniza tu calendario
       </PanelCardTitle>
       <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
-        Suscribe Apple Calendar o Google Calendar a tus clases. No es una
+        {/* «mentorías», no «clases»: es el vocabulario del producto desde el
+            acuerdo del 17-ago (R4 del Doc 24). Esta tarjeta cae justo debajo
+            de la de tutor en la captura 28 de Verónica. */}
+        Suscribe Apple Calendar o Google Calendar a tus mentorías. No es una
         descarga: tu calendario vuelve a consultar el enlace cada cierto tiempo,
-        así que las clases nuevas y las cancelaciones aparecen solas.
+        así que las mentorías nuevas y las cancelaciones aparecen solas.
       </p>
 
       {token === null ? (

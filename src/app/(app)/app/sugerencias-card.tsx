@@ -65,11 +65,27 @@ export function SugerenciasCard({ data }: { data: PanelSuggestions }) {
       {!desdeSusTemas && data.conOferta.length > 0 ? (
         <div className="mt-5 flex flex-col items-start gap-2 border-t border-[#e0e0e0] pt-4">
           <p className="text-[13px] text-[#6b6b6b]">O elige un tema:</p>
-          {/* `tone="light"`: la tarjeta del panel es blanca (ver CategoryIconChips). */}
+          {/* `tone="light"`: la tarjeta del panel es blanca (ver CategoryIconChips).
+
+              Verónica (3-sep-2026, captura 27 del panel a 390): «slider y
+              sustituir por textos en lugar de iconos». `layout="strip"` = UNA
+              fila con scroll horizontal por debajo de `lg` (antes: 9 círculos
+              en dos filas, medido 316×96); `variant="text"` = el nombre de la
+              categoría en vez del ícono. Desde `lg` no cambia nada (R1).
+
+              ⚠️ El sangrado que trae el componente es el de `Container`
+              (20/24/32) y aquí el padre es una `PanelCard`, que es `p-5` FIJO a
+              todos los anchos (medido: 20 px a 390 y a 768). Se pisa con 20 en
+              los tres tramos para que la tira llegue justo al borde interior
+              de la tarjeta: el último chip asoma cortado por ese borde, que es
+              la señal de que hay más. */}
           <CategoryIconChips
             categories={data.conOferta}
             hrefFor={(slug) => `/categories/${slug}`}
             tone="light"
+            layout="strip"
+            variant="text"
+            className="-mx-5 px-5 scroll-px-5 sm:-mx-5 sm:px-5 sm:scroll-px-5 md:-mx-5 md:px-5 md:scroll-px-5"
           />
         </div>
       ) : null}

@@ -21,11 +21,24 @@ export default async function AccountPage() {
   const { user, roles } = await requireUser();
 
   const supabase = await createClient();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, timezone, avatar_path")
-    .eq("id", user.id)
-    .single();
+  // Verónica (3-sep-2026): «si ya soy tutor no debería salir "quiero ser
+  // tutor"». Ser tutor a efectos de la tarjeta de `/account` NO es tener el
+  // rol —que solo se concede al APROBAR (US-1101)— sino haber empezado: la
+  // fila de `tutor_profiles`. Se lee su `approval_status` (y no el booleano de
+  // `hasTutorProfile()`) porque la tarjeta distingue «en revisión» de
+  // «rechazado». Las dos consultas van juntas: no dependen una de otra.
+  const [{ data: profile }, { data: tutorProfile }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("full_name, timezone, avatar_path")
+      .eq("id", user.id)
+      .single(),
+    supabase
+      .from("tutor_profiles")
+      .select("approval_status")
+      .eq("profile_id", user.id)
+      .maybeSingle(),
+  ]);
 
   const avatarUrl = storageUrl("avatars", profile?.avatar_path);
 
@@ -76,6 +89,9 @@ export default async function AccountPage() {
         timezone={profile?.timezone ?? "UTC"}
         avatarUrl={avatarUrl}
         isTutor={roles.includes("tutor")}
+        /* La cara de la tarjeta «Tu perfil de tutor»: `null` = nunca empezó
+           el alta de tutor (ver el comentario de la consulta, arriba). */
+        tutorStatus={tutorProfile?.approval_status ?? null}
         /* Baja programada: si la cuenta está desactivada esperando a que se
            mueva el dinero, la última tarjeta cambia de cara. */
         estadoBaja={estadoBaja}

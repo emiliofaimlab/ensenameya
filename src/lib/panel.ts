@@ -9,6 +9,11 @@
  * El proxy deja el último panel visitado en la cookie `ey-panel` y estas
  * pantallas la leen. Es solo para pintar el menú: cada destino sigue teniendo
  * su propia guarda, así que una cookie manipulada no abre nada.
+ *
+ * La misma cookie la lee **en cliente** el switch Aprender/Enseñar del header
+ * (`PanelSwitch`, `site-header.tsx`) para marcar el panel activo cuando la
+ * ruta no lo dice (`/account`, `/pagos`, lo público): así el switch y el menú
+ * lateral de esa pantalla cuentan la misma historia (Verónica, 3-sep-2026).
  */
 export const PANEL_COOKIE = "ey-panel";
 

@@ -20,9 +20,12 @@ import {
 } from "@/components/form/validation";
 import { AvatarUpload } from "@/components/onboarding/avatar-upload";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
+import type { Database } from "@/lib/database.types";
 import { DeleteAccountDialog } from "./delete-account-dialog";
 import { DeactivatedCard } from "./deactivated-card";
 import { estaDesactivada, type EstadoBaja } from "./baja";
+
+type TutorApproval = Database["public"]["Enums"]["tutor_approval_status"];
 
 /**
  * US-104 (SCR-G03) — "Mi cuenta" en módulos (24-jul): foto, información
@@ -40,6 +43,7 @@ export function AccountForm({
   timezone,
   avatarUrl,
   isTutor,
+  tutorStatus,
   estadoBaja,
   calendario,
   referidos,
@@ -49,7 +53,13 @@ export function AccountForm({
   fullName: string;
   timezone: string;
   avatarUrl: string | null;
+  /** El ROL `tutor`, que solo llega al aprobar (US-1101). Lo siguen usando la
+   *  baja de cuenta y el diálogo de eliminar, que preguntan por el rol. */
   isTutor: boolean;
+  /** `approval_status` de `tutor_profiles`, o `null` si nunca empezó el alta
+   *  de tutor. Con `isTutor` decide la cara de la tarjeta «Tu perfil de
+   *  tutor» (Verónica, 3-sep-2026). */
+  tutorStatus: TutorApproval | null;
   /** Estado de baja de la cuenta (`my_account_deletion_state`). `null` si la
    *  consulta falló: se pinta como cuenta activa, que es el caso de casi todo
    *  el mundo, y la verdad sigue estando en el diálogo de confirmación. */
@@ -335,24 +345,83 @@ export function AccountForm({
         </div>
       </PanelCard>
 
-      {/* Rol tutor */}
+      {/* Rol tutor · Verónica (3-sep-2026, captura 28): «si ya soy tutor no
+          debería salir que quiero ser tutor; en dado caso, ver perfil de
+          tutor». Hasta ahora la tarjeta miraba solo el ROL, y el rol `tutor`
+          se concede al APROBAR (US-1101): a quien acababa de terminar el
+          asistente —perfil pendiente— se le seguía ofreciendo «Quiero enseñar»
+          hacia el asistente que ya había hecho. Tres caras, por lo que de
+          verdad ha pasado:
+
+            sin fila en `tutor_profiles`  → invitación a enseñar (lo de siempre)
+            fila sin rol (pendiente…)     → «en revisión», con acceso a su panel
+            rol `tutor`                   → perfil público + panel
+
+          Un rechazado o suspendido tampoco vuelve a ver la invitación: su panel
+          (`/tutor`) ya explica el motivo y cómo volver a enviarlo. Los botones
+          van hug y envuelven (`flex-wrap`), como el resto de tarjetas de esta
+          pantalla: a 390 los dos del tutor aprobado no caben en una línea y
+          caen uno bajo otro sin estirarse. */}
       <PanelCard>
-        <PanelCardTitle>Enseñar en Enséñame Ya</PanelCardTitle>
-        <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
-          {isTutor
-            ? "Ya tienes el rol de tutor activo."
-            : "Conviértete en tutor para empezar a ofrecer tus mentorías."}
-        </p>
-        {isTutor ? null : (
-          <div className="mt-4">
-            <Button
-              asChild
-              variant="outline"
-              className="h-[45px] rounded-[8px] px-5"
-            >
-              <Link href="/tutor/onboarding">Quiero enseñar</Link>
-            </Button>
-          </div>
+        {isTutor ? (
+          <>
+            <PanelCardTitle>Tu perfil de tutor</PanelCardTitle>
+            <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
+              Ya eres tutor. Mira cómo te ven los alumnos o gestiona tus
+              mentorías desde tu panel.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                asChild
+                variant="outline"
+                className="h-[45px] rounded-[8px] px-5"
+              >
+                <Link href={`/tutors/${userId}`}>Ver mi perfil de tutor</Link>
+              </Button>
+              <Button
+                asChild
+                variant="outline"
+                className="h-[45px] rounded-[8px] px-5"
+              >
+                <Link href="/tutor">Ir a mi panel de tutor</Link>
+              </Button>
+            </div>
+          </>
+        ) : tutorStatus ? (
+          <>
+            <PanelCardTitle>Tu perfil de tutor</PanelCardTitle>
+            <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
+              {tutorStatus === "pending"
+                ? // NTF-03 (`tutor_review_result`) manda ese correo de verdad.
+                  "Está en revisión. Te avisamos por correo cuando lo aprobemos."
+                : "No está activo. Entra a tu panel para ver el motivo y volver a enviarlo."}
+            </p>
+            <div className="mt-4">
+              <Button
+                asChild
+                variant="outline"
+                className="h-[45px] rounded-[8px] px-5"
+              >
+                <Link href="/tutor">Ir a mi panel de tutor</Link>
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <PanelCardTitle>Enseñar en Enséñame Ya</PanelCardTitle>
+            <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
+              Conviértete en tutor para empezar a ofrecer tus mentorías.
+            </p>
+            <div className="mt-4">
+              <Button
+                asChild
+                variant="outline"
+                className="h-[45px] rounded-[8px] px-5"
+              >
+                <Link href="/tutor/onboarding">Quiero enseñar</Link>
+              </Button>
+            </div>
+          </>
         )}
       </PanelCard>
 

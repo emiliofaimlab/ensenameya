@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -40,7 +40,8 @@ import { Container } from "@/components/layout/container";
 import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
 import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 import { cn } from "@/lib/utils";
-import { isAdminRoute, isOnboardingRoute } from "@/lib/panel";
+import { panelDeCookie, ROLE_HOME } from "@/lib/auth/roles";
+import { isAdminRoute, isOnboardingRoute, panelFromPath } from "@/lib/panel";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
 export type HeaderUser = {
@@ -80,7 +81,29 @@ export type HeaderUser = {
  * frames pero NO dibuja ni uno solo del menú abierto, así que este switch no
  * tiene diseño al que parecerse: se queda donde estaba (menú del avatar y
  * cajón). Es el caso general de R2 — lo que el Figma desconoce no se borra.
+ *
+ * Verónica (3-sep-2026, captura 30): «estoy como tutor y, al ir a Mi cuenta
+ * desde el menú de las 3 rayas, me cambia a alumno». Fuera de un panel
+ * (`/account`, `/pagos`, lo público) la ruta no dice de dónde vienes, y marcar
+ * «Aprender» por defecto (24-jul) contradecía al menú lateral de ESA MISMA
+ * pantalla, que sigue a la cookie `ey-panel` (`panelItems`): chips de tutor
+ * arriba y «Aprender» marcado en el cajón. Ahora el switch lee la misma
+ * cookie: primero la ruta (`panelFromPath`), después la cookie, y solo sin
+ * ninguna de las dos el primero — que sigue siendo el default del 24-jul («un
+ * switch sin selección parece roto»). La cookie se valida contra `panels`: un
+ * `admin` en la cookie de quien no administra cae al default.
+ *
+ * `useSyncExternalStore` y no `useState` + `useEffect`: en servidor no hay
+ * `document`, así que el snapshot de servidor es `null` («Aprender») y en el
+ * cliente el primer render ya lee la cookie, sin un segundo render que
+ * parpadee. La cookie no avisa cuando cambia, de ahí la suscripción vacía: se
+ * relee en cada render, y este componente se monta cada vez que se abre el
+ * menú o el cajón, que es cuando importa. (En la práctica el snapshot de
+ * servidor ni se ve: los dos sitios que lo montan están cerrados al hidratar.)
  */
+const sinSuscripcion = () => () => {};
+const sinCookieEnServidor = () => null;
+
 function PanelSwitch({
   panels,
   pathname,
@@ -90,15 +113,18 @@ function PanelSwitch({
   pathname: string;
   onNavigate?: () => void;
 }) {
+  // Antes del `return` temprano: los hooks no pueden ser condicionales.
+  const panelCookie = useSyncExternalStore(
+    sinSuscripcion,
+    panelDeCookie,
+    sinCookieEnServidor,
+  );
   if (panels.length < 2) return null;
 
-  // Fuera de un panel (explorar, /account…) se marca "Aprender" (el primero):
-  // navegar lo público ES el modo aprender, y un switch sin selección parece
-  // roto (24-jul).
+  const panel = panelFromPath(pathname) ?? panelCookie;
   const activeHref =
-    panels.find(
-      (p) => pathname === p.href || pathname.startsWith(`${p.href}/`),
-    )?.href ?? panels[0].href;
+    (panel && panels.find((p) => p.href === ROLE_HOME[panel])?.href) ??
+    panels[0].href;
 
   return (
     <div
@@ -250,12 +276,22 @@ export function SiteHeader({
   const conBuscador = !admin && !onboarding;
 
   /**
-   * ¿La fila de acciones ocupa el ancho ENTERO a 390 y es la píldora del Figma?
+   * ¿La fila de acciones ocupa el ancho ENTERO a 390 con dos controles en los
+   * extremos (campana a la izquierda, píldora del avatar a la derecha)?
    *
-   * Sí siempre que haya sesión: es la `avatar-row` de «AL02 — Dashboard —
-   * Mobile» (358x42, r999, borde #e0e0e0, pad 6/12/6/6, contenido pegado a la
-   * derecha con `main:max`). Sin sesión la fila es la `auth-row` de AU01
-   * (222x40, pegada a la izquierda), que es hug y no lleva borde.
+   * Sí siempre que haya sesión. El Figma dibuja aquí la `avatar-row` de «AL02
+   * — Dashboard — Mobile» (358x42, r999, borde #e0e0e0, pad 6/12/6/6, contenido
+   * pegado a la derecha con `main:max`), y hasta el 8-sep la fila ENTERA era
+   * esa píldora, con la campana suelta dentro a la izquierda. Verónica
+   * (3-sep-2026, captura 29): «esta barra no existe en diseño; me gusta, pero
+   * mejor 2 botones, notificaciones a la izquierda y usuario a la derecha, sin
+   * que estén unidos». Así que el borde deja la fila y se lo queda cada
+   * control: la campana como círculo de 42 (`NotificationsBell`) y la píldora
+   * del avatar con el suyo, las dos con el mismo #e0e0e0 y la misma altura. La
+   * fila vuelve a ser un grupo transparente a los tres anchos, solo que a 390
+   * es `justify-between` y desde 768 `justify-end`, como siempre. Sin sesión la
+   * fila es la `auth-row` de AU01 (222x40, pegada a la izquierda), que es hug
+   * y no lleva borde.
    *
    * ⚠️ Admin va con el resto AUNQUE «AD02 — Dashboard Admin — Mobile» ponga su
    * `avatar-pill` en la misma fila que el logo. Ahí el Figma gasta los 358 px
@@ -263,7 +299,8 @@ export function SiteHeader({
    * no le sobra ni un píxel — y nosotros tenemos que meter además la campana y
    * la hamburguesa, que el archivo no dibuja en ningún frame (R2). Medido a
    * 390 con la fila compartida: 453 px de contenido para 350 de sitio. Con la
-   * píldora en su propia fila cabe todo y el nombre no se recorta.
+   * píldora en su propia fila cabe todo y el nombre solo se recorta si es muy
+   * largo (ver `min-w-0 shrink` en el disparador).
    */
   const filaAvatar = !!user && !onboarding;
 
@@ -305,11 +342,11 @@ export function SiteHeader({
     // ancho que de verdad ocupan o se desbordan sobre el buscador. Solo en
     // `lg:`: por debajo, el nombre del avatar SÍ tiene que poder recortarse.
     "order-4 w-full md:order-2 md:w-auto lg:order-3 lg:min-w-max lg:flex-1 lg:justify-end",
-    // Con sesión esa fila ES la píldora del Figma; a partir de 768 la píldora
-    // pasa a ser el propio disparador del menú y esto vuelve a ser un grupo
-    // transparente.
-    filaAvatar &&
-      "h-[42px] justify-between rounded-full border border-border px-1.5 md:h-auto md:justify-end md:gap-4 md:rounded-none md:border-0 md:px-0 lg:gap-2",
+    // Con sesión, a 390 son DOS controles con borde propio en los extremos
+    // (ver `filaAvatar`): la fila no lleva ni borde ni alto, lo ponen la
+    // campana (42) y la píldora (42). A partir de 768 el grupo se pega a la
+    // derecha, como siempre.
+    filaAvatar && "justify-between md:justify-end md:gap-4 lg:gap-2",
     // Sin sesión, AU01 pega los dos CTA a la IZQUIERDA de su fila con gap 16;
     // a 768 son un grupo hug a la derecha con gap 20.
     !user && "gap-4 md:gap-5 lg:gap-2",
@@ -481,18 +518,27 @@ export function SiteHeader({
                     <Button
                       variant="ghost"
                       className={cn(
-                        // Píldora del Figma: círculo de 30 + nombre + «▾».
-                        "h-[42px] w-auto justify-start gap-2 rounded-full p-0",
-                        // Quién lleva el borde de la píldora cambia con el
-                        // ancho: a 390 lo lleva la FILA (la `avatar-row` ocupa
-                        // el ancho entero y el disparador va suelto dentro); de
-                        // 768 en adelante la fila desaparece y la píldora es
-                        // esto (`avatar-row` 110x42 de AL02 tablet,
-                        // `avatar-pill` 172x42 de AD02 tablet).
-                        "md:border md:border-border md:pr-3 md:pl-1.5",
+                        // Píldora del Figma: círculo de 30 + nombre + «▾»,
+                        // 42 de alto, r999, borde #e0e0e0, pad 6/12 (AL02
+                        // `avatar-row` a 390 y a 768, `avatar-pill` de AD02).
+                        // El borde va aquí a TODOS los anchos por debajo de
+                        // 1024: hasta el 8-sep a 390 lo llevaba la fila entera
+                        // y Verónica (3-sep-2026) pidió los dos controles
+                        // separados (ver `filaAvatar`).
+                        "h-[42px] w-auto justify-start gap-2 rounded-full border-border p-0 pr-3 pl-1.5",
+                        // `shrink` + `min-w-0` (`buttonVariants` pone
+                        // `shrink-0`): sin esto el nombre real de la cuenta NO
+                        // se recorta y la píldora se sale de la pantalla —
+                        // medido a 390 con un nombre de 47 caracteres: 403 px
+                        // de disparador y 470 de `scrollWidth`, o sea scroll
+                        // horizontal de página. Ahora el suelo es el círculo y
+                        // el `truncate` del nombre actúa: la píldora no pasa
+                        // del sitio que deja la campana (350 − 42 − 8).
+                        "min-w-0 shrink",
                         // ≥1024 vuelve a ser el círculo pelado de 32 que hay
-                        // publicado desde EP-22 (R1): sin borde, sin nombre.
-                        "lg:size-8 lg:justify-center lg:gap-0 lg:p-0",
+                        // publicado desde EP-22 (R1): sin nombre ni padding, y
+                        // `shrink-0` como todos los botones de esa barra.
+                        "lg:size-8 lg:min-w-auto lg:shrink-0 lg:justify-center lg:gap-0 lg:p-0",
                       )}
                       aria-label="Abrir menú de cuenta"
                     >
@@ -513,9 +559,10 @@ export function SiteHeader({
                   </DropdownMenuTrigger>
                   {/* w-72: con tres paneles (admin) ni w-56 ni w-64 daban — en
                       w-64 "Aprender" se recortaba dentro de su celda. El
-                      `max-w-` lo acota a la pantalla: a 390 la píldora ya no
-                      está pegada al borde derecho y `align="end"` sacaba el
-                      menú fuera. */}
+                      `max-w-` lo acota a la pantalla y `collisionPadding` lo
+                      despega del borde (medido a 390: x=82..370 con la píldora
+                      pegada a la derecha; y también cabía cuando la píldora
+                      iba suelta dentro de la fila, que es de donde viene). */}
                   <DropdownMenuContent
                     align="end"
                     collisionPadding={12}
