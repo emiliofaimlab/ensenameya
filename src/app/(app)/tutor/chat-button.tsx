@@ -3,7 +3,10 @@
 import { MessageSquareIcon } from "lucide-react";
 
 import { pedirAbrirHilo } from "@/components/chat/open-thread";
-import { cn } from "@/lib/utils";
+// Se importa de `panel-controls` y NO del reexport de `panel-shell`: esto es
+// un componente de CLIENTE, y `panel-shell` arrastra el armazón entero del
+// panel (menú incluido) al bundle del navegador por un botón de 36 px.
+import { PanelIconButton } from "@/components/layout/panel-controls";
 
 /**
  * El botón «Chat» de las filas de sesión y de reserva del panel del tutor.
@@ -25,16 +28,16 @@ import { cn } from "@/lib/utils";
  * botones-icono de 36 px (chat · ojo · videocámara), así que aquí solo cambia
  * la forma: el destino y el porqué de abajo son los mismos.
  *
- * ⚠️ `aria-label` y `title` llevan LO MISMO y no son opcionales: sin texto
- * visible, el botón se anunciaba como «botón» a secas.
+ * ⚠️ `aria-label` y `title` los pone `PanelIconButton` a partir de `label`, y
+ * no son opcionales: sin texto visible, el botón se anunciaba como «botón» a
+ * secas.
  *
- * ⚠️ Las clases son las de `PanelIconButton` (G-04) copiadas, y eso duele.
- * No se reutiliza el componente porque `PanelIconButton` pinta un `<a href>` y
- * esto no navega a ningún sitio: abre la burbuja de chat en la propia página.
- * Un `<a>` sin `href` con `onClick` no recibe foco ni responde al teclado, que
- * es peor accesibilidad de la que se gana. Lo correcto es que
- * `PanelIconButton` sepa pintarse como `<button>`; mientras no lo sepa, esta
- * copia se mantiene a la vista, junto a su motivo.
+ * ✅ Aquí hubo una COPIA a mano de las clases de `PanelIconButton`, porque ese
+ * componente solo sabía pintar un `<a href>` y esto no navega a ningún sitio:
+ * abre la burbuja de chat en la propia página, y un `<a>` sin `href` con
+ * `onClick` no recibe foco ni responde al teclado. Desde que `PanelIconButton`
+ * acepta `asChild` la copia sobra: se le pasa un `<button type="button">` de
+ * verdad y las clases vuelven a vivir en un solo sitio.
  *
  * ── LO QUE VIAJA ES EL ID DE LA RESERVA, NO EL DE LA CONVERSACIÓN ───────────
  * Y es lo único que este panel tiene: consulta `sessions`, donde hay
@@ -56,19 +59,15 @@ export function ChatDeReservaButton({
   bookingId: string;
   className?: string;
 }) {
-  const etiqueta = "Abrir el chat de esta reserva";
   return (
-    <button
-      type="button"
-      aria-label={etiqueta}
-      title={etiqueta}
-      onClick={() => pedirAbrirHilo({ bookingId })}
-      className={cn(
-        "grid size-9 shrink-0 place-items-center rounded-[10px] border border-[#e0e0e0] bg-card text-[#4d4d4d] transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-        className,
-      )}
+    <PanelIconButton
+      asChild
+      label="Abrir el chat de esta reserva"
+      className={className}
     >
-      <MessageSquareIcon aria-hidden className="size-4" />
-    </button>
+      <button type="button" onClick={() => pedirAbrirHilo({ bookingId })}>
+        <MessageSquareIcon aria-hidden className="size-4" />
+      </button>
+    </PanelIconButton>
   );
 }

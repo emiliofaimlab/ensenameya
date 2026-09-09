@@ -1,8 +1,11 @@
+import Link from "next/link";
+
 import { requireTutorProfile } from "@/lib/auth/tutor";
+import { getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { buildSlotPreview, buildUsedBy } from "@/lib/availability";
+import { buildSlotPreview, buildUsedBy, horasSemana } from "@/lib/availability";
 import { cn } from "@/lib/utils";
-import { PanelCard } from "@/components/layout/panel-shell";
+import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { AvailabilityManager } from "./availability-manager";
 import { ExceptionsManager } from "./exceptions-manager";
@@ -12,16 +15,53 @@ export const metadata = { title: "Mi disponibilidad · Enséñame Ya" };
 const WEEKDAY_HEAD = ["L", "M", "M", "J", "V", "S", "D"];
 
 /**
+ * §3.1 (paquete v2) · «America/Bogotá (GMT−5) · ahora son las 14:32».
+ *
+ * ⚠️ Se traga los errores a propósito: `profiles.timezone` es texto libre —el
+ * select del onboarding manda, pero no hay CHECK—, así que una zona inválida
+ * haría reventar el render entero con un `RangeError`. Mismo criterio que
+ * `horaLocalDelAlumno` en la ficha del alumno. Sin zona válida, la cabecera
+ * dice lo que sabe y calla lo que no.
+ *
+ * El signo del offset se cambia por el menos tipográfico (−, U+2212): `Intl`
+ * devuelve el guion de teclado y a 13 px se lee como un separador.
+ */
+function relojDeLaZona(timeZone: string): { hora: string; gmt: string } | null {
+  try {
+    const ahora = new Date();
+    const hora = ahora.toLocaleTimeString("es", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone,
+    });
+    const gmt =
+      new Intl.DateTimeFormat("es", { timeZone, timeZoneName: "shortOffset" })
+        .formatToParts(ahora)
+        .find((p) => p.type === "timeZoneName")?.value ?? "";
+    return { hora, gmt: gmt.replace("-", "−") };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * US-501/502 (SCR-TU05) — disponibilidad del tutor con el layout del Figma:
  * reglas semanales agrupadas por día (izquierda) y, a la derecha, un
  * calendario del mes que pinta en azul los días con regla activa y en ámbar
  * los que tienen excepción (194:107), más las excepciones puntuales.
+ *
+ * §3 (paquete v2, 8-sep-2026) — es la pantalla que menos cambia. El calendario
+ * se conserva TAL CUAL (solo disponibilidad y excepciones: ni agenda del día ni
+ * clases reservadas). Lo que se mueve son las dos tarjetas de gestión: el
+ * resumen de la semana sube a la cabecera y los formularios dejan de estar
+ * siempre desplegados.
  */
 export default async function TutorAvailabilityPage() {
   const { userId, approvalStatus } = await requireTutorProfile();
 
   const supabase = await createClient();
-  const [{ data: rules }, { data: exceptions }, { data: products }, { data: links }] =
+  const [{ data: rules }, { data: exceptions }, { data: products }, { data: links }, tz] =
     await Promise.all([
       supabase
         .from("availability_rules")
@@ -51,15 +91,20 @@ export default async function TutorAvailabilityPage() {
       // productos del propio tutor (política `..._write_own`, que al ser `for
       // all` cubre también el select).
       supabase.from("product_availability_rules").select("rule_id, product_id"),
+      // §3.1 · la cabecera dice en QUÉ zona abre el tutor y qué hora es ahí
+      // ahora. `getUserTimezone` prefiere `profiles.timezone` sobre la cookie
+      // del navegador, que es lo correcto aquí: los horarios se guardan e
+      // interpretan en la zona del PERFIL (`get_available_slots`), no en la del
+      // sitio desde el que el tutor se haya conectado hoy.
+      getUserTimezone(),
     ]);
 
   // rule_id → títulos de las mentorías que la usan. El paso 4 del asistente
   // monta el mismo gestor y necesita el mismo mapa, así que vive en `lib`.
   const usedBy = buildUsedBy(products ?? [], links ?? []);
 
-  // rule_id → «9 clases de 60 min». La pregunta del cliente («¿un bloque de
-  // 8:00 a 17:00 es una clase de nueve horas?») contestada donde se hace: al
-  // lado de la franja.
+  // rule_id → «9 clases de 60 min» y si la franja pisa a otra. Desde §3.2 el
+  // chip solo pinta el solape, pero el cálculo entero sigue saliendo de aquí.
   const slotPreview = buildSlotPreview(
     rules ?? [],
     (products ?? []).map((p) => ({
@@ -70,6 +115,12 @@ export default async function TutorAvailabilityPage() {
     })),
     links ?? [],
   );
+
+  // §3.1 · el resumen de la semana sale del MISMO cálculo que las horas de cada
+  // fila (`horasSemana`), y por eso no puede descuadrar con ellas. Sin ninguna
+  // franja se dice «0 h», que es la verdad: no es un hueco, es que no abres.
+  const abre = horasSemana(rules ?? []) || "0 h";
+  const reloj = relojDeLaZona(tz);
 
   // Calendario del mes ACTUAL: azul = weekday con regla activa; ámbar = fecha
   // con excepción. Server-render puro: pinta el estado, no navega meses.
@@ -100,7 +151,34 @@ export default async function TutorAvailabilityPage() {
     <TutorShell
       userId={userId}
       title="Disponibilidad"
-      description="Tus horarios se muestran en tu zona horaria. Los cambios se guardan al momento."
+      /* §3.1 · la cabecera sustituye a «Tus horarios se muestran en tu zona
+         horaria»: dice lo mismo pero CON el dato —cuánto abres, en qué zona y
+         qué hora es ahí ahora—, y ofrece el único sitio donde se cambia. */
+      description={
+        <>
+          Abres{" "}
+          <strong className="font-semibold text-[#333333]">{abre}</strong> a la
+          semana en{" "}
+          <strong className="font-semibold text-[#333333]">
+            {tz}
+            {reloj?.gmt ? ` (${reloj.gmt})` : ""}
+          </strong>
+          {reloj ? ` · ahora son las ${reloj.hora}` : ""} ·{" "}
+          {/* ⚠️ Dos arreglos en una línea, y hacen falta los dos:
+              · `brand-foreground` (#036fda) en vez de `brand` (#0080ff), que a
+                13 px sobre el fondo del panel se queda en 3,64:1 contra el
+                4,5:1 de 1.4.3;
+              · subrayado FIJO, no solo al pasar el ratón: dentro de un párrafo
+                gris el color era lo único que decía que esto es un enlace, y
+                entre los dos hay 1,40:1 (1.4.1 pide 3:1 si el color va solo). */}
+          <Link
+            href="/account#informacion-personal"
+            className="text-brand-foreground underline underline-offset-2"
+          >
+            cambiar zona
+          </Link>
+        </>
+      }
     >
       {approvalStatus !== "approved" ? (
         <PanelCard>
@@ -112,28 +190,26 @@ export default async function TutorAvailabilityPage() {
       ) : null}
 
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_364px]">
-        <PanelCard>
-          <h2 className="text-base font-semibold text-[#19191f]">
-            Reglas recurrentes
-          </h2>
-          <p className="mt-1 text-xs text-[#6b6b6b]">
-            Define aquí tus franjas; al crear cada mentoría eliges cuáles usa.
-          </p>
-          <div className="mt-4">
-            <AvailabilityManager
-              userId={userId}
-              rules={rules ?? []}
-              usedBy={usedBy}
-              slotPreview={slotPreview}
-            />
-          </div>
+        {/* G-01 · los tres `id` son las anclas a las que apuntan los subniveles
+            del menú. `scroll-mt-24` deja el aire de la cabecera sticky: sin él
+            el salto deja el título justo debajo de la barra. */}
+        <PanelCard id="horario-semanal" className="scroll-mt-24">
+          {/* §3.2 · el título y «+ Añadir franja» los pinta el gestor: comparten
+              fila y el botón abre un formulario cuyo estado vive allí. */}
+          <AvailabilityManager
+            titulo="Horario semanal"
+            userId={userId}
+            rules={rules ?? []}
+            usedBy={usedBy}
+            slotPreview={slotPreview}
+          />
         </PanelCard>
 
         <div className="flex flex-col gap-5">
-          <PanelCard>
-            <h2 className="text-base font-semibold text-[#19191f] first-letter:uppercase">
+          <PanelCard id="calendario" className="scroll-mt-24">
+            <PanelCardTitle className="first-letter:uppercase">
               Calendario · {monthLabel}
-            </h2>
+            </PanelCardTitle>
             <div className="mt-4 grid grid-cols-7 gap-1.5 text-center">
               {WEEKDAY_HEAD.map((d, i) => (
                 <span key={i} className="text-xs text-[#6b6b6b]">
@@ -173,16 +249,15 @@ export default async function TutorAvailabilityPage() {
             </div>
           </PanelCard>
 
-          <PanelCard>
-            <h2 className="text-base font-semibold text-[#19191f]">
-              Excepciones puntuales
-            </h2>
-            <p className="mt-1 text-xs text-[#6b6b6b]">
-              Sobrescriben tu horario semanal en una fecha concreta.
-            </p>
-            <div className="mt-4">
-              <ExceptionsManager userId={userId} exceptions={exceptions ?? []} />
-            </div>
+          <PanelCard id="excepciones" className="scroll-mt-24">
+            {/* §3.4 · «Excepciones» (el nombre del subnivel del menú), lista
+                primero y «+ Añadir» en la cabecera. Título y botón los pinta el
+                gestor, por lo mismo que en el horario semanal. */}
+            <ExceptionsManager
+              titulo="Excepciones"
+              userId={userId}
+              exceptions={exceptions ?? []}
+            />
           </PanelCard>
         </div>
       </div>

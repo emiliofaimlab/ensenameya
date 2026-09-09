@@ -65,7 +65,9 @@ export function PaypalConectar({
         disabled={cargando}
         variant={conectada ? "outline" : "default"}
       >
-        {cargando ? "Abriendo…" : conectada ? "Cambiar cuenta" : "Conectar"}
+        {/* §5.4 · «Editar», igual que la fila de Stripe. «Cambiar cuenta» decía
+            lo mismo con otra palabra y rompía la simetría de la lista. */}
+        {cargando ? "Abriendo…" : conectada ? "Editar" : "Conectar"}
       </Button>
     );
   }

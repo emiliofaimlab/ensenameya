@@ -1,4 +1,5 @@
 import { ClockIcon } from "lucide-react";
+import { Slot } from "radix-ui";
 
 import { cn } from "@/lib/utils";
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -73,10 +74,23 @@ export function PanelCounter({
  * ⚠️ `aria-label` es OBLIGATORIO —el icono no tiene texto y sin él el botón se
  * anuncia como «botón» a secas— y `title` lleva lo mismo, para quien lo ve con
  * el ratón. Por eso son un solo prop: no pueden divergir.
+ *
+ * ⚠️ `asChild` NO es adorno, y lo pidieron TRES revisores del lote por separado.
+ * El `<a>` a pelo tiene dos fallos reales:
+ *   · navegando dentro de la app recarga la página entera, porque no es `<Link>`
+ *     (los botones de texto de al lado sí lo son: la misma fila navegaba de dos
+ *     maneras distintas);
+ *   · lo que NO navega —abrir el chat, desplegar el menú «···»— acababa siendo
+ *     un `<a>` sin `href`, que el teclado no alcanza y el lector de pantalla no
+ *     anuncia como botón (2.1.1 y 4.1.2).
+ * Con `asChild` cada sitio pone el elemento correcto —`<Link>`, `<button>`— y
+ * las clases siguen viviendo en un solo fichero, que es lo que evitó que
+ * `chat-button.tsx` se quedara con una copia a mano.
  */
 export function PanelIconButton({
   label,
   tone = "outline",
+  asChild = false,
   className,
   children,
   ...props
@@ -84,9 +98,12 @@ export function PanelIconButton({
   label: string;
   /** `primary` = naranja relleno, solo para «Entrar a la sala». */
   tone?: "outline" | "primary";
+  /** Pinta el hijo en vez de un `<a>`: `<Link>` para navegar, `<button>` para actuar. */
+  asChild?: boolean;
 }) {
+  const Comp = asChild ? Slot.Root : "a";
   return (
-    <a
+    <Comp
       aria-label={label}
       title={label}
       className={cn(
@@ -99,7 +116,7 @@ export function PanelIconButton({
       {...props}
     >
       {children}
-    </a>
+    </Comp>
   );
 }
 

@@ -925,7 +925,12 @@ export function ProductForm({
       {/* N-04 · a qué franjas de tu disponibilidad pertenece esta mentoría.
           Va después del formato porque depende de la duración: las franjas se
           trocean en huecos del tamaño de la sesión. */}
-      <PanelCard className="flex flex-col gap-3">
+      {/* `id="horarios"` es el destino del aviso ámbar «Sin franja de horario
+          asignada» de §2.3, que enlaza a `…/edit#horarios`. Sin el ancla el
+          enlace funcionaba pero dejaba al tutor arriba del formulario, con el
+          bloque que iba a arreglar fuera de pantalla. `scroll-mt-24` lo separa
+          de la cabecera fija. */}
+      <PanelCard id="horarios" className="flex scroll-mt-24 flex-col gap-3">
         <h2 className="text-base font-semibold text-[#19191f]">
           Horarios de esta mentoría
         </h2>

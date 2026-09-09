@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
+import type { TutorBalance } from "@/lib/payouts";
 
 /**
  * G-02 · Los contadores del menú del tutor (paquete «Panel del tutor v2»,
@@ -48,6 +49,7 @@ export const tutorSidebarBadges = cache(
       { count: borradores },
       { data: preferencia },
       { count: rechazados },
+      { data: saldo },
     ] = await Promise.all([
       // Misma condición que la lista de «Por aceptar» de /tutor/reservas.
       supabase
@@ -70,8 +72,9 @@ export const tutorSidebarBadges = cache(
         .select("id", { count: "exact", head: true })
         .eq("tutor_id", userId)
         .eq("status", "draft"),
-      // «Mis cuentas» pide acción cuando el tutor no ha elegido método
-      // preferido: es lo que deja el pago del lunes «por decidir» (H-01).
+      // «Mis cuentas» pide acción cuando hay dinero esperando y el tutor no
+      // ha elegido método: es lo que deja el pago del lunes «por decidir»
+      // (H-01). El porqué del saldo, más abajo.
       supabase
         .from("tutor_payout_preferences")
         .select("method")
@@ -84,7 +87,33 @@ export const tutorSidebarBadges = cache(
         .select("doc_type", { count: "exact", head: true })
         .eq("tutor_id", userId)
         .eq("status", "rejected"),
+      // El saldo, SOLO para saber si «Mis cuentas» pide acción. Ver abajo.
+      supabase.rpc("tutor_balance"),
     ]);
+
+    /**
+     * ⚠️ EL CONTADOR DE «MIS CUENTAS» LLEVA EL SALDO, y no basta con «no ha
+     * elegido método». Medido con val.rios el 9-sep-2026: el menú decía «Mis
+     * pagos, 1 pendiente» —naranja, que por G-02 significa «esto pide acción»—
+     * y la pantalla renderizaba **cero estrellas**, porque la estrella solo se
+     * puede pulsar en una cuenta completa y ella no tiene ninguna. Un tutor de
+     * un país sin cobertura no lo podría bajar NUNCA, que es justo lo que la
+     * regla 1 de este fichero prohíbe.
+     *
+     * La condición es la del propio aviso H-01 («solo si hay saldo disponible y
+     * ningún método preferido», §5.1 del documento aprobado), y esa es la regla
+     * 2: el criterio lo pone la pantalla. Así el número dice exactamente lo que
+     * el tutor va a leer al llegar, y desaparece en cuanto elige.
+     *
+     * Lo que se pierde —el empujón al tutor que aún no ha conectado nada— no se
+     * pierde: vive en la caja ámbar «Configura tu cuenta de cobro» del
+     * dashboard, que lo dice con palabras y enlaza al sitio.
+     */
+    // Mismo `as unknown as` que en `tutor/payouts/page.tsx`: la RPC está
+    // tipada como `Json` y el tipo generado no expresa su forma.
+    const hayDisponible = (
+      (saldo as unknown as TutorBalance | null)?.available ?? []
+    ).some((m) => m.amount > 0);
 
     return {
       // Dashboard · ver DP-1: solo las reservas, que es lo decidido.
@@ -95,8 +124,9 @@ export const tutorSidebarBadges = cache(
       "/tutor/products?f=borradores": borradores ?? 0,
       // Reservas · lo mismo que arriba, visto desde su propia pantalla.
       "/tutor/reservas?f=por-aceptar": porAceptar ?? 0,
-      // Mis pagos · 1 = «te falta elegir por dónde cobras».
-      "/tutor/payouts#mis-cuentas": preferencia?.method ? 0 : 1,
+      // Mis pagos · 1 = «tienes dinero listo y falta decir por dónde cobras».
+      "/tutor/payouts#mis-cuentas":
+        hayDisponible && !preferencia?.method ? 1 : 0,
       // Mi cuenta · documentos que el equipo devolvió.
       "/tutor/verification": rechazados ?? 0,
     };

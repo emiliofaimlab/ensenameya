@@ -1,6 +1,4 @@
 import Link from "next/link";
-import { LifeBuoyIcon } from "lucide-react";
-
 import { COMPANY } from "@/lib/company";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
@@ -31,27 +29,44 @@ import { Button } from "@/components/ui/button";
  * habla. Precargarlo es trabajo del formulario (hoy `ContactForm` no acepta
  * valores iniciales), no de este enlace.
  */
+/**
+ * ⚠️ Paquete «Panel del tutor v2» (§1.4, 8-sep-2026): la tarjeta pierde el
+ * icono, acorta el texto y su botón pasa a SECUNDARIO con el rótulo «Escribir a
+ * soporte». El porqué del botón no es estético: en un panel el botón naranja es
+ * la acción principal de la pantalla, y aquí la acción principal es cobrar o
+ * dar clase, no escribir a soporte. Dos botones naranjas en la misma columna se
+ * disputan la mirada y ninguno gana.
+ *
+ * Se cambia para los DOS paneles y no solo para el del tutor: es la misma
+ * tarjeta, y el rótulo nuevo («Escribir a soporte») es más corto y empieza por
+ * verbo, que es lo que quiere cualquiera de los dos.
+ *
+ * ⚠️ Lo que NO se quita, aunque la captura no lo dibuje: el buzón de correo de
+ * abajo. La captura recorta ahí, la lista aprobada no lo menciona, y la regla
+ * es que lo que no está en la lista se conserva (G-07). Además es la salida
+ * para quien prefiere escribir desde su propio correo, que es justo quien no
+ * puede o no quiere usar el formulario.
+ */
 export function SupportCard({ className }: { className?: string }) {
   return (
     <PanelCard className={className}>
-      <span className="grid size-10 place-items-center rounded-full bg-brand-muted text-brand">
-        <LifeBuoyIcon className="size-5" />
-      </span>
-      <PanelCardTitle className="mt-4 text-xl">
-        ¿Algo no funciona?
-      </PanelCardTitle>
+      <PanelCardTitle className="text-xl">¿Algo no funciona?</PanelCardTitle>
       <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
-        Cuéntanos qué ha pasado —una reserva, un pago, la sala— y te
-        respondemos en menos de 24 horas laborables.
+        Cuéntanos qué pasó y te respondemos en menos de 24 horas laborables.
       </p>
-      <Button asChild className="mt-4 h-10">
-        <Link href="/contacto">Contactar soporte técnico</Link>
+      <Button asChild variant="outline" className="mt-4 h-10">
+        <Link href="/contacto">Escribir a soporte</Link>
       </Button>
       <p className="mt-3 text-[12.5px] text-[#6b6b6b]">
         O escríbenos a{" "}
         <a
           href={`mailto:${COMPANY.email}`}
-          className="font-medium text-brand hover:underline"
+          /* `text-brand-foreground` (#036fda, 4,9:1 sobre blanco) y no
+             `text-brand` (#0080ff, 3,80:1): es texto de 12,5 px, o sea texto
+             normal para WCAG 1.4.3. El token ya existía en `globals.css` para
+             exactamente esto. El resto del sitio sigue con `text-brand` —168
+             usos, no todos texto— y ese barrido es aparte. */
+          className="font-medium text-brand-foreground hover:underline"
         >
           {COMPANY.email}
         </a>

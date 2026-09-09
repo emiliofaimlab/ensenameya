@@ -74,16 +74,27 @@ const esPasada = (b: Reserva) => !esPorAceptar(b) && !esProxima(b);
 /**
  * §4.2 · Chips de filtro, con el estado en la URL (`?f=`).
  *
- * ⚠️ `pasadas` NO es un chip —el documento fija cinco— pero SÍ es un valor
+ * ⚠️ `pasadas` NO es uno de los cinco chips del documento, pero SÍ es un valor
  * válido de `?f=`: el subnivel «Pasadas» del menú (`TUTOR_ITEMS`) apunta ahí, y
  * un filtro que no existe caería al de por defecto y enseñaría la lista entera.
- * Cuando está activo no se enciende ningún chip a propósito: quien manda es el
- * rótulo del grupo, que ya dice PASADAS.
+ * `chip:false` significa «no se pinta en la fila POR DEFECTO»; cuando es el
+ * filtro activo sí se pinta, porque si no la fila de chips se queda sin
+ * ninguno encendido justo en un filtro al que lleva el propio menú, y entonces
+ * deja de decir dónde estás, que es lo único que hace.
  *
  * Cada filtro se define por una FUNCIÓN y no por una lista de estados porque
  * «Próximas» no se puede expresar con estados (mira el reloj de la sesión), y
  * porque el mismo predicado sirve para contar el chip y para filtrar la lista:
  * dos definiciones acabarían discrepando.
+ *
+ * ⚠️ Y los cinco chips NO parten el conjunto: una reserva `confirmed` cuya
+ * sesión ya terminó y que `close_expired_sessions` aún no ha cerrado no cae en
+ * ninguno salvo «Todas» —no es próxima, ni completada, ni cancelada—, y lo
+ * mismo le pasa a `pending_payment`. Las dos salen bajo el rótulo PASADAS, que
+ * es donde tienen que estar, pero la suma de los cuatro chips no es «Todas».
+ * Se deja así a propósito: el documento fija esos cinco y meterlas en
+ * «Canceladas» sería mentir. Hoy no se ve porque el cron va al día (regla de
+ * oro 11), y ese es justo el motivo de escribirlo aquí.
  */
 const FILTROS: {
   id: string;
@@ -131,17 +142,25 @@ function valoracionDe(b: Reserva): number | null {
 }
 
 /** §4.5 · «★★★★★ Valoración del alumno», sin el comentario (ese va al detalle). */
-function Estrellas({ rating }: { rating: number }) {
+function Valoracion({ rating }: { rating: number }) {
   return (
-    <>
-      {/* Los glifos son decoración: quien no ve la pantalla necesita el número,
-          no cinco caracteres seguidos. */}
+    <p className="mt-0.5 text-[11.5px] text-[#6b6b6b]">
       <span aria-hidden className="text-[12px] tracking-[0.5px] text-[#a67314]">
         {"★".repeat(rating)}
-        <span className="text-[#d6d6d6]">{"☆".repeat(5 - rating)}</span>
+        {/* La estrella vacía es añadido nuestro —la referencia pinta siempre
+            cinco llenas— y es justo la que dice «sobre 5». A #d6d6d6 daba
+            1,45:1 sobre blanco, o sea que no se veía: un 3 se leía como un 3
+            sobre 3. #8f8f8f la deja en 3,23:1, que es el mínimo de 1.4.11. */}
+        <span className="text-[#8f8f8f]">{"☆".repeat(5 - rating)}</span>
       </span>
-      <span className="sr-only">{rating} de 5 ·</span>
-    </>
+      {/* Todo lo visible es decoración para quien no ve la pantalla: cinco
+          glifos seguidos y una etiqueta suelta se anunciaban «4 de 5 · punto ·
+          Valoración del alumno», o sea el número antes de saber de qué es. La
+          frase va entera y UNA sola vez en el `sr-only`, con la etiqueta
+          delante. */}
+      <span aria-hidden> Valoración del alumno</span>
+      <span className="sr-only">Valoración del alumno: {rating} de 5.</span>
+    </p>
   );
 }
 
@@ -211,7 +230,14 @@ function FilaDeReserva({
           {reserva.products?.title ?? "Mentoría"}
         </p>
         <p className="truncate text-[12px] text-[#404040]">
-          <StudentLink student={student} className="font-medium text-brand" />
+          {/* `brand-foreground` (#036fda) y no `brand` (#0080ff): el azul de
+              marca da 3,80:1 sobre blanco y esto es texto de 12 px, que pide
+              4,5:1. Es el mismo token con el que el dashboard pinta el nombre
+              del alumno, y a la vista es el mismo azul (4,89:1). */}
+          <StudentLink
+            student={student}
+            className="font-medium text-brand-foreground"
+          />
           {" · "}
           <span className="first-letter:uppercase">
             {cuando ? formatSessionTime(cuando, tz) : "Por agendar"}
@@ -219,34 +245,38 @@ function FilaDeReserva({
           {" · "}
           {formatMoney(reserva.total_amount, reserva.currency)}
         </p>
-        {rating !== null ? (
-          <p className="mt-0.5 text-[11.5px] text-[#6b6b6b]">
-            <Estrellas rating={rating} /> Valoración del alumno
-          </p>
-        ) : null}
+        {rating !== null ? <Valoracion rating={rating} /> : null}
       </div>
 
       <div className="ml-auto grid shrink-0 grid-cols-[104px_36px_36px] items-center justify-items-end gap-2">
-        {/* N-15 · la píldora decide su altura: nada de `h-*` desde aquí. */}
-        <StatusPill tone={BOOKING_PILL[reserva.status] ?? "neutral"}>
+        {/* N-15 · la píldora decide su altura: nada de `h-*` desde aquí.
+            `whitespace-nowrap` SÍ, y no es lo mismo: la columna mide 104 px
+            fijos y una etiqueta más larga («Pago pendiente») envolvía a dos
+            líneas dentro de una caja de 26 px de alto, o sea que el texto se
+            salía de la píldora. Con esto el peor caso es que asome unos píxeles
+            por el lado, que se ve raro pero se lee. */}
+        <StatusPill
+          tone={BOOKING_PILL[reserva.status] ?? "neutral"}
+          className="whitespace-nowrap"
+        >
           {BOOKING_STATUS_LABEL[reserva.status]}
         </StatusPill>
+        {/* `asChild` + `<Link>`: un `<a href>` a pelo recarga la página entera,
+            y estos dos sustituyen a botones que sí navegaban del lado del
+            cliente. Sin él, la misma fila navegaba de dos maneras distintas. */}
         {sala ? (
-          <PanelIconButton
-            tone="primary"
-            label="Entrar a la sala"
-            href={`/room/${sala.id}`}
-          >
-            <VideoIcon aria-hidden className="size-4" />
+          <PanelIconButton asChild tone="primary" label="Entrar a la sala">
+            <Link href={`/room/${sala.id}`}>
+              <VideoIcon aria-hidden className="size-4" />
+            </Link>
           </PanelIconButton>
         ) : (
           <span />
         )}
-        <PanelIconButton
-          label="Ver reserva"
-          href={`/tutor/reservas/${reserva.id}`}
-        >
-          <EyeIcon aria-hidden className="size-4" />
+        <PanelIconButton asChild label="Ver reserva">
+          <Link href={`/tutor/reservas/${reserva.id}`}>
+            <EyeIcon aria-hidden className="size-4" />
+          </Link>
         </PanelIconButton>
       </div>
     </li>
@@ -344,12 +374,15 @@ export default async function TutorReservasPage({
     >
       {/* G-03 · chips con contador. Estado en la URL: server-render puro. */}
       <div className="flex flex-wrap gap-2">
-        {FILTROS.filter((x) => x.chip !== false).map((x) => {
+        {FILTROS.filter((x) => x.chip !== false || x.id === filtro.id).map((x) => {
           const on = x.id === filtro.id;
           const total = reservas.filter(x.match).length;
           return (
             <Link
               key={x.id}
+              // Cuál está activo no puede ser solo el fondo azul: sin
+              // `aria-current` un lector de pantalla lee cinco enlaces iguales.
+              aria-current={on ? "page" : undefined}
               href={
                 x.id === "todas" ? "/tutor/reservas" : `/tutor/reservas?f=${x.id}`
               }
@@ -367,6 +400,13 @@ export default async function TutorReservasPage({
                 value={total}
                 tone={on ? "activo" : x.id === "por-aceptar" ? "naranja" : "gris"}
               />
+              {/* El círculo va `aria-hidden` para no ensuciar el nombre del
+                  enlace con un número suelto, pero entonces la cifra se pierde
+                  entera: «Por aceptar» se anunciaba sin el 2. Aquí vuelve, ya
+                  dicha. Condicionado igual que el contador, que a 0 no pinta. */}
+              {total > 0 ? (
+                <span className="sr-only">, {total} reservas</span>
+              ) : null}
             </Link>
           );
         })}
@@ -374,17 +414,26 @@ export default async function TutorReservasPage({
 
       {error ? (
         <PanelCard className="border-[#f0bfbf] bg-[#fdf5f5]">
+          {/* «Vuelve a intentarlo» pedía una acción sin decir cuál y sin dar un
+              control con el que hacerla. Se nombra la acción y se da la salida
+              para cuando falla dos veces. */}
           <p className="text-[13px] text-[#bf3333]">
-            No pudimos cargar tus reservas. Vuelve a intentarlo en un momento.
+            No pudimos cargar tus reservas. Recarga la página; si vuelve a
+            fallar, escríbenos a soporte.
           </p>
         </PanelCard>
       ) : null}
 
       {!error && visibles.length === 0 ? (
         <PanelCard>
+          {/* Sin reservas de ninguna clase, «No hay reservas por ahora» parece
+              un fallo del sistema al tutor recién aprobado. Decirle qué tiene
+              que pasar para que la lista se llene le dice que no está roto. Con
+              un filtro puesto no hace falta: ya sabe que la ha vaciado él. */}
           <p className="text-[13px] text-[#6b6b6b]">
-            No hay reservas{" "}
-            {filtro.id === "todas" ? "por ahora" : "en este filtro"}.
+            {filtro.id === "todas"
+              ? "Todavía no tienes reservas. Cuando un alumno reserve una de tus mentorías, aparecerá aquí."
+              : "No hay reservas en este filtro."}
           </p>
         </PanelCard>
       ) : null}
@@ -418,16 +467,23 @@ export default async function TutorReservasPage({
                   key={b.id}
                   className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3"
                 >
-                  {/* Mismo mínimo que en `FilaDeReserva` y por lo mismo: aquí
-                      las acciones ocupan aún más (cuenta atrás + dos botones). */}
-                  <div className="min-w-[180px] flex-1">
+                  {/* Mismo mecanismo que en `FilaDeReserva` pero con OTRO
+                      mínimo, y la diferencia es medible: aquí las acciones son
+                      cuenta atrás + Aceptar + Rechazar (271 px, frente a los
+                      192 de la rejilla fija), así que a 768 al texto le
+                      quedaban 199 de los 266 que pide «alumno · fecha · monto»
+                      y lo primero que se cortaba era el IMPORTE — el dato con
+                      el que se decide aceptar o rechazar. Con 260 el
+                      `flex-wrap` baja las acciones de línea antes de que eso
+                      pase. */}
+                  <div className="min-w-[260px] flex-1">
                     <p className="truncate text-[13px] font-semibold text-[#19191f]">
                       {b.products?.title ?? "Mentoría"}
                     </p>
                     <p className="truncate text-[12px] text-[#404040]">
                       <StudentLink
                         student={students.get(b.student_id)}
-                        className="font-medium text-brand"
+                        className="font-medium text-brand-foreground"
                       />
                       {" · "}
                       <span className="first-letter:uppercase">

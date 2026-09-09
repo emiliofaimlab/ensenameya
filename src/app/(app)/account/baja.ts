@@ -43,16 +43,23 @@ export function hayDineroEnVuelo(e: EnEspera): boolean {
 export function explicarAccionables(a: Accionables): string[] {
   const fuera: string[] = [];
 
+  // `clase(s)` con el paréntesis a la vista es una plantilla sin terminar, y
+  // esta frase la lee alguien que se está dando de baja: el peor momento para
+  // que la app parezca a medio hacer. El número siempre es ≥ 1 aquí (el `if`
+  // lo garantiza), así que basta con distinguir 1 del resto.
   if (a.clases_futuras_como_tutor) {
+    const n = a.clases_futuras_como_tutor;
     fuera.push(
-      `Tienes ${a.clases_futuras_como_tutor} clase(s) ya vendidas y sin impartir. ` +
-        "Son compromisos con tus alumnos: hay que darlas (o que ellos las cancelen) antes de poder darte de baja.",
+      `Tienes ${n} ${n === 1 ? "clase ya vendida" : "clases ya vendidas"} y sin impartir. ` +
+        `${n === 1 ? "Es un compromiso" : "Son compromisos"} con tus alumnos: hay que ` +
+        `${n === 1 ? "darla (o que ellos la cancelen)" : "darlas (o que ellos las cancelen)"} antes de poder darte de baja.`,
     );
   }
   if (a.clases_futuras_como_alumno) {
+    const n = a.clases_futuras_como_alumno;
     fuera.push(
-      `Tienes ${a.clases_futuras_como_alumno} clase(s) reservadas y sin dar. ` +
-        "Cancélalas primero desde «Mis reservas»: así se te aplica la política de reembolso que corresponda.",
+      `Tienes ${n} ${n === 1 ? "clase reservada" : "clases reservadas"} y sin dar. ` +
+        `${n === 1 ? "Cancélala" : "Cancélalas"} primero desde «Mis reservas»: así se te aplica la política de reembolso que corresponda.`,
     );
   }
   return fuera;

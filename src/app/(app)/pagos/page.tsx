@@ -1,5 +1,5 @@
 import { requireUser } from "@/lib/auth/server";
-import { panelItems } from "@/lib/auth/panel-items";
+import { panelMenu } from "@/lib/auth/panel-items";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isStripeConfigured, listSavedCards, publishableKey } from "@/lib/stripe";
 import {
@@ -49,11 +49,12 @@ export default async function PagosPage({
       : [];
 
   // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
-  const items = await panelItems(user.id, roles);
+  const { items, badges } = await panelMenu(user.id, roles);
 
   return (
     <PanelShell
       items={items}
+      badges={badges}
       eyebrow="Pagos"
       title="Métodos de pago"
       description="Añade o quita las tarjetas con las que pagas tus reservas."

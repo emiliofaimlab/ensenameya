@@ -98,9 +98,10 @@ export type TarjetaMetodo = {
  * El enrutador REORDENA candidatos con esta preferencia y después aplica sus
  * tres filtros de siempre, así que una preferencia que hoy no puede pagar no
  * deja ninguna orden atascada: se cae al siguiente riel que sí pueda. Ya no se
- * puede llegar a ese estado desde aquí —la estrella solo sale en las completas—
- * pero sí se puede haber llegado antes (una cuenta que se desconectó después),
- * y por eso el aviso de abajo sigue existiendo.
+ * puede llegar a ese estado desde aquí —solo se puede PULSAR la estrella de una
+ * cuenta completa— pero sí se puede haber llegado antes (una cuenta que se
+ * desconectó después), y por eso siguen existiendo dos cosas: el aviso de abajo
+ * y la estrella rellena, sin botón, de esa tarjeta a medias.
  */
 export function MetodosDeCobro({
   tarjetas,
@@ -122,16 +123,20 @@ export function MetodosDeCobro({
   acciones: Record<string, React.ReactNode>;
 }) {
   const router = useRouter();
-  // Optimista: el radio se mueve al pulsar y no cuando vuelve el servidor. Si
-  // la escritura falla se devuelve al valor anterior y se dice por qué.
+  // Optimista: la estrella se rellena al pulsar y no cuando vuelve el servidor.
+  // Si la escritura falla se devuelve al valor anterior y se dice por qué.
   const [elegida, setElegida] = useState<string | null>(preferida);
   const [guardando, setGuardando] = useState(false);
-  // Qué formulario está desplegado. Independiente del radio, a propósito.
+  // Qué formulario está desplegado. Independiente de la estrella, a propósito:
+  // rellenar una cuenta y preferirla son dos cosas.
   const [abierta, setAbierta] = useState<string | null>(null);
 
   async function elegir(clave: string) {
     // Volver a pulsar la estrella ya rellena no desmarca: ver la cabecera.
     if (clave === elegida) return;
+    // El doble clic se corta AQUÍ y no deshabilitando los botones: ver el
+    // porqué junto a `aria-busy`, abajo.
+    if (guardando) return;
     const anterior = elegida;
     setElegida(clave);
     setGuardando(true);
@@ -177,9 +182,10 @@ export function MetodosDeCobro({
 
   /**
    * La única frase que se gana su sitio: la que avisa de que lo que va a pasar
-   * NO es lo que el radio parece decir. Los estados evidentes —elegiste una y
-   * está completa, o no has elegido y hay alguna lista— no llevan nada: eso ya
-   * lo cuentan la píldora de la tarjeta y la ficha de «Cómo cobras».
+   * NO es lo que la estrella parece decir: una preferida que hoy no puede
+   * pagar (se conectó y luego se cayó). Los estados evidentes —la preferida
+   * está completa, o no hay preferida y sí alguna lista— no llevan nada: eso
+   * ya lo cuentan la píldora de la tarjeta y la ficha de «Cómo cobras».
    */
   const aviso =
     laElegida && !laElegida.listo
@@ -187,7 +193,12 @@ export function MetodosDeCobro({
         ? `Hasta que completes ${laElegida.nombre}, te pagamos por ${respaldo.nombre}.`
         : `Completa ${laElegida.nombre} para que podamos pagarte. Tu saldo se sigue acumulando.`
       : listas.length === 0
-        ? "Aún no podemos pagarte: completa una. Tu saldo se sigue acumulando."
+        ? // «completa una» se quedaba sin decir una QUÉ. La frase la lee un
+          // tutor que aún no ha conectado nada, o sea justo quien todavía no
+          // sabe que estas tarjetas se llaman «cuentas de cobro»; las otras dos
+          // ramas de este aviso sí nombran el método, y ésta no podía ser la
+          // única que da por sabido el vocabulario.
+          "Aún no podemos pagarte: conecta una de estas cuentas. Tu saldo se sigue acumulando."
         : null;
 
   return (
@@ -288,31 +299,72 @@ export function MetodosDeCobro({
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
-                  {/* 🔑 LA ESTRELLA, SOLO EN LAS CUENTAS COMPLETAS (§5.4).
-                      Vacía = se puede marcar; rellena = es la predeterminada, y
-                      hay una sola. En una cuenta sin conectar no se pinta: no
-                      hay nada que preferir hasta que pueda cobrar. */}
-                  {t.listo ? (
+                  {/* 🔑 LA ESTRELLA (§5.4). Vacía = se puede marcar; rellena =
+                      es la predeterminada, y hay una sola. En una cuenta sin
+                      conectar no se pinta: no hay nada que preferir hasta que
+                      pueda cobrar.
+
+                      ⚠️ CON UNA EXCEPCIÓN, Y NO ES TEÓRICA: la preferida que
+                      HOY no está completa. La preferencia es anterior a esta
+                      pantalla y puede apuntar a algo que se cayó después —un
+                      alta de Stripe sin terminar, un destino borrado—, y sin
+                      esto «Cómo cobras» decía arriba «Método preferido: X»
+                      mientras aquí abajo no había ni una estrella rellena, con
+                      el subtítulo prometiendo que la estrella marca cuál es.
+                      Es el estado real de dos de los tres tutores con saldo de
+                      dev. Se pinta como MARCADOR y no como botón: no hay nada
+                      que alternar —ya está marcada— y un control muerto en el
+                      recorrido del teclado sería peor que un icono. */}
+                  {!t.listo && marcada ? (
+                    <span
+                      role="img"
+                      aria-label={`${t.nombre}: es tu predeterminada, pero todavía no puede cobrar`}
+                      title="Es tu predeterminada, pero todavía no puede cobrar: complétala."
+                      className="grid size-11 shrink-0 place-items-center rounded-[8px] border border-[#e8d5a8] bg-[#fdf7e6] text-[#a67314]"
+                    >
+                      <StarIcon
+                        aria-hidden
+                        className="size-[18px]"
+                        strokeWidth={2}
+                        fill="currentColor"
+                      />
+                    </span>
+                  ) : t.listo ? (
                     <button
                       type="button"
                       aria-pressed={marcada}
-                      aria-label={
-                        marcada
-                          ? `${t.nombre}: es tu cuenta predeterminada`
-                          : `Marcar como predeterminada: ${t.nombre}`
-                      }
+                      // ⚠️ EL NOMBRE NO CAMBIA CON EL ESTADO: quien lo anuncia
+                      // es `aria-pressed`. Con dos nombres el estado se decía
+                      // dos veces y, peor, el control se le escapaba a quien
+                      // navega por voz: «pulsa Marcar como predeterminada»
+                      // dejaba de encontrarlo justo después de marcarlo. El
+                      // `title` sí cambia — es la pista del ratón, no el
+                      // nombre.
+                      aria-label={`Marcar como predeterminada: ${t.nombre}`}
                       title={
                         marcada
                           ? "Es tu cuenta predeterminada. Lo intentamos por aquí primero."
                           : "Marcar como predeterminada"
                       }
-                      disabled={guardando}
+                      // ⚠️ NO SE DESHABILITAN MIENTRAS GUARDA. Al pulsar una se
+                      // apagaban TODAS, incluida la que tenía el foco, y un
+                      // elemento enfocado que pasa a `disabled` manda el foco
+                      // al `<body>`: quien va con teclado pierde el sitio y
+                      // vuelve a tabular desde arriba, por dos idas al
+                      // servidor. La marca ya es optimista, así que no hay nada
+                      // que esperar; el doble clic lo corta `elegir()`.
+                      aria-busy={guardando}
                       onClick={() => elegir(t.clave)}
                       className={cn(
-                        "grid size-11 shrink-0 place-items-center rounded-[8px] border transition-colors disabled:opacity-60",
+                        "grid size-11 shrink-0 place-items-center rounded-[8px] border transition-colors",
                         marcada
                           ? "border-[#e8d5a8] bg-[#fdf7e6] text-[#a67314]"
-                          : "border-[#e0e0e0] bg-card text-[#949494] hover:border-[#949494] hover:text-[#a67314]",
+                          : // Borde #949494 y no #e0e0e0: a 1,32:1 sobre blanco
+                            // el contorno no se veía y toda la identificación
+                            // del control caía en el glifo, que se queda al
+                            // borde del umbral. Es el mismo borde que el botón
+                            // de «Configurar» de al lado.
+                            "border-[#949494] bg-card text-[#949494] hover:text-[#a67314]",
                       )}
                     >
                       <StarIcon
@@ -381,9 +433,9 @@ export function MetodosDeCobro({
       {/* 🔑 SOLO CUANDO DICE ALGO QUE LAS TARJETAS NO DICEN.
 
           Aquí había un párrafo que se pintaba SIEMPRE y que casi siempre
-          repetía lo que ya se ve: si el radio está marcado en una tarjeta con
-          la píldora «Completo», escribir «cobras por X» debajo no añade nada,
-          solo alarga la pantalla.
+          repetía lo que ya se ve: si la estrella está rellena en una tarjeta
+          con la píldora «Completo», escribir «cobras por X» debajo no añade
+          nada, solo alarga la pantalla.
 
           Lo que las tarjetas NO pueden contar es el desfase entre lo que el
           tutor eligió y lo que va a pasar de verdad — porque el enrutador

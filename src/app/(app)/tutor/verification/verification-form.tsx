@@ -26,7 +26,12 @@ import {
   SOCIAL_PLATFORMS,
   type SocialLink,
 } from "@/lib/socials";
-import { PanelCard, StatusPill, type PillTone } from "@/components/layout/panel-shell";
+import {
+  PanelCard,
+  PanelCardTitle,
+  StatusPill,
+  type PillTone,
+} from "@/components/layout/panel-shell";
 // El asistente vive en la otra dirección (importa este módulo), pero el hook de
 // "guardar al salir" es suyo y no se duplica: ver `useSaveOnExit` allí.
 import { useSaveOnExit } from "@/components/onboarding/wizard";
@@ -96,7 +101,16 @@ function enumerar(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} y ${items.at(-1)}`;
 }
 
-export type DocState = { status: DocStatus; linkUrl: string | null };
+export type DocState = {
+  status: DocStatus;
+  linkUrl: string | null;
+  /**
+   * §6.2 · Motivo escrito por el admin al rechazar (`review_notes`). Opcional
+   * a propósito: el asistente monta este mismo mapa sin pedirlo (allí no hay
+   * nada rechazado todavía) y no tiene por qué enterarse de este campo.
+   */
+  reviewNotes?: string | null;
+};
 
 /**
  * Lo que el asistente recibe de vuelta al guardar su paso de repaso.
@@ -174,7 +188,8 @@ function FileRow({
     : !status
       ? "Seleccionar"
       : status === "rejected"
-        ? "Volver a subir"
+        ? // §6.2 nombra este literal: «Dentro, "Subir de nuevo"».
+          "Subir de nuevo"
         : "Reemplazar";
   const solid = !stagedName && status === "rejected";
 
@@ -254,15 +269,22 @@ function ChecklistStep({
   n: number;
   icon: typeof FileTextIcon;
   title: string;
-  summary: string;
+  /**
+   * §6.2 · Ya no es solo texto: el paso 2 cuelga aquí el motivo del rechazo en
+   * rojo, en la misma línea y sin desplegar el bloque.
+   */
+  summary: React.ReactNode;
   state: StepState;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
   const id = `verif-paso-${n}`;
+  // `role="listitem"` porque el contenedor de §6.1 se anuncia como lista: la
+  // línea de 2 px agrupa a los cuatro pasos a la vista, y esto hace lo mismo
+  // para quien no la ve («elemento 2 de 4»). ChecklistStep solo se usa ahí.
   return (
-    <PanelCard className="p-0">
+    <PanelCard role="listitem" className="p-0">
       {/*
         Verónica 3-sep (móvil, 390): «ajustar texto para que no se divida así».
         La cabecera era UNA fila flex —icono · texto · píldora · chevrón— y por
@@ -280,11 +302,21 @@ function ChecklistStep({
         `row-*`, `justify-self-*`) no tienen efecto en un contenedor flex, así
         que el escritorio queda exactamente igual (R1).
       */}
+      {/*
+        El NOMBRE del control es corto a propósito («Paso 2, Documentos…,
+        Rechazado») y el resumen viaja como descripción. Desde §6.2 el resumen
+        arrastra el motivo del rechazo —un párrafo escrito por el admin—, y sin
+        esto el botón pasaba a llamarse con 200 caracteres: quien tabula por el
+        acordeón se comía la nota entera en cada paso. Se sigue leyendo, pero
+        después del nombre y no como si fuera el nombre.
+      */}
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={id}
+        aria-label={`Paso ${n}, ${title}, ${state.label}`}
+        aria-describedby={`${id}-resumen`}
         className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 p-5 text-left sm:flex sm:flex-wrap sm:gap-3"
       >
         <span
@@ -306,7 +338,12 @@ function ChecklistStep({
           <span className="block text-base font-semibold text-[#19191f]">
             {title}
           </span>
-          <span className="block text-[12.5px] text-[#6b6b6b]">{summary}</span>
+          <span
+            id={`${id}-resumen`}
+            className="block text-[12.5px] text-[#6b6b6b]"
+          >
+            {summary}
+          </span>
         </span>
         {/* Segunda fila bajo `sm`, alineada con el texto; `justify-self-start`
             para que no se estire a todo el ancho de la celda. */}
@@ -485,6 +522,29 @@ export function VerificationForm({
   const faltanRequeridos = KYC_REQUERIDOS.filter(
     (d) => !staged[d.type] && !docsByType[d.type],
   );
+
+  /**
+   * §6.2 · Los documentos rechazados CON su motivo, para decirlo en la línea de
+   * resumen del paso 2 sin que haya que desplegar nada. Hasta ahora la píldora
+   * decía «Rechazado» y el porqué no estaba en ninguna pantalla del tutor: lo
+   * previsible era volver a subir la misma foto cortada.
+   *
+   * Un archivo elegido en esta sesión lo tapa, igual que hace `docStatuses` con
+   * la píldora: si el reemplazo ya está puesto, seguir señalando el rechazo es
+   * hablar del pasado. Y sin nota del admin se dice el rechazo a secas —
+   * inventarle un motivo sería peor que no darlo.
+   */
+  const motivoRechazo = KYC_DOCS.filter(
+    (d) => !staged[d.type] && docsByType[d.type]?.status === "rejected",
+  )
+    .map((d) => {
+      const nota = docsByType[d.type]?.reviewNotes?.trim();
+      // Sin nota del admin no hay motivo que dar —inventarlo sería peor—, pero
+      // sí hay siguiente paso: el botón para corregirlo vive DENTRO del bloque,
+      // que está cerrado. Una nota, en cambio, ya suele acabar en instrucción.
+      return `${d.label} rechazado${nota ? `: ${nota}` : " · despliega y súbelo de nuevo"}`;
+    })
+    .join(" · ");
 
   const redesGuardadas = socials.length > 0;
   const redesState: StepState = redesGuardadas
@@ -759,315 +819,355 @@ export function VerificationForm({
 
   return (
     <>
-      {/* Barra de progreso del paquete completo: foto + documentos + redes +
-          mentoría. Es lo que la sesión de pruebas pedía ver de un vistazo. */}
-      <PanelCard className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-[#19191f]">
-            Tu expediente de tutor
-          </p>
-          <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
-            {inWizard
-              ? completos === pasos.length
-                ? "Está todo. Lo enviamos a revisión al pulsar «Finalizar»."
-                : "Repasa lo que falta y complétalo aquí mismo. Lo que dejes se guarda al pulsar «Finalizar»; nada llega a revisión hasta entonces."
-              : completos === pasos.length
-                ? "Está todo. Envía tus documentos a revisión cuando quieras."
-                : "Completa los cuatro bloques y envíalo todo junto: así lo revisamos de una vez."}
-          </p>
-        </div>
-        <StatusPill tone={completos === pasos.length ? "green" : "neutral"}>
-          {completos} de {pasos.length} listos
-        </StatusPill>
-      </PanelCard>
+      {/*
+        §6.1 · El progreso del paquete completo —foto + documentos + portafolio
+        + mentoría— DEJA DE SER UNA TARJETA: idéntica a las cuatro de abajo,
+        parecía un quinto paso que además no se podía abrir. Ahora es el
+        encabezado de la sección que agrupa a los cuatro, y la línea izquierda
+        de 2 px dice de un vistazo dónde empieza y dónde acaba el expediente
+        (mismo recurso que usan los subniveles del menú, G-01).
 
-      {/* Paso 1 · Foto y biografía, editables AQUÍ MISMO (28-ago). Antes esto
-          era un texto que decía "ya la subiste" y un enlace al paso 1 del
-          asistente — el único sitio donde se podían tocar—; ahora las dos son
-          opcionales para avanzar, así que el sitio donde se completan «luego»
-          tiene que existir, y es este. */}
-      <ChecklistStep
-        n={1}
-        icon={UserRoundIcon}
-        title="Tu foto y tu biografía"
-        summary="La cara y el texto de tu tarjeta en el catálogo."
-        state={perfilState}
-        open={abiertos.has(1)}
-        onToggle={() => togglePaso(1)}
-      >
-        {perfil ?? (
-          <p className="text-[13px] text-[#4d4d4d]">
-            {hasAvatar && hasBio
-              ? "Ya tienes foto y biografía."
-              : "Todavía te falta la foto o la biografía. Puedes completarlas desde tu registro de tutor."}
-          </p>
-        )}
-        {/* Opcionales para AVANZAR, no para APROBAR: la diferencia se dice, no
-            se deduce. Es lo único que queda del bloqueo que había antes. */}
-        {!hasAvatar || !hasBio ? (
-          <p className="mt-3 text-[12.5px] text-[#9a6b00]">
-            Puedes seguir sin ellas, pero no aprobamos un perfil sin foto ni
-            biografía: los alumnos eligen tutor por la ficha.
-          </p>
-        ) : null}
-      </ChecklistStep>
-
-      {/* Paso 2 · Documentos (C-14). 28-ago: selector + lista de lo subido, no
-          las seis filas fijas de antes — ver la nota de `KYC_DOCS`. */}
-      <ChecklistStep
-        n={2}
-        icon={FileTextIcon}
-        title="Documentos de identidad y formación"
-        summary={
-          docsListos === 0
-            ? `Elige el tipo y añádelo · ${KYC_HINT}`
-            : `${docsListos} ${docsListos === 1 ? "documento añadido" : "documentos añadidos"} · ${
-                faltanRequeridos.length === 0
-                  ? "tienes los tres requeridos"
-                  : `${faltanRequeridos.length === 1 ? "falta 1" : `faltan ${faltanRequeridos.length}`} de los requeridos`
-              }`
-        }
-        state={docsState}
-        open={abiertos.has(2)}
-        onToggle={() => togglePaso(2)}
-      >
-        <p className="text-xs text-[#6b6b6b]">
-          Sube lo que tengas a mano y vuelve cuando quieras: no hay una lista
-          que rellenar de golpe.
-        </p>
-        {/* Se DESTACAN, no bloquean: «Continuar» nunca los exige. */}
-        <p
-          className={cn(
-            "mt-2 text-xs",
-            faltanRequeridos.length > 0 ? "text-[#9a6b00]" : "text-success",
-          )}
-        >
-          {faltanRequeridos.length === 0
-            ? "Ya tienes los tres documentos que pide la aprobación."
-            : `Requeridos para aprobar tu perfil: ${enumerar(KYC_REQUERIDOS.map((d) => d.label))}. Te ${faltanRequeridos.length === 1 ? "falta" : "faltan"} ${enumerar(faltanRequeridos.map((d) => d.label))}.`}
-        </p>
-
-        {/* El selector: mismo gesto que el portafolio de abajo — elegir qué es
-            y añadirlo. El archivo NO sube aquí; se queda listo como siempre. */}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <select
-            aria-label="Tipo de documento"
-            value={tipoNuevo}
-            disabled={busy !== null || disponibles.length === 0}
-            onChange={(e) => setTipoNuevo(e.target.value)}
-            className="h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[260px]"
-          >
-            {/* Verónica 3-sep: «de este selector la primera opción no debería
-                poder elegirse». Es un placeholder, no un tipo de documento:
-                `disabled` lo deja gris y no elegible en la rueda de iOS, y
-                sigue siendo la opción que se muestra cuando `tipoNuevo` es ""
-                (React marca `selected` por valor, también en una deshabilitada). */}
-            <option value="" disabled>
-              ¿Qué documento subes?
-            </option>
-            {/* Un solo hijo de texto por opción: `<option>` no admite varios. */}
-            {disponibles.map((d) => (
-              <option key={d.type} value={d.type}>
-                {`${d.label}${d.requerido ? " · requerido" : ""}`}
-              </option>
-            ))}
-          </select>
-          <input
-            ref={nuevoRef}
-            type="file"
-            accept={KYC_TYPES.join(",")}
-            className="hidden"
-            onChange={onNuevoArchivo}
-          />
-          <Button
-            variant="outline"
-            disabled={busy !== null || !tipoNuevo}
-            onClick={() => nuevoRef.current?.click()}
-            className="h-[45px] rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
-          >
-            Elegir archivo y añadir
-          </Button>
-        </div>
-        {disponibles.length === 0 ? (
-          <p className="mt-2 text-xs text-[#6b6b6b]">
-            Ya has añadido los {KYC_DOCS.length} tipos de documento que
-            aceptamos. Puedes reemplazar cualquiera desde la lista.
-          </p>
-        ) : null}
-
-        {/* Lo que YA hay. Un documento guardado se REEMPLAZA, no se quita: la
-            RLS de `verification_documents` no da `delete` a `authenticated`
-            —solo select, insert y update de `storage_path`—, así que un botón
-            de borrar sería un botón que falla. Lo que sí se quita es lo elegido
-            en esta sesión, que hasta guardarse vive solo en memoria. */}
-        {enExpediente.length > 0 ? (
-          <div className="mt-5 divide-y divide-[#e0e0e0]">
-            {enExpediente.map((d) => (
-              <FileRow
-                key={d.type}
-                label={d.label}
-                hint={d.hint}
-                requerido={d.requerido}
-                status={docsByType[d.type]?.status}
-                stagedName={staged[d.type]?.name}
-                onPick={(file) => setStaged((p) => ({ ...p, [d.type]: file }))}
-                onClear={() =>
-                  setStaged((p) => {
-                    const next = { ...p };
-                    delete next[d.type];
-                    return next;
-                  })
-                }
-                disabled={busy !== null}
-              />
-            ))}
+        Lo que sí se conserva es el contenido: el mismo recuento «N de 4
+        listos», que es lo que la sesión de pruebas pedía ver de un vistazo.
+      */}
+      <section aria-labelledby="expediente" className="flex flex-col gap-5">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div className="min-w-0">
+            {/* `scroll-mt-24` porque el id es un ancla real y la cabecera del
+                panel es `sticky`: sin él, un salto a #expediente deja el título
+                debajo de la cabecera (regla del paquete para todo ancla). */}
+            <PanelCardTitle id="expediente" className="scroll-mt-24">
+              Tu expediente de tutor
+            </PanelCardTitle>
+            <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
+              {inWizard
+                ? completos === pasos.length
+                  ? "Está todo. Lo enviamos a revisión al pulsar «Finalizar»."
+                  : "Repasa lo que falta y complétalo aquí mismo. Lo que dejes se guarda al pulsar «Finalizar»; nada llega a revisión hasta entonces."
+                : completos === pasos.length
+                  ? // «Envíalo», no «envía tus documentos»: de los cuatro
+                    // bloques que acaba de nombrar el subtítulo, solo uno son
+                    // documentos — los otros tres son foto, portafolio y
+                    // mentoría, y se envían en el mismo gesto.
+                    "Está todo. Envíalo a revisión cuando quieras."
+                  : "Cuatro bloques. Complétalos y envíalos juntos: así lo revisamos de una vez."}
+            </p>
           </div>
-        ) : (
-          <p className="mt-4 rounded-[12px] border border-dashed border-[#e0e0e0] p-4 text-center text-[13px] text-[#6b6b6b]">
-            Todavía no has añadido ningún documento.
-          </p>
-        )}
-      </ChecklistStep>
+          <StatusPill tone={completos === pasos.length ? "green" : "neutral"}>
+            {completos} de {pasos.length} listos
+          </StatusPill>
+        </div>
 
-      {/* Paso 3 · R29-02 — portafolio y redes en UN módulo (190:98). Antes esto
-          era un enlace suelto aquí y dos campos más en el paso 3 del asistente.
-          ⚠️ El apartado se llama «Portafolio» desde el 28-ago (petición del
-          cliente): solo cambia la ETIQUETA. La columna sigue siendo
-          `tutor_profiles.socials` y su lógica, `lib/socials.ts`. */}
-      <ChecklistStep
-        n={3}
-        icon={LinkIcon}
-        title="Portafolio"
-        summary={
-          redesGuardadas
-            ? `${socials.length} ${socials.length === 1 ? "enlace guardado" : "enlaces guardados"}`
-            : "Al menos uno, obligatorio para enviar a revisión."
-        }
-        state={redesState}
-        open={abiertos.has(3)}
-        onToggle={() => togglePaso(3)}
-      >
-        <p className="text-xs text-[#6b6b6b]">
-          Tu web, tu portafolio o tus perfiles públicos: es parte de lo que
-          revisamos. El primer enlace es obligatorio para enviar tu perfil a
-          revisión y puedes añadir hasta {MAX_SOCIALS}; si lo tuyo es una web
-          propia, elige «Sitio web / Portafolio» y pega el enlace que quieras.
-        </p>
-        <div className="mt-4 flex flex-col gap-3">
-          {links.map((l, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <select
-                aria-label={`Plataforma del enlace ${i + 1}`}
-                value={l.platform}
-                disabled={busy !== null}
-                onChange={(e) => setLink(i, { platform: e.target.value })}
-                className="h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[190px]"
-              >
-                {/* Mismo patrón que el selector de documentos (Verónica 3-sep):
-                    el placeholder no se elige. Antes era la única forma de
-                    "deshacer" una plataforma elegida sin enlace; ahora esa fila
-                    simplemente no cuenta — ver `filled`. */}
-                <option value="" disabled>
-                  Plataforma…
-                </option>
-                {SOCIAL_PLATFORMS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-              <Input
-                type="url"
-                inputMode="url"
-                aria-label={`Enlace ${i + 1}`}
-                placeholder="https://…"
-                value={l.url}
-                disabled={busy !== null}
-                onChange={(e) => setLink(i, { url: e.target.value })}
-                className="h-[45px] min-w-0 flex-1 rounded-[8px] bg-muted px-3.5 text-sm placeholder:text-[#8c8c8c]"
-              />
-              {/* La fila 1 no se quita: siempre queda algo que rellenar. */}
-              {i > 0 ? (
-                <Button
-                  variant="ghost"
-                  disabled={busy !== null}
-                  onClick={() =>
-                    setLinks((prev) => prev.filter((_, j) => j !== i))
-                  }
-                  className="h-10 rounded-[8px] px-3 text-[13.5px] text-[#6b6b6b]"
-                >
-                  Quitar
-                </Button>
-              ) : null}
-            </div>
-          ))}
-          {links.length < MAX_SOCIALS ? (
-            <Button
-              variant="outline"
-              disabled={busy !== null}
-              // El tope se comprueba sobre `prev`, no sobre el render: con el
-              // guard solo en el JSX, dos clicks seguidos metían la fila 6.
-              onClick={() =>
-                setLinks((prev) =>
-                  prev.length >= MAX_SOCIALS
-                    ? prev
-                    : [...prev, { platform: "", url: "" }],
-                )
-              }
-              className="h-10 w-fit rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
-            >
-              Añadir otra
-            </Button>
-          ) : (
-            <p className="text-xs text-[#6b6b6b]">
-              Máximo {MAX_SOCIALS} enlaces.
+        {/* Los cuatro pasos, agrupados bajo el encabezado. El aire entre ellos
+            es el mismo `gap-5` que traían del contenedor de la pantalla: solo
+            cambia quién lo pone.
+
+            `role="list"` para que la agrupación no sea solo visual: la línea de
+            2 px dice «esto son los cuatro pasos» a quien la ve, y el rol lo dice
+            a quien no. Cuadra con el «N de 4 listos» de arriba. */}
+        <div
+          role="list"
+          className="flex flex-col gap-5 border-l-2 border-[#e0e0e0] pl-[18px]"
+        >
+        {/* Paso 1 · Foto y biografía, editables AQUÍ MISMO (28-ago). Antes esto
+            era un texto que decía "ya la subiste" y un enlace al paso 1 del
+            asistente — el único sitio donde se podían tocar—; ahora las dos son
+            opcionales para avanzar, así que el sitio donde se completan «luego»
+            tiene que existir, y es este. */}
+        <ChecklistStep
+          n={1}
+          icon={UserRoundIcon}
+          title="Tu foto y tu biografía"
+          summary="La cara y el texto de tu tarjeta en el catálogo."
+          state={perfilState}
+          open={abiertos.has(1)}
+          onToggle={() => togglePaso(1)}
+        >
+          {perfil ?? (
+            <p className="text-[13px] text-[#4d4d4d]">
+              {hasAvatar && hasBio
+                ? "Ya tienes foto y biografía."
+                : "Todavía te falta la foto o la biografía. Puedes completarlas desde tu registro de tutor."}
             </p>
           )}
-        </div>
-      </ChecklistStep>
+          {/* Opcionales para AVANZAR, no para APROBAR: la diferencia se dice, no
+              se deduce. Es lo único que queda del bloqueo que había antes. */}
+          {!hasAvatar || !hasBio ? (
+            <p className="mt-3 text-[12.5px] text-[#9a6b00]">
+              Puedes seguir sin ellas, pero no aprobamos un perfil sin foto ni
+              biografía: los alumnos eligen tutor por la ficha.
+            </p>
+          ) : null}
+        </ChecklistStep>
 
-      {/* Paso 4 · La primera mentoría, con acceso directo (N-10). EX-02: el
-          tutor puede posponerla, pero sin ella no se aprueba el perfil — así
-          que el checklist la cuenta y no la esconde en otra pantalla. */}
-      <ChecklistStep
-        n={4}
-        icon={GraduationCapIcon}
-        title="Tu primera mentoría"
-        summary={
-          productCount > 0
-            ? `${productCount} ${productCount === 1 ? "mentoría creada" : "mentorías creadas"}`
-            : "Sin ella no podemos aprobar tu perfil."
-        }
-        state={mentoriaState}
-        open={abiertos.has(4)}
-        onToggle={() => togglePaso(4)}
-      >
-        <p className="text-[13px] text-[#4d4d4d]">
-          {productCount > 0
-            ? "Ya tienes tu primera mentoría. Se publicará en cuanto aprobemos tu perfil."
-            : "Define qué enseñas, a qué precio y en cuánto tiempo. Se guarda como borrador: una mentoría solo se publica con el perfil aprobado."}
-        </p>
-        {/* 28-ago · "no digas que en el próximo paso la cargo, debemos incluir
-            el formulario ahí mismo". El paso siguiente ya no existe: el alta
-            entra AQUÍ y con ella el asistente termina. */}
-        {mentoria ? (
-          <div className="mt-4">{mentoria}</div>
-        ) : (
-          <Button
-            asChild
-            variant={productCount > 0 ? "outline" : "default"}
-            className={
-              productCount > 0
-                ? "mt-3 h-10 rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
-                : "mt-3 h-10 rounded-[8px] bg-brand px-4 text-[13.5px] font-semibold hover:bg-brand/90"
-            }
+        {/* Paso 2 · Documentos (C-14). 28-ago: selector + lista de lo subido, no
+            las seis filas fijas de antes — ver la nota de `KYC_DOCS`. */}
+        <ChecklistStep
+          n={2}
+          icon={FileTextIcon}
+          title="Documentos de identidad y formación"
+          summary={
+            <>
+              {docsListos === 0
+                ? `Elige el tipo y añádelo · ${KYC_HINT}`
+                : `${docsListos} ${docsListos === 1 ? "documento añadido" : "documentos añadidos"} · ${
+                    faltanRequeridos.length === 0
+                      ? "tienes los tres requeridos"
+                      : `${faltanRequeridos.length === 1 ? "falta 1" : `faltan ${faltanRequeridos.length}`} de los requeridos`
+                  }`}
+              {/* §6.2 · El motivo, en rojo y en la misma línea: es lo único de
+                  este resumen sobre lo que hay que ACTUAR. */}
+              {motivoRechazo ? (
+                <>
+                  {" · "}
+                  <span className="text-destructive">{motivoRechazo}</span>
+                </>
+              ) : null}
+            </>
+          }
+          state={docsState}
+          open={abiertos.has(2)}
+          onToggle={() => togglePaso(2)}
+        >
+          <p className="text-xs text-[#6b6b6b]">
+            Sube lo que tengas a mano y vuelve cuando quieras: no hay una lista
+            que rellenar de golpe.
+          </p>
+          {/* Se DESTACAN, no bloquean: «Continuar» nunca los exige. */}
+          <p
+            className={cn(
+              "mt-2 text-xs",
+              faltanRequeridos.length > 0 ? "text-[#9a6b00]" : "text-success",
+            )}
           >
-            <Link href="/tutor/products/new">
-              {productCount > 0 ? "Crear otra mentoría" : "Crear mi primera mentoría"}
-            </Link>
-          </Button>
-        )}
-      </ChecklistStep>
+            {faltanRequeridos.length === 0
+              ? "Ya tienes los tres documentos que pide la aprobación."
+              : `Requeridos para aprobar tu perfil: ${enumerar(KYC_REQUERIDOS.map((d) => d.label))}. Te ${faltanRequeridos.length === 1 ? "falta" : "faltan"} ${enumerar(faltanRequeridos.map((d) => d.label))}.`}
+          </p>
+
+          {/* El selector: mismo gesto que el portafolio de abajo — elegir qué es
+              y añadirlo. El archivo NO sube aquí; se queda listo como siempre. */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <select
+              aria-label="Tipo de documento"
+              value={tipoNuevo}
+              disabled={busy !== null || disponibles.length === 0}
+              onChange={(e) => setTipoNuevo(e.target.value)}
+              className="h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[260px]"
+            >
+              {/* Verónica 3-sep: «de este selector la primera opción no debería
+                  poder elegirse». Es un placeholder, no un tipo de documento:
+                  `disabled` lo deja gris y no elegible en la rueda de iOS, y
+                  sigue siendo la opción que se muestra cuando `tipoNuevo` es ""
+                  (React marca `selected` por valor, también en una deshabilitada). */}
+              <option value="" disabled>
+                ¿Qué documento subes?
+              </option>
+              {/* Un solo hijo de texto por opción: `<option>` no admite varios. */}
+              {disponibles.map((d) => (
+                <option key={d.type} value={d.type}>
+                  {`${d.label}${d.requerido ? " · requerido" : ""}`}
+                </option>
+              ))}
+            </select>
+            <input
+              ref={nuevoRef}
+              type="file"
+              accept={KYC_TYPES.join(",")}
+              className="hidden"
+              onChange={onNuevoArchivo}
+            />
+            <Button
+              variant="outline"
+              disabled={busy !== null || !tipoNuevo}
+              onClick={() => nuevoRef.current?.click()}
+              className="h-[45px] rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
+            >
+              Elegir archivo y añadir
+            </Button>
+          </div>
+          {disponibles.length === 0 ? (
+            <p className="mt-2 text-xs text-[#6b6b6b]">
+              Ya has añadido los {KYC_DOCS.length} tipos de documento que
+              aceptamos. Puedes reemplazar cualquiera desde la lista.
+            </p>
+          ) : null}
+
+          {/* Lo que YA hay. Un documento guardado se REEMPLAZA, no se quita: la
+              RLS de `verification_documents` no da `delete` a `authenticated`
+              —solo select, insert y update de `storage_path`—, así que un botón
+              de borrar sería un botón que falla. Lo que sí se quita es lo elegido
+              en esta sesión, que hasta guardarse vive solo en memoria. */}
+          {enExpediente.length > 0 ? (
+            <div className="mt-5 divide-y divide-[#e0e0e0]">
+              {enExpediente.map((d) => (
+                <FileRow
+                  key={d.type}
+                  label={d.label}
+                  hint={d.hint}
+                  requerido={d.requerido}
+                  status={docsByType[d.type]?.status}
+                  stagedName={staged[d.type]?.name}
+                  onPick={(file) => setStaged((p) => ({ ...p, [d.type]: file }))}
+                  onClear={() =>
+                    setStaged((p) => {
+                      const next = { ...p };
+                      delete next[d.type];
+                      return next;
+                    })
+                  }
+                  disabled={busy !== null}
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 rounded-[12px] border border-dashed border-[#e0e0e0] p-4 text-center text-[13px] text-[#6b6b6b]">
+              Todavía no has añadido ningún documento.
+            </p>
+          )}
+        </ChecklistStep>
+
+        {/* Paso 3 · R29-02 — portafolio y redes en UN módulo (190:98). Antes esto
+            era un enlace suelto aquí y dos campos más en el paso 3 del asistente.
+            ⚠️ El apartado se llama «Portafolio» desde el 28-ago (petición del
+            cliente): solo cambia la ETIQUETA. La columna sigue siendo
+            `tutor_profiles.socials` y su lógica, `lib/socials.ts`. */}
+        <ChecklistStep
+          n={3}
+          icon={LinkIcon}
+          title="Portafolio"
+          summary={
+            redesGuardadas
+              ? `${socials.length} ${socials.length === 1 ? "enlace guardado" : "enlaces guardados"}`
+              : "Al menos uno, obligatorio para enviar a revisión."
+          }
+          state={redesState}
+          open={abiertos.has(3)}
+          onToggle={() => togglePaso(3)}
+        >
+          <p className="text-xs text-[#6b6b6b]">
+            Tu web, tu portafolio o tus perfiles públicos: es parte de lo que
+            revisamos. El primer enlace es obligatorio para enviar tu perfil a
+            revisión y puedes añadir hasta {MAX_SOCIALS}; si lo tuyo es una web
+            propia, elige «Sitio web / Portafolio» y pega el enlace que quieras.
+          </p>
+          <div className="mt-4 flex flex-col gap-3">
+            {links.map((l, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label={`Plataforma del enlace ${i + 1}`}
+                  value={l.platform}
+                  disabled={busy !== null}
+                  onChange={(e) => setLink(i, { platform: e.target.value })}
+                  className="h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[190px]"
+                >
+                  {/* Mismo patrón que el selector de documentos (Verónica 3-sep):
+                      el placeholder no se elige. Antes era la única forma de
+                      "deshacer" una plataforma elegida sin enlace; ahora esa fila
+                      simplemente no cuenta — ver `filled`. */}
+                  <option value="" disabled>
+                    Plataforma…
+                  </option>
+                  {SOCIAL_PLATFORMS.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  type="url"
+                  inputMode="url"
+                  aria-label={`Enlace ${i + 1}`}
+                  placeholder="https://…"
+                  value={l.url}
+                  disabled={busy !== null}
+                  onChange={(e) => setLink(i, { url: e.target.value })}
+                  className="h-[45px] min-w-0 flex-1 rounded-[8px] bg-muted px-3.5 text-sm placeholder:text-[#8c8c8c]"
+                />
+                {/* La fila 1 no se quita: siempre queda algo que rellenar. */}
+                {i > 0 ? (
+                  <Button
+                    variant="ghost"
+                    disabled={busy !== null}
+                    onClick={() =>
+                      setLinks((prev) => prev.filter((_, j) => j !== i))
+                    }
+                    className="h-10 rounded-[8px] px-3 text-[13.5px] text-[#6b6b6b]"
+                  >
+                    Quitar
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+            {links.length < MAX_SOCIALS ? (
+              <Button
+                variant="outline"
+                disabled={busy !== null}
+                // El tope se comprueba sobre `prev`, no sobre el render: con el
+                // guard solo en el JSX, dos clicks seguidos metían la fila 6.
+                onClick={() =>
+                  setLinks((prev) =>
+                    prev.length >= MAX_SOCIALS
+                      ? prev
+                      : [...prev, { platform: "", url: "" }],
+                  )
+                }
+                className="h-10 w-fit rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
+              >
+                Añadir otra
+              </Button>
+            ) : (
+              <p className="text-xs text-[#6b6b6b]">
+                Máximo {MAX_SOCIALS} enlaces.
+              </p>
+            )}
+          </div>
+        </ChecklistStep>
+
+        {/* Paso 4 · La primera mentoría, con acceso directo (N-10). EX-02: el
+            tutor puede posponerla, pero sin ella no se aprueba el perfil — así
+            que el checklist la cuenta y no la esconde en otra pantalla. */}
+        <ChecklistStep
+          n={4}
+          icon={GraduationCapIcon}
+          title="Tu primera mentoría"
+          summary={
+            productCount > 0
+              ? `${productCount} ${productCount === 1 ? "mentoría creada" : "mentorías creadas"}`
+              : "Sin ella no podemos aprobar tu perfil."
+          }
+          state={mentoriaState}
+          open={abiertos.has(4)}
+          onToggle={() => togglePaso(4)}
+        >
+          <p className="text-[13px] text-[#4d4d4d]">
+            {productCount > 0
+              ? "Ya tienes tu primera mentoría. Se publicará en cuanto aprobemos tu perfil."
+              : "Define qué enseñas, a qué precio y en cuánto tiempo. Se guarda como borrador: una mentoría solo se publica con el perfil aprobado."}
+          </p>
+          {/* 28-ago · "no digas que en el próximo paso la cargo, debemos incluir
+              el formulario ahí mismo". El paso siguiente ya no existe: el alta
+              entra AQUÍ y con ella el asistente termina. */}
+          {mentoria ? (
+            <div className="mt-4">{mentoria}</div>
+          ) : (
+            <Button
+              asChild
+              variant={productCount > 0 ? "outline" : "default"}
+              className={
+                productCount > 0
+                  ? "mt-3 h-10 rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
+                  : "mt-3 h-10 rounded-[8px] bg-brand px-4 text-[13.5px] font-semibold hover:bg-brand/90"
+              }
+            >
+              <Link href="/tutor/products/new">
+                {productCount > 0 ? "Crear otra mentoría" : "Crear mi primera mentoría"}
+              </Link>
+            </Button>
+          )}
+        </ChecklistStep>
+        </div>
+      </section>
 
       {/* El envío es en bloque (Figma: "Enviar a revisión / Guardar borrador"):
           nada llega al admin hasta "Guardar y enviar a revisión". Vive fuera de

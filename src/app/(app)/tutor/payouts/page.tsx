@@ -84,12 +84,20 @@ function moneyLine(list: { currency: string; amount: number }[]): string {
   return list.map((m) => formatMoney(m.amount, m.currency)).join(" · ");
 }
 
-const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString("es", {
+/**
+ * ⚠️ EL AÑO SOLO CUANDO NO ES EL DE HOY. «4 sept 2026» en todas las filas
+ * ensancha la primera columna de una tabla que ya pide 680 px para no romperse
+ * en móvil, y lo hace para repetir el dato que se da por supuesto. Se pinta
+ * cuando de verdad distingue —una liquidación del año pasado— y no antes.
+ */
+const fmtDate = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString("es", {
     day: "numeric",
     month: "short",
-    year: "numeric",
+    year: d.getUTCFullYear() === new Date().getUTCFullYear() ? undefined : "numeric",
   });
+};
 
 /**
  * §5.1 · EL DÍA DEL PRÓXIMO LOTE, CALCULADO Y NO ESCRITO.
@@ -135,7 +143,8 @@ const monograma = (nombre: string) => {
  * ── LO QUE CAMBIÓ EL 8-SEP-2026, Y POR QUÉ ──────────────────────────────────
  *
  * 1 · **El tutor elige por dónde cobra.** Antes esta pantalla le pedía datos y
- *     el enrutador decidía solo; ahora hay un radiogroup y su elección vive en
+ *     el enrutador decidía solo; ahora lo marca con una estrella (§5.4, que se
+ *     llevó por delante el radiogroup del 8-sep) y su elección vive en
  *     `tutor_payout_preferences`. `payoutProviderFor` la usa para REORDENAR
  *     candidatos y después aplica sus tres filtros de siempre, así que elegir
  *     algo sin terminar no atasca ninguna orden — se cae al siguiente riel. La
@@ -487,7 +496,7 @@ export default async function TutorPayoutsPage() {
 
   /**
    * El formulario de cada tarjeta, renderizado en el servidor y pasado como
-   * `children`. El radiogroup es de cliente y no puede construirlos: necesitan
+   * `children`. La lista es de cliente y no puede construirlos: necesitan
    * el catálogo de bancos, las reglas del país y los nombres resueltos.
    */
   const formularios: Record<string, React.ReactNode> = {};
@@ -525,8 +534,22 @@ export default async function TutorPayoutsPage() {
         </>
       );
     } else if (m.clave === "stripe") {
+      /**
+       * ⚠️ EL `key` NO ES DECORATIVO: apaga el aviso de React que esta pantalla
+       * llevaba tirando a la consola en cada carga («Each child in a list should
+       * have a unique key prop … Check the render method of MetodosDeCobro. It
+       * was passed a child from TutorPayoutsPage»).
+       *
+       * El elemento se crea AQUÍ, se guarda en un objeto y se pinta allí dentro
+       * de una lista de hermanos (la estrella y él), así que React lo reconcilia
+       * como parte de un array sin que la validación de JSX lo haya visto nunca
+       * como hijo literal. Medido: con `key` en los dos `acciones`, cero avisos;
+       * ponerlo en los `<p>` del formulario —la sospecha razonable— no cambiaba
+       * nada. Cualquier `acciones[...]` que se añada mañana necesita el suyo.
+       */
       acciones.stripe = (
         <ConnectAlta
+          key="stripe"
           yaTieneCuenta={Boolean(cuentaConectada)}
           lista={connectLista}
           esLaUnicaVia={metodos.length === 1}
@@ -538,8 +561,10 @@ export default async function TutorPayoutsPage() {
       // botón «por si no quiere conectar», y eso era ofrecerle la vía que NO
       // entrega: cuatro pagos a un correo tecleado, cuatro `UNCLAIMED`
       // (medido el 4-sep-2026). La tarjeta de PayPal es un botón.
+      // El `key`, por lo mismo que el de arriba.
       acciones.paypal = (
         <PaypalConectar
+          key="paypal"
           conectada={Boolean(destinoDe("paypal")?.verified_account_id)}
           compacto
         />
@@ -619,6 +644,37 @@ export default async function TutorPayoutsPage() {
   const viaDelRiel = (provider: string | null): string =>
     provider ? (VIA[provider] ?? etiquetaDeCanal(provider)) : "Por decidir";
 
+  /**
+   * §5.1 (H-01) · EL AVISO DE ARRIBA, Y POR QUÉ TIENE DOS TEXTOS.
+   *
+   * ⚠️ «No elegiste tu método preferido» solo es verdad si HAY alguno que
+   * elegir. Con saldo y ninguna cuenta completa —el estado real de tres de los
+   * tutores de dev— el diagnóstico era falso y el botón peor: «Elegir método»
+   * anclaba a una lista donde no se pinta ni una estrella, porque la estrella
+   * vive en las cuentas completas. Un aviso sobre dinero que nombra una acción
+   * inexistente es peor que no ponerlo.
+   *
+   * Y no se pinta cuando NO HAY NI UNA TARJETA (país sin determinar, o país sin
+   * ninguna vía): ahí no hay nada que conectar y la propia sección de «Mis
+   * cuentas» ya explica lo único que se puede hacer —la zona horaria, o
+   * esperar—. Una caja roja permanente sin acción es ruido.
+   */
+  const hayAlgunaLista = tarjetas.some((t) => t.listo);
+  const avisoDeSaldo =
+    hasAvailable && !preferida && tarjetas.length > 0
+      ? hayAlgunaLista
+        ? {
+            titulo: `Tienes ${moneyLine(balance.available)} listos y aún no elegiste tu método preferido`,
+            detalle: `El pago del lunes ${diaDelProximoLote()} saldrá «por decidir» hasta que elijas uno. Un clic y listo.`,
+            boton: "Elegir método",
+          }
+        : {
+            titulo: `Tienes ${moneyLine(balance.available)} listos y todavía no tienes dónde cobrarlos`,
+            detalle: `El pago del lunes ${diaDelProximoLote()} saldrá «por decidir» hasta que conectes una cuenta.`,
+            boton: "Conectar una cuenta",
+          }
+      : null;
+
   return (
     <TutorShell
       userId={userId}
@@ -630,28 +686,25 @@ export default async function TutorPayoutsPage() {
           Hasta hoy esto era una píldora ámbar en la tercera columna de «Cómo
           cobras»: el tutor tenía saldo listo, no había elegido método, y el
           lote del lunes iba a salir «Por decidir» sin que nada se lo dijera.
-          Solo aparece cuando las DOS cosas se dan a la vez —hay saldo y no hay
-          método—, que es cuando hay algo que hacer; en cualquier otro estado
-          sería una caja roja permanente, o sea ruido. */}
-      {hasAvailable && !preferida ? (
+          Qué dice exactamente y cuándo se calla, arriba en `avisoDeSaldo`. */}
+      {avisoDeSaldo ? (
         <PanelCard className="border-[1.5px] border-[#f0bfbf] bg-[#fff8f8]">
           <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
             <div className="min-w-0">
               <p className="text-[15px] font-bold text-[#19191f]">
-                Tienes {moneyLine(balance.available)} listos y aún no elegiste
-                tu método preferido
+                {avisoDeSaldo.titulo}
               </p>
               <p className="mt-1 text-[13px] leading-[1.55] text-[#4d4d4d]">
-                El pago del lunes {diaDelProximoLote()} saldrá «por decidir»
-                hasta que elijas uno. Un clic y listo.
+                {avisoDeSaldo.detalle}
               </p>
             </div>
-            {/* Ancla, no ruta: la elección se hace en esta misma pantalla. */}
+            {/* Ancla, no ruta: lo que hay que hacer está en esta misma
+                pantalla, sea elegir o sea conectar. */}
             <a
               href="#mis-cuentas"
               className="inline-flex h-11 shrink-0 items-center rounded-[8px] bg-primary px-5 text-sm font-bold text-white transition-colors hover:bg-primary/90"
             >
-              Elegir método
+              {avisoDeSaldo.boton}
             </a>
           </div>
         </PanelCard>
@@ -669,25 +722,63 @@ export default async function TutorPayoutsPage() {
           El retiro pasa de botón de texto a círculo azul junto al monto. */}
       <div id="saldo" className="grid scroll-mt-24 gap-4 sm:grid-cols-3">
         <PanelCard className="border-brand p-5">
-          <p className="text-xs text-[#6b6b6b]">Disponible para retirar</p>
-          <div className="mt-1.5 flex items-center justify-between gap-3">
-            <p className="min-w-0 truncate text-2xl font-bold tabular-nums text-[#19191f]">
-              {moneyLine(balance.available)}
-            </p>
-            <WithdrawButton disabled={!hasAvailable} />
-          </div>
+          {/* ⚠️ `dl`/`dt`/`dd` y no dos `p` sueltos: rótulo y cifra son un par,
+              y sin la relación semántica un lector de pantalla lee «Disponible
+              para retirar» y «112,50 US$» como dos frases sin vínculo. Es lo
+              mismo que ya hace «Cómo cobras» tres bloques más abajo. No cambia
+              ni un píxel: el `dd` no trae sangría porque el preflight de
+              Tailwind le quita el margen. */}
+          <dl>
+            <dt className="text-xs text-[#6b6b6b]">Disponible para retirar</dt>
+            <dd className="mt-1.5 flex items-center justify-between gap-3">
+              {/* El `title` solo cuando hay más de una moneda: es el único caso
+                  en que la cifra puede no caber (el círculo se come 36 px del
+                  tile) y un importe cortado sin forma de leerlo entero es peor
+                  que uno que envuelve. Con una sola moneda sería un tooltip que
+                  repite lo que ya se ve. */}
+              <span
+                className="min-w-0 truncate text-2xl font-bold tabular-nums text-[#19191f]"
+                title={
+                  balance.available.length > 1
+                    ? moneyLine(balance.available)
+                    : undefined
+                }
+              >
+                {moneyLine(balance.available)}
+              </span>
+              <WithdrawButton disabled={!hasAvailable} />
+            </dd>
+          </dl>
         </PanelCard>
         <PanelCard className="p-5">
-          <p className="text-xs text-[#6b6b6b]">En retención</p>
-          <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]">
-            {moneyLine(balance.in_retention)}
-          </p>
+          <dl>
+            <dt className="text-xs text-[#6b6b6b]">En retención</dt>
+            <dd
+              className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]"
+              title={
+                balance.in_retention.length > 1
+                  ? moneyLine(balance.in_retention)
+                  : undefined
+              }
+            >
+              {moneyLine(balance.in_retention)}
+            </dd>
+          </dl>
         </PanelCard>
         <PanelCard className="p-5">
-          <p className="text-xs text-[#6b6b6b]">Ya cobrado</p>
-          <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]">
-            {moneyLine(balance.paid_out)}
-          </p>
+          <dl>
+            <dt className="text-xs text-[#6b6b6b]">Ya cobrado</dt>
+            <dd
+              className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]"
+              title={
+                balance.paid_out.length > 1
+                  ? moneyLine(balance.paid_out)
+                  : undefined
+              }
+            >
+              {moneyLine(balance.paid_out)}
+            </dd>
+          </dl>
         </PanelCard>
       </div>
 
@@ -758,6 +849,13 @@ export default async function TutorPayoutsPage() {
               control: el nivel lo asigna el admin y el tutor no tiene grant
               sobre `tier_id`.
 
+              ⚠️ Y SE FUE EL «Te quedas con el 75 %» DE AL LADO. §5.3 lo pide
+              con todas las letras («el reparto de cada una en `title`; sin
+              texto de ayuda») y la captura objetivo no lo tiene. Además estaba
+              dicho dos veces en el mismo `dd`: como texto y como tooltip. Esto
+              NO depende de AB-06 —el dato es el del propio tutor, y se sigue
+              leyendo al posar el ratón sobre la píldora.
+
               ⚠️ TODO · AB-06 — §5.3 pide el nivel como ESCALERA DE TRES
               píldoras («Nivel 1 › Nivel 2 › Nivel 3», la actual en azul y las
               otras en gris, con el reparto de cada una en `title`). Se queda en
@@ -789,7 +887,6 @@ export default async function TutorPayoutsPage() {
                 >
                   {tier.name}
                 </StatusPill>
-                <span>Te quedas con el {formatPct(tier.splitPct)}</span>
               </dd>
             </div>
           ) : null}
@@ -931,7 +1028,14 @@ export default async function TutorPayoutsPage() {
                           <span className="text-[#6b6b6b]">—</span>
                         ) : (
                           <details className="group">
-                            <summary className="cursor-pointer list-none font-semibold text-[#0068d0] marker:content-none">
+                            {/* ⚠️ 40 px DE ALTO SIN MOVER LA FILA. El texto solo
+                                mide 19,5 px y era el objetivo táctil más
+                                pequeño de la pantalla (los botones de «Mis
+                                cuentas» miden 44 y el círculo de retiro 36).
+                                Los márgenes negativos devuelven la caja a su
+                                sitio, así que crece el área que se puede pulsar
+                                y no la altura de la tabla. */}
+                            <summary className="-my-2.5 inline-flex min-h-[40px] cursor-pointer list-none items-center font-semibold text-[#0068d0] marker:content-none">
                               {reservas.length}{" "}
                               {reservas.length === 1 ? "reserva" : "reservas"}
                               <span

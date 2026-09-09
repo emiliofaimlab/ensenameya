@@ -99,13 +99,21 @@ export function ConnectAlta({
         disabled={cargando}
         variant={lista ? "outline" : "default"}
       >
+        {/* §5.4 del paquete v2 fija el vocabulario de la fila: «Editar» cuando
+            la cuenta ya está, «Configurar» cuando está a medias y «Conectar con
+            Stripe» —literal de la captura— cuando no hay nada. Los rótulos
+            anteriores («Ver en Stripe» / «Continuar alta» / «Empezar alta»)
+            decían lo mismo con tres palabras distintas de las que usan las
+            demás filas de métodos, que es justo lo que el paquete unifica.
+            Solo cambia el MODO COMPACTO: la tarjeta grande de abajo tiene sitio
+            para su propio texto y no compite con nada. */}
         {cargando
           ? "Abriendo…"
           : lista
-            ? "Ver en Stripe"
+            ? "Editar"
             : yaTieneCuenta
-              ? "Continuar alta"
-              : "Empezar alta"}
+              ? "Configurar"
+              : "Conectar con Stripe"}
       </Button>
     );
   }

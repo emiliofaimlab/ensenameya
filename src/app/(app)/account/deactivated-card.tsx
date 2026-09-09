@@ -73,7 +73,11 @@ export function DeactivatedCard({
   }
 
   return (
-    <PanelCard className="border-destructive/30 bg-destructive/[0.03] md:col-span-2 md:mt-1">
+    /* §7.4 · Sin `md:col-span-2`: desde el paquete v2 esta tarjeta ya no vive
+       dentro de una rejilla —la pila final de «Mi cuenta» es a ancho completo
+       por construcción—, y una clase de rejilla huérfana solo confunde a quien
+       la lea después. */
+    <PanelCard className="border-destructive/30 bg-destructive/[0.03]">
       <div className="flex flex-col gap-5">
         <div>
           <PanelCardTitle>Tu cuenta está desactivada</PanelCardTitle>

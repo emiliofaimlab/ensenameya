@@ -208,13 +208,37 @@ export function PanelCardTitle({
  * Si hace falta otro tamaño, se añade una variante aquí. Pasarle una clase de
  * altura por `className` vuelve a romper la consistencia en silencio.
  */
+/**
+ * ⚠️ CINCO DE LOS SEIS TONOS NO LLEGABAN A 4,5:1 y se oscurecieron el 9-sep-2026.
+ *
+ * El texto de la píldora mide 12 px, o sea **texto normal** para WCAG: le toca
+ * 4,5:1 (1.4.3) y no el 3:1 de los tamaños grandes. Medido sobre su propio
+ * fondo, no sobre blanco, que es el error que dejaba pasar estos colores:
+ *
+ * | tono    | antes            | ahora            |
+ * | :--     | :--              | :--              |
+ * | gris    | 6,15:1 ✔         | sin tocar        |
+ * | verde   | `#298c52` 3,52:1 | `#1f7043` 5,05:1 |
+ * | azul    | `text-brand` 3,18:1 | `#0063c4` 4,91:1 |
+ * | ámbar   | `#a67314` 3,55:1 | `#805710` 5,49:1 |
+ * | rojo    | `#bf3333` 4,40:1 | `#a82929` 5,46:1 |
+ * | neutro  | `#6b6b6b` 4,47:1 | `#595959` 5,88:1 |
+ *
+ * Los dos últimos fallaban por poco —4,40 y 4,47— y son los que más engañan:
+ * sobre blanco los dos aprueban, y el fondo de color se lleva la diferencia.
+ *
+ * ⚠️ `text-brand` (#0080ff) sale de aquí y NO se toca en el resto del sitio:
+ * eso es deuda de marca y se decide con Emilio. Lo que se corrige es su uso
+ * sobre este fondo azul claro, que es donde el propio paquete lo estrenó.
+ * Ojo si alguien lo retoca: `#036fda` tampoco basta (4,09:1).
+ */
 const PILL_TONE = {
   gray: "bg-[#f0f0f0] text-[#595959]",
-  green: "bg-[#d9f0de] font-semibold text-[#298c52]",
-  blue: "bg-[#dbedff] font-semibold text-brand",
-  amber: "bg-[#faedcc] font-semibold text-[#a67314]",
-  red: "bg-[#f7dede] font-semibold text-[#bf3333]",
-  neutral: "bg-[#ebebeb] font-semibold text-[#6b6b6b]",
+  green: "bg-[#d9f0de] font-semibold text-[#1f7043]",
+  blue: "bg-[#dbedff] font-semibold text-[#0063c4]",
+  amber: "bg-[#faedcc] font-semibold text-[#805710]",
+  red: "bg-[#f7dede] font-semibold text-[#a82929]",
+  neutral: "bg-[#ebebeb] font-semibold text-[#595959]",
 } as const;
 
 export type PillTone = keyof typeof PILL_TONE;

@@ -351,7 +351,20 @@ export default async function TutorHomePage() {
                   {profile?.approval_notes
                     ? `Motivo: ${profile.approval_notes}. `
                     : ""}
-                  Puedes actualizar tus datos y volver a enviarlo.
+                  {/* El enlace NO es adorno: a un tutor rechazado o suspendido
+                      el checklist se le oculta a propósito (unas líneas más
+                      abajo) y con él se iba el único camino a Verificación que
+                      quedaba en la pantalla — «Accesos rápidos» lo tenía y
+                      salió en §1.5. La frase prometía una acción y no daba
+                      dónde hacerla. */}
+                  Puedes{" "}
+                  <Link
+                    href="/tutor/verification"
+                    className="font-medium text-brand-foreground hover:underline"
+                  >
+                    actualizar tus documentos
+                  </Link>{" "}
+                  y volver a enviarlo.
                 </>
               )}
             </p>
@@ -393,7 +406,7 @@ export default async function TutorHomePage() {
                 ) : (
                   <Link
                     href={p.href}
-                    className="shrink-0 text-[12.5px] font-medium text-brand hover:underline"
+                    className="shrink-0 text-[12.5px] font-medium text-brand-foreground hover:underline"
                   >
                     {p.accion}
                   </Link>
@@ -405,89 +418,17 @@ export default async function TutorHomePage() {
       ) : null}
 
       {/* §1.4 · Dos columnas: 300 px a la izquierda y el resto a la derecha.
-          El `order` solo actúa por debajo de `lg`, donde no hay dos columnas
-          que valgan: apiladas, lo primero tiene que ser lo que pide acción,
-          no el saldo. */}
+          ⚠️ El ORDEN DEL DOM es el de móvil, no el de escritorio, y va al
+          revés que la rejilla a propósito: apiladas, lo primero tiene que ser
+          lo que pide acción y no el saldo, y eso vale también para el teclado
+          y el lector de pantalla. Invertirlo solo con `order` dejaba lo que se
+          ve y lo que se tabula en sitios distintos (WCAG 2.4.3): el foco bajaba
+          900 px hasta «Ver el detalle de mis pagos» y luego saltaba hacia
+          arriba a «Por atender». Con el DOM en este orden, `lg:order-*` solo
+          tiene que colocar las columnas a partir de `lg`, donde van lado a
+          lado y el orden de lectura vuelve a ser el natural. */}
       <div className="grid items-start gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-        <div className="order-2 flex flex-col gap-5 lg:order-1 lg:sticky lg:top-24">
-          {/* «Tus ingresos» — la tarjeta con más peso de la pantalla (borde
-              1.5 px negro): es el recordatorio de por qué el tutor está aquí.
-              El detalle vive en /tutor/payouts; aquí solo el titular. */}
-          <PanelCard
-            id="tus-ingresos"
-            className="scroll-mt-24 border-[1.5px] border-[#19191f]"
-          >
-            <h2 className="text-base font-semibold text-[#19191f]">
-              Tus ingresos
-            </h2>
-            <p className="mt-3 text-xs text-[#6b6b6b]">Disponible para cobrar</p>
-            <p className="mt-1 truncate text-[34px] leading-tight font-bold tracking-tight text-[#19191f] tabular-nums">
-              {moneyLine(balance.available)}
-            </p>
-            <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
-              Se paga el{" "}
-              <span className="font-semibold text-[#19191f]">
-                {fechaLarga(proximoLunes(), tz)}
-              </span>
-            </p>
-            <dl className="mt-3.5 flex flex-col gap-2">
-              <PanelRow
-                label="En camino (se libera en 7 días)"
-                value={moneyLine(balance.in_retention)}
-              />
-              {/* TODO · DP-3 — «Ganado este mes» necesita el BRUTO del mes y
-                  `tutor_balance` solo devuelve netos por moneda, sin ventana
-                  temporal (Doc 25 · H-06). No hay de dónde sacarlo sin una
-                  función nueva, así que la fila se queda fuera: un importe
-                  inventado en la tarjeta de dinero es peor que un hueco. */}
-              {/* N-16 · el nivel es una ETIQUETA, no prosa: el reparto sale al
-                  pasar el ratón. El nombre lo pone la BD (`tutor_tiers.name`)
-                  y no este fichero — AB-06 los deja sin decidir, así que aquí
-                  no se bautiza ninguno. */}
-              {tier ? (
-                <PanelRow
-                  label="Tu nivel"
-                  value={
-                    <StatusPill
-                      tone="blue"
-                      title={`Te quedas con el ${formatPct(tier.splitPct)} de cada reserva; la comisión de Enséñame Ya es el ${formatPct(tier.commissionPct)}.`}
-                    >
-                      {tier.name}
-                    </StatusPill>
-                  }
-                />
-              ) : null}
-            </dl>
-            {/* H-01 (Doc 25) · dinero acumulado y ningún sitio donde pagarlo.
-                Es el único aviso de esta tarjeta y solo sale cuando hay las
-                dos cosas: sin saldo no es urgente, y con cuenta no es nada. */}
-            {hayDinero && !cuentaDeCobroLista ? (
-              <div className="mt-3.5 rounded-[10px] bg-[#faedcc] p-3">
-                <p className="text-[12.5px] font-medium text-[#19191f]">
-                  Configura tu cuenta de cobro para poder recibir tu pago.
-                </p>
-                <Button asChild className="mt-2 h-8">
-                  <Link href="/tutor/payouts#mis-cuentas">
-                    Configurar cuenta de cobro
-                  </Link>
-                </Button>
-              </div>
-            ) : null}
-            <Link
-              href="/tutor/payouts"
-              className="mt-3 block text-[12.5px] font-medium text-brand hover:underline"
-            >
-              Ver el detalle de mis pagos →
-            </Link>
-          </PanelCard>
-
-          {/* SUP-01 · soporte. Es la misma tarjeta que ve el alumno: un solo
-              componente, un solo buzón. Aquí baja del sitio que ocupaba bajo
-              «Accesos rápidos» y se queda pegada al pie de la columna fija. */}
-          <SupportCard />
-        </div>
-
-        <div className="order-1 flex min-w-0 flex-col gap-5 lg:order-2">
+        <div className="flex min-w-0 flex-col gap-5 lg:order-2">
           {/* «Por atender» (borde azul): todo lo que espera al tutor, con su
               acción EN LA FILA. Se pinta siempre —también vacía— porque es el
               destino del subnivel «Por atender» del menú: un ancla que a veces
@@ -502,16 +443,27 @@ export default async function TutorHomePage() {
           >
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold text-[#19191f]">
-                Por atender
+                {/* El espacio va en el TEXTO y no solo en el margen: `ml-1.5`
+                    separa los píxeles, pero el nombre accesible del encabezado
+                    se leía «Por atender(2)». Y el paréntesis se dice de otra
+                    forma a quien lo escucha —«2 pendientes»—, que es lo que
+                    significa. */}
+                Por atender{" "}
                 {porAtenderTotal > 0 ? (
-                  <span className="ml-1.5 font-normal text-[#6b6b6b] tabular-nums">
-                    ({porAtenderTotal})
-                  </span>
+                  <>
+                    <span
+                      aria-hidden
+                      className="font-normal text-[#6b6b6b] tabular-nums"
+                    >
+                      ({porAtenderTotal})
+                    </span>
+                    <span className="sr-only">, {porAtenderTotal} pendientes</span>
+                  </>
                 ) : null}
               </h2>
               <Link
                 href="/tutor/reservas?f=por-aceptar"
-                className="shrink-0 text-[12.5px] font-medium text-brand hover:underline"
+                className="shrink-0 text-[12.5px] font-medium text-brand-foreground hover:underline"
               >
                 Ver todo
               </Link>
@@ -555,14 +507,21 @@ export default async function TutorHomePage() {
                       <div className="w-full min-w-0 sm:w-auto sm:flex-1">
                         {/* N-12 · `truncate` + `min-w-0`: los títulos de
                             mentoría llegan a 70 caracteres y sin esto empujan
-                            los botones fuera de la tarjeta. */}
-                        <p className="truncate text-[13px] font-semibold text-[#19191f]">
+                            los botones fuera de la tarjeta. El `title` es la
+                            contrapartida obligatoria: cortar con puntos
+                            suspensivos y no dejar forma de leer el resto es
+                            perder contenido (WCAG 1.4.10), y en un móvil de
+                            390 se corta casi entero. */}
+                        <p
+                          title={b.products?.title ?? "Mentoría"}
+                          className="truncate text-[13px] font-semibold text-[#19191f]"
+                        >
                           Reserva nueva · {b.products?.title ?? "Mentoría"}
                         </p>
                         <p className="truncate text-xs text-[#404040]">
                           <StudentLink
                             student={students.get(b.student_id)}
-                            className="font-medium text-brand"
+                            className="font-medium text-brand-foreground"
                           />
                           {" · "}
                           <span className="first-letter:uppercase">
@@ -607,15 +566,19 @@ export default async function TutorHomePage() {
               </div>
               <Link
                 href="/tutor/reservas?f=proximas"
-                className="shrink-0 text-[12.5px] font-medium text-brand hover:underline"
+                className="shrink-0 text-[12.5px] font-medium text-brand-foreground hover:underline"
               >
                 Ver agenda
               </Link>
             </div>
             {sesiones.length === 0 ? (
               <div className="mt-4">
+                {/* «sesiones» y no «clases»: es la palabra del título de esta
+                    misma tarjeta dos líneas más arriba, y la que el acuerdo de
+                    vocabulario del 17-ago reserva para la clase concreta que se
+                    dicta («clase» se queda para el contrato). */}
                 <p className="text-[13px] text-[#6b6b6b]">
-                  No tienes clases agendadas.
+                  No tienes sesiones agendadas.
                 </p>
                 {/* Estado vacío CON SALIDA: qué hacer para que lleguen
                     reservas. Publicar solo se ofrece si no hay ninguna activa;
@@ -639,7 +602,13 @@ export default async function TutorHomePage() {
                     className="flex flex-wrap items-center justify-between gap-3 py-3 last:pb-0"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-semibold text-[#19191f]">
+                      {/* `title` por lo mismo que en «Por atender»: el título
+                          truncado sin forma de leerlo entero es contenido
+                          perdido. */}
+                      <p
+                        title={s.bookings?.products?.title ?? "Mentoría"}
+                        className="truncate text-[13px] font-semibold text-[#19191f]"
+                      >
                         {s.bookings?.products?.title ?? "Mentoría"}
                       </p>
                       {/* N-13: con quién es la llamada. Es el dato que faltaba —
@@ -649,7 +618,7 @@ export default async function TutorHomePage() {
                         con{" "}
                         <StudentLink
                           student={students.get(s.student_id)}
-                          className="font-medium text-brand"
+                          className="font-medium text-brand-foreground"
                         />
                       </p>
                       {/* `first-letter:uppercase` porque el respaldo de
@@ -672,20 +641,22 @@ export default async function TutorHomePage() {
                           sala» semanas antes y el servidor le decía que no.
                           `roomOpen` es la misma comprobación que ya hacían las
                           dos pantallas de detalle. */}
+                      {/* `asChild` + `<Link>`: son destinos DENTRO de la app y
+                          un `<a href>` a pelo recarga la aplicación entera en
+                          la fila que más se pulsa. Los botones de texto que
+                          había aquí antes sí eran `<Link>`; al pasarlos a
+                          icono se había perdido la navegación de cliente. */}
                       {roomOpen(s) ? (
-                        <PanelIconButton
-                          label="Entrar a la sala"
-                          tone="primary"
-                          href={`/room/${s.id}`}
-                        >
-                          <VideoIcon className="size-[17px]" />
+                        <PanelIconButton asChild label="Entrar a la sala" tone="primary">
+                          <Link href={`/room/${s.id}`}>
+                            <VideoIcon className="size-[17px]" />
+                          </Link>
                         </PanelIconButton>
                       ) : (
-                        <PanelIconButton
-                          label="Ver reserva"
-                          href={`/tutor/reservas/${s.booking_id}`}
-                        >
-                          <EyeIcon className="size-4" />
+                        <PanelIconButton asChild label="Ver reserva">
+                          <Link href={`/tutor/reservas/${s.booking_id}`}>
+                            <EyeIcon className="size-4" />
+                          </Link>
                         </PanelIconButton>
                       )}
                     </div>
@@ -694,6 +665,97 @@ export default async function TutorHomePage() {
               </ul>
             )}
           </PanelCard>
+        </div>
+
+        <div className="flex flex-col gap-5 lg:order-1 lg:sticky lg:top-24">
+          {/* «Tus ingresos» — la tarjeta con más peso de la pantalla (borde
+              1.5 px negro): es el recordatorio de por qué el tutor está aquí.
+              El detalle vive en /tutor/payouts; aquí solo el titular. */}
+          <PanelCard
+            id="tus-ingresos"
+            className="scroll-mt-24 border-[1.5px] border-[#19191f]"
+          >
+            <h2 className="text-base font-semibold text-[#19191f]">
+              Tus ingresos
+            </h2>
+            <p className="mt-3 text-xs text-[#6b6b6b]">Disponible para cobrar</p>
+            <p className="mt-1 truncate text-[34px] leading-tight font-bold tracking-tight text-[#19191f] tabular-nums">
+              {moneyLine(balance.available)}
+            </p>
+            {/* La fecha del lote solo se anuncia cuando hay algo que pagar.
+                Con saldo cero la tarjeta decía «Disponible para cobrar · — ·
+                Se paga el lunes 14 de septiembre», o sea que le iban a pagar un
+                guion: la fecha es cierta, pero prometer un pago de nada en la
+                tarjeta que más se mira es ruido. Es un `?:`, no otro copy. */}
+            {balance.available.length > 0 ? (
+              <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
+                Se paga el{" "}
+                <span className="font-semibold text-[#19191f]">
+                  {fechaLarga(proximoLunes(), tz)}
+                </span>
+              </p>
+            ) : null}
+            <dl className="mt-3.5 flex flex-col gap-2">
+              <PanelRow
+                label="En camino (se libera en 7 días)"
+                value={moneyLine(balance.in_retention)}
+              />
+              {/* TODO · DP-3 — «Ganado este mes» necesita el BRUTO del mes y
+                  `tutor_balance` solo devuelve netos por moneda, sin ventana
+                  temporal (Doc 25 · H-06). No hay de dónde sacarlo sin una
+                  función nueva, así que la fila se queda fuera: un importe
+                  inventado en la tarjeta de dinero es peor que un hueco. */}
+              {/* N-16 · el nivel es una ETIQUETA, no prosa: el reparto sale al
+                  pasar el ratón. El nombre lo pone la BD (`tutor_tiers.name`)
+                  y no este fichero — AB-06 los deja sin decidir, así que aquí
+                  no se bautiza ninguno; lo único que hace `tier.ts` es
+                  traducir el prefijo provisional en inglés del seed.
+                  ⚠️ El `title` lleva TAMBIÉN la segunda mitad del párrafo de
+                  N-16 («lo asigna el equipo…»): al convertir el párrafo en
+                  etiqueta se había perdido, y era justo la frase que evitaba
+                  la pregunta «¿si me suben de nivel, se recalcula lo que ya
+                  tengo reservado?». En un tooltip no ocupa pantalla. */}
+              {tier ? (
+                <PanelRow
+                  label="Tu nivel"
+                  value={
+                    <StatusPill
+                      tone="blue"
+                      title={`Te quedas con el ${formatPct(tier.splitPct)} de cada reserva; la comisión de Enséñame Ya es el ${formatPct(tier.commissionPct)}. Tu nivel lo asigna el equipo y solo aplica a reservas nuevas.`}
+                    >
+                      {tier.name}
+                    </StatusPill>
+                  }
+                />
+              ) : null}
+            </dl>
+            {/* H-01 (Doc 25) · dinero acumulado y ningún sitio donde pagarlo.
+                Es el único aviso de esta tarjeta y solo sale cuando hay las
+                dos cosas: sin saldo no es urgente, y con cuenta no es nada. */}
+            {hayDinero && !cuentaDeCobroLista ? (
+              <div className="mt-3.5 rounded-[10px] bg-[#faedcc] p-3">
+                <p className="text-[12.5px] font-medium text-[#19191f]">
+                  Configura tu cuenta de cobro para poder recibir tu pago.
+                </p>
+                <Button asChild className="mt-2 h-8">
+                  <Link href="/tutor/payouts#mis-cuentas">
+                    Configurar cuenta de cobro
+                  </Link>
+                </Button>
+              </div>
+            ) : null}
+            <Link
+              href="/tutor/payouts"
+              className="mt-3 block text-[12.5px] font-medium text-brand-foreground hover:underline"
+            >
+              Ver el detalle de mis pagos →
+            </Link>
+          </PanelCard>
+
+          {/* SUP-01 · soporte. Es la misma tarjeta que ve el alumno: un solo
+              componente, un solo buzón. Aquí baja del sitio que ocupaba bajo
+              «Accesos rápidos» y se queda pegada al pie de la columna fija. */}
+          <SupportCard />
         </div>
       </div>
     </TutorShell>

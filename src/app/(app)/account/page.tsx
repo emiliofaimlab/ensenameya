@@ -1,6 +1,6 @@
 import { storageUrl } from "@/lib/catalog/format";
 import { requireUser } from "@/lib/auth/server";
-import { panelItems } from "@/lib/auth/panel-items";
+import { panelMenu } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { ReferralCard } from "@/components/referral/referral-card";
@@ -67,20 +67,23 @@ export default async function AccountPage() {
 
   // El menú lateral es el del panel del rol (undefined = alumno por defecto).
   // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
-  const items = await panelItems(user.id, roles);
+  const { items, badges } = await panelMenu(user.id, roles);
 
   return (
     <PanelShell
       items={items}
+      badges={badges}
       eyebrow="Cuenta"
       title="Mi cuenta"
-      description="Gestiona tu información personal, tu contraseña y tu sesión."
+      /* §7.1 · el subtítulo nombra las TRES cosas que hay aquí, y la tercera
+         («los avisos») es nueva: hasta ahora decía «tu sesión», que es lo menos
+         importante de la pantalla. */
+      description="Tus datos, tu acceso y los avisos que recibes."
     >
-      {/* ⚠️ EL MOSAICO LO ARMA `AccountForm`, y estas dos tarjetas entran por
-          props en vez de detrás. No es rebuscado: en dos columnas el ORDEN de
-          las tarjetas es el diseño (tarjetas altas emparejadas entre sí, el
-          calendario a ancho completo, la baja de cuenta sola al final), y
-          partirlo entre dos ficheros lo rompería el primer día. Aquí se decide
+      {/* ⚠️ EL ORDEN DE LA PANTALLA LO DECIDE `AccountForm`, y estas dos
+          tarjetas entran por props en vez de detrás. No es rebuscado: §7 fija
+          qué va en cada columna y qué va a ancho completo, y partir esa
+          decisión entre dos ficheros la rompería el primer día. Aquí se decide
           QUÉ tarjetas hay y con qué datos; allí, DÓNDE cae cada una. */}
       <AccountForm
         userId={user.id}

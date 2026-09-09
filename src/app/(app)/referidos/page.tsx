@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { GiftIcon } from "lucide-react";
 
 import { requireUser } from "@/lib/auth/server";
-import { panelItems } from "@/lib/auth/panel-items";
+import { panelMenu } from "@/lib/auth/panel-items";
 import { referralEmbedUrl, referralUrl } from "@/lib/referral";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,7 +38,7 @@ export default async function ReferidosPage() {
   const { user, roles } = await requireUser();
 
   // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
-  const items = await panelItems(user.id, roles);
+  const { items, badges } = await panelMenu(user.id, roles);
 
   /**
    * ⚠️ B1.11 · EL PROGRAMA LO DECIDE EL PANEL, NO EL ROL, y no es un atajo: es
@@ -71,6 +71,7 @@ export default async function ReferidosPage() {
   return (
     <PanelShell
       items={items}
+      badges={badges}
       eyebrow="Cuenta"
       title="Invita y gana"
       description={

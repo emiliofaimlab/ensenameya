@@ -383,12 +383,27 @@ export function AppSidebar({
           const pendientes = hijos.length
             ? hijos.reduce((n, c) => n + (badges?.[c.href] ?? 0), 0)
             : (badges?.[href] ?? 0);
+          // ⚠️ Cuando quien estás mirando es un SUBNIVEL con ruta propia, la
+          // categoría deja de ser «la página actual»: su href lleva a otro
+          // sitio. Sin esto el menú declaraba `aria-current="page"` DOS veces
+          // —medido en `/tutor/verification`: «Mi cuenta» (→ /account) y
+          // «Verificación»—, así que un lector de pantalla anunciaba dos
+          // páginas actuales y ofrecía como «la actual» un enlace que te saca
+          // de donde estás (4.1.2). Pasa en toda categoría cuyos hijos son
+          // rutas y no anclas.
+          //
+          // El resaltado VISUAL de la categoría no se toca: ahí sí es correcto
+          // —dice dónde estás dentro del menú— y `active` sigue igual. Lo que
+          // se corrige es solo lo que se ANUNCIA.
+          const hijoActivo = hijos.some(
+            (c) => !c.href.includes("#") && rutaDe(c.href) === pathname,
+          );
           return (
             <li key={href}>
               <Link
                 href={href}
                 ref={active ? activo : undefined}
-                aria-current={active ? "page" : undefined}
+                aria-current={active && !hijoActivo ? "page" : undefined}
                 aria-label={
                   pendientes > 0
                     ? `${label}, ${pendientes} ${pendientes === 1 ? "pendiente" : "pendientes"}`
