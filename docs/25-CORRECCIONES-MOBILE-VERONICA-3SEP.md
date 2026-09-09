@@ -1,7 +1,7 @@
 # DOC 25 — Correcciones móviles del correo de Verónica (3-sep-2026)
 
 > **Qué es esto.** Verónica revisó la versión móvil de `dev` en un iPhone (viewport 390x844) y
-> mandó el 3-sep-2026 «Correcciones Versión Mobile - Enséñame Ya»: 33 capturas y 45 puntos en 10
+> mandó el 3-sep-2026 «Correcciones Versión Mobile - Enséñame Ya»: 33 capturas y 41 peticiones en 10
 > pantallas. Este documento es la **trazabilidad punto a punto**: qué pidió (literal), cómo se leyó,
 > qué se hizo y con qué evidencia. Es el mismo formato que `docs/22-LISTA-VERONICA-21AGO.md`, y por
 > lo mismo: una lista suya se cruza con el código antes de convertirla en trabajo
@@ -20,7 +20,7 @@
 
 ## 25.0 · La conclusión, en cinco frases
 
-1. **De 45 puntos, 43 son de maquetación y se resuelven con cuatro primitivas**, no con 45 parches:
+1. **De sus 41 peticiones, 39 son de maquetación y se resuelven con cuatro primitivas**, no con 39 parches:
    CTA a ancho completo, buscador con el botón debajo, tira de chips con scroll (`scroll-strip`) y
    filtros como píldoras desplegables (`FilterPills`). Verónica describe la misma cosa con palabras
    distintas en cada pantalla («alargar y centrar», «bajar el buscar», «slider», «estilo Shein»).
@@ -140,7 +140,7 @@ La columna «Evidencia» se rellena con lo medido en el navegador al cerrar cada
 
 ## 25.1 bis · Las cuatro primitivas, y por qué existen
 
-Las 45 observaciones se resuelven con cuatro piezas compartidas, no con 45 parches. Quien toque una
+Las 41 peticiones se resuelven con cuatro piezas compartidas, no con 41 parches. Quien toque una
 pantalla móvil nueva debería usar estas antes de inventar otra cosa.
 
 | Pieza | Dónde | Qué hace |
