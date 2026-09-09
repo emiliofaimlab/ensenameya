@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -196,30 +196,79 @@ export function AppSidebar({
 
   const [signOutOpen, setSignOutOpen] = useState(false);
 
+  /**
+   * La fila de móvil trae a la vista la sección en la que estás.
+   *
+   * Sin esto, el panel de admin —once secciones en una tira de ~1.200 px— se
+   * abría en «Payouts» con la tira empezando por «Dashboard»: la marca azul
+   * quedaba fuera de la pantalla y la fila parecía no tener nada seleccionado.
+   *
+   * Se mueve `scrollLeft` A MANO y no con `scrollIntoView`: éste último puede
+   * desplazar también el eje vertical de la PÁGINA —justo el «brinca» que el
+   * cliente lleva un correo pidiendo que se quite— y aquí solo hace falta el
+   * horizontal. Se centra el ítem si hay recorrido para ello; si está al
+   * principio o al final, el `max/min` deja la tira pegada a su borde.
+   */
+  const tira = useRef<HTMLUListElement>(null);
+  const activo = useRef<HTMLAnchorElement>(null);
+  useEffect(() => {
+    const t = tira.current;
+    const a = activo.current;
+    // `clientWidth` 0 = la tira no se está pintando (a partir de 768 es una
+    // columna): no hay nada que centrar.
+    if (!t || !a || t.scrollWidth <= t.clientWidth) return;
+    const centrado = a.offsetLeft - (t.clientWidth - a.offsetWidth) / 2;
+    t.scrollLeft = Math.max(0, Math.min(centrado, t.scrollWidth - t.clientWidth));
+  }, [pathname]);
+
   return (
     <nav
       aria-label="Menú del panel"
       className={cn(
-        // US-1601 · POR DEBAJO DE 768 ESTO NO ES UNA TARJETA, SON CHIPS.
+        // ── POR DEBAJO DE 768 ESTO ES UNA SOLA FILA QUE SE DESPLAZA ──────────
         //
-        // El Figma «Mobile y Tablet» no dibuja ni un cajón ni una pestaña con
-        // scroll en los 115 frames: a 390 el menú del panel es una fila de
-        // chips que ENVUELVE y está siempre a la vista (`sidebar-nav · row
-        // wrap gap8` en AL02 — Dashboard — Mobile, `nav-chips` en TU06 y AD02).
-        // Sin marco, sin fondo y sin padding: los chips se apoyan directamente
-        // sobre el #f9fafc de la página.
+        // Hasta el 9-sep era una fila que ENVOLVÍA, que es lo que dibuja el
+        // Figma («sidebar-nav · row wrap gap8» en AL02 — Dashboard — Mobile).
+        // Con los destinos reales eso son dos filas en el panel del alumno y
+        // tres en el de admin: 150 px de menú antes del saludo, y lo que se ve
+        // al abrir el panel es el menú, no el panel. Jose lo rechazó mirándolo
+        // en un iPhone («se ven mal mal en mobile»), y su decisión gana al
+        // Figma (R3 del Doc 24).
         //
-        // De 768 en adelante vuelve a ser la tarjeta de siempre (r16, borde
-        // #e0e0e0, 12 de padding), que es lo que pintan AL02 y AD02 tablet y lo
-        // que ya había en escritorio: la restitución en `md:` deja ≥1024 igual.
-        "h-fit rounded-none border-0 bg-transparent p-0",
+        // Ahora es una tira de una línea con scroll horizontal —la misma
+        // `scroll-strip` de los chips de categoría y de los filtros—, con la
+        // sección activa traída a la vista. Cuesta 48 px fijos en vez de 150 y
+        // sigue estando a un toque, que es lo que se pierde al esconder el
+        // menú detrás de un botón.
+        //
+        // El sangrado hasta el borde del viewport es el de `PanelShell`
+        // (px-4 / sm:px-6), no el de `Container`: este menú vive dentro del
+        // panel, no de la rejilla pública.
+        // ⚠️ `min-w-0` NO es decorativo. Este `<nav>` es hijo de la rejilla de
+        // `PanelShell`, y el mínimo automático de un ítem de rejilla es el
+        // ancho de su CONTENIDO: con la tira dentro, ese contenido son los
+        // ~550 px de las cinco secciones sin envolver, así que la pista se
+        // ensanchaba y la PÁGINA ENTERA salía de 549 px en una pantalla de
+        // 390, con scroll horizontal. Medido dentro de un iframe de 390 —a ojo
+        // no se ve, porque el panel del navegador emula más ancho—. Es el mismo
+        // fallo que ya mordió en Explorar tutores con las píldoras de filtro.
+        "h-fit min-w-0 rounded-none border-0 bg-transparent p-0",
         "md:rounded-[16px] md:border md:border-[#e0e0e0] md:bg-card md:p-3",
-        // El `lg:sticky` se queda tal cual: los chips no deben pegarse, y el
+        // El `lg:sticky` se queda tal cual: la tira no debe pegarse, y el
         // `top-24` (96) sigue despejando la cabecera de 73.
         "lg:sticky lg:top-24",
       )}
     >
-      <ul className="flex flex-row flex-wrap gap-2 md:flex-col md:flex-nowrap md:gap-1">
+      <ul
+        ref={tira}
+        className={cn(
+          "max-md:scroll-strip max-md:-mx-4 max-md:gap-2 max-md:px-4 max-md:scroll-px-4",
+          // `py-1 -my-1`: aire para que la tira no recorte el anillo de foco
+          // del chip enfocado (un contenedor con scroll recorta lo que asoma).
+          "max-md:-my-1 max-md:py-1 max-sm:-mx-4 max-sm:px-4 sm:max-md:-mx-6 sm:max-md:px-6 sm:max-md:scroll-px-6",
+          "md:flex md:flex-col md:gap-1",
+        )}
+      >
         {items.map((item) => {
           const { href, label, icon: Icon } = item;
           // ⚠️ `mejorMatch >= 0` NO sobra. Sin él, en una ruta del área
@@ -236,6 +285,7 @@ export function AppSidebar({
             <li key={href}>
               <Link
                 href={href}
+                ref={active ? activo : undefined}
                 aria-current={active ? "page" : undefined}
                 aria-label={
                   pendientes > 0
@@ -243,14 +293,12 @@ export function AppSidebar({
                     : undefined
                 }
                 className={cn(
-                  // CHIP (base, <768): 38 de alto = pad9/14 + texto 13/20. Aquí
-                  // son pad 8 + borde 1 para que el total sea 38 EXACTOS con
-                  // `box-sizing: border-box`, que es lo que Figma dibuja sin
-                  // contar el trazo. r14 y no r8 porque en el archivo nuevo el
-                  // nodo se llama literalmente `chip` en dos de las tres áreas
-                  // (TU06 y AD02) y r14 es el radio de chip del sistema; el r8
-                  // de AL02 es la fila del menú reaprovechada.
-                  "flex min-h-[38px] items-center gap-2.5 rounded-[14px] border px-3.5 py-2 text-[13px] leading-5 transition-colors",
+                  // CHIP (base, <768). 40 de alto y no los 38 del Figma: es el
+                  // mínimo táctil del proyecto, y en una tira que se desplaza
+                  // con el pulgar se nota. `whitespace-nowrap` porque en una
+                  // fila que no envuelve una etiqueta de dos palabras partida
+                  // en dos líneas descuadra el alto de toda la tira.
+                  "flex min-h-10 items-center gap-2.5 rounded-[14px] border px-3.5 py-2 text-[13px] leading-5 whitespace-nowrap transition-colors",
                   // COLUMNA (≥768): `nav-item` 148x41 / 172x41 del Figma tablet,
                   // pad10/12 y r8. `min-h` en vez del `h-[41px]` de antes: la
                   // altura sale igual (10+20+10 = 40 → 41 por el mínimo) pero
@@ -310,10 +358,19 @@ export function AppSidebar({
             </li>
           );
         })}
-        {/* El aire que separa "Salir" del resto es el `Frame 10x8` que el Figma
-            mete antes de él en la columna de tablet. En modo chip no hay tal
-            separación: allí "Salir" es un chip más de la fila que envuelve. */}
-        <li className="mt-0 pt-0 md:mt-2 md:pt-1">
+        {/* ⚠️ «Salir» NO se pinta por debajo de 768, y esto tiene dos motivos.
+            El primero es de reparto (ver la nota del cajón en
+            `site-header.tsx`): cerrar sesión es lo MÍO, y lo mío vive en el
+            menú del avatar, que en móvil está siempre a la vista en la
+            cabecera. El segundo es que una acción destructiva no debería ser
+            un vecino más de una fila de navegación por la que se arrastra el
+            pulgar: aquí, además, la tira se desplaza, así que «Salir» podía
+            quedar justo donde el dedo suelta.
+
+            De 768 en adelante se queda tal cual estaba, con el aire que el
+            Figma le da en la columna (`Frame 10x8`) — el escritorio no se
+            toca (R1). */}
+        <li className="max-md:hidden md:mt-2 md:pt-1">
           <button
             type="button"
             onClick={() => setSignOutOpen(true)}

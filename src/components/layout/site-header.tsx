@@ -679,39 +679,39 @@ export function SiteHeader({
                       </Link>
                     ))}
                   </nav>
-                  <div className="mt-2 flex flex-col gap-2 px-4">
-                    {user ? (
-                      <>
-                        <PanelSwitch
-                          panels={user.panels}
-                          pathname={pathname}
-                          onNavigate={closeMenu}
-                        />
-                        <Button asChild variant="outline">
-                          <Link href={user.homeHref} onClick={closeMenu}>
-                            Mi panel
-                          </Link>
-                        </Button>
-                        <Button asChild variant="outline">
-                          <Link href="/account" onClick={closeMenu}>
-                            Mi cuenta
-                          </Link>
-                        </Button>
-                        <Button variant="ghost" onClick={confirmSignOut}>
-                          Cerrar sesión
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <Button asChild variant="outline">
-                          <Link href="/login">Iniciar sesión</Link>
-                        </Button>
-                        <Button asChild>
-                          <Link href="/signup">Crear cuenta</Link>
-                        </Button>
-                      </>
-                    )}
-                  </div>
+                  {/*
+                    ⚠️ CON SESIÓN, AQUÍ NO VA NADA DE LA CUENTA. Y no es un
+                    olvido: hasta el 9-sep este cajón repetía el switch
+                    Aprender/Enseñar, «Mi panel», «Mi cuenta» y «Cerrar sesión»
+                    —los mismos cuatro que ya están en el menú del avatar, a
+                    dos dedos de distancia en la misma cabecera—. Jose lo
+                    señaló mirando las dos capturas juntas: «que salga en los
+                    dos lados es redundante».
+
+                    El reparto que queda, y la regla para lo que venga:
+
+                      · La hamburguesa es el SITIO — lo que puede ver
+                        cualquiera: explorar, categorías, quiénes somos.
+                      · El avatar es lo MÍO — quién soy, en qué panel estoy,
+                        mi cuenta y salir.
+                      · La fila de la pantalla son las SECCIONES del panel en
+                        el que estoy (`app-sidebar.tsx`).
+
+                    Cada destino vive en UN sitio, y cuál es se deduce de la
+                    pregunta que se está haciendo el usuario. Sin sesión el
+                    avatar no existe, así que los dos CTA de alta sí se quedan
+                    aquí: no duplican nada.
+                  */}
+                  {user ? null : (
+                    <div className="mt-2 flex flex-col gap-2 px-4">
+                      <Button asChild variant="outline">
+                        <Link href="/login">Iniciar sesión</Link>
+                      </Button>
+                      <Button asChild>
+                        <Link href="/signup">Crear cuenta</Link>
+                      </Button>
+                    </div>
+                  )}
                 </SheetContent>
               </Sheet>
             </div>

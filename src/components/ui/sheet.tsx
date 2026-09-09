@@ -72,12 +72,19 @@ function SheetContent({
           <SheetPrimitive.Close data-slot="sheet-close" asChild>
             <Button
               variant="ghost"
-              className="absolute top-3 right-3"
+              /* Mismo criterio que el diálogo: el área tocable sube a 40 px por
+                 debajo de `sm` sin mover la X (los 6 px de margen negativo
+                 compensan el crecimiento). Es el único modo de cerrar el cajón
+                 con el pulgar sin arrastrarlo. */
+              className="absolute top-3 right-3 max-sm:-m-1.5 max-sm:size-10"
               size="icon-sm"
             >
-              <XIcon
-              />
-              <span className="sr-only">Close</span>
+              <XIcon />
+              {/* La X no tiene más nombre accesible que este `sr-only`, así que
+                  esta cadena ES el botón para quien navega con lector. Venía en
+                  inglés del scaffold de shadcn en un producto que está entero en
+                  español —el mismo arreglo que ya se hizo en `dialog.tsx`—. */}
+              <span className="sr-only">Cerrar</span>
             </Button>
           </SheetPrimitive.Close>
         )}

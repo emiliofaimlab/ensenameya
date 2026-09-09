@@ -172,6 +172,45 @@ quedaron sin aplicar y se cerraron en la integración:
 | Contraste del CTA claro y de los pasos | `home/final-cta.tsx`, `home/steps-block.tsx` | Azul de marca a 15 px sobre blanco (3,8:1) y los antetítulos y números de paso por debajo del mínimo. Con los tokens oscuros pasan a 4,7-7,5:1 |
 | «clases» → «mentorías» | `calendar/calendar-feed-card.tsx` | R4, y la tarjeta sale en la misma captura de Verónica |
 
+## 25.1 ter · La navegación de los paneles en móvil (Jose, 9-sep)
+
+No sale del correo de Verónica: Jose lo vio en la preview ya desplegada, en su iPhone, y señaló dos
+cosas a la vez. **Los chips del menú del panel «se ven mal mal en mobile»** —con los destinos reales
+son dos filas en el panel del alumno y tres en el de admin, unos 150 px de menú antes del saludo— y
+**«aprender, enseñar, mi cuenta, cerrar sesión salen en los dos lados»**: el cajón de la hamburguesa
+repetía los cuatro que ya estaban en el menú del avatar, a dos dedos en la misma cabecera.
+
+Los dos son el mismo problema: **tres menús sin un reparto claro**. La decisión, que vale también
+para lo que venga:
+
+| Menú | De qué se ocupa | Qué contiene |
+| :-- | :-- | :-- |
+| **Hamburguesa** | El SITIO: lo que puede ver cualquiera | Explorar tutores · Explorar mentorías · Categorías · Sobre nosotros · ¿Cómo funciona? Sin sesión, además, los dos botones de alta |
+| **Avatar** | Lo MÍO | Quién soy · Aprender/Enseñar · Mi panel · Mi cuenta · Cerrar sesión |
+| **Fila de la pantalla** | Las SECCIONES del panel en el que estoy | Inicio, Mis reservas, Agendar… (alumno) · Dashboard, Mis mentorías… (tutor) · las once de admin |
+
+Cada destino vive en **un** sitio, y cuál es se deduce de la pregunta que se está haciendo quien
+mira. Lo medido a 390 después del cambio:
+
+| | Antes | Ahora |
+| :-- | :-- | :-- |
+| Alto del menú del panel | ~150 px (2-3 filas que envuelven) | **40 px**, una fila |
+| Destinos repetidos entre cajón y avatar | 4 | **0** |
+| Sección activa visible al entrar | No en admin (quedaba fuera de la tira) | Sí: la fila se centra sola en ella |
+
+Tres detalles del cómo, por si alguien los toca:
+
+- **«Salir» desaparece de la fila en móvil.** Cerrar sesión es «lo mío» y vive en el avatar; además
+  una acción destructiva no debe ser un vecino más de una fila por la que se arrastra el pulgar. De
+  768 en adelante sigue en la columna, como estaba.
+- **La fila necesita `min-w-0`**, y esto no se ve a ojo: es hija de la rejilla del panel, y sin ello
+  aporta el ancho de su contenido como mínimo, ensancha la pista y **saca la página entera a 549 px
+  en una pantalla de 390**. Se descubrió midiendo dentro de un iframe de 390 px reales, porque la
+  emulación del navegador estaba dando 549.
+- **Esto contradice al Figma a propósito** (R3 del Doc 24, que dice que las decisiones del cliente
+  ganan): «AL02 — Dashboard — Mobile» dibuja los chips envolviendo, y con los once destinos reales
+  del admin eso son tres filas.
+
 ## 25.2 · Lo que se decidió y no conviene reabrir
 
 - **Escritorio intacto (R1).** Todo es mobile-first aditivo: base = 390, `md:` = 768, `lg:`
