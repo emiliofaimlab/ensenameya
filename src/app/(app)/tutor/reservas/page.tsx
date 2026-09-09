@@ -124,6 +124,7 @@ export default async function TutorReservasPage({
 
   return (
     <TutorShell
+      userId={userId}
       title="Reservas"
       description={
         // M-02 · antes esta línea prometía las 24 h para TODAS las reservas

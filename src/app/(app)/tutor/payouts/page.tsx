@@ -528,6 +528,7 @@ export default async function TutorPayoutsPage() {
 
   return (
     <TutorShell
+      userId={userId}
       title="Payouts"
       description="Lo que ganas se libera 7 días después de cada mentoría y se paga en el lote de los lunes. También puedes retirarlo antes."
     >

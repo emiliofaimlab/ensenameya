@@ -65,6 +65,7 @@ export default async function TutorFaqsPage() {
 
   return (
     <TutorShell
+      userId={userId}
       title="Preguntas frecuentes"
       description="Se escriben una vez y aparecen en todas tus mentorías."
     >

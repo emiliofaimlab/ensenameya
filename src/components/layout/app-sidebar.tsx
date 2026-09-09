@@ -17,7 +17,6 @@ import {
   LogOutIcon,
   PercentIcon,
   ReceiptIcon,
-  ShieldCheckIcon,
   TicketIcon,
   UserIcon,
   UsersIcon,
@@ -26,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { PanelCounter } from "@/components/layout/panel-controls";
 import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 
 export type SidebarItem = {
@@ -36,6 +36,24 @@ export type SidebarItem = {
   exact?: boolean;
   /** Prefijo extra que también lo marca activo (detalles que cuelgan de otra ruta). */
   alsoMatch?: string;
+  /**
+   * G-01 · Subniveles, **siempre abiertos** (nunca un acordeón: el paquete
+   * aprobado los quiere a la vista en todas las pantallas del panel, para que
+   * el menú diga de un vistazo qué hay dentro de cada sección).
+   *
+   * Cada uno es una de dos cosas, y el código las distingue por el `#`:
+   *   · un ANCLA al bloque de la propia pantalla (`/tutor#por-atender`) — no se
+   *     marca nunca como activo, porque marcarlo pediría un scroll-spy y el
+   *     diseño aprobado tampoco lo pinta;
+   *   · una RUTA de verdad (`/tutor/verification`) — se marca al estar en ella,
+   *     y de paso marca a su categoría, que es cómo «Verificación» deja de ser
+   *     entrada de primer nivel sin perder el rastro de dónde estás.
+   *
+   * ⚠️ Solo se pintan de 768 en adelante. Por debajo el menú es una tira de una
+   * línea que se desplaza (decisión de Jose del 9-sep): meter ahí un segundo
+   * nivel sería volver a las tres filas que se acaban de quitar.
+   */
+  children?: { href: string; label: string }[];
 };
 
 type Item = SidebarItem;
@@ -67,8 +85,27 @@ const STUDENT_ITEMS: Item[] = [
 
 /** Menú del tutor (TU06). Mismos criterios: solo rutas que existen. */
 export const TUTOR_ITEMS: Item[] = [
-  { href: "/tutor", label: "Dashboard", icon: LayoutDashboardIcon, exact: true },
-  { href: "/tutor/products", label: "Mis mentorías", icon: BookOpenIcon },
+  {
+    href: "/tutor",
+    label: "Dashboard",
+    icon: LayoutDashboardIcon,
+    exact: true,
+    children: [
+      { href: "/tutor#por-atender", label: "Por atender" },
+      { href: "/tutor#proximas-sesiones", label: "Próximas sesiones" },
+      { href: "/tutor#tus-ingresos", label: "Tus ingresos" },
+    ],
+  },
+  {
+    href: "/tutor/products",
+    label: "Mis mentorías",
+    icon: BookOpenIcon,
+    children: [
+      { href: "/tutor/products?f=activas", label: "Activas" },
+      { href: "/tutor/products?f=pausadas", label: "Pausadas" },
+      { href: "/tutor/products?f=borradores", label: "Borradores" },
+    ],
+  },
   // EY-194 · va pegada a "Mis mentorías" porque es lo mismo visto desde el otro
   // lado: contenido de la vitrina que se hereda en todas ellas.
   //
@@ -88,18 +125,62 @@ export const TUTOR_ITEMS: Item[] = [
   // enseñarla hay que descomentar esta línea, reponer el import de
   // `MessageCircleQuestionIcon` y el enlace de product-form.
   // { href: "/tutor/faqs", label: "Mis FAQ", icon: MessageCircleQuestionIcon },
-  { href: "/tutor/availability", label: "Disponibilidad", icon: CalendarPlusIcon },
-  { href: "/tutor/reservas", label: "Reservas", icon: TicketIcon },
-  { href: "/tutor/payouts", label: "Payouts", icon: WalletIcon },
+  {
+    href: "/tutor/availability",
+    label: "Disponibilidad",
+    icon: CalendarPlusIcon,
+    children: [
+      { href: "/tutor/availability#horario-semanal", label: "Horario semanal" },
+      { href: "/tutor/availability#calendario", label: "Calendario" },
+      { href: "/tutor/availability#excepciones", label: "Excepciones" },
+    ],
+  },
+  {
+    href: "/tutor/reservas",
+    label: "Reservas",
+    icon: TicketIcon,
+    children: [
+      { href: "/tutor/reservas?f=por-aceptar", label: "Por aceptar" },
+      { href: "/tutor/reservas?f=proximas", label: "Próximas" },
+      { href: "/tutor/reservas?f=pasadas", label: "Pasadas" },
+    ],
+  },
+  // G-01 · «Payouts» pasa a «Mis pagos». Era la única entrada del menú en
+  // inglés, y el propio panel ya llamaba «pagos» a lo que hay dentro.
+  {
+    href: "/tutor/payouts",
+    label: "Mis pagos",
+    icon: WalletIcon,
+    children: [
+      { href: "/tutor/payouts#saldo", label: "Saldo" },
+      { href: "/tutor/payouts#como-cobras", label: "Cómo cobras" },
+      { href: "/tutor/payouts#mis-cuentas", label: "Mis cuentas" },
+      { href: "/tutor/payouts#movimientos", label: "Movimientos" },
+    ],
+  },
   // R29-03a: "Métodos de pago" (/pagos) es card-on-file del ALUMNO (RN-43): como
   // tutor no pago, cobro. Sigue a un clic desde el panel de alumno (el switch de
   // `panelItems` le devuelve ese menú). La cuenta de cobro del tutor es R29-03b,
   // aplazada a EP-20 mientras el PSP no tenga cuentas.
-  // TU02: los documentos se suben, se reemplazan y se consultan aquí. En el
-  // Figma cuelgan de "Cuenta", pero sin entrada propia no había forma de
-  // llegar a ellos desde el panel.
-  { href: "/tutor/verification", label: "Verificación", icon: ShieldCheckIcon },
-  { href: "/account", label: "Cuenta", icon: UserIcon },
+  // G-01 · «Verificación» DEJA de ser entrada de primer nivel y pasa a colgar
+  // de «Mi cuenta». No se pierde el acceso —sigue siendo una ruta propia y el
+  // subnivel se marca al estar en ella—, y el menú deja de mezclar un trámite
+  // que se hace una vez con las secciones que se visitan siempre.
+  //
+  // El comentario que había aquí decía que sin entrada propia «no había forma
+  // de llegar a ellos desde el panel»: sigue habiéndola, solo que un nivel
+  // más adentro.
+  {
+    href: "/account",
+    label: "Mi cuenta",
+    icon: UserIcon,
+    children: [
+      { href: "/tutor/verification", label: "Verificación" },
+      { href: "/account#informacion-personal", label: "Información personal" },
+      { href: "/account#contrasena", label: "Contraseña" },
+      { href: "/account#avisos", label: "Avisos" },
+    ],
+  },
 ];
 
 /**
@@ -164,7 +245,22 @@ function matchLength(item: Item, pathname: string): number {
       : -1;
   const porAlias =
     item.alsoMatch && pathname.startsWith(item.alsoMatch) ? item.alsoMatch.length : -1;
-  return Math.max(porHref, porAlias);
+  // G-01 · un subnivel que es RUTA propia marca también a su categoría: en
+  // `/tutor/verification` la sección activa es «Mi cuenta», que es de donde
+  // cuelga. Cuenta con la longitud de la ruta del hijo para que gane al resto
+  // por el mismo criterio de siempre (el prefijo más largo).
+  const porHijo = Math.max(
+    -1,
+    ...(item.children ?? []).map((c) =>
+      rutaDe(c.href) === pathname ? rutaDe(c.href).length : -1,
+    ),
+  );
+  return Math.max(porHref, porAlias, porHijo);
+}
+
+/** La ruta de un enlace de subnivel, sin el `#ancla` ni la `?query`. */
+function rutaDe(href: string): string {
+  return href.split(/[#?]/)[0];
 }
 
 /**
@@ -280,7 +376,13 @@ export function AppSidebar({
           const active =
             mejorMatch >= 0 && matchLength(item, pathname) === mejorMatch;
           // Cero (o sin contador) = sin badge. Ver la nota de `badges`.
-          const pendientes = badges?.[href] ?? 0;
+          // G-02 · el contador de la categoría es la SUMA de los de sus
+          // subniveles, no un número aparte: así el menú no puede decir «Mis
+          // pagos 3» y enseñar dentro un solo 1. Sin subniveles, el suyo.
+          const hijos = item.children ?? [];
+          const pendientes = hijos.length
+            ? hijos.reduce((n, c) => n + (badges?.[c.href] ?? 0), 0)
+            : (badges?.[href] ?? 0);
           return (
             <li key={href}>
               <Link
@@ -338,23 +440,56 @@ export function AppSidebar({
 
                     `min-w` en vez de ancho fijo: "99+" son tres caracteres y
                     una píldora cuadrada los cortaría. */}
-                {pendientes > 0 ? (
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums",
-                      active
-                        ? // Sobre el naranja del activo, el contraste lo da el
-                          // relleno blanco: un badge naranja sobre naranja no se
-                          // ve, y el blanco sobre blanco tampoco.
-                          "bg-white text-brand"
-                        : "bg-brand text-white",
-                    )}
-                  >
-                    {pendientes > 99 ? "99+" : pendientes}
-                  </span>
-                ) : null}
+                {/* G-02 · círculo de 20 px NARANJA, el mismo de la campana:
+                    es lo que reclama atención. Sobre el chip activo (que en
+                    móvil va relleno de azul) el naranja se ve igual, así que
+                    no cambia de color como hacía antes. */}
+                <PanelCounter
+                  value={pendientes}
+                  tone={active ? "activo" : "naranja"}
+                  className="ml-auto"
+                />
               </Link>
+
+              {/* G-01 · Subniveles, siempre abiertos y solo en la columna
+                  (≥768). La línea izquierda de 1 px es lo que los ata
+                  visualmente a su categoría sin necesidad de un acordeón. */}
+              {hijos.length ? (
+                <ul className="mt-1 ml-4 border-l border-[#e0e0e0] max-md:hidden">
+                  {hijos.map((c) => {
+                    // Solo las RUTAS se marcan; las anclas no (ver el tipo).
+                    const hijoActivo =
+                      !c.href.includes("#") && rutaDe(c.href) === pathname;
+                    const n = badges?.[c.href] ?? 0;
+                    return (
+                      <li key={c.href}>
+                        <Link
+                          href={c.href}
+                          aria-current={hijoActivo ? "page" : undefined}
+                          className={cn(
+                            "flex min-h-[26px] items-center gap-2 py-0.5 pl-3 text-xs transition-colors",
+                            hijoActivo
+                              ? "font-semibold text-brand"
+                              : "text-[#595959] hover:text-foreground",
+                          )}
+                        >
+                          <span className="min-w-0 truncate">{c.label}</span>
+                          {/* Círculo de 18 px, gris y con 16 px de aire a la
+                              derecha: pide menos atención que el de la
+                              categoría, y ese margen es lo que impide que los
+                              dos números se lean como uno solo. */}
+                          <PanelCounter
+                            value={n}
+                            tone="suave"
+                            size={18}
+                            className="mr-4 ml-auto"
+                          />
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
             </li>
           );
         })}

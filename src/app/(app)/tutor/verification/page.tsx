@@ -95,6 +95,7 @@ export default async function VerificationPage() {
 
   return (
     <TutorShell
+      userId={user.id}
       title="Verifica tu identidad"
       description="Sube los documentos requeridos. El onboarding forma parte de tu entrevista de ingreso."
     >

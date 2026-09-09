@@ -251,3 +251,13 @@ export function PanelRow({
     </div>
   );
 }
+
+// Las piezas compartidas del panel v2 viven en su propio fichero para que
+// `app-sidebar` pueda usar el contador sin importar de aquí (sería un ciclo:
+// este fichero ya importa `AppSidebar`). Se reexportan para que las pantallas
+// sigan teniendo un solo sitio del que importar.
+export {
+  PanelCounter,
+  PanelIconButton,
+  AcceptCountdown,
+} from "@/components/layout/panel-controls";

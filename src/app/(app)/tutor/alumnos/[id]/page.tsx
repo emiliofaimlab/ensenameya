@@ -109,6 +109,7 @@ export default async function AlumnoDelTutorPage({
 
   return (
     <TutorShell
+      userId={userId}
       back={{ href: "/tutor/reservas", label: "Volver a reservas" }}
       eyebrow="Reservas / Alumno"
       title={nombre}

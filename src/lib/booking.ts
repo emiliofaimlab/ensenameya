@@ -244,3 +244,32 @@ export async function tutorNames(
       .map(([id, t]) => [id, t.displayName as string]),
   );
 }
+
+/**
+ * RN-38 · Lo que le queda al tutor para aceptar o rechazar una reserva, a
+ * partir de `bookings.created_at` + 24 h.
+ *
+ * Vivía dentro de `tutor/reservas/page.tsx`, que era el único sitio que la
+ * usaba; desde el paquete v2 del panel la necesitan también el Dashboard («Por
+ * atender») y cualquier pantalla que enseñe una reserva por aceptar, así que
+ * sube aquí para que la cuenta atrás sea la MISMA en todas — dos copias de una
+ * resta con husos horarios divergen el día que alguien toque una.
+ *
+ * `null` = ya venció. No se finge una cuenta atrás en negativo: la reserva la
+ * cancela el cron (`close_expired_sessions`), y hasta que pase el tutor no
+ * tiene nada que decidir.
+ *
+ * El rótulo es solo el tiempo («3 h 10 m»); el reloj y la explicación los pone
+ * `AcceptCountdown` (G-05 del paquete), porque son presentación.
+ */
+export function aceptaAntesDe(
+  createdAt: string,
+): { label: string; urgent: boolean } | null {
+  const ms = new Date(createdAt).getTime() + 24 * 3_600_000 - Date.now();
+  if (ms <= 0) return null;
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  // Sin `padStart` en las horas y con él en los minutos: «3 h 10 m» y
+  // «21 h 40 m», que es como lo escribe el paquete aprobado.
+  return { label: `${h} h ${String(m).padStart(2, "0")} m`, urgent: ms < 12 * 3_600_000 };
+}

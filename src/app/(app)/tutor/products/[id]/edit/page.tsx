@@ -68,6 +68,7 @@ export default async function EditProductPage({
 
   return (
     <TutorShell
+      userId={userId}
       title="Editar mentoría"
       description="Ajusta el resultado, el precio o el formato."
       back={{ href: "/tutor/products", label: "Volver a mis mentorías" }}

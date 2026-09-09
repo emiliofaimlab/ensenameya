@@ -29,6 +29,7 @@ export default async function NewProductPage() {
 
   return (
     <TutorShell
+      userId={userId}
       title="Nueva mentoría"
       description="Describe el resultado que ayudas a lograr y define el formato."
       back={{ href: "/tutor/products", label: "Volver a mis mentorías" }}

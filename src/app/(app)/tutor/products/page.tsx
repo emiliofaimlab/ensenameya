@@ -41,6 +41,7 @@ export default async function TutorProductsPage() {
 
   return (
     <TutorShell
+      userId={userId}
       title="Mis mentorías"
       description="Crea y gestiona las mentorías que ofreces."
       actions={

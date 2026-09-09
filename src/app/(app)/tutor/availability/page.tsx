@@ -98,6 +98,7 @@ export default async function TutorAvailabilityPage() {
 
   return (
     <TutorShell
+      userId={userId}
       title="Disponibilidad"
       description="Tus horarios se muestran en tu zona horaria. Los cambios se guardan al momento."
     >

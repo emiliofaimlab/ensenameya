@@ -3,6 +3,7 @@ import {
   PanelShell,
   type PanelShellProps,
 } from "@/components/layout/panel-shell";
+import { tutorSidebarBadges } from "@/lib/tutor/sidebar-badges";
 
 /**
  * Shell de las pantallas del tutor (TU02…TU09): `PanelShell` con su menú.
@@ -20,7 +21,31 @@ import {
  *  2. A partir de 1024 el tutor YA tiene barra lateral, y eso está en
  *     producción desde EP-22. Copiar los chips a 768 le dejaría tres estados
  *     (chips → chips → columna) frente a los dos de alumno y admin.
+ *
+ * G-02 (paquete v2, 8-sep-2026) · el shell resuelve los CONTADORES del menú y
+ * los pasa a `PanelShell`, igual que hace `AdminShell` con los suyos. Va aquí y
+ * no en cada pantalla por lo de siempre: siete pantallas pidiéndolos por su
+ * cuenta serían siete criterios que acaban discrepando, y además el menú los
+ * pinta en todas — una pantalla que se olvidara dejaría el menú sin números
+ * justo donde el tutor lo está mirando.
+ *
+ * Es `async` y por tanto un Server Component: `PanelShell` no lo es (lo usan
+ * pantallas de cliente), así que la consulta se queda de este lado.
+ * `tutorSidebarBadges` está memoizada por petición, de modo que compartir el
+ * shell entre layout y pantalla no la paga dos veces.
  */
-export function TutorShell(props: Omit<PanelShellProps, "items">) {
-  return <PanelShell items={TUTOR_ITEMS} {...props} />;
+export async function TutorShell({
+  userId,
+  ...props
+}: Omit<PanelShellProps, "items" | "badges"> & {
+  /**
+   * El tutor cuyos contadores se cuentan. Lo pasa la pantalla, que ya lo tiene
+   * de `requireTutorProfile()`: pedirlo otra vez aquí sería un viaje a Auth por
+   * pantalla. Sin él, el menú se pinta sin números (es lo que hacen las
+   * pantallas que todavía no lo pasan).
+   */
+  userId?: string;
+}) {
+  const badges = userId ? await tutorSidebarBadges(userId) : undefined;
+  return <PanelShell items={TUTOR_ITEMS} badges={badges} {...props} />;
 }

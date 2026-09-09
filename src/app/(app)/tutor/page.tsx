@@ -16,14 +16,13 @@ import { studentsOfTutor } from "./students";
 import { ChatDeReservaButton } from "./chat-button";
 import { StudentLink } from "./student-link";
 import { formatPct, tutorTier } from "./tier";
-import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import { SupportCard } from "@/components/support/support-card";
 import {
   PanelCard,
-  PanelShell,
   StatusPill,
   type PillTone,
 } from "@/components/layout/panel-shell";
+import { TutorShell } from "@/components/layout/tutor-shell";
 import { Button } from "@/components/ui/button";
 import type { Database } from "@/lib/database.types";
 
@@ -148,8 +147,10 @@ export default async function TutorHomePage() {
   const firstName = profile?.profiles?.full_name?.split(" ")[0];
 
   return (
-    <PanelShell
-      items={TUTOR_ITEMS}
+    // `TutorShell` y no `PanelShell` con `items` a mano: es el mismo menú, y
+    // así el dashboard recibe los contadores (G-02) como el resto del panel.
+    <TutorShell
+      userId={userId}
       title={firstName ? `Hola, ${firstName}` : "Tu panel"}
       description="Resumen de tu actividad como tutor."
     >
@@ -422,7 +423,7 @@ export default async function TutorHomePage() {
           <SupportCard />
         </div>
       </div>
-    </PanelShell>
+    </TutorShell>
   );
 }
 
