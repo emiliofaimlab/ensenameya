@@ -554,7 +554,7 @@ export default async function AdminPayoutsPage({
   // vez.
   //
   // La familia se decide con `rielDePayout(clave)?.dato`, NO por país ni por el
-  // nombre del proveedor: son cuatro rieles hoy y el eje que importa aquí es
+  // nombre del proveedor: son tres rieles automáticos hoy y el eje que importa aquí es
   // qué se le pidió al tutor. Cada una tiene su puerta y ninguna sirve para la
   // otra:
   //

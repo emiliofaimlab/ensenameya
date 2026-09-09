@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRightIcon } from "lucide-react";
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
+import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
@@ -13,6 +14,7 @@ import { DatosInvitado } from "@/components/checkout/datos-invitado";
 import {
   interpretar,
   irAPagar,
+  type DlocalTransparente,
   type RespuestaDeCobro,
 } from "@/components/checkout/respuesta-de-cobro";
 
@@ -66,8 +68,18 @@ type Apertura =
       bookingId: string;
       /** ISO hasta el que se promete el horario, o null si no se pudo saber. */
       retencionHasta: string | null;
-      /** null = el cobro está ruteado al proveedor simulado: no hay formulario. */
+      /**
+       * null = el cobro está ruteado al proveedor simulado O lo monta dLocal.
+       *
+       * ⚠️ MIRA `transparente` ANTES DE DEDUCIR NADA DE ESTE NULL. Desde que
+       * dLocal se monta dentro, «sin embed de Stripe» tiene DOS significados y
+       * solo uno es el simulado. Un null con dos significados es exactamente lo
+       * que hacía que una respuesta de redirección pintara el botón de simular
+       * pago; quien decide sigue siendo `interpretar`.
+       */
       embed: Embed | null;
+      /** dLocal transparente: sus campos de tarjeta, dentro de esta pantalla. */
+      transparente: DlocalTransparente | null;
     };
 
 /**
@@ -403,6 +415,10 @@ export function CheckoutForm({
         bookingId,
         retencionHasta: salida.retencionHasta ?? null,
         embed: accion.tipo === "embebido" ? accion.embed : null,
+        // dLocal, dentro de la pantalla. Va en el MISMO commit que las otras dos
+        // pantallas de cobro: dejar una atrás deja dos formularios distintos
+        // para el mismo producto.
+        transparente: accion.tipo === "transparente" ? accion.transparente : null,
       });
     }
 
@@ -671,6 +687,19 @@ export function CheckoutForm({
           </div>
         ) : null}
 
+        {/* ⚠️ Y CON dLOCAL NO HAY CASILLA DE GUARDADO NI LA HABRÁ AQUÍ: su
+            formulario embebido NO TIENE BÓVEDA (dictado §5). Quien pague por
+            dLocal no puede guardar la tarjeta — decisión abierta D-6. */}
+        {apertura.fase === "lista" && apertura.transparente ? (
+          <div className="mt-3.5">
+            <DlocalEmbed
+              sujeto={{ tipo: "booking", id: apertura.bookingId }}
+              {...apertura.transparente}
+              returnUrl={`/reservas/${apertura.bookingId}/confirmacion`}
+            />
+          </div>
+        ) : null}
+
         {/* El aviso solo cuando el cobro ES simulado. Dejarlo fijo fue un bug
             real: al encender Stripe, la pantalla seguía diciendo que no se movía
             dinero mientras el botón llevaba a una pasarela de verdad. */}
@@ -682,9 +711,14 @@ export function CheckoutForm({
 
         {/* Con el proveedor simulado no hay formulario que montar, así que el
             botón se queda. Con Stripe el botón de pagar lo pinta él dentro del
-            iframe: uno nuestro aquí abriría un segundo cobro sobre la misma
-            reserva. */}
-        {apertura.fase === "lista" && !apertura.embed ? (
+            iframe, y con dLocal lo pinta `DlocalEmbed`: uno nuestro aquí abriría
+            un segundo cobro sobre la misma reserva.
+
+            ⚠️ `!apertura.embed` YA NO BASTA, y esta línea es la razón de que la
+            rama de dLocal no se pueda dejar a medias: sin la segunda condición,
+            el checkout de dLocal saldría con el botón de «Confirmar pago» de un
+            entorno de pruebas debajo de un formulario de tarjeta de verdad. */}
+        {apertura.fase === "lista" && !apertura.embed && !apertura.transparente ? (
           <div className="mt-6 flex flex-wrap gap-3">
             <Button
               className="h-[49px] rounded-[10px] px-6 font-semibold"

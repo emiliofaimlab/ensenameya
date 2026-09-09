@@ -77,6 +77,9 @@ const CO: BeneficiarioWise = {
   account_holder_name: "Ana Gómez",
   legal_type: "PRIVATE",
   wise_bank_code: "COLOCOBM",
+  // Colombia identifica el banco con el código TRADUCIDO de nuestro catálogo, así
+  // que no tiene segundo número. Los cinco tipos que sí lo tienen están abajo.
+  bank_branch: null,
   bank_account: "00012345678",
   bank_account_type: "CHECKING",
   document_type: "CC",
@@ -141,9 +144,123 @@ assert.ok("motivo" in cuentaDeWise({ ...CO, wise_account_type: "brazil" }, 1));
 // Y un tipo que no existe tampoco se cuela.
 assert.ok("motivo" in cuentaDeWise({ ...CO, wise_account_type: "narnia" }, 1));
 
+// ── 4bis · Los siete corredores del 10-sep-2026 ─────────────────────────────
+//
+// Todos con un 200 de `POST /v1/accounts` detrás (`20260910150000`), y todos con
+// la misma pregunta debajo: ¿el `details` lleva EXACTAMENTE los campos que Wise
+// pide, con el valor que sale de la columna correcta? El fallo que se vigila no
+// es que falte un campo —eso es un 422 y se ve— sino que el identificador del
+// banco venga de `wise_bank_code` cuando tenía que venir de `bank_branch`: eso
+// crea un destinatario válido y equivocado.
+
+// Zona euro: la cuenta ES el IBAN y no hay nada más. Ni banco, ni tipo de cuenta,
+// ni sucursal, ni documento.
+const es = cuentaDeWise({ ...CO, wise_account_type: "iban", currency_to_pay: "EUR",
+  wise_bank_code: null, bank_account: "ES9121000418450200051332", bank_account_type: null,
+  document_type: "TAX", address: { country: "ES", city: "Madrid", firstLine: "Calle Mayor 1", postCode: "28013" } }, 1);
+assert.ok("cuenta" in es, "la zona euro no se pudo construir con un IBAN");
+assert.deepEqual(es.cuenta.details, {
+  IBAN: "ES9121000418450200051332",
+  address: { country: "ES", city: "Madrid", firstLine: "Calle Mayor 1", postCode: "28013" },
+}, "el IBAN manda campos de más o de menos");
+// Y NO lleva estado: mandarlo donde el corredor no lo pide es un campo desconocido.
+assert.equal("state" in (es.cuenta.details.address as object), false, "cuela el estado en la zona euro");
+
+// Los otros tres tipos cuyo details es un IBAN a secas. Se comprueban porque son
+// `case` distintos: un olvido dejaría el tipo dentro de TIPOS y sin rama.
+for (const tipo of ["emirates", "israeli_local", "turkish_earthport"]) {
+  const r = cuentaDeWise({ ...CO, wise_account_type: tipo, wise_bank_code: null,
+    bank_account: "AE070331234567890123456", bank_account_type: null }, 1);
+  assert.ok("cuenta" in r, `${tipo} no se pudo construir`);
+  assert.equal(r.cuenta.details.IBAN, "AE070331234567890123456", `${tipo} no manda el IBAN`);
+  assert.equal(r.cuenta.type, tipo, `${tipo} no viaja como type`);
+}
+
+// Reino Unido: el sort code sale de `bank_branch`, no del catálogo.
+const gb = cuentaDeWise({ ...CO, wise_account_type: "sort_code", currency_to_pay: "GBP",
+  wise_bank_code: null, bank_branch: "231470", bank_account: "28821822",
+  bank_account_type: null }, 1);
+assert.ok("cuenta" in gb, "Reino Unido no se pudo construir");
+assert.equal(gb.cuenta.details.sortCode, "231470", "el sort code no sale de bank_branch");
+assert.equal(gb.cuenta.details.accountNumber, "28821822");
+
+// Estados Unidos: número de ruta de `bank_branch`, tipo de cuenta y ESTADO.
+const usBase: BeneficiarioWise = { ...CO, wise_account_type: "aba", currency_to_pay: "USD",
+  wise_bank_code: null, bank_branch: "021000021", bank_account: "12345678",
+  bank_account_type: "CHECKING", document_type: "TAX",
+  address: { country: "US", city: "Miami", firstLine: "1 Brickell Ave", postCode: "33131", state: "FL" } };
+const us = cuentaDeWise(usBase, 1);
+assert.ok("cuenta" in us, "Estados Unidos no se pudo construir");
+// 🔑 EL FALLO QUE ESTA LÍNEA EXISTE PARA CAZAR: `abartn` venía de
+// `wise_bank_code`, que en Estados Unidos es null. Con eso el `details` salía con
+// `abartn: null` y el 422 llegaba desde Wise, no desde aquí.
+assert.equal(us.cuenta.details.abartn, "021000021", "el número de ruta no sale de bank_branch");
+assert.equal(us.cuenta.details.accountType, "CHECKING");
+assert.equal((us.cuenta.details.address as { state?: string }).state, "FL", "no manda el estado");
+// Sin estado no se construye: es el 422 medido «Please enter a state.»
+assert.ok("motivo" in cuentaDeWise({ ...usBase,
+  address: { ...usBase.address, state: null } }, 1), "acepta EE. UU. sin estado");
+// Sin número de ruta tampoco.
+assert.ok("motivo" in cuentaDeWise({ ...usBase, bank_branch: null }, 1),
+  "acepta EE. UU. sin número de ruta");
+// Y sin tipo de cuenta tampoco, que la ACH lo exige.
+assert.ok("motivo" in cuentaDeWise({ ...usBase, bank_account_type: null }, 1),
+  "acepta EE. UU. sin tipo de cuenta");
+
+// Australia: BSB en `bank_branch` y estado, igual que Estados Unidos.
+const auBase: BeneficiarioWise = { ...CO, wise_account_type: "australian", currency_to_pay: "AUD",
+  wise_bank_code: null, bank_branch: "802985", bank_account: "123456789",
+  bank_account_type: null, document_type: "TAX",
+  address: { country: "AU", city: "Sydney", firstLine: "George St 1", postCode: "2000", state: "NSW" } };
+const au = cuentaDeWise(auBase, 1);
+assert.ok("cuenta" in au, "Australia no se pudo construir");
+assert.equal(au.cuenta.details.bsbCode, "802985", "el BSB no sale de bank_branch");
+assert.ok("motivo" in cuentaDeWise({ ...auBase, address: { ...auBase.address, state: null } }, 1),
+  "acepta Australia sin estado");
+
+// India: IFSC en `bank_branch`, y NO pide estado.
+const inr = cuentaDeWise({ ...CO, wise_account_type: "indian", currency_to_pay: "INR",
+  wise_bank_code: null, bank_branch: "HDFC0000001", bank_account: "50100123456789",
+  bank_account_type: null, document_type: "TAX",
+  address: { country: "IN", city: "Mumbai", firstLine: "MG Road 1", postCode: "400001" } }, 1);
+assert.ok("cuenta" in inr, "India no se pudo construir");
+assert.equal(inr.cuenta.details.ifscCode, "HDFC0000001", "el IFSC no sale de bank_branch");
+assert.equal("state" in (inr.cuenta.details.address as object), false, "cuela el estado en India");
+
+// Panamá y compañía: el BIC lo teclea el tutor y va en `bank_branch`.
+const paBase: BeneficiarioWise = { ...CO, wise_account_type: "swift_code", currency_to_pay: "USD",
+  wise_bank_code: null, bank_branch: "BAGEPAPA", bank_account: "0412345678",
+  bank_account_type: null, document_type: "TAX",
+  address: { country: "PA", city: "Panamá", firstLine: "Calle 50 12", postCode: "0801" } };
+const pa = cuentaDeWise(paBase, 1);
+assert.ok("cuenta" in pa, "Panamá no se pudo construir");
+assert.equal(pa.cuenta.details.swiftCode, "BAGEPAPA", "el BIC no sale de bank_branch");
+assert.equal(pa.cuenta.details.accountNumber, "0412345678");
+assert.ok("motivo" in cuentaDeWise({ ...paBase, bank_branch: null }, 1),
+  "acepta un pago por SWIFT sin BIC");
+
+// Costa Rica: IBAN MÁS documento, y su vocabulario es más estrecho que el nuestro.
+const crBase: BeneficiarioWise = { ...CO, wise_account_type: "costa_rica", currency_to_pay: "CRC",
+  wise_bank_code: null, bank_branch: null, bank_account: "CR23015108410026012345",
+  bank_account_type: null, document_type: "CI", document: "123456789",
+  address: { country: "CR", city: "San José", firstLine: "Avenida 2 15", postCode: "10101" } };
+const cr = cuentaDeWise(crBase, 1);
+assert.ok("cuenta" in cr, "Costa Rica no se pudo construir con cédula");
+assert.equal(cr.cuenta.details.IBAN, "CR23015108410026012345");
+assert.equal(cr.cuenta.details.idDocumentType, "NATIONAL_ID_CARD", "no traduce la cédula");
+assert.equal(cr.cuenta.details.idDocumentNumber, "123456789");
+const crDimex = cuentaDeWise({ ...crBase, document_type: "DIMEX" }, 1);
+assert.ok("cuenta" in crDimex, "Costa Rica no se pudo construir con DIMEX");
+assert.equal(crDimex.cuenta.details.idDocumentType, "FOREIGN_ID", "no traduce el DIMEX");
+// Un tipo que Wise no conoce en Costa Rica NO se traduce a uno parecido.
+assert.ok("motivo" in cuentaDeWise({ ...crBase, document_type: "PASS" }, 1),
+  "inventa un documento en Costa Rica");
+
 // ── 5 · SCA: un 403 pelado NO es un reto ────────────────────────────────────
 assert.equal(retoDeSca(403, new Headers()), null, "confunde un 403 de permisos con SCA");
 assert.equal(retoDeSca(422, new Headers({ "x-2fa-approval": "ott" })), null, "reta fuera de un 403");
 assert.equal(retoDeSca(403, new Headers({ "x-2fa-approval": "ott" })), "ott", "no ve el reto real");
 
-console.log("✓ wise-mapeo: idempotencia, referencia, estados, 8 corredores y SCA");
+console.log(
+  "✓ wise-mapeo: idempotencia, referencia, estados, 15 corredores y SCA",
+);

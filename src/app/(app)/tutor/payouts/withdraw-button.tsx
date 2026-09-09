@@ -31,7 +31,19 @@ import { cn } from "@/lib/utils";
  * del lunes, y un clic accidental en un icono sin texto es más fácil que en un
  * botón que dice lo que hace.
  */
-export function WithdrawButton({ disabled }: { disabled: boolean }) {
+export function WithdrawButton({
+  disabled,
+  /**
+   * 🔑 SE RECIBEN LOS DOS MOTIVOS POR SEPARADO, no un solo `disabled`. El botón
+   * se apaga por dos razones distintas —sin saldo, o con saldo y sin cuenta de
+   * cobro— y el tutor necesita saber cuál es la suya: la primera se arregla
+   * dando clases y la segunda rellenando un formulario.
+   */
+  hasBalance,
+}: {
+  disabled: boolean;
+  hasBalance: boolean;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
 
@@ -50,9 +62,20 @@ export function WithdrawButton({ disabled }: { disabled: boolean }) {
   }
 
   const inactivo = disabled || busy;
-  // Sin saldo el botón se queda, apagado, y el `title` dice por qué: quitarlo
-  // dejaría el tile sin ninguna pista de que ese número se puede retirar.
-  const etiqueta = disabled ? "No tienes saldo disponible para retirar" : "Retirar ahora";
+  // Apagado el botón se queda, y el `title` dice por qué: quitarlo dejaría el
+  // tile sin ninguna pista de que ese número se puede retirar.
+  //
+  // ⚠️ SON DOS MOTIVOS DISTINTOS Y EL TEXTO TIENE QUE DISTINGUIRLOS. Aquí decía
+  // «No tienes saldo disponible para retirar» en los dos casos, y desde que el
+  // botón también se apaga sin cuenta de cobro (dictado del 9-sep) esa frase le
+  // mentía a un tutor con saldo: le decía que no tenía dinero cuando lo que no
+  // tenía era dónde recibirlo. Visto en pantalla el 10-sep con 137,25 US$
+  // disponibles.
+  const etiqueta = !hasBalance
+    ? "No tienes saldo disponible para retirar"
+    : disabled
+      ? "Añade una cuenta de cobro para poder retirar"
+      : "Retirar ahora";
 
   return (
     <button

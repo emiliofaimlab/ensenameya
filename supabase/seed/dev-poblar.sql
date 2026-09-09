@@ -497,7 +497,7 @@ insert into _resenas values
 insert into public.bookings (
   id, student_id, product_id, tutor_id, status, pricing_model, num_sessions,
   session_duration_min, currency, subtotal_amount, total_amount,
-  tier_split_pct, payee_country, completed_at, created_at, updated_at
+  tier_split_pct, payee_country, payer_country, completed_at, created_at, updated_at
 )
 select
   r.booking_id, r.student_id, r.product_id, p.tutor_id,
@@ -510,22 +510,27 @@ select
         then round(p.price_amount * p.session_duration_min / 60.0)
         else p.price_amount end)::bigint,
   75.00, 'VE',
+  -- Dictado 9-sep-2026: de dónde paga el alumno decide la pasarela. Se deduce
+  -- con la MISMA función que create_booking_line para que el dev refleje el
+  -- ruteo de verdad y no un literal.
+  public.pais_de_cobro_por_zona(sp.timezone),
   now() - make_interval(days => r.dias),
   now() - make_interval(days => r.dias + 3),
   now() - make_interval(days => r.dias)
 from _resenas r
 join public.products p on p.id = r.product_id
+join public.profiles sp on sp.id = r.student_id
 on conflict (id) do nothing;
 
 insert into public.payments (
   booking_id, status, currency, gross_amount, platform_fee_amount,
-  tutor_net_amount, tier_split_pct, payee_country, provider, paid_at, created_at
+  tutor_net_amount, tier_split_pct, payee_country, payer_country, provider, paid_at, created_at
 )
 select
   b.id, 'paid'::public.payment_status, b.currency, b.total_amount,
   b.total_amount - round(b.total_amount * 0.75)::bigint,   -- comisión de plataforma
   round(b.total_amount * 0.75)::bigint,                    -- neto del tutor (Tier 1)
-  75.00, 'VE', 'simulated',
+  75.00, 'VE', b.payer_country, 'simulated',
   b.created_at, b.created_at
 from public.bookings b
 where b.id::text like '55555555-0000-4000-8000-%'

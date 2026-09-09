@@ -5,15 +5,18 @@ import { marcaDe } from "./port";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   DlocalGoError,
+  abrirSesionDeCheckout,
   aUnidadMayor,
   aUnidadMenor,
   autocomprobacionDeConversion,
+  clavePublicaDeSmartFields,
   convertirImporte,
   crearPayout,
   dlocalgoFetch,
   esCredencialInvalida,
   esLimiteDiario,
   esSaldoInsuficiente,
+  esTransparenteNoPermitido,
   fechaDePayout,
   firmaCuadra,
   firmaDeCabecera,
@@ -32,7 +35,9 @@ import {
 } from "@/lib/dlocalgo";
 import type {
   ChargeInput,
+  ChargeRedirigido,
   ChargeResult,
+  ChargeTransparente,
   CobroRef,
   PayoutInput,
   PayoutResult,
@@ -56,10 +61,21 @@ import type {
  *
  * ── LOS CINCO DESAJUSTES CON EL PUERTO, Y CÓMO SE RESUELVE CADA UNO ─────────
  *
- * 1. FORMA DEL COBRO → `redirect_url`, no `client_secret`. El puerto ensanchó
- *    `ChargeResult` con `modo: 'redireccion'`. SmartFields (que sería embebido)
- *    NO está disponible: `"direct": true` se ignora en silencio y vuelve
- *    `"direct": false`. Ver `ChargeRedirigido` en `port.ts`.
+ * 1. FORMA DEL COBRO → no hay `client_secret`. El puerto ensanchó `ChargeResult`
+ *    con `modo: 'redireccion'` y, desde el dictado de pagos del 9-sep-2026, con
+ *    `modo: 'transparente'`, que es lo que se devuelve ahora por defecto.
+ *
+ *    ⚠️ AQUÍ ESTUVO ESCRITO QUE «SMARTFIELDS NO ESTÁ DISPONIBLE» Y ERA FALSO.
+ *    El párrafo decía que `"direct": true` se ignoraba en silencio. La medida
+ *    era buena y la conclusión no: `direct` es un campo de SOLO LECTURA de la
+ *    respuesta y el parámetro se llama **`allow_transparent`**. Con él, la
+ *    respuesta trae `merchant_checkout_token` y `GET /v1/checkout/{token}`
+ *    contesta `subType: "TRANSPARENT_CHECKOUT"` (sin él, `DGO_API`). Medido el
+ *    9-sep-2026 contra el sandbox con nuestras claves.
+ *
+ *    ⚠️ Y LA REDIRECCIÓN NO SE BORRA: sigue viviendo dentro de la variante
+ *    nueva (`ChargeTransparente.redirectUrl`) como salida de respaldo. Ver la
+ *    red de seguridad del 929 en `charge`.
  *
  * 2. EL WEBHOOK NO TRAE EVENTO, TRAE UN PING (`{"payment_id":"DP-283"}`). La
  *    deduplicación se sintetiza como `dlocalgo:<id>:<status>` releyendo el
@@ -279,6 +295,84 @@ async function sellarRef(ref: CobroRef, providerRef: string): Promise<void> {
  * creemos haber guardado: `order_id` dice de quién es y `amount` cuánto vale,
  * los dos según dLocal, que es quien va a cobrar.
  */
+/**
+ * LA FORMA DE LA SALIDA, EN UN SOLO SITIO — transparente si se puede, redirección
+ * si no.
+ *
+ * Los TRES retornos con éxito de `charge()` pasan por aquí a propósito: son el
+ * reuso de un cobro previo, el reintento tras el 5009 y el camino nuevo, y
+ * dejar uno con la forma vieja daría **dos checkouts distintos para el mismo
+ * producto** según por dónde entre el alumno (que es el mismo fallo que
+ * `respuesta-de-cobro.ts` documenta para las tres pantallas).
+ *
+ * 🔴 ES ASINCRÓNICA PORQUE PREGUNTA, Y NO SE PUEDE DEDUCIR. `merchant_checkout_
+ * token` viene SIEMPRE, con `allow_transparent` y sin él (medido), así que su
+ * presencia no autoriza a montar nada. Lo único que lo dice es `subType` de
+ * `GET /v1/checkout/{token}`, y esa llamada no es un gasto extra: es el **paso 1
+ * obligatorio** de la secuencia del transparente —sin ella, el
+ * `prepare-confirm` de después revienta con un 500 y un
+ * `java.lang.NullPointerException`—, así que hacerla aquí es adelantarla, no
+ * añadirla.
+ *
+ * Y cualquier duda cae a la redirección: el cobro ya existe, su URL sirve, y un
+ * formulario que no se va a poder confirmar es peor que un checkout alojado.
+ */
+async function salidaDeCobro(
+  pago: PagoDlocalGo,
+): Promise<ChargeTransparente | ChargeRedirigido> {
+  const redirectUrl = pago.redirect_url!;
+  const redireccion: ChargeRedirigido = {
+    ok: true,
+    modo: "redireccion",
+    redirectUrl,
+    providerRef: pago.id,
+  };
+
+  const token = pago.merchant_checkout_token;
+  if (!token) {
+    // No debería pasar (viene siempre), y por eso se grita: es la señal de que
+    // su API cambió de forma. No se saca del final de `redirect_url` aunque hoy
+    // coincida — derivar un identificador de una URL es cómo se construyen los
+    // fallos silenciosos que este proyecto ya conoce (US-1802 y el nombre de
+    // sala de Daily).
+    console.error(
+      `[dlocal] ⚠️ ${pago.id} sin merchant_checkout_token: no se puede montar el ` +
+        `checkout dentro del sitio, se manda a la URL alojada`,
+    );
+    return redireccion;
+  }
+
+  try {
+    const sesion = await abrirSesionDeCheckout(token);
+    if (sesion.subType !== "TRANSPARENT_CHECKOUT") {
+      // La cuenta no tiene el transparente para este cobro. Se dice fuerte —es
+      // una regresión del dictado §2, no un detalle— y se sigue cobrando.
+      console.error(
+        `[dlocal] 🔴 el checkout transparente NO está activo para ${pago.id} ` +
+          `(subType='${sesion.subType}'): el alumno SALE del sitio a la URL alojada. ` +
+          `Es la red de seguridad, no el destino: revisa allow_transparent en la cuenta`,
+      );
+      return redireccion;
+    }
+  } catch (e) {
+    console.error(
+      `[dlocal] no se pudo abrir la sesión de checkout de ${pago.id}, se manda a la ` +
+        `URL alojada:`,
+      e,
+    );
+    return redireccion;
+  }
+
+  return {
+    ok: true,
+    modo: "transparente",
+    checkoutToken: token,
+    publicKey: clavePublicaDeSmartFields(),
+    providerRef: pago.id,
+    redirectUrl,
+  };
+}
+
 function reutilizable(pago: PagoDlocalGo, input: ChargeInput): boolean {
   if (pago.status !== "PENDING" || !pago.redirect_url) return false;
 
@@ -1374,7 +1468,10 @@ export const dlocalProvider: PspProvider = {
       try {
         const previo = await recuperarPago(guardada);
         if (reutilizable(previo, input)) {
-          return { ok: true, modo: "redireccion", redirectUrl: previo.redirect_url!, providerRef: previo.id };
+          // El `GET /v1/payments/{id}` también trae `merchant_checkout_token`
+          // (comprobado sobre `DP-256968`), así que una recarga de la pantalla
+          // vuelve al MISMO formulario y no a la URL alojada.
+          return await salidaDeCobro(previo);
         }
         // Existe pero ya no sirve (pagado, caducado, rechazado). No se abre otro
         // por las buenas: si estaba PAID, el webhook ya lo habrá acreditado y
@@ -1399,7 +1496,19 @@ export const dlocalProvider: PspProvider = {
     // mentoría, que es donde manda.
     const totalMenor = input.lineas.reduce((s, l) => s + l.amountMinor, 0);
 
-    const cuerpo = {
+    /**
+     * ⚠️ `allow_transparent` SOLO CUANDO SE SABE EL PAÍS DEL PAGADOR, y esto es
+     * medido, no prudencia: `POST /v1/payments` con `allow_transparent: true` y
+     * sin `country` devuelve `400 {"code":5000,"message":"Empty country not
+     * allowed for transparent checkout"}`. Con el país, 200. O sea que el país
+     * pasa de «mejor mandarlo» a **requisito del transparente**, y de ahí que la
+     * fase 1 del dictado (congelar `payments.payer_country`) vaya antes que esta.
+     *
+     * Sin país no se falla: se crea el cobro como siempre y el alumno va al
+     * checkout alojado, que sí sabe preguntárselo. Es el mismo respaldo que el
+     * 929, por otra puerta.
+     */
+    const cuerpoDe = (conTransparente: boolean) => ({
       amount: aUnidadMayor(totalMenor, input.currency),
       currency: input.currency.toUpperCase(),
       // Opcional de verdad: sin él su checkout le pregunta el país a la persona.
@@ -1415,12 +1524,16 @@ export const dlocalProvider: PspProvider = {
       back_url: input.returnUrl,
       notification_url: input.notificationUrl,
       ...caducidadRelativa(input.expiresAt),
-    };
+      ...(conTransparente ? { allow_transparent: true } : {}),
+    });
 
-    let pago: PagoDlocalGo;
-    try {
-      pago = await dlocalgoFetch<PagoDlocalGo>("POST", "/v1/payments", cuerpo);
-    } catch (e) {
+    /**
+     * Qué hacer cuando el POST falla. Extraído a una función porque ahora hay
+     * DOS llamadas posibles (con y sin transparente) y el paso 3 —la emulación
+     * de la idempotencia— tiene que valer para las dos: un 5009 en el reintento
+     * es exactamente igual de peligroso que en el primer intento.
+     */
+    const falloAlCrear = async (e: unknown): Promise<ChargeResult> => {
       // ── 3 · el choque ──────────────────────────────────────────────────────
       if (e instanceof DlocalGoError && e.esOrderIdDuplicado) {
         const reintento = await refGuardada(input.ref);
@@ -1430,7 +1543,7 @@ export const dlocalProvider: PspProvider = {
           // haya chocado no prueba que el cobro de dLocal sea de este sujeto y
           // por este importe — solo que la clave se repite.
           if (reutilizable(previo, input)) {
-            return { ok: true, modo: "redireccion", redirectUrl: previo.redirect_url!, providerRef: previo.id };
+            return await salidaDeCobro(previo);
           }
         }
         // Hay un cobro con nuestro `order_id` en dLocal y no sabemos cuál es.
@@ -1463,11 +1576,59 @@ export const dlocalProvider: PspProvider = {
         };
       }
       throw e;
+    };
+
+    // Se pide transparente siempre que se pueda. `pedirTransparente` es false
+    // solo sin país del pagador, que es el caso que dLocal rechaza de plano.
+    const pedirTransparente = Boolean(input.payerCountry);
+
+    let pago: PagoDlocalGo;
+    try {
+      pago = await dlocalgoFetch<PagoDlocalGo>("POST", "/v1/payments", cuerpoDe(pedirTransparente));
+    } catch (e) {
+      // ── 🔴 LA RED DE SEGURIDAD DEL TRANSPARENTE ────────────────────────────
+      //
+      // Si lo que falló fue PEDIR el transparente —929 «Transparent Checkout not
+      // allowed», o el 5000 cuyo mensaje lo nombra— se repite la llamada sin el
+      // parámetro y el alumno acaba en el checkout alojado de siempre. Es lo que
+      // permite desplegar el dictado §2 sin esperar a que dLocal habilite la
+      // cuenta de PRODUCCIÓN: si allí no está activo, el sitio cobra como ayer.
+      //
+      // Se grita en el log porque es una regresión, no un detalle: alguien tiene
+      // que ir a activarlo.
+      //
+      // ⚠️ MISMO `order_id` A PROPÓSITO. Si el 929 hubiera creado algo pese al
+      // 400 —que en dLocal pasa, ver el bloque de payouts—, el reintento choca
+      // con un 5009 y lo resuelve `falloAlCrear`, que reencuentra el cobro en vez
+      // de abrir otro. Cambiar la clave aquí sería abrir un segundo cobro.
+      if (
+        pedirTransparente &&
+        e instanceof DlocalGoError &&
+        esTransparenteNoPermitido(e)
+      ) {
+        console.error(
+          `[dlocal] 🔴 dLocal rechazó el checkout transparente (${e.status}, code=${e.code}): ` +
+            `${e.message}. Se reintenta SIN allow_transparent y el alumno saldrá del sitio. ` +
+            `Hay que activarlo en la cuenta — dictado de pagos §2`,
+        );
+        try {
+          pago = await dlocalgoFetch<PagoDlocalGo>("POST", "/v1/payments", cuerpoDe(false));
+        } catch (e2) {
+          return await falloAlCrear(e2);
+        }
+      } else {
+        return await falloAlCrear(e);
+      }
     }
 
     if (!pago.redirect_url) {
       // El pago SÍ se creó —`pago` es la respuesta del POST, con su id— y lo
       // que falta es la URL a la que mandar al alumno. Hay cobro vivo.
+      //
+      // ⚠️ Y SIGUE SIENDO UN FALLO CON EL TRANSPARENTE, aunque el formulario no
+      // la use para pagar: `redirectUrl` es la salida de respaldo obligatoria de
+      // `ChargeTransparente`, y un formulario embebido sin salida es lo que deja
+      // encerrado a quien no consiga tokenizar la tarjeta.
       return {
         ok: false,
         error: "dLocal Go no devolvió redirect_url",
@@ -1478,7 +1639,7 @@ export const dlocalProvider: PspProvider = {
     // SELLAR ANTES DE DEVOLVER. Si esto lanza, el checkout falla — a propósito.
     await sellarRef(input.ref, pago.id);
 
-    return { ok: true, modo: "redireccion", redirectUrl: pago.redirect_url, providerRef: pago.id };
+    return await salidaDeCobro(pago);
   },
 
   /**

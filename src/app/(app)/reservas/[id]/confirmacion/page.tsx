@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CheckIcon, MailIcon, MessageSquareIcon, VideoIcon } from "lucide-react";
+import { CheckIcon, ClockIcon, MailIcon, MessageSquareIcon, VideoIcon } from "lucide-react";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
@@ -9,6 +9,7 @@ import { formatSessionTime, tutorNames } from "@/lib/booking";
 import { parseRequirements } from "@/lib/product-requirements";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
+import { EsperaConfirmacion } from "@/components/checkout/espera-confirmacion";
 
 export const metadata = { title: "Reserva confirmada · Enséñame Ya" };
 
@@ -86,12 +87,39 @@ export default async function ConfirmationPage({
   return (
     <div className="flex-1 bg-muted py-14">
       <div className="mx-auto flex w-full max-w-[600px] flex-col items-center gap-4 px-4">
-        <span className="grid size-[120px] place-items-center rounded-full bg-brand/15">
-          <span className="grid size-20 place-items-center rounded-full bg-brand text-white">
-            <CheckIcon className="size-9" strokeWidth={3} />
+        {/* 🔴 EL ICONO DEPENDE DEL ESTADO, y antes no.
+
+            Este círculo se pintaba SIEMPRE en verde de marca con un tic de 120
+            px, también encima de «Estamos confirmando tu pago». Con el checkout
+            transparente de dLocal eso dejó de ser un caso raro y pasó a ser el
+            estado NORMAL de llegada: se aterriza aquí antes de que entre el
+            webhook. Un tic de éxito gigante sobre un cobro sin acreditar es
+            justo lo que `EsperaConfirmacion` vino a evitar.
+
+            La hermana de `/pedidos/[id]/confirmacion` ya lo hacía bien; el
+            arreglo se aplicó a una de las dos. */}
+        <span
+          className={`grid size-[120px] place-items-center rounded-full ${
+            pagoPendiente ? "bg-muted" : "bg-brand/15"
+          }`}
+        >
+          <span
+            className={`grid size-20 place-items-center rounded-full ${
+              pagoPendiente ? "bg-[#e0e0e0] text-[#6b6b6b]" : "bg-brand text-white"
+            }`}
+          >
+            {pagoPendiente ? (
+              <ClockIcon className="size-9" strokeWidth={2.5} />
+            ) : (
+              <CheckIcon className="size-9" strokeWidth={3} />
+            )}
           </span>
         </span>
 
+        {/* Con dLocal se aterriza aquí ANTES de que llegue el webhook: sin
+            esto, «Estamos confirmando tu pago» se queda fijo sobre un pago
+            que ya se hizo. Ver el componente. */}
+        {pagoPendiente ? <EsperaConfirmacion /> : null}
         <h1 className="text-center text-[26px] font-bold text-[#19191f]">
           {pagoPendiente ? "Estamos confirmando tu pago" : "¡Reserva registrada!"}
         </h1>
@@ -166,7 +194,11 @@ export default async function ConfirmationPage({
           </ul>
 
           <div className="mt-3.5 flex items-baseline justify-between border-t border-[#e0e0e0] pt-3.5">
-            <span className="text-sm text-[#6b6b6b]">Total pagado</span>
+            {/* «pagado» solo cuando lo está. Mientras el webhook no llega,
+                el importe es el de la reserva, no un recibo. */}
+            <span className="text-sm text-[#6b6b6b]">
+              {pagoPendiente ? "Total de la reserva" : "Total pagado"}
+            </span>
             <span className="text-lg font-bold text-brand">
               {formatMoney(booking.total_amount, booking.currency)}
             </span>

@@ -18,6 +18,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start", "--", "--port", "3002"],
       "port": 3002
+    },
+    {
+      "name": "qa",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start", "--", "--port", "3007"],
+      "port": 3007
     }
   ]
 }

@@ -8,7 +8,7 @@ import {
   rielSirveAlMetodo,
 } from "./metodo-preferido.ts";
 
-const riel = (clave: string, dato: "banco" | "identificador" | "conectada") =>
+const riel = (clave: string, dato: "banco" | "identificador") =>
   ({ clave, dato });
 
 /* ── qué riel sirve a qué método ───────────────────────────────────────── */
@@ -17,8 +17,12 @@ const riel = (clave: string, dato: "banco" | "identificador" | "conectada") =>
 assert.equal(rielSirveAlMetodo(riel("dlocal", "banco"), "banco"), true);
 assert.equal(rielSirveAlMetodo(riel("wise", "banco"), "banco"), true,
   "elegir 'banco' tiene que adelantar a los DOS rieles bancarios, no a uno");
-assert.equal(rielSirveAlMetodo(riel("stripe", "conectada"), "banco"), false,
-  "el alta de Stripe no es 'transferencia bancaria': es otra tarjeta");
+// 🔑 Y STRIPE TAMBIÉN, desde el dictado del 9-sep-2026. Aquí se afirmaba lo
+// contrario —«el alta de Stripe no es transferencia bancaria: es otra
+// tarjeta»— porque existía la familia 'conectada'. Ya no: los TRES rieles de
+// banco leen la misma cuenta del tutor y son UNA sola tarjeta.
+assert.equal(rielSirveAlMetodo(riel("stripe", "banco"), "banco"), true,
+  "elegir 'banco' tiene que adelantar a los TRES rieles bancarios");
 
 // La asimetría de identificador, la misma que en `rielSirveParaEsteTutor`.
 assert.equal(rielSirveAlMetodo(riel("paypal", "identificador"), "paypal"), true);
@@ -28,11 +32,10 @@ assert.equal(rielSirveAlMetodo(riel("manual", "identificador"), "zinli"), true);
 assert.equal(rielSirveAlMetodo(riel("manual", "identificador"), "paypal"), false,
   "PayPal lo paga su riel, no el manual");
 
-// 🔴 Y el manual NO se da por elegido cuando el tutor pidió banco o Stripe. Sin
+// 🔴 Y el manual NO se da por elegido cuando el tutor pidió banco. Sin
 // `esCanalManual` esto devolvería true —«no es paypal, luego es mío»— y un
 // mexicano que eligió su banco vería adelantado el riel que paga una persona.
 assert.equal(rielSirveAlMetodo(riel("manual", "identificador"), "banco"), false);
-assert.equal(rielSirveAlMetodo(riel("manual", "identificador"), "stripe"), false);
 
 assert.equal(esCanalManual("zinli"), true);
 assert.equal(esCanalManual("banco"), false);
@@ -42,7 +45,7 @@ assert.equal(esCanalManual("banco"), false);
 // La fila real de México: dlocal > stripe > paypal > wise.
 const mx = [
   riel("dlocal", "banco"),
-  riel("stripe", "conectada"),
+  riel("stripe", "banco"),
   riel("paypal", "identificador"),
   riel("wise", "banco"),
 ];
@@ -57,11 +60,15 @@ assert.deepEqual(
   ["paypal", "dlocal", "stripe", "wise"],
 );
 
-// Con 'banco', los DOS bancarios suben, en su orden de tabla (dlocal antes que
-// wise, que es lo que decide el coste medido, no esta función).
+// 🔑 Con 'banco' suben los TRES bancarios —dlocal, stripe y wise—, cada uno en
+// su orden de tabla, y PayPal queda detrás. Aquí se esperaba
+// ["dlocal","wise","stripe","paypal"] cuando Stripe era de familia 'conectada' y
+// no se adelantaba; desde el dictado del 9-sep-2026 es un riel de banco más y
+// sube con ellos. Quién va antes lo decide el coste medido en la tabla de ruteo,
+// no esta función.
 assert.deepEqual(
   ordenaPorPreferencia(mx, "banco").map((r) => r.clave),
-  ["dlocal", "wise", "stripe", "paypal"],
+  ["dlocal", "stripe", "wise", "paypal"],
 );
 
 // Una preferencia que no tiene candidato —el tutor eligió Zelle y México no
@@ -84,38 +91,43 @@ assert.deepEqual(ordenaPorPreferencia(mx, "loquesea"), mx);
   assert.equal(metodos[1].automatico, false, "Zinli lo manda una persona");
 }
 
-// Colombia: {stripe, wise, paypal} — tres familias, tres tarjetas, en el orden
-// de la tabla de ruteo.
+// 🔑 Colombia: {stripe, wise, paypal} — DOS familias, DOS tarjetas. Antes eran
+// tres, porque Stripe traía la suya propia; con el dictado, Stripe y Wise son la
+// MISMA tarjeta de banco y el tutor no sabe cuál de los dos le paga.
 {
   const metodos = metodosDelPais({
-    rieles: [riel("stripe", "conectada"), riel("wise", "banco"), riel("paypal", "identificador")],
-    familias: ["conectada", "banco", "identificador"],
+    rieles: [riel("stripe", "banco"), riel("wise", "banco"), riel("paypal", "identificador")],
+    familias: ["banco", "identificador"],
     canalesActivos: ["paypal"],
   });
-  assert.deepEqual(metodos.map((m) => m.clave), ["stripe", "banco", "paypal"]);
+  assert.deepEqual(metodos.map((m) => m.clave), ["banco", "paypal"]);
 }
 
-// 🔴 México: dlocal Y wise, UNA sola tarjeta de banco. Dos tarjetas aquí serían
-// pedirle dos veces su CLABE para la misma cuenta.
+// 🔴 México: dlocal, stripe Y wise, UNA sola tarjeta de banco. Tres tarjetas
+// aquí serían pedirle tres veces su CLABE para la misma cuenta.
 {
   const metodos = metodosDelPais({
     rieles: mx,
-    familias: ["banco", "conectada", "identificador"],
+    familias: ["banco", "identificador"],
     canalesActivos: ["paypal"],
   });
-  assert.deepEqual(metodos.map((m) => m.clave), ["banco", "stripe", "paypal"]);
+  assert.deepEqual(metodos.map((m) => m.clave), ["banco", "paypal"]);
 }
 
-// 🔴 España / resto del mundo: la fila por defecto rutea {stripe, paypal, wise},
-// pero 'banco' NO es pintable porque ES no tiene fila en `payout_country_rules`.
-// Sin ese filtro se le ofrecería un formulario bancario que no puede guardar.
+// 🔴 Un país SIN fila en `payout_country_rules`: 'banco' no es pintable aunque
+// los rieles lleguen, porque sin esa fila no hay etiquetas que poner ni formato
+// contra el que validar, y el formulario no podría guardar.
+//
+// ⚠️ ESTE CASO ES LA DEUDA QUE EL DICTADO DESTAPA, no el comportamiento
+// deseado: la fase 3 abre esa tabla al mundo justamente para que España y
+// compañía dejen de caer aquí. Mientras caigan, ven solo PayPal.
 {
   const metodos = metodosDelPais({
-    rieles: [riel("stripe", "conectada"), riel("paypal", "identificador"), riel("wise", "banco")],
-    familias: ["conectada", "identificador"], // 'banco' ya viene fuera
+    rieles: [riel("stripe", "banco"), riel("paypal", "identificador"), riel("wise", "banco")],
+    familias: ["identificador"], // 'banco' ya viene fuera: sin fila de país no hay formulario
     canalesActivos: ["paypal"],
   });
-  assert.deepEqual(metodos.map((m) => m.clave), ["stripe", "paypal"]);
+  assert.deepEqual(metodos.map((m) => m.clave), ["paypal"]);
 }
 
 // Un país mixto donde PayPal no rutea: el canal 'paypal' del catálogo NO se

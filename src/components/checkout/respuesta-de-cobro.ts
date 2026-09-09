@@ -22,11 +22,19 @@ import type { Embed } from "@/components/checkout/stripe-embed";
  * aquí, una vez. Lo desconocido es un ERROR VISIBLE, no un checkout simulado.
  */
 export type RespuestaDeCobro = {
-  modo?: "embebido" | "redireccion" | "simulado";
+  modo?: "embebido" | "transparente" | "redireccion" | "simulado";
   clientSecret?: string;
   publishableKey?: string;
-  /** dLocal Go: a dónde mandar a la persona a pagar. */
+  /**
+   * dLocal Go: a dónde mandar a la persona a pagar.
+   *
+   * ⚠️ VIENE TAMBIÉN CON `modo: 'transparente'`, y ahí NO es el destino: es la
+   * salida de respaldo si el formulario no arranca. De ahí la regla del orden de
+   * abajo.
+   */
   redirectUrl?: string;
+  /** dLocal Go, transparente: la clave pública de SU tokenizador (no es nuestra). */
+  publicKey?: string;
   /** Se conserva por compatibilidad; `modo: 'simulado'` dice lo mismo. */
   simulated?: boolean;
   retencionHasta?: string | null;
@@ -36,23 +44,49 @@ export type RespuestaDeCobro = {
 /** Lo que la pantalla tiene que hacer con esa respuesta, ya decidido. */
 export type Apertura =
   | { tipo: "embebido"; embed: Embed }
+  /** dLocal transparente: sus campos de tarjeta, dentro de nuestra pantalla. */
+  | { tipo: "transparente"; transparente: DlocalTransparente }
   | { tipo: "redireccion"; url: string }
   | { tipo: "simulado" }
   | { tipo: "error"; mensaje: string };
 
+/** Lo que `DlocalEmbed` necesita para montarse. */
+export type DlocalTransparente = {
+  /** La clave de plataforma de dLocal Go, no la nuestra. */
+  publicKey: string;
+  /** El checkout alojado del MISMO cobro. Salida de respaldo, nunca el destino. */
+  redirectUrl: string;
+};
+
 /**
  * Traduce la respuesta a una acción.
  *
- * ⚠️ EL ORDEN DE LAS COMPROBACIONES IMPORTA. Se mira `modo` primero y la forma
- * después: la forma es la compatibilidad con una respuesta vieja (un despliegue
- * a medias, una pestaña abierta desde antes), no el criterio. Al revés, un
- * `modo: 'redireccion'` que por lo que sea trajera también un `clientSecret` se
- * montaría embebido.
+ * 🔴 EL ORDEN DE LAS COMPROBACIONES IMPORTA, Y CON EL TRANSPARENTE PASA A SER
+ * CRÍTICO: **primero el MODO, luego la forma.** La forma es la compatibilidad
+ * con una respuesta vieja (un despliegue a medias, una pestaña abierta desde
+ * antes), no el criterio.
+ *
+ * Al revés, con la comprobación de `redirectUrl` por delante, un
+ * `modo: 'transparente'` —que trae `redirectUrl` a propósito, como salida de
+ * respaldo— se iría por la redirección y el dictado §2 no se cumpliría nunca: el
+ * alumno saldría del sitio pudiendo pagar dentro, y el síntoma sería «el
+ * transparente no funciona» en vez de «lo estamos ignorando».
  *
  * Y el caso por defecto NO es «simulado»: es error. Solo se cae al camino
  * simulado cuando el servidor lo dice.
  */
 export function interpretar(salida: RespuestaDeCobro): Apertura {
+  // El transparente PRIMERO, porque es el único que trae dos formas a la vez.
+  if (salida.modo === "transparente") {
+    return salida.publicKey && salida.redirectUrl
+      ? {
+          tipo: "transparente",
+          transparente: { publicKey: salida.publicKey, redirectUrl: salida.redirectUrl },
+        }
+      : // Sin una de las dos no se monta nada: sin clave no hay tokenizador y sin
+        // la URL de respaldo no habría salida si el tokenizador fallara.
+        { tipo: "error", mensaje: "No se pudo abrir el formulario de pago." };
+  }
   if (salida.modo === "redireccion") {
     return salida.redirectUrl
       ? { tipo: "redireccion", url: salida.redirectUrl }

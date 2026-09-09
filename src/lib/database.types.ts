@@ -1153,6 +1153,8 @@ export type Database = {
           account_label: string
           account_patterns: Json
           account_types: string[]
+          branch_help: string | null
+          branch_label: string | null
           branch_pattern: string | null
           country: string
           created_at: string
@@ -1168,6 +1170,8 @@ export type Database = {
           account_label: string
           account_patterns?: Json
           account_types?: string[]
+          branch_help?: string | null
+          branch_label?: string | null
           branch_pattern?: string | null
           country: string
           created_at?: string
@@ -1183,6 +1187,8 @@ export type Database = {
           account_label?: string
           account_patterns?: Json
           account_types?: string[]
+          branch_help?: string | null
+          branch_label?: string | null
           branch_pattern?: string | null
           country?: string
           created_at?: string
@@ -2044,14 +2050,18 @@ export type Database = {
           bank_code: string
           beneficiary_address_line: string | null
           beneficiary_city: string | null
+          beneficiary_dob: string | null
           beneficiary_document: string
           beneficiary_document_type: string
           beneficiary_first_name: string
           beneficiary_last_name: string
           beneficiary_phone: string | null
           beneficiary_postcode: string | null
+          beneficiary_state: string | null
           country: string
           created_at: string
+          stripe_tos_accepted_at: string | null
+          stripe_tos_ip: unknown
           tutor_id: string
           updated_at: string
         }
@@ -2063,14 +2073,18 @@ export type Database = {
           bank_code: string
           beneficiary_address_line?: string | null
           beneficiary_city?: string | null
+          beneficiary_dob?: string | null
           beneficiary_document: string
           beneficiary_document_type: string
           beneficiary_first_name: string
           beneficiary_last_name: string
           beneficiary_phone?: string | null
           beneficiary_postcode?: string | null
+          beneficiary_state?: string | null
           country: string
           created_at?: string
+          stripe_tos_accepted_at?: string | null
+          stripe_tos_ip?: unknown
           tutor_id: string
           updated_at?: string
         }
@@ -2082,14 +2096,18 @@ export type Database = {
           bank_code?: string
           beneficiary_address_line?: string | null
           beneficiary_city?: string | null
+          beneficiary_dob?: string | null
           beneficiary_document?: string
           beneficiary_document_type?: string
           beneficiary_first_name?: string
           beneficiary_last_name?: string
           beneficiary_phone?: string | null
           beneficiary_postcode?: string | null
+          beneficiary_state?: string | null
           country?: string
           created_at?: string
+          stripe_tos_accepted_at?: string | null
+          stripe_tos_ip?: unknown
           tutor_id?: string
           updated_at?: string
         }
@@ -2658,6 +2676,10 @@ export type Database = {
         Returns: string
       }
       payout_beneficiary: { Args: { p_payout_id: string }; Returns: Json }
+      payout_beneficiary_stripe: {
+        Args: { p_payout_id: string }
+        Returns: Json
+      }
       payout_beneficiary_wise: { Args: { p_payout_id: string }; Returns: Json }
       payout_identifier_beneficiary: {
         Args: { p_channel: string; p_payout_id: string }
@@ -2869,23 +2891,45 @@ export type Database = {
         Args: { p_channel: string; p_handle: string; p_holder_name: string }
         Returns: Json
       }
-      upsert_payout_account: {
-        Args: {
-          p_account?: string
-          p_account_type?: string
-          p_address_line?: string
-          p_bank_code: string
-          p_branch?: string
-          p_city?: string
-          p_document?: string
-          p_document_type: string
-          p_first_name: string
-          p_last_name: string
-          p_phone?: string
-          p_postcode?: string
-        }
-        Returns: Json
-      }
+      upsert_payout_account:
+        | {
+            Args: {
+              p_account?: string
+              p_account_type?: string
+              p_address_line?: string
+              p_bank_code: string
+              p_branch?: string
+              p_city?: string
+              p_document?: string
+              p_document_type: string
+              p_first_name: string
+              p_last_name: string
+              p_phone?: string
+              p_postcode?: string
+              p_state?: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_account?: string
+              p_account_type?: string
+              p_address_line?: string
+              p_bank_code: string
+              p_branch?: string
+              p_city?: string
+              p_dob?: string
+              p_document?: string
+              p_document_type: string
+              p_first_name: string
+              p_last_name: string
+              p_phone?: string
+              p_postcode?: string
+              p_state?: string
+              p_tos_ip?: string
+            }
+            Returns: Json
+          }
       wise_puede_pagar_a: { Args: { p_tutor: string }; Returns: boolean }
     }
     Enums: {

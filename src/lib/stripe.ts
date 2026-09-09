@@ -2,6 +2,8 @@ import "server-only";
 
 import Stripe from "stripe";
 
+import type { CuerpoDeTransferencia } from "@/lib/payments/stripe-payout-mapeo";
+
 /**
  * Cliente de Stripe. **Solo servidor** — `STRIPE_API_KEY` puede crear cobros
  * y reembolsos en nombre del comercio. Misma regla que `service_role` y que
@@ -357,110 +359,119 @@ export async function permitirReutilizacion(paymentMethodId: string): Promise<vo
 }
 
 /**
- * ── CONNECT · LO QUE HACE FALTA PARA PAGARLE A UN TUTOR ─────────────────────
+ * ── LA CUENTA DE DESTINATARIO · LO QUE HACE FALTA PARA PAGARLE A UN TUTOR ────
  *
- * Cuatro llamadas y ninguna más. Viven aquí y no en el adaptador por el mismo
+ * Siete llamadas y ninguna más. Viven aquí y no en el adaptador por el mismo
  * invariante que el resto del archivo: las llamadas al SDK están en `lib/`, la
- * decisión de qué significa cada respuesta está en el puerto.
+ * decisión de qué significa cada respuesta está en el puerto, y el cuerpo de cada
+ * petición lo monta la parte pura (`payments/stripe-payout-mapeo.ts`), que sí se
+ * puede ejecutar sin credenciales.
  *
  * ⚠️ EL ACUERDO ES `recipient`, Y ESO CAMBIA QUÉ ES LA CUENTA. Bajo el
  * *recipient service agreement* la cuenta conectada solo puede RECIBIR
  * transferencias y pagarse a sí misma al banco: no cobra, no tiene panel de
  * Stripe y no es un comercio. Es lo correcto para un tutor —no vende nada a
- * través de nuestra plataforma con su propia cuenta— y es además lo que hace
- * que baste con la capability `transfers`, sin el KYC completo de un comercio.
- */
-
-/**
- * Crea la cuenta conectada de un tutor. Devuelve el `acct_…`.
+ * través de nuestra plataforma con su propia cuenta— y es además lo que hace que
+ * baste con la capability `transfers`, sin el KYC completo de un comercio.
  *
- * ⚠️ EL PAÍS SE CONGELA AQUÍ Y STRIPE NO LO DEJA CAMBIAR. Si un tutor se muda,
- * la cuenta vieja no vale y hay que crear otra — por eso el país sale del
- * `payout_country` que él mismo declaró y no de una IP ni de su zona horaria.
- */
-export async function crearCuentaConectada(opts: {
-  country: string;
-  email: string | null;
-}): Promise<string> {
-  const cuenta = await stripe().accounts.create({
-    type: "express",
-    country: opts.country.toUpperCase(),
-    ...(opts.email ? { email: opts.email } : {}),
-    // Solo recibir. Nada de `card_payments`: este tutor no cobra por su cuenta.
-    capabilities: { transfers: { requested: true } },
-    tos_acceptance: { service_agreement: "recipient" },
-  });
-  return cuenta.id;
-}
-
-/**
- * El enlace de alta que el tutor tiene que abrir. Caduca en minutos y es de un
- * solo uso: se pide uno nuevo cada vez que pulsa, y por eso este helper no
- * cachea nada.
- */
-export async function enlaceDeAltaConectada(opts: {
-  account: string;
-  returnUrl: string;
-}): Promise<string> {
-  const enlace = await stripe().accountLinks.create({
-    account: opts.account,
-    // Las dos al mismo sitio: la pantalla de payouts ya sabe leer el estado de
-    // la cuenta y decir si el alta quedó a medias.
-    refresh_url: opts.returnUrl,
-    return_url: opts.returnUrl,
-    type: "account_onboarding",
-  });
-  return enlace.url;
-}
-
-/** ¿Puede esta cuenta recibir dinero ya? Es lo único que se le pregunta. */
-export async function cuentaConectadaLista(account: string): Promise<{
-  lista: boolean;
-  pendiente: string | null;
-}> {
-  const c = await stripe().accounts.retrieve(account);
-  if (c.capabilities?.transfers === "active") return { lista: true, pendiente: null };
-  const falta = c.requirements?.currently_due ?? [];
-  return {
-    lista: false,
-    pendiente: falta.length > 0 ? falta.join(", ") : "Stripe sigue revisando el alta",
-  };
-}
-
-/**
- * La transferencia. `idempotencyKey` es LA MARCA del payout, y es lo que hace
- * que este riel no necesite el barrido de páginas que sí necesita dLocal Go:
- * repetir esta llamada con la misma clave devuelve la misma transferencia.
+ * ── 🔑 QUÉ CAMBIÓ EL 10-SEP-2026 (decisión D-1, aprobada) ───────────────────
  *
- * `transfer_group` lleva también la marca, y no es duplicar por duplicar: la
- * clave de idempotencia caduca a las 24 h y el grupo no, así que una orden que
- * se reanuda dos días después todavía se puede encontrar por él.
+ * Aquí vivían `crearCuentaConectada` (con `type: 'express'`),
+ * `enlaceDeAltaConectada` y `cuentaConectadaLista`. Las tres se han ido, y no por
+ * limpieza: describían el alta EN Stripe, donde el tutor abría una pantalla de
+ * Stripe, veía su marca y le entregaba a ELLOS sus coordenadas. Eso lo eliminó el
+ * dictado del 9-sep y no vuelve.
+ *
+ * Lo que vuelve es otra cosa: **la cuenta la creamos nosotros** con lo que el
+ * tutor teclea en NUESTRO formulario, y él no ve el nombre de Stripe en ningún
+ * sitio. Por eso ya no hay enlace de alta que pedir, y por eso la cuenta no nace
+ * `express` sino con `controller.requirement_collection: 'application'` —
+ * quien recoge los requisitos somos nosotros. Dejar aquel `crearCuentaConectada`
+ * habría sido dejar una trampa cargada: crea una cuenta con onboarding alojado
+ * que nadie va a poder completar.
+ *
+ * `cuentaConectadaLista` se fue por un motivo distinto y peor: solo miraba
+ * `capabilities.transfers`, y medido el 10-sep una cuenta SIN cuenta bancaria
+ * adjunta llega a `transfers: active` con `payouts_enabled: false`. Dar eso por
+ * «lista» transfiere el dinero a un saldo del que el tutor no puede sacarlo. La
+ * pregunta la responde ahora `estadoDeLaCuenta` en el mapeo, con las dos
+ * condiciones y con su comprobación ejecutable al lado.
  */
-export async function crearTransferencia(opts: {
-  amountMinor: number;
-  currency: string;
-  destination: string;
-  marca: string;
-  descripcion: string;
-}): Promise<Stripe.Transfer> {
-  return await stripe().transfers.create(
-    {
-      amount: opts.amountMinor,
-      currency: opts.currency.toLowerCase(),
-      destination: opts.destination,
-      transfer_group: opts.marca,
-      description: opts.descripcion,
-      metadata: { marca: opts.marca },
-    },
-    { idempotencyKey: opts.marca },
-  );
+
+/**
+ * Crea la cuenta de destinatario de un tutor. Devuelve el `acct_…`.
+ *
+ * El cuerpo lo monta `parametrosDeCuenta` — aquí no se decide nada.
+ *
+ * ⚠️ EL PAÍS SE CONGELA AQUÍ Y STRIPE NO LO DEJA CAMBIAR. Si un tutor se muda, la
+ * cuenta vieja no vale y hay que crear otra: por eso el país sale del que él mismo
+ * declaró (`tutor_payout_accounts.country`, vía la RPC) y no de una IP.
+ *
+ * ⚠️ `idempotencyKey` NO es opcional y va por TUTOR (`claveDeCuenta`): sin ella,
+ * una creación que cuaja y una escritura en `tutor_profiles` que no, dejan una
+ * cuenta huérfana y la pasada siguiente crea una segunda.
+ */
+export async function crearCuentaDeDestinatario(
+  params: Stripe.AccountCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Account> {
+  return await stripe().accounts.create(params, { idempotencyKey });
 }
 
 /**
- * Busca por la marca. UNA llamada, sin paginar: el filtro es exacto y la marca
- * es única por (payout, intento), así que una lista vacía DEMUESTRA que no se
- * creó nada — que es la palabra cara del puerto y la única que autoriza a
- * devolver una orden a la cola.
+ * Le pone a la cuenta los datos del titular y la aceptación de condiciones.
+ *
+ * SIN clave de idempotencia a propósito: es un `update` con los mismos valores
+ * cada vez —idempotente por naturaleza— y una clave fija impediría corregir un
+ * dato que el tutor arregle en el formulario dentro de la misma ventana de 24 h.
+ */
+export async function actualizarCuentaDeDestinatario(
+  account: string,
+  params: Stripe.AccountUpdateParams,
+): Promise<Stripe.Account> {
+  return await stripe().accounts.update(account, params);
+}
+
+/** La cuenta tal como la ve Stripe: capabilities, requisitos y cuentas adjuntas. */
+export async function recuperarCuentaDeDestinatario(account: string): Promise<Stripe.Account> {
+  return await stripe().accounts.retrieve(account);
+}
+
+/**
+ * Adjunta la cuenta bancaria del tutor.
+ *
+ * ⚠️ NO ES IDEMPOTENTE Y NO PUEDE SERLO: llamarlo dos veces crea DOS cuentas
+ * bancarias. Quien llama tiene que preguntar antes con `yaTieneEstaCuenta`; una
+ * clave de idempotencia fija aquí sería peor, porque bloquearía al tutor que
+ * cambia de banco durante 24 h.
+ */
+export async function adjuntarCuentaBancaria(
+  account: string,
+  params: Stripe.AccountCreateExternalAccountParams,
+): Promise<Stripe.ExternalAccount> {
+  return await stripe().accounts.createExternalAccount(account, params);
+}
+
+/**
+ * La transferencia. El cuerpo y la clave los monta `cuerpoDeTransferencia`, que
+ * es donde está escrito por qué la marca viaja tres veces.
+ *
+ * Repetir esta llamada con la misma clave devuelve LA MISMA transferencia
+ * (medido el 10-sep-2026, mismo `tr_…`), y eso es lo que hace que este riel no
+ * necesite el barrido de páginas que sí necesita dLocal Go.
+ */
+export async function crearTransferencia(cuerpo: CuerpoDeTransferencia): Promise<Stripe.Transfer> {
+  return await stripe().transfers.create(cuerpo.params, {
+    idempotencyKey: cuerpo.idempotencyKey,
+  });
+}
+
+/**
+ * Busca por la marca. UNA llamada, sin paginar: el filtro es exacto y la marca es
+ * única por (payout, intento), así que una lista vacía DEMUESTRA que no se creó
+ * nada — que es la palabra cara del puerto y la única que autoriza a devolver una
+ * orden a la cola. Medido: `transfer_group=EY-no-existe-99` devuelve `[]` con
+ * `has_more: false`.
  */
 export async function transferenciaPorMarca(marca: string): Promise<Stripe.Transfer | null> {
   const lista = await stripe().transfers.list({ transfer_group: marca, limit: 2 });

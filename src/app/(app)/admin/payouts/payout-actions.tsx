@@ -28,12 +28,10 @@ const PALABRA_DEVOLVER = "COMPROBADO-SIN-RASTRO";
 const AYUDA_DE_REFERENCIA: Record<FamiliaDeDato, string> = {
   banco: "número de comprobante de la transferencia",
   identificador: "id del envío de Zelle/Zinli/Binance…",
-  // ⚠️ 'conectada' no debería llegar aquí —un payout por Connect lo ejecuta
-  // Stripe, no una persona— pero el `Record` la exige y poner un texto es más
-  // barato que un tipo parcial. Si aparece en pantalla, lo que hay que mirar no
-  // es este texto: es por qué un riel automático acabó en el formulario de
-  // marcar a mano.
-  conectada: "id de la transferencia de Stripe (tr_…)",
+  // ⚠️ Aquí había una tercera clave, 'conectada', para el payout por Stripe
+  // Connect. Se fue con la familia entera en el dictado del 9-sep-2026: el
+  // tutor ya no da de alta ninguna cuenta conectada, así que ese caso no puede
+  // llegar a este formulario.
 };
 
 /**
@@ -110,7 +108,7 @@ export function PayoutActions({
    * que quien paga acaba de hacer. `null` = no se sabe (no hay riel resuelto).
    *
    * ⚠️ Se decide con la FAMILIA DE DATO del riel, nunca por país ni por la
-   * clave del proveedor: son cuatro rieles hoy y mañana más, y «lo que pide el
+   * clave del proveedor: son tres rieles automáticos hoy —dLocal, Wise y PayPal— y mañana más, y «lo que pide el
    * tutor» es la única pregunta que este formulario necesita responder. Una
    * transferencia bancaria y un envío por Zelle se justifican con referencias
    * distintas y salen por canales distintos.

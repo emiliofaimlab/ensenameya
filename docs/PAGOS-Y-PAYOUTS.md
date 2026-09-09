@@ -1,5 +1,20 @@
 # Enséñame Ya — Pagos y payouts: rutas, costes y quién asume qué
 
+> 🔴 **DEROGADO EN LO QUE TOCA AL RUTEO — 9 de septiembre de 2026.**
+>
+> `docs/DICTADO-PAGOS.md` manda sobre este documento en **quién cobra, quién paga y qué ve el
+> tutor**. En concreto, todo lo que este fichero diga sobre estos cuatro puntos es viejo:
+>
+> 1. **El cobro NO se rutea por el país del tutor**, sino por el del **alumno**.
+> 2. **El checkout de dLocal NO redirige**: vive dentro del sitio, igual que el de Stripe.
+> 3. **La cuenta conectada de Stripe ya no existe** para el tutor: ve dos tarjetas, PayPal y
+>    Banco, y detrás de Banco compiten Wise, dLocal y Stripe sin que él lo sepa.
+> 4. **Los canales manuales son solo Venezuela**, y lo son porque es el único país del mundo
+>    que ninguno de los tres rieles alcanza.
+>
+> ✅ **Lo que de este documento SIGUE MANDANDO: los COSTES.** El coste real de cada tramo y
+> quién asume cada comisión se leen aquí y en ningún otro sitio. El dictado no los toca.
+
 > **Qué es esto.** El mapa completo de cómo entra el dinero y cómo sale, país por país,
 > con el coste real de cada tramo. Nace de la ronda de análisis del **1–2 de septiembre de
 > 2026** y sustituye a cualquier comparativa de PSPs anterior — en particular al PDF

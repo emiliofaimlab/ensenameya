@@ -12,7 +12,6 @@
  * Sale de `datos_de_cobro_del_tutor` y no lleva ni un dato de cobro dentro.
  */
 export type DatosDeCobro = {
-  conectada: boolean;
   banco: boolean;
   /**
    * ⚠️ WISE PIDE MÁS QUE COORDENADAS BANCARIAS, y por eso esto va aparte de
@@ -23,6 +22,18 @@ export type DatosDeCobro = {
    * `wise_puede_pagar_a()`, que es la única definición de esa pregunta.
    */
   banco_wise: boolean;
+  /**
+   * ⚠️ Y STRIPE PIDE OTRAS DOS COSAS, por lo mismo que Wise tiene su clave: la
+   * fecha de nacimiento y la aceptación de condiciones, que son los dos campos
+   * OPCIONALES del formulario. Un tutor puede tener su cuenta registrada —y
+   * cobrar por dLocal o por Wise con ella— y aun así no ser pagable por Stripe.
+   *
+   * El PAÍS no entra aquí: Stripe no admite cuentas de EE. UU. ni de Brasil
+   * desde una plataforma estadounidense, pero quien sabe eso es Stripe. El
+   * adaptador lo clasifica `sin-datos` y la orden baja al siguiente candidato.
+   * Una lista de países en este módulo sería una segunda lista que mantener.
+   */
+  banco_stripe: boolean;
   canales: string[];
   /**
    * 🔑 POR DÓNDE PREFIERE COBRAR ÉL. `null` = no ha elegido, y entonces manda el
@@ -58,18 +69,23 @@ export type DatosDeCobro = {
  * el suyo y el manual acepta cualquier otro.
  */
 /** Lo mínimo de un riel que hace falta para responder. Encaja con `Riel`. */
-export type RielMinimo = { clave: string; dato: "banco" | "identificador" | "conectada" };
+export type RielMinimo = { clave: string; dato: "banco" | "identificador" };
 
 export function rielSirveParaEsteTutor(riel: RielMinimo, datos: DatosDeCobro): boolean {
   switch (riel.dato) {
-    case "conectada":
-      return datos.conectada;
     case "banco":
-      // Los dos rieles de banco automáticos leen la MISMA fila y no les vale lo
-      // mismo: a dLocal le basta con que exista, y Wise necesita además
-      // dirección, teléfono, país cubierto y un banco de su lista. Es la misma
-      // asimetría que abajo separa a PayPal del resto de identificadores.
-      return riel.clave === "wise" ? datos.banco_wise : datos.banco;
+      // Los TRES rieles de banco leen la MISMA fila y no les vale lo mismo:
+      //   · dLocal  → le basta con que exista;
+      //   · Wise    → necesita además dirección, teléfono, país cubierto y un
+      //               banco de su lista;
+      //   · Stripe  → necesita la fecha de nacimiento y la aceptación de
+      //               condiciones, que son opcionales en el formulario.
+      // Es la misma asimetría que abajo separa a PayPal del resto de
+      // identificadores, y existe para que no se elija un riel que va a
+      // devolver `sin-datos` y dejar la orden quieta.
+      if (riel.clave === "wise") return datos.banco_wise;
+      if (riel.clave === "stripe") return datos.banco_stripe;
+      return datos.banco;
     case "identificador":
       // El riel de PayPal quiere SU canal. Cualquier otro riel de identificador
       // —hoy solo el manual— se conforma con uno que no sea el de PayPal: es

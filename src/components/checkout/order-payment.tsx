@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
+import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import {
   interpretar,
   irAPagar,
+  type DlocalTransparente,
   type RespuestaDeCobro,
 } from "@/components/checkout/respuesta-de-cobro";
 import { Button } from "@/components/ui/button";
@@ -20,7 +22,13 @@ type Apertura =
   | { fase: "abriendo" }
   | { fase: "error"; mensaje: string }
   | { fase: "simulado"; retencionHasta: string | null }
-  | { fase: "lista"; retencionHasta: string | null; embed: Embed };
+  | { fase: "lista"; retencionHasta: string | null; embed: Embed }
+  /** dLocal transparente: sus campos de tarjeta, dentro de esta pantalla. */
+  | {
+      fase: "transparente";
+      retencionHasta: string | null;
+      transparente: DlocalTransparente;
+    };
 
 /**
  * EY-176 · EL PAGO DE UN PEDIDO — un cobro, N mentorías (P-3).
@@ -98,6 +106,13 @@ export function OrderPayment({
         setApertura({ fase: "lista", retencionHasta, embed: accion.embed });
         return;
       }
+      // dLocal, dentro de la pantalla. Con un pedido esto importa igual que con
+      // una reserva suelta: el cargo es UNO para las N mentorías (P-3), así que
+      // el formulario es uno y la confirmación es la del pedido.
+      if (accion.tipo === "transparente") {
+        setApertura({ fase: "transparente", retencionHasta, transparente: accion.transparente });
+        return;
+      }
       if (accion.tipo === "simulado") {
         setApertura({ fase: "simulado", retencionHasta });
         return;
@@ -163,6 +178,20 @@ export function OrderPayment({
           {/* La casilla de «guardar esta tarjeta» la pinta Stripe dentro de
               este formulario (D-3), igual que en el checkout de una reserva. */}
           <StripeEmbed {...apertura.embed} />
+        </div>
+      ) : null}
+
+      {/* ⚠️ Y AQUÍ NO HAY CASILLA DE GUARDADO DE NINGUNA CLASE: el formulario
+          embebido de dLocal NO TIENE BÓVEDA (dictado §5). Quien pague por dLocal
+          no puede guardar su tarjeta — es la decisión abierta D-6, y lo honesto
+          es no ofrecer una casilla que no guardaría nada. */}
+      {apertura.fase === "transparente" ? (
+        <div className="mt-3.5">
+          <DlocalEmbed
+            sujeto={{ tipo: "order", id: orderId }}
+            {...apertura.transparente}
+            returnUrl={`/pedidos/${orderId}/confirmacion`}
+          />
         </div>
       ) : null}
 
