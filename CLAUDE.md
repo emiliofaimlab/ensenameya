@@ -2,8 +2,8 @@
 
 > MVP web: marketplace de tutorías **1:1 en vivo** (alumno ↔ tutor) con reservas,
 > pagos (**capa agnóstica** por geografía; proveedor **decidido: DLocal + Stripe** —
-> **Stripe y dLocal cobran los dos**, con cuenta aprobada en sandbox y producción;
-> los payouts salen por **PayPal** y **Stripe Connect**), videollamada (Daily)
+> **el cobro lo decide el país del ALUMNO** y el payout el del TUTOR — ver
+> `docs/DICTADO-PAGOS.md`), videollamada (Daily)
 > y panel admin. **Monorepo:** frontend Next.js + backend Supabase en este mismo repo.
 
 ## Planificación — qué construir y en qué orden
@@ -13,7 +13,14 @@
 - **`docs/QA-LANZAMIENTO.md`** — matriz de RLS **ejecutada**, idempotencia de webhooks, barrido responsive y checklist de lanzamiento (US-1602).
 - **`docs/context/ADENDA-BACKLOG-v1.md`** — deltas del backlog v1.0 sobre los Docs 00–09 (RN-37..44, NTF-17..20, EP-17/18, `pending_acceptance`).
 - **`docs/ENTORNOS.md`** — ambientes dev + prod cloud (sin local) en Supabase + Vercel, flujo de trabajo y checklist (US-1603).
-- **`docs/PAGOS-Y-PAYOUTS.md`** — mapa de rutas de pago por país, coste real de cada tramo y
+- **`docs/DICTADO-PAGOS.md`** — 🔴 **MANDA EN TODO LO DE COBRO Y PAYOUT** (9-sep-2026, aprobado
+  por el cliente). El cobro se rutea por el país del **alumno**, el payout por el del **tutor**;
+  el checkout vive siempre dentro del sitio; el tutor ve dos tarjetas —PayPal y Banco— y detrás
+  de Banco compiten Wise, dLocal y Stripe sin que él lo sepa; los manuales son **solo Venezuela**.
+  Deroga cualquier cosa que digan los Docs 0–9, este fichero o los comentarios del código.
+  Avance de la implementación en **`docs/RUTA-DICTADO-PAGOS.md`**.
+- **`docs/PAGOS-Y-PAYOUTS.md`** — ⚠️ **derogado en lo que toca al RUTEO** por el dictado; sigue
+  mandando en el **coste** de cada tramo. Mapa de rutas de pago por país, coste real de cada tramo y
   quién asume cada comisión (2026-09-02). **Manda en todo lo de pagos y payouts**: sustituye al
   PDF «Infraestructura de Pagos» (jun-2026), cuyo eje de análisis es incorrecto.
 
@@ -30,8 +37,9 @@ quedaron cortos; el marco actual salió de la reunión del 24-jul). En Jira: **9
   (`git diff origin/dev origin/main` vacío) y cero migraciones pendientes: el PR #12 llevó los
   11 commits de PayPal y payouts, y el CI aplicó sus tres migraciones a producción sin un error
   (run `#34126503234`). Verificado además contra prod, no supuesto: `/terms` responde **200**
-  —llevaba meses en 404— y `/api/tutor/paypal-connect` y `/api/tutor/stripe-connect` responden
-  405 a un GET, o sea que las rutas están desplegadas.
+  —llevaba meses en 404— y `/api/tutor/paypal-connect` respondía
+  405 a un GET, o sea que las rutas están desplegadas. (`/api/tutor/stripe-connect` se borró
+  con el dictado del 9-sep-2026.)
   ⚠️ **Y esta línea caduca sola.** Decía `6cff50d` / 4-sep y el 7-sep ya era falsa: `dev` iba
   11 commits por delante. Antes de fiarse, `git rev-list --left-right --count dev...main`.
   ⚠️ **Y lo que hacía que las dos bases NO coincidieran no era el merge.** Era que el ruteo de
@@ -46,10 +54,14 @@ quedaron cortos; el marco actual salió de la reunión del 24-jul). En Jira: **9
   en Jira sigan `To Do`). La premisa de la épica —"no empezar hasta tener AMBAS cuentas"—
   era falsa: el sandbox de Stripe da Sessions, webhooks firmados y reembolsos con solo
   registrar el email; el KYC solo bloquea *live mode*. ✅ **Y desde el 4-sep-2026 no queda
-  nada bloqueado ahí**: dLocal tiene cuenta aprobada (sandbox y producción) y los payouts
-  ejecutan por **PayPal** y **Stripe Connect**. El «Connect exige KYC» que ponía aquí era una
-  premisa de agosto: se probó y no se sostiene (`POST /v1/accounts` con acuerdo *recipient*
-  devuelve 200 en 28 de 31 países). ⚠️ **Y ya no queda ningún riel esperando cuenta.** Aquí
+  nada bloqueado ahí**: dLocal tiene cuenta aprobada (sandbox y producción).
+  ⚠️ **Y desde el dictado del 9-sep-2026, los payouts YA NO ejecutan por Stripe Connect.**
+  Aquí ponía que sí, y esa frase la deroga `docs/DICTADO-PAGOS.md`: la cuenta conectada
+  desapareció de la pantalla del tutor y `stripe` salió de las 18 filas de `payout_providers`
+  que lo nombraban (`20260910130000`). Hoy los payouts ejecutan por **PayPal**, **dLocal** y
+  **Wise**; Stripe vuelve como tercer riel de la tarjeta de Banco cuando se apruebe la
+  decisión D-1 — está medido que funciona (`POST /v1/accounts` con acuerdo *recipient*,
+  54 de 60 países probados el 9-sep), lo que falta es la decisión de negocio. ⚠️ **Y ya no queda ningún riel esperando cuenta.** Aquí
   ponía «el único riel que espera cuenta es **Wise**» y contradecía a la fila de Wise de la
   tabla de integraciones de este mismo fichero, que lo daba por desbloqueado el 4-sep. Wise
   tiene token, **adaptador desde el 7-sep** y cinco países. Lo que le falta no es una cuenta:
@@ -137,10 +149,10 @@ Ninguna falta de clave rompe la app: el camino se cae al simulado o la cola se q
 
 | Integración | Hoy | Interruptor |
 | :-- | :-- | :-- |
-| **Stripe** (`lib/stripe.ts`) | *test mode*, probado de punta a punta contra la preview: Session creada → expirada desde la API → webhook firmado → reserva `cancelled`. API fijada a mano a `2026-07-29.dahlia`. | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET`, y la fila de `payment_routing_rules` — ⚠️ **que se toca con una MIGRACIÓN, no con un `UPDATE`**: aquí ponía lo contrario y esa frase es la causa de que dev y producción llevaran semanas ruteando distinto (`20260904190000`) |
-| **DLocal** (`lib/dlocalgo.ts`) | ✅ **cuenta APROBADA: sandbox y producción, las dos operativas** (confirmado por el cliente el 4-sep-2026). Adaptador de cobro, webhook firmado y payout escritos y verificados contra sandbox. ⚠️ Esta fila dijo durante un mes «sin cuenta — rechazada»: era un rechazo viejo, ya resuelto, y lo repetían seis documentos | `DLOCALGO_API_KEY` + `DLOCALGO_SECRET_KEY` (+ `DLOCALGO_API_BASE` para apuntar a producción) y su fila de `payment_routing_rules` |
+| **Stripe** (`lib/stripe.ts`) | **COBRA** en *test mode*, probado de punta a punta contra la preview: Session creada → expirada desde la API → webhook firmado → reserva `cancelled`. API fijada a mano a `2026-07-29.dahlia`. Cobra donde el país del **alumno** lo rutea: Venezuela y todo el mundo fuera de los 18 de dLocal. ⚠️ **NO PAGA**: desde el dictado del 9-sep-2026 salió de `payout_providers` y `RIELES.stripe.puedePagar` devuelve `false` a propósito (decisión D-1 pendiente). Vuelve como tercer riel de la tarjeta de Banco, no como cuenta conectada | `STRIPE_API_KEY` + `STRIPE_WEBHOOK_SECRET`, y la fila de `payment_routing_rules` — ⚠️ **que se toca con una MIGRACIÓN, no con un `UPDATE`**: aquí ponía lo contrario y esa frase es la causa de que dev y producción llevaran semanas ruteando distinto (`20260904190000`) |
+| **DLocal** (`lib/dlocalgo.ts`) | ✅ **cuenta APROBADA: sandbox y producción, las dos operativas** (confirmado por el cliente el 4-sep-2026). Adaptador de cobro, webhook firmado y payout escritos y verificados contra sandbox. ✅ **CHECKOUT TRANSPARENTE ACTIVO desde el 10-sep-2026**: el formulario de tarjeta se monta DENTRO del sitio. La vía es `allow_transparent` en el `POST /v1/payments` y luego `GET /v1/checkout/{token}` → `POST /v1/checkout/prepare-confirm` → `POST /v1/checkout/confirm`, **en ese orden** (saltarse el primero da un 500; saltarse el segundo, un 406). No es el `direct:true` que se probó en septiembre. ⚠️ **La clave del tokenizador NO es nuestra**: está hardcodeada en el SDK de dLocal Go y `DLOCALGO_SMARTFIELDS_KEY` no sirve para tokenizar. ⚠️ Y el cobro transparente **exige el país del pagador**: sin él, `400 5000 «Empty country not allowed»`. Paga a 8 países; Perú entró el 10-sep al mandarle la dirección que ya se guardaba. ⚠️ Esta fila dijo durante un mes «sin cuenta — rechazada»: era un rechazo viejo, ya resuelto, y lo repetían seis documentos | `DLOCALGO_API_KEY` + `DLOCALGO_SECRET_KEY` (+ `DLOCALGO_API_BASE` para apuntar a producción) y su fila de `payment_routing_rules` |
 | **PayPal** (`lib/payments/paypal-provider.ts`) | ✅ **CERRADO el 4-sep-2026**: recorrido entero con dinero moviéndose —conectar cuenta → retirar → job → `item: SUCCESS` → fila `paid` → NTF-12—, repetido dos veces. ⚠️ **Se paga al identificador de la cuenta CONECTADA, no al correo**: al correo quedó `UNCLAIMED` 5 de 5 veces, con el lote informando `SUCCESS` igualmente (`docs/PAGOS-Y-PAYOUTS.md` §9.4). El correo sigue como respaldo y ahí ese fallo se puede repetir. No cobra: no está en ningún `charge_providers` | `PAYPAL_CLIENT_ID` + `PAYPAL_SECRET` (+ `PAYPAL_API_URL` para producción) |
-| **Wise** (`lib/payments/wise-provider.ts`) | ✅ **Token vivo el 4-sep-2026 y ADAPTADOR ESCRITO el 7-sep**: cuatro pasos —presupuesto, alta del destinatario, transferencia y fondeo—, idempotencia por UUIDv5 derivado de (payout, intento) y mapeo por país en `lib/payments/wise-mapeo.ts` (`npm run check:wise`). Paga a **CO, AR, MX, CL y UY**, que son los países con `payout_country_rules.wise_account_type`. **No paga a Venezuela ni a Panamá** (422 `error.route.not.supported`, medido) y **Brasil está apagado a propósito**: sus códigos de banco no encajan con los de la tabla. ⚠️ **Y NO está probado de punta a punta con dinero moviéndose**, al revés que PayPal: el saldo de la cuenta es **cero** —`GET /v4/profiles/136151426/balances` devuelve `[]`, y por eso la opción de pago `BALANCE` llega `disabled: true`—, así que los tres primeros pasos van y el **fondeo** falla hasta que alguien abra y fondee un balance en USD. Eso es gestión de negocio, no código: el adaptador está escrito para que ese día no haya que tocar nada (la transferencia se queda en `incoming_payment_waiting` y el job reintenta el fondeo). ⚠️ Esta fila dijo primero «espera cuenta» y luego «espera adaptador»: las dos caducaron | `WISE_API_TOKEN`. `WISE_PRIVATE_KEY` es **opcional** — medido: esta cuenta no está sujeta a SCA; si algún día lo estuviera, `wiseFetch` lo dice con ese nombre en vez de morir con un 403 mudo |
+| **Wise** (`lib/payments/wise-provider.ts`) | ✅ **Token vivo el 4-sep-2026 y ADAPTADOR ESCRITO el 7-sep**: cuatro pasos —presupuesto, alta del destinatario, transferencia y fondeo—, idempotencia por UUIDv5 derivado de (payout, intento) y mapeo por país en `lib/payments/wise-mapeo.ts` (`npm run check:wise`). Paga a **CO, AR, MX, CL y UY**, que son los países con `payout_country_rules.wise_account_type`. **No paga a Venezuela ni a Panamá** (422 `error.route.not.supported`, medido) y **Brasil está apagado a propósito**: sus códigos de banco no encajan con los de la tabla. ⚠️ **Y NO está probado de punta a punta con dinero moviéndose**, al revés que PayPal: los tres primeros pasos van y el **fondeo** falla si la cuenta no tiene saldo. 🔑 **Eso NO es un límite del diseño**: desde el dictado del 9-sep-2026, operaciones fondea las cuentas todos los días antes del ciclo de payouts, así que un saldo a cero es una tarea pendiente de ese día y no un motivo para no ofrecer el riel. El adaptador ya lo aguanta (la transferencia se queda en `incoming_payment_waiting` y el job reintenta el fondeo). ⚠️ Y **paga a mucho más que 5 países**: `GET /v1/currency-pairs` devuelve **103 monedas destino** (EUR→`iban`, GBP→`sort_code`, USD→`aba`, medido). Lo que limita a 5 es nuestra tabla `payout_country_rules`, no Wise — abrirla es la fase 3 de `docs/RUTA-DICTADO-PAGOS.md`. ⚠️ Esta fila dijo primero «espera cuenta» y luego «espera adaptador»: las dos caducaron | `WISE_API_TOKEN`. `WISE_PRIVATE_KEY` es **opcional** — medido: esta cuenta no está sujeta a SCA; si algún día lo estuviera, `wiseFetch` lo dice con ese nombre en vez de morir con un 403 mudo |
 | **Correo** (`lib/email.ts` → **Resend**) | plantillas y job listos; sin clave la cola ni se toca | `RESEND_API_KEY` |
 | **Grabación de Daily** | ⚠️ **contratada y funcionando** — esta fila decía «add-on sin contratar → hoy no hay nada que borrar» y era falso: `GET api.daily.co/v1/recordings` devuelve **2 grabaciones `finished`** (14-ago, 13 s y 33 s). No hay tabla ni URL guardada **a propósito**: se consultan a Daily en el momento (`lib/daily.ts`). ⚠️ **Y la regla cambió el 2-sep: se graba SIEMPRE.** Esta fila decía que RN-42 exigía el sí de las dos partes y que «lo normal es que una sesión no tenga vídeo». El cliente lo reformuló —**obligatoria y notificada**— y por eso la casilla de la sala pasó de «Acepto» a «Entiendo». `recording_allowed()` devuelve `true` desde `20260902100000`. ⚠️ Y el fallo que tapaba esa premisa: `enable_recording:"cloud"` solo enciende el BOTÓN de grabar, no graba — por eso había 12 salas y 2 grabaciones. Quien arranca es `start_cloud_recording` en el token (`mintToken`); Daily no tiene propiedad de sala para esto. El nombre de sala se **lee** de `sessions.daily_room_name`; derivarlo otra vez es lo que hacía fallar a US-1802 en silencio | `DAILY_API_KEY` |
 | **Referral Factory** | ⚠️ campaña viva (**50297, la única**) pero **SIN atribución de ninguna clase** — esta fila decía «atribución por email» y era falso: esa vía no existe en el código y `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea**. Lo único que hace la app es **pintar el enlace/embed** de la campaña (`lib/referral.ts`); quién trajo a quién se queda entero en RF, y ni siquiera eso: sus dos únicos referidos se metieron a mano por API. La cookie `ey-ref` existe y funciona, pero espera un `?ref=` que RF no manda | `NEXT_PUBLIC_REFERRAL_URL` · `NEXT_PUBLIC_REFERRAL_EMBED_URL` — el interruptor real es la **URL**, no la clave |
@@ -244,7 +256,9 @@ docs/BACKLOG.md               backlog vigente (sprints, espejo de Jira)
 docs/PLAN-DESARROLLO.md       estado de ejecución por sprint (el más fiel)
 docs/QA-LANZAMIENTO.md        matriz de RLS ejecutada + checklist de lanzamiento
 docs/ENTORNOS.md              ambientes dev + prod cloud (Supabase + Vercel), sin local
-docs/PAGOS-Y-PAYOUTS.md       rutas de pago por país, fees reales y quién asume qué
+docs/DICTADO-PAGOS.md         🔴 MANDA en cobro y payout (9-sep-2026, aprobado)
+docs/RUTA-DICTADO-PAGOS.md    avance de su implementación, con casillas
+docs/PAGOS-Y-PAYOUTS.md       fees reales y quién asume qué (el RUTEO lo deroga el dictado)
 docs/context/                 docs técnicos (Docs 0–9 + adenda + revisión + aprobación cliente)
 ```
 
