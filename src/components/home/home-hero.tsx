@@ -11,8 +11,33 @@ import type { CategoryTag } from "@/lib/catalog/queries";
 // silencio: se ve como un hueco de más (o un salto que vuelve).
 const TITULAR_TEXTO =
   "Aprende a tu ritmo y conviértete en un PRO impulsando tu";
+// Correo de Verónica (3-sep-2026): «Hero: tratar de que no pase a 4 líneas
+// (reducir tamaño)». A 390 con `text-3xl` (30/36) salían 4 líneas (147 px,
+// medido). El Figma «Mobile y Tablet» (P01 § Hero) lo pinta a 26/39 y en 3
+// líneas… con «talento». Pero el fantasma reserva el alto de «emprendimiento»
+// (MN-15), así que "3 líneas" tiene que cumplirse con la palabra MÁS LARGA y en
+// el móvil más estrecho que soportamos (375 → 335 px de contenido):
+//
+//   línea 3 = «impulsando tu emprendimiento» + cursor (4 px), Poppins 600
+//     20 px → 332 px  (cabe en 335 y en 350)
+//     21 px → 348,6   (cabe en 350, NO en 335: 4 líneas en un iPhone SE/mini)
+//     26 px → 4 líneas incluso a 390 (filas medidas 249/253/252/232)
+//
+// Y no hay reparto mejor: la línea 2 «conviértete en un PRO impulsando» ya se
+// pasa a 21 px. De ahí 20, el mayor que cumple. El paso de línea conserva la
+// razón 1,5 del archivo (39/26) → 30 px. Desde `sm` no cambia nada (R1).
+//
+// ⚠️ Consecuencia asumida (revisión 8-sep): a 390 este h1 queda por DEBAJO de
+// los h2 de la misma página (24, 26 y 29 px). No es un descuido: con las siete
+// palabras cortas cabría el 26 del Figma (medido: «profesión», la más ancha de
+// ellas, entra en tres líneas hasta 26), pero el fantasma reserva el alto de
+// «emprendimiento», que a 22 ya rompe en cuatro incluso a 390. La salida no
+// es CSS: es quitar o acortar esa palabra en `rotating-word.tsx` (contenido
+// del cliente, §01.1 — no se toca sin su sí) y subir esto a
+// `text-[26px]/[39px]`. Mientras tanto la jerarquía se recupera por el otro
+// lado: el párrafo baja al 14/21 del Figma (ver el <p>).
 const TITULAR_CLASES =
-  "col-start-1 row-start-1 text-3xl font-semibold text-balance sm:text-5xl";
+  "col-start-1 row-start-1 text-[20px]/[30px] font-semibold text-balance sm:text-5xl";
 
 export function HomeHero({ categories }: { categories: CategoryTag[] }) {
   return (
@@ -86,7 +111,13 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
               {TITULAR_TEXTO} <RotatingWordGhost />
             </span>
           </div>
-          <p className="max-w-2xl text-pretty text-white/90">
+          {/* Móvil: 14/21 como el Figma «Mobile y Tablet» (P01 § Hero, escala
+              2: filas de párrafo cada 42 px → paso 21; tinta de ≈290 px para
+              «Tú eliges el objetivo que quieres alcanzar.» = Poppins 400 a 14).
+              Con el h1 a 20 (ver TITULAR_CLASES) el cuerpo a 16 le comía la
+              jerarquía: 20/16 = 1,25 frente al 1,86 del archivo. Desde `sm`
+              sigue el 16 de hoy (R1). */}
+          <p className="max-w-2xl text-pretty text-white/90 max-sm:text-sm/[21px]">
             Tú eliges el objetivo que quieres alcanzar. Nosotros te conectamos
             con el talento ideal para llevar tus habilidades al siguiente nivel
             desde el primer día.
@@ -94,22 +125,62 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
 
           {/* Mismo buscador con sugerencias que el header (R24-05), con el
               look del hero: caja blanca y "Buscar" dentro. Sigue siendo un form
-              GET a /search, así que funciona igual sin JS. */}
+              GET a /search, así que funciona igual sin JS.
+
+              Móvil (correo de Verónica 3-sep · Figma P01 § Hero, escala 2):
+              la tarjeta blanca mide 350 × 121 con 16 px de padding, y el
+              «Buscar» va DEBAJO del input a 318 de ancho con 12 px de hueco
+              (674−650 = 24/2). La columna la pone el propio buscador cuando
+              lleva botón; aquí solo el padding y el hueco. En el Figma el
+              placeholder ocupa dos líneas porque es una caja de texto; un
+              <input> no parte, así que se recorta —con el botón fuera de la
+              fila ya se lee «¿Qué meta vas a conquistar hoy? (ej. hab…», que
+              es lo que Verónica echaba en falta.
+
+              Foco (WCAG 2.4.7, revisión 8-sep): el input lleva `border-0` y
+              `focus-visible:ring-0` porque la caja visible es la TARJETA, no
+              él; pero así al tabular hasta el campo no se veía nada. El anillo
+              va en la tarjeta con `has-[input:focus-visible]` —solo cuando el
+              foco está en el campo, no en «Buscar», que ya trae el suyo— y
+              sin offset: un offset semitransparente sobre la foto del hero
+              ensucia el azul. En reposo no cambia ni un píxel (R1). */}
           <SearchAutocomplete
             className="w-full max-w-[700px] text-left"
-            formClassName="gap-2 rounded-lg bg-background p-2"
-            inputClassName="h-10 min-w-0 flex-1 border-0 bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0"
+            formClassName="gap-2 rounded-lg bg-background p-2 has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring max-sm:gap-3 max-sm:p-4"
+            inputClassName="h-10 min-w-0 flex-1 border-0 bg-transparent pl-8 text-sm shadow-none focus-visible:ring-0 max-sm:pl-7"
+            // La lupa se mide desde el input, que aquí va 8 px dentro de la
+            // tarjeta (`p-2`): `left-1` (4) la deja a los 12 del borde de
+            // siempre en escritorio. En móvil, a ras del padding (`left-0` →
+            // x = 36), donde el Figma pinta su 🔍 (73/2 = 36,5), con 12 px
+            // hasta el texto (`pl-7`), el mismo aire que en escritorio.
+            iconClassName="left-0 sm:left-1"
             placeholder="¿Qué meta vas a conquistar hoy? (ej. hablar inglés fluido, dominar cálculo…)"
             submitLabel="Buscar"
           />
 
           {/* Burbujas de categoría: círculo naranja que despliega el nombre al
-              hover (mismo componente que el resto del sitio, R24-03). */}
+              hover (mismo componente que el resto del sitio, R24-03).
+
+              Correo de Verónica (3-sep-2026): «Eliminar 2 líneas en categorías
+              - en su lugar hacerlo slider si es necesario». Con 10 categorías
+              a 390 salían dos filas de círculos (medido: 44 + 8 + 44). Con
+              `layout="strip"` van en UNA fila con scroll horizontal que sangra
+              hasta el borde y empieza pegada al contenido (x = 20, como la
+              píldora «Idiomas» del Figma P01 § Hero: círculos de 34 con 8 px
+              entre ellos). El centrado se conserva desde `lg`: el componente
+              pone `max-lg:justify-start` y `lg:flex-wrap`, así que en
+              escritorio no se mueve nada (R1). */}
           <CategoryIconChips
-            className="justify-center"
+            /* `justify-center-safe` y no `justify-center`: en la tira de móvil
+               las burbujas desbordan, y centrar un contenido que desborda deja
+               las primeras FUERA de alcance por la izquierda. `safe` centra
+               cuando caben (768 y escritorio, como hasta ahora) y arranca
+               desde el borde cuando no (390). */
+            className="justify-center-safe"
             categories={categories}
             hrefFor={(slug) => `/categories/${slug}`}
             limit={0}
+            layout="strip"
           />
         </Container>
       </div>

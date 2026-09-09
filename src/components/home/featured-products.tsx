@@ -34,19 +34,37 @@ export function FeaturedProducts({
             depende del ancho— tapaba 59px de la última mentoría (medido).
             El 164 no es ritmo, es la holgura que necesita ese solape. */}
         <Section className="pb-[124px] sm:pb-[164px] md:max-lg:pb-[164px]">
+          {/* Cabecera. En la captura 04 de Verónica el «Ver todos →» se partía
+              en TRES líneas junto al título de dos: `min-w-0` en el título y
+              `shrink-0 whitespace-nowrap` en el enlace lo dejan en una, y el
+              que cede es el título. Móvil (Figma «Mobile y Tablet», P01 §
+              Productos destacados, escala 2): el título va a dos líneas con
+              paso de 27,5 y el enlace, de 13 px, centrado verticalmente en
+              ellas (`items-center`). El Figma escribe este título a 18 y el de
+              «Tutores destacados» a 20 —mismo papel, dos cuerpos—: se unifica en
+              20 (`text-xl`, 20/28), que a 335 y 350 sigue dando dos líneas
+              (medido). El `-my-3 py-3` agranda la zona táctil del enlace a 44
+              px sin mover la fila. */}
           <div className="flex items-center justify-between gap-4">
-            <h2 className="text-2xl font-semibold">
+            <h2 className="min-w-0 text-xl font-semibold sm:text-2xl">
               Mentorías destacadas listas para reservar
             </h2>
             <Link
               href="/classes"
-              className="text-sm font-medium text-brand hover:underline"
+              className="-my-3 shrink-0 py-3 text-[13px] font-medium whitespace-nowrap text-brand hover:underline sm:text-sm"
             >
               Ver todos →
             </Link>
           </div>
 
-          <ul className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Correo de Verónica (3-sep-2026): «Slider también». Misma tira que
+              «Tutores destacados» (ver el comentario de featured-tutors.tsx
+              para el porqué del sangrado y del `py-4`/`-mb-4`), con la medida
+              del Figma para esta sección: tarjeta de 240 y 14 de hueco. El
+              hueco inferior de la Section (pb-[124px]) queda igual: el `py-4`
+              se compensa con `-mb-4`, así que la tarjeta de cifras cabalga el
+              mismo borde que antes. Desde `sm` vuelve la rejilla de hoy (R1). */}
+          <ul className="mt-6 gap-3.5 max-sm:scroll-strip max-sm:-mx-5 max-sm:mt-2 max-sm:-mb-4 max-sm:px-5 max-sm:py-4 max-sm:scroll-px-5 sm:grid sm:grid-cols-2 sm:gap-6 lg:grid-cols-4">
             {products.map((p) => {
               const sessions = sessionsLabel(p);
               // RV-08 · la portada enseñaba el importe a secas, sin unidad
@@ -56,7 +74,8 @@ export function FeaturedProducts({
               return (
                 <li
                   key={p.id}
-                  className="flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-card shadow-card"
+                  // El ancho fijo solo vale en la tira; en la rejilla lo pone la columna.
+                  className="flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-card shadow-card max-sm:w-[240px]"
                 >
                   {/* Miniatura 276×124 del Figma (DD-02). MN-09 · el hueco sin
                       foto lo rellena `ProductCover`, el MISMO componente que la
@@ -129,7 +148,12 @@ export function FeaturedProducts({
 
                     <Link
                       href={`/products/${p.id}`}
-                      className="text-[13px] font-semibold text-brand hover:underline"
+                      /* `-my-3 py-3`: en la tira móvil este enlace es el ÚNICO
+                         control de la tarjeta y medía 19,5 px de alto. Los 24
+                         px de padding lo llevan a 43,5 de zona tocable y el
+                         margen negativo se los devuelve al hueco de la
+                         columna, así que la maqueta no se mueve. */
+                      className="-my-3 inline-block py-3 text-[13px] font-semibold text-brand hover:underline"
                     >
                       Ver detalle →
                     </Link>

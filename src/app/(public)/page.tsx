@@ -82,7 +82,10 @@ export default async function HomePage() {
           {
             icon: VideoIcon,
             text: "Video en vivo con alta calidad",
-            desc: "Os veis y os escucháis sin cortes, y el tutor comparte su pantalla en la misma llamada.",
+            // «Se ven / se escuchan» y no «os veis / os escucháis»: el sitio
+            // habla de usted(es) implícito —mercado LATAM, C-13—; el voseo de
+            // España era un resto del borrador (revisión de copy, 8-sep).
+            desc: "Se ven y se escuchan sin cortes, y el tutor comparte su pantalla en la misma llamada.",
           },
           {
             icon: TargetIcon,
@@ -107,9 +110,21 @@ export default async function HomePage() {
       <FeaturedProducts products={products.slice(0, 4)} />
       <HomeStats stats={stats} overlap={products.length > 0} />
 
+      {/* Correo de Verónica (3-sep-2026): «Disminuir tamaño de título para que
+          cubra 2 líneas». A 390 con 24 px salían tres («¿Eres un crack / en lo
+          que haces? / Monetiza tu talento YA», captura 05). El Figma «Mobile y
+          Tablet» (P01 § Monetiza) lo escribe a 22 —dos líneas a 390—, pero a 375
+          (335 px de contenido) 22 sigue dando tres: «haces? Monetiza tu talento
+          YA» mide 336 px. A 21 caben las dos líneas en los dos anchos (medido
+          con `text-balance`). El paso de línea va explícito (30 = la razón 1,45
+          que el Figma da a este título, 32/22) porque `text-2xl` deja un
+          `line-height` SIN unidad (calc(2/1.5)) y con 21 px salían 28. Solo por
+          debajo de `sm`: el escritorio no se toca (R1). El otro bloque no lo
+          necesita: a 24 ya sale en dos. */}
       <FeatureSplit
         reverse
         title="¿Eres un crack en lo que haces? Monetiza tu talento YA"
+        titleClassName="max-sm:text-[21px]/[30px]"
         text="Crea tu perfil de tutor, comparte tu formación, certificaciones y pasiones, finalmente define tus tarifas con total libertad. Nosotros impulsamos tu crecimiento, aseguramos tus cobros y te conectamos con alumnos listos para aprender de ti."
         points={[
           { icon: TagIcon, text: "Tú decides tu valor y tus horarios" },

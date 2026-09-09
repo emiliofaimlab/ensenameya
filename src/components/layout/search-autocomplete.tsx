@@ -45,15 +45,34 @@ export function SearchAutocomplete({
   inputClassName,
   formClassName,
   submitLabel,
+  submitClassName,
+  iconClassName,
   autoFocusOnMount = false,
 }: {
   placeholder?: string;
   className?: string;
   inputClassName?: string;
+  /**
+   * Clases extra de la lupa. Se mide desde el borde del INPUT (ver el
+   * envoltorio de abajo), no desde el del form: si el form lleva padding (el
+   * hero), el consumidor lo descuenta aquí para que la lupa no se mueva.
+   */
+  iconClassName?: string;
   /** Estilos de la caja (el hero de P01 la pinta blanca con padding). */
   formClassName?: string;
-  /** Si se pasa, se dibuja el botón de enviar dentro de la caja (hero). */
+  /**
+   * Si se pasa, se dibuja el botón de enviar dentro de la caja (hero).
+   *
+   * Correo de Verónica (3-sep-2026) · con botón, por debajo de `sm` la caja
+   * es una COLUMNA: input arriba y «Buscar» debajo a ancho completo, como el
+   * hero del Figma «Mobile y Tablet» (P01 § Hero: botón de 318 × 45 bajo el
+   * placeholder, 12 px de separación). Verónica pide ese mismo patrón en las
+   * otras páginas con buscador «para que vaya acorde», así que vive aquí y no
+   * en cada consumidor. Desde `sm` la fila de hoy no cambia (R1).
+   */
   submitLabel?: string;
+  /** Clases extra del botón de enviar (solo tiene efecto con `submitLabel`). */
+  submitClassName?: string;
   autoFocusOnMount?: boolean;
 }) {
   const pathname = usePathname();
@@ -180,42 +199,74 @@ export function SearchAutocomplete({
       <form
         ref={formRef}
         action="/search"
-        className={cn("relative flex items-center", formClassName)}
+        className={cn(
+          "relative flex items-center",
+          // Con botón, columna por debajo de `sm` (ver `submitLabel`).
+          submitLabel && "max-sm:flex-col max-sm:items-stretch",
+          formClassName,
+        )}
       >
-        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          type="search"
-          name="q"
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-            measure();
-          }}
-          onFocus={() => {
-            setOpen(true);
-            measure();
-          }}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          autoComplete="off"
-          autoFocus={autoFocusOnMount}
-          className={cn(
-            // Placeholder en #595959, que es el del Figma para esta barra (el
-            // token `muted-foreground` es #4d4d4d, un punto más oscuro).
-            //
-            // ⚠️ `min-w-0` no es decorativo (US-1601): el input es un hijo flex
-            // del `<form>` y su `min-width:auto` vale el ancho intrínseco de un
-            // `<input>` (~170 px). Sin esto la caja del header no puede encoger
-            // por debajo de ese suelo, y el arreglo del solape del header —que
-            // consiste precisamente en que sea el buscador quien ceda ancho a
-            // la navegación entre 1024 y ~1409— deja de funcionar.
-            "h-11 w-full min-w-0 rounded-lg border border-border bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-[#595959] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-            inputClassName,
-          )}
-        />
+        {/* La lupa se ancla al INPUT y no al form: cuando el form es una
+            columna (input + botón), `top-1/2` del form caía entre los dos. El
+            envoltorio hereda el sitio del input en la fila (`flex-1 min-w-0`)
+            y el input lo llena, así que en el header no se mueve ni un píxel.
+            ⚠️ Lo que SÍ cambia es el origen horizontal de la lupa: antes se
+            medía desde el form y ahora desde el input, y si el form lleva
+            padding (el hero, `p-2`) la lupa se corría esos píxeles. De ahí
+            `iconClassName`: el hero lo compensa y el escritorio queda como
+            estaba (R1). */}
+        <div className="relative flex min-w-0 flex-1 items-center">
+          <SearchIcon
+            className={cn(
+              "pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground",
+              iconClassName,
+            )}
+          />
+          <input
+            type="search"
+            name="q"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setOpen(true);
+              measure();
+            }}
+            onFocus={() => {
+              setOpen(true);
+              measure();
+            }}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            autoComplete="off"
+            autoFocus={autoFocusOnMount}
+            className={cn(
+              // Placeholder en #595959, que es el del Figma para esta barra (el
+              // token `muted-foreground` es #4d4d4d, un punto más oscuro).
+              //
+              // ⚠️ `min-w-0` no es decorativo (US-1601): el input es un hijo flex
+              // del `<form>` y su `min-width:auto` vale el ancho intrínseco de un
+              // `<input>` (~170 px). Sin esto la caja del header no puede encoger
+              // por debajo de ese suelo, y el arreglo del solape del header —que
+              // consiste precisamente en que sea el buscador quien ceda ancho a
+              // la navegación entre 1024 y ~1409— deja de funcionar.
+              "h-11 w-full min-w-0 rounded-lg border border-border bg-secondary pr-3 pl-9 text-[13px] text-foreground placeholder:text-[#595959] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              inputClassName,
+            )}
+          />
+        </div>
         {submitLabel ? (
-          <Button type="submit" className="h-10 shrink-0 px-6">
+          <Button
+            type="submit"
+            className={cn(
+              "h-10 shrink-0 px-6",
+              // Móvil (Figma P01 § Hero, medido a escala 2): 45-46 de alto,
+              // ancho completo, radio 8 —el `rounded-lg` que el botón ya
+              // trae— y etiqueta de 14 px semibold («Buscar» mide 48 px de
+              // tinta: Poppins 600 a 14 avanza 49,5; a 16, 56,5).
+              "max-sm:h-[46px] max-sm:w-full max-sm:font-semibold",
+              submitClassName,
+            )}
+          >
             {submitLabel}
           </Button>
         ) : null}

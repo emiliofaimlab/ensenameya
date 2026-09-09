@@ -170,6 +170,9 @@ export default function HowItWorksPage() {
         image={{
           src: "/img/how-alumno.jpg",
           alt: "Alumna en una mentoría por videollamada",
+          // Apaisado (móvil): con el foco al 30 % la cara de la tutora en la
+          // pantalla queda entera; centrado se iba al filo.
+          focus: "max-lg:object-[50%_30%]",
         }}
         accent="brand"
         background="bg-[#e8f2ff]"
@@ -199,10 +202,31 @@ export default function HowItWorksPage() {
         image={{
           src: "/img/how-tutor.jpg",
           alt: "Tutora preparando su mentoría",
+          // Apaisado (móvil): al 15 % los cascos no se cortan; centrado
+          // partía la cabeza por la frente.
+          focus: "max-lg:object-[50%_15%]",
         }}
         accent="primary"
         background="bg-muted"
+        // Solo escritorio: bajo lg el botón suelto se esconde y su función
+        // pasa al bloque CTA de abajo (Verónica, 3-sep-2026).
         cta={{ href: "/signup", label: "Regístrate YA" }}
+      />
+
+      {/* Verónica (3-sep-2026): «en cuadro señalado falta información que está
+          en diseño y botón de quiero enseñar (ambos botones centrados y
+          alargados)». Es «P03 · cta-mid» del Figma móvil: título, párrafo y los
+          dos botones a ancho completo, en claro. Solo bajo lg: en escritorio
+          ese sitio lo ocupa el «Regístrate YA» del bloque del tutor (R1) y la
+          página ya cierra con el bloque azul. El Figma escribe «tu primera
+          clase»; R4 manda «mentoría». */}
+      <FinalCta
+        tone="light"
+        className="lg:hidden"
+        title="Empieza hoy: aprende o enseña"
+        text="Crea tu cuenta gratis y reserva tu primera mentoría, o conviértete en tutor y empieza a cobrar por tus resultados."
+        primaryLabel="Crear cuenta gratis"
+        secondaryLabel="Quiero enseñar"
       />
 
       <TrustCards
