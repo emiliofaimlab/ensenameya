@@ -1,5 +1,6 @@
 import { getSessionContext } from "@/lib/auth/server";
 import { tutorSidebarBadges } from "@/lib/tutor/sidebar-badges";
+import { leerPerfilDeTutor } from "@/lib/auth/tutor";
 
 /**
  * Este layout no pinta nada: **adelanta los contadores del menú**.
@@ -28,6 +29,12 @@ export default async function TutorLayout({
   // El `.catch` es obligatorio en una promesa sin dueño: sin él, un fallo de
   // red aquí tumbaría el proceso con un rechazo no capturado. El error real lo
   // sigue viendo quien haga `await` de la promesa memoizada.
-  if (user) void tutorSidebarBadges(user.id).catch(() => {});
+  if (user) {
+    void tutorSidebarBadges(user.id).catch(() => {});
+    // Y el perfil de tutor, por lo mismo: `requireTutorProfile()` es la primera
+    // línea de las diez pantallas, y hasta que no volvía no salía ni una de las
+    // consultas propias de la pantalla. Adelantarla aquí la solapa con ellas.
+    void leerPerfilDeTutor(user.id).catch(() => {});
+  }
   return children;
 }
