@@ -12,6 +12,7 @@ import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { PruneBought } from "@/components/cart/cart-actions";
+import { EsperaConfirmacion } from "@/components/checkout/espera-confirmacion";
 
 export const metadata = { title: "Pedido confirmado · Enséñame Ya" };
 
@@ -83,6 +84,10 @@ export default async function ConfirmacionPedidoPage({
           )}
         </span>
 
+        {/* Con dLocal se aterriza aquí ANTES de que llegue el webhook: sin
+            esto, «Estamos confirmando tu pago» se queda fijo sobre un pago
+            que ya se hizo. Ver el componente. */}
+        {sinResolver ? <EsperaConfirmacion /> : null}
         <h1 className="mt-4 text-[28px] font-bold tracking-tight text-[#19191f]">
           {sinResolver
             ? "Estamos confirmando tu pago"

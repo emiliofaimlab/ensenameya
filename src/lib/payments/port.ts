@@ -63,17 +63,34 @@ import "server-only";
  * sitio. No es una diferencia de nombres: es que en un caso el alumno nunca
  * sale y en el otro sí.
  *
- * ── ¿Y SmartFields, que sí sería embebido? NO ESTÁ DISPONIBLE ───────────────
- * dLocal Go tiene un checkout transparente (SmartFields) que daría la forma
- * embebida, pero exige `allow_transparent: true` en la cuenta, que lo activa su
- * soporte a petición. Comprobado contra el sandbox el 1-sep-2026: un
- * `POST /v1/payments` con `"direct": true` devuelve **200 con `"direct": false`**
- * — no da error, simplemente ignora la petición y sirve el checkout alojado de
- * siempre. O sea que no es cuestión de mandar otro parámetro: hasta que soporte
- * lo habilite, la redirección es el ÚNICO camino, y por eso el tipo se ensancha
- * en vez de forzar a dLocal a fingir un `clientSecret` que no existe.
+ * ── ⚠️ AQUÍ SE DIJO QUE SMARTFIELDS «NO ESTÁ DISPONIBLE», Y ERA FALSO ───────
+ * Este bloque afirmaba que el checkout transparente de dLocal Go estaba
+ * bloqueado esperando a que su soporte activara `allow_transparent` en la
+ * cuenta, «comprobado» porque un `POST /v1/payments` con `"direct": true`
+ * devolvía 200 con `"direct": false`.
  *
- * `modo` es el discriminante. Es obligatorio en las dos variantes a propósito:
+ * La medida era correcta y la conclusión no: **`direct` es un campo de SOLO
+ * LECTURA de la respuesta** —dice qué clase de integración es el cobro, no qué
+ * se pidió— y el parámetro de verdad se llama **`allow_transparent`**. Medido el
+ * 9-sep-2026 contra `api-sbx.dlocalgo.com` con nuestras claves:
+ *
+ *   · `POST /v1/payments` con `allow_transparent: true` → 200, y la respuesta
+ *     trae `merchant_checkout_token` (que ya venía antes, sin que nadie lo
+ *     leyera). `direct` sigue diciendo `false` en los dos casos: es ruido.
+ *   · `GET /v1/checkout/{token}` de ese cobro → **`subType:
+ *     "TRANSPARENT_CHECKOUT"`**. Del mismo cobro creado SIN el parámetro →
+ *     `subType: "DGO_API"`. Ese campo, y no `direct`, es el detector.
+ *
+ * O sea que la cuenta lo tiene habilitado y lo tenía. El dictado de pagos del
+ * 9-sep (§2, punto 2) exige que el formulario se monte dentro de nuestra
+ * pantalla, así que la redirección deja de ser el único camino y aparece la
+ * TERCERA variante de abajo, `ChargeTransparente`.
+ *
+ * ⚠️ Lo que sigue siendo verdad de aquel párrafo: **la variante nueva no finge
+ * un `clientSecret`**. dLocal no tiene nada parecido, y reusar `ChargeEmbebido`
+ * obligaría a inventarle uno.
+ *
+ * `modo` es el discriminante. Es obligatorio en las tres variantes a propósito:
  * sin él, un `if (salida.clientSecret)` en el navegador trata la redirección
  * como "no hay cobro" y cae al camino simulado — que es exactamente el fallo
  * silencioso que este proyecto ya conoce (ver `simulated-provider.ts`).
@@ -144,7 +161,73 @@ export type ChargeFallido = {
   creado: "nada" | "en-duda";
 };
 
-export type ChargeResult = ChargeEmbebido | ChargeRedirigido | ChargeFallido;
+/**
+ * EL COBRO SE MONTA DENTRO DE NUESTRA PANTALLA, PERO NO COMO EL DE STRIPE.
+ *
+ * Es el checkout transparente de dLocal Go (SmartFields): los campos de la
+ * tarjeta viven en iframes suyos —mismo perfil PCI que Stripe, el PAN no toca
+ * nuestro DOM— y todo lo que los rodea es nuestro, botón de pagar incluido,
+ * porque dLocal no trae uno. Lo monta `components/checkout/dlocal-embed.tsx` y
+ * lo empuja `POST /api/pagos/confirmar-dlocal`.
+ *
+ * ⚠️ NO ES `ChargeEmbebido` Y NO SE PUEDE REUSAR. Los campos de aquel son
+ * Stripe-ismos declarados como tales en su propio comentario: `clientSecret` no
+ * existe en dLocal (lo que hay es un token de checkout, que no es un secreto de
+ * un solo uso sino la referencia de la sesión) y `publishableKey` es NUESTRA
+ * clave en Stripe, mientras que la de aquí **no es nuestra** (ver `publicKey`).
+ * Meter dLocal en aquella variante obligaría a inventarle un secreto.
+ */
+export type ChargeTransparente = {
+  ok: true;
+  modo: "transparente";
+  /**
+   * `merchant_checkout_token` — la referencia de la SESIÓN de checkout, que es
+   * lo que identifica el cobro en los endpoints `/v1/checkout/*`.
+   *
+   * ⚠️ NO ES UN SECRETO Y TAMPOCO ES LA REFERENCIA DEL COBRO. Es el mismo
+   * valor que va en la `redirectUrl` (`…/validate/<token>`), o sea que ya
+   * viajaba al navegador. Lo que NO se puede hacer es aceptarlo DE VUELTA desde
+   * el navegador para confirmar: `confirmar-dlocal` lo relee del `DP-…` sellado
+   * en `payments.provider_payment_id` con `service_role` (regla de oro 2).
+   */
+  checkoutToken: string;
+  /**
+   * La clave pública del tokenizador de tarjetas.
+   *
+   * ⚠️ **NO ES NUESTRA CLAVE**, y ese es el motivo de que no se llame
+   * `publishableKey` como en Stripe. Es de la PLATAFORMA dLocal Go: está
+   * hardcodeada en su propio SDK (`static.dlocalgo.com/dlocalgo.min.js`), una
+   * por ambiente, y es la misma para todos sus comercios. Viaja en la respuesta
+   * del checkout —y no por `NEXT_PUBLIC_*`— por lo mismo que la de Stripe: para
+   * que el interruptor de dLocal siga siendo UNA sola cosa, sus dos claves de
+   * servidor. Ver `clavePublicaDeSmartFields()` en `lib/dlocalgo.ts`.
+   *
+   * ⚠️ NO es `DLOCALGO_SMARTFIELDS_KEY` de `.env.local`. Esa no tokeniza
+   * (medido); tenerla en el entorno es lo que hizo pensar que sí.
+   */
+  publicKey: string;
+  /** El `DP-…`, ya sellado. Igual que en `ChargeRedirigido`. */
+  providerRef: string;
+  /**
+   * 🔴 LA SALIDA DE RESPALDO, Y VIVE DENTRO DE LA VARIANTE A PROPÓSITO.
+   *
+   * El checkout alojado de dLocal sigue existiendo para este mismo cobro y esta
+   * URL sigue sirviendo. Es lo que convierte cualquier fallo del transparente
+   * —el SDK que no carga, un método que la cuenta no tiene, un 929— en «el
+   * checkout de hoy» en vez de en un formulario muerto. Y es además lo único
+   * que ofrece PIX, boleto y efectivo, que el transparente no hace (D-3).
+   *
+   * Que esté aquí y no en un tipo aparte es lo que impide olvidarla: el
+   * compilador la exige en cada retorno `transparente`.
+   */
+  redirectUrl: string;
+};
+
+export type ChargeResult =
+  | ChargeEmbebido
+  | ChargeRedirigido
+  | ChargeTransparente
+  | ChargeFallido;
 
 /**
  * EY-176 · A QUÉ APUNTA UN COBRO.

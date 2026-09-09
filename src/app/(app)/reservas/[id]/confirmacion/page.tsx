@@ -9,6 +9,7 @@ import { formatSessionTime, tutorNames } from "@/lib/booking";
 import { parseRequirements } from "@/lib/product-requirements";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
+import { EsperaConfirmacion } from "@/components/checkout/espera-confirmacion";
 
 export const metadata = { title: "Reserva confirmada · Enséñame Ya" };
 
@@ -92,6 +93,10 @@ export default async function ConfirmationPage({
           </span>
         </span>
 
+        {/* Con dLocal se aterriza aquí ANTES de que llegue el webhook: sin
+            esto, «Estamos confirmando tu pago» se queda fijo sobre un pago
+            que ya se hizo. Ver el componente. */}
+        {pagoPendiente ? <EsperaConfirmacion /> : null}
         <h1 className="text-center text-[26px] font-bold text-[#19191f]">
           {pagoPendiente ? "Estamos confirmando tu pago" : "¡Reserva registrada!"}
         </h1>

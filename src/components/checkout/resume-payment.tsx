@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
+import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import {
   interpretar,
   irAPagar,
+  type DlocalTransparente,
   type RespuestaDeCobro,
 } from "@/components/checkout/respuesta-de-cobro";
 
@@ -15,7 +17,13 @@ type Apertura =
   | { fase: "abriendo" }
   | { fase: "error"; mensaje: string }
   | { fase: "simulado"; retencionHasta: string | null }
-  | { fase: "lista"; retencionHasta: string | null; embed: Embed };
+  | { fase: "lista"; retencionHasta: string | null; embed: Embed }
+  /** dLocal transparente: sus campos de tarjeta, dentro de esta pantalla. */
+  | {
+      fase: "transparente";
+      retencionHasta: string | null;
+      transparente: DlocalTransparente;
+    };
 
 /**
  * "Pagar ahora" de una reserva que se quedó a medias.
@@ -88,6 +96,13 @@ export function ResumePayment({ bookingId }: { bookingId: string }) {
         setApertura({ fase: "lista", retencionHasta, embed: accion.embed });
         return;
       }
+      // dLocal, dentro de la pantalla. Va en el MISMO commit que las otras dos
+      // pantallas de cobro: dejar una atrás deja dos formularios distintos para
+      // el mismo producto.
+      if (accion.tipo === "transparente") {
+        setApertura({ fase: "transparente", retencionHasta, transparente: accion.transparente });
+        return;
+      }
       if (accion.tipo === "simulado") {
         setApertura({ fase: "simulado", retencionHasta });
         return;
@@ -133,6 +148,16 @@ export function ResumePayment({ bookingId }: { bookingId: string }) {
       {apertura.fase === "lista" ? (
         <div className="mt-3.5">
           <StripeEmbed {...apertura.embed} />
+        </div>
+      ) : null}
+
+      {apertura.fase === "transparente" ? (
+        <div className="mt-3.5">
+          <DlocalEmbed
+            sujeto={{ tipo: "booking", id: bookingId }}
+            {...apertura.transparente}
+            returnUrl={`/reservas/${bookingId}/confirmacion`}
+          />
         </div>
       ) : null}
     </>

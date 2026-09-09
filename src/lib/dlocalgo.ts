@@ -559,6 +559,21 @@ export type PagoDlocalGo = {
   rejected_reason?: string;
   /** A dónde se manda a la persona a pagar. Ver el desajuste 1 del adaptador. */
   redirect_url?: string;
+  /**
+   * La sesión de checkout de ESTE cobro — lo que hace posible el transparente.
+   *
+   * ⚠️ VIENE SIEMPRE, TAMBIÉN SIN `allow_transparent`, y por eso su presencia
+   * NO dice que el transparente esté disponible: es el mismo valor que el último
+   * segmento de `redirect_url`. Quien lo dice es `subType` de
+   * `abrirSesionDeCheckout()`. Medido el 9-sep-2026: con `allow_transparent`
+   * vuelve `TRANSPARENT_CHECKOUT`, sin él `DGO_API`, y `direct` dice `false` en
+   * los dos casos.
+   *
+   * Y viene también en el `GET /v1/payments/{id}` (comprobado sobre
+   * `DP-256968`), que es lo que permite reabrir el formulario tras una recarga
+   * sin crear un cobro nuevo.
+   */
+  merchant_checkout_token?: string;
   created_date?: string;
   approved_date?: string;
 };
@@ -575,6 +590,260 @@ export type ReembolsoDlocalGo = {
 export async function recuperarPago(id: string): Promise<PagoDlocalGo> {
   return await dlocalgoFetch<PagoDlocalGo>("GET", `/v1/payments/${encodeURIComponent(id)}`);
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// CHECKOUT TRANSPARENTE (SmartFields) — el cobro que no sale de nuestra pantalla
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Dictado de pagos §2 punto 2. Son OTROS endpoints y OTRA autenticación que el
+// resto de este archivo, y por eso van en su propio bloque con su propio
+// `fetch`:
+//
+//   · No llevan `Authorization`. La sesión del checkout se identifica con la
+//     cookie `checkout_token=<merchant_checkout_token>` — el propio checkout
+//     alojado de dLocal la usa así (`credentials: 'include'` en su bundle).
+//     ⚠️ Y eso es exactamente por lo que esto vive EN EL SERVIDOR: una llamada
+//     desde el navegador sería cookie de tercero, que Safari bloquea de serie.
+//     Aquí la cookie se pone a mano —su valor ES el token, medido— y no hace
+//     falta ningún «login».
+//   · Sus errores tienen OTRA FORMA: `{errorCode, errorMessage, causeMessage}`,
+//     no `{code, message}`. Un `DlocalGoError` no sabría leerlos y `code`
+//     quedaría a null, que es como se pierde la clasificación entera.
+//
+// 🔴 EL ORDEN DE LAS TRES LLAMADAS NO ES OPCIONAL, y está medido:
+//
+//   1. `abrirSesionDeCheckout(token)`  ← GET, inicializa la sesión
+//   2. `fijarMetodoDePago(token, …)`   ← POST prepare-confirm
+//   3. `confirmarCheckout(token, …)`   ← POST confirm
+//
+// Saltarse el paso 1 hace que el paso 2 devuelva **500 con
+// `java.lang.NullPointerException`** (medido sobre `DP-256968`: prepare sin GET
+// previo → 500; el mismo token tras el GET → 200). Saltarse el paso 2 hace que
+// el 3 devuelva **400 `{"errorCode":406,"errorMessage":"Missing payment
+// method"}`**. Ninguno de los dos fallos dice «te falta un paso».
+
+/** Lo que devuelven los `/v1/checkout/*` cuando algo va mal. */
+export class DlocalCheckoutError extends Error {
+  constructor(
+    readonly status: number,
+    /** El código de SU taxonomía. Ver `motivoDeCheckout` en el Route Handler. */
+    readonly errorCode: number | null,
+    message: string,
+    /** `causeMessage`, que es donde viene «Missing field: clientDocumentType». */
+    readonly detalle: string | null,
+  ) {
+    super(message);
+    this.name = "DlocalCheckoutError";
+  }
+
+  /** ¿Fue el momento o fue la petición? Mismo criterio que `DlocalGoError`. */
+  get esTransitorio(): boolean {
+    return this.status === 429 || this.status >= 500;
+  }
+}
+
+async function checkoutFetch<T>(
+  metodo: "GET" | "POST",
+  ruta: string,
+  token: string,
+  cuerpo?: unknown,
+): Promise<T> {
+  const res = await fetch(`${dlocalgoBase()}${ruta}`, {
+    method: metodo,
+    headers: {
+      "Content-Type": "application/json",
+      // La cookie que su propio checkout manda con `credentials: 'include'`.
+      Cookie: `checkout_token=${token}`,
+    },
+    body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
+    cache: "no-store",
+  });
+
+  const texto = await res.text();
+  let datos: unknown = null;
+  try {
+    datos = texto ? JSON.parse(texto) : null;
+  } catch {
+    if (!res.ok) {
+      throw new DlocalCheckoutError(res.status, null, texto.slice(0, 200) || res.statusText, null);
+    }
+  }
+
+  if (!res.ok) {
+    const err = datos as
+      | { errorCode?: number; errorMessage?: string; causeMessage?: string }
+      | null;
+    throw new DlocalCheckoutError(
+      res.status,
+      typeof err?.errorCode === "number" ? err.errorCode : null,
+      err?.errorMessage ?? err?.causeMessage ?? res.statusText,
+      err?.causeMessage ?? null,
+    );
+  }
+  return datos as T;
+}
+
+/** Un método de pago que la cuenta ofrece para el país de este cobro. */
+export type MetodoDeCheckout = {
+  /** El id NUMÉRICO. `payment_method/{id}` con el código (`"VI"`) da 400. */
+  id: number;
+  /** `VI`, `MC`, `EF_BA`… */
+  code: string;
+  name: string;
+  type: "CREDIT_CARD" | "VOUCHER" | "BANK_TRANSFER" | string;
+};
+
+export type SesionDeCheckout = {
+  type: string;
+  /**
+   * 🔑 EL DETECTOR DEL TRANSPARENTE. `TRANSPARENT_CHECKOUT` = se puede montar
+   * en nuestra pantalla; cualquier otra cosa (`DGO_API`, …) = hay que redirigir.
+   */
+  subType: string;
+  country: string | null;
+  paymentMethods: MetodoDeCheckout[];
+  paymentInfo?: { total?: string; currency?: string };
+  language?: string;
+};
+
+/**
+ * Paso 1 · abre (e inicializa) la sesión de checkout y dice de qué clase es.
+ *
+ * Es idempotente: llamarlo dos veces no crea nada ni invalida el token.
+ */
+export async function abrirSesionDeCheckout(token: string): Promise<SesionDeCheckout> {
+  return await checkoutFetch<SesionDeCheckout>(
+    "GET",
+    `/v1/checkout/${encodeURIComponent(token)}`,
+    token,
+  );
+}
+
+/** Un campo del pagador, tal y como dLocal lo pide. Las regex son SUYAS. */
+export type CampoDePagador = {
+  name: string;
+  type: "TEXT" | "COMBO_BOX" | "NUMBER" | "PHONE" | "DATE" | string;
+  /** ⚠️ La escribe dLocal. Aquí NO se inventa ninguna (ni dígitos de control). */
+  regex?: string;
+  readOnly?: boolean;
+  values?: { displayName: string; value: string }[];
+};
+
+/**
+ * Qué datos exige dLocal para pagar con ESE método en ESE país, con sus regex.
+ *
+ * ⚠️ ES LA FUENTE DE VERDAD DE LOS CAMPOS DEL PAGADOR, y por eso el formulario
+ * no lleva ni una regex nuestra. Medido para EC (métodos 531 y 743, idénticos):
+ * `clientFirstName` `^[^\d]{1,128}$` · `clientLastName` igual ·
+ * `clientDocumentType` COMBO_BOX con un solo valor (`CI`) ·
+ * `clientDocument` `^(\d{9,11}|\d{12,14})$` · `clientEmail` `^\S+@\S+$`.
+ *
+ * ⚠️ Y DESMIENTE DOS COSAS QUE SE DIERON POR MEDIDAS (las dos, el 9-sep-2026):
+ *
+ *   1. **El `confirm` NO pasa sin `clientDocumentType`.** Sin él responde
+ *      `400 {"errorCode":908,"errorMessage":"Missing fields","causeMessage":
+ *      "Missing field: clientDocumentType"}`. El dictado §2 dice que el tipo de
+ *      documento «no hace falta (medido)»; contra este sandbox, hace falta.
+ *   2. **Y no son tres campos en casi ningún país.** El tipo se rellena solo
+ *      cuando dLocal ofrece UNA sola opción, y eso solo pasa en EC (`CI`).
+ *      Medido pidiendo el mismo endpoint por país:
+ *          EC → CI                    AR → DNI, CUIT, CUIL
+ *          BR → CPF, CNPJ             CL → RUN, RUT, CI
+ *          MX → CURP, RFC, IFE
+ *      O sea que en AR, BR, CL y MX el comprador ve CUATRO campos, y la lista
+ *      que trae el SDK de dLocal Go hardcodeada (`{MX:["CURP"], CL:["RUN","RUT"]}`)
+ *      **no coincide con lo que contesta su API**. Manda la API.
+ */
+export async function camposDelPagador(
+  token: string,
+  metodoId: number,
+): Promise<{ processCountry: string | null; fields: CampoDePagador[] }> {
+  return await checkoutFetch<{ processCountry: string | null; fields: CampoDePagador[] }>(
+    "GET",
+    `/v1/checkout/payment_method/${metodoId}`,
+    token,
+  );
+}
+
+/**
+ * Paso 2 · fija el método de pago de la sesión, con lo que el BIN de la tarjeta
+ * acaba de decir. `brand` y `type` salen de `getBinInformation()` del SDK.
+ *
+ * Sin esto, el paso 3 responde 406 «Missing payment method».
+ */
+export async function fijarMetodoDePago(
+  token: string,
+  marca: { brand: string; type: string },
+): Promise<void> {
+  await checkoutFetch("POST", "/v1/checkout/prepare-confirm", token, marca);
+}
+
+/**
+ * Paso 3 · empuja el cobro.
+ *
+ * 🔴 NO ACREDITA NADA. Lo que esta respuesta diga es solo lo que hay que
+ * enseñarle a la persona: quien pone `payments` en `paid` es el webhook y solo
+ * el webhook (regla de oro 2, dictado §6).
+ *
+ * `redirectUrl` es el 3DS del banco emisor —la excepción inevitable al «siempre
+ * dentro» del dictado— y `url` es el comprobante de un medio en efectivo.
+ */
+export type ConfirmacionDeCheckout = {
+  /** `SUCCESS`, `PENDING`, … tal como lo nombra dLocal. */
+  status?: string;
+  /** El 3DS. Si viene, hay que navegar ahí. */
+  redirectUrl?: string;
+  /** A dónde nos devolvería SU checkout. No se usa: la vuelta es nuestra. */
+  successUrl?: string;
+  /** Comprobante de un medio en efectivo/voucher. */
+  url?: string;
+  iframe?: boolean;
+  externalId?: string;
+  paymentId?: string;
+};
+
+export async function confirmarCheckout(
+  token: string,
+  valores: Record<string, string>,
+): Promise<ConfirmacionDeCheckout> {
+  return await checkoutFetch<ConfirmacionDeCheckout>(
+    "POST",
+    "/v1/checkout/confirm",
+    token,
+    valores,
+  );
+}
+
+/**
+ * LA CLAVE PÚBLICA DEL TOKENIZADOR DE TARJETAS.
+ *
+ * ⚠️ NO ES NUESTRA. Es de la plataforma dLocal Go: está hardcodeada en su propio
+ * SDK (`static.dlocalgo.com/dlocalgo.min.js`, una constante por ambiente) y es
+ * la misma para todos sus comercios. No hay variable de entorno que ponerle
+ * porque no hay nada que configurar, y por eso tampoco es un `NEXT_PUBLIC_*`:
+ * viaja en la respuesta del checkout, como la publicable de Stripe.
+ *
+ * ⚠️ Y NO ES `DLOCALGO_SMARTFIELDS_KEY`. Esa clave está en `.env.local` y **no
+ * tokeniza** (medido): `dlocal(<esa clave>)` no consigue un token de tarjeta.
+ * Tenerla ahí es lo que hizo pensar que la tokenización era cosa nuestra.
+ *
+ * El ambiente sale del host, igual que todo lo demás en este archivo.
+ */
+const SMARTFIELDS_SANDBOX = "9dffb0de-42f0-4115-9fa7-2615c2fb5c88";
+const SMARTFIELDS_LIVE = "b458948f-a54c-4981-9ea7-c74a9d7e4184";
+
+export function clavePublicaDeSmartFields(): string {
+  return dlocalgoEsProduccion() ? SMARTFIELDS_LIVE : SMARTFIELDS_SANDBOX;
+}
+
+/*
+ * ⚠️ AQUÍ NO VIVE LA URL DEL SDK DEL NAVEGADOR, y no es un olvido: este fichero
+ * es `server-only`, así que un componente cliente no puede importarla. Vive en
+ * `components/checkout/dlocal-embed.tsx`, que deduce el ambiente comparando la
+ * clave que le llega con la de sandbox. Van emparejadas —la clave de sandbox
+ * contra `js-sandbox.dlocal.com`, la de producción contra `js.dlocal.com`— y
+ * cruzarlas da un token que el otro ambiente no reconoce.
+ */
 
 /**
  * ── PAYOUTS (C2) ────────────────────────────────────────────────────────────
@@ -732,9 +1001,8 @@ export function fechaDePayout(p: PayoutDlocalGo): number {
  *       AR → ALIAS, CBU · BR → CHECKING, SAVINGS · CL → CHECKING, SAVINGS, VISTA
  *       EC · MX · PE · PY · UY → CHECKING, SAVINGS
  *   · `beneficiary_address_street` / `_city` son obligatorios EN PERÚ
- *     (`400 Missing required field: beneficiary.address.street`). No están en
- *     este tipo porque `tutor_payout_accounts` no guarda dirección: PE no puede
- *     cobrar hasta que alguien la pida y la guarde. Se deja dicho aquí.
+ *     (`400 Missing required field: beneficiary.address.street`). Se mandan
+ *     desde el 10-sep-2026: salen de las columnas de dirección que pidió Wise.
  *
  * ⚠️ Y HAY UN MÍNIMO: `400 {"code":7000,"message":"Minimum amount for create a
  * payout is 1 USD"}`. Se evalúa en USD sobre el importe ya convertido, o sea que
@@ -758,6 +1026,18 @@ export type NuevoPayoutDlocalGo = {
   bank_account_type?: string | null;
   /** Obligatorio para la API aunque el país no lo use: `""` vale, faltar no. */
   bank_branch: string;
+  /**
+   * 🔑 OBLIGATORIOS EN PERÚ, opcionales en el resto. Los rellena
+   * `payout_beneficiary()` desde `tutor_payout_accounts`, con `''` cuando el
+   * tutor no los tiene — mismo criterio que `bank_branch`.
+   *
+   * ⚠️ Aquí ponía que NO estaban en este tipo «porque `tutor_payout_accounts` no
+   * guarda dirección: PE no puede cobrar hasta que alguien la pida y la
+   * guarde». Se guarda desde el 7-sep-2026, cuando la pidió Wise. Lo único que
+   * faltaba era mandarla.
+   */
+  beneficiary_address_street?: string;
+  beneficiary_address_city?: string;
   /**
    * 🔑 LA MARCA. Texto libre, **máximo 255 caracteres** (medido: 289 devuelve
    * `7000 Field description exceeds max length 255`), y viaja de ida y vuelta
@@ -924,4 +1204,35 @@ export function esSaldoInsuficiente(e: DlocalGoError): boolean {
   return /insufficient\s+funds|saldo\s+insuficiente|not\s+enough\s+(funds|balance)/i.test(
     e.message,
   );
+}
+
+/**
+ * ¿El `POST /v1/payments` falló POR PEDIR EL CHECKOUT TRANSPARENTE?
+ *
+ * 🔴 Es la puerta de la red de seguridad, y por eso se reconoce aquí y no con un
+ * `if` suelto: si esto es cierto, el adaptador REPITE la llamada sin
+ * `allow_transparent` y el alumno acaba en el checkout alojado de siempre. Un
+ * transparente que la cuenta no tenga habilitado no puede dejar el sitio sin
+ * cobrar; convierte un checkout roto en el checkout de ayer.
+ *
+ * Dos criterios y ninguno de adorno:
+ *
+ *   · **929** es el código que dLocal documenta como «Transparent Checkout not
+ *     allowed». NO se ha podido provocar contra nuestra cuenta —la tiene
+ *     habilitada, `subType: TRANSPARENT_CHECKOUT`— así que va por su código y no
+ *     por su texto, que no se ha visto nunca.
+ *   · El texto, para lo que sí está medido: `allow_transparent: true` **sin
+ *     `country`** devuelve `400 {"code":5000,"message":"Empty country not allowed
+ *     for transparent checkout"}`. Ese 5000 es un código genérico de validación,
+ *     así que aquí solo lo salva la palabra «transparent».
+ *
+ * ⚠️ Lo que NO entra: `5010 Payment Method not available` (ES, US) ni
+ * `5000 The 'country' is invalid or unsupported` (VE). Medido: esos dos fallan
+ * IGUAL sin `allow_transparent`, o sea que no son culpa del transparente sino
+ * países que dLocal no cobra — y ahí el respaldo correcto no es su checkout
+ * alojado, es Stripe. Reintentarlos sin el parámetro solo gastaría una llamada
+ * para volver a fallar y retrasaría la cadena.
+ */
+export function esTransparenteNoPermitido(e: DlocalGoError): boolean {
+  return e.code === 929 || /transparent/i.test(e.message);
 }
