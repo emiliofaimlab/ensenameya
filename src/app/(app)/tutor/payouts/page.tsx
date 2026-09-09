@@ -1,3 +1,5 @@
+import { headers } from "next/headers";
+
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
@@ -17,8 +19,6 @@ import { TutorShell } from "@/components/layout/tutor-shell";
 import { avisoDeImporteAproximado } from "@/lib/payments/dlocal-provider";
 import { WithdrawButton } from "./withdraw-button";
 import { PayoutAccountForm } from "./payout-account-form";
-import { cuentaConectadaLista } from "@/lib/stripe";
-import { ConnectAlta } from "./connect-alta";
 import { PaypalConectar } from "./paypal-conectar";
 import { PayoutManualForm } from "./payout-manual-form";
 import { MetodosDeCobro, type TarjetaMetodo } from "./metodos-de-cobro";
@@ -60,17 +60,18 @@ const MONEDA_DEL_SALDO = "USD";
 /**
  * `payouts.provider` → cómo se llama esa vía para el tutor.
  *
- * ⚠️ dLocal y Wise dicen lo MISMO, y no es una omisión: los dos le ingresan en
- * su cuenta bancaria y qué corresponsal usamos nosotros no es información suya.
- * Es la misma decisión que hace que la lista de arriba tenga UNA tarjeta de
- * banco y no dos.
+ * 🔑 LOS TRES RIELES DE BANCO DICEN LO MISMO, y no es una omisión: dLocal, Wise
+ * y Stripe le ingresan en su cuenta bancaria, y qué corresponsal usamos
+ * nosotros no es información suya. Es la misma decisión que hace que la lista
+ * de arriba tenga UNA tarjeta de banco y no tres, y es literalmente lo que
+ * pide el dictado: «el tutor JAMÁS se enterará» de quién ejecutó.
  *
  * Cierra el hueco que el Figma pedía (204:23, «Transferencia bancaria · DLocal»)
  * y que este fichero llevaba marcado como «llega con el PSP real (EP-20)»:
  * `payouts.provider` tiene `grant select` para `authenticated` desde que existe.
  */
 const VIA: Record<string, string> = {
-  stripe: "Cuenta bancaria vía Stripe",
+  stripe: "Transferencia bancaria",
   dlocal: "Transferencia bancaria",
   wise: "Transferencia bancaria",
   paypal: "PayPal",
@@ -162,10 +163,21 @@ const monograma = (nombre: string) => {
  *     Ahora es `rielesDelPais()`, que va por `ruta_de_pago()` — la misma
  *     función que usa `payoutProviderFor`, así que las dos no pueden discrepar.
  *
- * 4 · **Una tarjeta por MÉTODO, no por familia de dato.** dLocal y Wise leen la
- *     misma fila de `tutor_payout_accounts` y le ingresan en la misma cuenta:
- *     son una sola tarjeta. Los canales manuales, en cambio, son uno por
+ * 4 · **Una tarjeta por MÉTODO, no por familia de dato.** dLocal, Wise y Stripe
+ *     leen la misma fila de `tutor_payout_accounts` y le ingresan en la misma
+ *     cuenta: son una sola tarjeta. Los canales manuales, en cambio, son uno por
  *     tarjeta, porque para el tutor Zinli y Zelle son dos sitios distintos.
+ *
+ * ── Y LO QUE CAMBIÓ EL 9/10-SEP-2026 CON EL DICTADO ────────────────────────
+ *
+ * 5 · **Se fue la tarjeta de «Cuenta bancaria vía Stripe»** y con ella la
+ *     familia 'conectada' entera. El tutor ve DOS tarjetas automáticas —PayPal
+ *     y Banco— y detrás de Banco compiten los tres rieles sin que él lo sepa.
+ *     `docs/DICTADO-PAGOS.md` §3.
+ *
+ * 6 · **El banco alcanza a 55 países, no a 9.** `payout_country_rules` se abrió
+ *     por FORMATO —`iban` cubre 31 de golpe— en vez de país a país, así que un
+ *     tutor español, estadounidense o panameño ya ve su formulario.
  */
 export default async function TutorPayoutsPage() {
   // Mismo guard que el resto del panel: fila en `tutor_profiles`. Con
@@ -199,18 +211,18 @@ export default async function TutorPayoutsPage() {
     tutorTier(supabase, userId),
     supabase
       .from("tutor_profiles")
-      .select("payout_country, stripe_connect_account_id")
+      .select("payout_country")
       .eq("profile_id", userId)
       .maybeSingle(),
     supabase
       .from("payout_country_rules")
       .select(
-        "country, currency, account_label, account_help, account_types, account_patterns, document_patterns, requires_branch, branch_pattern, wise_account_type",
+        "country, currency, account_label, account_help, account_types, account_patterns, document_patterns, requires_branch, branch_pattern, branch_label, branch_help, wise_account_type",
       ),
     supabase
       .from("tutor_payout_accounts")
       .select(
-        "country, beneficiary_first_name, beneficiary_last_name, beneficiary_document_type, bank_code, bank_account_last4, bank_account_type, bank_branch, updated_at, beneficiary_address_line, beneficiary_city, beneficiary_postcode, beneficiary_phone",
+        "country, beneficiary_first_name, beneficiary_last_name, beneficiary_document_type, bank_code, bank_account_last4, bank_account_type, bank_branch, updated_at, beneficiary_address_line, beneficiary_city, beneficiary_state, beneficiary_postcode, beneficiary_phone",
       )
       .eq("tutor_id", userId)
       .maybeSingle(),
@@ -249,28 +261,35 @@ export default async function TutorPayoutsPage() {
   const paisDeCobro = perfil?.payout_country ?? null;
 
   /**
-   * ¿Puede la cuenta conectada del tutor recibir YA?
+   * 🔑 LA IP DEL TUTOR, para sellar la aceptación de condiciones (decisión D-1).
    *
-   * ⚠️ NO SE DEDUCE DE TENER UN `acct_…` GUARDADO: un tutor con el alta
-   * TERMINADA veía «Alta en Stripe» y un botón que le ofrecía «continuar» algo
-   * que ya había acabado. Quien lo sabe es Stripe, así que se le pregunta — una
-   * llamada, y solo si hay cuenta que preguntar.
+   * Stripe exige `tos_acceptance.ip` junto con la fecha, y el navegador no puede
+   * decir la suya: lo que él mandara sería lo que él quisiera. Se resuelve aquí,
+   * en el servidor, de la cabecera que pone el proxy.
+   *
+   * ⚠️ `x-forwarded-for` puede traer una CADENA de direcciones («cliente, proxy1,
+   * proxy2»). La del cliente es la PRIMERA. Quedarse con la cadena entera
+   * guardaría una `inet` inválida y la RPC reventaría al castear.
+   *
+   * `null` si no hay cabecera (en local, por ejemplo). Entonces la casilla no
+   * sella nada y el tutor sigue cobrando por sus otras vías: es mejor perder una
+   * ruta que guardar un consentimiento sin poder probar de dónde vino.
    */
-  const cuentaConectada = perfil?.stripe_connect_account_id ?? null;
+  const cabeceras = await headers();
+  const ipDelTutor =
+    cabeceras.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    cabeceras.get("x-real-ip")?.trim() ||
+    null;
 
-  // Las dos en segunda vuelta porque las dos dependen del perfil de arriba —
-  // pero NO una de la otra, y encadenadas eran dos peldaños: el enrutador va a
-  // la base y la cuenta conectada va a la API de Stripe, que es el viaje más
-  // lento de la pantalla.
   // 🔑 `rielesDelPais`: lo que se puede hacer por ESTE país, preguntándoselo al
   // enrutador.
-  const [{ rieles, familias: familiasDelPais }, connectLista] =
-    await Promise.all([
-      rielesDelPais(paisDeCobro),
-      cuentaConectada
-        ? cuentaConectadaLista(cuentaConectada).then((r) => r.lista)
-        : Promise.resolve(false),
-    ]);
+  //
+  // ⚠️ AQUÍ HABÍA UNA SEGUNDA LLAMADA, A LA API DE STRIPE, para saber si la
+  // cuenta conectada del tutor podía recibir ya. Se fue con la tarjeta: el
+  // dictado del 9-sep-2026 elimina el alta de Connect de esta pantalla, así que
+  // no hay nada que preguntarle a Stripe. De paso desaparece el viaje más lento
+  // que tenía este render.
+  const { rieles, familias: familiasDelPais } = await rielesDelPais(paisDeCobro);
 
   /**
    * ⚠️ Se miran los `error`, no solo los `data` (regla de oro 10). Un
@@ -287,10 +306,14 @@ export default async function TutorPayoutsPage() {
     errorCuenta ?? errorReglas ?? errorCanales ?? errorDestinos ?? errorPref,
   );
 
-  // La regla del país. Son las nueve filas de `payout_country_rules`
-  // (AR BR CL CO EC MX PE PY UY); Venezuela no está ni va a estar, y España
-  // todavía no —el día que tenga una con `wise_account_type='iban'`, la tarjeta
-  // de banco aparece sola sin tocar este fichero.
+  // La regla del país. Son las 55 filas de `payout_country_rules` desde el
+  // 10-sep-2026 — antes eran nueve y este comentario decía «y España todavía
+  // no». Ya sí: se abrieron por FORMATO (`iban` cubre 31 países de una vez), y
+  // por eso la tarjeta de banco de un tutor español aparece sin tocar este
+  // fichero, que era justo lo que este comentario prometía.
+  //
+  // Venezuela no está ni va a estar: es el único país que no alcanzan ni Wise,
+  // ni dLocal, ni Stripe, y por eso cobra por canal manual.
   const regla =
     (paisDeCobro
       ? ((reglas ?? []) as ReglaDePais[]).find((r) => r.country === paisDeCobro)
@@ -308,8 +331,10 @@ export default async function TutorPayoutsPage() {
   const pideBanco = familias.includes("banco");
 
   // El catálogo de bancos, solo del país que toca y solo si hace falta: son
-  // hasta 213 filas (Ecuador), y traer los 612 de los ocho países para enseñar
-  // uno sería mandar el catálogo entero al navegador en cada visita.
+  // hasta 213 filas (Ecuador), y traer el catálogo entero para enseñar uno
+  // sería mandarlo al navegador en cada visita. ⚠️ La mayoría de los países que
+  // se abrieron el 10-sep NO tienen catálogo de bancos: su formato es un IBAN o
+  // un BIC que el tutor teclea, así que aquí no hay nada que traer.
   const { data: bancosData } =
     pideBanco && regla
       ? await supabase
@@ -439,28 +464,6 @@ export default async function TutorPayoutsPage() {
       };
     }
 
-    if (m.clave === "stripe") {
-      return {
-        clave: "stripe",
-        nombre: "Cuenta bancaria vía Stripe",
-        logo: LOGOS.stripe ?? null,
-        monograma: "ST",
-        descripcion: "Te das de alta en Stripe y ellos te ingresan en tu banco.",
-        automatico: m.automatico,
-        listo: connectLista,
-        detalle: connectLista
-          ? "Alta terminada · tu cuenta puede recibir pagos"
-          : cuentaConectada
-            ? "Alta empezada · te falta terminarla en Stripe"
-            : null,
-        aviso: null,
-        subtarea: null,
-        // Con Connect no hay formulario que pintar: el tutor le da sus
-        // coordenadas a Stripe, no a nosotros.
-        conectar: true,
-      };
-    }
-
     // ⚠️ LOS CANALES MANUALES NO LLEVAN DESCRIPCIÓN EN LA TARJETA, y no se
     // pierde nada: `payout_manual_channels.help` —que es donde vive la
     // explicación buena, y es DATO— ya se pinta dentro del formulario, justo
@@ -534,33 +537,11 @@ export default async function TutorPayoutsPage() {
           bancos={bancos}
           cuenta={cuenta}
           paisDeclarado={paisDeCobro}
+          ipDelTutor={ipDelTutor}
           etiquetaPais={nombrePais(paisDeCobro)}
             etiquetaPaisGuardado={cuenta ? nombrePais(cuenta.country) : null}
           />
         </>
-      );
-    } else if (m.clave === "stripe") {
-      /**
-       * ⚠️ EL `key` NO ES DECORATIVO: apaga el aviso de React que esta pantalla
-       * llevaba tirando a la consola en cada carga («Each child in a list should
-       * have a unique key prop … Check the render method of MetodosDeCobro. It
-       * was passed a child from TutorPayoutsPage»).
-       *
-       * El elemento se crea AQUÍ, se guarda en un objeto y se pinta allí dentro
-       * de una lista de hermanos (la estrella y él), así que React lo reconcilia
-       * como parte de un array sin que la validación de JSX lo haya visto nunca
-       * como hijo literal. Medido: con `key` en los dos `acciones`, cero avisos;
-       * ponerlo en los `<p>` del formulario —la sospecha razonable— no cambiaba
-       * nada. Cualquier `acciones[...]` que se añada mañana necesita el suyo.
-       */
-      acciones.stripe = (
-        <ConnectAlta
-          key="stripe"
-          yaTieneCuenta={Boolean(cuentaConectada)}
-          lista={connectLista}
-          esLaUnicaVia={metodos.length === 1}
-          compacto
-        />
       );
     } else if (m.clave === "paypal") {
       // ⚠️ NI UN CAMPO DE CORREO. Aquí se pintaba `PayoutManualForm` debajo del
@@ -640,9 +621,20 @@ export default async function TutorPayoutsPage() {
    */
   const destinoDelRiel = (provider: string | null): string | null => {
     if (!provider) return null;
-    if (provider === "dlocal" || provider === "wise" || provider === "banco-manual")
+    // 🔑 Stripe entra aquí desde el dictado: es un riel de banco más, así que
+    // enseña los últimos cuatro de la MISMA cuenta que dLocal y Wise. Antes
+    // devolvía null porque el dinero salía por Connect y nosotros no teníamos
+    // sus coordenadas — ahora sí, porque las teclea el tutor en nuestro
+    // formulario. Sin esto, un pago ejecutado por Stripe aparecía en el
+    // historial sin destino, que se lee como «no sabemos a dónde fue».
+    if (
+      provider === "dlocal" ||
+      provider === "wise" ||
+      provider === "stripe" ||
+      provider === "banco-manual"
+    )
       return cuenta ? `····${cuenta.bank_account_last4}` : null;
-    if (provider === "stripe" || provider === "simulated") return null;
+    if (provider === "simulated") return null;
     return destinoDe(provider)?.handle_masked ?? null;
   };
 
@@ -752,7 +744,18 @@ export default async function TutorPayoutsPage() {
               >
                 {moneyLine(balance.available)}
               </span>
-              <WithdrawButton disabled={!hasAvailable} />
+              {/* 🔑 SE MIRAN LAS DOS COSAS: que haya saldo Y que haya por dónde
+                  pagarlo. Antes solo miraba el saldo, y eso creaba órdenes que
+                  ningún riel podía ejecutar: se quedaban en 'scheduled' para
+                  siempre, sin fallar y sin avisar a nadie. Es el mismo fallo
+                  silencioso que documenta `riel-viable.ts`, un piso más arriba.
+
+                  `hayAlgunaLista` ya está calculado unas líneas antes para
+                  decidir el texto del aviso; aquí solo se reusa. */}
+              <WithdrawButton
+                disabled={!hasAvailable || !hayAlgunaLista}
+                hasBalance={hasAvailable}
+              />
             </dd>
           </dl>
         </PanelCard>

@@ -134,7 +134,7 @@ export type DestinosParaPagar = DestinoManual[] | null;
  * ramas son todas de pago A MANO (`ejecuta === 'persona'`) y Connect lo ejecuta
  * el proveedor. Los `familia === "banco"` de aquí simplemente no casan.
  */
-export type FamiliaDeDato = "banco" | "identificador" | "conectada";
+export type FamiliaDeDato = "banco" | "identificador";
 
 /**
  * El beneficiario de UN payout, tal y como lo devuelve

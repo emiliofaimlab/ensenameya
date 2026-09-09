@@ -1,4 +1,3 @@
-import type { PillTone } from "@/components/layout/panel-shell";
 
 /**
  * B1 · Los datos con los que se le paga al tutor — la mitad que vive en el
@@ -47,10 +46,22 @@ export type ReglaDePais = {
   requires_branch: boolean;
   branch_pattern: string | null;
   /**
+   * 🔑 CÓMO SE LLAMA EN ESTE PAÍS el segundo dato bancario. Con 9 países era
+   * siempre «la sucursal»; con 55 es el sort code británico, la ruta ACH
+   * estadounidense, el BSB australiano, el IFSC indio o el BIC. Vive en la
+   * tabla y no en el componente por lo mismo que `account_label`: el texto que
+   * lee el tutor y la regla que lo valida (`branch_pattern`) tienen que poder
+   * cambiar juntos. `null` cuando el país no pide segundo dato.
+   */
+  branch_label: string | null;
+  branch_help: string | null;
+  /**
    * `null` = por este país no se puede pagar con transferencia internacional
    * (Wise), y no es un hueco pendiente: lo dice la columna homónima de
-   * `payout_country_rules` (`20260907120000`), medida corredor a corredor. Hoy
-   * solo CO, AR, MX, CL y UY la tienen puesta.
+   * `payout_country_rules`, medida corredor a corredor dando de alta
+   * destinatarios de verdad contra la API de Wise. ⚠️ Aquí ponía «Hoy solo CO,
+   * AR, MX, CL y UY la tienen puesta»: desde el 10-sep-2026 son **51 de las 55
+   * filas**. Los cuatro sin Wise son BR, EC, PE y PY, que cobran por dLocal.
    *
    * Aquí NO se usa para rutear nada —eso lo decide el servidor con
    * `wise_puede_pagar_a()`— sino para no prometerle a un tutor de Brasil una vía
@@ -97,6 +108,13 @@ export type CuentaEnmascarada = {
    */
   beneficiary_address_line: string | null;
   beneficiary_city: string | null;
+  /**
+   * 🔑 EL ESTADO O PROVINCIA. Lo exigen Wise para Estados Unidos (`aba`) y
+   * Australia (`australian`) —medido: `422 "Please enter a state."`, y 200 con
+   * él— y no lo pide ningún otro corredor. Nullable como sus vecinos: los ocho
+   * países de dLocal cobran sin él.
+   */
+  beneficiary_state: string | null;
   beneficiary_postcode: string | null;
   beneficiary_phone: string | null;
 };
@@ -257,9 +275,16 @@ export function validarCuenta(
 
   if (regla.requires_branch) {
     const suc = valores.sucursal.trim();
-    if (!suc) return "Falta la sucursal, que en este país es obligatoria.";
+    // ⚠️ EL MENSAJE NOMBRA EL CAMPO QUE EL TUTOR TIENE DELANTE. Aquí ponía
+    // «Falta la sucursal, que en este país es obligatoria» para los 55 países, y
+    // desde que la tabla se abrió al mundo eso era falso en la mayoría: a un
+    // tutor británico no le falta una sucursal, le falta su sort code. Un error
+    // que nombra un campo que no está en pantalla es un tutor que no sabe qué
+    // corregir, y por tanto un tutor que no cobra.
+    const rotulo = regla.branch_label ?? "sucursal";
+    if (!suc) return `Falta el dato «${rotulo}», que en tu país es obligatorio.`;
     if (regla.branch_pattern && !new RegExp(regla.branch_pattern).test(suc)) {
-      return "La sucursal no tiene el formato correcto.";
+      return `El dato «${rotulo}» no tiene el formato correcto.`;
     }
   }
 
@@ -388,107 +413,18 @@ function enumera(partes: string[]): string {
   return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
 }
 
-/**
- * El estado que se pinta en «Cuenta de cobro», arriba, junto a «País de cobro»
- * y «Retención». R29-03b: se dice en qué estado está el cobro sin pintar un
- * "Banco BBVA ····1234" que no existe.
+/*
+ * ⚠️ AQUÍ VIVÍA `estadoDeLaCuenta()`, Y SE BORRÓ POR DOS MOTIVOS A LA VEZ.
  *
- * Los estados no son decorativos: son situaciones distintas que el tutor tiene
- * que poder distinguir — y la de «país declarado cambiado después de registrar
- * la cuenta» es la única que nadie ve venir.
+ * Era código muerto desde antes del dictado —su única aparición en un `grep`
+ * era su propia declaración— y además su rama principal era la del riel
+ * 'conectada', o sea el alta de Stripe Connect que el dictado del 9-sep-2026
+ * elimina de la pantalla del tutor. Resucitarla obligaría a reescribirla
+ * entera, así que no se conserva «por si acaso».
  *
- * ⚠️ AQUÍ SE DECIDÍA POR `paisServible: boolean`, Y ESO SOLO VALÍA MIENTRAS HUBO
- * UN ÚNICO RIEL. Un booleano contesta «¿podemos pagar allí?»; lo que esta
- * función necesita saber desde el 2-sep es **cómo** se paga allí, porque son dos
- * datos guardados en dos tablas distintas y con dos formas de nombrarlos
- * («Banco Provincial ····1234» frente a «Zelle ····1234»). Por eso entra
- * `riel`, que se deriva del dato (`payment_routing_rules.payout_provider`) y no
- * de una lista de países en este fichero.
+ * Lo que de verdad pinta el estado de cada tarjeta vive en
+ * `src/app/(app)/tutor/payouts/metodos-de-cobro.tsx`.
  */
-export function estadoDeLaCuenta(args: {
-  paisDeclarado: string | null;
-  /** `null` = hoy no podemos pagar en ese país por ninguna vía. */
-  riel: RielDeCobro | null;
-  /** Riel bancario: lo guardado en `tutor_payout_accounts`. */
-  cuenta: CuentaEnmascarada | null;
-  nombreDelBanco: string | null;
-  /** Riel manual: lo guardado en `tutor_manual_payout_destinations`. */
-  destinos: DestinoManualEnmascarado[];
-  /** `channel` → `label` del catálogo. Un canal desconocido se cae a su clave. */
-  etiquetaDeCanal: (channel: string) => string;
-  /** `nombrePais`, inyectado: este módulo no lo importa (ver la cabecera). */
-  nombreDePais: (code: string) => string;
-  /**
-   * Riel 'conectada': ¿puede la cuenta del tutor recibir YA? Lo dice Stripe, no
-   * nuestra base —tener un `acct_…` guardado no significa que el alta esté
-   * terminada—, así que lo resuelve quien llama.
-   */
-  conectada?: boolean;
-}): { tone: PillTone; pill: string; detalle: string | null } {
-  const {
-    paisDeclarado,
-    riel,
-    cuenta,
-    nombreDelBanco,
-    destinos,
-    etiquetaDeCanal,
-    nombreDePais,
-    conectada = false,
-  } = args;
-
-  if (!paisDeclarado) {
-    return { tone: "amber", pill: "Falta el país", detalle: null };
-  }
-  if (!riel) {
-    return { tone: "amber", pill: "Pendiente", detalle: null };
-  }
-
-  // Connect: aquí no hay nada guardado de nuestro lado que mirar — lo que
-  // decide si el tutor puede cobrar vive EN STRIPE. Por eso entra `conectada`,
-  // que la pantalla resuelve preguntándoselo.
-  //
-  // ⚠️ Antes esto devolvía SIEMPRE «Alta en Stripe», también a quien ya la había
-  // terminado: se le decía que le faltaba algo cuando no le faltaba nada, y el
-  // botón de al lado le ofrecía «continuar» un alta ya completa.
-  if (riel === "conectada") {
-    return conectada
-      ? { tone: "green", pill: "Conectada", detalle: "Tu cuenta de Stripe puede recibir pagos." }
-      : { tone: "amber", pill: "Falta el alta", detalle: null };
-  }
-
-  if (riel === "identificador") {
-    if (destinos.length === 0) {
-      return { tone: "amber", pill: "Sin datos", detalle: null };
-    }
-    // Se listan TODOS, no solo el primero: el tutor puede tener varios y quien
-    // paga elige mirando la lista, así que enseñarle uno sería enseñarle una
-    // decisión que no se ha tomado. `handle_masked` ya viene enmascarado de la
-    // BD; aquí no se recorta nada más.
-    return {
-      tone: "green",
-      pill: "Registrado",
-      detalle: destinos
-        .map((d) => `${etiquetaDeCanal(d.channel)} ${d.handle_masked}`)
-        .join(" · "),
-    };
-  }
-
-  if (!cuenta) {
-    return { tone: "amber", pill: "Sin datos", detalle: null };
-  }
-  if (cuenta.country !== paisDeclarado) {
-    return {
-      tone: "red",
-      pill: "Revisar",
-      detalle: `Tus datos son de ${nombreDePais(cuenta.country)} y ahora cobras en ${nombreDePais(paisDeclarado)}.`,
-    };
-  }
-  return {
-    tone: "green",
-    pill: "Registrada",
-    detalle: `${nombreDelBanco ?? cuenta.bank_code} · ${enmascarar(cuenta.bank_account_last4)}`,
-  };
-}
 
 /* ══════════════════════════════════════════════════════════════════════════
  * C2m · LA OTRA MITAD: el destino de cobro que NO es una cuenta bancaria.
@@ -526,7 +462,7 @@ export function estadoDeLaCuenta(args: {
  * necesita saber es qué campos pintar, no quién ejecuta — así que es el mismo
  * par que `FamiliaDeDato` en `@/lib/payments`, del que sale por `payoutCountries()`.
  */
-export type RielDeCobro = "banco" | "identificador" | "conectada";
+export type RielDeCobro = "banco" | "identificador";
 
 /** Una fila de `payout_manual_channels`, tal y como la sirve PostgREST. */
 export type CanalManual = {

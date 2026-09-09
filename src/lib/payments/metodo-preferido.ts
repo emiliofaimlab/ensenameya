@@ -11,16 +11,21 @@
  * El enrutador razona en RIELES (`dlocal`, `wise`, `stripe`, `paypal`,
  * `manual`); el tutor razona en MÉTODOS, que es lo que él reconoce:
  *
- *     'banco'    → los rieles de familia 'banco' (dlocal Y wise)
- *     'stripe'   → el riel 'stripe' (cuenta conectada)
+ *     'banco'    → TODOS los rieles de familia 'banco' (dlocal, wise, stripe)
  *     'paypal'   → el riel 'paypal'
  *     <canal>    → el riel 'manual' con ESE canal ('zinli', 'zelle', 'binance'…)
  *
- * La asimetría importante es la primera: dLocal y Wise leen la MISMA fila de
- * `tutor_payout_accounts` y le ingresan en la MISMA cuenta. Lo único que los
- * separa es qué corresponsal usamos y cuánto nos cuesta — información que el
- * tutor no tiene y que no cambia nada de lo que él recibe. Por eso son UNA
- * tarjeta y no dos.
+ * 🔑 SON DOS MÉTODOS Y NO CUATRO, y esa es la simplificación del dictado del
+ * 9-sep-2026 (`docs/DICTADO-PAGOS.md` §3). Aquí había un tercero, 'stripe', que
+ * era la cuenta conectada de Connect: el tutor se daba de alta EN Stripe y veía
+ * su nombre. Ya no existe — ni el método, ni la tarjeta, ni la familia
+ * 'conectada' que lo sostenía.
+ *
+ * Los tres rieles de banco leen la MISMA fila de `tutor_payout_accounts` y le
+ * ingresan en la MISMA cuenta. Lo único que los separa es qué corresponsal
+ * usamos y cuánto nos cuesta — información que el tutor no tiene y que no
+ * cambia nada de lo que él recibe. Por eso son UNA tarjeta y no tres, y por eso
+ * su historial dice «Transferencia bancaria» en los tres casos.
  *
  * ── LA PREFERENCIA REORDENA, NO DECIDE ──────────────────────────────────────
  *
@@ -43,7 +48,7 @@ import type { RielMinimo } from "./riel-viable.ts";
  * inventado se comporta como cualquier preferencia sin candidato — no reordena
  * nada — que es exactamente el fallo seguro que documenta la migración.
  */
-export const METODOS_FIJOS = ["banco", "stripe", "paypal"] as const;
+export const METODOS_FIJOS = ["banco", "paypal"] as const;
 
 /** El riel 'manual' es el único de identificador que NO es PayPal. */
 export function esCanalManual(metodo: string): boolean {
@@ -61,10 +66,8 @@ export function esCanalManual(metodo: string): boolean {
 export function rielSirveAlMetodo(riel: RielMinimo, metodo: string | null): boolean {
   if (!metodo) return false;
   switch (riel.dato) {
-    case "conectada":
-      return metodo === "stripe";
     case "banco":
-      // dLocal y Wise a la vez, a propósito: ver la cabecera.
+      // dLocal, Wise y Stripe a la vez, a propósito: ver la cabecera.
       return metodo === "banco";
     case "identificador":
       // Misma asimetría que en `rielSirveParaEsteTutor`: el riel de PayPal
@@ -142,15 +145,13 @@ export function metodosDelPais(args: {
     const deLaFamilia = rieles.filter((r) => r.dato === familia);
     if (deLaFamilia.length === 0) continue;
 
-    if (familia === "conectada") {
-      metodos.push({ clave: "stripe", familia, canal: null, automatico: true });
-      continue;
-    }
-
     if (familia === "banco") {
-      // UNA tarjeta para dLocal y Wise. Automática si alguno de los dos lo es:
-      // hoy los dos lo son, y `banco-manual` ya no está en ninguna fila de
-      // ruteo desde `20260903190000`.
+      // 🔑 UNA SOLA TARJETA PARA dLocal, WISE Y STRIPE. Es el punto 3b del
+      // dictado: el tutor teclea sus datos bancarios una vez y el motor elige
+      // el riel más barato que cubra su país. Él no ve a ninguno de los tres.
+      //
+      // Automática si alguno lo es: hoy lo son todos, y `banco-manual` ya no
+      // está en ninguna fila de ruteo desde `20260903190000`.
       metodos.push({
         clave: "banco",
         familia,
