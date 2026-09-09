@@ -263,12 +263,29 @@ function ChecklistStep({
   const id = `verif-paso-${n}`;
   return (
     <PanelCard className="p-0">
+      {/*
+        Verónica 3-sep (móvil, 390): «ajustar texto para que no se divida así».
+        La cabecera era UNA fila flex —icono · texto · píldora · chevrón— y por
+        debajo de `sm` la píldora «Empezado, sin enviar» (150 px) más el chevrón
+        le dejaban a la columna de texto 70 px: medido, el título salía en 5
+        líneas y el resumen en 6, palabra por palabra, y la cabecera medía 292
+        px. `flex-wrap` no ayudaba porque la columna es `flex-1` y "cabe" en
+        cualquier ancho.
+
+        Por debajo de `sm` es una REJILLA de dos filas: [icono · texto · chevrón]
+        arriba y la píldora debajo, en la columna del texto (`col-start-2`) —
+        que es donde el Figma pone la píldora de estado de la tarjeta de
+        verificación (TU-ConfigPerfil, `Aprobado` bajo el texto, no al lado).
+        Desde `sm:` vuelve el flex de siempre y las clases de rejilla (`col-*`,
+        `row-*`, `justify-self-*`) no tienen efecto en un contenedor flex, así
+        que el escritorio queda exactamente igual (R1).
+      */}
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
         aria-controls={id}
-        className="flex w-full flex-wrap items-center gap-3 p-5 text-left"
+        className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 p-5 text-left sm:flex sm:flex-wrap sm:gap-3"
       >
         <span
           className={cn(
@@ -291,13 +308,18 @@ function ChecklistStep({
           </span>
           <span className="block text-[12.5px] text-[#6b6b6b]">{summary}</span>
         </span>
-        <StatusPill tone={state.tone}>
+        {/* Segunda fila bajo `sm`, alineada con el texto; `justify-self-start`
+            para que no se estire a todo el ancho de la celda. */}
+        <StatusPill
+          tone={state.tone}
+          className="col-start-2 row-start-2 justify-self-start"
+        >
           {state.label}
         </StatusPill>
         <ChevronDownIcon
           aria-hidden
           className={cn(
-            "size-4 shrink-0 text-[#6b6b6b] transition-transform",
+            "col-start-3 row-start-1 size-4 shrink-0 text-[#6b6b6b] transition-transform",
             open && "rotate-180",
           )}
         />
@@ -411,7 +433,15 @@ export function VerificationForm({
   const [tipoNuevo, setTipoNuevo] = useState("");
   const nuevoRef = useRef<HTMLInputElement>(null);
 
-  const filled = links.filter((l) => l.platform || l.url.trim());
+  /**
+   * Filas que cuentan: las que tienen ENLACE escrito. Una fila con plataforma
+   * elegida y el enlace en blanco se ignora, como la vacía del todo. Antes
+   * contaba (`l.platform || l.url.trim()`) y `cleanLinks` la rechazaba con
+   * «no es una URL válida»; se deshacía volviendo el selector a «Plataforma…»,
+   * y desde el 3-sep esa opción ya no se puede elegir (Verónica): sin esto, la
+   * fila 1 —que no tiene «Quitar»— dejaba al tutor sin forma de terminar.
+   */
+  const filled = links.filter((l) => l.url.trim());
   const linksDirty =
     JSON.stringify(filled.map((l) => ({ ...l, url: l.url.trim() }))) !==
     JSON.stringify(socials);
@@ -827,7 +857,14 @@ export function VerificationForm({
             onChange={(e) => setTipoNuevo(e.target.value)}
             className="h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[260px]"
           >
-            <option value="">¿Qué documento subes?</option>
+            {/* Verónica 3-sep: «de este selector la primera opción no debería
+                poder elegirse». Es un placeholder, no un tipo de documento:
+                `disabled` lo deja gris y no elegible en la rueda de iOS, y
+                sigue siendo la opción que se muestra cuando `tipoNuevo` es ""
+                (React marca `selected` por valor, también en una deshabilitada). */}
+            <option value="" disabled>
+              ¿Qué documento subes?
+            </option>
             {/* Un solo hijo de texto por opción: `<option>` no admite varios. */}
             {disponibles.map((d) => (
               <option key={d.type} value={d.type}>
@@ -926,7 +963,13 @@ export function VerificationForm({
                 onChange={(e) => setLink(i, { platform: e.target.value })}
                 className="h-[45px] w-full rounded-[8px] border border-input bg-muted px-3 text-sm text-[#333333] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-[190px]"
               >
-                <option value="">Plataforma…</option>
+                {/* Mismo patrón que el selector de documentos (Verónica 3-sep):
+                    el placeholder no se elige. Antes era la única forma de
+                    "deshacer" una plataforma elegida sin enlace; ahora esa fila
+                    simplemente no cuenta — ver `filled`. */}
+                <option value="" disabled>
+                  Plataforma…
+                </option>
                 {SOCIAL_PLATFORMS.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.label}

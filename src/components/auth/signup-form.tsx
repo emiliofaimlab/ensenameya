@@ -229,7 +229,11 @@ export function SignupForm({
             onClick={() => setIntent(opt.value)}
             aria-pressed={intent === opt.value}
             className={cn(
-              "rounded-lg px-3 py-2 text-sm transition-colors",
+              // `min-h-10` solo por debajo de `lg`: el conmutador medía 34 px
+              // de alto y es el primer control del alta en un teléfono (el
+              // diálogo que abre «Crear cuenta gratis»). Desde 1024 se queda
+              // en los 34 publicados (R1).
+              "rounded-lg px-3 py-2 text-sm transition-colors max-lg:min-h-10",
               intent === opt.value
                 ? "bg-card font-semibold text-foreground shadow-sm"
                 : "font-medium text-muted-foreground hover:text-foreground",
@@ -333,7 +337,11 @@ export function SignupForm({
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               aria-pressed={showPassword}
-              className="absolute top-1/2 right-3 -translate-y-1/2 text-[13px] font-medium text-muted-foreground hover:text-foreground"
+              /* El área tocable era la de la palabra (48x18). `min-h-10` con
+                 `px-2 -mr-2` la lleva a 40 px de alto sin mover ni un píxel el
+                 texto: el padding crece hacia dentro y el margen negativo lo
+                 compensa. El `pr-20` del input sigue dejándole sitio. */
+              className="absolute top-1/2 right-3 -mr-2 flex min-h-10 -translate-y-1/2 items-center px-2 text-[13px] font-medium text-muted-foreground hover:text-foreground"
             >
               {showPassword ? "Ocultar" : "Mostrar"}
             </button>

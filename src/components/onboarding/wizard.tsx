@@ -148,11 +148,26 @@ export function WizardDone({
 
       {children}
 
+      {/*
+        `replace`, no `push` (Verónica 3-sep: «me apareció 2 veces el "tu
+        perfil está listo y en revisión"»). Reproducido en dev: «Ir a mi panel»
+        apilaba el panel SOBRE el asistente, así que un «atrás» desde el panel
+        —en iOS, el gesto de deslizar— devolvía al asistente por su último paso:
+        el caché del router conserva el `initialStep` con el que se pintó por
+        última vez (5, tras el `router.refresh()` del guardado), la pantalla
+        volvía a ser «Repasa y termina» con su «Finalizar», y pulsarlo
+        celebraba otra vez. Con `replace` el panel ocupa el sitio del asistente
+        en el historial: «atrás» desde el panel lleva a donde se estaba ANTES
+        de entrar al asistente, que es lo que `finish()` ya prometía al quitar
+        el `?paso=` («la pantalla de cierre no es un paso»).
+      */}
       <Button
         asChild
         className="mt-2 h-[49px] rounded-[10px] px-6 font-semibold"
       >
-        <Link href={href}>{cta}</Link>
+        <Link href={href} replace>
+          {cta}
+        </Link>
       </Button>
     </div>
   );

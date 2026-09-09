@@ -71,7 +71,13 @@ function DialogContent({
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
               variant="ghost"
-              className="absolute top-2 right-2"
+              /* `size-10` con `-m-1.5` por debajo de `sm`: el botón medía 28 px
+                 y es el único modo de cerrar el diálogo con el pulgar (el alta
+                 que abre «Crear cuenta gratis» es un diálogo). Los 6 px de
+                 margen negativo compensan el crecimiento por los dos lados, así
+                 que la X no se mueve ni un píxel; solo crece su área. Desde
+                 `sm` se queda el botón publicado. */
+              className="absolute top-2 right-2 max-sm:-m-1.5 max-sm:size-10"
               size="icon-sm"
             >
               <XIcon />

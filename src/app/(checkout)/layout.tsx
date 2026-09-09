@@ -71,7 +71,41 @@ export default function CheckoutLayout({
       </div>
 
       <main className="flex flex-1 flex-col">
-        <div className="mx-auto w-full max-w-[1120px] flex-1 px-4 py-8 sm:px-6">
+        {/*
+          Verónica 3-sep (móvil): «el botón de stripe sale encima del botón de
+          pago». Esa píldora negra «stripe ›» NO es nuestra ni del formulario:
+          es el distintivo de MODO PRUEBA que stripe.js inyecta cuando la clave
+          publicable es `pk_test_…` — un iframe `elements-inner-easel` fijo en
+          la esquina inferior derecha (medido: 123×72 px, `z-index: 99999`). Con
+          claves *live* no existe, así que en producción no se verá. Pero en
+          las previews sí, y tapaba el extremo del botón «Pagar» del iframe de
+          Stripe cuando la página está al final: quedaban 48 px entre el pie
+          del formulario y el pie de la página, y el recuadro de la píldora
+          ocupa 72 → 24 px de solape sobre el botón (medido a 390 y 375).
+
+          El pie del contenedor pasa de 32 a 80 px (`pb-20`): con la página al
+          final, el iframe del formulario termina en 747 y el recuadro de la
+          píldora empieza en 772 — 25 px de aire, medido a 390 y a 375. Con los
+          32 px de antes terminaba en 795 y se cruzaban 23 px en vertical (90
+          en horizontal a 390): la esquina de la píldora sobre el extremo del
+          botón, que es justo la captura de Verónica.
+
+          Llega hasta `lg` y no solo hasta `sm` porque a 768 pasaba lo mismo
+          —medido: 11 px de solape horizontal y los mismos 23 en vertical— y
+          una tableta es tan móvil como un teléfono para esto. Desde `lg` se
+          restituye el `py-8` de siempre y el escritorio no se toca (R1).
+          ⚠️ A 1024 justos la píldora SÍ sigue pisando la esquina del botón (82
+          × 23 px): a ese ancho la columna del formulario llega casi al borde
+          derecho y la píldora cae encima. No se arregla aquí a propósito —sería
+          cambiar el escritorio, que Verónica no pidió—; a 1280 ya no se cruzan
+          (−33 px en horizontal). Si algún día se quiere, es cambiar `lg:` por
+          `xl:` en esta misma línea.
+
+          Va en el layout y no en la pantalla porque el mismo formulario —y la
+          misma píldora— se monta también en `/reservas/[id]/pagar` y
+          `/pedidos/[id]/pagar`.
+        */}
+        <div className="mx-auto w-full max-w-[1120px] flex-1 px-4 pt-8 pb-20 sm:px-6 lg:pb-8">
           {children}
         </div>
       </main>
