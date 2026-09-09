@@ -84,11 +84,19 @@ function ConfirmDialog({
 }
 
 /**
- * US-606 (SCR-TU07b) — Aceptar naranja 102×43 / Rechazar outline (200:62).
+ * US-606 (SCR-TU07b) — Aceptar naranja / Rechazar outline (200:62).
  * `respond_booking` agenda las sesiones al aceptar y reembolsa al rechazar.
  *
  * Aceptar no pregunta (es la acción esperada y se puede cancelar después);
  * rechazar sí, porque devuelve el 100 % y no tiene vuelta atrás.
+ *
+ * ⚠️ Los botones miden 36 px y no los 43 del Figma (102×43), porque la TARJETA
+ * para la que se dibujaron ya no existe: §4.3 del paquete aprobado la sustituye
+ * por una FILA de una línea, donde estos dos comparten renglón con la cuenta
+ * atrás (26 px) y con los botones-icono de G-04 (36 px). A 43 px la fila crecía
+ * a 67 px de alto y rompía el ritmo de la lista. Es la única llamada del
+ * proyecto —y la del dashboard, que es igual de compacta—, así que se cambia el
+ * componente en vez de añadir un `size` que nadie pediría al otro valor.
  */
 export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
   const router = useRouter();
@@ -111,11 +119,11 @@ export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
   }
 
   return (
-    <div className="flex flex-wrap gap-3">
+    <div className="flex gap-2">
       <Button
         disabled={busy}
         onClick={() => respond(true)}
-        className="h-[43px] rounded-[8px] px-6 font-semibold"
+        className="h-9 rounded-[8px] px-3.5 text-[12.5px] font-semibold"
       >
         Aceptar
       </Button>
@@ -123,7 +131,7 @@ export function AcceptRejectButtons({ bookingId }: { bookingId: string }) {
         variant="outline"
         disabled={busy}
         onClick={() => setConfirming(true)}
-        className="h-[43px] rounded-[8px] px-6 text-[#4d4d4d]"
+        className="h-9 rounded-[8px] px-3.5 text-[12.5px] text-[#4d4d4d]"
       >
         Rechazar
       </Button>

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
-import { LandmarkIcon } from "lucide-react";
+import { LandmarkIcon, StarIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { StatusPill } from "@/components/layout/panel-shell";
@@ -61,31 +61,46 @@ export type TarjetaMetodo = {
 };
 
 /**
- * 🔑 POR DÓNDE QUIERE COBRAR EL TUTOR — el radiogroup.
+ * 🔑 «MIS CUENTAS» — las formas de cobro del tutor y cuál es la predeterminada.
  *
- * ── POR QUÉ SON RADIOS DE VERDAD Y NO DIVS CON `role="radio"` ───────────────
+ * ── SE FUE EL RADIO, Y EL MOTIVO NO ES ESTÉTICO (§5.4) ──────────────────────
  *
- * Porque un `<input type="radio">` dentro de su `<label>` ya trae gratis lo que
- * un div hay que reimplementar mal: el nombre accesible es la etiqueta entera,
- * las flechas recorren el grupo, Espacio marca, y el estado lo anuncia el
- * navegador sin un solo `aria-checked` escrito a mano. Lo único que se estiliza
- * es el borde de la tarjeta.
+ * Cada fila tenía DOS controles para DOS decisiones distintas —un radio a la
+ * izquierda («¿es esta mi preferida?») y un botón a la derecha («¿la
+ * configuro?»)— y la izquierda pesaba más que la derecha justo al revés de lo
+ * que importa: una cuenta sin conectar no puede ser preferida de nada. Ahora la
+ * fila enseña primero lo que hay que hacer («Conectar» / «Configurar») y la
+ * preferencia es una ESTRELLA que solo existe en las cuentas ya completas.
  *
- * ── Y POR QUÉ EL BOTÓN DE «AÑADIR» VA FUERA DE LA ETIQUETA ──────────────────
+ * ── LA ESTRELLA ES UN BOTÓN CON `aria-pressed`, NO UN RADIO DISFRAZADO ──────
  *
- * Porque un `<button>` dentro de un `<label>` hereda su clic: pulsar «Editar»
- * en la tarjeta de PayPal cambiaría la preferencia del tutor a PayPal sin que
- * él lo pidiera. Son dos cosas independientes —cuál prefiero y cuál estoy
- * rellenando— y aquí se modelan como dos controles, no como uno con dos
- * significados.
+ * Es un grupo de botones de dos estados, no un grupo de opciones excluyentes en
+ * un formulario: el cambio se guarda al pulsar, no al enviar nada. `aria-pressed`
+ * anuncia «predeterminada / no predeterminada» sin reimplementar el recorrido
+ * con flechas que un radiogroup trae hecho y que aquí no aplica —las tarjetas
+ * también llevan botón y formulario, así que el foco tiene que poder entrar en
+ * ellas una por una.
+ *
+ * Volver a pulsar la que ya está marcada no hace nada (no la «desmarca»): sin
+ * preferida el enrutador vuelve a decidir solo, y eso es un estado al que se
+ * llega por no haber elegido nunca, no por deshacer.
+ *
+ * ── EL BOTÓN DE «CONFIGURAR» NUNCA CAMBIÓ LA PREFERENCIA ────────────────────
+ *
+ * Cuando el radio vivía dentro del `<label>`, un `<button>` ahí dentro habría
+ * heredado su clic: pulsar «Editar» en PayPal habría cambiado la preferencia
+ * sin pedirlo. Por eso iba fuera. Con el radio fuera el riesgo desaparece, pero
+ * la separación se mantiene: cuál prefiero y cuál estoy rellenando siguen
+ * siendo dos cosas.
  *
  * ── ELEGIR UNA SIN TERMINAR NO ROMPE NADA ───────────────────────────────────
  *
  * El enrutador REORDENA candidatos con esta preferencia y después aplica sus
- * tres filtros de siempre, así que marcar PayPal sin conectar la cuenta no deja
- * ninguna orden atascada: se cae al siguiente riel que sí pueda pagarle. Por eso
- * la pantalla lo dice en voz alta abajo («mientras tanto te pagamos por X») en
- * vez de impedir la elección: prohibirla sería mentir sobre lo que pasa.
+ * tres filtros de siempre, así que una preferencia que hoy no puede pagar no
+ * deja ninguna orden atascada: se cae al siguiente riel que sí pueda. Ya no se
+ * puede llegar a ese estado desde aquí —la estrella solo sale en las completas—
+ * pero sí se puede haber llegado antes (una cuenta que se desconectó después),
+ * y por eso el aviso de abajo sigue existiendo.
  */
 export function MetodosDeCobro({
   tarjetas,
@@ -115,15 +130,15 @@ export function MetodosDeCobro({
   const [abierta, setAbierta] = useState<string | null>(null);
 
   async function elegir(clave: string) {
+    // Volver a pulsar la estrella ya rellena no desmarca: ver la cabecera.
     if (clave === elegida) return;
     const anterior = elegida;
     setElegida(clave);
     setGuardando(true);
-    // Una tarjeta a medias se abre sola al elegirla: el siguiente paso del tutor
-    // es rellenarla, y hacerle buscar el botón sería un clic de castigo. Las de
-    // conectar no se abren porque no tienen nada que abrir.
-    const t = tarjetas.find((x) => x.clave === clave);
-    if (t && !t.listo && !t.conectar) setAbierta(clave);
+    // Ya no se abre ningún formulario al marcar. Antes tenía sentido —se podía
+    // elegir una tarjeta a medias y lo siguiente era rellenarla—, pero la
+    // estrella solo aparece en las que ya están completas: no queda nada que
+    // abrir, y abrir algo sería un salto que el tutor no pidió.
 
     const supabase = createClient();
     const { data: sesion } = await supabase.auth.getUser();
@@ -177,50 +192,31 @@ export function MetodosDeCobro({
 
   return (
     <div>
-      <ul
-        role="radiogroup"
-        aria-label="Forma de cobro preferida"
-        className="mt-4 grid gap-2.5"
-      >
+      <ul aria-label="Tus cuentas de cobro" className="mt-4 grid gap-2.5">
         {tarjetas.map((t) => {
           const marcada = elegida === t.clave;
           const desplegada = abierta === t.clave;
           return (
             <li
               key={t.clave}
-              className={cn(
-                "rounded-[12px] border bg-card transition-colors",
-                marcada
-                  ? "border-brand shadow-[0_0_0_1px_var(--brand)]"
-                  : "border-[#e0e0e0] hover:border-[#949494]",
-              )}
+              // Borde neutro también en la predeterminada: quien lo dice es la
+              // estrella. Un borde azul más el icono serían dos marcas para lo
+              // mismo, y la azul se confundiría con «la que estoy editando».
+              className="rounded-[12px] border border-[#e0e0e0] bg-card transition-colors hover:border-[#949494]"
             >
               <div className="flex flex-wrap items-center gap-3 p-3.5 sm:flex-nowrap sm:gap-4">
-                <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 sm:gap-4">
-                  <input
-                    type="radio"
-                    name="metodo-de-cobro"
-                    className="size-5 shrink-0 accent-brand"
-                    checked={marcada}
-                    disabled={guardando}
-                    onChange={() => elegir(t.clave)}
-                  />
+                <div className="flex min-w-0 flex-1 items-center gap-3 sm:gap-4">
                   {/* El logo OFICIAL de la marca, en SU color. El azulejo se
-                      queda neutro —y no se tiñe al marcarse— porque un logo
-                      recoloreado deja de ser el logo: lo que dice «elegida» es
-                      el borde de la tarjeta y el radio, no la marca ajena.
+                      queda neutro porque un logo recoloreado deja de ser el
+                      logo: lo que dice «predeterminada» es la estrella, no la
+                      marca ajena.
 
                       ⚠️ Va con `mask` y no con `<img>`: los SVG de simple-icons
                       no traen `fill`, así que un `<img>` los pintaría negros. El
                       fichero pone la forma y `logos.ts` el color. */}
                   <span
                     aria-hidden="true"
-                    className={cn(
-                      "grid size-10 shrink-0 place-items-center rounded-[10px] border",
-                      marcada
-                        ? "border-[#b6dbff] bg-white"
-                        : "border-[#ececec] bg-[#fafafa]",
-                    )}
+                    className="grid size-10 shrink-0 place-items-center rounded-[10px] border border-[#ececec] bg-[#fafafa]"
                   >
                     {t.logo && !t.logo.color ? (
                       // Logo que ya trae sus colores: se pinta tal cual. Una
@@ -261,10 +257,12 @@ export function MetodosDeCobro({
                       <strong className="text-sm font-semibold text-[#19191f]">
                         {t.nombre}
                       </strong>
+                      {/* «Sin conectar» y no «Sin configurar» (§5.4): es la
+                          palabra que usa la acción de la propia fila. */}
                       {t.listo ? (
                         <StatusPill tone="green">Completo</StatusPill>
                       ) : (
-                        <StatusPill tone="gray">Sin configurar</StatusPill>
+                        <StatusPill tone="gray">Sin conectar</StatusPill>
                       )}
                       {/* Nunca un plazo: de la velocidad de estos rieles no hay
                           ni una medida. Automático o a mano sí es un hecho. */}
@@ -287,24 +285,65 @@ export function MetodosDeCobro({
                       </span>
                     ) : null}
                   </span>
-                </label>
+                </div>
 
-                {/* 🔑 Los de conectar NO despliegan nada: su única acción es
-                    el botón que los lleva a PayPal o a Stripe, y va aquí, donde
-                    los otros tienen «Configurar». Esconderlo detrás de un
-                    desplegable sería un clic de más para llegar a lo mismo. */}
-                {t.conectar ? (
-                  <span className="shrink-0">{acciones[t.clave] ?? null}</span>
-                ) : (
-                  <button
-                    type="button"
-                    aria-expanded={desplegada}
-                    onClick={() => setAbierta(desplegada ? null : t.clave)}
-                    className="h-11 shrink-0 rounded-[8px] border border-[#949494] bg-card px-4 text-[13px] font-semibold text-[#19191f] transition-colors hover:bg-[#f5f5f5]"
-                  >
-                    {desplegada ? "Cerrar" : t.listo ? "Editar" : "Configurar"}
-                  </button>
-                )}
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* 🔑 LA ESTRELLA, SOLO EN LAS CUENTAS COMPLETAS (§5.4).
+                      Vacía = se puede marcar; rellena = es la predeterminada, y
+                      hay una sola. En una cuenta sin conectar no se pinta: no
+                      hay nada que preferir hasta que pueda cobrar. */}
+                  {t.listo ? (
+                    <button
+                      type="button"
+                      aria-pressed={marcada}
+                      aria-label={
+                        marcada
+                          ? `${t.nombre}: es tu cuenta predeterminada`
+                          : `Marcar como predeterminada: ${t.nombre}`
+                      }
+                      title={
+                        marcada
+                          ? "Es tu cuenta predeterminada. Lo intentamos por aquí primero."
+                          : "Marcar como predeterminada"
+                      }
+                      disabled={guardando}
+                      onClick={() => elegir(t.clave)}
+                      className={cn(
+                        "grid size-11 shrink-0 place-items-center rounded-[8px] border transition-colors disabled:opacity-60",
+                        marcada
+                          ? "border-[#e8d5a8] bg-[#fdf7e6] text-[#a67314]"
+                          : "border-[#e0e0e0] bg-card text-[#949494] hover:border-[#949494] hover:text-[#a67314]",
+                      )}
+                    >
+                      <StarIcon
+                        aria-hidden
+                        className="size-[18px]"
+                        strokeWidth={2}
+                        // Rellena solo la predeterminada: es la diferencia que
+                        // se lee de un vistazo en una lista de cinco.
+                        fill={marcada ? "currentColor" : "none"}
+                      />
+                    </button>
+                  ) : null}
+
+                  {/* 🔑 Los de conectar NO despliegan nada: su única acción es
+                      el botón que los lleva a PayPal o a Stripe, y va aquí,
+                      donde los otros tienen «Configurar». Esconderlo detrás de
+                      un desplegable sería un clic de más para llegar a lo
+                      mismo. */}
+                  {t.conectar ? (
+                    acciones[t.clave] ?? null
+                  ) : (
+                    <button
+                      type="button"
+                      aria-expanded={desplegada}
+                      onClick={() => setAbierta(desplegada ? null : t.clave)}
+                      className="h-11 shrink-0 rounded-[8px] border border-[#949494] bg-card px-4 text-[13px] font-semibold text-[#19191f] transition-colors hover:bg-[#f5f5f5]"
+                    >
+                      {desplegada ? "Cerrar" : t.listo ? "Editar" : "Configurar"}
+                    </button>
+                  )}
+                </div>
               </div>
 
               {t.aviso ? (

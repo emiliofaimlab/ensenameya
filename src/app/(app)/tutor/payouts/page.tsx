@@ -33,7 +33,7 @@ import {
 } from "@/lib/payout-account";
 import { formatPct, tutorTier } from "../tier";
 
-export const metadata = { title: "Payouts · Enséñame Ya" };
+export const metadata = { title: "Mis pagos · Enséñame Ya" };
 
 /** Píldoras del Figma (204:9/19/30): color por estado del payout. */
 const PAYOUT_PILL: Record<string, PillTone> = {
@@ -90,6 +90,29 @@ const fmtDate = (iso: string) =>
     month: "short",
     year: "numeric",
   });
+
+/**
+ * §5.1 · EL DÍA DEL PRÓXIMO LOTE, CALCULADO Y NO ESCRITO.
+ *
+ * El aviso de arriba nombra un día concreto («el pago del lunes 14»), así que
+ * una fecha en el texto se quedaría mintiendo a la semana siguiente. Sale del
+ * único sitio donde ese día existe de verdad: el `cron.schedule` de
+ * `run-payout-batch`, `0 3 * * 1` desde `20260716140000` — lunes a las 03:00.
+ *
+ * ⚠️ Se cuenta en UTC, que es la hora del cron. Es la única excepción sensata a
+ * la regla de oro 4 en esta frase: el día del lote lo fija el servidor, no la
+ * zona del tutor, y traducirlo a su hora local haría que a un colombiano le
+ * pusiera «domingo» en el aviso de un lote que la plataforma llama «los lunes».
+ */
+function diaDelProximoLote(hoy = new Date()): number {
+  const d = new Date(hoy);
+  // 0 domingo … 1 lunes. Un lunes antes de las 03:00 UTC el lote es HOY; a
+  // partir de esa hora ya corrió y el siguiente es el de dentro de siete días.
+  const esHoy = d.getUTCDay() === 1 && d.getUTCHours() < 3;
+  const dias = esHoy ? 0 : (8 - d.getUTCDay()) % 7 || 7;
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.getUTCDate();
+}
 
 /**
  * Dos letras para el cuadradito de cada tarjeta. NO es el logo de la marca: el
@@ -152,6 +175,7 @@ export default async function TutorPayoutsPage() {
     { data: canalesData, error: errorCanales },
     { data: destinosData, error: errorDestinos },
     { data: prefData, error: errorPref },
+    { data: itemsData, error: errorItems },
   ] = await Promise.all([
     supabase.rpc("tutor_balance"),
     supabase
@@ -189,6 +213,25 @@ export default async function TutorPayoutsPage() {
       .select("method")
       .eq("tutor_id", userId)
       .maybeSingle(),
+    /**
+     * §5.5 (N-27) · DE QUÉ RESERVAS SE COMPONE CADA LIQUIDACIÓN.
+     *
+     * `payouts.amount` es un agregado y hasta hoy la tabla no decía de dónde
+     * salía: el tutor veía «$ 210,00» y no tenía forma de cuadrarlo con sus
+     * clases. `payout_items` es exactamente esa descomposición, y la puede leer
+     * él —`payout_items_select_own` + `grant select … to authenticated`, los
+     * dos desde `20260716140000`—, así que no hace falta ni migración ni RPC.
+     *
+     * Sin `.eq(tutor_id)`: la política filtra por «el payout es tuyo», que es
+     * la misma condición y la aplica el motor. El identificador humano de la
+     * reserva (`booking_ref`) vive AQUÍ y en el detalle, no en la lista de
+     * Reservas (§4.5).
+     */
+    supabase
+      .from("payout_items")
+      .select(
+        "payout_id, amount, payments(bookings(booking_ref, products(title)))",
+      ),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -526,25 +569,111 @@ export default async function TutorPayoutsPage() {
     ...(payouts ?? []).filter((p) => !UPCOMING.has(p.status)),
   ];
 
+  /**
+   * §5.5 · Las reservas de cada liquidación, agrupadas por payout.
+   *
+   * ⚠️ Se mira el `error` (regla de oro 10): con `const { data }` un fallo de
+   * permisos llegaría aquí como lista vacía y la tabla diría «0 reservas» en
+   * una fila de $ 210,00 — la mentira creíble de siempre, y encima sobre
+   * dinero. Si falla, la columna dice «—» y no cuenta nada.
+   */
+  const reservasPorPayout = new Map<
+    string,
+    { ref: string; titulo: string; amount: number }[]
+  >();
+  if (!errorItems) {
+    for (const it of itemsData ?? []) {
+      const booking = it.payments?.bookings;
+      const lista = reservasPorPayout.get(it.payout_id) ?? [];
+      lista.push({
+        // Sin `booking_ref` (las reservas viejas no lo tienen) se cae al guion:
+        // inventar un identificador en una tabla de conciliación es peor que
+        // no ponerlo, porque el tutor lo usaría para escribirnos.
+        ref: booking?.booking_ref ?? "—",
+        titulo: booking?.products?.title ?? "Mentoría",
+        amount: it.amount,
+      });
+      reservasPorPayout.set(it.payout_id, lista);
+    }
+  }
+
+  /**
+   * §5.5 · «Vía · destino»: el riel, y a qué cuenta suya.
+   *
+   * `payouts` NO guarda el destino —ni una columna, ni nada usable en
+   * `provider_metadata`—, así que lo que se puede enseñar es la cuenta que el
+   * tutor tiene registrada HOY para ese riel. Se dice así en el `title` de la
+   * celda en vez de afirmar que fue esa: si cambió de cuenta después de cobrar,
+   * la fila enseñaría la nueva. Con Stripe ni eso — las coordenadas se las dio
+   * a ellos y nosotros no las vemos nunca.
+   */
+  const destinoDelRiel = (provider: string | null): string | null => {
+    if (!provider) return null;
+    if (provider === "dlocal" || provider === "wise" || provider === "banco-manual")
+      return cuenta ? `····${cuenta.bank_account_last4}` : null;
+    if (provider === "stripe" || provider === "simulated") return null;
+    return destinoDe(provider)?.handle_masked ?? null;
+  };
+
+  /** El nombre de la vía. Los canales manuales lo sacan de su fila de catálogo. */
+  const viaDelRiel = (provider: string | null): string =>
+    provider ? (VIA[provider] ?? etiquetaDeCanal(provider)) : "Por decidir";
+
   return (
     <TutorShell
       userId={userId}
-      title="Payouts"
-      description="Lo que ganas se libera 7 días después de cada mentoría y se paga en el lote de los lunes. También puedes retirarlo antes."
+      title="Mis pagos"
+      description="Lo que ganas se libera 7 días después de cada mentoría y se paga cada lunes. También puedes retirarlo antes."
     >
+      {/* §5.1 (H-01) · EL DINERO QUE NO SE VA A PAGAR, ANUNCIADO ARRIBA.
+
+          Hasta hoy esto era una píldora ámbar en la tercera columna de «Cómo
+          cobras»: el tutor tenía saldo listo, no había elegido método, y el
+          lote del lunes iba a salir «Por decidir» sin que nada se lo dijera.
+          Solo aparece cuando las DOS cosas se dan a la vez —hay saldo y no hay
+          método—, que es cuando hay algo que hacer; en cualquier otro estado
+          sería una caja roja permanente, o sea ruido. */}
+      {hasAvailable && !preferida ? (
+        <PanelCard className="border-[1.5px] border-[#f0bfbf] bg-[#fff8f8]">
+          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+            <div className="min-w-0">
+              <p className="text-[15px] font-bold text-[#19191f]">
+                Tienes {moneyLine(balance.available)} listos y aún no elegiste
+                tu método preferido
+              </p>
+              <p className="mt-1 text-[13px] leading-[1.55] text-[#4d4d4d]">
+                El pago del lunes {diaDelProximoLote()} saldrá «por decidir»
+                hasta que elijas uno. Un clic y listo.
+              </p>
+            </div>
+            {/* Ancla, no ruta: la elección se hace en esta misma pantalla. */}
+            <a
+              href="#mis-cuentas"
+              className="inline-flex h-11 shrink-0 items-center rounded-[8px] bg-primary px-5 text-sm font-bold text-white transition-colors hover:bg-primary/90"
+            >
+              Elegir método
+            </a>
+          </div>
+        </PanelCard>
+      ) : null}
+
       {/* Cifras (203:42). El retiro va DENTRO de la tarjeta del saldo: es la
           acción de ese número, y tenerlo en un panel aparte lo separaba de lo
-          único que lo explica. */}
-      <div className="grid gap-4 sm:grid-cols-3">
+          único que lo explica.
+
+          §5.2 · SIN TEXTO BAJO LOS MONTOS. Cada tile llevaba una línea con su
+          regla («7 días desde que la mentoría se completa», «Suma de todas tus
+          liquidaciones pagadas»): decía la norma, no el cuándo, y multiplicada
+          por tres convertía la fila de cifras en un párrafo. La regla del plazo
+          ya está en el subtítulo de la pantalla y la del lote en «Frecuencia».
+          El retiro pasa de botón de texto a círculo azul junto al monto. */}
+      <div id="saldo" className="grid scroll-mt-24 gap-4 sm:grid-cols-3">
         <PanelCard className="border-brand p-5">
           <p className="text-xs text-[#6b6b6b]">Disponible para retirar</p>
-          <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]">
-            {moneyLine(balance.available)}
-          </p>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs text-[#6b6b6b]">
-              {hasAvailable ? "Ya liberado" : "Nada liberado todavía"}
-            </span>
+          <div className="mt-1.5 flex items-center justify-between gap-3">
+            <p className="min-w-0 truncate text-2xl font-bold tabular-nums text-[#19191f]">
+              {moneyLine(balance.available)}
+            </p>
             <WithdrawButton disabled={!hasAvailable} />
           </div>
         </PanelCard>
@@ -553,34 +682,39 @@ export default async function TutorPayoutsPage() {
           <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]">
             {moneyLine(balance.in_retention)}
           </p>
-          <p className="mt-1.5 text-xs text-[#6b6b6b]">
-            7 días desde que la mentoría se completa
-          </p>
         </PanelCard>
         <PanelCard className="p-5">
           <p className="text-xs text-[#6b6b6b]">Ya cobrado</p>
           <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]">
             {moneyLine(balance.paid_out)}
           </p>
-          <p className="mt-1.5 text-xs text-[#6b6b6b]">
-            Suma de todas tus liquidaciones pagadas
-          </p>
         </PanelCard>
       </div>
 
-      {/* Cómo cobras (204:54) — R29-03b. */}
-      <PanelCard>
+      {/* Cómo cobras (204:54) — R29-03b. §5.3 renombra los cuatro rótulos:
+          «País de pago · Frecuencia · Método preferido · Tu nivel». Los de
+          antes («País de cobro», «Cuándo», «Forma preferida») decían lo mismo
+          con palabras distintas de las del menú y del resto del panel. */}
+      <PanelCard id="como-cobras" className="scroll-mt-24">
         <h2 className="text-base font-semibold text-[#19191f]">Cómo cobras</h2>
-        <dl className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.3fr)]">
+        <dl className="mt-4 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.8fr)_minmax(0,1fr)_minmax(0,1.5fr)]">
           <div>
-            <dt className="text-xs text-[#6b6b6b]">País de cobro</dt>
+            <dt className="text-xs text-[#6b6b6b]">País de pago</dt>
             {/* ⚠️ AQUÍ HABÍA UN PÁRRAFO Y AHORA HAY UN ENLACE. Explicaba que el
                 país sale de la zona horaria y que se cambia en la cuenta; tres
                 líneas para decir algo que solo importa cuando el país está mal.
                 Lo que NO se puede quitar es la salida: desde `20260908130000`
                 el tutor no tiene grant sobre `payout_country`, así que sin este
                 enlace uno con el país equivocado no tiene por dónde arreglarlo.
-                La explicación cabe en el `title`; la acción, en una palabra. */}
+                La explicación cabe en el `title`; la acción, en una palabra.
+
+                TODO · DP-6 — «¿se permite un país de pago distinto al de la
+                zona horaria?». Hoy `20260908130000` lo DEDUCE de la zona, y por
+                eso «Cambiar» lleva a `/account` y no abre un selector aquí. El
+                día que la respuesta sea «sí», esto pasa a ser un campo propio y
+                el `title` sobra. No se adelanta: un país de pago editable sin
+                que la regla lo respalde rutearía el dinero a un riel que no
+                llega. */}
             <dd className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm text-[#19191f]">
               {paisDeCobro ? (
                 <>
@@ -602,13 +736,13 @@ export default async function TutorPayoutsPage() {
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-[#6b6b6b]">Cuándo</dt>
-            <dd className="mt-1.5 text-sm text-[#19191f]">
-              Lote semanal, los lunes
-            </dd>
+            <dt className="text-xs text-[#6b6b6b]">Frecuencia</dt>
+            {/* «Cada lunes» y no «Lote semanal, los lunes»: lo de «lote» es
+                vocabulario nuestro, y el rótulo ya dice que es la frecuencia. */}
+            <dd className="mt-1.5 text-sm text-[#19191f]">Cada lunes</dd>
           </div>
           <div>
-            <dt className="text-xs text-[#6b6b6b]">Forma preferida</dt>
+            <dt className="text-xs text-[#6b6b6b]">Método preferido</dt>
             <dd className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
               {preferida ? (
                 <StatusPill tone="blue">
@@ -622,12 +756,39 @@ export default async function TutorPayoutsPage() {
           {/* N-16 — estas cifras ya son NETAS de comisión: sin el reparto, los
               importes no cuadran con lo que pagó el alumno. Etiqueta, no
               control: el nivel lo asigna el admin y el tutor no tiene grant
-              sobre `tier_id`. */}
+              sobre `tier_id`.
+
+              ⚠️ TODO · AB-06 — §5.3 pide el nivel como ESCALERA DE TRES
+              píldoras («Nivel 1 › Nivel 2 › Nivel 3», la actual en azul y las
+              otras en gris, con el reparto de cada una en `title`). Se queda en
+              una sola píldora, la real, y no por pereza: los otros dos escalones
+              hoy no se pueden pintar sin inventarlos, por DOS motivos a la vez.
+
+                1 · Los NOMBRES son la propia AB-06, sin respuesta del cliente.
+                    El dato real ni siquiera dice «Nivel»: el seed de
+                    `20260715170000` los llama «Tier 1/2/3», que es lo que
+                    saldría en pantalla.
+                2 · Los porcentajes de los otros dos no se pueden leer.
+                    `tutor_tiers_select_own` deja al tutor ver SOLO el suyo
+                    (`tp.tier_id = tutor_tiers.id`), así que un «85 %» y un
+                    «90 %» aquí serían el seed copiado a mano — un número de
+                    dinero escrito en el TSX, que es justo lo que la regla de
+                    oro 5 impide en el esquema y no tiene por qué valer en la
+                    vista. Abrir esa lectura es una migración, y este lote no
+                    lleva ninguna.
+
+              Cuando lleguen las dos cosas, la escalera se pinta aquí sin tocar
+              nada más: son tres píldoras sobre la lista de `tutor_tiers`. */}
           {tier ? (
             <div>
               <dt className="text-xs text-[#6b6b6b]">Tu nivel</dt>
               <dd className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#19191f]">
-                <StatusPill tone="blue">{tier.name}</StatusPill>
+                <StatusPill
+                  tone="blue"
+                  title={`Te quedas con el ${formatPct(tier.splitPct)} de cada reserva.`}
+                >
+                  {tier.name}
+                </StatusPill>
                 <span>Te quedas con el {formatPct(tier.splitPct)}</span>
               </dd>
             </div>
@@ -636,11 +797,14 @@ export default async function TutorPayoutsPage() {
 
       </PanelCard>
 
-      {/* 🔑 El radiogroup. */}
-      <PanelCard>
-        <h2 className="text-base font-semibold text-[#19191f]">
-          Cómo quieres cobrar
-        </h2>
+      {/* 🔑 Las cuentas de cobro.
+
+          §5.4 · «Cómo quieres cobrar» → «Mis cuentas», el mismo nombre que su
+          subnivel del menú: el tutor buscaba en la pantalla el rótulo que
+          acababa de pulsar y no estaba. Y con el radio fuera, el título ya no
+          describe una elección sino un sitio, que es lo que es. */}
+      <PanelCard id="mis-cuentas" className="scroll-mt-24">
+        <h2 className="text-base font-semibold text-[#19191f]">Mis cuentas</h2>
 
         {fallaLaCuenta ? (
           <p className="mt-2 max-w-[620px] text-[13px] font-medium text-[#bf3333]">
@@ -675,11 +839,15 @@ export default async function TutorPayoutsPage() {
           </p>
         ) : (
           <>
-            {/* ⚠️ Sin párrafo de introducción. Decía «elige por dónde quieres
-                que te paguemos», que es exactamente lo que ya dice el título de
-                la tarjeta, y remataba con dos frases que la propia lista
-                demuestra: los radios enseñan que se elige UNA y las píldoras,
-                cuáles están completas. Prosa que describe lo que se ve. */}
+            {/* ⚠️ UNA LÍNEA, Y SOLO PORQUE LA ESTRELLA NO SE EXPLICA SOLA.
+                Aquí hubo un párrafo de tres frases que describía lo que se veía
+                («se elige una», «estas están completas»); se fue. Lo que sí
+                hace falta ahora es decir qué significa el icono nuevo, porque
+                una estrella puede ser un favorito, una valoración o un
+                destacado. Es el subtítulo que fija §5.4. */}
+            <p className="mt-1 text-[13px] leading-[1.6] text-[#4d4d4d]">
+              Conecta las que quieras; la estrella marca la predeterminada.
+            </p>
             <MetodosDeCobro
               tarjetas={tarjetas}
               preferida={preferida}
@@ -690,39 +858,45 @@ export default async function TutorPayoutsPage() {
         )}
       </PanelCard>
 
-      {/* Movimientos (204:2 + 204:23, en una sola tabla). */}
-      <PanelCard>
+      {/* Movimientos (204:2 + 204:23, en una sola tabla). §5.5 le añade las dos
+          columnas que faltaban para poder CONCILIAR (N-27): a qué cuenta suya
+          fue el dinero, y de qué reservas se compone el importe. */}
+      <PanelCard id="movimientos" className="scroll-mt-24">
         <h2 className="text-base font-semibold text-[#19191f]">Movimientos</h2>
         {movimientos.length === 0 ? (
           <p className="mt-3 text-[13px] text-[#6b6b6b]">
-            Aquí verás cada liquidación con la vía por la que salió. Todavía no
-            tienes ninguna.
+            Aquí verás cada liquidación con la vía por la que salió y las
+            reservas que la componen. Todavía no tienes ninguna.
           </p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[560px] border-collapse">
+            <table className="w-full min-w-[680px] border-collapse">
               <thead>
                 <tr>
-                  {["Fecha", "Vía", "Estado", "Importe"].map((h, i) => (
-                    <th
-                      key={h}
-                      scope="col"
-                      className={`border-b border-[#e0e0e0] pb-2.5 pr-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6b6b6b] ${
-                        i === 3 ? "pr-0 text-right" : "text-left"
-                      }`}
-                    >
-                      {h}
-                    </th>
-                  ))}
+                  {["Fecha", "Vía · destino", "Reservas", "Estado", "Importe"].map(
+                    (h, i) => (
+                      <th
+                        key={h}
+                        scope="col"
+                        className={`border-b border-[#e0e0e0] pb-2.5 pr-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6b6b6b] ${
+                          i === 4 ? "pr-0 text-right" : "text-left"
+                        }`}
+                      >
+                        {h}
+                      </th>
+                    ),
+                  )}
                 </tr>
               </thead>
               <tbody>
                 {movimientos.map((p) => {
                   const b = PAYOUT_BADGE[p.status];
                   const programado = UPCOMING.has(p.status);
+                  const destino = destinoDelRiel(p.provider);
+                  const reservas = reservasPorPayout.get(p.id) ?? [];
                   return (
                     <tr key={p.id}>
-                      <td className="border-b border-[#efefef] py-3.5 pr-3 text-[13px] text-[#19191f] last:border-b-0">
+                      <td className="border-b border-[#efefef] py-3.5 pr-3 align-top text-[13px] text-[#19191f]">
                         {fmtDate(p.paid_at ?? p.scheduled_for ?? p.created_at)}
                         {programado ? (
                           <span className="mt-0.5 block text-[11.5px] text-[#6b6b6b]">
@@ -730,17 +904,68 @@ export default async function TutorPayoutsPage() {
                           </span>
                         ) : null}
                       </td>
-                      <td className="border-b border-[#efefef] py-3.5 pr-3 text-[13px] text-[#4d4d4d]">
+                      <td
+                        className="border-b border-[#efefef] py-3.5 pr-3 align-top text-[13px] text-[#4d4d4d]"
+                        title={
+                          destino
+                            ? "La cuenta que tienes registrada hoy para esta vía."
+                            : undefined
+                        }
+                      >
                         {/* Un `provider` a null es una orden que todavía no ha
-                            elegido riel: se dice, no se inventa una vía. */}
-                        {p.provider ? (VIA[p.provider] ?? p.provider) : "Por decidir"}
+                            elegido riel: se dice, no se inventa una vía. Y el
+                            destino solo se pinta cuando lo hay — con Stripe no
+                            lo hay nunca, porque esas coordenadas se las quedan
+                            ellos. */}
+                        {viaDelRiel(p.provider)}
+                        {destino ? (
+                          <span className="tabular-nums"> · {destino}</span>
+                        ) : null}
                       </td>
-                      <td className="border-b border-[#efefef] py-3.5 pr-3">
+                      <td className="border-b border-[#efefef] py-3.5 pr-3 align-top text-[13px]">
+                        {/* ⚠️ CERO NO ES «CERO RESERVAS». Si la lectura de
+                            `payout_items` falló, o si esta orden todavía no
+                            tiene líneas, poner «0 reservas» junto a un importe
+                            sería la mentira creíble de la regla de oro 10. */}
+                        {reservas.length === 0 ? (
+                          <span className="text-[#6b6b6b]">—</span>
+                        ) : (
+                          <details className="group">
+                            <summary className="cursor-pointer list-none font-semibold text-[#0068d0] marker:content-none">
+                              {reservas.length}{" "}
+                              {reservas.length === 1 ? "reserva" : "reservas"}
+                              <span
+                                aria-hidden
+                                className="ml-1 inline-block transition-transform group-open:rotate-180"
+                              >
+                                ▾
+                              </span>
+                            </summary>
+                            <ul className="mt-2 grid gap-1.5">
+                              {reservas.map((r) => (
+                                <li
+                                  key={`${p.id}-${r.ref}-${r.amount}`}
+                                  className="text-[12.5px] leading-[1.45] text-[#4d4d4d]"
+                                >
+                                  <span className="font-semibold tabular-nums text-[#19191f]">
+                                    {r.ref}
+                                  </span>{" "}
+                                  · {r.titulo} ·{" "}
+                                  <span className="tabular-nums">
+                                    {formatMoney(r.amount, p.currency)}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
+                      </td>
+                      <td className="border-b border-[#efefef] py-3.5 pr-3 align-top">
                         <StatusPill tone={PAYOUT_PILL[p.status] ?? "neutral"}>
                           {b.label}
                         </StatusPill>
                       </td>
-                      <td className="border-b border-[#efefef] py-3.5 text-right text-[13px] font-semibold tabular-nums text-[#19191f]">
+                      <td className="border-b border-[#efefef] py-3.5 text-right align-top text-[13px] font-semibold tabular-nums text-[#19191f]">
                         {formatMoney(p.amount, p.currency)}
                       </td>
                     </tr>
