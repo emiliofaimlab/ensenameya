@@ -168,11 +168,15 @@ configurado. El token **sí tiene su propio campo `Permissions`**: tiene que ser
 de solo lectura es el peor caso, porque pasa la comprobación de configuración, pasa
 `GET /v2/profiles` y pasa el presupuesto — y muere en el tercer paso, el alta del destinatario.
 
-⚠️ **Comprobar «Team members and payment approvals» antes del primer ciclo real.** Si esa cuenta
-tiene **aprobación de pagos activada**, una transferencia creada por API se queda esperando que un
-humano la apruebe, y el adaptador no sabe distinguir eso de un pago en curso: el payout se cuelga
-sin error. Es el mismo tipo de fallo mudo que el `incoming_payment_waiting` por saldo, pero este no
-se destraba fondeando.
+✅ **«Payment approvals» comprobado el 10-sep: no hay, y no puede haber.** Wise exige **dos
+miembros como mínimo** para configurarlas —«to set a payment approval for yourself, you need
+another team member with the permission to approve payments»— y el equipo tiene **un solo miembro**
+(el dueño). O sea que hoy no se pueden activar ni queriendo.
+⚠️ **El riesgo vuelve el día que se añada un segundo miembro** y alguien configure aprobaciones:
+una transferencia creada por API se queda esperando a un humano, y el adaptador no distingue eso de
+un pago en curso — el payout se cuelga **sin error**. Es el mismo tipo de fallo mudo que el
+`incoming_payment_waiting` por saldo, pero este **no se destraba fondeando**. Mirar esto antes de
+dar de alta a nadie en la cuenta de Wise.
 
 El `profileId` no hace falta configurarlo: se descubre con `GET /v2/profiles` y el código elige
 explícitamente el de tipo `BUSINESS`, cayendo al primero solo si no hay ninguno (`perfil()`).
@@ -718,7 +722,7 @@ Todo en **Vercel → Environment Variables → ámbito Production**, salvo donde
 | 1 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` del endpoint creado **en live mode** | idem |
 | 2 | `DLOCALGO_API_KEY` · `DLOCALGO_SECRET_KEY` | credenciales de **producción** | cuenta ya aprobada |
 | 2 | `DLOCALGO_API_BASE` | `https://api.dlocalgo.com` | — |
-| 3 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | app **live** | cliente |
+| 3 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | app **live** | ✅ puestas 10-sep · queda la revisión |
 | 3 | `PAYPAL_API_URL` | `https://api-m.paypal.com` | — |
 | 4 | `WISE_API_TOKEN` | token de producción | ⚠️ leer §7.1 |
 | 5 | `EMAIL_FROM` | `…@ensenameya.com` | verificar dominio en Resend |
@@ -748,6 +752,22 @@ y tratarlo como fallo terminal liberaría el horario de alguien que estaba pagan
 `STRIPE_WEBHOOK_SECRET` es **una sola variable**: no caben la firma de test y la de live a la vez.
 El día del cambio, el endpoint de test empieza a devolver 400 — bórralo cuando el de live esté
 probado, o Stripe lo desactiva solo y deja un aviso confuso en el historial.
+
+### 7.3.1 PayPal: qué está habilitado en live (comprobado 10-sep)
+
+En `developer.paypal.com` → app **live** → *Payment capabilities*: **`Payouts` está marcado** ✅,
+que es la única que necesita esta app — el código llama a `/v1/payments/payouts`. No hace falta
+solicitar nada a PayPal.
+
+⚠️ Están marcadas también **`Subscriptions`** y **`Payment links and buttons`**, y **ninguna se
+usa**: no hay cobros recurrentes ni enlaces de pago. Desmarcarlas sería lo limpio, pero **no
+mientras la app esté en revisión** (hasta 7 días laborables): tocar las capacidades puede reiniciar
+el proceso. Se hace cuando la revisión termine, no antes.
+
+⚠️ **El banner «Contact the merchant to enable PayPal and Venmo» es irrelevante aquí.** Va de
+aceptar PayPal como **método de cobro** en el checkout, y esta app no lo hace: PayPal solo paga.
+Y por cuenta US, cobrar con PayPal vía Stripe tampoco es posible — Stripe solo lo ofrece a
+comercios europeos.
 
 ### 7.4 Orden, y por qué
 
