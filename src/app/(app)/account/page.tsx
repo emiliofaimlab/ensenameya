@@ -35,7 +35,7 @@ export default async function AccountPage() {
     [{ data: profile }, { data: tutorProfile }],
     { data: feedToken },
     { data: estadoBaja },
-    { items, badges },
+    { items, badges, panel },
   ] = await Promise.all([
     Promise.all([
     supabase
@@ -120,7 +120,7 @@ export default async function AccountPage() {
            (10-sep) sería alta en el programa equivocado, sin que se note.
            ⚠️ Puede renderizar `null`: el mosaico cuenta con ello, ver
            `account-form.tsx`. */
-        referidos={<ReferralCard isTutor={items?.[0]?.href === "/tutor"} />}
+        referidos={<ReferralCard isTutor={panel === "tutor"} />}
       />
     </PanelShell>
   );
