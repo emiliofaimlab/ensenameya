@@ -50,6 +50,35 @@ export function loteYaExistente(e: unknown): string | null {
   return null;
 }
 
+/**
+ * 🔴 EL LOTE YA EXISTE PERO PAYPAL NO DICE CUÁL.
+ *
+ * Mismo 400 de `SENDER_BATCH_ID` duplicado, sin el `details[].link` que trae su
+ * id. `loteYaExistente` devuelve `null` ahí —y hace bien: componer la URL a mano
+ * nos dejaría preguntando por un lote que no existe—, pero ese `null` es
+ * indistinguible del de un 400 por cualquier otra cosa, y ahí estaba el fallo:
+ * la orden acababa clasificada como RECHAZADA, o sea «el proveedor no creó
+ * nada», cuando el mensaje dice literalmente lo contrario.
+ *
+ * Con el descenso de rieles (AUD-01) eso pasó de ser un fallo latente a uno
+ * caro: una orden «rechazada» puede bajar al siguiente riel y pagar otra vez el
+ * dinero que este lote ya puede estar pagando.
+ *
+ * Quien pregunta esto tiene que devolver `en-duda`: hay un pago que conciliar y
+ * no lo podemos identificar solos. Es la única salida honesta.
+ */
+export function loteDuplicadoSinEnlace(e: unknown): boolean {
+  if (!(e instanceof PaypalError) || e.status !== 400) return false;
+  const detalles = (e.cuerpo as { details?: Array<Record<string, unknown>> })?.details ?? [];
+  return detalles.some((d) => {
+    if (d.field !== "SENDER_BATCH_ID") return false;
+    const enlaces = (d.link as Array<{ href?: string }> | undefined) ?? [];
+    // Solo los que NO traen enlace: los que lo traen ya los adopta
+    // `loteYaExistente`, que es el camino bueno.
+    return !enlaces[0]?.href;
+  });
+}
+
 /** PayPal habla en unidad mayor con dos decimales. `payouts.amount` es menor. */
 export function aDecimal(amountMinor: number): string {
   return (amountMinor / 100).toFixed(2);

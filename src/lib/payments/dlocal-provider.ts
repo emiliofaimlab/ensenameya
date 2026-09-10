@@ -1011,6 +1011,37 @@ export const dlocalProvider: PspProvider = {
 
       const salida = desenlace(visto, false);
 
+      // ── Camino 1a-bis · ¿Y HAY OTRO PAYOUT VIVO CON ESTA MISMA MARCA? ────────
+      //
+      // 🔴 dLocal Go NO DEDUPLICA POR `description`, así que un reintento tras
+      // un fallo de red puede dejar DOS payouts con la marca `EY-<id>-<intento>`:
+      // el que estamos consultando, rechazado, y otro que sigue vivo y que puede
+      // estar pagando. `barrer()` sabe detectarlo —devuelve `ilegible` con «HAY N
+      // PAYOUTS VIVOS CON LA MARCA … puede ser un pago doble»— pero ESTE camino
+      // no lo consultaba nunca: preguntaba por un id concreto y contestaba
+      // 'rechazado' mirando solo a ese.
+      //
+      // La consecuencia era decirle al tutor que su cobro falló (NTF-16) mientras
+      // el proveedor se lo estaba pagando, y dejar que un `retry` creara un
+      // tercero. Cuesta un listado por rechazo, y los rechazos son raros.
+      //
+      // `en-duda` es la salida correcta: deja la fila en 'processing', no se
+      // reintenta sola jamás y sale en el contador que el job marca «debe ser 0».
+      if (salida.estado === "rechazado") {
+        const bDoble = await barrer(input, marca);
+        if (bDoble.tipo === "ilegible" && bDoble.motivo.includes("PAYOUTS VIVOS")) {
+          return {
+            estado: "en-duda",
+            mensaje: `${bDoble.motivo} (el consultado, ${salida.payoutId ?? "?"}, está rechazado)`,
+            causa: bDoble,
+          };
+        }
+        // Cualquier otro resultado del barrido —incluida una credencial rota o
+        // un listado que no se puede leer— NO cambia el desenlace: el rechazo
+        // que ya tenemos es un dato del proveedor y vale por sí mismo. Esto solo
+        // existe para cazar el segundo payout vivo.
+      }
+
       // ── Camino 1b · REINTENTO DE ADMIN ────────────────────────────────────
       //
       // 🔴 ESTE ES EL BUCLE QUE `manage_payout('retry')` NO PODÍA ROMPER. El
