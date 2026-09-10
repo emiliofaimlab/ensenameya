@@ -145,17 +145,37 @@ Está en `.env.local` por un intento que no funcionó; borrarla no rompe nada.
 | :-- | :-- | :-- | :-- |
 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | ✅ sandbox | ✅ sandbox | ❌ **payout PayPal muerto en prod** |
 | `PAYPAL_API_URL` | ✅ | ✅ | ❌ **hace falta** `https://api-m.paypal.com` |
-| `WISE_API_TOKEN` | ❌ **desactivada 10-sep** — ver abajo | ❌ | ❌ |
+| `WISE_API_TOKEN` | ❌ desactivada 10-sep — ver abajo | ❌ **y así se queda** | ✅ token `ensenameya-prod` (10-sep) |
 | `WISE_PRIVATE_KEY` · `WISE_API_URL` | ❌ | ❌ | ❌ · opcionales |
 
-🔴 **`WISE_API_TOKEN` estaba en `.env.local` y `WISE_API_URL` no** (desactivado el 10-sep; la
-línea sigue ahí comentada con su razón encima, para poder volver a activarla al trabajar en Wise).
-El peligro no era el token, era la asimetría: Y el defecto de `WISE_API_URL`
-es **producción** (`api.transferwise.com`, `lib/payments/wise-provider.ts`), no sandbox — al revés
-que dLocal y PayPal. O sea: **llamar a `/api/cron/payouts-process` en local puede intentar una
-transferencia real** contra la cuenta de Wise de verdad, con los datos de la BD de dev. No es
-teórico y no hay un segundo interruptor que lo pare. Si no estás trabajando en Wise, saca ese
-token de `.env.local`.
+🔴 **Wise NO tiene split sandbox/producción en esta cuenta.** Hay una sola cuenta Wise y una sola
+API, la que mueve dinero real. Y el defecto de `WISE_API_URL` es **producción**
+(`api.transferwise.com`, `lib/payments/wise-provider.ts`), **al revés que dLocal y PayPal**, que
+caen a sandbox cuando les falta su URL. O sea: **no existe un «token de preview»**. Preview no
+lleva token, y eso no es una omisión: es lo único que impide que un PR pague de verdad.
+
+Hasta el 10-sep el token vivía en `.env.local` —en texto plano, `Full access`, sobre una cuenta
+que paga— y `WISE_API_URL` no estaba puesta. Con eso, **llamar a `/api/cron/payouts-process` en
+local podía intentar una transferencia real** con datos de la BD de dev, sin segundo interruptor
+que lo parase. Desactivado ese día; la línea sigue comentada con su razón encima. Si algún día hace
+falta trabajar en Wise en local, se crea un token para eso y **se borra al terminar**: un token por
+sitio, para poder revocar uno sin tumbar el otro.
+
+⚠️ **Dónde está el token en Wise, porque no se encuentra:** `Your Account → Integrations and Tools
+→ API tokens` (`wise.com/your-account/integrations-and-tools/api-tokens`). **No aparece en el menú
+de Settings** —ahí solo está «Accounting integrations»—, y exige tener el login en 2 pasos
+configurado. El token **sí tiene su propio campo `Permissions`**: tiene que ser `Full access`. Uno
+de solo lectura es el peor caso, porque pasa la comprobación de configuración, pasa
+`GET /v2/profiles` y pasa el presupuesto — y muere en el tercer paso, el alta del destinatario.
+
+⚠️ **Comprobar «Team members and payment approvals» antes del primer ciclo real.** Si esa cuenta
+tiene **aprobación de pagos activada**, una transferencia creada por API se queda esperando que un
+humano la apruebe, y el adaptador no sabe distinguir eso de un pago en curso: el payout se cuelga
+sin error. Es el mismo tipo de fallo mudo que el `incoming_payment_waiting` por saldo, pero este no
+se destraba fondeando.
+
+El `profileId` no hace falta configurarlo: se descubre con `GET /v2/profiles` y el código elige
+explícitamente el de tipo `BUSINESS`, cayendo al primero solo si no hay ninguno (`perfil()`).
 
 **Plataforma**
 
