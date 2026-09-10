@@ -13,16 +13,15 @@ import {
   sesionVigente,
 } from "@/lib/booking";
 import { salaDeLaReserva } from "@/lib/room-window";
-import { cn } from "@/lib/utils";
 import {
   AcceptCountdown,
   PanelCard,
-  PanelCounter,
   PanelIconButton,
   StatusPill,
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
+import { PanelFiltro } from "@/components/layout/panel-filtro";
 import { AcceptRejectButtons } from "./booking-actions";
 import { studentsOfTutor, type StudentIdentity } from "../students";
 import { StudentLink } from "../student-link";
@@ -106,7 +105,11 @@ const FILTROS: {
   { id: "todas", label: "Todas", match: () => true },
   { id: "por-aceptar", label: "Por aceptar", match: esPorAceptar },
   { id: "proximas", label: "Próximas", match: esProxima },
-  { id: "completadas", label: "Completadas", match: (b) => b.status === "completed" },
+  {
+    id: "completadas",
+    label: "Completadas",
+    match: (b) => b.status === "completed",
+  },
   {
     id: "canceladas",
     label: "Canceladas",
@@ -114,6 +117,21 @@ const FILTROS: {
   },
   { id: "pasadas", label: "Pasadas", chip: false, match: esPasada },
 ];
+
+/**
+ * Bajo qué chips se ve un trozo de pantalla: los filtros que casan con AL MENOS
+ * una de sus reservas. Sirve para una fila (`filtrosDe([b])`), para un grupo
+ * (`filtrosDe(proximas)`) y para la tarjeta que los envuelve, que es todo lo
+ * que hace falta esconder — el resto lo hace la regla de CSS de `PanelFiltro`.
+ *
+ * ⚠️ Ojo con la tentación de calcularlo en el cliente: se calcula AQUÍ, una vez,
+ * con los mismos predicados que cuentan los chips. Dos definiciones acabarían
+ * discrepando, que es lo que este fichero lleva evitando desde §4.2.
+ */
+const filtrosDe = (rows: Reserva[]) =>
+  FILTROS.filter((x) => rows.some(x.match))
+    .map((x) => x.id)
+    .join(" ");
 
 const BOOKING_PILL: Record<string, PillTone> = {
   confirmed: "green",
@@ -164,25 +182,28 @@ function Valoracion({ rating }: { rating: number }) {
   );
 }
 
-/** Rótulo de grupo (§4.4). El primero no lleva línea: ya la pone la tarjeta. */
+/**
+ * Rótulo de grupo (§4.4).
+ *
+ * ⚠️ Ya no lleva el `primero` que decidía si pintar la línea de separación:
+ * con el filtro en el cliente, «cuál es el primero» cambia sin volver al
+ * servidor. La línea es ahora un elemento propio entre los dos grupos, que se
+ * esconde con el mismo `data-f` que todo lo demás — y le toca `todas`, que es
+ * el único filtro bajo el que PRÓXIMAS y PASADAS se ven a la vez.
+ */
 function RotuloDeGrupo({
   id,
-  primero,
   children,
 }: {
   id: string;
-  primero: boolean;
   children: React.ReactNode;
 }) {
   return (
     <h2
       id={id}
-      className={cn(
-        // `scroll-mt-24` por la cabecera sticky: sin él un salto de ancla deja
-        // el rótulo justo debajo de la barra y parece que no ha pasado nada.
-        "scroll-mt-24 pt-3 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#6b6b6b] uppercase",
-        !primero && "mt-1.5 border-t border-[#e0e0e0]",
-      )}
+      // `scroll-mt-24` por la cabecera sticky: sin él un salto de ancla deja
+      // el rótulo justo debajo de la barra y parece que no ha pasado nada.
+      className="scroll-mt-24 pt-3 pb-1 text-[11px] font-semibold tracking-[0.08em] text-[#6b6b6b] uppercase"
     >
       {children}
     </h2>
@@ -208,6 +229,8 @@ function FilaDeReserva({
   student: StudentIdentity | undefined;
   tz: string;
 }) {
+  // Bajo qué chips se ve esta fila. Ver `filtrosDe` y `PanelFiltro`.
+  const f = filtrosDe([reserva]);
   const cuando = fechaDeReserva(reserva);
   // Mismo criterio que el panel del alumno y que `/reservas`: reserva
   // `confirmed`/`in_progress` y sesión dentro de su ventana de acceso. Aquí
@@ -217,7 +240,10 @@ function FilaDeReserva({
   const rating = valoracionDe(reserva);
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
+    <li
+      data-f={f}
+      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3"
+    >
       {/* N-12 · `flex-1` **y** un mínimo: sin `flex-1` el bloque se dimensiona
           por su contenido y un título largo empuja las acciones fuera; sin el
           mínimo pasa lo contrario en móvil —la rejilla fija se queda sus 192 px
@@ -304,15 +330,14 @@ function fechaDeReserva(b: Reserva): string | null {
  * PRÓXIMAS y PASADAS; y el identificador de reserva sale de la lista (§4.5): en
  * una fila de una línea ocupaba el sitio del dato con el que se decide.
  */
-export default async function TutorReservasPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ f?: string }>;
-}) {
+export default async function TutorReservasPage() {
   const { userId } = await requireTutorProfile();
   const tz = await getUserTimezone();
-  const { f } = await searchParams;
-  const filtro = FILTROS.find((x) => x.id === f) ?? FILTROS[0];
+  // ⚠️ Esta pantalla ya NO lee `searchParams`, y no es un descuido: el filtro
+  // vive en el cliente (`PanelFiltro`). Además de ahorrar las once consultas de
+  // cada clic, deja de meter `?f=` en la clave del segmento de página, así que
+  // los tres enlaces profundos del menú lateral tampoco pagan una navegación
+  // entera para caer en la misma pantalla que ya estaba montada.
 
   const supabase = await createClient();
   // M-02 · aquí había una consulta a `tutor_profiles.auto_accept_bookings` para
@@ -350,13 +375,15 @@ export default async function TutorReservasPage({
   // Regla de oro 10 · si la consulta falla, `data` es `null` y una lista vacía
   // sería una mentira creíble: el tutor leería «no hay reservas» teniendo 30.
   const reservas = (data ?? []) as unknown as Reserva[];
-  const visibles = reservas.filter(filtro.match);
 
-  const porAceptar = visibles.filter(esPorAceptar);
-  const proximas = visibles.filter(esProxima).sort(porProximidad);
+  // Se agrupan TODAS: esconder es cosa del filtro, que ya no vuelve al
+  // servidor. Los tres grupos son excluyentes por construcción (`esPasada` es
+  // «ni por aceptar ni próxima»), así que ninguna reserva se pinta dos veces.
+  const porAceptar = reservas.filter(esPorAceptar);
+  const proximas = reservas.filter(esProxima).sort(porProximidad);
   // §4.4 · las pasadas, la más reciente primero. Las que no tienen sesión
   // quedan al final (cadena vacía) conservando el `created_at desc` del orden.
-  const pasadas = visibles
+  const pasadas = reservas
     .filter(esPasada)
     .sort((a, b) =>
       (fechaDeReserva(b) ?? "").localeCompare(fechaDeReserva(a) ?? ""),
@@ -372,102 +399,93 @@ export default async function TutorReservasPage({
       // cabecera prometía un plazo que a la mayoría de reservas no le toca).
       description="Todas las reservas de tus mentorías, en tu zona horaria."
     >
-      {/* G-03 · chips con contador. Estado en la URL: server-render puro. */}
-      <div className="flex flex-wrap gap-2">
-        {FILTROS.filter((x) => x.chip !== false || x.id === filtro.id).map((x) => {
-          const on = x.id === filtro.id;
-          const total = reservas.filter(x.match).length;
-          return (
-            <Link
-              key={x.id}
-              // Cuál está activo no puede ser solo el fondo azul: sin
-              // `aria-current` un lector de pantalla lee cinco enlaces iguales.
-              aria-current={on ? "page" : undefined}
-              href={
-                x.id === "todas" ? "/tutor/reservas" : `/tutor/reservas?f=${x.id}`
-              }
-              className={cn(
-                "inline-flex h-9 items-center gap-1.5 rounded-full border px-4 text-[13px] transition-colors",
-                on
-                  ? "border-brand bg-brand font-semibold text-white"
-                  : "border-[#e0e0e0] bg-card text-[#6b6b6b] hover:border-brand hover:text-brand",
-              )}
-            >
-              {x.label}
-              {/* Solo «Por aceptar» va en naranja (G-03): es el único chip que
-                  pide algo del tutor; el resto informan. */}
-              <PanelCounter
-                value={total}
-                tone={on ? "activo" : x.id === "por-aceptar" ? "naranja" : "gris"}
-              />
-              {/* El círculo va `aria-hidden` para no ensuciar el nombre del
-                  enlace con un número suelto, pero entonces la cifra se pierde
-                  entera: «Por aceptar» se anunciaba sin el 2. Aquí vuelve, ya
-                  dicha. Condicionado igual que el contador, que a 0 no pinta. */}
-              {total > 0 ? (
-                <span className="sr-only">, {total} reservas</span>
-              ) : null}
-            </Link>
-          );
-        })}
-      </div>
-
-      {error ? (
-        <PanelCard className="border-[#f0bfbf] bg-[#fdf5f5]">
-          {/* «Vuelve a intentarlo» pedía una acción sin decir cuál y sin dar un
+      {/* G-03 · chips con contador. El estado vive en el CLIENTE: pulsar uno
+          no toca el servidor (ver `PanelFiltro`). Los totales se cuentan aquí
+          sobre TODAS las reservas, que es lo que pide G-03 —un chip cuenta lo
+          que esconde— y por eso no cambian al filtrar. */}
+      <PanelFiltro
+        base="/tutor/reservas"
+        sufijo={{ uno: "reserva", varios: "reservas" }}
+        chips={FILTROS.map((x) => ({
+          id: x.id,
+          label: x.label,
+          total: reservas.filter(x.match).length,
+          // Solo «Por aceptar» va en naranja (G-03): es el único chip que pide
+          // algo del tutor; el resto informan.
+          naranja: x.id === "por-aceptar",
+          oculto: x.chip === false,
+        }))}
+      >
+        {error ? (
+          <PanelCard className="border-[#f0bfbf] bg-[#fdf5f5]">
+            {/* «Vuelve a intentarlo» pedía una acción sin decir cuál y sin dar un
               control con el que hacerla. Se nombra la acción y se da la salida
               para cuando falla dos veces. */}
-          <p className="text-[13px] text-[#bf3333]">
-            No pudimos cargar tus reservas. Recarga la página; si vuelve a
-            fallar, escríbenos a soporte.
-          </p>
-        </PanelCard>
-      ) : null}
+            <p className="text-[13px] text-[#bf3333]">
+              No pudimos cargar tus reservas. Recarga la página; si vuelve a
+              fallar, escríbenos a soporte.
+            </p>
+          </PanelCard>
+        ) : null}
 
-      {!error && visibles.length === 0 ? (
-        <PanelCard>
-          {/* Sin reservas de ninguna clase, «No hay reservas por ahora» parece
-              un fallo del sistema al tutor recién aprobado. Decirle qué tiene
-              que pasar para que la lista se llene le dice que no está roto. Con
-              un filtro puesto no hace falta: ya sabe que la ha vaciado él. */}
-          <p className="text-[13px] text-[#6b6b6b]">
-            {filtro.id === "todas"
-              ? "Todavía no tienes reservas. Cuando un alumno reserve una de tus mentorías, aparecerá aquí."
-              : "No hay reservas en este filtro."}
-          </p>
-        </PanelCard>
-      ) : null}
+        {/* Los dos vacíos van SEPARADOS porque el texto depende del filtro y el
+          filtro ya no lo sabe el servidor. El primero solo existe si no hay ni
+          una reserva —a un tutor recién aprobado, «no hay reservas» a secas le
+          parece un fallo del sistema—; el segundo se pinta bajo los filtros que
+          se quedan a cero, que son los que `filtrosDe` NO devuelve. */}
+        {!error && reservas.length === 0 ? (
+          <PanelCard>
+            <p className="text-[13px] text-[#6b6b6b]">
+              Todavía no tienes reservas. Cuando un alumno reserve una de tus
+              mentorías, aparecerá aquí.
+            </p>
+          </PanelCard>
+        ) : null}
 
-      {/* §4.3 · un solo bloque con borde azul para lo que espera respuesta. */}
-      {porAceptar.length > 0 ? (
-        <PanelCard
-          id="por-aceptar"
-          className="scroll-mt-24 border-[1.5px] border-[#0080ff]/40"
-        >
-          <h2 className="text-[15px] font-semibold text-[#19191f]">
-            Por aceptar{" "}
-            <span className="font-normal text-[#6b6b6b]">
-              ({porAceptar.length})
-            </span>
-          </h2>
-          {/* Aviso FIJO, no una píldora por fila: la regla es la misma para
+        {!error && reservas.length > 0 ? (
+          <PanelCard
+            data-f={FILTROS.filter((x) => !reservas.some(x.match))
+              .map((x) => x.id)
+              .join(" ")}
+          >
+            <p className="text-[13px] text-[#6b6b6b]">
+              No hay reservas en este filtro.
+            </p>
+          </PanelCard>
+        ) : null}
+
+        {/* §4.3 · un solo bloque con borde azul para lo que espera respuesta. */}
+        {porAceptar.length > 0 ? (
+          <PanelCard
+            id="por-aceptar"
+            data-f={filtrosDe(porAceptar)}
+            className="scroll-mt-24 border-[1.5px] border-[#0080ff]/40"
+          >
+            <h2 className="text-[15px] font-semibold text-[#19191f]">
+              Por aceptar{" "}
+              <span className="font-normal text-[#6b6b6b]">
+                ({porAceptar.length})
+              </span>
+            </h2>
+            {/* Aviso FIJO, no una píldora por fila: la regla es la misma para
               todas y repetirla en cada una era el ruido de las tarjetas TU07b. */}
-          <p className="mt-0.5 text-[11.5px] text-[#6b6b6b]">
-            Si no respondes en 24 h, la reserva se cancela y el alumno recibe el
-            100 %.
-          </p>
-          <ul className="mt-1.5 divide-y divide-[#e0e0e0]">
-            {porAceptar.map((b) => {
-              // G-05 · la cuenta atrás compartida (RN-38). `null` = ya venció:
-              // no se finge un plazo, el cron es quien la cancela.
-              const plazo = aceptaAntesDe(b.created_at);
-              const cuando = fechaDeReserva(b);
-              return (
-                <li
-                  key={b.id}
-                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3"
-                >
-                  {/* Mismo mecanismo que en `FilaDeReserva` pero con OTRO
+            <p className="mt-0.5 text-[11.5px] text-[#6b6b6b]">
+              Si no respondes en 24 h, la reserva se cancela y el alumno recibe
+              el 100 %.
+            </p>
+            <ul className="mt-1.5 divide-y divide-[#e0e0e0]">
+              {porAceptar.map((b) => {
+                // G-05 · la cuenta atrás compartida (RN-38). `null` = ya venció:
+                // no se finge un plazo, el cron es quien la cancela.
+                const plazo = aceptaAntesDe(b.created_at);
+                const cuando = fechaDeReserva(b);
+                return (
+                  <li
+                    key={b.id}
+                    data-f={filtrosDe([b])}
+                    className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3"
+                  >
+                    {/* Mismo mecanismo que en `FilaDeReserva` pero con OTRO
                       mínimo, y la diferencia es medible: aquí las acciones son
                       cuenta atrás + Aceptar + Rechazar (271 px, frente a los
                       192 de la rejilla fija), así que a 768 al texto le
@@ -476,74 +494,84 @@ export default async function TutorReservasPage({
                       el que se decide aceptar o rechazar. Con 260 el
                       `flex-wrap` baja las acciones de línea antes de que eso
                       pase. */}
-                  <div className="min-w-[260px] flex-1">
-                    <p className="truncate text-[13px] font-semibold text-[#19191f]">
-                      {b.products?.title ?? "Mentoría"}
-                    </p>
-                    <p className="truncate text-[12px] text-[#404040]">
-                      <StudentLink
-                        student={students.get(b.student_id)}
-                        className="font-medium text-brand-foreground"
-                      />
-                      {" · "}
-                      <span className="first-letter:uppercase">
-                        {cuando ? formatSessionTime(cuando, tz) : "Por agendar"}
-                      </span>
-                      {" · "}
-                      {formatMoney(b.total_amount, b.currency)}
-                    </p>
-                  </div>
-                  <div className="ml-auto flex shrink-0 items-center gap-2">
-                    {plazo ? <AcceptCountdown {...plazo} /> : null}
-                    <AcceptRejectButtons bookingId={b.id} />
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </PanelCard>
-      ) : null}
+                    <div className="min-w-[260px] flex-1">
+                      <p className="truncate text-[13px] font-semibold text-[#19191f]">
+                        {b.products?.title ?? "Mentoría"}
+                      </p>
+                      <p className="truncate text-[12px] text-[#404040]">
+                        <StudentLink
+                          student={students.get(b.student_id)}
+                          className="font-medium text-brand-foreground"
+                        />
+                        {" · "}
+                        <span className="first-letter:uppercase">
+                          {cuando
+                            ? formatSessionTime(cuando, tz)
+                            : "Por agendar"}
+                        </span>
+                        {" · "}
+                        {formatMoney(b.total_amount, b.currency)}
+                      </p>
+                    </div>
+                    <div className="ml-auto flex shrink-0 items-center gap-2">
+                      {plazo ? <AcceptCountdown {...plazo} /> : null}
+                      <AcceptRejectButtons bookingId={b.id} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </PanelCard>
+        ) : null}
 
-      {/* §4.4 · PRÓXIMAS y PASADAS comparten tarjeta: son la misma lista con un
+        {/* §4.4 · PRÓXIMAS y PASADAS comparten tarjeta: son la misma lista con un
           corte temporal, y dos tarjetas separadas doblaban el aire por nada. */}
-      {proximas.length > 0 || pasadas.length > 0 ? (
-        <PanelCard className="px-5 py-2">
-          {proximas.length > 0 ? (
-            <>
-              <RotuloDeGrupo id="proximas" primero>
-                Próximas
-              </RotuloDeGrupo>
-              <ul className="divide-y divide-[#e0e0e0]">
-                {proximas.map((b) => (
-                  <FilaDeReserva
-                    key={b.id}
-                    reserva={b}
-                    student={students.get(b.student_id)}
-                    tz={tz}
-                  />
-                ))}
-              </ul>
-            </>
-          ) : null}
-          {pasadas.length > 0 ? (
-            <>
-              <RotuloDeGrupo id="pasadas" primero={proximas.length === 0}>
-                Pasadas
-              </RotuloDeGrupo>
-              <ul className="divide-y divide-[#e0e0e0]">
-                {pasadas.map((b) => (
-                  <FilaDeReserva
-                    key={b.id}
-                    reserva={b}
-                    student={students.get(b.student_id)}
-                    tz={tz}
-                  />
-                ))}
-              </ul>
-            </>
-          ) : null}
-        </PanelCard>
-      ) : null}
+        {proximas.length > 0 || pasadas.length > 0 ? (
+          <PanelCard
+            data-f={filtrosDe([...proximas, ...pasadas])}
+            className="px-5 py-2"
+          >
+            {proximas.length > 0 ? (
+              <div data-f={filtrosDe(proximas)}>
+                <RotuloDeGrupo id="proximas">Próximas</RotuloDeGrupo>
+                <ul className="divide-y divide-[#e0e0e0]">
+                  {proximas.map((b) => (
+                    <FilaDeReserva
+                      key={b.id}
+                      reserva={b}
+                      student={students.get(b.student_id)}
+                      tz={tz}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {/* La línea entre los dos grupos, solo cuando los dos se ven — o sea
+              solo en «Todas». Era el `primero` de `RotuloDeGrupo`. */}
+            {proximas.length > 0 && pasadas.length > 0 ? (
+              <div
+                data-f="todas"
+                className="mt-1.5 border-t border-[#e0e0e0]"
+              />
+            ) : null}
+            {pasadas.length > 0 ? (
+              <div data-f={filtrosDe(pasadas)}>
+                <RotuloDeGrupo id="pasadas">Pasadas</RotuloDeGrupo>
+                <ul className="divide-y divide-[#e0e0e0]">
+                  {pasadas.map((b) => (
+                    <FilaDeReserva
+                      key={b.id}
+                      reserva={b}
+                      student={students.get(b.student_id)}
+                      tz={tz}
+                    />
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </PanelCard>
+        ) : null}
+      </PanelFiltro>
     </TutorShell>
   );
 }
