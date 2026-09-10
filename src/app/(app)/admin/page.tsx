@@ -182,8 +182,10 @@ export default async function AdminDashboardPage() {
         ))}
       </div>
 
-      {/* RV-20: no es una cola, es una herramienta, y no tiene entrada de menú
-          propia. Sin este enlace no se llega a ella desde ninguna parte. */}
+      {/* RV-20: no es una cola, es una herramienta, por eso no va con las
+          tarjetas de arriba. Ya NO es el único acceso —«Operaciones» tiene
+          entrada propia en el menú lateral—, pero se queda: aquí lleva el
+          contexto de para qué sirve, que un ítem de menú no puede dar. */}
       <p className="text-[13px] text-[#6b6b6b]">
         ¿Comprobando el vencimiento de las 24 h de aceptación?{" "}
         <Link
