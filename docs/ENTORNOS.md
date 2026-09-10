@@ -113,7 +113,7 @@ debería haber: es lo que hay. ✅ puesta · ❌ no existe · — no aplica.
 | `STRIPE_WEBHOOK_SECRET` | ✅ (`stripe listen`) | ✅ destino `ensenameya-vercel` | ✅ destino `ensenameya-prod` |
 | `DLOCALGO_API_KEY` · `DLOCALGO_SECRET_KEY` | ✅ sandbox | ✅ sandbox | ❌ **→ el 503 de prod** |
 | `DLOCALGO_API_BASE` | ❌ (= sandbox, correcto) | ❌ (= sandbox, correcto) | ❌ **hace falta** `https://api.dlocalgo.com` |
-| `DLOCALGO_SMARTFIELDS_KEY` | ✅ | — | — | 
+| `DLOCALGO_SMARTFIELDS_KEY` | ❌ **desactivada 10-sep** | — | — |
 | `DLOCALGO_FX_SPREAD` | ❌ | ❌ | ❌ · opcional |
 
 ⚠️ `DLOCALGO_SMARTFIELDS_KEY` **no sirve para tokenizar** y no la lee el código: la clave del
@@ -126,10 +126,12 @@ Está en `.env.local` por un intento que no funcionó; borrarla no rompe nada.
 | :-- | :-- | :-- | :-- |
 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | ✅ sandbox | ✅ sandbox | ❌ **payout PayPal muerto en prod** |
 | `PAYPAL_API_URL` | ✅ | ✅ | ❌ **hace falta** `https://api-m.paypal.com` |
-| `WISE_API_TOKEN` | ⚠️ **✅ — ver abajo** | ❌ | ❌ |
+| `WISE_API_TOKEN` | ❌ **desactivada 10-sep** — ver abajo | ❌ | ❌ |
 | `WISE_PRIVATE_KEY` · `WISE_API_URL` | ❌ | ❌ | ❌ · opcionales |
 
-🔴 **`WISE_API_TOKEN` está en `.env.local` y `WISE_API_URL` no.** Y el defecto de `WISE_API_URL`
+🔴 **`WISE_API_TOKEN` estaba en `.env.local` y `WISE_API_URL` no** (desactivado el 10-sep; la
+línea sigue ahí comentada con su razón encima, para poder volver a activarla al trabajar en Wise).
+El peligro no era el token, era la asimetría: Y el defecto de `WISE_API_URL`
 es **producción** (`api.transferwise.com`, `lib/payments/wise-provider.ts`), no sandbox — al revés
 que dLocal y PayPal. O sea: **llamar a `/api/cron/payouts-process` en local puede intentar una
 transferencia real** contra la cuenta de Wise de verdad, con los datos de la BD de dev. No es
@@ -144,7 +146,7 @@ token de `.env.local`.
 | `DAILY_API_KEY` | ✅ | ✅ | ✅ | — |
 | `CRON_SECRET` | ✅ | ✅ | ✅ | ✅ secret |
 | `RESEND_API_KEY` | ❌ | ✅ | ✅ | — |
-| `EMAIL_FROM` | ❌ | ❌ | ❌ — remitente sigue en `onboarding@resend.dev` | — |
+| `EMAIL_FROM` | ❌ | ❌ | ❌ — **siguiente paso**: dominio ya verificado en Resend (§3-G) | — |
 | `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | ❌ | ✅ | ✅ | — |
 | `APP_BASE_URL` | — | — | — | ✅ **`https://ensenameya.com`** (10-sep) |
 | `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional · solo si apunta a una preview |
@@ -160,7 +162,7 @@ token de `.env.local`.
 | :-- | :-- | :-- | :-- |
 | `NEXT_PUBLIC_REFERRAL_URL` · `..._EMBED_URL` | ✅ | ✅ | ✅ |
 | `NEXT_PUBLIC_REFERRAL_URL_TUTOR` · `..._EMBED_URL_TUTOR` | — | — | — · **no existe la campaña de tutores**, solo la 50297 |
-| `REFERRAL_FACTORY_API_KEY` | ✅ | ✅ | ✅ · 🗑️ **no la lee nadie** (0 referencias en `src/`) |
+| `REFERRAL_FACTORY_API_KEY` | ✅ inerte | ❌ **borrada 10-sep** | ❌ **borrada 10-sep** · no la lee nadie (0 referencias en `src/`) |
 
 **Ausentes a propósito**
 
@@ -380,7 +382,40 @@ alumno y el payout el del tutor**. El avance de la implementación está en
   que se lleva por delante **todo** el correo del dominio, el suyo incluido — no solo el nuestro.
   Si Resend pide `MX` o `SPF`, será sobre un subdominio (`send.ensenameya.com`) y eso es seguro; el
   DKIM (`resend._domainkey`) es un TXT propio y no choca con nada. Ante la duda: subdominio.
-- [ ] **Verificar el dominio `ensenameya.com` en Resend.** Hoy el remitente es
+- [x] **Dominio `ensenameya.com` verificado en Resend — 10-sep**, por **Manual setup**, no por
+  «Auto configure»: ese último le da a Resend permiso de **escritura sobre la zona** vía Domain
+  Connect (el CNAME `_domainconnect` está puesto y funcionaría), y las plantillas de Domain Connect
+  pueden **modificar** registros existentes, no solo añadir. El único registro compartido de esa
+  zona es el `v=spf1` de la raíz, o sea el del correo del cliente. Tres registros, región
+  `us-east-1` (la de Supabase prod):
+
+  | Type | Name | Value | Prio |
+  | :-- | :-- | :-- | :-- |
+  | `TXT` | `resend._domainkey` | `p=MIGfMA0GCSqGSIb3…QIDAQAB` (DKIM, clave RSA) | — |
+  | `MX` | `send` | `feedback-smtp.us-east-1.amazonses.com` | 10 |
+  | `TXT` | `send` | `v=spf1 include:amazonses.com ~all` | — |
+
+  **Ninguno toca el correo del cliente**: el SPF y el MX de Resend caen en `send.ensenameya.com`,
+  y en la raíz solo va un selector DKIM que no colisiona con nada. Verificado con `dig` contra el
+  autoritativo: los 3 MX de Proofpoint siguen en `@` con prioridad 0 y en la raíz hay
+  **exactamente un** `v=spf1`.
+  ⚠️ **`Enable Receiving` se queda APAGADO.** Encenderlo hace que Resend pida un **`MX` en la
+  raíz**, y ahí sí competiría con Proofpoint: sería quitarle el correo entrante al cliente. El
+  inbound lo hace M365 y no lo necesitamos.
+  ⚠️ El `MX` va con Name **`send`**, no `@`. Puesto en `@` sería un cuarto MX en la raíz con
+  prioridad 10 junto a los tres de prioridad 0: Proofpoint seguiría ganando y el correo *casi*
+  funcionaría, que es la peor clase de error.
+  El DMARC del dominio es `p=quarantine` con `adkim=r`/`aspf=r`, así que alinea por los dos
+  caminos: SPF desde `send.ensenameya.com` (mismo dominio organizativo) y DKIM con
+  `d=ensenameya.com`.
+- [ ] **Poner `EMAIL_FROM`** (Production y Preview) y hacer Redeploy. Sin ella el remitente sigue
+  siendo `onboarding@resend.dev` aunque el dominio esté verificado.
+  ⚠️ **No usar `info@ensenameya.com`**: es el buzón humano real de M365, el del §39 del contrato.
+  El código ya dejó dicha la intención en `lib/email.ts`: `hola@ensenameya.com`. Ese buzón **no
+  existe**, así que una respuesta a un correo transaccional rebota — el formulario de contacto no
+  se ve afectado porque manda `replyTo`, pero si se quiere que las respuestas lleguen a alguien hay
+  que crear un alias en M365 (admin de correo, no DNS).
+- [x] ~~Verificar el dominio en Resend~~ — hecho, ver arriba. Contexto de por qué se eligió Resend: Hoy el remitente es
   `onboarding@resend.dev`, que funciona, pero un correo de contacto que no llega desde
   `@ensenameya.com` es exactamente lo que un revisor de dLocal marca. El día que se verifique, se
   pone `EMAIL_FROM` y no hay que tocar código.
