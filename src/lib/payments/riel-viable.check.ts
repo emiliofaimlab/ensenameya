@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { rielSirveParaEsteTutor, type DatosDeCobro } from "./riel-viable.ts";
+import { eligeRiel, rielSirveParaEsteTutor, sePuedeBajarDeRiel, type DatosDeCobro } from "./riel-viable.ts";
 
 const riel = (clave: string, dato: "banco" | "identificador") =>
   ({ clave, dato });
@@ -80,7 +80,6 @@ for (const [clave, dato] of [["paypal","identificador"],["manual","identificador
   assert.equal(rielSirveParaEsteTutor(riel(clave, dato), nada), false, `${clave} sin datos`);
 }
 
-console.log("riel-viable.check.ts · ok");
 
 /* ── 🔑 Stripe pide dos cosas más que dLocal, y por eso tiene su propia clave ──
  *
@@ -109,3 +108,134 @@ console.log("riel-viable.check.ts · ok");
     "lo que Wise necesita no es lo que necesita Stripe",
   );
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// `eligeRiel` — AUD-01: un riel que RECHAZA baja al siguiente candidato.
+// ════════════════════════════════════════════════════════════════════════════
+
+const elegible = (
+  clave: string,
+  dato: "banco" | "identificador",
+  opts: { atado?: boolean; puede?: boolean } = {},
+) => ({
+  clave,
+  dato,
+  ataduraDeBalance: opts.atado ?? false,
+  puedePagar: () => opts.puede ?? true,
+});
+
+// El tutor tipo de la tarjeta «Banco»: tiene cuenta y los tres rieles bancarios
+// pueden pagarle. Es el caso donde el fallo dolía, porque él solo ve «Banco».
+const conBanco: DatosDeCobro = {
+  banco: true, banco_wise: true, banco_stripe: true, canales: [], metodo_preferido: null,
+};
+
+// 🔴 EL CASO DEL FALLO. Wise va primero y rechaza (un 422 de ruta no soportada).
+// Antes la orden moría ahí. Ahora Stripe, que está detrás y puede pagarle, es
+// quien la recoge.
+{
+  const candidatos = [
+    elegible("wise", "banco"),
+    elegible("stripe", "banco"),
+    elegible("dlocal", "banco", { atado: true }),
+  ];
+  assert.equal(eligeRiel(candidatos, conBanco, "stripe"), "wise",
+    "sin rechazos manda el orden de la tabla: Wise primero");
+  assert.equal(eligeRiel(candidatos, conBanco, "stripe", ["wise"]), "stripe",
+    "🔴 AUD-01: si Wise rechazó, la orden BAJA a Stripe en vez de morir");
+  assert.equal(eligeRiel(candidatos, conBanco, "stripe", ["wise", "stripe"]), null,
+    "cuando ya no queda ninguno, null — y solo entonces es 'failed' de verdad");
+}
+
+// La exclusión NO se salta los demás filtros: un riel excluido y uno inviable
+// se descartan por motivos distintos y los dos tienen que seguir descartándose.
+{
+  const candidatos = [
+    elegible("wise", "banco"),
+    // Atado al balance de dLocal, pero el dinero lo cobró Stripe: impagable.
+    elegible("dlocal", "banco", { atado: true }),
+    elegible("paypal", "identificador"),
+  ];
+  assert.equal(eligeRiel(candidatos, conBanco, "stripe", ["wise"]), null,
+    "dLocal no vale por balance ajeno, y PayPal no vale porque el tutor no lo conectó");
+
+  const conPaypal: DatosDeCobro = { ...conBanco, canales: ["paypal"] };
+  assert.equal(eligeRiel(candidatos, conPaypal, "stripe", ["wise"]), "paypal",
+    "el mismo tutor con PayPal conectado sí baja hasta PayPal");
+  assert.equal(eligeRiel(candidatos, conPaypal, "dlocal", ["wise"]), "dlocal",
+    "y si el dinero lo cobró dLocal, su riel atado vuelve a ser candidato");
+}
+
+// Un riel sin adaptador reserva su sitio en el orden y nada más — que la
+// exclusión exista no puede resucitarlo ni saltárselo.
+{
+  const candidatos = [
+    elegible("wise", "banco"),
+    elegible("futuro", "banco", { puede: false }),
+    elegible("stripe", "banco"),
+  ];
+  assert.equal(eligeRiel(candidatos, conBanco, "stripe", ["wise"]), "stripe",
+    "el riel declarado sin adaptador se salta y la orden sigue bajando");
+}
+
+// 🔴 EL DESCENSO TERMINA. La lista de rechazados solo crece, así que a lo sumo
+// se prueban tantos rieles como candidatos haya. Sin esto el arreglo sería un
+// bucle infinito, que es peor que el fallo que arregla.
+{
+  const candidatos = [elegible("wise", "banco"), elegible("stripe", "banco")];
+  const rechazados: string[] = [];
+  let vueltas = 0;
+  for (;;) {
+    const elegido = eligeRiel(candidatos, conBanco, "stripe", rechazados);
+    if (!elegido) break;
+    assert.ok(!rechazados.includes(elegido), "nunca se vuelve a elegir un riel que ya rechazó");
+    rechazados.push(elegido);
+    vueltas++;
+    assert.ok(vueltas <= candidatos.length, "el descenso no puede dar más vueltas que candidatos");
+  }
+  assert.equal(vueltas, 2, "se probaron los dos rieles, en orden, y paró");
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// `sePuedeBajarDeRiel` — las cuatro puertas. Cada una tapa un pago doble real.
+// ════════════════════════════════════════════════════════════════════════════
+
+const limpio = {
+  enVuelo: false,
+  payoutIdDelRechazo: null,
+  payoutIdEnLaFila: null,
+  ultimoEstado: "reclamado",
+};
+
+// El caso bueno: rechazo limpio en el primer intento. Es el 422 de Wise.
+assert.equal(sePuedeBajarDeRiel(limpio), true,
+  "un rechazo limpio de una orden reclamada en esta pasada SÍ baja de riel");
+
+// 🔴 Puerta 1 · una orden que ya venía en vuelo puede tener un pago detrás.
+assert.equal(sePuedeBajarDeRiel({ ...limpio, enVuelo: true }), false,
+  "una orden que venía en 'processing' NO baja: no se conoce su historia");
+
+// 🔴 Puerta 2 · el rechazo con identificador significa que el proveedor SÍ creó
+// la orden. En su panel puede haber otra viva con la misma marca.
+assert.equal(sePuedeBajarDeRiel({ ...limpio, payoutIdDelRechazo: "pay_1" }), false,
+  "si el rechazo trae identificador, el proveedor creó algo: no se baja");
+
+// 🔴 Puerta 3 · lo mismo si ya lo traía la fila.
+assert.equal(sePuedeBajarDeRiel({ ...limpio, payoutIdEnLaFila: "pay_1" }), false,
+  "si la fila ya tenía identificador, no se baja");
+
+// 🔴 Puerta 4 · EL CASO DE PAYPAL. La pasada anterior murió a mitad de envío, así
+// que el lote pudo quedar creado; el reintento recibe «batch already exists», que
+// llega como un rechazo cualquiera. Bajar aquí es pagar dos veces.
+assert.equal(sePuedeBajarDeRiel({ ...limpio, ultimoEstado: "transitorio" }), false,
+  "tras un 'transitorio' NO se baja: el proveedor pudo aceptar sin que nos enteráramos");
+
+// Y las puertas no se anulan entre sí: basta con que una se cierre.
+assert.equal(
+  sePuedeBajarDeRiel({ enVuelo: true, payoutIdDelRechazo: "p", payoutIdEnLaFila: "q", ultimoEstado: "transitorio" }),
+  false,
+  "con las cuatro cerradas, tampoco");
+assert.equal(sePuedeBajarDeRiel({ ...limpio, ultimoEstado: undefined }), true,
+  "sin rastro previo (orden nueva de verdad) se baja igual");
+
+console.log("riel-viable.check.ts · ok");

@@ -95,3 +95,96 @@ export function rielSirveParaEsteTutor(riel: RielMinimo, datos: DatosDeCobro): b
         : datos.canales.some((c) => c !== "paypal");
   }
 }
+
+/**
+ * Lo que hace falta de un riel para ELEGIRLO, no solo para saber si sirve.
+ * Es `Riel` menos lo que aquí no se mira, y se declara aparte porque este
+ * módulo no puede importar `lib/payments.ts` (lleva `server-only`).
+ */
+export type RielElegible = RielMinimo & {
+  ataduraDeBalance: boolean;
+  puedePagar: () => boolean;
+};
+
+/**
+ * 🔴 QUIÉN EJECUTA ESTA ORDEN — la decisión entera, y pura.
+ *
+ * Vivía dentro de `payoutProviderFor`, mezclada con dos consultas. Sale aquí
+ * porque decidir por dónde sale el dinero de alguien es exactamente el tipo de
+ * lógica que tiene que poder comprobarse sin red ni credenciales
+ * (`npm run check:riel`).
+ *
+ * `rieles` llega YA ordenado por preferencia del tutor: reordenar es cosa de
+ * `ordenaPorPreferencia`, y mezclar las dos cosas es cómo se desincronizan.
+ *
+ * ⚠️ `excluir` ES LO QUE ARREGLA AUD-01. Antes no existía y un riel que
+ * RECHAZABA dejaba la orden en `failed` sin probar a los de detrás: el 422 de
+ * Wise mataba el cobro de un tutor al que Stripe sí podía pagar. Como el tutor
+ * solo ve «Banco» y detrás compiten tres rieles, ese fallo le llegaba como «no
+ * me han pagado» sin más explicación. Aquí entran los que ya rechazaron ESTA
+ * orden, y por eso la lista solo puede crecer: es lo que garantiza que el
+ * descenso termina.
+ */
+export function eligeRiel(
+  rieles: readonly RielElegible[],
+  datos: DatosDeCobro | null,
+  fundingProvider: string | null,
+  excluir: readonly string[] = [],
+): string | null {
+  for (const riel of rieles) {
+    // Ya lo intentamos y el proveedor dijo que no. No se vuelve a preguntar.
+    if (excluir.includes(riel.clave)) continue;
+    // ¿Hay hoy con qué ejecutar por aquí? Un riel sin adaptador reserva sitio
+    // en el orden de preferencia y nada más.
+    if (!riel.puedePagar()) continue;
+    // 🔴 LA ATADURA DEL BALANCE. Un riel atado solo sirve si el dinero está en
+    // SU balance; uno fondeado aparte no depende de quién cobró.
+    if (riel.ataduraDeBalance && riel.clave !== fundingProvider) continue;
+    // Y lo último: que ESTE tutor le haya dado lo que necesita. Un riel que no
+    // puede pagarle a él no es un candidato, es una orden atascada en silencio.
+    if (datos && !rielSirveParaEsteTutor(riel, datos)) continue;
+    return riel.clave;
+  }
+  return null;
+}
+
+/**
+ * 🔴 ¿SE PUEDE BAJAR DE RIEL SIN RIESGO DE PAGAR DOS VECES?
+ *
+ * Bajar significa mandar el MISMO dinero por otro sitio, así que solo se hace
+ * cuando está demostrado que el riel anterior no creó nada. Si alguna puerta se
+ * cierra, la orden termina en 'failed' y la mira una persona: entre pagar dos
+ * veces y que un humano revise, se revisa.
+ *
+ * Vive aquí, pura y comprobable, porque es la única parte del descenso donde un
+ * error cuesta dinero de verdad. La primera versión de AUD-01 no la tenía y
+ * bajaba siempre — incluido el caso en que el rechazo trae identificador, que
+ * es justo cuando el proveedor SÍ creó la orden.
+ */
+export type SituacionDelRechazo = {
+  /** ¿Venía ya en 'processing' de una pasada anterior? Entonces no se conoce su historia. */
+  enVuelo: boolean;
+  /** El identificador que trae el rechazo. Si lo trae, el proveedor creó la orden. */
+  payoutIdDelRechazo: string | null | undefined;
+  /** El que ya tenía la fila. Mismo argumento. */
+  payoutIdEnLaFila: string | null | undefined;
+  /** Cómo acabó la pasada ANTERIOR, leído antes del reclamo. */
+  ultimoEstado: string | null | undefined;
+};
+
+export function sePuedeBajarDeRiel(s: SituacionDelRechazo): boolean {
+  // 1 · Reclamada en esta pasada: su historia es conocida.
+  if (s.enVuelo) return false;
+  // 2 · El rechazo no trae identificador. Cuando lo trae, el proveedor creó la
+  //     orden y luego la rechazó — y en su panel puede haber otra viva con la
+  //     misma marca, porque dLocal no deduplica por `description`.
+  if (s.payoutIdDelRechazo) return false;
+  // 3 · Ni lo traía ya la fila.
+  if (s.payoutIdEnLaFila) return false;
+  // 4 · Y la pasada anterior no murió a mitad de envío. Un 'transitorio' es
+  //     exactamente el caso en que el proveedor pudo aceptar sin que nosotros
+  //     nos enteráramos: PayPal contesta después «batch already exists», y ese
+  //     400 llega al job como un rechazo cualquiera.
+  if (s.ultimoEstado === "transitorio") return false;
+  return true;
+}

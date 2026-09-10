@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { adapterFor, payoutProviderFor, rielDePayout } from "@/lib/payments";
+import { sePuedeBajarDeRiel } from "@/lib/payments/riel-viable";
 import type { PayoutInput, PayoutResult, PspProvider } from "@/lib/payments/port";
 
 /**
@@ -158,6 +159,23 @@ type Rastro = {
    * conciliar contra su panel un rechazo que ya no está en la fila.
    */
   intentos_muertos?: string[];
+  /**
+   * 🔴 LOS RIELES QUE YA RECHAZARON ESTA ORDEN (AUD-01).
+   *
+   * Existe por un fallo que dejaba a un tutor sin cobrar teniendo detrás un riel
+   * capaz de pagarle: un 422 de Wise escribía 'failed' y ahí se acababa, sin
+   * preguntarle a Stripe. Detrás de la tarjeta «Banco» compiten tres rieles y al
+   * tutor se le promete el más barato que llegue a su país, así que morir en el
+   * primero es romper esa promesa sin decírselo.
+   *
+   * ⚠️ ESTA LISTA SOLO CRECE, y eso es lo que garantiza que el descenso TERMINA:
+   * cada rechazo añade un riel que ya no se vuelve a preguntar, así que a lo
+   * sumo hay tantos intentos como candidatos tenga el país.
+   *
+   * ⚠️ Y solo la escribe el rechazo DEFINITIVO. `en-duda` no entra: cuando no se
+   * sabe si el dinero salió, bajar al siguiente riel es cómo se paga dos veces.
+   */
+  rieles_rechazados?: { riel: string; mensaje: string; en: string }[];
   /** Cómo acabó el último intento, en el vocabulario del puerto. */
   ultimo_estado?: string;
   ultimo_mensaje?: string;
@@ -267,6 +285,8 @@ export async function GET(req: Request) {
   let seguidos = 0;
   let adoptados = 0;
   let rechazados = 0;
+  /** Órdenes que un riel rechazó y que bajaron al siguiente candidato (AUD-01). */
+  let bajados = 0;
   let reintentables = 0;
   let sinDecidirCambio = 0;
   let sinDatosDeCobro = 0;
@@ -320,9 +340,19 @@ export async function GET(req: Request) {
     // posterior sino parte de elegir: descarta a un candidato y deja pasar al
     // siguiente. Y puede devolver `null` — «ningún candidato puede pagar esta
     // orden hoy» —, que NO es un fallo: la fila se queda esperando.
+    // ⚠️ Y AL RESOLVER SE LE PASA QUIÉN YA RECHAZÓ (AUD-01). Sin esto el arreglo
+    // del descenso sería un bucle: la orden vuelve a la cola, el resolvedor
+    // elige otra vez al riel que acaba de decir que no, y así para siempre. La
+    // lista solo crece, así que a lo sumo se prueban tantos rieles como
+    // candidatos tenga el país.
     const claveEjecutor = enVueloYa
       ? (fila.provider ?? "simulated")
-      : await payoutProviderFor(fila.payee_country, fila.funding_provider, fila.tutor_id);
+      : await payoutProviderFor(
+          fila.payee_country,
+          fila.funding_provider,
+          fila.tutor_id,
+          (rastro.rieles_rechazados ?? []).map((r) => r.riel),
+        );
     // `claveEjecutor` puede ser null desde C2r: «ningún candidato puede pagar
     // esta orden hoy». `pspDe` ya sabe tratar una clave que no es un PSP, así
     // que se le pasa el null tal cual y la fila cae en el camino de «sin
@@ -564,6 +594,12 @@ export async function GET(req: Request) {
               // perderlo aquí haría que el barrido buscara una marca que no es.
               intento,
               ...(rastro.intentos_muertos ? { intentos_muertos: rastro.intentos_muertos } : {}),
+              // 🔴 Y LOS RIELES QUE YA RECHAZARON, que si se pierden aquí el
+              // descenso de AUD-01 se vuelve un BUCLE: la orden volvería a la
+              // cola, el resolvedor elegiría otra vez al que acaba de decir que
+              // no, y cada vuelta gastaría una llamada real al proveedor. Esta
+              // línea es lo que hace cierta la invariante «la lista solo crece».
+              ...(rastro.rieles_rechazados ? { rieles_rechazados: rastro.rieles_rechazados } : {}),
               ultimo_estado: "reclamado",
             } satisfies Rastro,
           },
@@ -629,12 +665,21 @@ export async function GET(req: Request) {
     // nada. En los dos casos volver a la cola es seguro.
     const volver: Record<string, unknown> = enVueloYa ? {} : { status: "scheduled", provider: null };
 
-    const marca = async (campos: Record<string, unknown>, estadoRastro: string, mensaje?: string) => {
+    const marca = async (
+      campos: Record<string, unknown>,
+      estadoRastro: string,
+      mensaje?: string,
+      // Lo que este desenlace concreto añade al rastro. Hoy solo lo usa el
+      // rechazo, para apuntar el riel que dijo que no y el id que deja muerto.
+      extraRastro?: Partial<Rastro>,
+    ) => {
       const meta = {
         c2: {
           reclamado_en: claimedAt,
           intento,
           ...(rastro.intentos_muertos ? { intentos_muertos: rastro.intentos_muertos } : {}),
+          ...(rastro.rieles_rechazados ? { rieles_rechazados: rastro.rieles_rechazados } : {}),
+          ...extraRastro,
           ultimo_estado: estadoRastro,
           ultimo_intento_en: ahora(),
           ...(mensaje ? { ultimo_mensaje: mensaje } : {}),
@@ -729,25 +774,161 @@ export async function GET(req: Request) {
         break;
       }
 
-      // ── El proveedor rechazó la orden. Es el ÚNICO camino que escribe
-      // 'failed', y con él la incidencia NTF-16 al tutor.
+      // ── El proveedor rechazó la orden.
+      //
+      // 🔴 UN RECHAZO YA NO MATA LA ORDEN SI QUEDA OTRO RIEL (AUD-01). Antes
+      // esto escribía 'failed' y ahí se acababa: el 422 de Wise dejaba sin
+      // cobrar a un tutor al que Stripe sí podía pagar. Y el dictado afirmaba
+      // por escrito que el descenso «ya existe en el código» — existía, pero
+      // solo el PREVIO: `rielSirveParaEsteTutor` descarta a quien no tiene los
+      // datos del tutor ANTES de elegir. Un riel elegido que luego rechazaba no
+      // tenía a dónde caer.
+      //
+      // Sigue siendo el ÚNICO camino que escribe 'failed', pero ahora solo
+      // cuando NO queda ningún candidato detrás — que es cuando 'failed' es
+      // verdad. Con él sale la incidencia NTF-16 al tutor.
       case "rechazado": {
+        const rechazoDeAhora = {
+          riel: psp.key,
+          mensaje: salida.mensaje.slice(0, 300),
+          en: ahora(),
+        };
+        const historial = [...(rastro.rieles_rechazados ?? []), rechazoDeAhora];
+        // El id que deja muerto este intento se archiva igual que en `difunto`:
+        // es la única traza para conciliar contra el panel del proveedor un
+        // rechazo que ya no está en la fila.
+        const muertos = [
+          ...(rastro.intentos_muertos ?? []),
+          ...(salida.payoutId ? [salida.payoutId] : []),
+        ];
+
+        // ── 🔴 LAS CUATRO PUERTAS DEL DESCENSO ────────────────────────────
+        //
+        // Bajar de riel significa MANDAR EL MISMO DINERO POR OTRO SITIO. Solo se
+        // hace cuando está demostrado que el anterior no creó nada. Si alguna de
+        // estas cuatro no se cumple, la orden termina en 'failed' — que es el
+        // comportamiento de siempre y el que hace que una persona lo mire.
+        // Entre pagar dos veces y que un humano revise, se revisa.
+        // Las cuatro puertas viven en `riel-viable.ts`, puras y con su
+        // comprobación al lado (`npm run check:riel`): es la única parte del
+        // descenso donde equivocarse cuesta dinero.
+        const puedeBajar = sePuedeBajarDeRiel({
+          enVuelo: enVueloYa,
+          payoutIdDelRechazo: salida.payoutId,
+          payoutIdEnLaFila: fila.provider_payout_id,
+          ultimoEstado: rastro.ultimo_estado,
+        });
+
+        // ¿Y queda alguien detrás que pueda pagarle a ESTE tutor? Lo contesta el
+        // mismo resolvedor de siempre, excluyendo a los que ya dijeron que no.
+        let siguiente: string | null = null;
+        if (puedeBajar) {
+          try {
+            siguiente = await payoutProviderFor(
+              fila.payee_country,
+              fila.funding_provider,
+              fila.tutor_id,
+              historial.map((r) => r.riel),
+            );
+          } catch (eResolver) {
+            // Si el resolvedor no contesta, NO se inventa un descenso: la orden
+            // termina en 'failed', que es el comportamiento conocido y el que
+            // deja rastro. Bajar «por si acaso» a un riel que no se ha podido
+            // validar es cómo se paga dos veces.
+            console.error("[C2] no se pudo resolver el siguiente riel tras un rechazo", {
+              ...base,
+              error: eResolver instanceof Error ? eResolver.message : String(eResolver),
+            });
+          }
+        }
+
+        if (siguiente) {
+          // BAJA AL SIGUIENTE. Vuelve a la cola limpia: sin `provider` y sin el
+          // identificador del que rechazó, para que la pasada siguiente la
+          // resuelva de cero y el barrido no busque en el proveedor equivocado.
+          // No se toca `intento`: la marca de idempotencia vive DENTRO de cada
+          // proveedor, así que el riel nuevo estrena la suya sin colisionar.
+          //
+          // ⚠️ CON GUARDA DE ESTADO, y no es adorno: si un admin acaba de anotar
+          // a mano el identificador de un pago vivo (`manage_payout('anotar')`),
+          // la fila ya no está en 'processing' con lo que leímos y este `update`
+          // tiene que tocar CERO filas en vez de borrarle el rastro y mandar el
+          // dinero otra vez. Es la misma guarda que usan el reclamo y las cuatro
+          // acciones de `manage_payout`.
+          const meta = {
+            c2: {
+              reclamado_en: claimedAt,
+              intento,
+              ...(muertos.length ? { intentos_muertos: muertos } : {}),
+              rieles_rechazados: historial,
+              ultimo_estado: "rechazado-baja",
+              ultimo_intento_en: ahora(),
+              ultimo_mensaje: `${psp.key}: ${salida.mensaje}`.slice(0, 500),
+            } satisfies Rastro,
+          };
+          const { data: bajada, error: eBaja } = await admin
+            .from("payouts")
+            .update({
+              status: "scheduled",
+              provider: null,
+              provider_payout_id: null,
+              provider_metadata: meta,
+            })
+            .eq("id", fila.id)
+            .eq("status", "processing")
+            .select("id");
+
+          if (eBaja) {
+            reintentables++;
+            console.error("[C2] no se pudo devolver a la cola tras el rechazo", {
+              ...base,
+              error: eBaja.message,
+            });
+            break;
+          }
+          if (!bajada?.length) {
+            // Alguien la tocó entre medias. No se insiste: la siguiente pasada
+            // la lee como esté, que es lo correcto.
+            noReclamados++;
+            console.warn("[C2] la orden cambió de estado mientras bajaba de riel", base);
+            break;
+          }
+          bajados++;
+          console.warn("[C2] payout rechazado — baja al siguiente riel", {
+            ...base,
+            rechazo: psp.key,
+            siguiente,
+            error: salida.mensaje,
+          });
+          break;
+        }
+
+        // No queda nadie. Ahora sí es un fallo, y el motivo nombra a TODOS los
+        // que lo rechazaron: con tres rieles detrás de «Banco», «falló» a secas
+        // no le dice nada a quien tenga que arreglarlo.
+        const porQue = historial.map((r) => `${r.riel}: ${r.mensaje}`).join(" · ");
+        const motivoDeNoBajar = !puedeBajar
+          ? "no se pudo descartar que el proveedor creara algo: se deja para revisión"
+          : "no queda ningún riel que pueda pagarle";
         await marca(
           {
             status: "failed",
             provider: psp.key,
             ...(salida.payoutId ? { provider_payout_id: salida.payoutId } : {}),
             failed_at: ahora(),
-            failure_reason: salida.mensaje.slice(0, 500),
+            failure_reason: porQue.slice(0, 500),
           },
           "rechazado",
           salida.mensaje,
+          { rieles_rechazados: historial },
         );
         rechazados++;
-        console.error("[C2] payout RECHAZADO por el proveedor — requiere revisión", {
+        console.error("[C2] payout RECHAZADO — requiere revisión", {
           ...base,
+          motivo: motivoDeNoBajar,
           proveedorPayout: salida.payoutId ?? null,
-          error: salida.mensaje,
+          rielesQueRechazaron: historial.map((r) => r.riel),
+          error: porQue,
         });
         break;
       }
@@ -794,6 +975,8 @@ export async function GET(req: Request) {
                 reclamado_en: claimedAt,
                 intento: intento + 1,
                 intentos_muertos: muertos,
+                // Igual que en el reclamo: perder los vetos aquí reabre el bucle.
+                ...(rastro.rieles_rechazados ? { rieles_rechazados: rastro.rieles_rechazados } : {}),
                 ultimo_estado: "difunto",
                 ultimo_intento_en: ahora(),
                 ultimo_mensaje: salida.mensaje,
@@ -1030,6 +1213,7 @@ export async function GET(req: Request) {
     // Rechazos del proveedor. Si no es 0, hay dinero prometido que no va a salir
     // sin que una persona mire.
     rechazados,
+    bajados,
     // 🔴 Órdenes que pueden corresponder a un pago sin identificar. Debe ser 0.
     enDuda,
     sinIdentificar: sinIdentificar ?? 0,
