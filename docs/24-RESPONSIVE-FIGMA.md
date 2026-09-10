@@ -1,51 +1,49 @@
 # DOC 24 — El responsive de Diana, aplicado
 
-> **Qué es esto.** El archivo Figma **«Mobile y Tablet»** (`e2Av6H2GHVvz6g9mCKPwVV`) llegó por fin:
-> **115 frames = 57 pantallas × 2 anchos** (390 y 768). Esto **desbloquea la US-1601**, que llevaba
-> meses parada «esperando diseños de Diana» (Doc 22, punto G4). Este documento es el plan de
-> ejecución y, sobre todo, el **registro de divergencias conscientes**: dónde NO se sigue el Figma
-> y por qué. Sin él, cada agente que toque una pantalla vuelve a abrir las mismas discusiones.
+> **Qué es esto.** El archivo Figma **«Mobile y Tablet»** (`e2Av6H2GHVvz6g9mCKPwVV`):
+> **115 frames = 57 pantallas × 2 anchos** (390 y 768). US-1601 está **aplicada** y lo que queda
+> vivo de este documento es lo que ninguna pantalla trae escrito: el **registro de divergencias
+> conscientes** (dónde NO se sigue el Figma y por qué), el **sistema de facto** que sale de contar
+> sus nodos, y **cómo se verifica el móvil sin engañarse**. Sin esto, cada agente que toque una
+> pantalla vuelve a abrir las mismas discusiones.
 
 | Campo | Valor |
 | :-- | :-- |
 | **Documento** | 24 — Aplicación del Figma responsive (US-1601) |
-| **Fecha** | 2026-08-27 |
-| **Autor** | Jose Mora (desarrollo) |
-| **Rama** | `feat/responsive-figma`, sacada de `dev` @ `c4ce969` |
 | **Fuente de diseño** | Figma «Mobile y Tablet» `e2Av6H2GHVvz6g9mCKPwVV`, mod. 2026-08-11 |
-| **Verificación** | Auditoría de **10 agentes** sobre los 115 frames y las 68 rutas, **medida en navegador** a 390/768/1024/1280/1440 — no leída de la documentación. 92 fichas de pantalla, 564 hallazgos, 162 conflictos |
+| **Estado** | Aplicada en `ffe900f` (27-ago-2026), en `dev` y en `main`. Las peticiones móviles de Verónica del 3-sep se trazan en `docs/25-CORRECCIONES-MOBILE-VERONICA-3SEP.md` |
+| **Auditoría de partida** | **10 agentes** sobre los 115 frames y las rutas del repo, **medida en navegador** a 390/768/1024/1280/1440 — no leída de la documentación. 92 fichas de pantalla, 564 hallazgos, 162 conflictos |
+| **Lo que citan otros** | §24.2 (las cuatro reglas) y §24.8 (cómo se regenera el Figma y cómo se mide) |
 
 ---
 
-## 24.0 · La conclusión, en seis frases
+## 24.0 · La conclusión, en cinco frases
 
-1. **El problema no está en las 57 pantallas: está en tres ficheros.** `site-header.tsx` (65 rutas),
-   `panel-shell.tsx` y `app-sidebar.tsx` (44 rutas) concentran la mayor parte del daño. Arreglados
-   esos, media aplicación queda bien sin tocarla.
-2. **Hay un bug vivo hoy en producción que no lo trae este encargo**: entre **768 y ~1370 px** el
-   buscador del header **tapa «Explorar» y «Nosotros» y los hace inpulsables**
-   (`document.elementFromPoint(190,36)` devuelve el `<input>`). Eso incluye escritorio a 1024 y 1280.
-3. **Al repo le falta la banda de tablet.** 144 prefijos `sm:` contra 34 `md:`: salta de 640 a 1024
-   y se salta justo el ancho que define este Figma (768 = donde entra `md:`).
-4. **El sistema ya estaba bien.** Poppins con sus cuatro pesos cubre el 100 % de los 7.226 nodos de
-   texto, `--radius: 0.5rem` acierta con el radio dominante y **19 de los 20 tokens de color** de
-   `globals.css` aparecen en el archivo nuevo. No hay tokens nuevos que inventar.
-5. **El Figma desconoce el producto.** Cero apariciones de la campana de avisos, del badge del
+1. **El cromo son tres ficheros, no 57 pantallas.** `site-header.tsx`, `panel-shell.tsx` y
+   `app-sidebar.tsx` gobiernan casi todo: la cadena de layouts cuelga `SiteHeader` de las **61
+   pantallas** de `(public)` + `(app)`, `SiteFooter` de 43 y `AdminFooter` de las 18 de admin.
+   Tocando el cromo se mueve media aplicación; tocando una pantalla, una.
+2. **La banda de tablet es `md:`, y hoy está poblada**: **148 apariciones** en `src/**/*.tsx` frente a
+   326 de `sm:` y 383 de `lg:`. Es el ancho que define este Figma (768), y el que un repo
+   mobile-first se salta si solo usa `sm:` y `lg:`.
+3. **El sistema ya estaba bien.** Poppins con sus cuatro pesos cubre el 100 % de los nodos de texto y
+   `--radius: 0.5rem` acierta con el radio dominante (735 de 1.500 nodos con esquina). La auditoría
+   no encontró **ni un token de color nuevo** que inventar.
+4. **El Figma desconoce el producto.** Cero apariciones de la campana de avisos, del badge del
    carrito y del menú del avatar abierto en los 115 frames; cero frames del cajón móvil; cero de los
    desplegables. Todo lo que vive detrás de un «▾» hay que inventarlo, y el riesgo real es que
-   alguien «limpie» el header para parecerse al Figma y se lleve por delante funcionalidad.
-6. **Y hay dos cosas rotas hoy que no son de diseño**: por debajo de 768 px un usuario con sesión
-   **no tiene ningún acceso a sus avisos** (la campana vive dentro de un `hidden md:flex` y no está
-   en el cajón), y `/admin/notificaciones`, `/admin/operaciones` y `/admin/reembolsos` **no están en
-   `ADMIN_ITEMS`**, así que no se llega a ellas desde ningún menú.
+   alguien «limpie» el header para parecerse al Figma y se lleve por delante funcionalidad (R2).
+5. **Y hay un menú incompleto, que no es un problema de maquetación:** `/admin/notificaciones`,
+   `/admin/operaciones` y `/admin/reembolsos` **no están en `ADMIN_ITEMS`**. Existen y se llega a
+   ellas, pero solo desde las tarjetas del dashboard (`(app)/admin/page.tsx`), no desde el menú.
 
 ---
 
 ## 24.1 · Las dos decisiones tomadas antes de escribir código
 
-| # | Decisión | Qué se hace |
+| # | Decisión | Cómo quedó |
 | :-- | :-- | :-- |
-| **D-1** | **El solape del header se arregla entero, escritorio incluido.** La causa es una sola clase (`max-w-[558px] shrink-0` con `flex-1` a los lados) y el propio Figma del área de tutor ya la resuelve: allí el buscador es `w:fill grow`, o sea **flexible**. Acotar el arreglo a 768–1023 dejaría la navegación inpulsable en la mayoría de portátiles | Buscador flexible en todos los anchos. El escritorio **cambia a propósito**: el buscador deja de medir 558 px fijos |
+| **D-1** | **El solape del header se arregla entero, escritorio incluido.** La causa era una sola clase (`max-w-[558px] shrink-0` con `flex-1` a los lados), y el propio Figma del área de tutor ya la resuelve: allí el buscador es `w:fill grow`. Con los 558 px fijos, entre **768 y ~1370 px** el buscador **tapaba «Explorar» y «Nosotros» y los hacía inpulsables** (`document.elementFromPoint(190,36)` devolvía el `<input>`), escritorio a 1024 y 1280 incluidos | **Aplicada**: buscador flexible con tope (`lg:max-w-[558px] lg:grow-[3] lg:basis-0`, `site-header.tsx:466`) y fila entera por debajo de 1024. El escritorio **cambió a propósito**: el buscador ya no mide 558 px fijos |
 | **D-2** | **El widget de soporte del Figma no se construye.** Los 74 frames con burbujón dibujan, al abrirlo, un chat de **soporte** («Soporte Enséñame Ya · En línea», un agente contestando sobre reembolsos). No es lo construido —bandeja alumno↔tutor estilo LinkedIn, decisión 15 / R24-21— ni lo decidido para soporte (`/contacto`, DL-01, con aviso expreso en `support-card.tsx` de no abrir un segundo canal) | No se implementa. Del Figma de chat se aprovecha **solo** el hilo a pantalla completa a 390 px, que sí es un arreglo real |
 
 > **Sobre D-2, el dato que la sostiene:** el burbujón aparece en 74 de 115 frames con **tamaño**
@@ -82,7 +80,7 @@ No es una estimación: sale de contar los nodos, no de mirar las pantallas.
 | Padding horizontal de página | **20 px** (2.053 nodos en `x=20`) | **32 px** (716 nodos en `x=32`) |
 | Ancho de contenido | **350** (635 frames exactos) | **704** (260 frames exactos) |
 | Cuerpo de texto | 13px/400/lh20 · con 11–14px se cubre el **79 %** | ídem · **74 %** |
-| Menú de panel | chips que envuelven (`row wrap gap8`) | columna real: **168 px** alumno, **196 px** admin |
+| Menú de panel | chips que envuelven (`row wrap gap8`) — **no se hace así**, ver §24.4 | columna real: **168 px** alumno, **196 px** admin (`panel-shell.tsx`) |
 | Header público | **3 filas**, 164–173 px | **2 filas**, 146 px |
 | Pie | 1 columna apilada | 3 columnas en fila |
 
@@ -104,14 +102,15 @@ se encuentre uno de estos casos lo cita y sigue; no lo «arregla».
 
 | Lo que pide el Figma | Por qué no se hace | Dónde está escrito |
 | :-- | :-- | :-- |
-| Buscador «Buscar en el panel…» en **las 26 pantallas de admin** | No existe la búsqueda global del panel que alimentaría ese input | `site-header.tsx:213-215` |
+| Buscador «Buscar en el panel…» en **las 26 pantallas de admin** | No existe la búsqueda global del panel que alimentaría ese input. Por debajo de 1024 el cajón de admin sí trae uno, y busca el **sitio público** | `site-header.tsx:276` (`conBuscador`) y `:668` |
 | **Header + pie completos** en el checkout (AL05) y en la sala en vivo (LV01) | El cliente pidió aislarlas, **por escrito y dos veces** | `(checkout)/layout.tsx` (N-37) · `(room)/layout.tsx` (MN-04) |
-| **Domicilio y EIN** fuera / redes sociales en el pie | Domicilio (P-2) y EIN (V-8) retirados por decisión expresa del cliente; `COMPANY_SOCIALS` vacío porque los tres perfiles **no existen** | `site-footer.tsx:73-99` y `:151-154` |
-| Chips de menú «Pagos, Mensajes, Reseñas, Ayuda…» | Solo se listan destinos que **existen**: un menú que lleva a 404 es peor que un menú corto | `app-sidebar.tsx:44-51` |
-| Buscador y hamburguesa **durante el onboarding** | El área autenticada está cerrada por `requireUser` hasta terminar: serían enlaces a ninguna parte | `site-header.tsx:207-211` |
-| Primera tarjeta de garantías **fija en naranja** | Es un `hover`, no un estado fijo — acuerdo del 24-jul (R24-02) | `home/trust.tsx:59-63` y `:92` |
-| FAB de chat **naranja y siempre visible** | El código lo pinta azul y **solo con sesión** (decisión 15 / R24-21). Y ver **D-2** | `chat-launcher.tsx:6` |
-| Quitar la **hamburguesa** en el área de tutor a 390 | Es el único acceso a Explorar / Sobre nosotros / Cómo funciona en móvil | — |
+| **Domicilio y EIN** en el pie / redes sociales | Domicilio (P-2) y EIN (V-8) retirados por decisión expresa del cliente; `COMPANY_SOCIALS` vacío porque los tres perfiles **no existen** | `site-footer.tsx:96-124` y `:218-224` |
+| Chips de menú «Pagos, Mensajes, Reseñas, Ayuda…» | Solo se listan destinos que **existen**: un menú que lleva a 404 es peor que un menú corto | `app-sidebar.tsx` → `STUDENT_ITEMS` · `TUTOR_ITEMS` · `ADMIN_ITEMS` |
+| Menú de panel a 390 como fila que **envuelve** (`sidebar-nav · row wrap gap8`) | Con los destinos reales son dos filas en alumno y tres en admin: 150 px de menú antes del saludo, y lo primero que se ve al abrir el panel es el menú. Desde el 9-sep es una **tira de una línea con scroll** y la sección activa traída a la vista: 48 px fijos y sigue a un toque | `app-sidebar.tsx:362-399` |
+| Buscador y hamburguesa **durante el onboarding** | El área autenticada está cerrada por `requireUser` hasta terminar: serían enlaces a ninguna parte. Solo queda «Guardar y salir» | `site-header.tsx:276` y `:470-481` |
+| Primera tarjeta de garantías **fija en naranja** | Es un `hover`, no un estado fijo — acuerdo del 24-jul (R24-02) | `home/trust.tsx:92` |
+| FAB de chat **naranja y siempre visible** | El código lo pinta azul (`bg-brand`) y **solo con sesión** (decisión 15 / R24-21). Y ver **D-2** | `chat-launcher.tsx:6` · `chat-bubble.tsx:656` |
+| Quitar la **hamburguesa** en el área de tutor a 390 | Es el único acceso a Explorar / Sobre nosotros / Cómo funciona en móvil; se esconde a partir de 1024 (`lg:hidden`), no antes | `site-header.tsx:646` |
 | «clases» / «tutorías» | **R4**: mentoría al 100 % | acuerdo del 17-ago |
 
 ---
@@ -139,51 +138,78 @@ No todo lo que falta es culpa del código.
 
 ---
 
-## 24.6 · Lo que ya estaba hecho y NO se rehace
+## 24.6 · Piezas que ya casan, y no se rehacen
 
-Media auditoría es esto, y es la parte que ahorra trabajo:
-
-- **El pie a 768** ya se arregló en US-1601 (`site-footer.tsx:107-111`): columnas en `x=300..729`
-  dentro de 753, sin scroll.
-- **Las rejillas de tarjetas** ya casan con el Figma: 1 columna a 390 y 2 a 768 en P04, P05, P06,
-  P07 y P09 — los 342–350 px que pide Diana.
-- **El selector de horarios de AL04** (`slot-picker.tsx`) es la pieza mejor resuelta del repo: corte
-  `md:` calculado y comentado, barra `sticky` inferior con hueco para el FAB.
-- **TU09 Payouts, TU04 y el colapso de TU05/TU06/TU08** ya son exactamente el Figma.
-- **El admin no tiene ni una `<table>`**: los 13 listados ya son `<ul>` de tarjetas, que es la
-  familia de la que sale el patrón del diseño. Y los detalles ya apilan a una columna bajo 1024.
+- **El pie a 768** ya se arregló en US-1601 (`site-footer.tsx`): columnas en `x=300..729` dentro de
+  753, sin scroll.
+- **Las rejillas de tarjetas** casan con el Figma: 1 columna a 390 y 2 a 768 en P04, P05, P06, P07 y
+  P09 — los 342–350 px que pide Diana.
+- **El selector de horarios de AL04** (`(app)/reservar/[productId]/slot-picker.tsx`) es la pieza mejor
+  resuelta del repo: corte `md:` calculado y comentado, barra `sticky` inferior con hueco para el FAB.
+- **TU04 y el colapso de TU05/TU06/TU08** son exactamente el Figma.
+- **Los listados del admin no tienen ni una `<table>`**: son `<ul>` de tarjetas, que es la familia de
+  la que sale el patrón del diseño, y los detalles apilan a una columna bajo 1024. La **única
+  `<table>` del sitio** es la de movimientos de `/tutor/payouts`, y vive dentro de un
+  `overflow-x-auto` con `min-w-[680px]`.
 - **La píldora negra «Admin»** del header coincide **exactamente** con el Figma (58×25, r999,
   pad 4/10, 600 11/16). No tocar.
-- **`dialog`, `sheet` y `chat-bubble`** ya son seguros a 390: no hay que tocar los primitivos.
-- `/carrito`, `/pedidos/[id]/confirmacion`, `/reservas/[id]/pagar`, `/admin/reportes`, `/tutor/faqs`
-  y `/tutor/reservas/[id]/cancelar` **funcionan a 390 sin tocar nada**.
+- **La campana vive en el grupo único de acciones** (`site-header.tsx:512`), que se pinta a los tres
+  anchos: a 390 un usuario con sesión llega a sus avisos. ⚠️ No devolverla a un `hidden md:flex`: sin
+  copia en el cajón, por debajo de 768 **no hay ningún acceso** a los avisos.
+- **`dialog`, `sheet` y `chat-bubble`** son seguros a 390: no hay que tocar los primitivos.
+- `(public)/carrito`, `(checkout)/pedidos/[id]/confirmacion`, `(checkout)/reservas/[id]/pagar`,
+  `/admin/reportes`, `/tutor/faqs` y `/tutor/reservas/[id]/cancelar` **funcionan a 390 sin tocar nada**.
+
+⚠️ **La pantalla de cobros del tutor ya no responde a este Figma.** El dictado de pagos
+(`docs/DICTADO-PAGOS.md`, 9-sep-2026) la rehízo: hoy son **dos tarjetas automáticas —PayPal y
+Banco—** (detrás de Banco compiten Wise, dLocal y Stripe sin que el tutor vea cuál ejecutó) y los
+canales manuales son **solo Venezuela**. La cuenta bancaria por onboarding de Stripe Connect **salió
+del producto y del código** (`src/app/api/tutor/stripe-connect/` y `connect-alta.tsx` ya no existen),
+así que cualquier medida de «TU09 Payouts» contra el Figma es de otra pantalla. El paquete vigente de
+ese panel es `docs/27-PANEL-TUTOR-V2-CAMBIOS-APROBADOS.md`.
 
 ---
 
-## 24.7 · Orden de ejecución
+## 24.7 · Cómo se ejecutó, para el próximo lote
 
-El cromo va **primero y se congela**: son los ficheros que querría editar cualquier agente de
-pantalla, y sin ese orden habría conflicto de merge en los tres ficheros más largos del área.
+El cromo va **primero y se congela** —`panel-shell`, `app-sidebar`, los shells de tutor y admin, los
+pies, `container`, `section`, `globals.css`, y después el header con D-1—, y solo entonces las
+pantallas por área con propiedad de ficheros asignada. Sin ese orden hay conflicto de merge en los
+tres ficheros más largos del área, porque son los que querría editar cualquier agente de pantalla.
 
-| Fase | Qué | Ficheros |
-| :-- | :-- | :-- |
-| **A** | Auditoría (hecha) | — |
-| **B** | Cromo compartido | `panel-shell` · `app-sidebar` · `tutor-shell` · `admin-shell` · `site-footer` · `admin-footer` · `auth-shell` · `container` · `section` · `globals.css` · `not-found` (nuevo) · `error` |
-| **B2** | El header, con D-1 | `site-header` · `search-autocomplete` · `notifications-bell` |
-| **C** | Las 57 pantallas + 22 rutas sin diseño | por área, con propiedad de ficheros asignada |
-| **D** | Verificación | build · typecheck · lint · medición a 390/768/1024/1280/1440 |
-
-**Cuellos de botella medidos** (informe `propiedad.md`): de 114 componentes, solo **23 son
-exclusivos** de una ruta, 28 son de área y **61 (54 %) son globales** — no por acoplamiento malo,
-sino por la cadena de layouts: `(public)/layout.tsx` y `(app)/layout.tsx` cuelgan `SiteHeader` de 65
-rutas y `SiteFooter` de 64.
+**Cuellos de botella medidos:** de 114 componentes, solo **23 son exclusivos** de una ruta, 28 son de
+área y **61 (54 %) son globales** — no por acoplamiento malo, sino por la cadena de layouts (§24.0).
+Cada fase cierra con build, typecheck, lint y **medición** a 390/768/1024/1280/1440.
 
 ---
 
-## 24.8 · Dónde está el detalle
+## 24.8 · Cómo se verifica el móvil, y las tres trampas
 
-Los diez informes completos de la auditoría —92 fichas de pantalla con hallazgos, conflictos y
-huecos, fichero y línea— están fuera del repo, en el directorio de trabajo de la sesión.
-Los artefactos del Figma (115 specs de texto con la geometría exacta de cada nodo y 574 PNG por
-secciones) se regeneran con la REST API en unos minutos; el procedimiento y sus trampas
-—el 429 en paralelo, y que un frame de 5.955 px no se puede leer entero— están anotados.
+**Los artefactos del Figma** (115 specs de texto con la geometría exacta de cada nodo y 574 PNG por
+secciones) se regeneran con la REST API en unos minutos, con el `FIGMA_API_KEY` de `.env.local`. Dos
+trampas anotadas: el **429 si se pide en paralelo**, y que un frame de 5.955 px **no se puede leer
+entero** — hay que renderizar por secciones.
+
+**Y tres trampas al medir, las tres verificadas el 8/9-sep-2026. Ninguna avisa: todas devuelven una
+pantalla que parece correcta.**
+
+1. **Chrome headless NO sirve por debajo de ~500 px.** Con `--headless=new` y con el viejo,
+   `--window-size=390,844` da un PNG de 390 px pero con el layout calculado a un viewport más ancho:
+   el header sale recortado y el hero cortado. Chrome impone un ancho mínimo de ventana. La emulación
+   del panel del navegador (`resize_window {width:390,height:844}`) sí es real: `innerWidth` 390 y UA
+   de Android. **Headless solo de 768 para arriba.**
+2. **La app no hidrata en `127.0.0.1` ni en `[::1]`** — Next 16 solo permite desarrollo desde
+   `localhost`. El síntoma engaña: la página se pinta entera pero React nunca engancha, ningún botón
+   responde y el formulario de login se envía como GET nativo (`/login?email=&password=`). Para una
+   sesión aislada, **subdominios: `http://qa.localhost:3000`** — Chrome los resuelve solo, cada uno
+   tiene su propio tarro de cookies (así `localhost` sigue anónimo para las páginas públicas) y Next
+   los acepta sin tocar `allowedDevOrigins`.
+3. **Con el panel del navegador OCULTO la página no se pinta.** Las capturas salen en blanco o
+   caducan, los clics y el scroll de puntero agotan el tiempo, y —la peor— las transiciones CSS se
+   congelan: leer un color a medio `transition` da un valor que no es ni el de antes ni el de después
+   (para medir color, inyectar antes `* { transition: none }`). Con el panel oculto sí funcionan medir
+   por DOM (`getBoundingClientRect`, `getComputedStyle`, `scrollWidth`), `find`, `read_page`,
+   `get_page_text`, escribir y navegar.
+
+> El cliente revisa en un iPhone (390×844). Una captura «a 390» que en realidad es a 500 manda a
+> arreglar lo que no falla y esconde lo que sí.

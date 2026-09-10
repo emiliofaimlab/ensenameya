@@ -19,7 +19,7 @@
 > **Documento comercial / de aprobación.** Conversión fiel a Markdown del PDF
 > `APROBACION-CLIENTE-FAIMLAB.pdf` (v1 · 2026-06-09). Resumen **completo y no técnico**
 > para revisión y firma del cliente. El **detalle técnico** vive en los Docs 0–9 +
-> `REVISION-docs-1-3.md` de esta misma carpeta. Los diagramas (Figuras 1–7) eran imágenes
+> la revisión técnica de los Docs 1–3 (hoy consolidada en `CLAUDE.md` y en las migraciones). Los diagramas (Figuras 1–7) eran imágenes
 > en el PDF; aquí se transcribe su **contenido textual íntegro** (que, según el propio pie
 > de cada figura, *es la fuente de verdad*).
 

@@ -1,57 +1,87 @@
 # Acceso de administrador — dev (RV-19)
 
-> **Qué es esto.** El acceso al panel de admin de **dev**, separado del documento de cuentas de
-> prueba. Hasta el 17-ago los dos vivían juntos y compartían contraseña; esa es exactamente la
-> incidencia **RV-19**.
+> **Qué es esto.** Cómo se entra como administrador en **dev**, cómo se siembra uno nuevo y por qué
+> ese acceso no vive en el documento de pruebas que se reparte al equipo.
 >
 > ⚠️ **Aquí NO hay ninguna contraseña, y no la va a haber.** Este repositorio es **público**
 > (`github.com/emiliofaimlab/ensenameya`). Escribirla aquí sería mover el problema, no arreglarlo.
 
 | Campo | Valor |
 | :-- | :-- |
-| Documento | Acceso admin dev |
-| Fecha | 2026-08-17 |
+| Documento | Acceso admin dev (RV-19) |
 | Ámbito | **Solo dev** (`lbtpnszjjsxbeileqsja`) |
-| Sustituye a | La entrada "Admin" de `Guia-de-pruebas-dev.pdf` (10-ago) |
+| Sustituye a | La entrada "Admin" de `Guia-de-pruebas-dev.pdf` |
+| Verificado contra dev | 2026-09-09 |
 
 ---
 
-## 1. El problema, dicho entero
+## 1. Cómo se entra hoy
 
-Tras la purga del 10-ago quedaron **13 cuentas en dev**: 8 tutores, 4 alumnos y **un admin**
-(`admin.us1101@ensenameya.dev`, el único con rol `admin` desde `supabase/seed/admin-bootstrap.sql`).
-Las trece se igualaron a **la misma contraseña**, y esa contraseña se repartió en el mismo PDF de
-pruebas que se le pasa a cualquiera que vaya a probar la app.
+- **La cuenta es `admin.us1101@ensenameya.dev`**, y es la **única** con rol `admin`: una sola fila
+  `role = 'admin'` en `user_roles` sobre 45 cuentas de dev.
+- **La contraseña se pide a quien administra.** Sigue **pendiente de rotar**: hoy es la misma que
+  siembra `supabase/seed/dev-poblar.sql`, y ese archivo está en el repositorio público → §4.
+- **Al entrar aterriza en `/admin`**: con rol `admin` manda `ROLE_HOME.admin` (`src/lib/auth/roles.ts`),
+  salvo que la cookie `ey-panel` recuerde otro panel válido para esa persona.
+- **El onboarding también aplica al admin** (RN-44): `requireUser()` redirige al asistente hasta que
+  `profiles.onboarding_complete` sea cierto (`src/lib/auth/server.ts`).
+- **Para mirar datos sin pasar por la app**, la terminal:
 
-Con esa única cadena, quien iba a probar el flujo de reserva como alumno podía además, sin
-proponérselo:
+```bash
+npx supabase db query --linked "select u.email, ur.role from auth.users u
+  join public.user_roles ur on ur.user_id = u.id where ur.role = 'admin';"
+```
 
-- **aprobar o rechazar tutores** y leer sus **documentos de KYC** (7 documentos por tutor, `C-14`);
-- **reembolsar pagos** desde `refund_payment` (US-704) — y desde el 17-ago eso ya **encola contra
-  Stripe de verdad** (X-01), así que el botón mueve dinero en el sandbox;
+⚠️ El `--linked` es obligatorio: sin él el CLI apunta a `127.0.0.1:54322` y pide Docker, que en este
+proyecto no existe (`docs/ENTORNOS.md`).
+
+---
+
+## 2. Sembrar un admin (dev o un ambiente nuevo)
+
+1. **El usuario tiene que existir ya en Auth.** Se registra por la app o desde el panel de Supabase.
+   En **dev** el alta queda confirmada sola (las cuentas nuevas nacen con `email_confirmed_at`); en
+   **prod** hay que confirmar el correo antes.
+2. **`supabase/seed/admin-bootstrap.sql`**, con el email cambiado, en el SQL Editor del ambiente o
+   por `db query`. Es idempotente (PK `user_id + role`) y siembra **el rol, no la contraseña**.
+3. Comprobar con el `select` final del propio archivo: tiene que devolver la fila con `role = 'admin'`.
+
+⚠️ **Por REST con `service_role` no se puede**: `user_roles` no le da `grant` (regla de oro 9) y la
+llamada muere con `42501 permission denied`. Lo mismo pasa al sembrar catálogo (`products`,
+`tutor_profiles`): la vía buena es abrir sesión del propio usuario con un magic link, que es lo que
+hace `supabase/seed/dev-imagenes.mjs`.
+
+⚠️ **Aprobar un tutor a mano son DOS escrituras**, no una: `tutor_profiles.approval_status` **y** la
+fila de `user_roles`. Por eso se aprueba con `review_tutor()` desde `/admin/tutores/<id>`, que hace
+las dos en la misma transacción (`20260715170000`). Un `update` suelto deja al tutor «aprobado» y sin
+rol, y el fallo no aparece hasta que intenta entrar a su panel.
+
+---
+
+## 3. Qué puede el admin, que es de dónde sale el problema
+
+Con esa única credencial se puede, sin proponérselo:
+
+- **aprobar o rechazar tutores** y abrir sus **documentos de KYC** (6 tipos, `C-14`: CV, título,
+  identidad, certificado, diploma y corte de notas). En dev hay **21 documentos subidos y 20 son de
+  cuentas cuyo correo NO es `@ensenameya.dev`** — diez de ellos, de dos cuentas de `gmail.com`;
+- **reembolsar pagos** con `refund_payment` desde `/admin/payments/<id>` (US-704), que **ejecuta
+  contra Stripe en *test mode*** (X-01): el botón mueve dinero de verdad en el sandbox;
 - **repartir roles**, incluido el de admin;
-- leer `payments`, `payouts` y `profiles` de todo el mundo (matriz de §1 de `QA-LANZAMIENTO.md`:
-  el admin ve 43 perfiles, 54 reservas y 49 pagos).
-
-**Y hay un agravante que RV-19 no menciona:** la contraseña compartida está **escrita en claro en el
-repositorio público**, en `supabase/seed/dev-poblar.sql` (`crypt('…', gen_salt('bf'))`, cabecera del
-archivo). Para las 12 cuentas de mentira eso es asumible —solo pueden mirar datos falsos de dev—;
-para el **admin** no lo es en ningún caso. Mientras el admin comparta esa contraseña, **el acceso de
-administrador de dev es público**.
+- **leer `profiles`, `payments` y `payouts` de todo el mundo** — hoy 45 perfiles, 171 reservas y
+  97 pagos.
 
 > La frontera real no es "cuentas de prueba sí / no": es **qué puede hacer cada rol**. Un alumno de
 > mentira con contraseña conocida no es un problema. Un administrador con contraseña conocida sí.
 
 ---
 
-## 2. Qué se hace, en tres pasos
+## 4. La rotación, que es lo que sigue pendiente
 
-### Paso 1 — Rotar la contraseña del admin a una propia
+### Paso 1 — Contraseña propia para el admin
 
 Por el panel, que es el camino soportado: **Supabase → dev → Authentication → Users →
-`admin.us1101@ensenameya.dev` → Reset / update password**.
-
-Si hiciera falta hacerlo por SQL (SQL editor de **dev**):
+`admin.us1101@ensenameya.dev` → Reset / update password**. Por SQL (SQL editor de **dev**):
 
 ```sql
 -- Solo dev. Este mismo UPDATE contra prod sería un incidente.
@@ -63,54 +93,47 @@ update auth.users
 
 ⚠️ **Cambiar la contraseña no cierra las sesiones ya abiertas.** Los refresh tokens vivos siguen
 sirviendo. Si el motivo de la rotación es que alguien la tuvo, hay que además **cerrar sus sesiones**
-(en el panel, "Sign out user"; por SQL, borrando sus filas de `auth.sessions` y
-`auth.refresh_tokens`). Rotar sin esto deja la puerta abierta el tiempo que dure el token.
+("Sign out user" en el panel; por SQL, borrando sus filas de `auth.sessions` y `auth.refresh_tokens`).
 
 ### Paso 2 — Guardarla donde no sea el repositorio
 
 **Gestor de contraseñas del equipo**, con acceso solo para quien administra. Nunca en el repo, ni en
 Jira, ni en capturas, ni en el PDF de pruebas, ni en un mensaje de chat.
 
-⚠️ **Guardarla bien no es opcional aquí: no hay recuperación por correo.** `@ensenameya.dev` no tiene
-buzón, así que el "he olvidado mi contraseña" del admin **no llega a ninguna parte**. Si se pierde,
-la única salida es volver a fijarla por SQL o por el panel — lo cual solo puede hacer quien ya tenga
-acceso a Supabase. Es recuperable, pero no por el camino que uno espera.
+⚠️ **No hay recuperación por correo.** `@ensenameya.dev` no tiene buzón, así que el "he olvidado mi
+contraseña" del admin no llega a ninguna parte. Si se pierde, solo se puede volver a fijar desde
+Supabase — o sea, solo quien ya tiene acceso al proyecto.
 
-### Paso 3 — Dejar la nota en el sitio de donde salió
+### Paso 3 — Dejar la nota donde antes estaba el dato
 
-Para que quien busque el acceso de admin donde siempre lo tuvo no concluya que se perdió:
-
-- [ ] **`Guia-de-pruebas-dev.pdf`** (el documento que se reparte al equipo): quitar la fila del admin
-      y dejar en su lugar *"El acceso de administrador ya no está aquí — pedirlo a quien administra;
-      ver `docs/ACCESO-ADMIN-DEV.md`."*
+- [ ] **`Guia-de-pruebas-dev.pdf`**: quitar la fila del admin y dejar *"El acceso de administrador ya
+      no está aquí — pedirlo a quien administra; ver `docs/ACCESO-ADMIN-DEV.md`."*
 - [ ] **`supabase/seed/dev-poblar.sql`**: su cabecera dice "Contraseña de **todas**". Desde la
-      rotación deja de ser cierto y hay que decirlo ahí, que es donde alguien lo lee. **Ese archivo
-      no es de este carril**; queda anotado para quien lo tenga.
+      rotación deja de ser cierto y hay que decirlo ahí, que es donde alguien lo lee.
 - [x] **`docs/QA-LANZAMIENTO.md` §4.1**, en el punto de sembrar el admin: apunta aquí.
 
 ---
 
-## 3. Qué NO cambia, y por qué
+## 5. Qué NO cambia, y con qué matiz
 
-- **Las 12 cuentas de prueba se quedan como están**, con su contraseña compartida y pública. Son
-  alumnos y tutores de mentira sobre datos de mentira en dev; rotarlas costaría reescribir el seed y
-  el PDF a cambio de nada. ⚠️ Ese razonamiento se cae el día que **dev tenga un dato personal de
-  verdad** — una cuenta real de alguien del equipo, un documento de KYC auténtico subido "para
-  probar". Si eso pasa, dev deja de ser un entorno de mentira y esto hay que replantearlo entero.
+- **Las 12 cuentas del seed se quedan como están**, con su contraseña compartida y pública: son
+  alumnos y tutores de mentira, y rotarlas costaría reescribir el seed y el PDF a cambio de nada.
+  ⚠️ **Pero dev ya no es un entorno enteramente de mentira**: de sus 45 cuentas, **24 tienen un correo
+  que no es del dominio de pruebas**, y casi todos los documentos de KYC cuelgan de ellas (§3). El
+  argumento cubre a las cuentas del seed; no cubre lo que se ha ido subiendo encima.
 - **`admin-bootstrap.sql` no se toca.** Siembra el rol, no la contraseña.
 
 ---
 
-## 4. Producción, que es donde esto importa de verdad
+## 6. Producción
 
 En prod **todavía no hay admin sembrado** — es un punto abierto del checklist
 (`QA-LANZAMIENTO.md` §4.1). Cuando se siembre:
 
-- [ ] Contraseña **propia**, generada en el momento, **distinta de la de dev** y distinta de la del
-      seed. No copiar nada de este entorno.
+- [ ] Contraseña **propia**, generada en el momento, **distinta de la de dev** y de la del seed.
 - [ ] Guardada en el gestor antes de crearla, no después.
-- [ ] Con un **buzón que reciba de verdad** — si el admin de prod se llama `…@ensenameya.dev` hereda
-      el mismo problema de recuperación descrito arriba, y allí no hay red.
+- [ ] Con un **buzón que reciba de verdad**: un `…@ensenameya.dev` hereda el problema de recuperación
+      de §4 y allí no hay red.
 - [ ] Y su onboarding completado: el gate de `requireUser` (RN-44) también aplica al admin.
 
 > Lo de dev es una molestia. Lo mismo en prod, con pagos reales y documentos de identidad de tutores
@@ -118,4 +141,4 @@ En prod **todavía no hay admin sembrado** — es un punto abierto del checklist
 
 ---
 
-*Faim Lab · RV-19 · 17 de agosto de 2026.*
+*Faim Lab · RV-19.*

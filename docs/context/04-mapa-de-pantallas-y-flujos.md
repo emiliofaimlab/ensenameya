@@ -56,7 +56,7 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 | SCR-AL02 | Dashboard Alumno | Sesiones activas y pasadas | alumno |
 | SCR-AL03 | Detalle de Reserva / Sesión | Estado, sesiones, acceso a sala, acciones | alumno |
 | SCR-AL04 | Agendar (selección de horario) | Elegir slot(s) disponibles del tutor | alumno |
-| SCR-AL05 | Checkout / Pago | Resumen + pago por proveedor (DP-01) | alumno |
+| SCR-AL05 | Checkout / Pago | Resumen + **formulario de pago embebido** (nunca una página del proveedor) | alumno |
 | SCR-AL06 | Confirmación de Reserva | Resumen + horario bloqueado | alumno |
 | SCR-AL07 | Flujo de Cancelación | Cancelar reserva/sesión según política | alumno |
 | SCR-AL08 | Dejar Reseña | Rating 1–5 + comentario (RN-28) | alumno |
@@ -66,14 +66,14 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 | ID | Pantalla | Propósito | Acceso |
 | :-- | :-- | :-- | :-- |
 | SCR-TU01 | Onboarding Tutor | Bio, categorías, oferta inicial, `timezone` | tutor |
-| SCR-TU02 | Verificación de Identidad | Subir documentos (KYC manual, M2/M8) | tutor |
+| SCR-TU02 | Verificación de Identidad | Subir los **seis** documentos de KYC — CV, título, identidad, certificado, diploma y corte de notas (C-14); los tres primeros obligatorios | tutor |
 | SCR-TU03 | Mis Productos | Listado/gestión de tutorías (M3) | tutor |
 | SCR-TU04 | Crear/Editar Producto | Modelo de precio, duración, categorías, política | tutor |
 | SCR-TU05 | Disponibilidad / Calendario | Reglas recurrentes + excepciones (S-03) | tutor |
 | SCR-TU06 | Dashboard Tutor | Sesiones realizadas + total ganado | tutor |
 | SCR-TU07 | Reservas del Tutor | Listado + detalle de reservas | tutor |
 | SCR-TU08 | Detalle de Sesión (Tutor) | Ver estado / marcar completada | tutor |
-| SCR-TU09 | Payout / Cobros | Estado de retiro, montos, historial (M7) | tutor |
+| SCR-TU09 | Payout / Cobros | Estado de retiro, montos, historial (M7). **Dos tarjetas automáticas: PayPal y Banco** — y detrás de Banco compiten Wise, Stripe y dLocal sin que el tutor sepa cuál ejecutó. Los canales manuales (Zinli · Zelle · Binance) solo se pintan a un tutor de Venezuela | tutor |
 
 ### 4.2.5 Sala en vivo (compartida)
 
@@ -101,6 +101,10 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 | SCR-AD14 | Alertas / Incidencias | Fallas de pago, cancelaciones, disputas | admin |
 | SCR-AD15 | Payouts a Tutores | Lista, detalle, hold/release (M7) | admin |
 
+> **No existe pantalla de alta de cuenta en un proveedor de pago.** El tutor teclea sus coordenadas
+> bancarias en **nuestro** formulario (SCR-TU09) y no entra en el onboarding de ningún tercero. Es
+> doctrina del dictado de pagos, no un estado transitorio.
+
 ### 4.2.7 Globales / transversales
 
 | ID | Pantalla | Propósito | Acceso |
@@ -109,7 +113,7 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 | SCR-G02 | Estado vacío genérico | Sin datos en listados | todos |
 | SCR-G03 | Configuración de cuenta | Perfil, `timezone`, seguridad, cerrar sesión | auth |
 
-> **Referidos:** no es una pantalla propia. Es un **widget/integración de frontend** de Referral Factory embebido (p. ej. en SCR-AL02/SCR-G03) que captura `referral_code` (S-11/S-18). Sin lógica interna (RN-21).
+> **Referidos:** no es una pantalla propia. Es un **widget de frontend** de Referral Factory embebido (RN-21, sin lógica interna). ⚠️ Solo **pinta** el enlace o el embed: no captura nada, porque la plataforma externa no devuelve al referido con un código. Ver Doc 6 §6.12.
 
 ---
 
@@ -134,8 +138,9 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 | 3 | SCR-P04/05/06/09 | Descubre tutores/productos/categoría | Lista resultados (solo activos/aprobados, RN-24) | — | — |
 | 4 | SCR-P07/P08 | Abre perfil/producto y "Reservar" | Muestra disponibilidad del tutor | — | — |
 | 5 | SCR-AL04 | Selecciona slot(s) (paquete → N) | Valida disponibilidad; crea reserva tentativa | `booking: pending_payment` | — |
-| 6 | SCR-AL05 | Paga (checkout del proveedor) | Resuelve proveedor (RN-15); procesa cobro | `payment: pending→paid` (webhook) | NTF recibo |
-| 7 | SCR-AL06 | Ve confirmación | Confirma reserva; crea sesiones y salas | `booking: confirmed`; `session: scheduled` | NTF reserva confirmada (alumno+tutor) |
+| 6 | SCR-AL05 | Paga **dentro del sitio** | Rutea por el país del alumno (RN-15) y cobra. Le pide nombre, apellido, tipo y número de documento, que es lo que dLocal exige para cobrar fuera de su formulario | `payment: pending→paid` (webhook) | **NTF-04** recibo |
+| 6b | SCR-AL03 | Espera al tutor | La reserva queda **pagada y sin confirmar**: el tutor tiene 24 h (RN-38) | `booking: pending_acceptance` | **NTF-17** al tutor — 🔴 sin cablear |
+| 7 | SCR-AL06 | Ve confirmación | El tutor acepta: se crean sesiones y salas | `booking: confirmed`; `session: scheduled` | **NTF-05** al alumno · **NTF-07** al tutor |
 | 8 | SCR-AL02/AL03 | Revisa próximas sesiones | Muestra agenda; recordatorios programados | `confirmed` | NTF recordatorio (24h/1h, S-07) |
 | 9 | SCR-LV01 | Entra a la sala en su horario | Habilita acceso por ventana (RN-18) | `session: in_progress`; `booking: in_progress` | NTF "sala lista" |
 | 10 | SCR-LV01 | Toma la clase; finaliza | Cierra sesión | `session: completed` | — |
@@ -151,7 +156,7 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 | :-- | :-- | :-- | :-- | :-- | :-- |
 | 1 | SCR-AU02 | Registro como tutor | Crea perfil tutor | `approval: pending` | NTF bienvenida tutor |
 | 2 | SCR-TU01 | Onboarding (bio, categorías, oferta) | Guarda perfil | `approval: pending` | — |
-| 3 | SCR-TU02 | Sube documentos de identidad | Encola KYC | `identity: pending`; `document: pending` | NTF "en revisión" |
+| 3 | SCR-TU02 | Sube sus documentos (6, C-14) | Encola KYC | `identity: pending`; `document: pending` | **NTF-06** «en revisión» |
 | 4 | (admin) | — | Admin revisa identidad y perfil | `identity: approved` → `approval: approved` (RN-29) | NTF tutor aprobado |
 | 5 | SCR-TU04 | Crea producto(s) | Guarda; publica | `product: draft→active` (RN-24) | — |
 | 6 | SCR-TU05 | Define disponibilidad | Guarda reglas + excepciones (S-03) | — | — |
@@ -159,7 +164,7 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 | 8 | SCR-LV01 | Da la clase en su horario | Habilita sala (RN-18) | `session: in_progress→completed` | — |
 | 9 | SCR-TU08 | Marca completada (o automático) | Cierra sesión | `session: completed` | — |
 | 10 | SCR-TU06 | Revisa ingresos | Muestra total ganado/neto | `payout_item` devengado (RN-30) | — |
-| 11 | SCR-TU09 | Consulta payouts | Programa/ejecuta liquidación tras retención | `payout: pending→scheduled→paid` (DP-02) | NTF payout pagado |
+| 11 | SCR-TU09 | Registra **cómo cobra** y consulta sus payouts | Guarda su cuenta o conecta PayPal; el lote semanal programa la liquidación al vencer los **7 días** de retención, y puede pedir el retiro él mismo (RN-40) | `payout: pending→scheduled→processing→paid` | **NTF-12** pagado · **NTF-16** incidencia · **NTF-23** payout sin llegar |
 
 ---
 
@@ -192,14 +197,18 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 
 ## 4.8 FL-05 — Cancelación y reembolso (transversal)
 
-Resumen del recorrido (mecanismo en Doc 2 §2.13; política = **DP-03/DP-08**):
+Resumen del recorrido (mecanismo en Doc 2 §2.13). La política de reembolso es **RN-37**, única de plataforma; lo único abierto es el no-show (**DP-08**).
+
+⚠️ **Cancelar y devolver el dinero son dos pasos.** La cancelación encola la petición; el dinero lo mueve el job `/api/cron/refunds-process`. El correo al alumno sale al **pedirlo** (Doc 7 §7.3, NTF-10).
 
 | Caso | Pantalla | Estados resultantes | Notif |
 | :-- | :-- | :-- | :-- |
-| Alumno cancela | SCR-AL03→AL07 | `booking/session: cancelled`; `payment: refunded/partial` (DP-03) | NTF cancelación + reembolso |
-| Tutor cancela | SCR-TU08 | `booking: cancelled`; `payment: refunded` (100%) | NTF al alumno |
-| No-show | SCR-LV01 / sistema | `session: no_show`; efecto financiero según DP-08 | NTF según política |
-| Reembolso por admin | SCR-AD08 | `payment: refunded/partial`; ajuste payout (S-29) | NTF reembolso |
+| Alumno cancela con ≥24 h | SCR-AL03→AL07 | `booking/session: cancelled`; `payment: refunded` (**100 %**) | **NTF-09** + **NTF-10** |
+| Alumno cancela con <24 h | SCR-AL03→AL07 | `booking/session: cancelled`; `payment: partially_refunded` (**50 %**) | **NTF-09** + **NTF-10** |
+| Tutor cancela | SCR-TU08 | `booking: cancelled`; `payment: refunded` (**100 %**) | **NTF-09** al alumno |
+| Tutor rechaza o deja vencer sus 24 h | — | `booking: cancelled`; `payment: refunded` (**100 %**, RN-38) | **NTF-09** al alumno |
+| No-show | SCR-LV01 / sistema | `session: no_show`; efecto financiero según **DP-08** (abierta) | Según política |
+| Reembolso por admin | SCR-AD08 | `payment: refunded/partial`; ajuste del payout (S-29) | **NTF-10** |
 
 ---
 
