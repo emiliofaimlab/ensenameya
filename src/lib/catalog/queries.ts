@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/database.types";
 import { parseFaqs, type Faq } from "@/lib/tutor-faqs";
@@ -36,6 +38,15 @@ export type TutorCardData = {
   bio: string | null;
   ratingAvg: number | null;
   ratingCount: number;
+  /**
+   * §5.2 · el «Marzo 2026 / tutor desde» de las estadísticas del perfil, de
+   * `tutor_profiles.approved_at`. Lo baja **solo** `getTutorDetail`: los
+   * listados no pintan esa estadística y sus `select` se quedan mínimos a
+   * propósito (el porqué, en el aviso del `select` de tutor de
+   * `getProductDetail`). `null` = o no se consultó, o el tutor no tiene fecha;
+   * en los dos casos la estadística no se pinta, que es lo mismo que hacer.
+   */
+  approvedAt: string | null;
 };
 
 export type ProductTutor = {
@@ -62,6 +73,17 @@ export type ProductCardData = {
   /** DD-03 — de la mentoría; `null` en las que se publicaron antes del campo. */
   level: string | null;
   language: string | null;
+  /**
+   * G-03 · la confirmación es POR MENTORÍA (`products.auto_accept_bookings`,
+   * migración `20260817180000`), nunca del perfil del tutor.
+   *
+   * No es opcional a propósito: el distintivo de la tarjeta solo tiene dos
+   * caras, y una tarjeta que no supiera el dato caería en la conservadora
+   * («El tutor confirma en 24 h») sobre una mentoría que sí confirma al
+   * instante. Prometer de menos en la pantalla donde se comparan mentorías es
+   * tan falso como prometer de más, así que el tipo obliga a traerlo.
+   */
+  autoAccept: boolean;
   /** Solo lo rellena el listado de P05; `null` donde no se consultó. */
   tutor?: ProductTutor | null;
 };
@@ -104,8 +126,9 @@ function toCategoryTags(
 }
 
 /** Fila de producto con el embed de categorías → tarjeta. Compartido por las
- *  consultas de listado/búsqueda (el `select` literal se repite en cada sitio
- *  porque Supabase infiere el tipo desde el string literal, no desde una const). */
+ *  consultas de listado/búsqueda; donde el mismo `select` se usa dos veces vive
+ *  en una const (`TUTOR_PRODUCT_SELECT`, `PRODUCT_CARD_SELECT`): una const de
+ *  string conserva el tipo literal que Supabase necesita para inferir la fila. */
 function mapProductCard(r: {
   id: string;
   title: string;
@@ -116,6 +139,9 @@ function mapProductCard(r: {
   session_duration_min: number | null;
   package_num_sessions: number | null;
   image_path: string | null;
+  // Obligatorio y no `?` como `level`/`language`: así el `select` que se olvide
+  // de bajarlo no compila, en vez de pintar el distintivo equivocado (G-03).
+  auto_accept_bookings: boolean;
   level?: string | null;
   language?: string | null;
   product_categories: { categories: CategoryTag | null }[] | null;
@@ -132,6 +158,7 @@ function mapProductCard(r: {
     imagePath: r.image_path,
     level: r.level ?? null,
     language: r.language ?? null,
+    autoAccept: r.auto_accept_bookings,
     categories: toCategoryTags(r.product_categories),
   };
 }
@@ -239,6 +266,9 @@ async function withProductFacts(rows: TutorRow[]): Promise<FeaturedTutor[]> {
     bio: r.bio,
     ratingAvg: r.rating_avg,
     ratingCount: r.rating_count,
+    // Ninguna tarjeta de listado pinta «tutor desde», así que sus `select` no
+    // bajan `approved_at`: aquí `null` significa «no consultado» (§5.2).
+    approvedAt: null,
     priceFromMinor: cheapest.get(r.profile_id)?.amount ?? null,
     currency: cheapest.get(r.profile_id)?.currency ?? null,
     categories: [...(cats.get(r.profile_id) ?? new Map())].map(
@@ -410,16 +440,54 @@ export async function listFeaturedTutors(limit = 4): Promise<FeaturedTutor[]> {
   return withProductFacts(data ?? []);
 }
 
-/** US-304 (P07) — perfil público del tutor + sus clases activas. */
-export async function getTutorDetail(
+/**
+ * Mentorías de un tutor tal y como las pintan su ficha (§1) y la ficha de
+ * mentoría (§3.6). Sobre lo que necesita la tarjeta baja tres columnas que los
+ * `select` de listado **no** traen:
+ *
+ *  · `auto_accept_bookings` — el distintivo de confirmación es por mentoría (G-03);
+ *  · `level` y `language` — de ellas salen las estadísticas «2 niveles» y
+ *    «Español · Inglés» del perfil (§5.2) y los chips de «Lo que enseño», que
+ *    ya no repiten el nivel del tutor.
+ */
+const TUTOR_PRODUCT_SELECT =
+  "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, level, language, product_categories(categories(slug, name, icon))";
+
+/**
+ * US-304 (P07) — perfil público del tutor + sus clases activas.
+ *
+ * Dos datos de la tira de estadísticas (§1) NO se bajan aquí, y no por olvido:
+ *
+ * TODO(DP-31.1) · «148 / sesiones impartidas». Hoy no hay de dónde sacarlo con
+ *   el cliente anónimo: `sessions` no es legible desde el catálogo público, así
+ *   que el recuento tendría que ser columna nueva de la vista `tutors_public` o
+ *   una RPC pública. Las dos cosas son migración y la decisión sigue abierta —
+ *   mientras tanto la tira se pinta con tres estadísticas, no con un cero.
+ *
+ * TODO(DP-31.4) · insignia «Tutor verificado». Sale de `approval_status`, que
+ *   ya se filtra arriba. Si se decide condicionarla a
+ *   `identity_verification_status = 'verified'`, esa columna entra en el
+ *   `select` de abajo y en `TutorCardData`; hasta entonces no se pide, porque
+ *   bajar una columna que nadie lee es justo lo que avisa `getProductDetail`.
+ */
+/**
+ * ⚠️ `cache()` NO es adorno (§5.6, 10-sep). `generateMetadata` y el propio
+ * componente de página llaman a esto con el MISMO id dentro de la MISMA
+ * petición, así que sin memorizar por request son dos viajes idénticos a
+ * Postgres por cada visita a una ficha. Antes de los metadatos la segunda
+ * llamada no existía; ahora existe siempre. Es el mismo patrón que
+ * `getSessionContext()` en `lib/auth/server.ts`, y por el mismo motivo: se
+ * memoriza por PETICIÓN, no entre peticiones, así que no cachea datos de nadie.
+ */
+export const getTutorDetail = cache(async (
   id: string,
-): Promise<{ tutor: TutorCardData; products: ProductCardData[] } | null> {
+): Promise<{ tutor: TutorCardData; products: ProductCardData[] } | null> => {
   const supabase = await createClient();
 
   const { data: t } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, teaching_level",
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, teaching_level, approved_at",
     )
     .eq("profile_id", id)
     .eq("approval_status", "approved")
@@ -428,9 +496,7 @@ export async function getTutorDetail(
 
   const { data: prods } = await supabase
     .from("products")
-    .select(
-      "id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name, icon))",
-    )
+    .select(TUTOR_PRODUCT_SELECT)
     .eq("tutor_id", id)
     .eq("status", "active")
     .order("created_at", { ascending: false });
@@ -447,9 +513,41 @@ export async function getTutorDetail(
       bio: t.bio,
       ratingAvg: t.rating_avg,
       ratingCount: t.rating_count,
+      approvedAt: t.approved_at,
     },
     products,
   };
+});
+
+/**
+ * §3.6 · «Otras mentorías de {tutor}» de la ficha de mentoría: las activas del
+ * tutor menos la que se está viendo. Mismo `select`, mismo orden y mismo mapeo
+ * que la ficha del tutor —es la misma tarjeta—, por eso comparten const.
+ *
+ * `limit` es un tope, no un recuento: quien pinta decide cuántas caben (dos en
+ * escritorio, fila desplazable en móvil). Está para no bajar el catálogo entero
+ * de un tutor con veinte mentorías por una sección secundaria de la página.
+ */
+export async function listTutorProducts(
+  tutorId: string,
+  excludeId?: string,
+  limit = 4,
+): Promise<ProductCardData[]> {
+  const supabase = await createClient();
+  let q = supabase
+    .from("products")
+    .select(TUTOR_PRODUCT_SELECT)
+    .eq("tutor_id", tutorId)
+    .eq("status", "active");
+  // Se excluye en la consulta y no al mapear: filtrándola después, la propia
+  // mentoría se comería uno de los huecos del `limit` y la sección enseñaría
+  // una tarjeta de menos justo en los tutores con pocas mentorías.
+  if (excludeId) q = q.neq("id", excludeId);
+
+  const { data } = await q
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  return (data ?? []).map(mapProductCard);
 }
 
 export type TutorReview = {
@@ -459,7 +557,45 @@ export type TutorReview = {
   createdAt: string;
   /** Firma del alumno si consintió publicarla (decisión 18); si no, null. */
   author: string | null;
+  /**
+   * §5.4 · de qué mentoría habla la reseña, para la línea de contexto bajo el
+   * autor. `reviews.product_id` es NOT NULL en el esquema, pero el embed puede
+   * llegar vacío si esa mentoría ya no es legible, así que el título se trata
+   * como opcional: sin él la reseña se pinta sin su línea, no se esconde.
+   */
+  productId: string | null;
+  productTitle: string | null;
 };
+
+/**
+ * El embed **nombra su FK** (regla 10 de CLAUDE.md): el día que alguien cuelgue
+ * una tabla puente entre `reviews` y `products`, un embed sin nombrar no se
+ * degrada — se cae entero con `PGRST201`. Por eso mismo las dos consultas de
+ * abajo sí miran el `error`: un `const { data } = …` convertiría ese fallo en
+ * «este tutor no tiene reseñas», que es la clase de mentira que nadie reporta.
+ */
+const REVIEW_SELECT =
+  "id, rating, comment, created_at, author_display, product_id, products!reviews_product_id_fkey(title)";
+
+function mapReview(r: {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  author_display: string | null;
+  product_id: string;
+  products: { title: string } | null;
+}): TutorReview {
+  return {
+    id: r.id,
+    rating: r.rating,
+    comment: r.comment,
+    createdAt: r.created_at,
+    author: r.author_display,
+    productId: r.product_id,
+    productTitle: r.products?.title ?? null,
+  };
+}
 
 /**
  * US-902 — reseñas públicas del tutor. Van **anónimas salvo consentimiento**:
@@ -469,32 +605,72 @@ export type TutorReview = {
  */
 export async function listTutorReviews(tutorId: string): Promise<TutorReview[]> {
   const supabase = await createClient();
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("reviews")
-    .select("id, rating, comment, created_at, author_display")
+    .select(REVIEW_SELECT)
     .eq("tutor_id", tutorId)
     .order("created_at", { ascending: false })
     .limit(50);
+  if (error) console.error("[listTutorReviews]", error.code, error.message);
 
-  return (data ?? []).map((r) => ({
-    id: r.id,
-    rating: r.rating,
-    comment: r.comment,
-    createdAt: r.created_at,
-    author: r.author_display,
-  }));
+  return (data ?? []).map(mapReview);
+}
+
+/**
+ * §5.3 — reseñas de UNA mentoría. Mismo `select` y mismo tope que las del
+ * tutor; lo que cambia es la clave de búsqueda y que aquí hacen falta las tres
+ * cifras, porque `products` no lleva copia de la media como sí la lleva
+ * `tutor_profiles.rating_avg`:
+ *
+ *  · `count` es el EXACTO de la BD, no `reviews.length`. El botón dice «Ver las
+ *    12 reseñas» y con más de 50 el tope de la lista haría mentir a ese número.
+ *  · `avg` se calcula sobre las cargadas (las 50 más recientes) y es `null` sin
+ *    reseñas: un 0 pintaría cinco estrellas vacías donde lo que hay es «aún no
+ *    hay valoraciones».
+ */
+export async function listProductReviews(
+  productId: string,
+): Promise<{ reviews: TutorReview[]; count: number; avg: number | null }> {
+  const supabase = await createClient();
+  const { data, error, count } = await supabase
+    .from("reviews")
+    .select(REVIEW_SELECT, { count: "exact" })
+    .eq("product_id", productId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) console.error("[listProductReviews]", error.code, error.message);
+
+  const reviews = (data ?? []).map(mapReview);
+  // Media sin redondear: la decide quien la pinta (una cifra de 44 px con un
+  // decimal), y redondear aquí impediría distinguir 4,45 de 4,5 al ordenar.
+  const avg =
+    reviews.length > 0
+      ? reviews.reduce((total, r) => total + r.rating, 0) / reviews.length
+      : null;
+  // Sin `count` (solo pasa si la consulta falló) manda lo que sí se cargó, que
+  // es cero: es preferible a un `NaN` en «Ver las N reseñas».
+  return { reviews, count: count ?? reviews.length, avg };
 }
 
 /** US-304 (P08) — detalle de producto; null si no es visible (RN-24). */
-export async function getProductDetail(
+/**
+ * ⚠️ `cache()` NO es adorno (§5.6, 10-sep). `generateMetadata` y el propio
+ * componente de página llaman a esto con el MISMO id dentro de la MISMA
+ * petición, así que sin memorizar por request son dos viajes idénticos a
+ * Postgres por cada visita a una ficha. Antes de los metadatos la segunda
+ * llamada no existía; ahora existe siempre. Es el mismo patrón que
+ * `getSessionContext()` en `lib/auth/server.ts`, y por el mismo motivo: se
+ * memoriza por PETICIÓN, no entre peticiones, así que no cachea datos de nadie.
+ */
+export const getProductDetail = cache(async (
   id: string,
-): Promise<ProductDetail | null> {
+): Promise<ProductDetail | null> => {
   const supabase = await createClient();
 
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, faqs, requirements, level, language, tutor_id, product_categories(categories(slug, name, icon))",
+      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, faqs, requirements, level, language, tutor_id, product_categories(categories(slug, name, icon))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -539,6 +715,9 @@ export async function getProductDetail(
     imagePath: p.image_path,
     level: p.level,
     language: p.language,
+    // G-03 · de aquí salen el chip del hero, el paso 2 de «Cómo funciona» y la
+    // línea bajo el CTA; las tres dicen lo mismo porque leen el mismo dato.
+    autoAccept: p.auto_accept_bookings,
     categories: toCategoryTags(p.product_categories),
     // jsonb → lista tipada; se ignora lo que no tenga forma {q,a}. El parseo es
     // el MISMO que el de las FAQ del tutor (EY-194) a propósito: las dos listas
@@ -560,7 +739,7 @@ export async function getProductDetail(
       faqs: [],
     },
   };
-}
+});
 
 /** Nombre de una categoría activa (o null si no existe / inactiva por RLS). */
 export async function getCategoryBySlug(
@@ -627,7 +806,7 @@ export async function listActiveProducts(opts: {
   let base = supabase
     .from("products")
     .select(
-      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, level, language, product_categories(categories(slug, name, icon))",
+      "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, level, language, product_categories(categories(slug, name, icon))",
       { count: "exact" },
     )
     .eq("status", "active");
@@ -779,7 +958,7 @@ export async function suggestSearch(q: string): Promise<SearchSuggestions> {
 }
 
 const PRODUCT_CARD_SELECT =
-  "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, product_categories(categories(slug, name, icon))";
+  "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, product_categories(categories(slug, name, icon))";
 
 /**
  * RV-17 · cuánto pesa que el término esté en el TÍTULO.

@@ -210,6 +210,18 @@ export function TutorOnboardingForm({
   // y `display_name` (la vitrina pública, DD-01) sin nada que copiar.
   const [fullName, setFullName] = useState(name0);
   const [headline, setHeadline] = useState(headline0);
+
+  /**
+   * §5.10 · lo que la ficha pública va a hacer con este campo, dicho antes de
+   * guardarlo. Mismo `split(" · ", 2)` que el hero del perfil: si aquí y allí
+   * se parte distinto, el aviso mide una cosa y la pantalla recorta otra.
+   */
+  const META_MAX = 40;
+  const metaHeadline = headline.split(" · ", 2)[1]?.trim() ?? "";
+  const avisoHeadline =
+    metaHeadline.length > META_MAX
+      ? `La parte de detrás del « · » tiene ${metaHeadline.length} caracteres y en tu perfil se recorta sobre los ${META_MAX}. Acórtala o quita el « · » para que todo sea el titular.`
+      : "Con un « · » en medio se parte en dos: delante el titular, detrás una línea de apoyo de unos 40 caracteres. Sin « · », todo es titular.";
   const [bio, setBio] = useState(bio0);
   const [avatar, setAvatar] = useState<string | null>(avatarPath);
   /**
@@ -582,12 +594,27 @@ export function TutorOnboardingForm({
             fileBase="tutor-avatar"
           />
         </Field>
-        <Field label="Headline (obligatorio)" htmlFor="headline">
+        {/*
+          §5.10 (10-sep) · ESTE CAMPO SE PARTE EN DOS EN LA FICHA PÚBLICA.
+          El hero del perfil lo divide por el PRIMER « · »: lo de delante es el
+          título (17 px semibold) y lo de detrás la meta (14 px). Las dos van en
+          UNA línea con `nowrap` + elipsis (G-10), así que una meta larga no
+          envuelve: se recorta en silencio y el tutor no se entera de que su
+          frase no se lee entera. De ahí el aviso —que es AVISO, no candado: el
+          tope de 40 es una recomendación de la revisión, no una regla de
+          negocio, y bloquear el guardado por pasarse dos caracteres sería
+          inventarse una validación que nadie aprobó.
+        */}
+        <Field
+          label="Headline (obligatorio)"
+          htmlFor="headline"
+          hint={avisoHeadline}
+        >
           <Input
             id="headline"
             value={headline}
             onChange={(e) => setHeadline(e.target.value)}
-            placeholder="Ej: Profesora de inglés para entrevistas tech"
+            placeholder="Ej: Profesora de Matemáticas · Preparo Cálculo I"
             className={FIELD_CLASS}
           />
         </Field>

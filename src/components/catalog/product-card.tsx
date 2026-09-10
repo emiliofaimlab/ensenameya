@@ -1,8 +1,18 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRightIcon, StarIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ArrowUpRightIcon,
+  BarChart3Icon,
+  CheckIcon,
+  ClockIcon,
+  StarIcon,
+  VideoIcon,
+  ZapIcon,
+} from "lucide-react";
 
 import { ProductCover } from "@/components/catalog/product-cover";
+import { LEVELS } from "@/components/catalog/product-filters";
 import {
   initialsFrom,
   perSessionLabel,
@@ -29,18 +39,66 @@ export function ProductCard({
   /** P09 la usa a 273px: miniatura y tipografías más pequeñas, tutor en una línea. */
   compact?: boolean;
 }) {
-  const sessions = sessionsLabel(product);
+  /**
+   * §6 · fila de datos con icono: `⏱ 60 min · 📹 En vivo 1 a 1 · 📶 Intermedio`.
+   *
+   * La duración de una sesión suelta se escribe "60 min" y NO "1 × 60 min":
+   * `sessionsLabel` antepone el recuento siempre, y ese "1 ×" no informa de
+   * nada cuando solo hay una sesión. En paquetes sí manda `sessionsLabel`
+   * ("4 × 60 min"), para no tener dos sitios escribiendo el mismo formato.
+   *
+   * Sin idioma a propósito (§6): a 190px —la anchura de la fila desplazable de
+   * móvil— el cuarto dato empuja la fila a una tercera línea.
+   */
+  const duracion =
+    (product.packageNumSessions ?? 1) > 1
+      ? sessionsLabel(product)
+      : product.sessionDurationMin
+        ? `${product.sessionDurationMin} min`
+        : null;
+  // DD-03 · el nivel es el de LA MENTORÍA y su vocabulario lo da el filtro de
+  // P05 (básico/intermedio/avanzado). Sin nivel —mentorías anteriores al
+  // campo— el dato no se pinta en vez de inventar uno.
+  const nivel = LEVELS.find((l) => l.id === product.level)?.label ?? null;
+  const datos: { k: string; Icon: LucideIcon; label: string }[] = [
+    ...(duracion ? [{ k: "dur", Icon: ClockIcon, label: duracion }] : []),
+    { k: "vivo", Icon: VideoIcon, label: "En vivo 1 a 1" },
+    ...(nivel ? [{ k: "nivel", Icon: BarChart3Icon, label: nivel }] : []),
+  ];
+
+  /**
+   * G-03 · la confirmación es POR MENTORÍA (`products.auto_accept_bookings`),
+   * nunca del perfil del tutor: dos mentorías del mismo tutor pueden responder
+   * distinto. Se pinta siempre —también en `compact`—, porque es justo lo que
+   * decide si el alumno puede entrar hoy o tiene que esperar 24 h.
+   */
+  const confirmacion: { Icon: LucideIcon; label: string; className: string } =
+    product.autoAccept
+      ? {
+          Icon: ZapIcon,
+          label: "Confirmación inmediata",
+          // Naranja oscuro, no el `primary` de marca: a 11-12px sobre blanco el
+          // #fe6a00 se queda en 2.4:1 de contraste y esto es texto, no un botón.
+          className: "text-[#c4470a]",
+        }
+      : {
+          Icon: CheckIcon,
+          label: "El tutor confirma en 24 h",
+          className: "text-[#595959]",
+        };
+
   // RV-08 · manda el total de la reserva, no la tarifa (ver `priceDisplay`).
   const precio = priceDisplay(product);
   /**
    * RV-09 · el paquete sale más barato por sesión y la tarjeta no lo decía.
    *
    * La nota del precio en un paquete es "paquete · 6 sesiones": repite lo que ya
-   * dice la línea de arriba ("6 × 60 min") y calla lo único que sirve para
+   * dice la fila de datos ("6 × 60 min") y calla lo único que sirve para
    * comparar con una clase suelta — cuánto cuesta CADA sesión. `perSessionLabel`
-   * lo dice y trae también el recuento, así que SUSTITUYE a la nota en lugar de
-   * apilarse encima. Es el mismo criterio que ya sigue el panel de reserva de
-   * P08, y aquí importa más: el catálogo es donde se comparan mentorías.
+   * lo dice ("4 sesiones · US$ 15,00 c/u") y trae también el recuento, así que
+   * SUSTITUYE a la nota en lugar de apilarse encima. Es el mismo criterio que ya
+   * sigue el panel de reserva de P08, y aquí importa más: el catálogo es donde
+   * se comparan mentorías.
    *
    * Devuelve `null` fuera de `per_package` y en paquetes de una sola sesión, así
    * que el resto de tarjetas no cambian.
@@ -124,28 +182,45 @@ export function ProductCard({
           </div>
         ) : null}
 
-        {sessions ? (
-          <p
-            className={
-              compact ? "text-xs text-[#666666]" : "text-[13px] text-[#666666]"
-            }
-          >
-            {sessions} · En vivo 1 a 1
-          </p>
-        ) : null}
+        {/* Cada dato con su icono (G-02) y `whitespace-nowrap` por ítem: la fila
+            envuelve ENTRE datos, nunca dentro de uno ("En vivo 1 a" + "1" sería
+            peor que dos líneas). A 190px caben dos por línea en `compact`. */}
+        <ul
+          className={`flex flex-wrap items-center text-[#4d4d4d] ${
+            compact
+              ? "gap-x-2.5 gap-y-1 text-[11px]"
+              : "gap-x-3.5 gap-y-1 text-[12.5px]"
+          }`}
+        >
+          {datos.map(({ k, Icon, label }) => (
+            <li key={k} className="flex items-center gap-1.5 whitespace-nowrap">
+              <Icon className="size-3.5 shrink-0 text-brand" aria-hidden />
+              {label}
+            </li>
+          ))}
+        </ul>
 
-        {product.categories.length > 0 && !compact ? (
-          <div className="flex flex-wrap gap-2">
-            {product.categories.slice(0, 2).map((c) => (
-              <span
-                key={c.slug}
-                className="rounded-[6px] bg-[#f0f0f0] px-2.5 py-1 text-xs font-medium text-[#5c5c5c]"
-              >
-                {c.name}
-              </span>
-            ))}
-          </div>
-        ) : null}
+        {/* G-03 · categoría a la izquierda y confirmación a la derecha, en la
+            MISMA fila. Solo la primera categoría: con la confirmación
+            compartiendo la línea, dos chips + "El tutor confirma en 24 h" no
+            caben en los 276px de la tarjeta y la fila se partiría en dos.
+            En `compact` no hay chip (como hasta hoy) y la confirmación se queda
+            sola a la izquierda. */}
+        <div className="flex items-center justify-between gap-2">
+          {product.categories.length > 0 && !compact ? (
+            <span className="min-w-0 truncate rounded-[6px] bg-[#f0f0f0] px-2.5 py-1 text-xs font-medium text-[#5c5c5c]">
+              {product.categories[0].name}
+            </span>
+          ) : null}
+          <span
+            className={`flex shrink-0 items-center gap-1.5 font-semibold whitespace-nowrap ${
+              compact ? "text-[11px]" : "text-xs"
+            } ${confirmacion.className}`}
+          >
+            <confirmacion.Icon className="size-3.5 shrink-0" aria-hidden />
+            {confirmacion.label}
+          </span>
+        </div>
 
         <div
           className={`mt-auto border-t border-[#ebebeb] ${compact ? "pt-2.5" : "pt-3"}`}
@@ -161,10 +236,11 @@ export function ProductCard({
               >
                 {precio.amount}
               </p>
-              {/* RV-09 · la equivalencia por sesión puede no caber en una línea
-                  a 276px, así que en ese caso se deja envolver en vez de
-                  recortarse: un "Equivale a 16,00 US…" cortado no informa de
-                  nada. La nota corriente sigue con `truncate`. */}
+              {/* RV-09 · la nota del paquete ("4 sesiones · US$ 15,00 c/u")
+                  puede no caber en una línea a 276px, así que en ese caso se
+                  deja envolver en vez de recortarse: un "4 sesiones · US$ 15…"
+                  cortado esconde justo el dato que se añadió. La nota corriente
+                  sigue con `truncate`. */}
               <p
                 className={`text-[#666666] ${compact ? "text-[11px]" : "text-xs"} ${
                   porSesion ? "text-pretty" : "truncate"

@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
 import { getSessionContext, getUserTimezone, requireUser } from "@/lib/auth/server";
-import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
 import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
@@ -76,7 +75,6 @@ export default async function CheckoutPage({
     redirect(user ? `/reservar/${productId}` : `/products/${productId}`);
   }
 
-  const supabase = await createClient();
   // RN-01/RN-02 · la zona del alumno, resuelta en SERVIDOR. El checkout pintaba
   // las horas sin ella —y por tanto en la del servidor durante el SSR, UTC en
   // Vercel— mientras el calendario que las eligió y `/reservas/[id]/pagar` sí la
@@ -102,14 +100,20 @@ export default async function CheckoutPage({
   // M-02 · ¿esta mentoría acepta sola? Cambia lo que se promete abajo: con la
   // aceptación automática la reserva pagada salta a `confirmed` sin pasar por
   // `pending_acceptance`, así que NO hay ventana de 24 h ni reembolso íntegro
-  // automático (RN-38). Va en consulta aparte porque `getProductDetail` no trae
-  // la columna y `lib/catalog/queries.ts` lo comparten media docena de
-  // pantallas públicas que no necesitan este dato.
-  const { data: aceptacion } = await supabase
-    .from("products")
-    .select("auto_accept_bookings")
-    .eq("id", productId)
-    .maybeSingle();
+  // automático (RN-38).
+  //
+  // §5.1 (10-sep) · ESTO ERA UNA CONSULTA SUELTA A `products` y ya no lo es.
+  // `getProductDetail` baja ahora `auto_accept_bookings` —lo necesitan las dos
+  // fichas públicas para el distintivo de confirmación (G-03)—, así que el dato
+  // llega en `product.autoAccept`. Un viaje menos por checkout, y una fuente
+  // menos de la que pueden discrepar la ficha y el pago: hasta hoy la ficha
+  // podía prometer «se confirma al instante» y esta pantalla la ventana de 24 h
+  // si las dos consultas caían distinto.
+  //
+  // Ojo al matiz que se pierde: el respaldo era `?? false` sobre una fila que
+  // podía no ser legible. Ahora `autoAccept` es un boolean real, porque si el
+  // producto no fuera legible `getProductDetail` habría devuelto `null` y esta
+  // pantalla ya habría respondido 404 más arriba.
 
   // V-6 · AQUÍ SOBRABA UNA CONSULTA. `tutorNames()` volvía a `tutor_profiles` a
   // por un nombre que `getProductDetail` ya había traído en la misma petición
@@ -195,15 +199,12 @@ export default async function CheckoutPage({
         tutor={product.tutor}
         packageLabel={bookingFormatLabel(required)}
         // Las dos etiquetas ya existían en el catálogo y se reutilizan tal cual:
-        // "4 × 60 min" y "Equivale a 24,00 US$ por sesión · 4 sesiones". Escribir
+        // "4 × 60 min" y "4 sesiones · US$ 24,00 c/u". Escribir
         // aquí otra versión de lo mismo es como acaban divergiendo la ficha y el
         // checkout en el precio de un paquete.
         incluye={sessionsLabel(product)}
         precioPorSesion={perSessionLabel(product)}
-        // Sin fila legible se asume que NO acepta sola: es el mensaje
-        // conservador (promete la ventana de 24 h, que es lo que pasa cuando la
-        // columna está en false) y nunca promete de menos.
-        aceptaSola={aceptacion?.auto_accept_bookings ?? false}
+        aceptaSola={product.autoAccept}
       />
     </div>
   );
