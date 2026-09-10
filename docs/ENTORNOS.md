@@ -195,9 +195,28 @@ explícitamente el de tipo `BUSINESS`, cayendo al primero solo si no hay ninguno
 | `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional · solo si apunta a una preview |
 
 `RESEND_API_KEY` no está en `.env.local`: en local **no se envía nada** y la cola se queda
-`pending`, que es el fallo cerrado de diseño. Sentry **sí está cableado**
-(`@sentry/nextjs`, `src/instrumentation.ts` + `instrumentation-client.ts`) y llevaba desde el
-27-ago sin figurar en esta tabla.
+`pending`, que es el fallo cerrado de diseño.
+
+**Sentry: verificado en producción el 10-sep**, no supuesto. El SDK viaja en el bundle de cliente,
+el DSN apunta a `ingest.us.sentry.io/4511983664431105` y el `environment` se inlinea como
+`"production"` (vía `NEXT_PUBLIC_VERCEL_ENV`, que existe porque «System Environment Variables» está
+activado). El servidor tiene su `SENTRY_DSN` y `instrumentation.ts` exporta `onRequestError`.
+Llevaba desde el 27-ago funcionando **sin figurar en esta tabla**.
+
+Tres cosas de Sentry que son decisiones, no huecos:
+
+- **Sin `withSentryConfig`** → **sin source maps**. Está razonado en `instrumentation.ts` y sigue
+  siendo la decisión correcta: pide token de organización y hoy no hay tráfico. El precio se paga
+  el día del primer bug real, cuando el stack trace apunte a `143tgmllw_qeu.js` y no diga nada.
+- **`tracesSampleRate: 0`** → solo errores, nada de rendimiento. Se enciende cuando haya una
+  pregunta de rendimiento que responder.
+- **`sendDefaultPii: false`** → los correos de alumnos y tutores no salen de Supabase. La RLS los
+  protege; no se regalan aquí.
+
+⚠️ **Comprobar a dónde van las alertas de Sentry.** Un proyecto de Sentry cuyas alertas no lee
+nadie es el mismo patrón que un job de `pg_cron` que falla en silencio (regla 11): el error se
+registra y no se lo dice a nadie. La cuenta es `ensenameya@gmail.com`, así que por defecto irán
+ahí.
 
 **Referidos**
 
