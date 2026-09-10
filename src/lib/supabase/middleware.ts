@@ -65,8 +65,17 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  // IMPORTANTE: no insertar lógica entre createServerClient y getUser().
-  // getUser() valida el token contra el servidor de Auth y renueva la sesión.
+  // IMPORTANTE: no insertar lógica entre `createServerClient` y esta llamada.
+  // Es la que renueva la sesión y escribe las cookies nuevas en
+  // `supabaseResponse` (por el `setAll` de arriba); cualquier cosa que lea
+  // cookies en medio leería las viejas.
+  //
+  // Es `getClaims()`, NO `getUser()`: el proyecto firma con ES256 y publica su
+  // JWKS, así que la librería VERIFICA LA FIRMA EN LOCAL —misma garantía
+  // criptográfica— sin el viaje al servidor de Auth que costaba ~300 ms en cada
+  // request del sitio. Igual que en `lib/auth/server.ts`. Si el token está
+  // caducado sí hay viaje, porque hay que refrescarlo, que es de lo que va esta
+  // función.
   await supabase.auth.getClaims();
 
   // US-1302 · el `?ref=` de Referral Factory puede llegar a CUALQUIER página

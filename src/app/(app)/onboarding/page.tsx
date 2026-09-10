@@ -24,7 +24,16 @@ export default async function OnboardingPage({
   searchParams: Promise<{ next?: string; paso?: string }>;
 }) {
   const { next, paso } = await searchParams;
-  const { user } = await requireUser();
+  const { user, onboardingComplete } = await requireUser();
+
+  // ⚠️ El flag sale de `requireUser()` y NO de una segunda consulta a
+  // `profiles`, que es de donde salía. Eran dos fuentes de verdad para el mismo
+  // dato y podían contradecirse: `requireUser()` manda aquí a quien ve
+  // `onboarding_complete = false` —incluido todo el mundo si `session_bootstrap`
+  // falla, ver `lib/auth/server.ts`— y esta pantalla, leyendo la columna por su
+  // cuenta, se veía completa y devolvía a `/app`. Rebote infinito y mudo.
+  // Ahora la respuesta es una sola, así que o entra o no entra.
+  if (onboardingComplete) redirect(safeNext(next, "/app"));
 
   // El paso se resuelve en el SERVIDOR para que el primer HTML ya venga con el
   // correcto y no parpadee otro número al hidratar. Solo mira `?paso=`, que es
@@ -35,11 +44,9 @@ export default async function OnboardingPage({
   const supabase = await createClient();
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, timezone, phone, avatar_path, onboarding_complete, primary_goal")
+    .select("full_name, timezone, phone, avatar_path, primary_goal")
     .eq("id", user.id)
     .single();
-
-  if (profile?.onboarding_complete) redirect(safeNext(next, "/app"));
 
   const [{ data: cats }, { data: mine }] = await Promise.all([
     supabase.from("categories").select("id, name").order("sort_order"),

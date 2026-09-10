@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { requireUser } from "@/lib/auth/server";
+import { tutorSidebarBadges } from "@/lib/tutor/sidebar-badges";
 import { storageUrl } from "@/lib/catalog/format";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
@@ -52,6 +53,12 @@ const IDENTITY_PILL: Record<string, { label: string; tone: PillTone; note: strin
  */
 export default async function VerificationPage() {
   const { user } = await requireUser();
+  // La décima pantalla del panel: es la única que no entra por
+  // `requireTutorProfile()` —lee su propia fila de `tutor_profiles` con cuatro
+  // columnas más— así que adelanta los contadores del menú por su cuenta. Sin
+  // esto, `TutorShell` no los pediría hasta que esta pantalla acabara sus
+  // `await`, y serían un peldaño entero al final. Ver `lib/auth/tutor.ts`.
+  void tutorSidebarBadges(user.id).catch(() => {});
   const supabase = await createClient();
 
   // Requiere haber hecho el onboarding de tutor (existe la fila tutor_profiles).

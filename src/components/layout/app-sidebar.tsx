@@ -15,12 +15,15 @@ import {
   HomeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
+  MailIcon,
   PercentIcon,
   ReceiptIcon,
   TicketIcon,
+  Undo2Icon,
   UserIcon,
   UsersIcon,
   WalletIcon,
+  WrenchIcon,
   type LucideIcon,
 } from "lucide-react";
 
@@ -200,6 +203,11 @@ export const TUTOR_ITEMS: Item[] = [
  * Pagos, Reservas, Categorías, Tiers, Estadísticas, Alertas, Payouts.
  * `/admin` es el dashboard (AD02) y la cola de tutores vive en /admin/tutores.
  *
+ * Lo que el Figma no dibujó se coloca PEGADO A SU TEMA (así entraron «Mentorías
+ * impartidas» tras Tutores y «Reportes» tras Alertas), salvo las dos
+ * herramientas internas —«Operaciones» y «Notificaciones»—, que no son tema de
+ * nadie y hacen cola al final, detrás de Payouts.
+ *
  * Vive aquí y no en `admin-shell` a propósito: los iconos son componentes, y
  * un Server Component no puede pasar funciones a uno de cliente.
  */
@@ -220,6 +228,12 @@ export const ADMIN_ITEMS: Item[] = [
     icon: ActivityIcon,
   },
   { href: "/admin/payments", label: "Pagos", icon: ReceiptIcon },
+  // X-01 · no está en el Figma. Va pegada a Pagos y no a Payouts porque un
+  // reembolso es un COBRO al revés: cada fila cuelga de un `payment`, la
+  // pantalla reutiliza los filtros de `/admin/payments` y el dinero vuelve al
+  // alumno. Payouts es el otro flujo —lo que se le debe al tutor— y mezclarlos
+  // en el menú es lo que hace buscar los reembolsos donde no están.
+  { href: "/admin/reembolsos", label: "Reembolsos", icon: Undo2Icon },
   { href: "/admin/bookings", label: "Reservas", icon: TicketIcon },
   { href: "/admin/categorias", label: "Categorías", icon: FolderTreeIcon },
   { href: "/admin/tiers", label: "Tiers", icon: PercentIcon },
@@ -230,6 +244,25 @@ export const ADMIN_ITEMS: Item[] = [
   // la dibujó: la pantalla nació después.
   { href: "/admin/reportes", label: "Reportes", icon: FlagIcon },
   { href: "/admin/payouts", label: "Payouts", icon: WalletIcon },
+  // ── HERRAMIENTAS INTERNAS ───────────────────────────────────────────────
+  // Las dos existían sin puerta: se llegaba escribiendo la URL, o desde los
+  // enlaces sueltos del dashboard. NO son primer nivel por importancia sino
+  // por alcance: como hijas de otra entrada desaparecerían por debajo de 768
+  // —los subniveles son `max-md:hidden`— y volverían a no tener acceso justo
+  // en el ancho en el que nadie se sabe la URL de memoria.
+  //
+  // RV-20 · «Operaciones» es la única acción destructiva del panel, pero la
+  // destrucción vive detrás de una vista previa y un envío en su propia
+  // pantalla: lo que hay aquí es un enlace, no un botón (por eso no comparte
+  // el criterio de «Salir», que dispara el diálogo al tocarlo). Aun así va
+  // ANTES que «Notificaciones» para no ser el último chip de la tira de móvil,
+  // que es donde el pulgar suelta al arrastrar.
+  { href: "/admin/operaciones", label: "Operaciones", icon: WrenchIcon },
+  // Diagnóstico, no bandeja: qué avisos están pending/sent/failed. La etiqueta
+  // no es el título de la pantalla («Cola de notificaciones», 22 caracteres):
+  // el tope de la columna son ~158 px a 14/600 y ahí ya va justa «Mentorías
+  // impartidas» con 20. «Notificaciones» son 14 y entra de sobra.
+  { href: "/admin/notificaciones", label: "Notificaciones", icon: MailIcon },
 ];
 
 /**
@@ -333,9 +366,11 @@ export function AppSidebar({
   /**
    * La fila de móvil trae a la vista la sección en la que estás.
    *
-   * Sin esto, el panel de admin —once secciones en una tira de ~1.200 px— se
-   * abría en «Payouts» con la tira empezando por «Dashboard»: la marca azul
-   * quedaba fuera de la pantalla y la fila parecía no tener nada seleccionado.
+   * Sin esto, el panel de admin —hoy catorce secciones; eran once, y entonces
+   * la tira medía ~1.200 px— se abría en «Payouts» con la tira empezando por
+   * «Dashboard»: la marca azul quedaba fuera de la pantalla y la fila parecía
+   * no tener nada seleccionado. Cada entrada nueva empeora ese caso, así que
+   * esto pasa a hacer más falta, no menos.
    *
    * Se mueve `scrollLeft` A MANO y no con `scrollIntoView`: éste último puede
    * desplazar también el eje vertical de la PÁGINA —justo el «brinca» que el

@@ -1,7 +1,5 @@
 import "server-only";
 
-import { cache } from "react";
-
 import { getSessionContext } from "@/lib/auth/server";
 import { hasTutorProfile } from "@/lib/auth/tutor";
 import { pickHome, ROLE_HOME } from "@/lib/auth/roles";
@@ -23,8 +21,12 @@ import { pickHome, ROLE_HOME } from "@/lib/auth/roles";
  * Aquí se resuelve el destino ANTES de pintar el enlace, para que nadie llegue
  * por rebote y nadie termine en el panel equivocado.
  *
- * `cache()` porque la portada y el banner del pie lo piden en el mismo render y
- * `getSessionContext()` no está memoizada: sin esto serían dos `auth.getUser()`.
+ * Sin `cache()` propia: no queda nada que memoizar. Las DOS lecturas que hace
+ * —`getSessionContext()` y `leerPerfilDeTutor()` por debajo de
+ * `hasTutorProfile()`— ya lo están cada una por su cuenta, así que la portada y
+ * el banner del pie pidiéndolo en el mismo render no cuestan ni un viaje extra.
+ * El resto del cuerpo es decidir un `href`. La `cache()` que había aquí se
+ * justificaba diciendo que `getSessionContext()` no estaba memoizada; lo está.
  */
 export type VisitorState = {
   /** Sin sesión: los CTA de alta abren el modal en vez de navegar. */
@@ -39,7 +41,7 @@ export type VisitorState = {
   teachHref: string | null;
 };
 
-export const getVisitorState = cache(async (): Promise<VisitorState> => {
+export async function getVisitorState(): Promise<VisitorState> {
   const { user, roles } = await getSessionContext();
   if (!user) return { anonimo: true, homeHref: null, teachHref: null };
 
@@ -60,4 +62,4 @@ export const getVisitorState = cache(async (): Promise<VisitorState> => {
     homeHref,
     teachHref: empezado ? ROLE_HOME.tutor : "/tutor/onboarding",
   };
-});
+}
