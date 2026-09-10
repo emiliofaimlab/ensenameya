@@ -22,7 +22,7 @@ No hay Postgres/Docker local. Se desarrolla contra la **BD de dev en la nube**:
 | Ambiente | Supabase | Vercel | Rama |
 | :-- | :-- | :-- | :-- |
 | **dev** | `ensenameya-dev` | Preview | `dev` / PRs |
-| **prod** | `ensenameya-prod` | Production (`ensenameya.vercel.app`) | `main` |
+| **prod** | `ensenameya-prod` | Production (**`ensenameya.com`**) | `main` |
 
 Vercel despliega **desde el repo** (no desde tu máquina): `main`→prod, `dev`/PRs→preview.
 Las **mismas migraciones** se aplican a ambos → prod ≡ dev. Detalle en [`docs/ENTORNOS.md`](docs/ENTORNOS.md).
@@ -138,11 +138,15 @@ minuto de la cadencia pedida, así que no se puede planificar al minuto.
 `complete-pending-account-deletions`. Un `pg_cron` que falla **no avisa a nadie**: no hay build
 en rojo ni 500 en Vercel, el error se queda en `cron.job_run_details`.
 
-**3) Hueco conocido en `payouts-process`:** cuando el proveedor **rechaza** la orden, la marca
-`failed` y corta (`src/app/api/cron/payouts-process/route.ts:734`) — **no prueba el siguiente
-riel candidato**. El descenso que sí existe es el previo, al elegir riel:
-`rielSirveParaEsteTutor` (`src/lib/payments/riel-viable.ts`) descarta los rieles sin datos antes
-de intentar nada.
+**3) Los payouts bajan de riel en los DOS momentos.** Antes solo en uno, y este README describía
+el hueco: un rechazo del proveedor marcaba la orden `failed` y cortaba sin probar el siguiente
+candidato. Lo cerró `20260910230000` (AUD-01). Hoy existen los dos descensos:
+
+- **Al elegir riel**, `rielSirveParaEsteTutor` (`src/lib/payments/riel-viable.ts`) descarta los que
+  no tienen datos antes de intentar nada.
+- **Tras un rechazo**, el job archiva quién rechazó en `rastro.rieles_rechazados`, pregunta a
+  `sePuedeBajarDeRiel()` y vuelve a resolver el riel **excluyendo a los que ya dijeron no**. Solo
+  escribe `failed` cuando no queda candidato.
 
 ## Estructura
 
@@ -165,7 +169,7 @@ de intentar nada.
 │        └─ middleware.ts    # helper de sesión
 ├─ supabase/
 │  ├─ config.toml            # config del CLI de Supabase (link, migraciones)
-│  ├─ migrations/            # esquema versionado (fuente de verdad) — 177 hoy
+│  ├─ migrations/            # esquema versionado (fuente de verdad) — 178 hoy
 │  └─ seed/                  # datos de dev (npm run db:seed · db:seed:imagenes)
 ├─ vercel.json               # Vercel Cron (purga de grabaciones)
 ├─ .github/workflows/        # CI (lint/typecheck) + migraciones (dev/prod) + 4 crons

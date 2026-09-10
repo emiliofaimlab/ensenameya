@@ -8,10 +8,15 @@
 > cualquier comparativa de PSPs anterior, en particular al PDF «Infraestructura de Pagos»
 > (Emilio, junio-2026), cuyo eje de análisis es incorrecto (§9).
 >
-> ⚠️ **Nada de esto está en producción, y es deliberado.** El sitio no está lanzado; todo el
-> trabajo de pagos se prueba contra **dev**. Prod tiene el código y las migraciones desplegadas,
-> pero no tiene todas las credenciales: hoy le falta `DLOCALGO_API_KEY` y un GET a
-> `/api/pagos/confirmar-dlocal` devuelve 503.
+> ✅ **Esto SÍ está en producción desde el 10-sep**, y hay que leer el resto del documento con eso
+> delante. Prod lleva las credenciales de **los cuatro rieles**: Stripe con claves `live` y su
+> webhook de live, dLocal y PayPal con credenciales de producción y sus `*_API_BASE`/`*_API_URL`, y
+> Wise con su token. El 503 de dLocal se midió pasar a **400**.
+>
+> ⚠️ **Pero configurado no es cobrando.** La cuenta de **Stripe sigue sin activar** (KYC), así que
+> un cobro live se rechaza; la app de **PayPal está en revisión** (7 días); y el balance de **Wise
+> está a cero**, así que el primer payout llegará al paso de fondeo y esperará. El trabajo de pagos
+> se sigue **probando contra dev**, que es lo correcto.
 >
 > ⚠️ **No hay entregable comercial vigente de pagos.** El PDF de 10 páginas que se le mandó al
 > cliente describía el mapa de ruteo ANTERIOR al dictado, y se borró del repo el 9-sep-2026
@@ -523,15 +528,19 @@ del país— y lo que falla es **la entrega por correo a una dirección sin conf
 **Consecuencia para el producto, que no está especificada en ningún sitio:** al tutor hay que
 **decirle que tiene un pago esperando y que entre en PayPal a reclamarlo**. Sin eso, un tutor
 que registró un correo sin cuenta —o con el correo sin confirmar— ve «pago enviado» y no cobra
-en 30 días. **Hoy no hay aviso para eso.**
+en 30 días. ✅ **Ese aviso ya existe: es NTF-23** (`payout_unclaimed`), y ramifica por riel — el
+cuerpo de PayPal habla de reclamar y el de los demás no, porque en un banco no hay nada que
+reclamar. Lo encola `avisar_payouts_sin_reclamar`.
 
 ✅ **Lo que el sistema sí hace bien:** la fila se queda en `processing` y **nunca** pasa a
 `paid`, así que NTF-12 («se pagó tu liquidación») no se dispara. Es la regla del puerto
 —`enviado` ≠ `pagado`— haciendo su trabajo.
 
-⚠️ **No se cambia el adaptador a `PAYPAL_ID`, y es deliberado.** Un tutor sabe su correo; su id
-de cuenta de PayPal no lo sabe nadie y no se le puede pedir. `EMAIL` es lo correcto para el
-producto. Lo que hay que arreglar no es cómo se manda, es **avisar al tutor cuando su pago
+⚠️ **Esto cambió: hoy se paga al identificador de la cuenta CONECTADA, no al correo.** El tutor no
+teclea su id —no lo sabe nadie— sino que **conecta su cuenta** con «Log In with PayPal»
+(`/api/tutor/paypal-connect`, configurado en live el 10-sep) y de ahí sale el `payer_id`. El correo
+se queda como respaldo, y ahí este fallo se puede repetir: al correo quedó `UNCLAIMED` **5 de 5
+veces** con el lote informando `SUCCESS`. Lo que hay que arreglar no es cómo se manda, es **avisar al tutor cuando su pago
 queda esperando**.
 
 **Y el camino de recuperación, ejercitado entero (4-sep):**

@@ -40,7 +40,7 @@ Cuando se pida crear o modificar el esquema de la base de datos:
      tabla: un job con `service_role` se come `permission denied` **en tiempo de ejecución** —no
      en el build, no en el typecheck— hasta que su migración declare
      `grant select, insert, update on public.<tabla> to service_role;`. Es el fallo más caro del
-     repo (mordió tres veces el 6-ago) y hoy lo declaran 61 de las 177 migraciones. **Tabla que
+     repo (mordió tres veces el 6-ago) y hoy lo declaran 61 de las 178 migraciones. **Tabla que
      toque un job = grant explícito, en la misma migración.**
    - Funciones: `grant execute on function public.<fn>(args) to authenticated;` / `to
      service_role;` según quién la llame.
@@ -90,7 +90,7 @@ Cuando se pida crear o modificar el esquema de la base de datos:
    manda en cobro y payout.
 
 9. **`comment on table` / `comment on column`** para lo que no se deduce del nombre: unidades,
-   qué significa un `null`, de dónde sale el valor. Lo hacen 85 de las 177 migraciones y es lo que
+   qué significa un `null`, de dónde sale el valor. Lo hacen 85 de las 178 migraciones y es lo que
    queda cuando el que la escribió no está.
 
 10. **Aplica a dev cloud:** `npm run db:push` (requiere `supabase link` a dev una vez;

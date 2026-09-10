@@ -84,7 +84,7 @@ documentar opciones e impacto, y diseñar **sin acoplarse** a lo pendiente (regl
 | RISK-06 | Coste por cuenta de Stripe escala con los tutores | Baja | Bajo | **Baja** | No hay cuenta conectada por tutor ni onboarding de Connect: la plataforma crea una cuenta de destinatario solo cuando ese riel va a ejecutar. |
 | RISK-07 | Confusión paquetes vs. clases grupales | Baja | Medio | **Baja** | **Cerrado** (D-02): paquete = N sesiones 1:1; grupal fuera (RN-22). |
 | RISK-08 | Referidos sin atribución | **Alta** | Medio | **Alta** | 🔴 **La atribución no existe.** La cookie `ey-ref` funciona y espera un `?ref=` que Referral Factory no manda; `profiles.referral_code` se escribe y no lo lee nadie. Antes de las reglas del programa (DP-04) hay que decidir si se construye el mecanismo. |
-| RISK-09 | Herramienta de email sin definir | — | — | **Cerrado** | Resend (DP-05). Lo que queda es el **dominio propio**, que depende de la migración de dominio. |
+| RISK-09 | Herramienta de email sin definir | — | — | **Cerrado del todo (10-sep)** | Resend (DP-05), con el **dominio propio verificado** y `EMAIL_FROM` puesto. Ya no queda nada colgando de la migración de dominio, que también se hizo. |
 | RISK-10 | El KYC manual se vuelve cuello de botella | Media | Medio | **Media** | Seis documentos (C-14) con cola y estados en el panel; diseñado para automatizar luego (RN-05). |
 | RISK-11 | Política de reembolsos sin definir → disputas | Baja | Alto | **Media** | **Cerrado por RN-37**, y el mecanismo está ejercitado con dinero real en *test mode*. Lo que queda abierto es **cuándo se avisa** (Doc 7, NTF-10). |
 | RISK-12 | Errores de zona horaria | Media | Alto | **Alta** | La zona horaria no solo pinta fechas: **decide quién cobra** (`pais_de_cobro_por_zona()`). Un alumno de viaje o con VPN rutea por otro corredor — se acepta, y la fila comodín garantiza que pueda comprar igual. Mitigación: UTC en BD, hora local en UI, y el país **congelado** en la reserva. |
@@ -117,7 +117,7 @@ RISK-12 (la zona horaria decide el cobro), RISK-21 (conciliación) y RISK-23 (jo
 | S-24/S-29 | No-show / reembolso previo a liquidar | Ligados a **DP-08**. |
 | S-25 | Ventana de checkout | Superado: la autocancelación por pago vencido es de **20 min** (ADENDA §5). |
 | S-28 | Checkout **alojado** por el proveedor | 🔴 **Derogado** por el punto 2 del dictado. Los formularios viven dentro del sitio; lo que sobrevive es que no guardamos datos de tarjeta, porque los campos siguen en iframes del proveedor. |
-| S-35 | Sin checkout como invitado | Vigente. ⚠️ La confirmación de correo está encendida en prod y apagada en dev, y esa asimetría afecta a este flujo. |
+| S-35 | Sin checkout como invitado | 🔴 **Derogado.** Existe: la cuenta se crea **dentro** del pago (`src/app/api/checkout/invitado/route.ts`). ⚠️ Y la asimetría sigue importando justo aquí: la confirmación de correo está **encendida en prod y apagada en dev**, así que este flujo se comporta distinto en cada ambiente. |
 | S-45 | Ventana de sala ≈ 10 / 10 min | ✅ **Confirmado en código.** Ojo: son **dos** funciones distintas, la de acceso a la sala y la de contabilidad de la clase. |
 | S-49 | Opt-out de no esenciales | Sin construir. |
 

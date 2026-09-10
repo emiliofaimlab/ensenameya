@@ -294,9 +294,11 @@ comportamiento actual.
 ## 6.11 Email transaccional — **Resend**
 
 **DP-05 / C-11 resuelta: Resend.** Es el único de los tres candidatos que deja enviar y probar
-**sin dominio verificado**. El adaptador es `src/lib/email.ts`; el remitente sale de `EMAIL_FROM` y
-por defecto es `onboarding@resend.dev`, porque el dominio propio sigue bloqueado por la migración de
-dominio.
+**sin dominio verificado**, y eso es lo que decidió la elección. El adaptador es
+`src/lib/email.ts`; el remitente sale de `EMAIL_FROM`. ✅ **Y desde el 10-sep el dominio propio está
+verificado**: `EMAIL_FROM` vale `Enséñame Ya <hola@ensenameya.com>` en Preview y Production. El
+`onboarding@resend.dev` sigue siendo el **defecto del código**, el que se usa si la variable falta —
+no el remitente real.
 
 ```typescript
 // El puerto sigue siendo el mismo: cambiar de proveedor es esta función.

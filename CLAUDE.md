@@ -61,7 +61,7 @@ al mergear a `main`.
 9. ⚠️ **`service_role` se salta la RLS, pero NO los `grant` de tabla.** Con "auto-expose new
    tables" OFF, un job con `service_role` come `permission denied` **en tiempo de ejecución**
    —no en el build, no en el typecheck— hasta que su migración declare
-   `grant … to service_role`. Mordió tres veces el 6-ago. Hoy lo hacen 61 de las 177
+   `grant … to service_role`. Mordió tres veces el 6-ago. Hoy lo hacen 61 de las 178
    migraciones. Tabla que toque un job = grant explícito, en la misma migración.
 10. ⚠️ **Una tabla puente nueva vuelve AMBIGUOS los embeds de PostgREST** entre las dos tablas
     que une, y la consulta se cae con `PGRST201` — no se degrada. `tutor_views`
@@ -109,7 +109,7 @@ al mergear a `main`.
 - **`provider` es `text`, no un enum**, para no acoplar el esquema a la lista de PSPs.
 - **Baja lógica sobre borrado físico** donde haya rastro financiero o legal.
 - `comment on table` / `comment on column` es como este repo transporta el porqué: lo hacen
-  85 de las 177 migraciones.
+  85 de las 178 migraciones.
 
 ## Pagos — manda el dictado
 
@@ -206,7 +206,7 @@ vercel.json                   Vercel Cron (purga de grabaciones)
 la API de Auth y se estaba haciendo hasta cuatro veces por pantalla: era la causa de la
 lentitud que reportó el cliente. Usa `getSessionContext()` / `requireUser()` /
 `requireRole()` de `src/lib/auth/server.ts`, que van por `getClaims()` + `cache()`.
-Hoy 51 de los 79 `page.tsx`/`layout.tsx` lo hacen así.
+Hoy 49 de los 77 `page.tsx`/`layout.tsx` lo hacen así (medido el 10-sep).
 
 ⚠️ **Toda ruta con datos lleva su `loading.tsx`.** Su ausencia es lo que medía "~700 ms
 congelado → 60 ms", y es lo que permite a Next prefetchear rutas dinámicas.
@@ -225,11 +225,18 @@ El cliente ya tenía términos publicados en `ensenameya.com` (GoDaddy, marzo-20
 sale el buzón **info@ensenameya.com**. Divergimos a propósito en dos puntos: el suyo nombra
 "Stripe o Mercado Pago" y deja los reembolsos vagos, cuando **RN-37 ya es código**.
 
-⚠️ **Dos webs de la misma marca sin conectar.** `ensenameya.com` es una landing de GoDaddy
-que **no enlaza a la app** (vive en `ensenameya.vercel.app`), cada una con su juego de
-términos. Se resuelve con la migración de dominio, que es DNS y negocio, no un merge.
+✅ **Un solo sitio, desde el 10-sep-2026.** `ensenameya.com` **es** la app: sirve la home y todas
+sus rutas. `www.ensenameya.com` y `ensenameya.vercel.app` son **308 hacia él**, preservando la
+ruta, así que los enlaces viejos siguen sirviendo. La landing de GoDaddy dejó de servirse y con
+ella se acabaron los dos juegos de términos vivos. ⚠️ Lo que **no** se tocó, y no se toca: el
+dominio lleva **Microsoft 365 detrás de Proofpoint** y la migración movió solo los `A` y el `www`.
+`info@ensenameya.com` es un buzón real, el del §39 del contrato. Detalle y runbook en
+`docs/ENTORNOS.md`.
 
-⚠️ **Producción no tiene usuarios**, pero **sí tiene código y migraciones desplegadas**. No es
+⚠️ **Producción tiene UN usuario**, y es una cáscara: un alta real con Google del 10-sep que se
+dio de baja el mismo día. La baja es lógica —anonimiza con `update auth.users` y la fila se
+queda—, así que `auth.users` devuelve 1 y `account_deletions` también. No asumas la tabla vacía al
+probar barridos o borrados contra prod. Y **sí tiene código y migraciones desplegadas**. No es
 lo mismo: el orden de las migraciones importa igual, y lo que se rompa ahí está roto de verdad.
 El interruptor de cobrar dinero real son las claves de Vercel, no las tablas.
 

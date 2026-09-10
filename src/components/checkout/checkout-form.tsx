@@ -208,7 +208,7 @@ export function CheckoutForm({
   packageLabel: string;
   /** "4 × 60 min" (`sessionsLabel`). Null si la mentoría no declara duración. */
   incluye: string | null;
-  /** "Equivale a 24,00 US$ por sesión · 4 sesiones" (`perSessionLabel`).
+  /** "4 sesiones · US$ 24,00 c/u" (`perSessionLabel`).
    *  Null cuando no es un paquete: ahí el precio por sesión ES el total. */
   precioPorSesion: string | null;
   /** `products.session_duration_min`. NULLABLE: sin él no hay hora de fin. */

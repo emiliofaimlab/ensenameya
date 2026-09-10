@@ -50,7 +50,21 @@ export function modelLabel(p: {
   }
 }
 
-/** "Equivale a $16 por sesión · 6 sesiones" — solo tiene sentido en paquetes. */
+/**
+ * "6 sesiones · US$ 16,00 c/u" — solo tiene sentido en paquetes.
+ *
+ * §5.14 · antes decía «Equivale a US$ 16,00 por sesión · 6 sesiones»: la misma
+ * información, pero enterraba en medio de la frase lo único que se compara de
+ * un vistazo —cuánto sale CADA sesión— y dejaba el recuento de cierre, donde ya
+ * lo repite la línea de arriba ("6 × 60 min"). Ahora abre el recuento y cierra
+ * el precio unitario, que es el orden en que se lee.
+ *
+ * ⚠️ La firma no cambia porque esto se ve en cuatro sitios, no en uno: la
+ * tarjeta del catálogo, el panel de reserva de la ficha, el resumen del
+ * checkout y `checkout-form`. Cualquiera de ellos que reescriba el texto por su
+ * cuenta es como acaban divergiendo la vitrina y el pago en el precio de un
+ * paquete.
+ */
 export function perSessionLabel(p: {
   pricingModel: PricingModel;
   priceAmount: number;
@@ -60,7 +74,7 @@ export function perSessionLabel(p: {
   if (p.pricingModel !== "per_package") return null;
   const n = p.packageNumSessions ?? 0;
   if (n < 2) return null;
-  return `Equivale a ${formatMoney(Math.round(p.priceAmount / n), p.currency)} por sesión · ${n} sesiones`;
+  return `${n} sesiones · ${formatMoney(Math.round(p.priceAmount / n), p.currency)} c/u`;
 }
 
 /** "4 × 60 min" — sesiones incluidas por duración de cada una. */

@@ -7,11 +7,12 @@ import { MessageCircleIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { SignupDialog } from "@/components/auth/signup-dialog";
+import { cn } from "@/lib/utils";
 import { pedirAbrirHilo } from "./open-thread";
 import { asRpc } from "./rpc";
 
 /**
- * M-12 · «Escribir al tutor» desde su ficha pública.
+ * M-12 · «Pregúntale al tutor» desde su ficha pública.
  *
  * ⚠️ EY-194 · ESTE FICHERO ESTUVO BORRADO SEIS DÍAS. Lo retiró MN-06 (`b786e38`,
  * 20-ago) cuando el cliente contestó a P-1 que el chat solo existía tras
@@ -65,17 +66,45 @@ import { asRpc } from "./rpc";
  * que es lo que hace falta cuando alguien pulsa porque "no ha pasado nada". La
  * protección de verdad sigue estando en SQL — este `useState` es comodidad, no
  * un candado, y se pierde al recargar como debe ser.
+ *
+ * ── G-06 · «PREGÚNTALE A», Y EN PRIMARIO (10-sep) ───────────────────────────
+ * El texto era «Escribir a Valentina», que describe el mecanismo (se escribe un
+ * mensaje) en vez del motivo (resolver una duda antes de pagar), y el botón era
+ * el `outline` secundario, lo que lo dejaba compitiendo de tú a tú con el CTA de
+ * reserva sin serlo. Ahora es primario naranja con `MessageCircle`, y su línea
+ * de apoyo («Suele responder en unas horas · Sin compromiso») la pone la página,
+ * no este componente: el dato sale de `responseTimeLabel`, que es del servidor.
+ *
+ * Cambia la presentación; NO cambia nada de lo de arriba. Las mismas dos ramas,
+ * la misma RPC, el mismo modal de alta.
+ *
+ * Tres props nuevas, todas de forma, porque el mismo botón sale en cinco sitios
+ * con cinco aspectos: `label` acorta el texto donde no cabe el nombre (la fila
+ * de dos botones del hero móvil dice solo «Pregúntale»), `iconOnly` lo reduce a
+ * un botón-icono de 40 px (tarjeta «Tu tutor» de la mentoría, franja fija móvil)
+ * y `className` deja pisar color y ancho —el hero móvil del tutor lo quiere
+ * secundario con borde blanco—. Se compone con `cn`, no sustituye: quien llama
+ * ajusta lo suyo y hereda el resto.
  */
 export function ContactTutor({
   tutorId,
   tutorName,
   anonimo,
+  iconOnly = false,
+  label,
+  className,
 }: {
   tutorId: string;
   /** Solo para el texto del botón y del modal. */
   tutorName: string;
   /** Lo decide el servidor: sin sesión, el botón abre el alta. */
   anonimo: boolean;
+  /** Botón-icono de 40 px (G-09), con el texto completo en `aria-label`. */
+  iconOnly?: boolean;
+  /** Sustituye al texto por defecto donde el nombre no cabe («Pregúntale»). */
+  label?: string;
+  /** Se compone con las clases de la variante; no las reemplaza. */
+  className?: string;
 }) {
   const [busy, setBusy] = useState(false);
   /** El hilo con este tutor, una vez que la RPC nos lo ha dicho. */
@@ -85,37 +114,79 @@ export function ContactTutor({
   const nombreCorto = tutorName.trim().split(/\s+/)[0] || "al tutor";
 
   /**
-   * Verónica 3-sep (P07): en móvil el botón baja al borde izquierdo, bajo los
-   * metadatos, y por debajo de sm toma la forma del botón secundario del Figma
-   * P07 («Enviar mensaje», el mismo gesto dentro del panel de reserva a 390):
-   * ancho completo, 52 px de alto, radio 8 y etiqueta de 15 px semibold
-   * centrada (medido sobre el PNG a escala 2: caja 314x52, borde #ebebeb). Aquí
-   * queda en el hero y no en el panel por EY-194 (ver cabecera): mover el botón
-   * de sitio es una decisión del cliente, no de maquetación.
+   * El texto completo manda siempre en lo accesible: aunque el botón se quede
+   * en «Pregúntale» o en un icono suelto, quien usa lector de pantalla oye a
+   * quién le va a preguntar. `label` solo recorta lo que se PINTA.
+   */
+  const textoCompleto = `Pregúntale a ${nombreCorto}`;
+
+  /**
+   * Forma del botón, compartida por las dos ramas (con y sin sesión).
    *
-   * Entre sm y lg (tablets, que también son táctiles) no vuelve el botón de
-   * 32 px: se queda a ancho de contenido pero con 44 px de alto (`h-11`), más
-   * padding y la misma etiqueta de 15 px. Desde lg es el botón de siempre (R1).
-   * Las dos ramas (con y sin sesión) comparten las clases.
+   * 46 px y 14,5 px semibold en la variante con texto (G-06); 40 px cuadrados
+   * con el icono a 18 px en la de solo icono (G-09). El `variant="default"` es
+   * el naranja `bg-primary` del tema — pisable desde `className`, que es como
+   * el hero móvil del tutor lo devuelve a secundario con borde blanco.
    *
    * El foco: el anillo del `Button` es el azul de marca al 50 %, y sobre el
-   * hero azul de la ficha no se ve (1,05:1 medido). Como este botón vive
-   * SIEMPRE sobre ese hero, el anillo y el borde de foco pasan al gris de
-   * primer plano, que contrasta contra el azul (≥ 4,3:1) y contra el relleno
-   * blanco del botón. Es solo el estado de foco: en reposo no cambia nada.
+   * hero azul de la ficha no se ve (1,05:1 medido). Como este botón vive casi
+   * siempre sobre ese hero, el anillo y el borde de foco pasan al gris de
+   * primer plano, que contrasta contra el azul (≥ 4,3:1) y también contra el
+   * relleno naranja. Es solo el estado de foco: en reposo no cambia nada.
+   *
+   * (Histórico: hasta el 10-sep esto era el botón secundario a 52 px de ancho
+   * completo por debajo de sm, del Figma P07 que revisó Verónica el 3-sep. Lo
+   * sustituye la fila de dos botones al 50 % del hero móvil, que la página
+   * arma con `className`.)
    */
-  const claseMovil =
-    "gap-2 max-sm:h-[52px] max-sm:w-full sm:max-lg:h-11 sm:max-lg:px-6 max-lg:text-[15px] max-lg:font-semibold focus-visible:border-foreground focus-visible:ring-foreground/60";
+  const claseBase = cn(
+    iconOnly
+      ? "size-10 rounded-lg p-0"
+      : "h-[46px] gap-2 px-5 text-[14.5px] font-semibold",
+    "focus-visible:border-foreground focus-visible:ring-foreground/60",
+    className,
+  );
+
+  /** El texto completo va SIEMPRE al `aria-label`: ni el icono suelto ni el
+   *  recorte de «a {nombre}» en móvil deben esconder a quién se pregunta. */
+  const propsAccesibles = { "aria-label": textoCompleto, title: textoCompleto };
+
+  /**
+   * §7 pide los DOS textos en la misma página: «Pregúntale a Valentina» en el
+   * hero de escritorio (§1) y «Pregúntale» a secas en la fila de dos botones
+   * del hero móvil (§2). Ninguna clase de Tailwind recorta un string, así que
+   * el nombre va en su propio `<span>` y es ESE el que se esconde por debajo de
+   * lg — un solo botón, un solo nodo, sin duplicar DOM (que es justo lo que las
+   * dos fichas evitan en todo lo demás con `max-lg:*`).
+   *
+   * Con `label` explícito no se parte nada: quien lo pasa ya decidió el texto.
+   * Y `aria-label` no cambia en ningún caso: el lector de pantalla oye siempre
+   * a quién se le va a preguntar, mida lo que mida la pantalla.
+   */
+  const contenido = (
+    <>
+      <MessageCircleIcon className={iconOnly ? "size-[18px]" : "size-4"} />
+      {iconOnly ? null : busy ? (
+        "Abriendo…"
+      ) : label ? (
+        label
+      ) : (
+        <span className="truncate">
+          Pregúntale
+          <span className="max-lg:hidden"> a {nombreCorto}</span>
+        </span>
+      )}
+    </>
+  );
 
   if (anonimo) {
     return (
       <SignupDialog
-        titulo="Crea tu cuenta para escribirle"
+        titulo="Crea tu cuenta para preguntarle"
         descripcion={`Pregúntale a ${nombreCorto} lo que necesites antes de reservar`}
       >
-        <Button variant="outline" className={claseMovil}>
-          <MessageCircleIcon className="size-4" />
-          Escribir a {nombreCorto}
+        <Button className={claseBase} {...propsAccesibles}>
+          {contenido}
         </Button>
       </SignupDialog>
     );
@@ -151,13 +222,15 @@ export function ContactTutor({
 
   return (
     <Button
-      variant="outline"
-      className={claseMovil}
+      className={claseBase}
       disabled={busy}
+      // `aria-busy` porque en la variante de solo icono el «Abriendo…» no tiene
+      // dónde pintarse: sin esto, el lector de pantalla no sabe que pasó algo.
+      aria-busy={busy}
       onClick={() => void escribir()}
+      {...propsAccesibles}
     >
-      <MessageCircleIcon className="size-4" />
-      {busy ? "Abriendo…" : `Escribir a ${nombreCorto}`}
+      {contenido}
     </Button>
   );
 }

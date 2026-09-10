@@ -343,7 +343,7 @@ El sistema ofrece PayPal en los 195 países sin comprobarlo. Nigeria, por ejempl
 | Quién | Qué |
 | :-- | :-- |
 | **Cliente** | D-3. |
-| **dLocal** | Clave de SmartFields de **producción** y repetir la medida contra la API en vivo. Todo lo medido es sandbox, y no hay prefijo en la clave que distinga los ambientes. |
+| **dLocal** | ✅ **Credenciales de producción puestas el 10-sep**, junto a `DLOCALGO_API_BASE` — que conmuta el host **y** la clave de SmartFields, así que la de producción entra sola: no es una variable aparte. ⚠️ Sigue pendiente **repetir la medida contra la API en vivo**: todo lo medido es sandbox, y las claves de dLocal **no traen prefijo** que distinga el ambiente, así que el único indicador es de dónde se copiaron (`dashboard.` = producción). El tell en el primer cobro real: si el formulario carga la clave `b458948f-…`, está en producción. |
 | **Operaciones** | Montar la rutina diaria de fondeo y decidir quién la ejecuta. |
 
 ---

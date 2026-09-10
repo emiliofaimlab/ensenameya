@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import {
+  CalendarIcon,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ZapIcon,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { BookingSelect } from "@/components/catalog/booking-select";
@@ -10,9 +17,33 @@ import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
 import { listProductSlots } from "@/lib/catalog/queries";
 import type { ProductCardData } from "@/lib/catalog/queries";
 
-const WEEKDAYS = ["D", "L", "M", "M", "J", "V", "S"];
+/**
+ * G-04a · cabeceras de DOS letras. Con una sola («D L M M J V S») martes y
+ * miércoles quedaban los dos en «M», así que para saber en qué columna caía un
+ * día había que contarlas desde el domingo. La semana sigue empezando en
+ * DOMINGO, igual que `slot-picker.tsx`: los dos calendarios de la reserva no
+ * pueden empezar la semana en días distintos (§N-32).
+ */
+const WEEKDAYS = ["Do", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá"];
 
 const pad = (n: number) => String(n).padStart(2, "0");
+
+/** "YYYY-MM" de una clave de día "YYYY-MM-DD". */
+const mesDe = (dia: string) => dia.slice(0, 7);
+
+/**
+ * Mes ± n. Con aritmética de meses y no con `Date`: un `setMonth()` sobre una
+ * fecha local vuelve a meter la zona del SERVIDOR en la rejilla, que es justo
+ * lo que R24-22 prohíbe en todo este archivo.
+ */
+const mesDesplazado = (mes: string, delta: number) => {
+  const [y, m] = mes.split("-").map(Number) as [number, number];
+  const t = y * 12 + (m - 1) + delta;
+  return `${Math.floor(t / 12)}-${pad((t % 12) + 1)}`;
+};
+
+/** `m=` llega de la barra de direcciones: texto sin validar, igual que `?h=`. */
+const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 /**
  * Clave de día "YYYY-MM-DD" **en la zona del visitante** (R24-22): un hueco de
@@ -35,6 +66,57 @@ const slotTime = (iso: string, timeZone: string) =>
     minute: "2-digit",
     timeZone,
   });
+
+/**
+ * G-04c · «jue 11», el día del hueco tal y como lo vive el visitante.
+ *
+ * Van dos formatos y no uno: `{ weekday:'short', day:'numeric' }` juntos, en
+ * `es`, salen como «jue, 11» — con coma. El texto aprobado es «jue 11 · 10:00»
+ * y la coma delante del separador `·` se lee como una errata.
+ */
+const slotDayLabel = (iso: string, timeZone: string) => {
+  const d = new Date(iso);
+  return `${d.toLocaleDateString("es", { weekday: "short", timeZone })} ${d.toLocaleDateString("es", { day: "numeric", timeZone })}`;
+};
+
+/**
+ * G-04b · una flecha de mes.
+ *
+ * ⚠️ SIN DESTINO SE PINTA APAGADA, NO SE OCULTA. La fila está centrada sobre la
+ * rejilla, así que quitar una flecha desplaza el rótulo del mes y la rejilla
+ * «salta» de sitio justo al cambiar de mes, que es el momento en el que el ojo
+ * está pegado a ella. Apagada ocupa lo mismo y además dice que ahí se acaba el
+ * horizonte, en vez de dejar creer que la flecha nunca existió.
+ */
+function FlechaMes({
+  href,
+  etiqueta,
+  children,
+}: {
+  href?: string;
+  etiqueta: string;
+  children: ReactNode;
+}) {
+  const base =
+    "grid size-[30px] place-items-center rounded-lg border lg:size-7";
+  return href ? (
+    <Link
+      href={href}
+      scroll={false}
+      aria-label={etiqueta}
+      title={etiqueta}
+      className={`${base} border-[#e0e0e0] text-[#404040] transition-colors hover:border-brand hover:text-brand`}
+    >
+      {children}
+    </Link>
+  ) : (
+    // `aria-hidden`: sin destino no es un control, y anunciar «mes anterior» a
+    // algo que no lleva a ningún sitio es peor que no anunciarlo.
+    <span aria-hidden className={`${base} border-[#f0f0f0] text-[#c4c4c4]`}>
+      {children}
+    </span>
+  );
+}
 
 /** Horarios que hay que elegir para reservar esta mentoría (RN-12). */
 const sesionesPorReserva = (p: ProductCardData) =>
@@ -92,10 +174,15 @@ export async function BookingPanel({
   selectedId,
   selectedDay,
   selectedTime,
+  month,
   hrefFor,
+  title,
   ctaLabel = "Reservar mentoría YA",
-  note = "Pago protegido · Cancela con 24h y recibe el 100%.",
+  note = "Pago protegido · Cancela con 24 h y recibe el 100 %",
   details = false,
+  compact = false,
+  autoAcceptLine = false,
+  ctaFijo = true,
   footer,
   timeZone,
 }: {
@@ -108,14 +195,49 @@ export async function BookingPanel({
    * huecos reales y solo entonces pinta o desbloquea nada.
    */
   selectedTime?: string;
+  /**
+   * §5.11 · el mes que DIBUJA la rejilla ("YYYY-MM", query `m=`), separado del
+   * día elegido. Llega sin validar, como `selectedTime`: se contrasta abajo
+   * contra el formato y contra el horizonte, y si no cuadra se ignora.
+   */
+  month?: string;
+  /**
+   * §4 · ¿la barra del CTA se despega abajo en móvil? Por defecto sí (B3.5).
+   *
+   * La ficha de mentoría la apaga: desde el 10-sep tiene su PROPIA franja fija
+   * de precio arriba, y §4 dice «no hay ninguna otra barra fija». Con las dos
+   * encendidas, en el tramo en que el panel asoma por abajo pero la franja
+   * todavía no se ha soltado, el teléfono enseña dos barras a la vez — que es
+   * exactamente lo que la revisión quiso quitar. Y el argumento de B3.5 («el
+   * CTA cae bajo el pliegue») ahí ya no aplica: en esa ficha el panel dejó de
+   * ser lo último de la página y la franja de arriba lleva su propio botón de
+   * reservar. En el perfil del tutor no cambia nada.
+   */
+  ctaFijo?: boolean;
   /** Zona del visitante (`getViewerTimezone`): con sesión, la suya; sin sesión,
    *  la del navegador. Sin ella el SSR pintaría la hora del servidor (R24-22). */
   timeZone: string;
-  hrefFor: (next: { p?: string; d?: string; h?: string }) => string;
+  hrefFor: (next: { p?: string; d?: string; h?: string; m?: string }) => string;
+  /**
+   * §5.12 · título del panel por prop. Cuando viene MANDA sobre la lógica de
+   * `single`/`details` de abajo — y puede hacerlo sin reabrir B3.4 porque es
+   * una prop: no cambia durante la vida de la pantalla, que es exactamente lo
+   * que el cliente pidió del encabezado.
+   */
+  title?: string;
   ctaLabel?: string;
   note?: string;
   /** P08 añade equivalencia por sesión y duración bajo el precio. */
   details?: boolean;
+  /**
+   * G-05 · panel compacto de ESCRITORIO: el objetivo declarado es que quepa
+   * entero en 800 px de alto. Encoge desde `lg` y solo desde `lg` (ver el
+   * aviso de `siCompacto`), y quita la línea de ayuda bajo el título.
+   */
+  compact?: boolean;
+  /** G-03 · pinta bajo el CTA lo que promete la mentoría elegida (al instante
+   *  o en 24 h). Sin mentoría elegida no hay nada que prometer y no se pinta. */
+  autoAcceptLine?: boolean;
   /** Contenido extra bajo el botón (P08: política de cancelación). */
   footer?: ReactNode;
 }) {
@@ -214,20 +336,95 @@ export async function BookingPanel({
       )
     : [];
 
-  // Rejilla del mes del día elegido. Se construye con NÚMEROS de calendario y
-  // claves de texto, sin objetos Date locales: así la rejilla no se desplaza
-  // por la zona del servidor (R24-22).
-  const [year, month] = day.split("-").map(Number) as [number, number, number];
-  const offset = new Date(Date.UTC(year, month - 1, 1)).getUTCDay();
-  const total = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  /*
+   * G-04b · QUÉ MES SE DIBUJA, Y POR QUÉ NO SE VUELVE A CONSULTAR NADA.
+   *
+   * ⚠️ Las flechas NO piden huecos de otro mes. `listProductSlots` ya trajo el
+   * HORIZONTE ENTERO de golpe (`HORIZONTE_RESERVA_DIAS = 30`, `rangoPublicado`),
+   * así que `slotsByProduct` tiene desde hoy hasta el último día publicado.
+   * Cambiar de mes es puro repintado: la misma lista, otra rejilla. Si algún
+   * día alguien «optimiza» esto pidiendo mes a mes, tendrá dos verdades y una
+   * consulta por flecha para no enseñar ni un hueco más.
+   *
+   * ⚠️ Y POR ESO TAMPOCO SE PUEDE NAVEGAR MÁS ALLÁ. El horizonte de 30 días no
+   * es de esta pantalla: lo comparte `create_booking`, o sea que un hueco fuera
+   * de él no se puede reservar aunque se pinte. Subirlo es una MIGRACIÓN (se
+   * cambia en `HORIZONTE_RESERVA_DIAS` **y** en la función, ver su comentario),
+   * no un `+1` aquí. Con 30 días esto son dos meses como mucho.
+   *
+   * ⚠️ MES PINTADO ≠ DÍA ELEGIDO. Antes eran lo mismo y la rejilla salía del
+   * día; al separarlos, un día elegido en otro mes sigue siendo el día elegido
+   * —viaja en `d`, alimenta los selectores y el precio— pero NO se marca en el
+   * mes que se está mirando: `isSelected` compara la clave completa, que lleva
+   * el mes dentro, así que ninguna casilla de octubre casa con un día de
+   * septiembre. Al volver a su mes vuelve a marcarse solo.
+   */
+  const mesMinimo = mesDe(slotDay(new Date().toISOString(), timeZone));
+  // El último mes con huecos publicados. `allDays` está ordenado.
+  const ultimoConHuecos = allDays.length
+    ? mesDe(allDays[allDays.length - 1])
+    : mesMinimo;
+  const mesTope = ultimoConHuecos < mesMinimo ? mesMinimo : ultimoConHuecos;
+  const mesPedido =
+    month && MES_VALIDO.test(month) && month >= mesMinimo && month <= mesTope
+      ? month
+      : undefined;
+  const mesPintado = mesPedido ?? mesDe(day);
+
+  const mesAtras = mesDesplazado(mesPintado, -1);
+  const mesAdelante = mesDesplazado(mesPintado, 1);
+  /* Las flechas conservan TODA la elección (mentoría, día y hora): mirar otro
+     mes es mirar, no deshacer lo elegido. */
+  const hrefMes = (m: string) => hrefFor({ p: chosen?.id, d: day, h: hora, m });
+
+  /* `m` solo viaja cuando el mes que se mira NO es el del día elegido: si
+     coinciden, el propio `d` ya lo dice y el parámetro sobraría en la URL. */
+  const mesEnLaUrl = mesPintado === mesDe(day) ? undefined : mesPintado;
+
+  // Rejilla del mes pintado. Se construye con NÚMEROS de calendario y claves de
+  // texto, sin objetos Date locales: así la rejilla no se desplaza por la zona
+  // del servidor (R24-22).
+  const [anio, mesNum] = mesPintado.split("-").map(Number) as [number, number];
+  const offset = new Date(Date.UTC(anio, mesNum - 1, 1)).getUTCDay();
+  const total = new Date(Date.UTC(anio, mesNum, 0)).getUTCDate();
   const cells: (number | null)[] = [
     ...Array.from({ length: offset }, () => null),
     ...Array.from({ length: total }, (_, i) => i + 1),
   ];
-  const monthLabel = new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString(
+  const monthLabel = new Date(Date.UTC(anio, mesNum - 1, 1)).toLocaleDateString(
     "es",
     { month: "long", year: "numeric", timeZone: "UTC" },
   );
+
+  /*
+   * G-04c · EL PRÓXIMO HUECO. De la mentoría elegida si la hay; si no, del
+   * conjunto del tutor, que es lo que el visitante está mirando.
+   *
+   * Se recorre y se compara por INSTANTE en vez de fiarse del orden que
+   * devuelva `get_available_slots`: aquí se juntan las listas de VARIAS
+   * mentorías, y dos listas ordenadas concatenadas no están ordenadas.
+   */
+  const proximo = (
+    chosen
+      ? (slotsByProduct.get(chosen.id) ?? []).map(
+          (iso) => [chosen.id, iso] as const,
+        )
+      : [...slotsByProduct].flatMap(([pid, isos]) =>
+          isos.map((iso) => [pid, iso] as const),
+        )
+  ).reduce<readonly [string, string] | undefined>(
+    (mejor, actual) =>
+      !mejor || Date.parse(actual[1]) < Date.parse(mejor[1]) ? actual : mejor,
+    undefined,
+  );
+
+  /* G-05 · lo que encoge en el panel compacto lo hace SOLO desde `lg`.
+     ⚠️ En móvil el panel ocupa la pantalla entera y apretarlo ahí no gana un
+     píxel útil, pero sí rompería el objetivo táctil de 40 px de los días del
+     calendario — el control que más se toca de esta ficha (ver el comentario
+     de la casilla). Por eso todo esto son clases responsive sobre el MISMO
+     marcado y no una segunda rama de JSX. */
+  const siCompacto = (clases: string) => (compact ? clases : "");
 
   /* Qué falta para poder pulsar. Va como `title` del botón bloqueado, así que
      tiene que nombrar los controles con LAS MISMAS PALABRAS que sus etiquetas:
@@ -269,7 +466,9 @@ export async function BookingPanel({
    * altura de la columna—, no meterle un scroll propio al aside.
    */
   return (
-    <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
+    <aside
+      className={`rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24 ${siCompacto("lg:px-5 lg:py-[18px]")}`}
+    >
       {/* R29-01: arriba del calendario va el TÍTULO de la clase; el precio baja
           junto al CTA. Sigue valiendo R24-14 (nada de importe fijo por delante):
           sin clase elegida no hay precio en ninguna de las dos posiciones.
@@ -304,7 +503,22 @@ export async function BookingPanel({
         lee en el `<select>` de abajo, que la enseña de forma permanente. Antes
         eso lo decía el color de una tarjeta; ahora lo dice el propio control.
       */}
-      {single ? (
+      {/*
+        §5.12 · el título por PROP va primero y gana. No reabre B3.4 —«no
+        cambies el título de arriba cuando selecciones»— porque una prop no
+        cambia durante la vida de la pantalla; es la misma garantía que da
+        `single`, solo que dicha desde la página, que es quien sabe si el H1 de
+        al lado es el nombre del tutor o el de la mentoría.
+
+        Y con título por prop no se pinta línea de ayuda: las de abajo
+        pertenecen a sus dos ramas y ninguna describe un título que no
+        escribieron ellas.
+      */}
+      {title ? (
+        <p className="text-[22px] font-bold text-balance text-[#19191f]">
+          {title}
+        </p>
+      ) : single ? (
         <>
           {/* V-5b · En la ficha de la mentoría el título NO se repite. Ahí ya
               es el H1 de la página, a dos dedos de aquí, y volver a escribirlo
@@ -318,7 +532,10 @@ export async function BookingPanel({
           <p className="text-[22px] font-bold text-balance text-[#19191f]">
             {details ? "Reserva esta mentoría" : single.title}
           </p>
-          {details && single.sessionDurationMin ? (
+          {/* G-05 · la línea de ayuda es lo primero que se va en el panel
+              compacto: son los 30 px que separan «cabe en 800» de «no cabe», y
+              lo que dice ya lo dicen el chip del hero y la línea de precio. */}
+          {details && single.sessionDurationMin && !compact ? (
             <p className="mt-1.5 text-sm text-[#595959]">
               En vivo 1 a 1 · {single.sessionDurationMin} min por sesión
             </p>
@@ -329,27 +546,90 @@ export async function BookingPanel({
           <p className="text-[22px] font-bold text-[#19191f]">
             Reserva estas mentorías
           </p>
-          <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
-            Elige el día y la sesión; el precio depende de la mentoría que
-            escojas.
-          </p>
+          {compact ? null : (
+            <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
+              Elige el día y la sesión; el precio depende de la mentoría que
+              escojas.
+            </p>
+          )}
         </>
       )}
 
-      <hr className="my-5 border-[#e0e0e0]" />
+      {/*
+        G-04c · EL PRÓXIMO HUECO, EN UNA LÍNEA Y EN UN SOLO SITIO.
+        «Elegir» deja marcados día Y hora de una vez: es el atajo para quien no
+        viene a comparar fechas sino a reservar lo antes posible, que hoy tenía
+        que descubrir a mano cuál de las casillas azules era la primera.
 
-      <div className="flex items-baseline justify-between gap-4">
-        <p className="text-[15px] font-semibold text-[#212121]">{monthLabel}</p>
-        <p className="text-xs text-[#808080]">Días disponibles</p>
-      </div>
+        No se pinta sin huecos, y no se repite en ninguna otra parte de la
+        página: la ficha de la mentoría lo tenía además en la línea de precio y
+        eran dos sitios que podían discrepar en cuanto uno se quedara viejo.
+      */}
+      {proximo ? (
+        <div
+          className={`mt-3 flex items-center gap-2 rounded-[10px] border border-[#cfe4ff] bg-[#eaf3ff] px-3 py-2 text-[12.5px] text-[#0b4f96] ${siCompacto("lg:mt-2.5 lg:px-2.5 lg:py-[7px]")}`}
+        >
+          <CalendarIcon className="size-3.5 shrink-0" aria-hidden />
+          <span className="min-w-0 truncate">
+            Próximo:{" "}
+            <b className="font-semibold">
+              {slotDayLabel(proximo[1], timeZone)} ·{" "}
+              {slotTime(proximo[1], timeZone)}
+            </b>
+          </span>
+          {/* Día y hora a la vez. Sin `m`: el mes se deduce del día, y el día
+              es justo el de este hueco, así que la rejilla ya salta a su mes
+              sola. */}
+          <Link
+            href={hrefFor({
+              p: proximo[0],
+              d: slotDay(proximo[1], timeZone),
+              h: proximo[1],
+            })}
+            scroll={false}
+            className="ms-auto shrink-0 font-semibold text-brand hover:underline"
+          >
+            Elegir →
+          </Link>
+        </div>
+      ) : null}
+
+      <hr className={`my-5 border-[#e0e0e0] ${siCompacto("lg:my-3")}`} />
 
       {allDays.length === 0 ? (
-        <p className="mt-4 text-[13px] text-muted-foreground">
+        <p className="text-[13px] text-muted-foreground">
           Sin horarios publicados para las próximas semanas.
         </p>
       ) : (
         <>
-          <div className="mt-4 grid grid-cols-7 text-center text-xs font-medium text-[#808080]">
+          {/* G-04b · la navegación vive DENTRO de esta rama: sin días
+              publicados no hay mes al que ir, y una fila de flechas muertas
+              sobre «Sin horarios publicados» solo invita a pulsarlas.
+              Sustituye a la fila «septiembre de 2026 … Días disponibles»:
+              el rótulo de la
+              derecha describía la rejilla que ya se ve, y el sitio hacía
+              falta para centrar el mes entre las dos flechas. */}
+          <div className="flex items-center justify-center gap-3.5">
+            <FlechaMes
+              href={mesAtras >= mesMinimo ? hrefMes(mesAtras) : undefined}
+              etiqueta="Mes anterior"
+            >
+              <ChevronLeftIcon className="size-4" />
+            </FlechaMes>
+            <p className="text-[15px] font-semibold text-[#212121]">
+              {monthLabel}
+            </p>
+            <FlechaMes
+              href={mesAdelante <= mesTope ? hrefMes(mesAdelante) : undefined}
+              etiqueta="Mes siguiente"
+            >
+              <ChevronRightIcon className="size-4" />
+            </FlechaMes>
+          </div>
+
+          <div
+            className={`mt-4 grid grid-cols-7 text-center text-xs font-medium text-[#808080] ${siCompacto("lg:mt-2")}`}
+          >
             {WEEKDAYS.map((d, i) => (
               <span key={i}>{d}</span>
             ))}
@@ -357,8 +637,11 @@ export async function BookingPanel({
           <div className="mt-1 grid grid-cols-7 gap-y-1 text-center">
             {cells.map((d, i) => {
               if (!d) return <span key={i} />;
-              const key = `${year}-${pad(month)}-${pad(d)}`;
+              const key = `${anio}-${pad(mesNum)}-${pad(d)}`;
               const free = productsByDay.has(key);
+              // La clave lleva el mes dentro, así que un día elegido en OTRO
+              // mes no marca ninguna casilla del que se está mirando — y
+              // vuelve a marcarse solo al volver a su mes.
               const isSelected = key === day;
               if (!free) {
                 return (
@@ -366,7 +649,7 @@ export async function BookingPanel({
                     key={i}
                     // Mismo alto que los días pulsables: si no, la rejilla del
                     // mes cambia de altura según cuántos días haya libres.
-                    className="grid h-10 place-items-center text-[13px] text-[#bfbfbf]"
+                    className={`grid h-10 place-items-center text-[13px] text-[#bfbfbf] ${siCompacto("lg:h-[27px] lg:text-[11.5px]")}`}
                   >
                     {d}
                   </span>
@@ -393,7 +676,11 @@ export async function BookingPanel({
                   // los días del calendario son el control que más se toca de
                   // esta pantalla y se quedaban dos píxeles por debajo del
                   // mínimo táctil del proyecto.
-                  className={`grid h-10 place-items-center rounded-full text-[13px] transition-colors ${
+                  // ⚠️ Los 27 px del panel compacto son SOLO desde `lg`, donde
+                  // se pulsa con un ratón: en móvil los 40 se quedan.
+                  className={`grid h-10 place-items-center rounded-full text-[13px] transition-colors ${siCompacto(
+                    "lg:h-[27px] lg:text-[11.5px]",
+                  )} ${
                     isSelected
                       ? "bg-brand font-bold text-white"
                       : "text-[#212121] hover:bg-muted"
@@ -420,7 +707,14 @@ export async function BookingPanel({
               Así que el precio va en la MISMA línea, detrás del título. Quitarlo
               sería perder la comparación, no simplificar. */}
           {single ? null : (
-            <div className="mt-5">
+            /* ⚠️ Los 36 px del campo compacto se piden con `[&_select]`, no
+               tocando `BookingSelect`: su `h-[45px]` es el alto de TODOS los
+               selectores de reserva (también los de `/reservar/<id>`, que no
+               son compactos) y encogerlo allí encogería pantallas que nadie ha
+               revisado. Aquí gana por especificidad (`.clase select`). */
+            <div
+              className={`mt-5 ${siCompacto("lg:mt-2.5 lg:[&_select]:mt-1.5 lg:[&_select]:h-9")}`}
+            >
               <BookingSelect
                 id="reserva-mentoria"
                 /* «Mentoría» y no «sesión»: lo que se elige aquí es CUÁL de
@@ -441,7 +735,10 @@ export async function BookingPanel({
                     // Igual que con el día: cambiar de clase suelta la hora.
                     // Los huecos son de la mentoría, no del tutor. Es EL MISMO
                     // destino que tenía la tarjeta que esto sustituye.
-                    href: hrefFor({ p: p.id, d: day }),
+                    // `m` solo si el mes que se mira no es el del día elegido:
+                    // cambiar de mentoría no debería devolver la rejilla a
+                    // otro mes de golpe.
+                    href: hrefFor({ p: p.id, d: day, m: mesEnLaUrl }),
                   };
                 })}
               />
@@ -457,7 +754,9 @@ export async function BookingPanel({
                   entonces no hay control al que asociarla. */}
               {times.length === 0 ? (
                 <>
-                  <p className="mt-5 text-[13px] font-medium">
+                  <p
+                    className={`mt-5 text-[13px] font-medium ${siCompacto("lg:mt-2.5")}`}
+                  >
                     Horarios disponibles
                   </p>
                   <p className="mt-2 text-[13px] text-muted-foreground">
@@ -491,7 +790,9 @@ export async function BookingPanel({
                     §23.4: los chips ocupaban de una a cuatro filas según cuántas
                     horas tuviera el día. El `<select>` mide lo mismo siempre.
                   */}
-                  <div className="mt-5">
+                  <div
+                    className={`mt-5 ${siCompacto("lg:mt-2.5 lg:[&_select]:mt-1.5 lg:[&_select]:h-9")}`}
+                  >
                     <BookingSelect
                       id="reserva-horario"
                       label="Horarios disponibles"
@@ -513,7 +814,12 @@ export async function BookingPanel({
                       options={times.map((iso) => ({
                         value: iso,
                         label: slotTime(iso, timeZone),
-                        href: hrefFor({ p: chosen.id, d: day, h: iso }),
+                        href: hrefFor({
+                          p: chosen.id,
+                          d: day,
+                          h: iso,
+                          m: mesEnLaUrl,
+                        }),
                       }))}
                     />
                   </div>
@@ -551,12 +857,14 @@ export async function BookingPanel({
           clase lo cambia sin estado de cliente. */}
       {chosen && precio ? (
         <>
-          <hr className="mt-5 border-[#e0e0e0]" />
+          <hr className={`mt-5 border-[#e0e0e0] ${siCompacto("lg:mt-2.5")}`} />
           {/* RV-08 · este es el último número antes del botón de pagar: tiene
               que ser EL que se cobra. Antes ponía la tarifa ("30 US$ / hora")
               y el checkout pedía 45 en una clase de 90 min. Ahora manda el
               total y la tarifa queda debajo, explicando de dónde sale. */}
-          <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <div
+            className={`mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 ${siCompacto("lg:mt-2.5")}`}
+          >
             <span className="text-[15px] text-[#6b6b6b]">{totalLabel}</span>
             <span className="text-[30px] font-bold text-[#19191f]">
               {precio.amount}
@@ -718,19 +1026,28 @@ export async function BookingPanel({
           «brinca» que Verónica denuncia en los chips y en el paginador, en su
           tercera forma. Apagando el anclaje en la barra, el ancla vuelve a ser
           el contenido y la página se queda donde estaba. */}
-      <div className="sticky bottom-0 z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 [overflow-anchor:none] max-lg:pe-[72px] lg:static">
+      {/* ⚠️ El `pb` compacto solo se anula desde `lg`, donde la barra es
+          `lg:static` y su relleno inferior es simple aire antes de la nota. En
+          móvil sigue siendo `sticky bottom-0` y ahí los 16 px son lo que
+          separa el botón del borde de la pantalla. */}
+      <div
+        className={`z-20 -mx-6 mt-4 border-t border-[#e0e0e0] bg-card pt-4 pb-4 ps-6 pe-6 [overflow-anchor:none] lg:static ${ctaFijo ? "sticky bottom-0 max-lg:pe-[72px]" : ""} ${siCompacto("lg:-mx-5 lg:mt-2.5 lg:ps-5 lg:pe-5 lg:pt-2.5 lg:pb-0")}`}
+      >
         {chosen && sesionesPorReserva(chosen) > 1 ? (
           /* PAQUETE · no pasa por el carrito desde aquí (ver arriba). El botón
              se queda igual que siempre: bloqueado sin hora, y con hora lleva al
              selector múltiple con la primera ya marcada. */
           hora ? (
-            <Button asChild className="h-[51px] w-full text-[15px]">
+            <Button
+              asChild
+              className={`h-[51px] w-full text-[15px] ${siCompacto("lg:h-[46px]")}`}
+            >
               <Link href={destinoDeLaHora(chosen, hora)}>{ctaLabel}</Link>
             </Button>
           ) : (
             <Button
               disabled
-              className="h-[51px] w-full text-[15px]"
+              className={`h-[51px] w-full text-[15px] ${siCompacto("lg:h-[46px]")}`}
               title={motivoDelBloqueo}
             >
               {ctaLabel}
@@ -773,8 +1090,12 @@ export async function BookingPanel({
               Y la navegación va con `scroll: false`, así que la vista se queda
               donde está en vez de saltar al `#reservar` que lleva el href.
             */
-            limpiarHref={hrefFor({ d: day })}
+            limpiarHref={hrefFor({ d: day, m: mesEnLaUrl })}
             motivo={motivoDelBloqueo}
+            /* G-05 · mismo botón, 5 px más bajo desde `lg`. Se pide por prop
+               porque `AddToCart` es cliente y su alto por defecto (51 px) lo
+               comparten pantallas que no son compactas. */
+            buttonClassName={`h-[51px] w-full text-[15px] ${siCompacto("lg:h-[46px]")}`}
           />
         )}
 
@@ -783,12 +1104,45 @@ export async function BookingPanel({
         <GoToCart initial={enCarrito} className="mt-2" />
       </div>
 
+      {/*
+        G-03 · LO QUE PASA AL PAGAR, DICHO DONDE SE PAGA.
+
+        La confirmación es POR MENTORÍA (`products.auto_accept_bookings`), no
+        del perfil del tutor: dos mentorías del mismo tutor pueden prometer
+        cosas distintas. Por eso sale de `chosen` y no se pinta nada mientras no
+        haya mentoría elegida — sin ella la promesa sería una media verdad
+        elegida al azar entre las suyas.
+
+        Va junto a la nota y no suelto: las dos son lo mismo —las condiciones
+        del cobro— y separarlas dejaba un texto centrado huérfano entre el botón
+        y la política.
+      */}
+      <div
+        className={`mt-4 flex flex-col gap-1 text-center text-xs text-[#6b6b6b] ${siCompacto("lg:mt-2")}`}
+      >
+        {autoAcceptLine && chosen ? (
+          <span className="inline-flex items-center justify-center gap-1.5 font-semibold text-[#c4470a]">
+            {chosen.autoAccept ? (
+              <ZapIcon className="size-3.5 shrink-0" aria-hidden />
+            ) : (
+              <CheckIcon className="size-3.5 shrink-0" aria-hidden />
+            )}
+            {chosen.autoAccept
+              ? "Se confirma al instante al pagar"
+              : "El tutor confirma en 24 h"}
+          </span>
+        ) : null}
+        <p>{note}</p>
+      </div>
+
+      {/* La política plegada (P08) va DEBAJO de la nota, no encima: la nota
+          resume las condiciones en una línea y la política es su letra
+          pequeña. Al revés se leía como si la nota fuera un pie de la
+          política. */}
       {footer}
 
       {/* "Enviar mensaje" del Figma no se implementa: la bandeja alumno ↔ tutor
           es DD-07 (`EY-117`) y hoy el chat solo existe por reserva. */}
-
-      <p className="mt-4 text-center text-xs text-[#6b6b6b]">{note}</p>
     </aside>
   );
 }

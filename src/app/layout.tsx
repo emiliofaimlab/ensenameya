@@ -6,6 +6,7 @@ import { DropdownDismiss } from "@/components/layout/dropdown-dismiss";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { TimezoneSync } from "@/components/layout/timezone-sync";
+import { siteUrl } from "@/lib/site-url";
 
 // Única familia del diseño: Poppins en los 4 pesos que usan las 3.691 capas de texto del Figma.
 const poppins = Poppins({
@@ -19,7 +20,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+
 export const metadata: Metadata = {
+  // §5.6 · Base contra la que Next resuelve las URL RELATIVAS de los metadatos
+  // (`alternates.canonical`, `openGraph.url`, `openGraph.images`) que declaran las
+  // fichas públicas. Sin ella se resuelven contra `http://localhost:3000`.
+  metadataBase: new URL(siteUrl()),
   title: "Enséñame Ya",
   description: "Marketplace de mentorías 1:1 en vivo entre alumnos y tutores.",
 };
