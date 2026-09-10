@@ -456,6 +456,45 @@ alumno y el payout el del tutor**. El avance de la implementación está en
 
 ## 4. Trabajos programados
 
+### 4.0 Salud medida de los nueve jobs de pg_cron — 10-sep-2026
+
+Primera auditoría de `cron.job_run_details` **en producción**, agregada por `jobname` y `status`
+como manda la regla 11 de `CLAUDE.md` (no las diez últimas filas). Y el esquema de prod está al día:
+**178 migraciones aplicadas, última `20260910230000`** — idéntico a local, sin divergencia.
+
+| Job | Reloj | Estado medido |
+| :-- | :-- | :-- |
+| `close-expired-sessions` | `*/5 * * * *` | **12.778 fallos**, el último **30-ago 19:25**; 3.133 éxitos desde entonces (último 10-sep 16:30) |
+| `process-notifications` | `*/2 * * * *` | 39.777 éxitos, 0 fallos |
+| `process-payouts` | `*/10 * * * *` | 7.956 éxitos, 0 fallos |
+| `expire-stale-bookings` | — | 21.089 éxitos, 0 fallos |
+| `purge-expired-messages` | `0 4 * * *` | 55 éxitos, 0 fallos |
+| `purge-contact-messages` · `purge-tutor-views` | diario | 15 éxitos cada uno, 0 fallos |
+| `complete-pending-account-deletions` | diario | 10 éxitos, 0 fallos |
+| `run-payout-batch` | **`0 3 * * 1`** | 8 éxitos, 0 fallos · última **lunes 7-sep 03:00** |
+
+**Los 12.778 fallos son la cicatriz, no una herida.** Y confirman la regla 11 al pie de la letra:
+el doc dice que el fallo «siguió cayendo en producción dos días después de existir la migración en
+dev» — la migración es del 28-ago y el último fallo en prod es del **30-ago**. Exactamente dos días.
+La cifra que cita `CLAUDE.md` (12.446) es la de antes del corte; **la de prod es 12.778**.
+
+⚠️ **`run-payout-batch` es el caso literal del sub-aviso de la regla 11:** es **semanal**
+(`0 3 * * 1`, lunes), así que su última corrida siempre parecerá vieja. Leyendo «las diez últimas
+filas» se ve un job sin actividad reciente y se sale a buscar un bug que no existe. Agrega por
+`jobname` y `status`, y valida cada «última» contra **su** reloj, no contra el de al lado.
+
+**La consulta, para no reconstruirla:**
+
+```sql
+select j.jobname, d.status, count(*) as veces, max(d.end_time) as ultima
+from cron.job_run_details d
+join cron.job j on j.jobid = d.jobid
+group by j.jobname, d.status
+order by j.jobname, d.status;
+```
+
+
+
 **Cinco endpoints HTTP y dos sitios donde vive su reloj.** Ninguno es una Edge Function de Supabase,
 a propósito: la decisión está en `20260717120000_us801_daily_real.sql` — Postgres no puede llamar a la
 API de Daily desde aquí, y una función de Deno necesitaría su propio cliente, su propia copia de la
