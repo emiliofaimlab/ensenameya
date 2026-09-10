@@ -28,21 +28,47 @@ import type { AppRole } from "./roles";
 // Interna a propósito: la puerta es `panelMenu`. Con las dos exportadas, la
 // pantalla siguiente elige la que no trae contadores —que es justo el olvido
 // que esto viene a cerrar— y el menú se queda mudo sin que nadie lo note.
-async function panelItems(
+async function panelResuelto(
   userId: string,
   roles: AppRole[],
-): Promise<SidebarItem[] | undefined> {
+): Promise<Panel> {
   const panel = (await cookies()).get(PANEL_COOKIE)?.value as Panel | undefined;
-  if (panel === "alumno") return undefined;
+  if (panel === "alumno") return "alumno";
 
   const admin = roles.includes("admin");
-  if (panel === "admin" && admin) return ADMIN_ITEMS;
+  if (panel === "admin" && admin) return "admin";
 
   const tutor = roles.includes("tutor") || (await hasTutorProfile(userId));
-  if (panel === "tutor" && tutor) return TUTOR_ITEMS;
+  if (panel === "tutor" && tutor) return "tutor";
 
   // Entrada directa (sin cookie): el panel de mayor rango que pueda abrir.
-  return admin ? ADMIN_ITEMS : tutor ? TUTOR_ITEMS : undefined;
+  return admin ? "admin" : tutor ? "tutor" : "alumno";
+}
+
+/**
+ * ⚠️ POR QUÉ ESTA FUNCIÓN DEVUELVE EL PANEL Y NO SOLO EL MENÚ, Y POR QUÉ NO SE
+ * PUEDE VOLVER A DEDUCIR DEL MENÚ. `TUTOR_ITEMS` y `ADMIN_ITEMS` viven en
+ * `components/layout/app-sidebar.tsx`, que es `"use client"`. Importarlos desde
+ * código de SERVIDOR no trae el array: trae una **referencia de cliente**, que
+ * es una función. Medido el 10-sep en `/referidos`:
+ *
+ *     typeof TUTOR_ITEMS → "function" · Array.isArray → false · .length → 0
+ *
+ * Así que `items?.[0]?.href === "/tutor"` —el idiom con el que tres pantallas
+ * decidían de qué panel venías— es `undefined` SIEMPRE, y la comparación sale
+ * `false` siempre. Falla mudo: el menú se pinta perfecto, porque la referencia
+ * se resuelve ya en el cliente, y solo se nota en la decisión que cuelga de él.
+ * Costó que ningún tutor pudiera ver su campaña de referidos (B1.11): se le
+ * servía la del alumno, que es exactamente lo prohibido.
+ *
+ * `panel` sale de la cookie, que es un `string` y cruza el borde intacta.
+ */
+async function panelItems(panel: Panel): Promise<SidebarItem[] | undefined> {
+  return panel === "admin"
+    ? ADMIN_ITEMS
+    : panel === "tutor"
+      ? TUTOR_ITEMS
+      : undefined;
 }
 
 /**
@@ -62,13 +88,19 @@ async function panelItems(
  * que tenía exactamente el mismo hueco.
  */
 export async function panelMenu(userId: string, roles: AppRole[]) {
-  const items = await panelItems(userId, roles);
+  const panel = await panelResuelto(userId, roles);
   return {
-    items,
+    /** El panel del que vienes. Quien decida algo por rol de panel usa ESTO,
+     *  nunca `items[0].href` — ver la cabecera de `panelItems`. */
+    panel,
+    items: await panelItems(panel),
+    // Por `panel` y no por identidad de referencia (`items === TUTOR_ITEMS`):
+    // esa comparación seguía funcionando de casualidad —es el mismo objeto a
+    // los dos lados— pero atarla a lo que sí cruza el borde cuesta lo mismo.
     badges:
-      items === TUTOR_ITEMS
+      panel === "tutor"
         ? await tutorSidebarBadges(userId)
-        : items === ADMIN_ITEMS
+        : panel === "admin"
           ? await adminSidebarBadges()
           : undefined,
   };

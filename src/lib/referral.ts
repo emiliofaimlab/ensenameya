@@ -13,25 +13,19 @@ export const REFERRAL_COOKIE = "ey-ref";
 /**
  * US-1301 · La campaña de Referral Factory que le toca a cada rol.
  *
- * ⚠️ B1.11 · OJO: LA PREMISA DE ESTA FUNCIÓN NO SE CUMPLE HOY, Y ESTÁ MEDIDO.
+ * ✅ B1.11 · LAS DOS CAMPAÑAS EXISTEN DESDE EL 10-SEP-2026, y está medido
+ * contra su API con la clave real:
  *
- * Se escribió afirmando que el cliente tiene DOS programas separados en
- * Referral Factory —uno para alumnos, otro para tutores—, cada uno con su URL,
- * sus reglas y sus recompensas. El 26-ago se consultó su API con la clave real
- * y **solo existe UNA campaña**: `id 50297`, «Campaign for Enséñame Ya»,
- * `launched`, y su URL es exactamente la que hay en `NEXT_PUBLIC_REFERRAL_URL`.
- * Tampoco existe en su modelo ningún concepto de audiencia o rol dentro de una
- * campaña. O nunca hubo dos, o la segunda no llegó a crearse.
+ *   · alumnos → `id 50297`, «Campaign for Enséñame Ya», code `cXr65Wou`
+ *   · tutores → `id 50784`, «Enséñame Ya - Tutor»,      code `cKAf69gl`
  *
- * O sea que `NEXT_PUBLIC_REFERRAL_URL_TUTOR` **no tiene a qué apuntar**, y por
- * eso hoy al tutor no se le enseña nada.
+ * (El 26-ago solo existía la primera, y por eso al tutor no se le enseñaba
+ * nada. La campaña no lleva dentro ningún concepto de audiencia ni de rol: son
+ * dos programas separados, y el reparto lo hace esta función.)
  *
- * La función se deja como está a la espera de una decisión de negocio, y no por
- * pereza: mientras el reparto por rol siga aquí, crear la segunda campaña es
- * poner una variable. Si se decide que hay un solo programa para todos, lo que
- * sobra es la mitad de esta función — y eso es diez minutos. Lo que NO se puede
- * hacer es que el tutor caiga a la campaña del alumno: darlo de alta en el
- * programa equivocado sin que se note es peor que no enseñarle nada.
+ * Crear la campaña fue poner una variable, tal como estaba previsto. Lo que NO
+ * se puede hacer es que el tutor caiga a la campaña del alumno: darlo de alta
+ * en el programa equivocado sin que se note es peor que no enseñarle nada.
  *
  * La URL es el interruptor, igual que la credencial en Daily o el PSP: sin ella
  * el bloque **no se pinta**. Un «Invita y gana» que no lleva a ninguna parte es

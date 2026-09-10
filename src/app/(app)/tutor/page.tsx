@@ -14,6 +14,7 @@ import { ChatDeReservaButton } from "./chat-button";
 import { StudentLink } from "./student-link";
 import { formatPct, tutorTier } from "./tier";
 import { AcceptRejectButtons } from "./reservas/booking-actions";
+import { ReferralCard } from "@/components/referral/referral-card";
 import { SupportCard } from "@/components/support/support-card";
 import {
   AcceptCountdown,
@@ -671,6 +672,15 @@ export default async function TutorHomePage() {
               </ul>
             )}
           </PanelCard>
+
+          {/* «Invita y gana» (US-1301). Va en la columna que scrollea, no en la
+              fija: esa es `sticky` y una tarjeta más la deja más alta que el
+              viewport, que es cuando `sticky` deja de pegarse.
+
+              B1.11 · esta pantalla es el panel del TUTOR, así que su programa
+              es el de tutores siempre —igual que `/app` fija el del alumno—. Se
+              pinta sola solo si su campaña está configurada; si no, `null`. */}
+          <ReferralCard isTutor />
         </div>
 
         <div className="flex flex-col gap-5 lg:order-1 lg:sticky lg:top-24">
