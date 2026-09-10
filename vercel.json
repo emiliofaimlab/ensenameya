@@ -18,6 +18,12 @@
       "has": [{ "type": "host", "value": "www.ensenameya.com" }],
       "destination": "/contacto",
       "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "ensenameya.vercel.app" }],
+      "destination": "/contacto",
+      "permanent": false
     }
   ]
 }
