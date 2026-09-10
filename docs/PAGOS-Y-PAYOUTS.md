@@ -13,8 +13,12 @@
 > pero no tiene todas las credenciales: hoy le falta `DLOCALGO_API_KEY` y un GET a
 > `/api/pagos/confirmar-dlocal` devuelve 503.
 >
-> Entregable comercial derivado: `EnsenameYa-Pagos-y-Payouts.pdf` (10 págs., versión cliente).
-> ⚠️ **Describe el mapa de ruteo anterior**: si se vuelve a enviar, hay que regenerarlo.
+> ⚠️ **No hay entregable comercial vigente de pagos.** El PDF de 10 páginas que se le mandó al
+> cliente describía el mapa de ruteo ANTERIOR al dictado, y se borró del repo el 9-sep-2026
+> justamente por eso: al ser binario no lo encuentra ningún `grep`, así que contradecía al
+> dictado sin que nada pudiera avisarlo. Sigue en el historial (`410044f`) si hace falta ver qué
+> se envió. Regenerarlo desde este documento y `docs/DICTADO-PAGOS.md` antes de volver a mandar
+> nada.
 
 **Marcas de confianza usadas en todo el documento:**
 
