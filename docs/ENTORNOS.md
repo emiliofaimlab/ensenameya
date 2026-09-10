@@ -286,6 +286,41 @@ alumno y el payout el del tutor**. El avance de la implementación está en
 - [ ] `sk_live_` y el KYC de *live mode* de Stripe: sigue siendo del cliente.
 - [ ] **Migración de dominio.** `ensenameya.com` es una landing de GoDaddy que no enlaza a la app,
   que vive en `ensenameya.vercel.app`. Es DNS y negocio, no un merge — y ya no bloquea a ningún PSP.
+  El **cliente ya tiene el dominio** y la landing muere: era un GoDaddy Builder con un formulario
+  para ir recogiendo gente, y eso lo cubre `/contacto`, que además guarda en `contact_messages`.
+  **Cero cambios de código**: `siteUrl()` (`src/lib/stripe.ts`) sale de `VERCEL_PROJECT_PRODUCTION_URL`
+  y de ahí cuelgan el `return_url` de Stripe y el `notification_url` de dLocal. Orden del corte:
+
+  1. **GoDaddy DNS** → apuntar el apex (y `www`) a Vercel; **Vercel prod** → añadir el dominio.
+  2. **Supabase Auth (prod)** → Site URL y Redirect URLs con `https://ensenameya.com/auth/callback`.
+     Sin esto, Google OAuth y el magic link rebotan al dominio viejo.
+  3. **Stripe** → re-registrar `POST /api/webhooks/stripe`. ⚠️ **Endpoint nuevo = firma nueva**:
+     hay que reponer `STRIPE_WEBHOOK_SECRET` en Vercel (§5).
+  4. **GitHub → Variables** → `APP_BASE_URL` = `https://ensenameya.com` (lo leen los cuatro
+     workflows de cron, §4).
+  5. **Redeploy.** Nada de lo anterior entra en un despliegue que ya existe (§1.3).
+
+  **No hay que tocar** dLocal ni PayPal —sus URL de vuelta viajan en cada petición, derivadas de
+  `siteUrl()`—, ni `vercel.json` en su parte de `crons` (ruta relativa), ni el UID de los `.ics`
+  (`src/lib/calendar/ics.ts` ya dice `ensenameya.com`, así que los calendarios ya suscritos no se
+  duplican).
+
+- [ ] **Quitar el bloqueo de pre-lanzamiento.** Mientras el sitio no esté vivo, `ensenameya.com`
+  redirige `/` → `/contacto` (`redirects` de `vercel.json`, con `has: host` para que **no afecte a
+  las previews**) y `src/app/robots.ts` sirve un `disallow: /`. Son **la misma decisión** y se
+  quitan en **un solo commit**. Se hace así, y no con una redirección del apex a un Typeform, por
+  dos razones: un formulario externo es un segundo almacén de leads que alguien tendría que
+  reconciliar a mano, y una redirección ciega del apex se lleva por delante `/terms`, `/privacy`,
+  `/cookies` y `/contacto` — que es exactamente lo que abre un revisor de dLocal (DL-01/DL-02).
+  ⚠️ El `permanent: false` es a propósito: un 301 se queda cacheado en el navegador de todo el que
+  entre y sobrevive al lanzamiento.
+
+- [ ] **Subdominio de dev: decidido que NO.** La ofuscación por nombre (`algoraro.ensenameya.com`)
+  no existe: el certificado que emite Vercel se publica en los **Certificate Transparency logs** y
+  crt.sh lo indexa a los minutos. Y sería un cambio a peor — hoy dev vive en el alias fijo de rama
+  `ensenameya-git-dev-*.vercel.app`, **detrás del login de Vercel** (Deployment Protection, §4).
+  Si algún día pesa que el cliente tenga que loguearse para ver una demo, entonces `dev.` con
+  nombre normal y protección explícita; no antes.
 
 ### G) Correo — Resend (C-11/DP-05) — [x] cuenta creada y clave puesta
 - [x] Proveedor **decidido: Resend**, por un motivo operativo — es el único de los tres candidatos

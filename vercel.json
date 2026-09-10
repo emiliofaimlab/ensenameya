@@ -5,5 +5,19 @@
       "path": "/api/cron/recordings-purge",
       "schedule": "0 4 * * *"
     }
+  ],
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "ensenameya.com" }],
+      "destination": "/contacto",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.ensenameya.com" }],
+      "destination": "/contacto",
+      "permanent": false
+    }
   ]
 }
