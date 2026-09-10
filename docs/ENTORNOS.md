@@ -694,7 +694,42 @@ probado, o Stripe lo desactiva solo y deja un aviso confuso en el historial.
    en un solo commit. Hasta que eso pase, el sitio no es alcanzable aunque las claves sean live:
    `/` redirige a `/contacto` y `robots.txt` dice `Disallow: /`.
 
-### 7.5 Lo que NO hay que hacer
+### 7.5 Google OAuth — estaba roto, y no por el dominio
+
+**Hasta el 10-sep el login con Google no funcionaba para nadie.** El consent screen estaba en
+**Testing** con la lista de test users **vacía**, y en Testing solo se autentican los usuarios de
+esa lista y los dueños del proyecto de Google. Lo tapaban dos cosas: prod no tiene usuarios, y en
+dev se entra con la cuenta que posee el proyecto. **No lo rompió la migración de dominio** —
+llevaba así desde que se creó el proyecto.
+
+Publicado el 10-sep: `Publishing status: In production`, `User type: External`.
+
+- **No hay cap ni pantalla de «app no verificada»** porque solo se piden `email profile openid`,
+  los tres no sensibles: el botón llama a `signInWithOAuth({ provider: "google" })` **sin scopes
+  propios** (`components/auth/google-button.tsx`). Publicar fue un clic, sin cola de revisión.
+- 🔴 **NO subir el App logo.** El propio panel lo dice: subirlo obliga a pasar verificación de
+  marca de Google salvo que la app esté en Testing. Es lo único que convierte este publicado
+  instantáneo en una cola. El logo se añade el día que alguien decida que compensa esperar.
+- **Authorized domains son TRES** y los tres hacen falta: `lbtpnszjjsxbeileqsja.supabase.co` (dev),
+  `nrzsyysqanbrcgtslfte.supabase.co` (prod) y `ensenameya.com`. Un solo cliente OAuth sirve a los
+  dos entornos, así que borrar el de dev rompe dev.
+- **El redirect URI NO cambia con el dominio**: apunta a
+  `https://<ref>.supabase.co/auth/v1/callback`, o sea a Supabase. En la migración no se toca.
+
+✅ **Verificado de punta a punta el 10-sep**: login con Google en `ensenameya.com` → sesión y
+onboarding, con el nombre traído del scope `profile`. Fue el **primer usuario real de producción**.
+
+⚠️ **Lo que ese test NO prueba: `siteUrl()`.** El `redirectTo` se construye con
+`window.location.origin` en el navegador, no en el servidor. `siteUrl()` solo se ejercita en el
+`return_url` de Stripe, el `notification_url` de dLocal y el `redirect_uri` de
+`/api/tutor/paypal-connect`. Sigue pendiente de comprobar en el primer cobro real; el indicador es
+qué clave de SmartFields carga el formulario (`b458948f-…` = producción).
+
+⚠️ **Cosmético pero es lo primero que ve un alumno:** en la pantalla de Google se lee
+«Continuar a nrzsyysqanbrcgtslfte.supabase.co», no la marca. Arreglarlo pide el **Custom Domain de
+Supabase**, que es add-on de pago y el proyecto está en Free. Es decisión de negocio.
+
+### 7.6 Lo que NO hay que hacer
 
 - **No tocar `payment_routing_rules` con un `UPDATE`.** Es una migración (regla 5 de `CLAUDE.md`).
   Con claves live, el ruteo que ya está declarado vale tal cual.
