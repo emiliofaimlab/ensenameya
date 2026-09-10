@@ -183,20 +183,30 @@ export default async function TutorPayoutsPage() {
   // Mismo guard que el resto del panel: fila en `tutor_profiles`. Con
   // `requireRole("tutor")` un tutor aprobado sin el rol concedido (o uno
   // pendiente, al que el menú ya le ofrece Payouts) rebotaba a /app.
-  const { userId } = await requireTutorProfile();
+  //
+  // 🔑 EL PAÍS SALE DE AQUÍ, y con eso se aplana la pantalla más lenta del
+  // panel. Era el primer eslabón de una cadena de cinco: la guarda leía
+  // `tutor_profiles`, y DESPUÉS el `Promise.all` volvía a leer la MISMA FILA
+  // solo por `payout_country`; de ese valor colgaba `rielesDelPais()`, y de lo
+  // que devolviera, el catálogo de bancos. Cuatro viajes en fila india por un
+  // dato que ya venía en la primera consulta — 874 ms de payload RSC contra
+  // ~350 ms de `/tutor/reservas`. Trayéndolo en la guarda, los tres peldaños de
+  // abajo se convierten en miembros del mismo `Promise.all`.
+  const { userId, payoutCountry: paisDeCobro } = await requireTutorProfile();
 
   const supabase = await createClient();
   const [
     { data: balanceData },
     { data: payouts },
     tier,
-    { data: perfil },
     { data: reglas, error: errorReglas },
     { data: cuentaData, error: errorCuenta },
     { data: canalesData, error: errorCanales },
     { data: destinosData, error: errorDestinos },
     { data: prefData, error: errorPref },
     { data: itemsData, error: errorItems },
+    { rieles, familias: familiasDelPais },
+    { data: bancosData },
   ] = await Promise.all([
     supabase.rpc("tutor_balance"),
     supabase
@@ -209,11 +219,6 @@ export default async function TutorPayoutsPage() {
       )
       .order("created_at", { ascending: false }),
     tutorTier(supabase, userId),
-    supabase
-      .from("tutor_profiles")
-      .select("payout_country")
-      .eq("profile_id", userId)
-      .maybeSingle(),
     supabase
       .from("payout_country_rules")
       .select(
@@ -253,12 +258,40 @@ export default async function TutorPayoutsPage() {
       .select(
         "payout_id, amount, payments(bookings(booking_ref, products(title)))",
       ),
+    // 🔑 `rielesDelPais`: lo que se puede hacer por ESTE país, preguntándoselo
+    // al enrutador. Va DENTRO del `Promise.all` desde que el país lo trae la
+    // guarda: antes era un `await` suelto que no podía empezar hasta que este
+    // bloque entero terminaba, y por dentro hace su propio `rpc(ruta_de_pago)`.
+    //
+    // ⚠️ AQUÍ HABÍA UNA SEGUNDA LLAMADA, A LA API DE STRIPE, para saber si la
+    // cuenta conectada del tutor podía recibir ya. Se fue con la tarjeta: el
+    // dictado del 9-sep-2026 elimina el alta de Connect de esta pantalla, así
+    // que no hay nada que preguntarle a Stripe.
+    rielesDelPais(paisDeCobro),
+    // El catálogo de bancos, solo del país que toca: son hasta 213 filas
+    // (Ecuador), y traer el catálogo entero para enseñar uno sería mandarlo al
+    // navegador en cada visita. ⚠️ La mayoría de los países que se abrieron el
+    // 10-sep NO tienen catálogo de bancos: su formato es un IBAN o un BIC que
+    // el tutor teclea, así que ahí esto vuelve vacío.
+    //
+    // ⚠️ SE PIDE SIN SABER TODAVÍA SI HAY TARJETA DE BANCO, y es inocuo por un
+    // motivo concreto: `bancos` se lee en dos sitios y los dos están dentro de
+    // la rama de banco, que ya exige `regla` (`m.clave === "banco"` solo existe
+    // si `familias` conservó "banco", y eso pide `regla !== null`). O sea, una
+    // lista vacía nunca se interpreta como «este país no tiene regla»: en el
+    // país sin regla nadie mira esta variable. Lo que se gana a cambio es el
+    // quinto peldaño de la cascada, que colgaba de lo que devolviera el cuarto.
+    paisDeCobro
+      ? supabase
+          .from("payout_banks")
+          .select("bank_code, name, rejects_cpf")
+          .eq("country", paisDeCobro)
+          .order("name")
+      : Promise.resolve({ data: null }),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
   const hasAvailable = balance.available.length > 0;
-
-  const paisDeCobro = perfil?.payout_country ?? null;
 
   /**
    * 🔑 LA IP DEL TUTOR, para sellar la aceptación de condiciones (decisión D-1).
@@ -280,16 +313,6 @@ export default async function TutorPayoutsPage() {
     cabeceras.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     cabeceras.get("x-real-ip")?.trim() ||
     null;
-
-  // 🔑 `rielesDelPais`: lo que se puede hacer por ESTE país, preguntándoselo al
-  // enrutador.
-  //
-  // ⚠️ AQUÍ HABÍA UNA SEGUNDA LLAMADA, A LA API DE STRIPE, para saber si la
-  // cuenta conectada del tutor podía recibir ya. Se fue con la tarjeta: el
-  // dictado del 9-sep-2026 elimina el alta de Connect de esta pantalla, así que
-  // no hay nada que preguntarle a Stripe. De paso desaparece el viaje más lento
-  // que tenía este render.
-  const { rieles, familias: familiasDelPais } = await rielesDelPais(paisDeCobro);
 
   /**
    * ⚠️ Se miran los `error`, no solo los `data` (regla de oro 10). Un
@@ -330,19 +353,7 @@ export default async function TutorPayoutsPage() {
   const familias = familiasDelPais.filter((f) => f !== "banco" || regla !== null);
   const pideBanco = familias.includes("banco");
 
-  // El catálogo de bancos, solo del país que toca y solo si hace falta: son
-  // hasta 213 filas (Ecuador), y traer el catálogo entero para enseñar uno
-  // sería mandarlo al navegador en cada visita. ⚠️ La mayoría de los países que
-  // se abrieron el 10-sep NO tienen catálogo de bancos: su formato es un IBAN o
-  // un BIC que el tutor teclea, así que aquí no hay nada que traer.
-  const { data: bancosData } =
-    pideBanco && regla
-      ? await supabase
-          .from("payout_banks")
-          .select("bank_code, name, rejects_cpf")
-          .eq("country", regla.country)
-          .order("name")
-      : { data: null };
+  // Se pidió arriba, con el resto. Solo se lee dentro de la rama de banco.
   const bancos = (bancosData ?? []) as BancoDePais[];
 
   /** `channel` → `label`. Incluye los apagados: un destino registrado en uno

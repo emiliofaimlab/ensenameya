@@ -31,8 +31,10 @@ import { tutorSidebarBadges } from "@/lib/tutor/sidebar-badges";
  *
  * Es `async` y por tanto un Server Component: `PanelShell` no lo es (lo usan
  * pantallas de cliente), así que la consulta se queda de este lado.
- * `tutorSidebarBadges` está memoizada por petición, de modo que compartir el
- * shell entre layout y pantalla no la paga dos veces.
+ * `tutorSidebarBadges` está memoizada por petición, y de eso vive el ADELANTO:
+ * `requireTutorProfile()` —la primera línea de las pantallas— la lanza sin
+ * `await`, así que este `await` encuentra la misma promesa ya en vuelo en vez
+ * de empezar de cero al final del render. Ver `lib/auth/tutor.ts`.
  */
 export async function TutorShell({
   userId,

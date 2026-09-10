@@ -5,6 +5,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { adminSidebarBadges } from "@/lib/admin/sidebar-badges";
 import {
   toNotice,
   type AppNotice,
@@ -93,7 +94,21 @@ export const getSessionContext = cache(async (): Promise<SessionContext> => {
   // y dos peldaños de latencia —los avisos necesitan el id que devuelven las
   // otras dos—, y los pagaba entera cada pantalla con sesión. La RLS sigue
   // delante: la función es `security invoker`.
-  const { data } = await supabase.rpc("session_bootstrap");
+  const { data, error } = await supabase.rpc("session_bootstrap");
+  // ⚠️ Regla de oro 10: `const { data } = …` convierte el fallo en una lista
+  // vacía, que es una mentira creíble. Y aquí la mentira no es un contador a
+  // cero: sin roles y con `onboardingComplete = false`, TODO usuario con sesión
+  // rebota a `/onboarding` — un fallo del RPC es indistinguible de una cuenta
+  // recién creada, y sin esta línea no deja rastro en ninguna parte.
+  //
+  // NO se lanza a propósito. `getSessionContext()` lo llaman también los
+  // layouts públicos y varios route handlers SIN try/catch: un `throw` aquí
+  // convertiría «el panel está roto» en «el sitio entero devuelve 500 a
+  // cualquiera con cookie de sesión», legales incluidos. El flujo se queda
+  // exactamente como estaba; lo único que cambia es que ahora se ve.
+  // El `cache()` de arriba garantiza UNA línea por petición, no una por
+  // llamante.
+  if (error) console.error("[session_bootstrap]", error.code, error.message);
   const boot = (data ?? {}) as {
     roles?: AppRole[];
     profile?: {
@@ -251,7 +266,21 @@ export async function requireRole(
   role: AppRole,
 ): Promise<{ user: SessionUser; roles: AppRole[] }> {
   const ctx = await requireUser();
+  // ⚠️ Sí, esto es UI dentro del fichero de guardas, y se hace a sabiendas:
+  // `await requireRole("admin")` es la PRIMERA línea de las quince pantallas
+  // del panel y el único punto por el que pasan todas. `AdminShell` pide los
+  // contadores desde dentro del árbol que devuelve la pantalla, o sea al final
+  // de todos sus `await`; lanzarlos aquí sin esperarlos los solapa con las
+  // consultas propias de la pantalla. Un `admin/layout.tsx` no sirve para esto:
+  // en una navegación de cliente dentro de /admin/* los layouts por encima del
+  // punto de divergencia no se re-ejecutan. `adminSidebarBadges` está memoizada
+  // con `cache()`, así que el shell encuentra la promesa en vuelo, no otra.
+  // El `.catch` evita que un fallo de red en una promesa sin dueño tumbe el
+  // proceso; el error real lo sigue viendo quien haga `await`. Va DESPUÉS de la
+  // comprobación del rol: quien no es admin se va por el `redirect` sin pagar
+  // tres consultas que además la RLS le contestaría a cero.
   if (!ctx.roles.includes(role)) redirect(pickHome(ctx.roles));
+  if (role === "admin") void adminSidebarBadges().catch(() => {});
   return ctx;
 }
 
