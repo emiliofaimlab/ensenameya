@@ -403,6 +403,14 @@ alumno y el payout el del tutor**. El avance de la implementación está en
   `/cookies` y `/contacto` — que es exactamente lo que abre un revisor de dLocal (DL-01/DL-02).
   ⚠️ El `permanent: false` es a propósito: un 301 se queda cacheado en el navegador de todo el que
   entre y sobrevive al lanzamiento.
+  ⚠️ **Son TRES entradas, una por hostname de producción**: `ensenameya.com`, `www.ensenameya.com`
+  y **`ensenameya.vercel.app`**. La última se descubrió el 10-sep midiendo: con solo las dos
+  primeras, `https://ensenameya.vercel.app/` devolvía **200 con la home completa** y `/tutors`
+  también — o sea que producción era alcanzable sin bloqueo por su otro nombre, y con claves live
+  detrás. El `robots.txt` sí salía bien ahí (es agnóstico del host), así que no había indexación,
+  pero cualquiera con esa URL veía el marketplace entero. Condicionar por host es lo que mantiene
+  las **previews** fuera del bloqueo (viven en `ensenameya-git-dev-*.vercel.app`, que no está en la
+  lista), y el precio de esa precisión es tener que enumerar cada hostname de producción.
 
 - [ ] **Subdominio de dev: decidido que NO.** La ofuscación por nombre (`algoraro.ensenameya.com`)
   no existe: el certificado que emite Vercel se publica en los **Certificate Transparency logs** y
