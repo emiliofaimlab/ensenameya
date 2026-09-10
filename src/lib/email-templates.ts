@@ -85,14 +85,26 @@ const PLANTILLAS: Record<string, (p: Payload) => Plantilla> = {
     cuerpo: `Se procesó un reembolso${importe(p, "refunded") && ` de ${importe(p, "refunded")}`} por el mismo medio de pago que usaste. Según tu banco puede tardar unos días en aparecer.`,
     cta: "Ver mis pagos",
   }),
+  // El asunto dice las DOS cosas a propósito. «Un pago no se pudo completar» era
+  // pasivo y ambiguo —¿de quién, y qué pasó con mi clase?— y obligaba a abrir el
+  // correo para enterarse de lo que de verdad importa: que la reserva ya no
+  // existe. En la bandeja, el asunto es lo único que se lee.
   payment_failed: () => ({
-    asunto: "Un pago no se pudo completar",
+    asunto: "Tu pago no se completó y la reserva se canceló",
     cuerpo:
       "No pudimos cobrar el pago de tu reserva, así que se canceló y el horario volvió a quedar libre. No se te ha cobrado nada.",
     cta: "Ver mis pagos",
   }),
+  // ⚠️ EL ASUNTO RAMIFICA IGUAL QUE EL CUERPO. Antes era uno solo —«Tu solicitud
+  // para enseñar tiene respuesta»— y eso obligaba a quien había sido APROBADO a
+  // abrir el correo para saber si la noticia era buena. Un asunto que oculta
+  // deliberadamente el resultado se lee como malas noticias, y aquí la mitad de
+  // las veces no lo son. El cuerpo ya ramificaba; el asunto no tenía por qué no.
   tutor_review_result: (p) => ({
-    asunto: "Tu solicitud para enseñar tiene respuesta",
+    asunto:
+      p?.status === "approved"
+        ? "Tu perfil de tutor está aprobado"
+        : "Revisamos tu solicitud para enseñar",
     cuerpo:
       p?.status === "approved"
         ? "Tu perfil quedó aprobado. Ya puedes publicar mentorías y recibir reservas."
@@ -268,28 +280,99 @@ export function renderEmail(opts: {
     plantilla.cta ? `${plantilla.cta}: ${url}` : url,
     "",
     "— Enséñame Ya",
+    "Recibes este correo porque tienes una cuenta en la plataforma.",
+    "¿Dudas? info@ensenameya.com",
   ].join("\n");
 
-  // HTML con estilos EN LÍNEA y sin imágenes: los clientes de correo descartan
-  // el <style> del head y bloquean las remotas por defecto. Nada de layout
-  // moderno aquí — esto se ve en Outlook.
+  // ─────────────────────────────────────────────────────────────────────────
+  // El HTML. Cuatro restricciones que no son estéticas y explican cada
+  // decisión rara de aquí abajo:
+  //
+  // 1. TABLAS, no `div` con flex. Outlook renderiza con el motor de Word y no
+  //    soporta flex ni grid. Van con `role="presentation"` para que un lector
+  //    de pantalla no las anuncie como tablas de datos (WCAG 1.3.1).
+  // 2. TODO EN LÍNEA. Los clientes descartan el `<style>` del head, así que un
+  //    `<style>` sería trabajo que se tira. Por eso cada `td` repite su
+  //    `font-family` en vez de heredarla.
+  // 3. `bgcolor` **Y** `background` en cada celda con color. Outlook ignora el
+  //    CSS de fondo en algunas versiones y solo respeta el atributo.
+  // 4. CERO IMÁGENES. Los clientes bloquean las remotas por defecto, así que un
+  //    logo en `<img>` se ve como un hueco roto la primera vez. El logotipo va
+  //    en TEXTO — que además es lo que el Figma escribe a mano cuando el asset
+  //    no está («Enséñame ya», 700, azul; ver `site-footer.tsx`), y para un
+  //    lector de pantalla es mejor que cualquier `alt`.
+  //
+  // ⚠️ CONTRASTE: el texto del botón es `#14141a` sobre el naranja de marca, no
+  // blanco. Medido: blanco sobre `#fe6a00` da **2.89:1** y falla el AA de WCAG
+  // incluso para texto grande (pide 3:1); `#14141a` sobre el mismo naranja da
+  // **6.36:1**. Así el naranja de marca se queda intacto y el correo cumple.
+  // Los enlaces usan `--brand-foreground` (#036fda, 4.90:1) y no `--brand`
+  // (#0080ff, 3.80:1): los dos existen ya en `globals.css`, no se inventó nada.
+  // El logotipo sí va en #0080ff — WCAG 1.4.3 exime los logotipos.
+  //
+  // Poppins va PRIMERA en la pila aunque casi nadie la tenga instalada: si
+  // está, el correo se ve con la tipografía de la marca; si no, cae a la del
+  // sistema. No cuesta nada y no puede fallar.
+  //
+  // El botón mide 48 px de alto (15+15 de padding + 18 de línea) para cumplir
+  // el objetivo táctil de 44 px de WCAG 2.5.5 — un correo se abre en el móvil.
   //
   // ⚠️ Los dos trozos variables van escapados. El cuerpo por `admin_message`
   // (NTF-22, lo escribe el admin), y el saludo porque sale de
-  // `profiles.full_name`, que lo escribe el propio usuario: eso ya se estaba
-  // interpolando crudo desde el primer correo.
+  // `profiles.full_name`, que lo escribe el propio usuario.
   //
   // Los saltos de línea del cuerpo se convierten en `<br>` DESPUÉS de escapar:
   // un mensaje del panel se escribe en varios párrafos y sin esto llegaba todo
   // pegado en una línea.
+  const FUENTE =
+    "Poppins,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
   const cuerpoHtml = escaparHtml(plantilla.cuerpo).replace(/\n/g, "<br>");
-  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#242424;max-width:520px;margin:0 auto;padding:24px">
-  <p style="margin:0 0 16px">${escaparHtml(saludo)}</p>
-  <p style="margin:0 0 24px">${cuerpoHtml}</p>
-  <p style="margin:0 0 24px">
-    <a href="${url}" style="display:inline-block;background:#fe6a00;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:600">${plantilla.cta ?? "Abrir Enséñame Ya"}</a>
-  </p>
-  <p style="margin:0;color:#666;font-size:13px">Enséñame Ya · Recibes este correo porque tienes una cuenta en la plataforma.</p>
+  // La línea de vista previa de la bandeja. Sin esto, lo que se lee junto al
+  // asunto es «Hola Lucía,» — el saludo, que no informa de nada. Va oculta:
+  // la ven los clientes en la lista y no se pinta al abrir el correo.
+  const preheader = escaparHtml(plantilla.cuerpo.replace(/\s+/g, " ").slice(0, 140));
+
+  const html = `<div lang="es" style="margin:0;padding:0;background:#f5f5f5">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all">${preheader}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f5f5f5" style="background:#f5f5f5;width:100%;border-collapse:collapse">
+    <tr>
+      <td align="center" style="padding:24px 12px">
+        <table role="presentation" width="520" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="background:#ffffff;width:100%;max-width:520px;border-collapse:collapse;border-radius:12px">
+          <tr>
+            <td style="padding:28px 28px 0;font-family:${FUENTE};font-size:18px;font-weight:700;line-height:1.2;color:#0080ff">Enséñame ya</td>
+          </tr>
+          <tr>
+            <td style="padding:20px 28px 0;font-family:${FUENTE};font-size:15px;line-height:1.6;color:#14141a">${escaparHtml(saludo)}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 28px 0;font-family:${FUENTE};font-size:15px;line-height:1.6;color:#14141a">${cuerpoHtml}</td>
+          </tr>
+          <tr>
+            <td style="padding:24px 28px 0">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse">
+                <tr>
+                  <td bgcolor="#fe6a00" align="center" style="background:#fe6a00;border-radius:8px">
+                    <a href="${url}" style="display:block;padding:15px 24px;font-family:${FUENTE};font-size:15px;font-weight:700;line-height:18px;color:#14141a;text-decoration:none">${escaparHtml(plantilla.cta ?? "Abrir Enséñame Ya")}</a>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 28px 0">
+              <div style="height:1px;background:#e0e0e0;font-size:0;line-height:1px">&nbsp;</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px 28px;font-family:${FUENTE};font-size:13px;line-height:1.6;color:#4d4d4d">
+              <strong style="color:#14141a">Enséñame Ya</strong> · Recibes este correo porque tienes una cuenta en la plataforma.<br>
+              ¿Dudas? Escríbenos a <a href="mailto:info@ensenameya.com" style="color:#036fda;text-decoration:underline">info@ensenameya.com</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </div>`;
 
   return { subject: plantilla.asunto, html, text };
