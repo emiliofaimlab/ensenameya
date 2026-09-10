@@ -111,10 +111,29 @@ debería haber: es lo que hay. ✅ puesta · ❌ no existe · — no aplica.
 | `STRIPE_API_KEY` | ✅ test | ✅ sandbox | ✅ **`sk_live_`** |
 | `STRIPE_PUBLISHABLE_KEY` | ✅ | ✅ | ✅ **`pk_live_`** — ⚠️ sin ella no se pinta el formulario |
 | `STRIPE_WEBHOOK_SECRET` | ✅ (`stripe listen`) | ✅ destino `ensenameya-vercel` | ✅ destino `ensenameya-prod` |
-| `DLOCALGO_API_KEY` · `DLOCALGO_SECRET_KEY` | ✅ sandbox | ✅ sandbox | ❌ **→ el 503 de prod** |
-| `DLOCALGO_API_BASE` | ❌ (= sandbox, correcto) | ❌ (= sandbox, correcto) | ❌ **hace falta** `https://api.dlocalgo.com` |
+| `DLOCALGO_API_KEY` · `DLOCALGO_SECRET_KEY` | ✅ sandbox | ✅ sandbox | ✅ **producción (10-sep)** |
+| `DLOCALGO_API_BASE` | ❌ (= sandbox, correcto) | ❌ **y así se queda** (ver abajo) | ✅ `https://api.dlocalgo.com` |
 | `DLOCALGO_SMARTFIELDS_KEY` | ❌ **desactivada 10-sep** | — | — |
 | `DLOCALGO_FX_SPREAD` | ❌ | ❌ | ❌ · opcional |
+
+⚠️ **`DLOCALGO_API_BASE` va SOLO en Production, y no es una preferencia.** La variable tiene que
+casar con las credenciales de su entorno: Preview tiene claves de **sandbox**, así que apuntarlo al
+host de producción manda credenciales de sandbox a `api.dlocalgo.com` y devuelve **401 en
+ejecución**. Y lo otro —poner credenciales de producción también en Preview para que casaran—
+significaría que **cada PR y cada push a una rama puede cobrar tarjetas reales**. Es la misma forma
+que Stripe: Preview lleva `sk_test_` + la firma del sandbox, Production `sk_live_` + la de live.
+Cruzar cualquier par rompe; lo que importa es la coherencia dentro de cada entorno.
+Y hay un tercer motivo, más difícil de diagnosticar: esa variable **también conmuta la clave del
+tokenizador de SmartFields**, así que puesta en Preview el formulario del navegador cargaría la
+clave de producción mientras el backend habla con sandbox — la tarjeta se tokeniza «bien» y el pago
+se cae después, sin que ninguno de los dos errores diga que el problema es de configuración.
+
+⚠️ **El orden de las dos claves de dLocal importa.** La cabecera es
+`Authorization: Bearer <apiKey>:<secretKey>` —los dos pegados por dos puntos, sin codificar
+(`cabeceraAuth()`)—. Parece Basic Auth y no lo es. Cruzarlas da 401 en ejecución, y `credenciales()`
+no valida formato: las claves de dLocal **no traen prefijo** que diga de qué entorno son, al
+contrario que el `sk_test_`/`sk_live_` de Stripe. El único indicador fiable es de dónde las
+copiaste: `dashboard.dlocalgo.com` es producción, `sandbox.dlocalgo.com` es sandbox.
 
 ⚠️ `DLOCALGO_SMARTFIELDS_KEY` **no sirve para tokenizar** y no la lee el código: la clave del
 tokenizador está hardcodeada (`clavePublicaDeSmartFields()`), y `DLOCALGO_API_BASE` la conmuta.
@@ -146,7 +165,7 @@ token de `.env.local`.
 | `DAILY_API_KEY` | ✅ | ✅ | ✅ | — |
 | `CRON_SECRET` | ✅ | ✅ | ✅ | ✅ secret |
 | `RESEND_API_KEY` | ❌ | ✅ | ✅ | — |
-| `EMAIL_FROM` | ❌ | ❌ | ❌ — **siguiente paso**: dominio ya verificado en Resend (§3-G) | — |
+| `EMAIL_FROM` | ❌ | ✅ | ✅ `Enséñame Ya <hola@ensenameya.com>` (10-sep) | — |
 | `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | ❌ | ✅ | ✅ | — |
 | `APP_BASE_URL` | — | — | — | ✅ **`https://ensenameya.com`** (10-sep) |
 | `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional · solo si apunta a una preview |

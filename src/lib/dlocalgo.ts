@@ -47,7 +47,15 @@ export function dlocalgoBase(): string {
   return process.env.DLOCALGO_API_BASE?.trim() || BASE_SANDBOX;
 }
 
-/** ¿Estamos apuntando al host que mueve dinero de verdad? Solo para el log. */
+/**
+ * ¿Estamos apuntando al host que mueve dinero de verdad?
+ *
+ * ⚠️ NO es solo informativo, aunque el comentario anterior lo dijera: de esto
+ * cuelga `clavePublicaDeSmartFields()`, o sea qué clave de tokenizador carga el
+ * formulario de tarjeta en el navegador. Poner `DLOCALGO_API_BASE` en el
+ * entorno equivocado desalinea el front del back: la tarjeta se tokeniza contra
+ * un ambiente y el pago se cobra contra otro.
+ */
 export function dlocalgoEsProduccion(): boolean {
   return dlocalgoBase().startsWith(BASE_LIVE);
 }
