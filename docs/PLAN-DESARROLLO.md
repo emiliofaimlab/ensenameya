@@ -89,7 +89,7 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 | C-02/C-04 | Retención / agrupación payout | US-1002 | [ ] pendiente | Config |
 | C-05 | No-show | US-604/802 | 🟠 **medio contestada**: el **§17 de los Términos firmados** fija que el no-show del alumno no se reembolsa. Siguen abiertas la reprogramación tras no-show del **tutor** y la penalización acumulada | Default Doc 2 |
 | C-10 | Reglas de referidos | US-1301 | [ ] pendiente — ⚠️ **no queda default operable**: RF no manda código de vuelta y **la atribución no existe en ninguna forma**, ni cookie ni email. Ver «Referidos» más abajo | — |
-| ~~C-11~~ | ~~Email transaccional~~ | US-1201 | ✅ **resuelto: Resend** (6-ago, `58fd62e`) — el único de los tres candidatos (SendGrid/Mailgun/Resend) que envía y se **prueba sin dominio verificado**, y el dominio propio sigue bloqueado. Ahora falta la **cuenta + `RESEND_API_KEY`**, no la decisión | Cola en `notifications` (el stub ya **no** la vacía) |
+| ~~C-11~~ | ~~Email transaccional~~ | US-1201 | ✅ **resuelto: Resend** (6-ago, `58fd62e`) — el único de los tres candidatos (SendGrid/Mailgun/Resend) que envía y se **prueba sin dominio verificado**, y el dominio propio seguía bloqueado. ✅ **Cerrada del todo el 10-sep**: cuenta creada, `RESEND_API_KEY` puesta, dominio `ensenameya.com` **verificado** y `EMAIL_FROM = Enséñame Ya <hola@ensenameya.com>` | Cola en `notifications` (el stub ya **no** la vacía) |
 | ~~C-06~~ | ~~Checkout invitado~~ | US-602 | ✅ **construido**: la cuenta se crea **dentro** del pago (`8013150`, `src/app/api/checkout/invitado/route.ts`) | — |
 | C-12 | Opt-out de notificaciones | EP-12 | [ ] pendiente | Sin opt-out: todo se encola |
 | C-15 | Moneda de liquidación / FX | Payouts cross-border | [ ] pendiente | Moneda del producto, sin conversión (`payments.settlement_currency` existe y no se usa) |
@@ -966,7 +966,7 @@ esperando credenciales** — y se puede adelantar a medias en cuanto llegue la c
 | Referidos (`EY-78`) | pegar la URL de la campaña en `NEXT_PUBLIC_REFERRAL_URL` — ⚠️ **y replantear la atribución** (6-ago) |
 | Sentry (`EY-80`) | crear la cuenta y pegar el DSN |
 | ~~Grabación (`EY-85/86`)~~ | ~~activar el add-on en Daily (go de coste)~~ → ✅ ya activo (31-ago) |
-| ~~Correos (EP-12)~~ | ~~proveedor real (C-11)~~ → ✅ **decidido: Resend** (6-ago); falta la cuenta y `RESEND_API_KEY` |
+| ~~Correos (EP-12)~~ | ~~proveedor real (C-11)~~ → ✅ **Resend, cerrado del todo el 10-sep**: cuenta, `RESEND_API_KEY`, dominio verificado, `EMAIL_FROM` y 16 correos vistos llegar |
 | Cobros y payouts reales | cuentas y API keys de Stripe/DLocal (EP-20) — ✅ **Stripe test ya cableado y probado** (6-ago) |
 | Responsive "de diseño" (`EY-82`) | los frames de tablet/escritorio de Diana |
 | ~~Páginas legales (`EY-116`)~~ | ~~el texto del cliente~~ → ✅ **redactado el 6-ago**; lo que queda es de negocio (dos webs, dos contratos) |
@@ -1396,13 +1396,13 @@ column-grants que el proyecto ya usaba.
 | Variable | Local | Vercel | GitHub |
 | :-- | :-- | :-- | :-- |
 | `CRON_SECRET` | ✅ | ✅ **sí** (comprobado 30-ago; este doc la daba por ausente desde el 6-ago) | ✅ **sí (30-ago)** (secret) |
-| `STRIPE_API_KEY` | ✅ | ✅ (Preview) | — |
-| `STRIPE_PUBLISHABLE_KEY` | ✅ | — | — |
-| `STRIPE_WEBHOOK_SECRET` | ✅ | ✅ (Preview) | — |
-| `RESEND_API_KEY` | ❌ (falta la cuenta) | ✅ **sí (17-ago)** — comprobado el 30-ago: el cron devuelve `status:"ok"`, no `sin-proveedor` | — |
-| `NEXT_PUBLIC_REFERRAL_URL` | ✅ | ❌ **falta** | — |
-| `REFERRAL_FACTORY_API_KEY` | ✅ | ❌ falta — **y da igual: no la lee ningún fichero de `src/`** (1-sep). Ponerla no enciende nada | — |
-| `APP_BASE_URL` | — | — | ✅ **sí (30-ago)**: `https://ensenameya.vercel.app` (variable) |
+| `STRIPE_API_KEY` | ✅ test | ✅ sandbox (Preview) · ✅ **`sk_live_` (Production, 10-sep)** | — |
+| `STRIPE_PUBLISHABLE_KEY` | ✅ | ✅ los dos ámbitos (10-sep) · `pk_live_` en Production | — |
+| `STRIPE_WEBHOOK_SECRET` | ✅ | ✅ **partido por ámbito (10-sep)**: firma de live en Production, de sandbox en Preview | — |
+| `RESEND_API_KEY` | ✅ (10-sep) | ✅ **sí (17-ago)** — comprobado el 30-ago: el cron devuelve `status:"ok"`, no `sin-proveedor` | — |
+| `NEXT_PUBLIC_REFERRAL_URL` | ✅ | ✅ los dos ámbitos | — |
+| `REFERRAL_FACTORY_API_KEY` | ✅ inerte | 🗑️ **borrada de Vercel el 10-sep** — no la lee ningún fichero de `src/` (verificado el 1-sep y otra vez el 10), así que era un secreto expuesto sin razón | — |
+| `APP_BASE_URL` | — | — | ✅ **`https://ensenameya.com`** (puesta el 30-ago al host viejo, actualizada al dominio propio el 10-sep) |
 
 ⚠️ **Esto se cumplió al pie de la letra, y nadie lo miró.** El workflow está escrito para fallar en
 rojo (`exit 1`) porque una configuración a medias en verde es peor que una en rojo — y desde que
@@ -1417,28 +1417,28 @@ código las usa.
 
 Confirmado por el cliente el **4-sep-2026**. Aquí ponía «dLocal rechazó la cuenta» y describía un
 rechazo de agosto que ya se resolvió; esa frase se propagó a seis documentos. Lo que sigue abierto es
-otra cosa: **`ensenameya.com` es una landing de GoDaddy que no enlaza a la app**, que vive en
-`ensenameya.vercel.app` — dos webs de la misma marca con **dos juegos de términos**. Se cierra con la
-migración de dominio, y ya no bloquea a ningún PSP.
+otra cosa, y ✅ **también quedó cerrada el 10-sep**: `ensenameya.com` servía una landing de GoDaddy
+que no enlazaba a la app, con dos juegos de términos vivos. Hoy `ensenameya.com` **es** la app, y
+`www` y `ensenameya.vercel.app` son 308 hacia ella. Un solo contrato, el del cliente.
 
 ### 📌 Qué falta para encender (7-ago)
 
 | Para | Falta | De quién |
 | :-- | :-- | :-- |
 | ~~**Que todo esto llegue a producción**~~ | ✅ **el merge se hizo el 26-ago** (`3fca8b2`). Hoy `dev` va 52 commits y **7** migraciones por delante, no 20 | Jose |
-| ~~Correos (`EY-73`)~~ | ✅ `RESEND_API_KEY` (17-ago) + `APP_BASE_URL` y `CRON_SECRET` en GitHub (30-ago). ⚠️ Queda **ver llegar un correo**: el reloj apunta a prod y allí la cola está vacía | Jose |
+| ~~Correos (`EY-73`)~~ | ✅ `RESEND_API_KEY` (17-ago) + `APP_BASE_URL` y `CRON_SECRET` en GitHub (30-ago). ✅ **Y el 10-sep se vio llegar:** las 16 variantes de las 14 plantillas, a un buzón real, desde el remitente de producción, y aprobadas por el cliente | Jose |
 | ~~Purga de grabaciones (RN-42)~~ | ✅ `CRON_SECRET` en Vercel ya estaba. ⚠️ Sigue sin haber nada que purgar, pero **no por el add-on** —que está activo (31-ago)—: a ninguna grabación le ha vencido la retención, la primera el **13-sep**. Que funcione cuando toque **sigue sin demostrarse** | Jose |
 | ~~**Vaciar la cola de correo de dev**~~ | ✅ **hecho el 30-ago**: 336 avisos a `failed` (§4.6). ⚠️ Vuelve a llenarse sola mientras el seed use `@ensenameya.dev` (sin MX): 187 de las 336 iban ahí | Jose |
 | ~~**Ejercitar X-01**~~ | ✅ **hecho el 30-ago**: los 2 `refund_requests` de dev ejecutados contra Stripe *test mode*, **$47,50**. El job **sí mueve dinero**. ⚠️ Salió que NTF-10 avisa al PEDIR el reembolso, no al moverlo | Jose |
 | Referidos (`EY-78`/`EY-79`) | `NEXT_PUBLIC_REFERRAL_URL` en Vercel (lo único que enciende algo: pinta el bloque). ⚠️ **La atribución no es «rehacerla por email»: es hacerla, y aún no se sabe cómo** — RF no manda código de vuelta y su API tampoco recibe hoy a nadie desde aquí. Decisión de producto antes que código (C-10) | Jose / Cliente |
 | Términos de la campaña de RF | están sin rellenar (plantilla con corchetes) | Cliente / Jose |
 | Cobro real (live mode) | `sk_live_` — o sea el KYC de Stripe del cliente | Cliente |
-| ~~DLocal~~ | ✅ cuenta aprobada (sandbox y producción), 4-sep-2026. ⚠️ **Pero producción no tiene hoy `DLOCALGO_API_KEY`**: un `GET` a `/api/pagos/confirmar-dlocal` devuelve **503**, o sea que el checkout transparente está desplegado y apagado. Poner la variable es el despliegue | Jose |
+| ~~DLocal~~ | ✅ cuenta aprobada (sandbox y producción), 4-sep-2026, y ✅ **credenciales de producción puestas el 10-sep** junto a `DLOCALGO_API_BASE`. Verificado midiendo el webhook: 503 → 400. El checkout transparente ya existe en prod | ~~Jose~~ |
 | Payout por **Stripe** | ✅ **Paga** (decisión D-1 aprobada), como **tercer riel de la tarjeta de Banco** y siempre **después de Wise** en el orden de candidatos. ⚠️ **No es una cuenta conectada**: el onboarding de Stripe Connect salió del producto y del código con el dictado — `src/app/api/tutor/stripe-connect/` y `connect-alta.tsx` **no existen** | — |
 | Payouts por **Wise** | ✅ Token vivo contra `api.transferwise.com` y adaptador escrito. Alcanza **55 países** por `payout_country_rules`, y el criterio es el **formato de cuenta**, no una lista de mercados. **No paga a Venezuela**; **sí a Panamá** (USD→USD). ⚠️ Lo que bloquea es el **saldo**: sin balance en USD el paso de fondear la transferencia falla, la transferencia se queda en `incoming_payment_waiting` y el job reintenta. Fondearlo a diario es la tarea de operaciones que fija el dictado, no un límite del diseño | Operaciones (fondear el balance) |
 | ~~Grabación (`EY-85/86`)~~ | ~~el add-on de Daily (go de coste)~~ → ✅ **contratado y verificado el 31-ago**. Sale de la lista de bloqueos | ~~Cliente / Emilio~~ |
-| Un solo contrato legal | decidir qué pasa con los términos de `ensenameya.com` (marzo) y con `ensenameya.com` → app | Negocio |
-| Sentry (`EY-80`) | el DSN | Jose |
+| ~~Un solo contrato legal~~ | ✅ **resuelto el 10-sep**: la landing de GoDaddy dejó de servirse al migrar el dominio, y con ella su juego de términos de marzo | ~~Negocio~~ |
+| ~~Sentry (`EY-80`)~~ | ✅ el DSN está puesto y **funcionando en producción**, verificado el 10-sep leyendo el bundle servido | ~~Jose~~ |
 | Responsive "de diseño" (`EY-82`) | los frames de Diana | Diana |
 
 ---
@@ -1608,8 +1608,10 @@ en producción: PR #13, `44089c9`, once migraciones (`20260910120000`…`2026091
 el **formato de cuenta**, no una lista de mercados. **No paga a Venezuela.** **Sí a Panamá** — en
 USD→USD; medirlo con USD→PAB da un falso negativo, porque el balboa no está en Wise.
 
-⚠️ **Producción no tiene hoy `DLOCALGO_API_KEY`:** un `GET` a `/api/pagos/confirmar-dlocal` devuelve
-**503**. El código está desplegado y el riel apagado; la variable es el interruptor.
+✅ **Producción tiene las claves de dLocal desde el 10-sep**, junto a `DLOCALGO_API_BASE`. Medido
+sobre el webhook: pasó de **503 «sin secreto»** a **400 «sin firma»**. El riel dejó de estar apagado.
+⚠️ Preview se queda en sandbox **y sin `DLOCALGO_API_BASE`**, que es justo lo que la mantiene ahí:
+esa variable conmuta el host **y** la clave del tokenizador de SmartFields.
 
 ⚠️ **Tocar `payment_routing_rules` es una MIGRACIÓN** (regla de oro 5). Ver el aviso de la sección de
 Stripe, más arriba.
@@ -1646,7 +1648,7 @@ migración siguen citando, y deudas verificadas contra el código.
 | :-- | :-- | :-- |
 | 1 | **URLs reales de las redes sociales.** Las que había eran inventadas y dos daban 404, así que se **quitaron** del pie. Devolverlas el día que lleguen es una línea | abierta |
 | 2 | **¿Hay teléfono publicable?** Sí o no, en una línea. Se publicó sin él | abierta |
-| 3 | **¿Qué pasa con `ensenameya.com`?** Sigue sirviendo una landing de GoDaddy con **otros términos** —nombran «Stripe o Mercado Pago»— que contradicen el contrato de verdad. Es el único punto que **ningún merge arregla**: es DNS y negocio | abierta |
+| 3 | ~~**¿Qué pasa con `ensenameya.com`?**~~ ✅ **cerrada el 10-sep**: el dominio migró y sirve la app. La landing de GoDaddy dejó de publicarse y con ella sus términos de marzo, los que nombraban «Stripe o Mercado Pago». Era, en efecto, DNS y negocio y no un merge — y ya está hecho | ~~abierta~~ |
 | 4 | **Referidos y tiers:** porcentajes por referido (**AB-09**), si hay campaña de estudiantes (**AB-04**) y **nombres de los niveles de tutor** (**AB-06**) — las comisiones ya están fijadas (25/15/10 %) | abierta |
 
 **Y la pregunta de Ennis, sin contestar desde agosto: ¿manda el Word o el documento de contenido?**
@@ -1662,7 +1664,7 @@ reproduce desde el CSS actual: hay que reproducirlo a ese ancho antes de tocar n
 
 | # | Deuda | Por qué importa |
 | :-- | :-- | :-- |
-| 7 | **Google OAuth no está en el proyecto de producción**, y necesita credenciales propias | Si se lanza sin eso, el botón sale roto en prod el día del estreno |
+| ~~7~~ | ✅ **Cerrada el 10-sep, y era peor de lo que decía esta fila.** No era que faltaran credenciales —un solo cliente OAuth sirve a los dos proyectos—: el **consent screen llevaba en `Testing` con la lista de usuarios de prueba vacía** desde que se creó el proyecto, y en Testing solo entran los de esa lista y los dueños del proyecto de Google. O sea que el botón estaba roto **para todo el mundo, en prod y en dev**, y lo tapaban dos cosas: prod no tenía usuarios y en dev se entra con la cuenta dueña. Publicado `In production` y verificado con un alta real | ~~el botón salía roto — ya no~~ |
 | 8 | **RV-12 a medias.** El mínimo de 8 caracteres vive en el código (`PASSWORD_MIN = 8` en `src/components/form/validation.ts:22`, aplicado en `signup-form.tsx` y `account-form.tsx`). El **panel de Auth** es configuración fuera del repo: mientras siga en 6, **la API acepta 6** | El navegador rechaza 6 y la API los sigue aceptando: la mitad que protege es la que falta |
 | 9 | **Los perfiles con `timezone = 'UTC'` nunca se sanearon.** Medido hoy en dev: **3 de 45**. RV-03 lo tapa cayendo a la cookie `ey-tz`; quien entre sin cookie vuelve a ver el síntoma | Es la hora de la clase |
 | 10 | **Las cuentas anteriores al 17-ago no tienen constancia de aceptación** de los Términos | Decisión de negocio, no de código: o se les vuelve a pedir (§34) o se da por buena la anterior. **Preguntar antes de lanzar** |

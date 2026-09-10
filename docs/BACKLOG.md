@@ -23,9 +23,14 @@
 
 ### Dónde estamos
 
-- **Las 60 historias de dev de §2 están en producción.** `main` lleva el código y las **177
-  migraciones** desplegadas (PR #13, `44089c9`). Producción **no tiene usuarios**: el sitio se abre
-  tras la migración de dominio, que es DNS y negocio, no un merge.
+- **Las 60 historias de dev de §2 están en producción.** `main` lleva el código y las **178
+  migraciones** desplegadas.
+- ✅ **El sitio está abierto desde el 10-sep.** `ensenameya.com` sirve la app entera; `www` y
+  `ensenameya.vercel.app` son 308 hacia él. La migración de dominio ya no es un pendiente. Lo que
+  sigue cerrado a propósito es **la indexación**: `robots.ts` mantiene `Disallow: /` hasta que haya
+  tutores publicados, porque que el sitio funcione y que Google lo indexe son decisiones distintas.
+  Producción tiene **un usuario**, y es una cáscara anonimizada de un alta de prueba dada de baja el
+  mismo día.
 - **El dictado de pagos del 9-sep-2026 reestructuró cobro y payout, y ya está desplegado** (11
   migraciones `20260910*`). Lo que fija:
   1. la pasarela de **cobro** la decide el país del **alumno** —`ruta_de_pago(payer_country).charge_providers`—
@@ -35,8 +40,8 @@
      Stripe** sin que él vea cuál ejecutó — la cuenta bancaria por **Stripe Connect salió del
      producto y del código**;
   4. los métodos **manuales** (Binance, Zinli, Zelle) son **solo Venezuela**.
-- ⚠️ **Producción no tiene hoy `DLOCALGO_API_KEY`:** un `GET` a `/api/pagos/confirmar-dlocal`
-  responde **503**. La credencial es el interruptor, y sin ella ese camino no cobra.
+- ✅ **Producción tiene las claves de dLocal desde el 10-sep**, más `DLOCALGO_API_BASE`. Medido: el
+  webhook pasó de **503** a **400**. La credencial es el interruptor y ya está puesto.
 - **EP-25, EP-26 y EP-27** —las épicas que nacieron de las listas del cliente de agosto y que este
   espejo no recogía— están cerradas **salvo `EY-187`**. Sus 15 fichas, con lo que cerró cada una,
   en **§4.4**. Las fichas que abrió la auditoría de septiembre, en **§4.5**.
@@ -360,9 +365,11 @@ graba **siempre** desde el 2-sep-2026, no con consentimiento de ambos).
 
 **Estado.** S1…S5 cerrados; **6 AC · 7 · 8** siguen abiertos en Jira a la vez, con las 60 historias
 de dev **ya en producción** — el tablero va por detrás del código, no al revés. Del Sprint 6 AC
-(activación comercial) no queda nada bloqueado por credenciales: Stripe cobra en *test mode*, dLocal
-tiene cuenta aprobada en sandbox y producción, PayPal está probado con dinero moviéndose y Wise tiene
-token y adaptador. `PAC-01` y `PAC-03` **no son cerrables como están redactadas**: cada ticket pide
+(activación comercial) no queda nada bloqueado por credenciales, y desde el **10-sep** menos aún:
+Stripe lleva claves **live** con su webhook de live (⚠️ falta el KYC del cliente para que un cobro no
+se rechace), dLocal tiene **credenciales de producción** puestas, PayPal también —con `Payouts`
+habilitado y Log In with PayPal configurado, a falta de la revisión de su app— y Wise tiene el token
+en Production. `PAC-01` y `PAC-03` **no son cerrables como están redactadas**: cada ticket pide
 "Stripe **y** DLocal" en uno solo, así que hay que partirlos por proveedor en Jira o cuentan como no
 hechos.
 
@@ -485,7 +492,7 @@ o alcance nuevo — no son trabajo visual.
 | DD-03 | EY-113 | ✅ **Cerrada (29-jul, migración `20260729190000`, `31a9ddd`)** — nivel e idioma **por mentoría**. El nivel **reutiliza el enum `teaching_level`** (mismo vocabulario del filtro del Figma, un tipo menos); el idioma es texto con check porque la lista la mueve producto. Selects en TU04, grupos en P05, desplegables en P06 y chips en P08. El "Idioma del tutor" de P04 no necesitó columna: se deriva de las clases que publica | P05, P06, P07, P08 |
 | DD-04 | EY-114 | ✅ **Cerrada, y rehecha (4-ago, `cccb566` + `96f4e0b`)** — la primera versión (29-jul, `302ba82`) copiaba los **cuatro tramos fijos** del Figma; el comentario de Jose en `EY-114` pedía un **rango continuo**. Ahora es una **vista nueva `tutors_public`** (migración `20260804120000`) que expone el precio de la mentoría activa más barata por *lateral join*: el rango, la paginación y el `count` los hace Postgres, sin columna materializada que mantener. `security_invoker = true` **no es decorativo** — sin él la vista correría con los privilegios del dueño y habría publicado tutores no aprobados y borradores. El deslizador va en **escala logarítmica**: con un tutor a 120 US$ y ocho entre 10 y 25, en lineal el catálogo útil cabía en el primer 12 % del recorrido | P04 |
 | DD-05 | EY-115 | Subcategorías / "Temas" — hoy las categorías son **planas por decisión** (S-13). **Reducida el 23-jul:** los chips del hero de P06 no eran subcategorías sino el **selector de categoría**, y el filtro "Temas" se resolvió cruzando con una **segunda categoría** (`product_categories` es N–M). ✅ **Cerrada el 29-jul sin escribir código**: la decisión 26 del cliente mantiene las categorías planas y el cruce ya vivía en `category-explorer.tsx:83-90`. La jerarquía real queda **fuera del MVP** | P04, P06, P07 |
-| DD-06 | EY-116 | ✅ **Cerrada (29-jul, `8d8ddb2`) y luego sustituida por el texto del cliente** — `/terms`, `/privacy` y `/cookies` existen y responden **200 en producción**. Desde el 17-ago los **Términos y Condiciones son el contrato que redactó el cliente** (39 secciones, inglés y español) y viven en `src/components/legal/terms-content.ts` con su propia página; `legal-doc.tsx` se queda con **privacidad y cookies**, que siguen siendo texto nuestro escrito desde el funcionamiento real del sistema. La garantía de que los **% de reembolso no divergan de `lib/policy.ts`** no se perdió al cambiar de texto: se comprueba en `terms-content.check.ts` (`npm run check:terms`). 🔍 **Hallazgo que disparó el cambio:** el cliente **ya tenía** términos y privacidad publicados en `ensenameya.com` (GoDaddy, marzo-2026) y nadie los había mirado — de ahí el buzón oficial **`info@ensenameya.com`**. ⚠️ Mientras los dos sitios estén publicados hay **dos contratos vivos**: eso lo decide negocio, no dev | todas |
+| DD-06 | EY-116 | ✅ **Cerrada (29-jul, `8d8ddb2`) y luego sustituida por el texto del cliente** — `/terms`, `/privacy` y `/cookies` existen y responden **200 en producción**. Desde el 17-ago los **Términos y Condiciones son el contrato que redactó el cliente** (39 secciones, inglés y español) y viven en `src/components/legal/terms-content.ts` con su propia página; `legal-doc.tsx` se queda con **privacidad y cookies**, que siguen siendo texto nuestro escrito desde el funcionamiento real del sistema. La garantía de que los **% de reembolso no divergan de `lib/policy.ts`** no se perdió al cambiar de texto: se comprueba en `terms-content.check.ts` (`npm run check:terms`). 🔍 **Hallazgo que disparó el cambio:** el cliente **ya tenía** términos y privacidad publicados en `ensenameya.com` (GoDaddy, marzo-2026) y nadie los había mirado — de ahí el buzón oficial **`info@ensenameya.com`**. ✅ **Y el 10-sep se acabaron los dos contratos vivos:** `ensenameya.com` pasó a servir la app, la landing de GoDaddy dejó de publicarse y con ella su juego de términos de marzo. Queda un solo contrato, el del cliente | todas |
 | DD-07 | EY-117 | ✅ **Cerrada (27-jul, `b09e518` / R24-21)** — burbuja flotante **solo con sesión** (RN-41), tipo bandeja: los hilos por reserva sin entrar a la sesión. Reconcilia el FAB del Figma con el error de diseño documentado arriba | todas, con sesión |
 | DD-08 | EY-118 | ✅ **Cerrada en Jira** (`Done`) — 🐞 Seed de dev: ratings sembrados sin filas en `reviews`. Era dato de semilla, así que **no deja commit ni migración que citar** | dev/QA |
 

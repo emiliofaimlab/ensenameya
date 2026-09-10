@@ -125,7 +125,10 @@ Inventaria **todas las pantallas** del MVP (con un ID estable por pantalla, base
 - **Admin:** SCR-AD01 → SCR-AD02 ↔ resto del panel AD.
 - **Global:** SCR-G03 accesible desde el menú de usuario; SCR-G01/G02 según contexto.
 
-> **SUPUESTO S-35:** no hay *checkout como invitado*; reservar/pagar exige sesión iniciada (se solicita login/registro antes del checkout). La navegación pública permite descubrir y ver detalle sin sesión.
+> **SUPUESTO S-35 — 🔴 DEROGADO.** Decía que no había *checkout como invitado* y que reservar exigía
+> sesión iniciada. Se construyó: la cuenta **nace dentro del pago**
+> (`src/app/api/checkout/invitado/route.ts`). Lo que sí sigue en pie del supuesto es la otra mitad:
+> la navegación pública permite descubrir y ver detalle sin sesión.
 
 ---
 
@@ -222,7 +225,7 @@ Conforme a la propuesta (§4.1.G, §4.2.G, §8, §12), **todas** las pantallas d
 
 | ID | Supuesto |
 | :-- | :-- |
-| S-35 | No hay checkout como invitado; reservar/pagar exige sesión iniciada (login/registro antes del checkout). |
+| S-35 | 🔴 **Derogado.** Sí hay checkout como invitado: la cuenta se crea dentro del pago (`api/checkout/invitado`). La navegación pública sin sesión sigue siendo cierta. |
 | S-36 | Breakpoints responsive estándar (≈ 360/768/1024/1280); detalle por pantalla en Doc 5. |
 | S-37 | El registro permite declarar intención (alumno/tutor); un usuario puede activar el rol tutor luego desde su cuenta (S-14). |
 

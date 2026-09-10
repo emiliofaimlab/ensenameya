@@ -318,7 +318,7 @@ alumno **antes** de reservar, no después. Comprobar con
 | C-3 | **El país del pagador es obligatorio en el transparente** · el mismo caso sin dirección del alumno | dLocal responde `400 5000 «Empty country not allowed»`. Es el fallo que hay que ver una vez para reconocerlo | ⬜ |
 | C-4 | **`/api/pagos/confirmar-dlocal` no escribe en `payments`** · confirmar y mirar la fila | ni una escritura desde esa ruta: acreditar sigue siendo exclusivo del webhook (regla de oro 2). Una respuesta `pagado` de esa ruta significa «dLocal aceptó el cargo», no «hay dinero» | ⬜ |
 | C-5 | **El `DP-…` no viene del navegador** · mandar a `confirmar-dlocal` el id de un cobro ajeno | rechazado: el identificador se relee de `payments.provider_payment_id` con `service_role` a partir de un `bookingId`/`orderId` cuya propiedad comprueba la RLS | ⬜ |
-| C-6 | **Sin claves de dLocal el alumno igual compra** · quitar `DLOCALGO_API_KEY` con un alumno de `EC` | el resolvedor salta dLocal y cobra por **Stripe**, que está en el `charge_providers` de todas las filas. Es el estado real de producción hoy (`docs/ENTORNOS.md` §1.2) | ⬜ |
+| C-6 | **Sin claves de dLocal el alumno igual compra** · quitar `DLOCALGO_API_KEY` con un alumno de `EC` | el resolvedor salta dLocal y cobra por **Stripe**, que está en el `charge_providers` de todas las filas. ⚠️ **Ya no es el estado de producción**: dLocal tiene sus claves de producción desde el 10-sep. El caso sigue siendo válido como prueba del respaldo por país (`docs/ENTORNOS.md` §1.2) | ⬜ |
 | P-1 | **Payout por Wise** · tutor de un país con `wise_account_type` y con dirección y teléfono | Wise es el primer candidato de Banco; los cuatro pasos —presupuesto, destinatario, transferencia y **fondeo**— y la fila `paid` con NTF-12. ⚠️ El fondeo falla si el balance está a cero: eso es la tarea diaria de operaciones, no un fallo del riel | ⬜ |
 | P-2 | **Payout por dLocal** · tutor de uno de los ocho donde dLocal paga (AR, BR, CL, EC, MX, PE, PY, UY) | dLocal va primero en esos países; el diferencial de cambio se aplica con `DLOCALGO_FX_SPREAD` y el detalle archiva tasa publicada, factor y efectiva | ⬜ |
 | P-3 | **Payout por Stripe** · tutor con fecha de nacimiento y condiciones aceptadas | Stripe es el **tercer** riel de Banco, siempre detrás de Wise; la cuenta de destinatario la crea la plataforma con lo que el tutor tecleó; en el historial del tutor pone «Transferencia bancaria» y **no aparece el nombre de Stripe** | ⬜ |
@@ -369,7 +369,7 @@ entró en el barrido.
 
 ### 4.1 Antes de abrir
 
-- [x] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`, hoy **177**).
+- [x] **Migraciones aplicadas a prod** por CI al mergear a `main` (`supabase/migrations/`, hoy **178**).
       ⚠️ Cuántas lleva cada ambiente **no se escribe aquí**, que es lo que hizo caducar esta línea dos
       veces: se mira en el último run del workflow de migraciones, y las ramas con
       `git rev-list --left-right --count dev...main`.
@@ -385,8 +385,8 @@ entró en el barrido.
 - [x] **Páginas legales publicadas** (DD-06 → DL-05). Desde el **17-ago** `/terms` sirve los
       **Términos del cliente** (39 secciones, versión **inglesa, que es la que gobierna** por su §38)
       y `/terms/es` la española; `/privacy` y `/cookies` siguen siendo texto nuestro, porque el
-      cliente no mandó esos dos. **En producción responden 200** — verificado contra
-      `ensenameya.vercel.app/terms`.
+      cliente no mandó esos dos. **En producción responden 200** — reverificado el 10-sep contra
+      `ensenameya.com/terms` y `/privacy` (el host viejo ahora es un 308).
 - [x] **Constancia de aceptación de términos** (`terms_acceptances`, `20260817130000`): quién, cuándo,
       qué versión y qué idioma. ⚠️ **Las cuentas anteriores al 17-ago no tienen fila** — aceptaron una
       casilla que no dejaba rastro, y de un texto distinto. Decidir antes de abrir si se les vuelve a
@@ -394,13 +394,13 @@ entró en el barrido.
 - [x] **`payment_routing_rules` declarada en migraciones** (`20260904190000` y las `20260910*`), no en
       `UPDATE`s a mano — que es lo que hizo que las dos bases divergieran durante semanas: un `UPDATE`
       no existe como fichero y no hay nada que aplicar en el otro ambiente (regla de oro 5).
-      ⚠️ El aviso que sigue vivo: **producción tiene claves de Stripe de *test mode***, así que acepta
-      la tarjeta 4242 y no cobra nada. El interruptor de cobrar de verdad son las claves de Vercel, no
-      esta tabla (§4.4).
-- [ ] 🔴 **Las claves de dLocal en producción.** Hoy faltan, medido: un GET a
-      `/api/pagos/confirmar-dlocal` devuelve **503 «dLocal Go no configurado»**. Nadie se queda sin
-      comprar —el alumno cae a Stripe— pero el **checkout transparente, que es el camino principal del
-      dictado, no funciona en prod** (`docs/ENTORNOS.md` §1.2).
+      ⚠️ **Ese aviso caducó el 10-sep:** producción lleva `sk_live_` y `pk_live_`, con el webhook de
+      live registrado y la firma partida por ámbito. La 4242 ya no vale ahí. Lo que **sí** sigue
+      abierto es otra cosa: la cuenta de Stripe **no está activada** (KYC), así que un cobro live se
+      rechazaría. Tener las claves no es estar en live (§4.4).
+- [x] **Las claves de dLocal en producción — 10-sep**, con `DLOCALGO_API_BASE`. Verificado midiendo
+      el webhook: pasó de **503 «sin secreto»** a **400 «sin firma»**. El checkout transparente, que
+      es el camino principal del dictado, ya existe en prod (`docs/ENTORNOS.md` §1.2).
 - [ ] 🔴 **Correr las doce filas de §2.5**: el cobro y el payout del dictado no tienen ni una prueba
       ejecutada en este documento.
 - [ ] 🔴 **Mirar la primera purga de grabaciones el 13-sep-2026** — §4.10. Es la retención que prometen
@@ -440,7 +440,8 @@ Detalle en `docs/ENTORNOS.md`. **`service_role` jamás en `NEXT_PUBLIC_*`** (reg
 
 - [x] ~~`CRON_SECRET` en Vercel~~ — **ya estaba**. Comprobado el 30-ago sin abrir el panel: sin la
       variable el endpoint responde 503 y con ella 401, y un `curl` sin cabecera a
-      `https://ensenameya.vercel.app/api/cron/notifications-send` devuelve **401**.
+      `https://ensenameya.com/api/cron/notifications-send` devuelve **401** (reverificado el 10-sep
+      en los cuatro endpoints de cron; contra el host viejo hoy saldría un 308).
 - [ ] `NEXT_PUBLIC_REFERRAL_URL` en Vercel (la URL de campaña es
       `https://vercel.referral-factory.com/cXr65Wou/signup`) — es la que decide si el bloque se pinta.
       `NEXT_PUBLIC_REFERRAL_EMBED_URL` (`https://embed.referral-factory.com/cXr65Wou`) es opcional y
@@ -451,7 +452,8 @@ Detalle en `docs/ENTORNOS.md`. **`service_role` jamás en `NEXT_PUBLIC_*`** (reg
 **Y en GitHub**, que es donde viven los relojes del correo y de los reembolsos
 (`.github/workflows/notifications-cron.yml` y `refunds-cron.yml`, que comparten las dos):
 
-- [x] variable `APP_BASE_URL` = `https://ensenameya.vercel.app` — **30-ago**
+- [x] variable `APP_BASE_URL` = **`https://ensenameya.com`** — puesta el 30-ago apuntando a
+      `ensenameya.vercel.app` y actualizada al dominio propio el **10-sep**
 - [x] secret `CRON_SECRET`, el mismo valor que en Vercel — **30-ago**
 - [ ] *(opcional)* secret `VERCEL_PROTECTION_BYPASS`, solo si `APP_BASE_URL` apunta a una preview
 
@@ -556,29 +558,36 @@ Son tres preguntas distintas y confundirlas es lo que hace que un lanzamiento sa
 
 | Riel | Escrito | Probado | En producción |
 | :-- | :-- | :-- | :-- |
-| **Stripe · cobro** | sí | sí, de punta a punta contra la preview (§2.2) | sí, con claves de **test mode**: acepta la 4242 y no cobra nada real |
-| **dLocal · cobro transparente** | sí | contra sandbox al escribirlo; **sin filas de QA** (§2.5) | 🔴 **no**: faltan `DLOCALGO_API_KEY` y `DLOCALGO_SECRET_KEY`, medido con un 503 |
-| **PayPal · payout** | sí | sí, con dinero moviéndose y repetido dos veces | sandbox |
-| **dLocal · payout** | sí | contra sandbox | sandbox |
-| **Wise · payout** | sí | los pasos sí, el **dinero no**: el fondeo falla con el balance a cero (§4.9) | no: `WISE_API_TOKEN` solo está en `.env.local` |
-| **Stripe · payout** | sí, como tercer riel de Banco | la receta completa contra la API en España | test mode |
+| **Stripe · cobro** | sí | sí, de punta a punta contra la preview (§2.2) | ✅ **claves live (10-sep)** + webhook de live · ⚠️ la cuenta **sin activar** (KYC), así que un cobro live se rechaza |
+| **dLocal · cobro transparente** | sí | contra sandbox al escribirlo; **sin filas de QA** (§2.5) | ✅ **producción (10-sep)**: claves + `DLOCALGO_API_BASE`, medido con el 503 → 400 |
+| **PayPal · payout** | sí | sí, con dinero moviéndose y repetido dos veces | ✅ **producción (10-sep)** + Log In with PayPal y `Payouts` habilitado · ⚠️ la app **en revisión** (7 días) |
+| **dLocal · payout** | sí | contra sandbox | ✅ **producción (10-sep)**, mismas claves que el cobro |
+| **Wise · payout** | sí | los pasos sí, el **dinero no**: el fondeo falla con el balance a cero (§4.9) | ✅ **`WISE_API_TOKEN` en Production (10-sep)** · ⚠️ balance a cero, así que el primer payout espera fondeo |
+| **Stripe · payout** | sí, como tercer riel de Banco | la receta completa contra la API en España | ✅ claves live (10-sep) · ⚠️ pendiente la activación |
 | **Manuales (Venezuela)** | sí | — | — |
 
 **El interruptor es siempre la credencial.** Ningún riel sin clave rompe el sitio: desaparece de la
 lista de candidatos y el siguiente del país se hace cargo (§2.3). Y como **todas** las filas de
-`payment_routing_rules` llevan `stripe` en `charge_providers`, hoy nadie se queda sin comprar aunque
-falte dLocal — lo que no funciona en producción es el camino transparente, que es el principal.
+`payment_routing_rules` llevan `stripe` en `charge_providers`, nadie se queda sin comprar aunque
+falte un riel. ✅ **Y desde el 10-sep no falta dLocal en producción**, así que el camino transparente
+—el principal del dictado— ya existe ahí.
 
-⚠️ **Producción cobrando en *test mode* es peor que producción sin cobrar**: acepta tarjetas de prueba
-y no cobra ninguna real. Se asumió a sabiendas —el sitio no está lanzado, no hay usuarios— pero antes
-de abrir: o las claves pasan a modo real, o el ruteo de prod se saca de Stripe con una migración.
+✅ **Resuelto el 10-sep: producción ya no cobra en *test mode*.** Lleva `sk_live_` y `pk_live_`, con
+el webhook de live registrado y `STRIPE_WEBHOOK_SECRET` partido por ámbito.
+
+⚠️ **Pero tener las claves no es estar en live.** La cuenta de Stripe **no está activada** (KYC:
+modelo de negocio, teléfono, entidad, cuenta bancaria) y hasta que lo esté un cobro live se rechaza.
+Eso es del cliente. La alternativa sigue en pie si urgiera: sacar `stripe` del ruteo de prod con una
+migración.
 
 **Lo que NO es simulado y conviene no volver a marcarlo como pendiente:**
 
-- **Correo** — C-11 resuelta: **Resend**, cuenta creada y clave puesta en local, Preview y Production.
-  El envío es real (`/api/cron/notifications-send`); todo el acoplamiento vive en `sendEmail()`
-  (`lib/email.ts`). Lo que falta no es la cuenta: es **verificar el dominio** y **ver llegar el primer
-  correo**, que nadie ha visto todavía.
+- **Correo** — C-11 resuelta y **cerrada el 10-sep**: **Resend** con el dominio `ensenameya.com`
+  **verificado** y `EMAIL_FROM = Enséñame Ya <hola@ensenameya.com>` en los dos ámbitos. El envío es
+  real (`/api/cron/notifications-send`) y todo el acoplamiento vive en `sendEmail()` (`lib/email.ts`).
+  ✅ **Y el primer correo ya se vio llegar:** las **16 variantes** de las 14 plantillas salieron a un
+  buzón real desde el remitente de producción y quedaron aprobadas por el cliente. Resend aceptó las
+  16, 0 fallos.
 - **Grabación de Daily** — el add-on está **contratado y funcionando** (`GET
   api.daily.co/v1/recordings` devuelve grabaciones `finished`), `DAILY_API_KEY` está puesta desde julio
   y **se graba siempre**: RN-42 dejó de exigir el sí de las dos partes y `recording_allowed()` devuelve
@@ -595,9 +604,11 @@ de abrir: o las claves pasan a modo real, o el ruteo de prod se saca de Stripe c
 nunca** y no se encontraba ninguna grabación. Ahora se lee `sessions.daily_room_name` en vez de volver
 a derivar el nombre por segunda vez.
 
-**Lo que sigue abierto y no es código:** `ensenameya.com` es una landing de GoDaddy que **no enlaza a
-la app** —que vive en `ensenameya.vercel.app`—; dos webs de la misma marca sin conectar, con dos juegos
-de términos. Se cierra con la **migración de dominio**: DNS y negocio. Ya no bloquea a ningún PSP.
+✅ **Cerrado el 10-sep.** Era: `ensenameya.com` servía una landing de GoDaddy que no enlazaba a la
+app, con dos juegos de términos vivos. Hoy `ensenameya.com` **es** la app, y `www` y
+`ensenameya.vercel.app` son 308 hacia ella preservando la ruta. Con eso muere el segundo juego de
+términos. El correo del dominio no se tocó: M365 tras Proofpoint, y `info@ensenameya.com` sigue
+siendo el buzón del §39.
 
 ### 4.5 Decisiones del cliente que siguen abiertas
 
@@ -932,9 +943,12 @@ y que pueda pagarle *a esta persona* son dos preguntas distintas.
 **Lo que queda antes de dar el riel por cerrado:**
 
 - [ ] **Abrir y fondear un balance USD** en el perfil `136151426`. Sin esto no paga, y punto.
-- [ ] **`WISE_API_TOKEN` en Vercel** (Production y Preview). Hoy solo está en `.env.local`, así que
-      en producción `missingPayoutConfig()` devuelve que falta y el resolvedor **salta el riel en
-      silencio** — que es el fallo seguro, pero es un riel apagado.
+- [x] **`WISE_API_TOKEN` en Vercel Production — 10-sep.** ⚠️ **En Preview NO, y a propósito:** Wise
+      no tiene split sandbox/producción y `WISE_API_URL` cae a producción por defecto, al revés que
+      dLocal y PayPal. Preview sin token es lo único que impide que un PR pague de verdad.
+      *(Lo que decía antes, y era cierto hasta el 10-sep: solo estaba en `.env.local`, así que en
+      producción `missingPayoutConfig()` devolvía que faltaba y el resolvedor **saltaba el riel en
+      silencio** — el fallo seguro, pero un riel apagado.)*
 - [ ] **Un payout real a un tutor con `wise_account_type`**, con `outgoing_payment_sent` y NTF-12.
       ⚠️ La cobertura ya no son cinco países: `payout_country_rules` llega a **55**, y lo que decide es
       el **formato de cuenta** de cada uno (IBAN, ABA, sort code, BSB, IFSC, SWIFT), no una lista de
