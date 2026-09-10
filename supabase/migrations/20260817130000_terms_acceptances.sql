@@ -28,7 +28,8 @@
 --     cubre AU04 en el cliente llamando a `record_terms_acceptance`, igual que
 --     ya hace con `intended_role` y con el código de referido.
 --
--- Doc 3 §permisos · docs/19-PLAN-DE-EJECUCION.md §19.5
+-- Doc 3 §permisos · aceptación de Términos (RV/legales). El plan de ejecución
+-- del 17-ago que se citaba aquí se consolidó en docs/PLAN-DESARROLLO.md.
 -- ============================================================================
 
 create table public.terms_acceptances (

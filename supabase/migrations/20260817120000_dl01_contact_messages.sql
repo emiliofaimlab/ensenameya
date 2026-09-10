@@ -25,7 +25,8 @@
 -- TIEMPO DE EJECUCIÓN — no en el build, no en el typecheck. Ya mordió tres
 -- veces el 6-ago (`sessions`, `payments`/`profiles`, `payment_routing_rules`).
 --
--- Doc 3 §permisos · docs/19-PLAN-DE-EJECUCION.md §19.4 (DL-01)
+-- Doc 3 §permisos · DL-01, buzón de contacto. El plan de ejecución del 17-ago
+-- que se citaba aquí se consolidó en docs/PLAN-DESARROLLO.md.
 -- ============================================================================
 
 -- Si el correo salió o no. Mismos tres estados que `notifications` (y por la

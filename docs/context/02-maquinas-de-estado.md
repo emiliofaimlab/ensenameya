@@ -46,7 +46,7 @@ Cubre las 8 máquinas de estado correspondientes a los `enum` del Doc 1 (§1.3) 
 | **Mutación segura** | `payments`/`payouts`/`payout_items` solo se mutan vía **service role / webhooks** (S-15, RN-26). El cliente nunca cambia esos estados directamente. |
 | **Idempotencia** | Toda transición disparada por `webhook` debe ser idempotente (reintentos del proveedor no deben duplicar efectos). Ver Doc 6. |
 
-> Las transiciones de negocio se implementan mediante **funciones controladas** (RPC/Edge Functions de Supabase) y no como `UPDATE` libres del `status`, para garantizar guardas y efectos atómicos.
+> Las transiciones de negocio se implementan mediante **funciones controladas** —RPC de Postgres y **Route Handlers** de Next con `service_role`— y no como `UPDATE` libres del `status`, para garantizar guardas y efectos atómicos. **No hay Edge Functions** en este proyecto: todo el código server-side son Route Handlers y Server Components.
 
 ---
 
@@ -157,7 +157,8 @@ Núcleo del flujo de compra. Coordina pago (M6), sesiones (M5) y reseña (RN-17)
 | Estado | Tipo | Descripción |
 | :-- | :-- | :-- |
 | `pending_payment` | inicial | Reserva creada; esperando confirmación de pago. |
-| `confirmed` | intermedio | Pago confirmado; sesiones agendadas y salas previstas. |
+| `pending_acceptance` | intermedio | **Pagada y esperando al tutor** (RN-38): tiene 24 h para aceptar o rechazar; el timeout cuenta como rechazo. |
+| `confirmed` | intermedio | Aceptada por el tutor; sesiones agendadas y salas previstas. |
 | `in_progress` | intermedio | El servicio comenzó (primera sesión iniciada). |
 | `completed` | terminal | Todas las sesiones finalizaron; habilita reseña (RN-17). |
 | `cancelled` | terminal | Cancelada (antes/durante); sin reembolso o con reembolso parcial según política. |
@@ -167,17 +168,19 @@ Núcleo del flujo de compra. Coordina pago (M6), sesiones (M5) y reseña (RN-17)
 
 | Desde | Evento / disparador | Hacia | Actor | Guarda | Efectos |
 | :-- | :-- | :-- | :-- | :-- | :-- |
-| `pending_payment` | Pago confirmado | `confirmed` | webhook | `payments.status = paid` (M6) | Crea `sessions` 1..N (RN-12, RN-25); reserva slots; provisiona salas Daily (Doc 6); notifica alumno y tutor |
+| `pending_payment` | Pago confirmado | `pending_acceptance` | webhook | `payments.status = paid` (M6) | Arranca las 24 h del tutor (RN-38). **Aquí todavía no se crean sesiones ni salas.** |
+| `pending_acceptance` | El tutor acepta | `confirmed` | tutor | Dentro de las 24 h | Crea `sessions` 1..N (RN-12, RN-25); reserva slots; provisiona salas Daily (Doc 6); notifica alumno y tutor (NTF-05/07) |
+| `pending_acceptance` | El tutor rechaza, o vencen las 24 h | `cancelled` | tutor / sistema | — | Reembolso del **100 %** (RN-38); libera el hold |
 | `pending_payment` | Pago fallido / abandono / expiración | `cancelled` | webhook / sistema | Pago `failed` o ventana de pago vencida (RN-27) | Libera slots tentativos; notifica alumno |
 | `confirmed` | Inicia primera sesión | `in_progress` | sistema / daily | Una `session` pasa a `in_progress` (M5) | — |
-| `confirmed` | Cancelar antes de iniciar | `cancelled` | alumno / tutor / admin | Política de cancelación (RN-11); reembolso según `DP-03` | Cancela `sessions` (M5); dispara reembolso si aplica (M6) |
+| `confirmed` | Cancelar antes de iniciar | `cancelled` | alumno / tutor / admin | Reembolso según **RN-37** (≥24 h 100 % · <24 h alumno 50 % · tutor 100 %) | Cancela `sessions` (M5); encola el reembolso (M6) |
 | `in_progress` | Última sesión completada | `completed` | sistema | Todas las `sessions` en estado terminal con ≥1 `completed` (RN-25) | `completed_at`; abre ventana de reseña (RN-28); consolida neto del tutor para payout (M7) |
-| `in_progress` | Cancelar a mitad de paquete | `cancelled` | alumno / tutor / admin | Política + `DP-03` (reembolso prorrateado de sesiones no tomadas) | Cancela sesiones futuras; reembolso parcial (M6) |
-| `confirmed` / `in_progress` / `completed` | Reembolso total procesado | `refunded` | webhook / admin | `payments.status = refunded` (M6); `DP-03` | Ajusta/!revierte payout si no liquidado (M7); notifica alumno y tutor |
+| `in_progress` | Cancelar a mitad de paquete | `cancelled` | alumno / tutor / admin | **RN-37** sobre las sesiones no tomadas | Cancela sesiones futuras; reembolso parcial (M6) |
+| `confirmed` / `in_progress` / `completed` | Reembolso total ejecutado | `refunded` | job / admin | `payments.status = refunded` (M6) | Revierte el payout si no está liquidado (M7); notifica a alumno y tutor |
 
-> **RN-25:** una `booking` pasa a `completed` cuando **todas** sus `sessions` están en estado terminal y al menos una se completó. El tratamiento de `no_show` (M5) en el cómputo de "completada" se rige por `DP-08`/`DP-03` (ver §2.13). `SUPUESTO S-24`: si **todas** las sesiones son `no_show`/`cancelled`, la reserva no se marca `completed` (no habilita reseña) y entra a revisión de reembolso.
+> **RN-25:** una `booking` pasa a `completed` cuando **todas** sus `sessions` están en estado terminal y al menos una se completó. El tratamiento de `no_show` (M5) en el cómputo de "completada" se rige por `DP-08` (ver §2.13). `SUPUESTO S-24`: si **todas** las sesiones son `no_show`/`cancelled`, la reserva no se marca `completed` (no habilita reseña) y entra a revisión de reembolso.
 >
-> **RN-27:** una `booking` en `pending_payment` se autocancela si el pago no se confirma dentro de la **ventana de pago**. `SUPUESTO S-25`: ventana de checkout de 30 min para el intento de pago; la reserva del slot es tentativa hasta `confirmed`.
+> **RN-27:** una `booking` en `pending_payment` se autocancela si el pago no se confirma dentro de la **ventana de pago**, que son **20 minutos**. La reserva del slot es tentativa hasta que el tutor acepta.
 >
 > **RN-28:** la reseña (1–5) solo puede crearse con `booking.status = completed` (refuerza RN-17 a nivel de estado).
 
@@ -204,7 +207,7 @@ Instancia agendada 1:1 (RN-03, RN-18). Se crean al confirmarse la reserva.
 | — | Reserva confirmada | `scheduled` | sistema | `booking` → `confirmed` (M4) | Crea fila; calcula `access_opens_at`/`access_closes_at` (S-07); crea sala Daily |
 | `scheduled` | Apertura de ventana / primer join | `in_progress` | sistema / daily | `now() ∈ [access_opens_at, access_closes_at]` (RN-18) | Habilita acceso a sala; si es la 1ª, mueve `booking` a `in_progress` |
 | `in_progress` | Fin de sesión | `completed` | sistema / tutor | Fin de horario o marcado manual | `completed_at`; evalúa cierre de `booking` (RN-25) |
-| `scheduled` | Cancelar | `cancelled` | alumno / tutor / admin | Política (RN-11) | Libera slot; reembolso según `DP-03` (M6) |
+| `scheduled` | Cancelar | `cancelled` | alumno / tutor / admin | **RN-37** | Libera slot; encola el reembolso (M6) |
 | `scheduled` | Nadie se unió en la ventana | `no_show` | sistema | Ventana cerrada sin asistencia (S-07) | Marca `no_show`; resolución `DP-08` (§2.13) |
 
 > **SUPUESTO S-26:** el cierre de una sesión a `completed` lo hace el **sistema** al vencer la ventana de acceso; el tutor puede marcar "completada" antes para acelerar. La reprogramación (reschedule) de una sesión `scheduled` se modela como **cancelación + nueva sesión** dentro de la misma reserva (no hay estado `rescheduled` en el MVP). `SUPUESTO S-27`.
@@ -233,19 +236,36 @@ Cobro 1:1 con la reserva (S-04). **Solo muta vía webhook/service role** (S-15, 
 | `pending` | Autorización | `authorized` | webhook | Captura diferida | Retiene fondos; snapshot proveedor (`provider`, `provider_payment_id`) |
 | `pending` / `authorized` | Captura / cobro confirmado | `paid` | webhook | Fondos capturados | `paid_at`; confirma `booking` (M4); crea `payout_item` y devenga payout (M7) |
 | `pending` / `authorized` | Rechazo | `failed` | webhook | — | `failed_at`; permite reintento; puede autocancelar `booking` (RN-27) |
-| `failed` | Reintento de pago | `pending` | alumno | Dentro de ventana (S-25) | Nuevo intento de cobro |
-| `paid` | Reembolso parcial | `partially_refunded` | webhook / admin | `DP-03`; `refunded_amount += x` | Ajusta neto del tutor / payout (M7); notifica |
-| `paid` / `partially_refunded` | Reembolso total | `refunded` | webhook / admin | `DP-03`; `refunded_amount = gross_amount` | Revierte/!retira payout no liquidado (M7); mueve `booking` a `refunded` (M4) |
+| `failed` | Reintento de pago | `pending` | alumno | Dentro de la ventana de 20 min (RN-27) | Nuevo intento de cobro |
+| `paid` | Reembolso parcial | `partially_refunded` | job / admin | **RN-37**; `refunded_amount += x` | Ajusta neto del tutor / payout (M7); notifica |
+| `paid` / `partially_refunded` | Reembolso total | `refunded` | job / admin | **RN-37**; `refunded_amount = gross_amount` | Revierte/retira payout no liquidado (M7); mueve `booking` a `refunded` (M4) |
+
+> ⚠️ **Pedir un reembolso y ejecutarlo son dos pasos separados por una cola.** El camino de
+> cancelación encola una fila en `refund_requests`; quien habla con el PSP y mueve este estado es el
+> job `/api/cron/refunds-process`. El aviso al alumno (NTF-10) se manda al **pedirlo**, no al
+> ejecutarlo — ver Doc 7 §7.3.
 
 > **RN-26:** ninguna transición de M6 se origina en el cliente; todas provienen de **webhooks del proveedor** o de operaciones `admin` ejecutadas por el **service role**. El frontend solo lee.
 >
-> **SUPUESTO S-28:** el MVP usa **checkout alojado por el proveedor** (no se almacenan datos de tarjeta; fuera de alcance PCI directo). La elección autorización-luego-captura vs. cobro inmediato depende del proveedor/adaptador (Doc 6) y no acopla esta máquina.
+> 🔴 **S-28 DEROGADO — el checkout NO es alojado.** El formulario de pago vive **dentro del sitio**
+> (punto 2 de `docs/DICTADO-PAGOS.md`): Stripe con `ui_mode: 'form'` y dLocal con
+> `allow_transparent`. Lo que sobrevive del supuesto es su consecuencia: **no se almacenan datos de
+> tarjeta**, porque los campos siguen viviendo en iframes del proveedor. El alcance PCI no cambia.
+> Dos excepciones inevitables sacan al alumno de la página y ninguna es evitable por código: el
+> **3DS** del banco emisor, y los **medios locales** de dLocal (PIX, boleto, OXXO, efectivo), que solo
+> existen en su formulario alojado.
+>
+> **Quién cobra lo decide el país del ALUMNO** (RN-15), y `payments.provider` se **congela al crear la
+> reserva**: cambiar el ruteo después no cambia quién cobra una reserva ya vendida.
+>
+> La elección autorización-luego-captura vs. cobro inmediato depende del adaptador y no acopla esta
+> máquina.
 
 ---
 
 ## 2.10 M7 — Payout / Liquidación (`payout_status`)
 
-Liquidación del neto del tutor tras el periodo de retención. Compatible con `DP-02` (retención) y `DP-06` (agregación). **Solo service role** (S-15).
+Liquidación del neto del tutor tras el periodo de retención: **7 días**, en lote **semanal**. **Solo service role** (S-15).
 
 **Estados**
 
@@ -262,17 +282,21 @@ Liquidación del neto del tutor tras el periodo de retención. Compatible con `D
 
 | Desde | Evento / disparador | Hacia | Actor | Guarda | Efectos |
 | :-- | :-- | :-- | :-- | :-- | :-- |
-| `pending` | Programar | `scheduled` | sistema | Fin del periodo de retención (`DP-02`: 15/30 d) | Calcula `retention_until`/`scheduled_for`; agrupa `payout_items` según `DP-06` |
-| `scheduled` | Ejecutar | `processing` | sistema | `now() ≥ scheduled_for`; resuelve proveedor por `payee_country` (RN-15) | Llama `provider.payout()` (Doc 6) |
-| `processing` | Confirmación | `paid` | webhook | Proveedor confirma | `paid_at`; notifica tutor |
-| `processing` | Error | `failed` | webhook | — | `failed_at`; registra causa |
+| `pending` | Programar | `scheduled` | sistema | Retención de **7 días** vencida; o retiro pedido por el tutor (RN-40) | Calcula `retention_until`/`scheduled_for`; agrupa `payout_items` por **(tutor, moneda, balance de origen)** |
+| `scheduled` | Ejecutar | `processing` | sistema | `now() ≥ scheduled_for`; el riel sale de `payout_providers` del **país del TUTOR**, filtrado por lo que este tutor tiene registrado | Llama `provider.payout()` (Doc 6 §6.7) |
+| `processing` | Confirmación | `paid` | job / proveedor | El proveedor confirma la entrega | `paid_at`; escribe `provider` (quién ejecutó); notifica tutor (NTF-12) |
+| `processing` | Rechazo del proveedor | `failed` | job | — | `failed_at`; `failure_reason`; NTF-16. 🔴 **No baja al siguiente riel**: hay que reintentar desde el panel |
 | `failed` | Reintentar | `scheduled` | admin / sistema | Causa subsanada | Re-programa |
 | `pending` / `scheduled` / `failed` | Retener | `on_hold` | admin | Disputa/KYC/reembolso | Bloquea liquidación; notifica interno |
 | `on_hold` | Liberar | `scheduled` | admin | Incidencia resuelta | Re-habilita |
 
-> **RN-30:** el devengo del neto del tutor (`tutor_net_amount`) ocurre al `paid` del pago (M6) mediante un `payout_item` (Doc 1 §1.4.14). La **agregación** de items en un payout (uno-por-pago vs. lote) es `DP-06`; la tabla puente soporta ambas sin migración. El **inicio de la retención** se ancla a `DP-02`.
+> **RN-30:** el devengo del neto del tutor (`tutor_net_amount`) ocurre al `paid` del pago (M6) mediante un `payout_item` (Doc 1 §1.4.14). La agregación es **por lote**, y la clave de agrupación incluye el **balance de origen** (`payouts.funding_provider`): un tutor con cobros de dos corredores recibe **dos** órdenes de retiro.
 >
-> **SUPUESTO S-29:** si un pago asociado a un `payout_item` se reembolsa **antes** de liquidar, el item se excluye/ajusta del payout `pending`/`scheduled`. Si se reembolsa **después** de `paid`, se gestiona como **clawback** manual del admin (no automatizado en MVP). Ligado a `DP-03`.
+> ⚠️ **Hay un estado que la máquina no nombra: «en duda».** Cuando el adaptador no puede afirmar si el dinero salió, la fila **se queda en `processing`** y no se reintenta sola: la barre la pasada siguiente hasta poder afirmar algo. Es la única salida honesta de una API sin idempotencia, y es el motivo de que `processing` no sea un estado de paso rápido.
+>
+> ⚠️ **Un riel `manual` no tiene adaptador y no va a tenerlo.** Esas órdenes se quedan quietas y las cierra una persona con `manage_payout(id, 'mark_paid', referencia, canal)`. Solo Venezuela.
+>
+> **SUPUESTO S-29:** si un pago asociado a un `payout_item` se reembolsa **antes** de liquidar, el item se excluye/ajusta del payout `pending`/`scheduled`. Si se reembolsa **después** de `paid`, se gestiona como **clawback** manual del admin (no automatizado en MVP).
 
 ---
 
@@ -307,11 +331,12 @@ Secuencia coordinada de la compra de un producto (sesión simple o paquete):
 | Paso | Disparador | M4 Reserva | M6 Pago | M5 Sesión(es) | M7 Payout |
 | :-- | :-- | :-- | :-- | :-- | :-- |
 | 1 | Alumno crea reserva y va a checkout | `pending_payment` | `pending` | — | — |
-| 2 | Proveedor confirma cobro (webhook) | → `confirmed` | → `paid` | crea `scheduled` (1..N) | devenga `payout_item` (`pending`) |
+| 2 | Proveedor confirma cobro (webhook) | → `pending_acceptance` | → `paid` | — | — |
+| 2b | El tutor acepta dentro de 24 h (RN-38) | → `confirmed` | `paid` | crea `scheduled` (1..N) | devenga `payout_item` (`pending`) |
 | 3 | Llega la hora; abre ventana de acceso | `confirmed` → `in_progress` (1ª sesión) | `paid` | `scheduled` → `in_progress` | `pending` |
 | 4 | Termina cada sesión | `in_progress` | `paid` | `in_progress` → `completed` | `pending` |
 | 5 | Última sesión completada | → `completed` (abre reseña) | `paid` | `completed` | `pending` |
-| 6 | Vence retención (`DP-02`) | `completed` | `paid` | `completed` | `pending` → `scheduled` |
+| 6 | Vence la retención de 7 días (lote semanal) | `completed` | `paid` | `completed` | `pending` → `scheduled` |
 | 7 | Job ejecuta payout | `completed` | `paid` | `completed` | `scheduled` → `processing` → `paid` |
 
 **Reglas de coordinación clave**
@@ -324,26 +349,40 @@ Secuencia coordinada de la compra de un producto (sesión simple o paquete):
 
 ## 2.13 Cancelaciones, reembolsos y no-show
 
-La política de **reembolsos es `DECISIÓN PENDIENTE DP-03`**; aquí se modela el *mecanismo* sin fijar los *porcentajes/plazos*, de modo que resolver DP-03 sea configuración, no rediseño.
+La política de reembolsos **está cerrada: RN-37**, única de plataforma y no por tutor. Los
+porcentajes viven en `src/lib/policy.ts`, que es de donde los leen también las páginas legales.
 
-| Escenario | Estados resultantes | Parámetro pendiente |
+| Escenario | Estados resultantes | Reembolso |
 | :-- | :-- | :-- |
-| Cancelación del alumno antes de la ventana de cancelación gratuita | `booking → cancelled`, `payment → refunded`, `sessions → cancelled` | Plazo de "gratuito" (`DP-03`) |
-| Cancelación tardía del alumno | `booking → cancelled`, `payment → partially_refunded` o sin reembolso | % retenido (`DP-03`) |
-| Cancelación del tutor | `booking → cancelled`, `payment → refunded` (100%) | Política tutor (RN-11) + `DP-03` |
-| Cancelación a mitad de paquete | `booking → cancelled`, `payment → partially_refunded` por sesiones no tomadas | Prorrateo (`DP-03`) |
-| `no_show` del alumno | `session → no_show`; reserva puede contar como consumida | `DECISIÓN PENDIENTE DP-08` |
-| `no_show` del tutor | `session → no_show`; reembolso/recompensa al alumno | `DP-08` + `DP-03` |
+| Cancelación del alumno con **≥24 h** de antelación | `booking → cancelled`, `payment → refunded`, `sessions → cancelled` | **100 %** |
+| Cancelación del alumno con **<24 h** | `booking → cancelled`, `payment → partially_refunded` | **50 %** |
+| Cancelación del **tutor**, en cualquier momento | `booking → cancelled`, `payment → refunded` | **100 %** |
+| El tutor rechaza, o vencen sus 24 h en `pending_acceptance` | `booking → cancelled`, `payment → refunded` | **100 %** (RN-38) |
+| `no_show` del alumno | `session → no_show`; la reserva puede contar como consumida | `DECISIÓN PENDIENTE DP-08` |
+| `no_show` del tutor | `session → no_show`; reembolso al alumno | `DP-08` |
+
+⚠️ **Y hay un hueco de ≤15 minutos**: la reserva deja de ser cancelable cuando pasa a `completed`,
+que ocurre en `end_at + 10 min` más lo que tarde el cron. Entre el fin de la clase y ese cierre
+todavía se puede cancelar al 50 %. Es un caso de borde conocido y cerrarlo es tocar
+`cancel_booking`, que es dinero.
 
 > **DECISIÓN PENDIENTE DP-08 (nueva — operativa, no estratégica de pagos):** política de **inasistencia (`no_show`)** — ventana de gracia, quién marca el no-show, y efecto financiero (¿se cobra al alumno?, ¿se reembolsa por no-show del tutor?). **No se resuelve aquí.** Se documenta como supuesto operable (S-24/S-29) y se consolida en el Doc 9. *Default operable mientras se resuelve:* no-show del alumno = sesión consumida (sin reembolso); no-show del tutor = reembolso de esa sesión.
 
 ---
 
-## 2.14 Retención y agregación de payout (DP-02 / DP-06)
+## 2.14 Retención y agregación de payout
 
-- **Inicio de retención:** al `paid` del pago (RN-30). **Fin de retención = `DP-02` (15 o 30 días).** El job de §2.12 paso 6 lee este parámetro de configuración; cambiarlo no toca el modelo.
-- **Agregación (`DP-06`):** la tabla `payout_items` permite (a) **un payout por pago** (un item) o (b) **un payout por lote** (varios items del mismo tutor/periodo/moneda). La máquina M7 es idéntica en ambos casos; solo cambia el criterio de agrupación al pasar de `pending` a `scheduled`.
-- **Moneda/FX (`DP-07`):** si la moneda de liquidación difiere de la de cobro, M7 usa `settlement_currency`/`fx_rate` del pago (Doc 1) sin cambiar estados.
+- **Inicio de retención:** al `paid` del pago (RN-30). **Fin: 7 días**, y el lote lo arma
+  `run_payout_batch()` una vez por semana. El parámetro es un argumento de la función, así que
+  cambiarlo no toca el modelo.
+- **Agregación: por lote**, con clave **(tutor, moneda, `funding_provider`)**. La máquina M7 no
+  cambia; lo que cambia es cuántas órdenes salen: un tutor que cobró por dos corredores recibe dos.
+- **Moneda/FX (`DP-07`, abierta):** si la moneda de liquidación difiere de la de cobro, M7 usa
+  `settlement_currency`/`fx_rate` del pago sin cambiar estados. Lo que falta es la **política** de
+  quién asume la diferencia.
+- ⚠️ **`run-payout-batch` es un job de pg_cron semanal, y un pg_cron que falla no avisa a nadie.**
+  Se cae de la ventana si se leen las últimas filas de `cron.job_run_details`: hay que agregar por
+  `jobname`.
 
 ---
 
@@ -360,7 +399,7 @@ La política de **reembolsos es `DECISIÓN PENDIENTE DP-03`**; aquí se modela e
 | RN-27 | Una reserva en `pending_payment` se autocancela al expirar la ventana de pago. |
 | RN-28 | La reseña solo puede crearse con `booking.status = completed`. |
 | RN-29 | *(operativa)* El admin no aprueba a un tutor con identidad no verificada (M2 `approved`), salvo relajación por negocio (S-21). |
-| RN-30 | El neto del tutor se devenga al `paid` del pago (`payout_item`); la liquidación se programa al fin de la retención (`DP-02`). |
+| RN-30 | El neto del tutor se devenga al `paid` del pago (`payout_item`); la liquidación se programa al vencer la retención de **7 días**. |
 
 **Supuestos nuevos**
 
@@ -370,10 +409,10 @@ La política de **reembolsos es `DECISIÓN PENDIENTE DP-03`**; aquí se modela e
 | S-22 | La verificación de identidad es independiente del tier y no afecta el split. |
 | S-23 | Al suspender a un tutor no se cambian masivamente los `product_status`; se filtra en consulta/creación de reserva. |
 | S-24 | Si todas las sesiones de una reserva son `no_show`/`cancelled`, la reserva no se marca `completed` ni habilita reseña. |
-| S-25 | Ventana de checkout/pago de 30 min; el slot se reserva tentativamente hasta `confirmed`. |
+| S-25 | ~~Ventana de checkout de 30 min~~ → **20 min** en código (RN-27); el slot se reserva tentativamente hasta que el tutor acepta. |
 | S-26 | El cierre de sesión a `completed` lo hace el sistema al vencer la ventana; el tutor puede adelantarlo. |
 | S-27 | La reprogramación se modela como cancelación + nueva sesión (sin estado `rescheduled` en el MVP). |
-| S-28 | Checkout alojado por el proveedor; auth-then-capture vs. cobro inmediato lo define el adaptador (Doc 6). |
+| S-28 | 🔴 **Derogado**: el checkout vive **dentro del sitio**, no alojado. Lo que sigue en pie es que no se guardan datos de tarjeta. Ver §2.9. |
 | S-29 | Reembolso previo a liquidar excluye/ajusta el `payout_item`; reembolso posterior a `paid` = clawback manual del admin. |
 | S-30 | Documentos KYC no se reactivan; la corrección es un documento nuevo; M2→`approved` con el conjunto requerido aprobado. |
 
@@ -381,7 +420,7 @@ La política de **reembolsos es `DECISIÓN PENDIENTE DP-03`**; aquí se modela e
 
 | ID | Decisión | Opciones | Impacto |
 | :-- | :-- | :-- | :-- |
-| DP-08 | Política de inasistencia (`no_show`): ventana de gracia, quién marca, efecto financiero | (a) no-show alumno = consumido / no-show tutor = reembolso; (b) ventana de gracia con reprogramación; (c) penalizaciones configurables | Estados M5/M4, reembolsos (ligado a `DP-03`), reportes |
+| DP-08 | Política de inasistencia (`no_show`): ventana de gracia, quién marca, efecto financiero | (a) no-show alumno = consumido / no-show tutor = reembolso; (b) ventana de gracia con reprogramación; (c) penalizaciones configurables | Estados M5/M4, reembolsos, reportes. **Sigue abierta** — es la única DP de este documento que no se ha cerrado |
 
 ---
 

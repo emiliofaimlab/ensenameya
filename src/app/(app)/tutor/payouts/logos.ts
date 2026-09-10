@@ -36,13 +36,14 @@ export const LOGOS: Record<string, { src: string; color?: string }> = {
   // marca. No se ajustan «para que peguen»: un logo con el color cambiado deja
   // de ser el logo.
   paypal: { src: "/img/payout/paypal.svg", color: "#002991" },
-  stripe: { src: "/img/payout/stripe.svg", color: "#635BFF" },
   binance: { src: "/img/payout/binance.svg", color: "#F0B90B" },
   zelle: { src: "/img/payout/zelle.svg", color: "#6D1ED4" },
   // Sin `color`: su SVG ya trae los dos (morado #5333B5 y verde #33CC99).
   zinli: { src: "/img/payout/zinli.svg" },
   // 'banco' NO lleva logo de marca a propósito: la tarjeta de transferencia
-  // cubre a dLocal y a Wise a la vez y no dice cuál usamos, porque al tutor no
-  // le cambia nada. Poner el de uno de los dos sería prometerle un corresponsal.
+  // cubre a dLocal, Wise y Stripe a la vez y no dice cuál usamos, porque al
+  // tutor no le cambia nada. Poner el de uno de los tres sería prometerle un
+  // corresponsal concreto. Por eso tampoco hay ya entrada de `stripe` aquí:
+  // era inalcanzable, porque ningún método del tutor se llama así.
   // Su glifo es el icono de banco de lucide, que ya es dependencia.
 };

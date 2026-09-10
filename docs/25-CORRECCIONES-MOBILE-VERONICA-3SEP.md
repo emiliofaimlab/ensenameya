@@ -3,7 +3,8 @@
 > **Qué es esto.** Verónica revisó la versión móvil de `dev` en un iPhone (viewport 390x844) y
 > mandó el 3-sep-2026 «Correcciones Versión Mobile - Enséñame Ya»: 33 capturas y 41 peticiones en 10
 > pantallas. Este documento es la **trazabilidad punto a punto**: qué pidió (literal), cómo se leyó,
-> qué se hizo y con qué evidencia. Es el mismo formato que `docs/22-LISTA-VERONICA-21AGO.md`, y por
+> qué se hizo y con qué evidencia. Es el mismo formato que usaban las listas de agosto —hoy consolidadas en
+> `docs/PLAN-DESARROLLO.md`—, y por
 > lo mismo: una lista suya se cruza con el código antes de convertirla en trabajo
 > ([[listas-veronica-son-consolidadas]]).
 
