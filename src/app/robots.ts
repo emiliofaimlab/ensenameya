@@ -4,6 +4,11 @@ import type { MetadataRoute } from "next";
  * ⚠️ BLOQUEO DE PRE-LANZAMIENTO — se quita el día del corte, en el mismo commit
  * que los `redirects` de `vercel.json`. Los dos son la misma decisión.
  *
+ * ⚠️ Y ESTO YA NO ES LO ÚNICO QUE QUEDA DEL BLOQUEO: la redirección de
+ * pre-lanzamiento se quitó el 10-sep y el sitio abre en su home. Este fichero
+ * sobrevive **a propósito**, porque son dos cosas distintas: que el sitio
+ * funcione y que Google lo indexe. Se abre cuando haya tutores publicados.
+ *
  * Por qué existe: hasta ahora la app vivía en `ensenameya.vercel.app`, sin
  * enlaces entrantes y sin nadie que la buscara. En cuanto `ensenameya.com`
  * apunte aquí hereda la autoridad de la landing de GoDaddy, y lo que Google

@@ -12,7 +12,11 @@ import { rutaFor, toNotice } from "./notifications.ts";
  * esto, una plantilla mal escrita se vería exactamente igual que una API key
  * caducada — y el aviso se marcaría `failed` sin que nadie supiera por qué.
  */
-const BASE = "https://ensenameya.vercel.app";
+// El dominio oficial desde el 10-sep. Era `ensenameya.vercel.app`, que a partir
+// de hoy es un 308 hacia aquí: un fixture que apunta al host viejo sigue pasando
+// las aserciones —solo comprueban que la base aparezca— pero deja escrito en el
+// contrato un dominio que ya no es el de la app.
+const BASE = "https://ensenameya.com";
 
 // Las 12 plantillas de correo del Doc 7 tienen que existir. Si alguien añade un
 // `enqueue_notification` con una plantilla nueva y no la registra aquí, el
