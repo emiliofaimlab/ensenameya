@@ -112,11 +112,15 @@ export default async function AccountPage() {
           />
         }
         /* G03 · el otro punto de integración de referidos (Doc 4 §4.x).
-           B1.11 · el rol decide QUÉ programa se le ofrece. Esta pantalla la
-           comparten los dos, y `roles` ya estaba a mano más arriba.
-           ⚠️ Puede renderizar `null` (hoy, siempre para el tutor): el mosaico
-           cuenta con ello, ver `account-form.tsx`. */
-        referidos={<ReferralCard isTutor={roles.includes("tutor")} />}
+           B1.11 · lo decide el PANEL del que vienes, no el rol — es la misma
+           regla que aplica el destino (`/referidos`), y tienen que coincidir:
+           con el rol, un tutor que entra por el panel de alumno veía aquí la
+           tarjeta del tutor y allí se le servía la campaña del alumno. Mientras
+           solo existía la de alumnos eso era un 404; desde que existen las dos
+           (10-sep) sería alta en el programa equivocado, sin que se note.
+           ⚠️ Puede renderizar `null`: el mosaico cuenta con ello, ver
+           `account-form.tsx`. */
+        referidos={<ReferralCard isTutor={items?.[0]?.href === "/tutor"} />}
       />
     </PanelShell>
   );

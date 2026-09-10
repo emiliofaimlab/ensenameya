@@ -48,19 +48,17 @@ export default async function ReferidosPage() {
    *
    * Decidirlo con `roles.includes("tutor")` rompería justo ese caso: la tarjeta
    * de `/app` se pinta con el programa del alumno y este destino resolvería el
-   * del tutor, que hoy no existe → un botón que acaba en 404.
+   * del tutor. Mientras la del tutor no existía eso era un 404; desde que
+   * existen las dos (10-sep) sería servirle la campaña equivocada en silencio.
    *
    * El panel se lee del menú que acaba de resolverse, que es el mismo idiom que
    * ya usa `PanelShell` para esto (`items?.[0]?.href === "/admin"`). Admin
    * cuenta como alumno: no hay campaña de administradores.
    *
-   * Queda un hueco conocido, y se deja abierto a propósito: `/account` sí pinta
-   * su tarjeta por ROL, así que si algún día existiera la campaña del tutor y NO
-   * la del alumno, un tutor con panel de alumno vería el botón y aquí se
-   * encontraría un 404. Cerrarlo sería caer a la otra campaña, que es
-   * justamente lo prohibido (B1.11). Esa combinación no existe hoy —solo hay
-   * campaña de alumnos—; el día que se cree la segunda, lo que hay que cambiar
-   * es que `/account` pase el panel en vez del rol.
+   * Ese día llegó: al crearse la campaña del tutor (10-sep), `/account` pasó a
+   * decidir por PANEL igual que aquí. Las dos puertas comparten la regla a
+   * propósito — si discrepan, la tarjeta anuncia un programa y esta pantalla
+   * sirve el otro, que es el fallo más difícil de ver de los dos posibles.
    */
   const isTutor = items?.[0]?.href === "/tutor";
 
