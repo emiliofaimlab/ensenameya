@@ -417,7 +417,15 @@ alumno y el payout el del tutor**. El avance de la implementación está en
   (`src/lib/calendar/ics.ts` ya dice `ensenameya.com`, así que los calendarios ya suscritos no se
   duplican).
 
-- [ ] **Quitar el bloqueo de pre-lanzamiento.** Mientras el sitio no esté vivo, `ensenameya.com`
+- [x] **Redirección de pre-lanzamiento QUITADA — 10-sep.** `ensenameya.com` sirve la home normal y
+  el sitio funciona entero. Lo pidió el cliente al aprobar los correos. `vercel.json` se queda solo
+  con su `crons`.
+- [ ] ⚠️ **`robots.ts` sigue con `Disallow: /`, y es una decisión aparte.** «Que el sitio funcione»
+  y «que Google lo indexe» no son lo mismo: hoy el catálogo tiene **cero tutores** y el checkout
+  corre con claves live sobre una cuenta de Stripe **sin activar**. Indexar eso deja a Google con un
+  marketplace vacío en el índice, y el primer resultado de marca sería una página sin oferta. Se
+  abre cuando haya tutores publicados, no cuando el sitio deje de redirigir.
+- [x] ~~Quitar el bloqueo de pre-lanzamiento~~ (histórico, ver arriba): Mientras el sitio no esté vivo, `ensenameya.com`
   redirige `/` → `/contacto` (`redirects` de `vercel.json`, con `has: host` para que **no afecte a
   las previews**) y `src/app/robots.ts` sirve un `disallow: /`. Son **la misma decisión** y se
   quitan en **un solo commit**. Se hace así, y no con una redirección del apex a un Typeform, por
