@@ -16,6 +16,14 @@ import { useEffect } from "react";
  * módulo tenga que resolverse para pintarlo, más casos cubre. Por eso el correo
  * está escrito a mano y no sale de `lib/company.ts` como en el resto del sitio.
  *
+ * ⚠️ Y por eso el aviso a Sentry va con `import()` DENTRO del efecto y no con un
+ * `import` arriba: un boundary de React **se traga** el error, así que sin este
+ * `captureException` la clase de fallo más grave —la pantalla en blanco— es la
+ * única que Sentry no vería. Pero la ruta de renderizado tiene que seguir sin
+ * módulos por resolver: si el `import()` falla, la pantalla se pinta igual y solo
+ * se pierde el aviso. `@sentry/nextjs` ya está cargado en el navegador desde
+ * `instrumentation-client.ts`, así que en la práctica no viaja nada nuevo.
+ *
  * US-1601 · lo que se tocó es solo el tamaño en móvil, con `clamp()` en vez de
  * media queries: aquí no hay hoja de estilos donde ponerlas, y un `clamp` deja
  * los valores de escritorio EXACTAMENTE donde estaban (24 y 15px) mientras baja
@@ -32,6 +40,9 @@ export default function GlobalError({
 }) {
   useEffect(() => {
     console.error("[global error boundary]", error.digest ?? "", error);
+    void import("@sentry/nextjs")
+      .then((Sentry) => Sentry.captureException(error))
+      .catch(() => {});
   }, [error]);
 
   return (
