@@ -6,6 +6,7 @@ import {
   PaypalError,
   aDecimal,
   desenlace,
+  loteDuplicadoSinEnlace,
   loteYaExistente,
   receptorDe,
   type BeneficiarioPaypal,
@@ -277,6 +278,27 @@ export const paypalProvider: PspProvider = {
             causa: e2,
           };
         }
+      }
+
+      // 🔴 EL MISMO DUPLICADO, PERO SIN EL ENLACE QUE LO IDENTIFICA. PayPal dice
+      // que el lote existe y no dice cuál. Antes esto caía hasta el `rechazado`
+      // del final —o sea, «el proveedor no creó nada»— que es exactamente lo
+      // contrario de lo que acaba de contestar. Y desde AUD-01 un rechazo puede
+      // bajar al siguiente riel: pagaríamos otra vez el dinero que este lote ya
+      // puede estar pagando.
+      //
+      // `en-duda` deja la fila en 'processing', no se reintenta sola jamás y sale
+      // en el contador que el job marca como «debe ser 0». Que una persona mire
+      // es el desenlace correcto cuando hay un pago que no podemos identificar.
+      if (loteDuplicadoSinEnlace(e)) {
+        return {
+          estado: "en-duda",
+          mensaje:
+            `PayPal dice que el lote ${marca} ya existe pero no devolvió su enlace. ` +
+            `Búscalo en el panel por ese sender_batch_id antes de tocar la orden: ` +
+            (e as Error).message,
+          causa: e,
+        };
       }
 
       if (esCredencialInvalida(e)) {

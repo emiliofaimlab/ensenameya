@@ -7,7 +7,7 @@ import { dlocalProvider } from "@/lib/payments/dlocal-provider";
 import { paypalProvider } from "@/lib/payments/paypal-provider";
 import { wiseProvider } from "@/lib/payments/wise-provider";
 import type { AnyProvider, LocalProvider, PspProvider } from "@/lib/payments/port";
-import { rielSirveParaEsteTutor, type DatosDeCobro } from "@/lib/payments/riel-viable";
+import { eligeRiel, rielSirveParaEsteTutor, type DatosDeCobro } from "@/lib/payments/riel-viable";
 import {
   metodosDelPais,
   ordenaPorPreferencia,
@@ -391,6 +391,13 @@ export async function payoutProviderFor(
   payeeCountry: string | null,
   fundingProvider: string | null,
   tutorId: string | null,
+  /**
+   * 🔴 LOS RIELES QUE YA RECHAZARON **ESTA** ORDEN (AUD-01). Vacío en el caso
+   * normal. El job de payouts lo rellena cuando un proveedor devuelve un
+   * rechazo definitivo, para que la orden baje al siguiente candidato en vez de
+   * morir teniendo detrás a otro riel capaz de pagarle.
+   */
+  yaRechazaron: readonly string[] = [],
 ): Promise<string | null> {
   // Mismo resolvedor que el cobro, y por el mismo motivo: el desempate entre la
   // fila del país y la de por defecto vive en `ruta_de_pago()` y en ningún otro
@@ -440,19 +447,16 @@ export async function payoutProviderFor(
     .map((clave) => RIELES[clave])
     .filter((r): r is Riel => Boolean(r));
 
-  for (const riel of ordenaPorPreferencia(rieles, datos?.metodo_preferido ?? null)) {
-    if (!riel.puedePagar()) continue;
-    // 🔴 LA ATADURA DEL BALANCE. Aquí, y no en el job: tenerlo en dos sitios es
-    // cómo se desincronizan. Un riel atado solo sirve si el dinero está en SU
-    // balance; uno fondeado aparte no depende de quién cobró.
-    if (riel.ataduraDeBalance && riel.clave !== fundingProvider) continue;
-    // Y lo último: que ESTE tutor le haya dado lo que necesita. Un riel que no
-    // puede pagarle a él no es un candidato, es una orden atascada en silencio.
-    if (datos && !rielSirveParaEsteTutor(riel, datos)) continue;
-    return riel.clave;
-  }
-
-  return null;
+  // La elección en sí es PURA y vive en `riel-viable.ts`, con su comprobación
+  // ejecutable al lado (`npm run check:riel`). Aquí solo se le da lo que hay que
+  // ir a buscar: la lista ordenada, lo que el tutor tiene registrado, de dónde
+  // salió el dinero y quién ya dijo que no.
+  return eligeRiel(
+    ordenaPorPreferencia(rieles, datos?.metodo_preferido ?? null),
+    datos,
+    fundingProvider,
+    yaRechazaron,
+  );
 }
 
 /**

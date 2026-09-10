@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 
 import {
-  receptorDe, PaypalError, aDecimal, desenlace, loteYaExistente, type LotePaypal } from "./paypal-mapeo.ts";
+  receptorDe, PaypalError, aDecimal, desenlace, loteDuplicadoSinEnlace, loteYaExistente,
+  type LotePaypal } from "./paypal-mapeo.ts";
 
 /**
  * Comprobación del mapeo de PayPal. Sin framework: `npm run check:paypal`.
@@ -74,11 +75,22 @@ assert.equal(
   loteYaExistente(new PaypalError(400, { details: [{ field: "AMOUNT" }] }, "x")),
   null,
 );
-// Y un duplicado SIN enlace tampoco se adivina componiendo la URL.
-assert.equal(
-  loteYaExistente(new PaypalError(400, { details: [{ field: "SENDER_BATCH_ID" }] }, "x")),
-  null,
-);
+// Y un duplicado SIN enlace tampoco se adivina componiendo la URL: `null`.
+const dupSinEnlace = new PaypalError(400, { details: [{ field: "SENDER_BATCH_ID" }] }, "x");
+assert.equal(loteYaExistente(dupSinEnlace), null);
+
+// 🔴 PERO ESE `null` NO SIGNIFICA «no era un duplicado», y confundirlo es lo que
+// mandaba la orden al desenlace `rechazado` —«el proveedor no creó nada»— cuando
+// PayPal acababa de decir que el lote SÍ existe. Desde AUD-01 un rechazo puede
+// bajar al siguiente riel, así que esa confusión paga dos veces.
+assert.equal(loteDuplicadoSinEnlace(dupSinEnlace), true,
+  "un duplicado sin enlace SÍ es un duplicado: hay un pago que conciliar");
+assert.equal(loteDuplicadoSinEnlace(dup), false,
+  "el que trae enlace NO pasa por aquí: lo adopta `loteYaExistente`, que es el camino bueno");
+assert.equal(loteDuplicadoSinEnlace(new PaypalError(400, { details: [{ field: "AMOUNT" }] }, "x")), false,
+  "un 400 por otra cosa no es un duplicado");
+assert.equal(loteDuplicadoSinEnlace(new PaypalError(500, {}, "x")), false);
+assert.equal(loteDuplicadoSinEnlace(new Error("red")), false);
 assert.equal(loteYaExistente(new PaypalError(500, {}, "x")), null);
 assert.equal(loteYaExistente(new Error("red")), null);
 
