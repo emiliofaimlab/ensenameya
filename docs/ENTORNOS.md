@@ -101,42 +101,73 @@ declara `20260904190000` y lo completan las migraciones `20260910*`.
 
 ### 1.3 Dónde está puesta cada variable
 
-"falta" = hay que ponerla; el resto ya está.
+**Medido el 10-sep-2026** sobre el panel de Vercel y los nombres de `.env.local`. No es lo que
+debería haber: es lo que hay. ✅ puesta · ❌ no existe · — no aplica.
 
-| Variable | `.env.local` | Vercel Preview | Vercel Production | GitHub |
+**Cobro**
+
+| Variable | `.env.local` | Preview | Production |
+| :-- | :-- | :-- | :-- |
+| `STRIPE_API_KEY` | ✅ test | ✅ sandbox | ✅ **`sk_live_`** |
+| `STRIPE_PUBLISHABLE_KEY` | ✅ | ✅ | ✅ **`pk_live_`** — ⚠️ sin ella no se pinta el formulario |
+| `STRIPE_WEBHOOK_SECRET` | ✅ (`stripe listen`) | ✅ destino `ensenameya-vercel` | ✅ destino `ensenameya-prod` |
+| `DLOCALGO_API_KEY` · `DLOCALGO_SECRET_KEY` | ✅ sandbox | ✅ sandbox | ❌ **→ el 503 de prod** |
+| `DLOCALGO_API_BASE` | ❌ (= sandbox, correcto) | ❌ (= sandbox, correcto) | ❌ **hace falta** `https://api.dlocalgo.com` |
+| `DLOCALGO_SMARTFIELDS_KEY` | ✅ | — | — | 
+| `DLOCALGO_FX_SPREAD` | ❌ | ❌ | ❌ · opcional |
+
+⚠️ `DLOCALGO_SMARTFIELDS_KEY` **no sirve para tokenizar** y no la lee el código: la clave del
+tokenizador está hardcodeada (`clavePublicaDeSmartFields()`), y `DLOCALGO_API_BASE` la conmuta.
+Está en `.env.local` por un intento que no funcionó; borrarla no rompe nada.
+
+**Payout**
+
+| Variable | `.env.local` | Preview | Production |
+| :-- | :-- | :-- | :-- |
+| `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | ✅ sandbox | ✅ sandbox | ❌ **payout PayPal muerto en prod** |
+| `PAYPAL_API_URL` | ✅ | ✅ | ❌ **hace falta** `https://api-m.paypal.com` |
+| `WISE_API_TOKEN` | ⚠️ **✅ — ver abajo** | ❌ | ❌ |
+| `WISE_PRIVATE_KEY` · `WISE_API_URL` | ❌ | ❌ | ❌ · opcionales |
+
+🔴 **`WISE_API_TOKEN` está en `.env.local` y `WISE_API_URL` no.** Y el defecto de `WISE_API_URL`
+es **producción** (`api.transferwise.com`, `lib/payments/wise-provider.ts`), no sandbox — al revés
+que dLocal y PayPal. O sea: **llamar a `/api/cron/payouts-process` en local puede intentar una
+transferencia real** contra la cuenta de Wise de verdad, con los datos de la BD de dev. No es
+teórico y no hay un segundo interruptor que lo pare. Si no estás trabajando en Wise, saca ese
+token de `.env.local`.
+
+**Plataforma**
+
+| Variable | `.env.local` | Preview | Production | GitHub |
 | :-- | :-- | :-- | :-- | :-- |
-| `NEXT_PUBLIC_SUPABASE_URL` · `..._ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY` | dev | dev | prod | — |
-| `DAILY_API_KEY` | sí | sí | sí | — |
-| `STRIPE_API_KEY` | sí (`sk_test_`) | sí | sí | — |
-| `STRIPE_WEBHOOK_SECRET` | sí (el de `stripe listen`) | sí (el del endpoint) | sí | — |
-| `STRIPE_PUBLISHABLE_KEY` | sí | **por comprobar** | **por comprobar** | — · ⚠️ sin ella no se pinta el formulario de pago (§1.2) |
-| `DLOCALGO_API_KEY` · `DLOCALGO_SECRET_KEY` | sí (sandbox) | sí (sandbox) | **falta** (503 medido) | — |
-| `DLOCALGO_API_BASE` | — | — | **falta** — hace falta para apuntar a `api.dlocalgo.com` | — |
-| `DLOCALGO_FX_SPREAD` | opcional | opcional | opcional | — |
-| `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | sí (sandbox) | **por comprobar** | **por comprobar** | — |
-| `PAYPAL_API_URL` | — | — | **falta** — hace falta para salir de sandbox | — |
-| `WISE_API_TOKEN` | sí | **falta** | **falta** | — |
-| `WISE_PRIVATE_KEY` · `WISE_API_URL` | — | — | — | — · opcionales (§1.2) |
-| `CRON_SECRET` | sí | ? sin comprobar | sí | sí (secret) |
-| `RESEND_API_KEY` | sí | sí | sí | — |
-| `NEXT_PUBLIC_REFERRAL_URL` | sí | **falta** | **falta** | — |
-| `NEXT_PUBLIC_REFERRAL_URL_TUTOR` | **falta** | **falta** | **falta** | — |
-| `NEXT_PUBLIC_REFERRAL_EMBED_URL` · `..._TUTOR` | **falta** | **falta** | **falta** | — |
-| `REFERRAL_FACTORY_API_KEY` | sí | — | — | — · no la lee nadie: subirla no habilita nada |
-| `APP_BASE_URL` | — | — | — | sí: `https://ensenameya.vercel.app` (variable, no secret) |
-| `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional (secret) — solo si `APP_BASE_URL` apunta a una preview |
+| `NEXT_PUBLIC_SUPABASE_URL` · `..._ANON_KEY` · `SUPABASE_SERVICE_ROLE_KEY` | ✅ dev | ✅ dev | ✅ prod | — |
+| `DAILY_API_KEY` | ✅ | ✅ | ✅ | — |
+| `CRON_SECRET` | ✅ | ✅ | ✅ | ✅ secret |
+| `RESEND_API_KEY` | ❌ | ✅ | ✅ | — |
+| `EMAIL_FROM` | ❌ | ❌ | ❌ — remitente sigue en `onboarding@resend.dev` | — |
+| `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | ❌ | ✅ | ✅ | — |
+| `APP_BASE_URL` | — | — | — | ✅ **`https://ensenameya.com`** (10-sep) |
+| `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional · solo si apunta a una preview |
 
-- **Producción cobra en *test mode*.** Las claves de Stripe de prod son `sk_test_`: acepta la tarjeta
-  4242 y no cobra ninguna real. Se asumió a sabiendas —el sitio no está lanzado— y el interruptor de
-  cobrar de verdad son las claves de Vercel, no la tabla de ruteo. Antes de abrir a usuarios: o pasan
-  a `sk_live_`, o el ruteo de prod se saca de `stripe` con una migración.
-- `APP_BASE_URL` es solo de **GitHub**: le dice a los cuatro workflows a qué despliegue llamar (§4).
-  `CRON_SECRET` hace falta en **los dos lados y con el mismo valor** — GitHub lo manda en la
-  cabecera, Vercel lo compara.
-- `VERCEL_PROTECTION_BYPASS` no hace falta apuntando a producción, que no está protegida. Solo si se
-  apunta un workflow a una **preview**: ahí Deployment Protection devuelve **302 antes de que corra
-  una línea nuestra** y el job no falla, simplemente no hace nada. Es la misma trampa que el webhook
-  de Stripe (§5); el workflow de reembolsos la detecta y lo dice, el de correo todavía no.
+`RESEND_API_KEY` no está en `.env.local`: en local **no se envía nada** y la cola se queda
+`pending`, que es el fallo cerrado de diseño. Sentry **sí está cableado**
+(`@sentry/nextjs`, `src/instrumentation.ts` + `instrumentation-client.ts`) y llevaba desde el
+27-ago sin figurar en esta tabla.
+
+**Referidos**
+
+| Variable | `.env.local` | Preview | Production |
+| :-- | :-- | :-- | :-- |
+| `NEXT_PUBLIC_REFERRAL_URL` · `..._EMBED_URL` | ✅ | ✅ | ✅ |
+| `NEXT_PUBLIC_REFERRAL_URL_TUTOR` · `..._EMBED_URL_TUTOR` | — | — | — · **no existe la campaña de tutores**, solo la 50297 |
+| `REFERRAL_FACTORY_API_KEY` | ✅ | ✅ | ✅ · 🗑️ **no la lee nadie** (0 referencias en `src/`) |
+
+**Ausentes a propósito**
+
+- **`NEXT_PUBLIC_SITE_URL`** — no está en ningún entorno, y así debe quedarse. Vacía, `siteUrl()`
+  usa `VERCEL_PROJECT_PRODUCTION_URL`, que desde la migración es `ensenameya.com`. Ponerla a mano
+  es la forma de que un preview devuelva al alumno a producción tras pagar (EX-07).
+- **Las `*_TUTOR`** — no es un hueco: esa campaña no existe en Referral Factory.
 
 > **Vercel no aplica una variable nueva a un despliegue que ya existe.** Las env vars se inyectan al
 > construir: añadirla en Settings y recargar la misma URL devuelve **exactamente el mismo 503** de
@@ -291,7 +322,24 @@ alumno y el payout el del tutor**. El avance de la implementación está en
   **Cero cambios de código**: `siteUrl()` (`src/lib/stripe.ts`) sale de `VERCEL_PROJECT_PRODUCTION_URL`
   y de ahí cuelgan el `return_url` de Stripe y el `notification_url` de dLocal. Orden del corte:
 
-  1. **GoDaddy DNS** → apuntar el apex (y `www`) a Vercel; **Vercel prod** → añadir el dominio.
+  0. ⚠️ **NO SE TOCA EL CORREO.** Medido el 10-sep sobre el DNS vivo: `ensenameya.com` tiene
+     **Microsoft 365 detrás de Proofpoint** (`MX → mx1/2/3-usg2.ppe-hosted.com`, `TXT →
+     NETORGFT20529965.onmicrosoft.com`, `SPF → include:_spf-usg2.ppe-hosted.com
+     include:secureserver.net`, `DMARC p=quarantine`). Ese es el buzón **`info@ensenameya.com`** del
+     §39 del contrato y de `src/lib/company.ts`. La migración mueve **solo los registros `A` del
+     apex y el `www`** — que hoy apuntan al GoDaddy Website Builder (`76.223.105.230`,
+     `13.248.243.5`). Todo lo que sea `MX`, el TXT de `onmicrosoft.com`, el SPF de la raíz y el
+     `_dmarc` se queda exactamente como está. Borrar de más aquí no rompe la app: rompe el correo
+     del cliente, y no se nota hasta que alguien escribe.
+  1. [x] **HECHO el 10-sep.** GoDaddy: dos ediciones y cero borrados — `A @` (que era la fila
+     gestionada «WebsiteBuilder Site») → `216.198.79.1`, y `CNAME www` → el destino propio del
+     dominio que da Vercel (`65b3d9d82d476a71.vercel-dns-017.com`, con hash: **no es un valor
+     genérico, se copia del panel**). Vercel: apex en Production y `www` con **308** al apex —
+     canónico el apex, no el `www`, para que `siteUrl()` case con el §39 del contrato y con
+     `company.ts`. Verificado: `/` → 307 → `/contacto`, `/terms` y `/privacy` en 200, `robots.txt`
+     es el nuestro, certificado de Let's Encrypt, y los 20 registros del correo intactos.
+     ⚠️ Al verificar desde una terminal, consulta el autoritativo (`dig @ns65.domaincontrol.com`):
+     un `dig` normal cachea las IPs viejas una hora y hace parecer que la migración no funcionó.
   2. **Supabase Auth (prod)** → Site URL y Redirect URLs con `https://ensenameya.com/auth/callback`.
      Sin esto, Google OAuth y el magic link rebotan al dominio viejo.
   3. **Stripe** → re-registrar `POST /api/webhooks/stripe`. ⚠️ **Endpoint nuevo = firma nueva**:
@@ -327,6 +375,11 @@ alumno y el payout el del tutor**. El avance de la implementación está en
   (SendGrid, Mailgun, Resend) que deja enviar y **probar sin dominio verificado**, y el dominio
   propio sigue bloqueado. El acoplamiento vive entero en `sendEmail()` (`src/lib/email.ts`):
   cambiar de proveedor es reescribir esa función.
+- [ ] ⚠️ **Al verificar en Resend: un solo `v=spf1` en la raíz.** La raíz **ya tiene** un SPF, y es
+  el del Microsoft 365 del cliente. Añadir un **segundo** registro `v=spf1` es un `permerror` de SPF
+  que se lleva por delante **todo** el correo del dominio, el suyo incluido — no solo el nuestro.
+  Si Resend pide `MX` o `SPF`, será sobre un subdominio (`send.ensenameya.com`) y eso es seguro; el
+  DKIM (`resend._domainkey`) es un TXT propio y no choca con nada. Ante la duda: subdominio.
 - [ ] **Verificar el dominio `ensenameya.com` en Resend.** Hoy el remitente es
   `onboarding@resend.dev`, que funciona, pero un correo de contacto que no llega desde
   `@ensenameya.com` es exactamente lo que un revisor de dLocal marca. El día que se verifique, se
@@ -505,3 +558,93 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
 aplica el CI: push a `dev` → dev, merge a `main` → prod. Cuántas lleva cada ambiente **no se escribe
 aquí**: se mira en el último run del workflow de migraciones. Y ojo con el orden de siempre — la app
 nueva contra el esquema viejo revienta, así que el merge a `main` lleva su migración dentro.
+
+---
+
+## 7. Paso a producción real (live)
+
+Escrito el 10-sep-2026, con la migración de dominio ya hecha. **Del lado del código no falta
+nada**: ningún riel está acoplado a test ni a sandbox, todo se decide con variables de entorno.
+Lo que queda son credenciales y un trámite.
+
+### 7.1 La asimetría que puede costar dinero
+
+Los tres rieles **no** fallan hacia el mismo lado:
+
+| Riel | Si NO pones la variable de host |
+| :-- | :-- |
+| dLocal — `DLOCALGO_API_BASE` | **sandbox** (`api-sbx.dlocalgo.com`) |
+| PayPal — `PAYPAL_API_URL` | **sandbox** (`api-m.sandbox.paypal.com`) |
+| **Wise — `WISE_API_URL`** | ⚠️ **PRODUCCIÓN** (`api.transferwise.com`) |
+
+O sea: en dLocal y PayPal, meter credenciales de producción sin su host las manda al de pruebas y
+el fallo es silencioso. En **Wise no hay segundo interruptor**: poner `WISE_API_TOKEN` en
+Production ya paga de verdad, y el cron de payouts corre cada hora. **Wise va la última**, y solo
+después de comprobar que la cola de `payouts` de prod está vacía.
+
+⚠️ `DLOCALGO_API_BASE` es **un interruptor con dos efectos**: cambia el host *y* la clave pública
+del tokenizador de SmartFields (`clavePublicaDeSmartFields()`, `lib/dlocalgo.ts`). No hay una
+variable aparte para la segunda, y no debe haberla.
+
+### 7.2 Qué poner, dónde, y de quién depende
+
+Todo en **Vercel → Environment Variables → ámbito Production**, salvo donde se diga.
+
+| # | Variable | Valor | Depende de |
+| :-- | :-- | :-- | :-- |
+| 1 | `STRIPE_API_KEY` | `sk_live_…` | ⚠️ **cliente: activación/KYC** |
+| 1 | `STRIPE_PUBLISHABLE_KEY` | `pk_live_…` | idem — ⚠️ sin ella **no se pinta el formulario** |
+| 1 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` del endpoint creado **en live mode** | idem |
+| 2 | `DLOCALGO_API_KEY` · `DLOCALGO_SECRET_KEY` | credenciales de **producción** | cuenta ya aprobada |
+| 2 | `DLOCALGO_API_BASE` | `https://api.dlocalgo.com` | — |
+| 3 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | app **live** | cliente |
+| 3 | `PAYPAL_API_URL` | `https://api-m.paypal.com` | — |
+| 4 | `WISE_API_TOKEN` | token de producción | ⚠️ leer §7.1 |
+| 5 | `EMAIL_FROM` | `…@ensenameya.com` | verificar dominio en Resend |
+| 6 | `APP_BASE_URL` | `https://ensenameya.com` | — · va en **GitHub → Variables**, no en Vercel |
+
+**Las claves live de Stripe ya existen** (emitidas el 28-jul, visibles en Developers → API keys).
+Stripe las entrega al crear la cuenta; lo que la activación desbloquea es que un cobro live no se
+rechace. Por eso "tener la clave" no es "estar en live".
+
+### 7.3 El webhook de Stripe hay que rehacerlo en live
+
+Los endpoints de test y de live son objetos distintos y **tienen firmas distintas**. En live mode:
+`Developers → Webhooks → Add endpoint` → `https://ensenameya.com/api/webhooks/stripe`, con
+**exactamente** estos cuatro:
+
+```
+checkout.session.completed
+checkout.session.async_payment_succeeded
+checkout.session.async_payment_failed
+checkout.session.expired
+```
+
+`payment_intent.payment_failed` **no va**, y el porqué está en `traducirTipo()`
+(`lib/payments/stripe-provider.ts`): un rechazo de tarjeta deja la Session abierta para reintentar,
+y tratarlo como fallo terminal liberaría el horario de alguien que estaba pagando.
+
+`STRIPE_WEBHOOK_SECRET` es **una sola variable**: no caben la firma de test y la de live a la vez.
+El día del cambio, el endpoint de test empieza a devolver 400 — bórralo cuando el de live esté
+probado, o Stripe lo desactiva solo y deja un aviso confuso en el historial.
+
+### 7.4 Orden, y por qué
+
+1. Variables (1→5 según lleguen; **Wise la última**).
+2. **Redeploy.** Vercel inyecta las env vars al construir: sin esto no entra ninguna (§1.3).
+3. Prueba de punta a punta contra `ensenameya.com`. ⚠️ **En live no existe la 4242**: hay que
+   pasar una tarjeta real por poco importe y reembolsarla. El reembolso ya es código (RN-37,
+   `lib/policy.ts`), así que la misma prueba cubre los dos caminos.
+4. Borrar el endpoint de webhook de test.
+5. **Quitar el bloqueo de pre-lanzamiento** — `redirects` de `vercel.json` y `src/app/robots.ts`,
+   en un solo commit. Hasta que eso pase, el sitio no es alcanzable aunque las claves sean live:
+   `/` redirige a `/contacto` y `robots.txt` dice `Disallow: /`.
+
+### 7.5 Lo que NO hay que hacer
+
+- **No tocar `payment_routing_rules` con un `UPDATE`.** Es una migración (regla 5 de `CLAUDE.md`).
+  Con claves live, el ruteo que ya está declarado vale tal cual.
+- **No tocar el DNS del correo** al verificar Resend: [§3, paso 0 de la migración].
+- **No prefijar `STRIPE_PUBLISHABLE_KEY` con `NEXT_PUBLIC_`.** Se lee en servidor
+  (`lib/stripe.ts`) y viaja al navegador por `/api/pagos/metodos`. Exponerla como pública no
+  haría daño, pero cambiaría el nombre que el código busca y el formulario dejaría de pintarse.
