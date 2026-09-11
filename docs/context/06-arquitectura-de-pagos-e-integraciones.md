@@ -312,21 +312,55 @@ send({ to, templateKey, vars, locale })   // locale: 'es' por defecto (S-38)
 
 ---
 
-## 6.12 Referidos (Referral Factory — integración frontend)
+## 6.12 Referidos (Referral Factory — **backend por API**, no integración frontend)
 
-- **Sin lógica interna** (RN-21, D-03): el programa se configura en Referral Factory; la plataforma
-  solo **pinta el enlace/embed** (`src/lib/referral.ts`).
-- 🔴 **La atribución NO existe.** El mecanismo escrito es una cookie: el proxy guarda el `?ref=` en
-  `ey-ref` (`src/lib/supabase/middleware.ts`), viaja al metadata del alta y `handle_new_user` lo
-  aterriza en `profiles.referral_code`. **Y ese `?ref=` no llega nunca**: Referral Factory no manda
-  al referido a la app con un código, lo lleva a una página de oferta alojada por ella. Además
-  `profiles.referral_code` **no lo lee nadie**: se escribe, se anula en la baja de cuenta y no entra
-  en ningún cálculo.
-- **`REFERRAL_FACTORY_API_KEY` no se lee en ninguna línea de código.** El interruptor real es la
-  **URL** (`NEXT_PUBLIC_REFERRAL_URL` / `_EMBED_URL`), no una clave.
-- ⚠️ El subdominio `embed.*` se puede enmarcar; la URL pública **no** (`frame-ancestors`) y sale en
-  blanco.
-- **Reglas del programa** (monto, conversión válida, límites): externas, **DP-04**.
+> ⚠️ **Reescrito el 11-sep-2026 («Referidos v2»).** Lo que decía este apartado —«la plataforma solo
+> pinta el enlace/embed», «la atribución NO existe», «`REFERRAL_FACTORY_API_KEY` no se lee en ninguna
+> línea de código», «el interruptor real es la URL»— **era cierto hasta el 10-sep y hoy es falso en
+> los cuatro puntos**. Se deja dicho así de claro porque esas frases llegaron a repetirse en media
+> docena de documentos.
+
+- **Sin lógica interna** (RN-21, D-03): **esto no ha cambiado.** Las reglas, los montos y el pago de
+  la recompensa siguen viviendo enteros en Referral Factory. Lo que hacemos nosotros es dar de alta,
+  atribuir y avisar de la conversión.
+- **Ya no es una integración de frontend.** «Invita y gana» es la pantalla **nativa** `/referidos`,
+  la misma para alumno y tutor, **pintada entera desde nuestra base**: cero llamadas a RF al
+  renderizar. No es elegancia — RF tiene picos de **más de 25 s** (3 de 40 llamadas, medido el
+  10-sep), así que toda llamada suya lleva timeout y vive **fuera del camino crítico** del registro y
+  del pago. RF pasa a ser **solo backend por API** (`src/lib/referral-factory.ts`, `server-only`).
+- ✅ **La atribución existe.** Y el nudo se deshizo emitiendo **nosotros** el enlace:
+  1. la primera visita a `/referidos` da de alta al usuario como referidor en RF (`POST users`) en
+     cada campaña visible y guarda `rf_user_id`, `code` y `url` en `referral_memberships`;
+  2. el usuario comparte `https://<origen>/?ref=<code>` — **nuestro dominio**, no la landing de RF,
+     que era justo lo que impedía que el código volviera;
+  3. el proxy lo guarda en la cookie `ey-ref` (`src/lib/supabase/middleware.ts`, 30 días) y el alta
+     lo aterriza en `profiles.referral_code` (`handle_new_user`, y `callback-status.tsx` para
+     Google). **Estos dos tramos no se tocaron**: eran código correcto que nunca recibía nada;
+  4. el cron `/api/cron/referrals-sync` detecta la conversión, crea al referido en RF colgando del
+     referidor (`POST users` con `referrer_code`), lo califica (`PUT users/{id}`) y solo entonces
+     escribe `profiles.referral_converted_at` — el ancla de idempotencia.
+  ⚠️ **La conversión la detecta ese cron o no la detecta nadie**: RF **no manda webhooks** (sus
+  endpoints `webhooks` y `events` responden 404).
+- **Esquema**: `20260911120000_referidos_nativos.sql` — `referral_campaigns`,
+  `referral_memberships`, `profiles.referral_converted_at`, `profiles.referral_rf_user_id`, y las RPC
+  `security definer` `referral_invitees()` (pantalla) y `referral_conversions_pending(int)` (cron).
+- **Las campañas se gestionan en `/admin/referidos`, no por variable de entorno.** Hoy son **tres**
+  (verificadas contra la API el 11-sep): **50785** «Enséñame Ya» → alumnos, visible; **50784**
+  «Enséñame Ya - Tutor» → tutores, visible; y **50297** «Campaign for Enséñame Ya», la vieja, que
+  entra en el seed **no visible**. Qué campaña convierte con qué lo decide su `audience`: alumnos =
+  primer pago, tutores = primera sesión completada.
+- 🔴 **El interruptor es la CREDENCIAL, no la URL.** `REFERRAL_FACTORY_API_KEY`, **server-only y
+  jamás `NEXT_PUBLIC_`**. Sin ella `/referidos` carga con «El programa de invitaciones todavía no
+  está activo.» y el cron responde `sin-credencial` **con 200** — con lo que el workflow de GitHub
+  sale **en verde sin haber hecho nada**: fallo mudo, del tipo que describe la regla de oro 11.
+  Las cuatro `NEXT_PUBLIC_REFERRAL_URL` / `_URL_TUTOR` / `_EMBED_URL` / `_EMBED_URL_TUTOR` **se
+  retiraron**: ya no las lee ninguna línea de `src/`.
+- ⚠️ Lo del iframe queda como nota histórica y sigue siendo cierto de RF: el subdominio `embed.*` se
+  puede enmarcar y la URL pública **no** (`frame-ancestors`), sale en blanco. Ya no afecta a nadie
+  porque no enmarcamos nada.
+- **Reglas del programa** (monto, conversión válida, límites): externas, **DP-04**. ⚠️ Los
+  `reward_text` del seed son **ejemplos sin aprobar** y hoy se le prometen al usuario tal cual; se
+  fijan desde `/admin/referidos`.
 
 ---
 
@@ -357,7 +391,9 @@ send({ to, templateKey, vars, locale })   // locale: 'es' por defecto (S-38)
   OFF, un job con `service_role` come `permission denied` **en tiempo de ejecución** hasta que su
   migración declare `grant … to service_role`. Tabla que toque un job = grant explícito, en la
   misma migración.
-- **Los tres jobs HTTP exigen `CRON_SECRET` y fallan cerrado (503) sin ella.**
+- **Los jobs HTTP exigen `CRON_SECRET` y fallan cerrado (503) sin ella.** Son **siete** al 11-sep
+  (seis en GitHub Actions y uno en Vercel Cron), no tres: la lista al día, con su reloj y su
+  cadencia, está en `docs/ENTORNOS.md` §4.
 
 ---
 
@@ -377,7 +413,7 @@ cola se queda `pending`. Poner la variable es el despliegue.
 | `DAILY_API_KEY` | servidor | Salas y tokens |
 | `RESEND_API_KEY` (+ `EMAIL_FROM`) | servidor | Correo transaccional |
 | `CRON_SECRET` | servidor | Autoriza los endpoints de cron |
-| `NEXT_PUBLIC_REFERRAL_URL` · `NEXT_PUBLIC_REFERRAL_EMBED_URL` (+ `_TUTOR`) | cliente | Enlace y embed de referidos |
+| `REFERRAL_FACTORY_API_KEY` | **servidor** | Todo «Invita y gana» (§6.12). ⚠️ Sustituye a las cuatro `NEXT_PUBLIC_REFERRAL_*`, retiradas el 11-sep: el interruptor dejó de ser una URL pública y pasó a ser una credencial |
 | `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | ambos | Monitoreo |
 | `NEXT_PUBLIC_SITE_URL` | ambos | URL canónica del sitio |
 
@@ -398,12 +434,14 @@ cola se queda `pending`. Poner la variable es el despliegue.
 | :-- | :-- | :-- |
 | S-28 | Checkout **alojado** por el proveedor. | 🔴 **Derogado** por el punto 2 del dictado: el formulario vive dentro del sitio. Lo que sobrevive es la consecuencia —no guardamos datos de tarjeta— porque los campos siguen en iframes del proveedor. |
 | S-45 | Ventana de sala ≈ 10 min antes / 10 min después. | **Confirmado en código** (`session_access_window`). |
-| S-46 | La integración de referidos consume el artefacto de Referral Factory; la conversión se gestiona fuera. | Vigente, pero **la atribución no existe** (§6.12). |
+| S-46 | La integración de referidos consume el artefacto de Referral Factory; la conversión se gestiona fuera. | 🔄 **Reformulado el 11-sep** (§6.12): ya no consumimos un artefacto de frontend, usamos su **API**; el enlace lo emitimos nosotros y **la conversión la detecta y la manda nuestro cron**. Lo que sigue gestionándose fuera —y es lo que RN-21 protege— es la **recompensa**: cuánto, cuándo y quién la paga. |
 | S-47 | Métricas operativas mínimas de pago/payout/webhook. | **Sin construir.** |
 
 **Decisiones pendientes:** **DP-01 resuelta** (dLocal + Stripe cobran; PayPal, Wise, dLocal y Stripe
 pagan), **DP-02 resuelta** (retención de 7 días, lote semanal), **DP-03 resuelta** (RN-37),
-**DP-05 resuelta** (Resend). Siguen abiertas **DP-04** (reglas de referidos), **DP-06**
+**DP-05 resuelta** (Resend). Siguen abiertas **DP-04** (reglas de referidos — ⚠️ desde el 11-sep ya
+no bloquea el mecanismo, solo el **importe**: la atribución funciona y los textos de recompensa se
+editan en `/admin/referidos` sin tocar código), **DP-06**
 (agregación de payout, hoy por lote y por `funding_provider`), **DP-07** (FX/settlement) y **DP-08**
 (no-show). Estado consolidado en Doc 9 §9.2. Las abiertas del propio dictado son **D-3** (medios
 locales de dLocal) y **D-6** (tarjeta guardada).

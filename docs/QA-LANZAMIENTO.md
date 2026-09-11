@@ -249,6 +249,8 @@ endpoint público que borra datos de usuarios, manda correos, paga o marca reser
 | `/api/cron/notifications-send` | **503** | **401** |
 | `/api/cron/refunds-process` | **503** | **401** |
 | `/api/cron/payouts-process` | **503** | **401** |
+| `/api/cron/alertas-resumen` | **503** | **401** |
+| `/api/cron/referrals-sync` | **503** | **401** |
 | `/api/cuenta/eliminar/barrido` | **503** | **401** |
 | `/api/webhooks/stripe` | **503** | **400** (firma inválida o ausente) |
 | `/api/webhooks/dlocalgo` | **503** | **400** (firma inválida o ausente) |
@@ -421,7 +423,6 @@ RN-37 ya es código. Las dos se reconcilian **con el cliente**, no en el repo.
 | :-- | :-- |
 | `NEXT_PUBLIC_SUPABASE_URL` / `ANON_KEY` | la app no arranca |
 | `DAILY_API_KEY` | sala de video **simulada** |
-| `NEXT_PUBLIC_REFERRAL_URL` | el bloque de referidos no se pinta |
 | `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` | sin monitoreo de errores |
 | `STRIPE_API_KEY` | el checkout ruteado a Stripe no cae al simulado (regalaría clases): el riel sale de la lista de candidatos |
 | `STRIPE_PUBLISHABLE_KEY` | **no se pinta el formulario de pago** aunque la secreta esté puesta: `stripe-embed.tsx` la necesita para `loadStripe()` |
@@ -429,10 +430,9 @@ RN-37 ya es código. Las dos se reconcilian **con el cliente**, no en el repo.
 | `DLOCALGO_API_KEY` · `DLOCALGO_SECRET_KEY` | **no hay checkout transparente**: `/api/pagos/confirmar-dlocal` responde 503 y el lote de payouts se para entero. Es el estado de producción hoy |
 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | el riel de payout de PayPal desaparece de los candidatos, sin error |
 | `WISE_API_TOKEN` | ídem con Wise |
-| `CRON_SECRET` | los **cinco** endpoints programados responden **503** y no corren (§2.3, §4.3) |
+| `CRON_SECRET` | los **siete** endpoints programados responden **503** y no corren (§2.3, §4.3) — eran cinco hasta el 11-sep; se sumaron `alertas-resumen` y `referrals-sync` |
 | `RESEND_API_KEY` | el job de correo no toca la cola (los avisos se quedan `pending`) y el formulario de contacto guarda pero no entrega → **DL-01 sin cumplir** |
-| `REFERRAL_FACTORY_API_KEY` | ⚠️ **nada**. Esta fila decía «sin atribución de referidos» y era falso: **ninguna línea de código la lee** (verificado el 1-sep, `grep -rn "REFERRAL_FACTORY_API_KEY" src/` = 0). Ponerla o quitarla no cambia el comportamiento de la app — ver §4.5 |
-| `NEXT_PUBLIC_REFERRAL_EMBED_URL` | «Invita y gana» cae al enlace externo en pestaña nueva en vez del iframe del panel (fallo previsto, no roto) |
+| `REFERRAL_FACTORY_API_KEY` | 🔴 **«Invita y gana» entero, apagado.** ⚠️ Esta fila decía «nada, no la lee nadie» y **caducó el 11-sep**: era cierto el 1-sep y dejó de serlo con Referidos v2. Hoy la leen `src/lib/referral-factory.ts`, `/referidos`, `/api/cron/referrals-sync` y `/admin/referidos`. Sin ella la pantalla carga con «El programa de invitaciones todavía no está activo.», nadie recibe enlace y el cron responde `sin-credencial` **con 200** → el workflow **sale en verde sin haber hecho nada** (regla de oro 11). **Está borrada de Vercel desde el 10-sep: reponerla es el punto de gestión nº 1** (`docs/ENTORNOS.md` §3 C.1) |
 
 Detalle en `docs/ENTORNOS.md`. **`service_role` jamás en `NEXT_PUBLIC_*`** (regla de oro 3).
 
@@ -442,15 +442,22 @@ Detalle en `docs/ENTORNOS.md`. **`service_role` jamás en `NEXT_PUBLIC_*`** (reg
       variable el endpoint responde 503 y con ella 401, y un `curl` sin cabecera a
       `https://ensenameya.com/api/cron/notifications-send` devuelve **401** (reverificado el 10-sep
       en los cuatro endpoints de cron; contra el host viejo hoy saldría un 308).
-- [ ] `NEXT_PUBLIC_REFERRAL_URL` en Vercel (la URL de campaña es
-      `https://vercel.referral-factory.com/cXr65Wou/signup`) — es la que decide si el bloque se pinta.
-      `NEXT_PUBLIC_REFERRAL_EMBED_URL` (`https://embed.referral-factory.com/cXr65Wou`) es opcional y
-      solo cambia si abre en pestaña nueva o dentro del panel.
-      ⚠️ `REFERRAL_FACTORY_API_KEY` **sale de este checklist**: no la lee nadie (§4.5). Subirla a
-      Vercel no habilita nada; da la falsa impresión de que la atribución quedaría encendida.
+- [ ] 🔴 **`REFERRAL_FACTORY_API_KEY` en Vercel, en los tres ámbitos** (Development, Preview y
+      Production). ⚠️ **Este punto está al revés de como se escribió el 30-ago.** Entonces decía que
+      la clave «sale de este checklist» porque no la leía nadie, y que lo que encendía el bloque era
+      `NEXT_PUBLIC_REFERRAL_URL`. Con Referidos v2 (11-sep) es exactamente lo contrario: las cuatro
+      `NEXT_PUBLIC_REFERRAL_*` **se retiran** (ya no las lee ninguna línea de `src/`) y la credencial
+      es el único interruptor. Está **borrada de Vercel desde el 10-sep**.
+      **Los cinco puntos de gestión de Referidos v2 viven en `docs/ENTORNOS.md` §3 C.1**: reponer la
+      clave, retirar las cuatro variables públicas, apagar la campaña **50297** en Referral Factory,
+      fijar los textos de recompensa reales desde `/admin/referidos` (DP-32.1 — los del seed son
+      **ejemplos sin aprobar** y hoy se le prometen al usuario tal cual) y medir la cadencia real del
+      workflow en las primeras 48 h.
 
-**Y en GitHub**, que es donde viven los relojes del correo y de los reembolsos
-(`.github/workflows/notifications-cron.yml` y `refunds-cron.yml`, que comparten las dos):
+**Y en GitHub**, que es donde viven **seis** relojes desde el 11-sep —correo, reembolsos, payouts,
+barrido de bajas, resumen de incidencias y **conversiones de referidos**
+(`notifications-`, `refunds-`, `payouts-`, `barrido-bajas-`, `alertas-` y `referrals-cron.yml`)—,
+todos compartiendo las dos:
 
 - [x] variable `APP_BASE_URL` = **`https://ensenameya.com`** — puesta el 30-ago apuntando a
       `ensenameya.vercel.app` y actualizada al dominio propio el **10-sep**
@@ -508,9 +515,10 @@ aparecer en esa lista.
 cayendo en **producción** dos días después de que la migración existiera en `dev`, hasta 12.778
 corridas rojas. Un `pg_cron` roto se arregla cuando la migración **aterriza**, no cuando se escribe.
 
-**Cinco son HTTP, y su reloj vive fuera de la base de datos.** Postgres no puede llamar a APIs
+**Siete son HTTP, y su reloj vive fuera de la base de datos.** Postgres no puede llamar a APIs
 externas aquí (no está `pg_net`, no hay Vault y el repo es público, así que no tiene dónde guardar una
-clave). Los cinco se autentican con `Authorization: Bearer $CRON_SECRET` (§2.3).
+clave). Los siete se autentican con `Authorization: Bearer $CRON_SECRET` (§2.3). **Eran cinco hasta
+el 11-sep**: se sumaron `alertas-resumen` y `referrals-sync`.
 
 | Job | Reloj | Cadencia pedida | Qué pasa si no corre |
 | :-- | :-- | :-- | :-- |
@@ -518,12 +526,22 @@ clave). Los cinco se autentican con `Authorization: Bearer $CRON_SECRET` (§2.3)
 | `/api/cron/notifications-send` | GitHub Actions (`notifications-cron.yml`) | `*/5 * * * *` | los avisos se quedan en `pending` |
 | `/api/cron/refunds-process` | GitHub Actions (`refunds-cron.yml`) | `7,22,37,52 * * * *` | **el dinero no vuelve**: la base de datos y el correo dicen "reembolsado" y el alumno no recibe nada (X-01) |
 | **`/api/cron/payouts-process`** | GitHub Actions (`payouts-cron.yml`) | `13 * * * *` | **ningún tutor cobra**: las órdenes se quedan `scheduled` y nadie las empuja al proveedor |
+| `/api/cron/alertas-resumen` | GitHub Actions (`alertas-cron.yml`) | `41 * * * *` | el resumen de incidencias no se encola |
+| **`/api/cron/referrals-sync`** | GitHub Actions (`referrals-cron.yml`) | `0 * * * *` | ninguna conversión llega a Referral Factory: `profiles.referral_converted_at` se queda a null para siempre y el referidor ve «1 invitado · 0 convertidos» eternamente. ⚠️ **Nadie más lo detecta**: RF no manda webhooks (sus endpoints `webhooks` y `events` son 404), así que o lo ve este cron o no lo ve nadie |
 | `/api/cuenta/eliminar/barrido` | GitHub Actions (`barrido-bajas-cron.yml`) | `37 5 * * *` | los ficheros de una cuenta dada de baja **siguen en Storage** aunque la fila diga «anonimizada» |
 
 ⚠️ **El barrido de bajas NO cuelga de `/api/cron/`.** Buscar los jobs por ese prefijo lo deja fuera, y
 es el que borra datos personales.
 
-Los cuatro de Actions no están en Vercel Cron porque **el plan Hobby limita los crons a uno al día** y
+🔴 **Y `referrals-sync` tiene un silencio propio que ningún otro tiene.** Sin
+`REFERRAL_FACTORY_API_KEY` responde `{"status":"sin-credencial"}` **con 200**, y el workflow da esa
+respuesta por buena: **sale en verde sin haber hecho nada**. Es deliberado —no hay nada roto, hay algo
+sin configurar, y el día que se ponga la variable sale de golpe todo lo acumulado—, pero es
+literalmente el patrón de la regla de oro 11: el fallo no se lo dice a nadie. **La clave está borrada
+de Vercel desde el 10-sep** (§4.2 y `docs/ENTORNOS.md` §3 C.1), o sea que hoy ese verde no significa
+nada.
+
+Los seis de Actions no están en Vercel Cron porque **el plan Hobby limita los crons a uno al día** y
 ese hueco lo gasta la purga. Aunque quedara sitio, la cadencia diaria no sirve para ninguno: un aviso
 de "tienes 24 h para aceptar esta reserva" que llega mañana no vale, un reembolso pedido a las 04:05
 esperaría un día entero cuando el §13 de los Términos promete devolver "al método de pago original", y
@@ -619,6 +637,28 @@ payout) · C-05 (no-show) · C-06 (checkout invitado) · C-09 (%s de tiers) · C
 Ninguna bloquea el despliegue: todas tienen default operable (ver el tracker de
 `docs/PLAN-DESARROLLO.md`).
 
+> 🟢 **SUPERADO EL 11-SEP-2026 — «Referidos v2».** Todo lo que sigue en este apartado hasta el
+> «Veredicto» es la **verificación del 1-sep** y se conserva como historia: era verdad entonces y
+> explica por qué se rehízo. **Ya no describe el estado de hoy.** La atribución **existe**, y el
+> recorrido completo es: `/referidos` da de alta al usuario como referidor en Referral Factory
+> (`POST users`) y guarda su código en `referral_memberships` → el usuario comparte
+> `https://<origen>/?ref=<code>` —**el enlace lo emitimos nosotros**, que es justo lo que RF no hacía
+> y por lo que el `?ref=` no llegaba nunca— → el proxy lo guarda en la cookie `ey-ref` (30 días) →
+> el alta lo aterriza en `profiles.referral_code` → el cron `/api/cron/referrals-sync` detecta la
+> conversión y la manda a RF. Esquema en `20260911120000_referidos_nativos.sql`
+> (`referral_campaigns`, `referral_memberships`, `profiles.referral_converted_at` y
+> `profiles.referral_rf_user_id`, más las RPC `referral_invitees()` y
+> `referral_conversions_pending(int)`).
+>
+> Y la fila de la tabla de abajo que decía «**La lee para algo** — nadie» también caducó: la leen la
+> RPC `referral_invitees()` que pinta la pantalla y `referral_conversions_pending()` que alimenta el
+> cron. Lo único que **no** cambió es RN-21: las reglas, los montos y el pago de la recompensa siguen
+> viviendo enteros en RF.
+>
+> ⚠️ Pero encendido **no es lo mismo que desplegado**: `REFERRAL_FACTORY_API_KEY` está borrada de
+> Vercel desde el 10-sep y sin ella todo esto está apagado sin que nada se ponga rojo (§4.2 y
+> `docs/ENTORNOS.md` §3 C.1).
+
 **C-10 ya no es solo una decisión pendiente: tiene un problema técnico encima.** La campaña de
 Referral Factory **no** manda al referido a nuestra app con un código. Lo lleva a una página de
 oferta **alojada por RF**, donde deja nombre y email. RF **no ofrece un parámetro de código de
@@ -653,13 +693,30 @@ solo hay **5 usuarios**, los dos con `referrer_id` metidos a mano por su API (`s
 ninguno `qualified`; los dos reales (`veronica@faimlab.com`, `faim3110@gmail.com`) entraron por el
 embed como **referidores**, sin referidor propio.
 
-→ **Veredicto: hoy no hay atribución de referidos de ninguna clase.** No está «hecha por email» ni
-«hecha por cookie a falta de un ajuste»: está **entera por hacer**. El AC de `EY-79` hay que
-rehacerlo, no revisarlo. Y `EY-148` (RF-03) sigue pendiente de la comprobación de §EP-13 del backlog:
-si la integración nativa RF↔Stripe ya califica sola, el ticket se cierra sin código.
+→ **Veredicto del 1-sep: no había atribución de referidos de ninguna clase.** No estaba «hecha por
+email» ni «hecha por cookie a falta de un ajuste»: estaba **entera por hacer**. El AC de `EY-79`
+había que rehacerlo, no revisarlo. ✅ **Y se rehízo el 11-sep** (ver el aviso del principio del
+apartado): la atribución existe, no depende de que RF nos devuelva a nadie —el enlace lo emitimos
+nosotros— y `EY-148` (RF-03) deja de depender de la integración nativa RF↔Stripe, porque quien marca
+la conversión es nuestro cron.
 
 Aparte: los términos que RF le enseña al referido son **su plantilla sin rellenar**, con
-corchetes tipo "[Insert link to Privacy Policy here]". Redactarlos antes de abrir.
+corchetes tipo "[Insert link to Privacy Policy here]". Sigue vigente para quien aterrice en la
+landing de RF, aunque la pantalla nativa ya no mande a nadie ahí.
+
+**Lo que se midió el 11-sep contra la API real**, con la clave de `.env.local`:
+
+- **Tres campañas `launched`**, no una: **50785** «Enséñame Ya» (`es`, código `ctAI3ZWp`) →
+  audiencia alumnos, visible; **50784** «Enséñame Ya - Tutor» (`en`, código `cKAf69gl`) → audiencia
+  tutores, visible; y **50297** «Campaign for Enséñame Ya» (`es`, código `cXr65Wou`,
+  `vercel.referral-factory.com/cXr65Wou`), la vieja, que entra en el seed **no visible**. Que «solo
+  existía la 50297» y que «no existía la campaña de tutores» dejó de ser cierto.
+- ✅ **S-32.2 queda RESUELTO, y era FALSO.** El supuesto decía que `POST users` con un correo que ya
+  existe en esa campaña devolvería **422**, y por eso el cron traía un plan B (buscar por correo o
+  marcar y seguir). Medido: **no da 422** — devuelve **el MISMO usuario**, con su mismo `id` y su
+  mismo `code`. O sea que `createUser` es **idempotente por (campaña, correo)**. Y el mismo correo en
+  **otra** campaña sí crea un usuario nuevo, con código distinto, que es lo que hace falta para que
+  alguien sea referidor en los dos programas a la vez.
 
 ### 4.6 ⚠️ Vaciar la cola vieja de correo — ANTES de dar reloj a Actions
 
@@ -880,6 +937,12 @@ pago.
 huella de referidos en el esquema es la columna `profiles.referral_code`, que —§4.5— **nadie lee** y
 que además está vacía en las 39 filas de dev.
 
+> 🟡 **Al día 11-sep:** las dos frases de arriba eran ciertas el 1-sep y hoy no lo son. Sí hay tablas
+> `referr*` (`referral_campaigns` y `referral_memberships`, `20260911120000`) y `referral_code` sí lo
+> lee alguien. **Pero el veredicto de EY-209 no cambia**: siguen sin existir tabla de recompensas,
+> `split_pct` de referido ni sitio en `payouts` para pagarle a un referidor — la recompensa la
+> contabiliza y la paga **Referral Factory** (RN-21), no nosotros.
+
 → **Veredicto: EY-209 se cierra desmentido, sin código.** No es «los splits están mal»: es que un
 split de referidos nunca se construyó. El único `split_pct` del sistema es el de `tutor_tiers`
 (RN-06, US-1103), que reparte alumno↔plataforma↔tutor y no tiene nada que ver con el programa de
@@ -1000,7 +1063,14 @@ Medido en la pasada del 30-ago: a dos alumnos se les avisó el 17 y el 27-ago, y
 
 ---
 
-*Se actualiza en cada pasada de QA. Última edición: **2026-09-09** — §2 reescrita sobre el dictado de
+*Se actualiza en cada pasada de QA. Última edición: **2026-09-11** — Referidos v2: §4.5 marcada como
+superada (la atribución **existe** desde hoy y se pinta desde nuestra base; tres campañas en RF, no
+una; **S-32.2 resuelto y desmentido** — `POST users` con correo repetido devuelve el mismo usuario,
+no un 422), §4.2 con `REFERRAL_FACTORY_API_KEY` ascendida de «no la lee nadie» a interruptor único
+—y con el aviso de que su ausencia deja el cron en **200 verde sin hacer nada**—, las cuatro
+`NEXT_PUBLIC_REFERRAL_*` fuera, el recuento de endpoints programados corregido de cinco a **siete**,
+y §4.8 acotada (hay tablas `referr*`, pero el veredicto de EY-209 sigue en pie). Edición previa el
+**2026-09-09** — §2 reescrita sobre el dictado de
 pagos (cómo se rutea el cobro y el payout, fail-closed de los cinco endpoints con secreto y de los dos
 webhooks), **§2.5 nueva con las doce filas de cobro y payout que hay que ejercitar y que hoy están
 vacías** —incluido el riel rechazado, que no baja al siguiente candidato—, §1 con la declaración de que

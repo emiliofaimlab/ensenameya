@@ -30,7 +30,7 @@ npm run dev        # → http://localhost:3000 (contra dev cloud)
 | `npm run db:push` | Aplica migraciones al proyecto **dev** enlazado |
 | `npm run db:types` | Regenera `src/lib/database.types.ts` (aborta sin tocar el fichero si falla) |
 | `npm run lint` · `npm run typecheck` | Lint y typecheck |
-| `npm run check:*` | **Diez comprobaciones ejecutables** sin red ni credenciales: `email`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel` |
+| `npm run check:*` | **Once comprobaciones ejecutables** sin red ni credenciales: `email`, `correos`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel` |
 
 Enlace del CLI a dev: `npx supabase link --project-ref lbtpnszjjsxbeileqsja`.
 Tras tocar el esquema: `npm run db:push` **y** `npm run db:types`. A prod llega por **CI**
@@ -141,9 +141,9 @@ queda `pending` (nunca `failed`). **Poner la variable es el despliegue.**
 | **Wise** (`lib/payments/wise-provider.ts`) | Paga. Cuatro pasos —presupuesto, alta del destinatario, transferencia y fondeo— con idempotencia por UUIDv5 de (payout, intento) y mapeo en `lib/payments/wise-mapeo.ts` (`npm run check:wise`). Alcanza los países de `payout_country_rules`, hoy **55**, por formato de cuenta (iban, swift, sort_code, aba…). **No paga a Venezuela**; Brasil está apagado a propósito (sus códigos de banco no encajan). ⚠️ El fondeo falla si la cuenta no tiene saldo — eso **no es un límite del diseño**: operaciones fondea las cuentas antes de cada ciclo, y el adaptador aguanta (`incoming_payment_waiting` + reintento) | `WISE_API_TOKEN`. `WISE_PRIVATE_KEY` es **opcional**: esta cuenta no está sujeta a SCA, y si algún día lo estuviera `wiseFetch` lo dice por su nombre en vez de morir con un 403 mudo |
 | **Correo** (`lib/email.ts` → **Resend**) | Plantillas y job listos; sin clave la cola ni se toca | `RESEND_API_KEY` |
 | **Daily** (`lib/daily.ts`) | Grabación contratada y **obligatoria** (RN-42 reformulada el 2-sep: se graba siempre y se avisa; por eso la casilla de la sala dice "Entiendo", no "Acepto"). ⚠️ **`enable_recording:"cloud"` solo enciende el BOTÓN, no graba**: quien arranca es `start_cloud_recording` en el token (`mintToken`); Daily no tiene propiedad de sala para esto. El nombre de sala se **lee** de `sessions.daily_room_name` — derivarlo otra vez es lo que hacía fallar a US-1802 en silencio. No hay tabla de grabaciones a propósito: se consultan a Daily en el momento | `DAILY_API_KEY` |
-| **Referral Factory** (`lib/referral.ts`) | ⚠️ Campaña viva (**50297**) pero **sin atribución de ninguna clase**. La app solo pinta el enlace/embed; quién trajo a quién se queda entero en RF. La cookie `ey-ref` existe y funciona, pero espera un `?ref=` que RF **no manda**: su página de oferta no redirige de vuelta. Atribuir referidos está **entero por hacer** | `NEXT_PUBLIC_REFERRAL_URL` · `NEXT_PUBLIC_REFERRAL_EMBED_URL` — el interruptor es la **URL**, no la clave |
+| **Referral Factory** (`lib/referral-factory.ts`) | **Solo backend por API desde el 11-sep.** `/referidos` es una pantalla **nativa**, igual para alumno y tutor, que se pinta **entera desde nuestra base**: cero llamadas a RF al renderizar, y no por elegancia —RF tiene picos de más de 25 s—. **Y la atribución YA EXISTE**, que era el agujero de julio: `/referidos` da de alta al usuario como referidor (`POST users`) y guarda su código en `referral_memberships` → el usuario comparte `https://<origen>/?ref=<code>` —el enlace lo emitimos NOSOTROS, no RF— → el proxy lo guarda en la cookie `ey-ref` (30 días) → el alta lo aterriza en `profiles.referral_code` → el cron `/api/cron/referrals-sync` detecta la conversión y la manda a RF. **Tres campañas**: **50785** alumnos y **50784** tutores (visibles) y la vieja **50297** (`visible=false`). Se gestionan en **`/admin/referidos`**, ya no por variable de entorno | `REFERRAL_FACTORY_API_KEY` — **server-only, jamás `NEXT_PUBLIC_`**. Sin ella `/referidos` carga con «El programa de invitaciones todavía no está activo.» y el cron responde `sin-credencial` **con 200**. ⚠️ Ese 200 hace que el workflow de GitHub **salga en verde sin haber hecho nada**: fallo mudo de los de la regla de oro 11, y hay que saberlo. Las cuatro `NEXT_PUBLIC_REFERRAL_*` se retiraron: ya no las lee ninguna línea de `src/` |
 
-## Los jobs — cinco endpoints y tres sitios
+## Los jobs — siete endpoints y tres sitios
 
 Todos exigen `CRON_SECRET` y fallan cerrado (503) sin ella.
 
@@ -153,20 +153,31 @@ Todos exigen `CRON_SECRET` y fallan cerrado (503) sin ella.
 | `/api/cron/notifications-send` | GitHub Actions | `*/5 * * * *` |
 | `/api/cron/refunds-process` | GitHub Actions | `7,22,37,52 * * * *` |
 | `/api/cron/payouts-process` | GitHub Actions | `13 * * * *` — **esto es dinero** |
-| `/api/cuenta/eliminar/barrido` | GitHub Actions | `37 5 * * *` — ⚠️ **no cuelga de `/api/cron/`**, al revés que sus tres hermanas |
+| `/api/cron/alertas-resumen` | GitHub Actions | `41 * * * *` |
+| `/api/cron/referrals-sync` | GitHub Actions | `0 * * * *` — ⚠️ sin `REFERRAL_FACTORY_API_KEY` responde `sin-credencial` **con 200** y el workflow sale en **verde sin haber hecho nada** |
+| `/api/cuenta/eliminar/barrido` | GitHub Actions | `37 5 * * *` — ⚠️ **no cuelga de `/api/cron/`**, al revés que sus cinco hermanas |
 
 ⚠️ **La cadencia de GitHub es una ficción.** Medido sobre corridas reales: entrega **una cada
 2-6 horas**, no cada 5 minutos. Sigue siendo mejor que el único cron diario que permite Vercel
 Hobby —que es el motivo de que estén ahí—, pero no se puede planificar con "5 minutos".
 
-**Y en la propia BD hay NUEVE jobs de `pg_cron`** que `grep` en el repo sí encuentra, pero solo
+**Y en la propia BD hay TRECE jobs de `pg_cron`** que `grep` en el repo sí encuentra, pero solo
 si lo buscas: `close-expired-sessions`, `expire-stale-bookings`, `process-notifications`,
 `process-payouts`, `run-payout-batch`, `purge-expired-messages`, `purge-contact-messages`,
-`purge-tutor-views`, `complete-pending-account-deletions`. Antes de dar uno por inexistente:
+`purge-tutor-views`, `complete-pending-account-deletions`, y los cuatro del Doc 33
+(`20260911210000`): `avisar-reservas-por-expirar`, `avisar-clases-de-manana`,
+`avisar-clases-que-empiezan` y `caducar-notificaciones`. Antes de dar uno por inexistente:
 `grep -rn "cron.schedule" supabase/migrations/`.
 
 ⚠️ `process_notifications()` **ya solo informa**; antes marcaba toda la cola como `sent` sin
 enviar nada. El envío real es el job HTTP.
+
+⚠️ **Los recordatorios con hora dentro ENCOLAN por `pg_cron` pero los ENVÍA el job HTTP**, y ahí
+está el límite real: «tu clase empieza en unos minutos» encolado a la hora y entregado tres horas
+después es peor que no mandarlo. Por eso `caducar_notificaciones()` marca `failed` lo que llegó
+tarde (`session_starting` a los 30 min, `booking_reminder_24h` a las 12 h) y la campana filtra
+`status = 'failed'`. Subir eso a «a tiempo» es acelerar el reloj de `notifications-send`, no
+tocar los barridos.
 
 ## Dónde está cada cosa
 
@@ -176,8 +187,12 @@ src/app/                      rutas y páginas — TODAS dentro de un grupo:
 src/app/api/                  todo el código server-side (Route Handlers)
 src/app/api/pagos/checkout    abre el cobro por el riel que decide el país del ALUMNO
 src/app/api/webhooks/stripe   webhook firmado (cuerpo crudo, 400 si la firma falla)
-src/app/api/cron/             notifications-send · payouts-process · recordings-purge
-                              · refunds-process
+src/app/api/cron/             alertas-resumen · notifications-send · payouts-process
+                              · recordings-purge · referrals-sync · refunds-process
+src/app/(app)/referidos       «Invita y gana» NATIVA — se pinta desde nuestra base, RF
+                              solo por API (misma pantalla para alumno y tutor)
+src/app/(app)/admin/referidos qué campañas de RF se ven y con qué texto (+ sus dos
+                              Route Handlers en `src/app/api/admin/referidos/`)
 src/app/(public)/terms|privacy|cookies  páginas legales (DD-06)
 src/proxy.ts                  refresco de sesión (convención Next 16)
 src/lib/auth/server.ts        getSessionContext() · requireUser() · requireRole()
@@ -192,12 +207,15 @@ src/lib/payments/             un adaptador por riel: stripe · dlocal · paypal 
 src/lib/payments/*-mapeo.ts   la parte PURA de tres de ellos (paypal, stripe-payout, wise),
                               con su comprobación al lado: `*-mapeo.check.ts`
 src/lib/policy.ts             reembolsos RN-37 (los legales leen de aquí)
+src/lib/referral-factory.ts   cliente de Referral Factory (server-only) — la CREDENCIAL
+                              es el interruptor; `src/lib/referral.ts` ya solo tiene
+                              la cookie `ey-ref`
 src/lib/company.ts            datos fiscales de la sociedad — fuente de verdad
 src/lib/database.types.ts     tipos generados (no editar a mano)
 supabase/migrations/          esquema versionado (fuente de verdad)
 supabase/seed/                sembrado de dev
 vercel.json                   Vercel Cron (purga de grabaciones)
-.github/workflows/            CI · migraciones a prod · CUATRO relojes de cron
+.github/workflows/            CI · migraciones a prod · SEIS relojes de cron
 ```
 
 ## Rendimiento — lo que ya se aprendió a golpes

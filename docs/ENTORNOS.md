@@ -48,14 +48,19 @@ apaga sola en vez de romper.
 | Variable | Enciende | Si falta |
 | :-- | :-- | :-- |
 | `DAILY_API_KEY` | Sala de video real (EP-08) · borrado de grabaciones (§4) | Sala simulada; la purga responde `sin-daily` y no marca nada |
-| `NEXT_PUBLIC_REFERRAL_URL` | Bloque "Invita y gana" del **alumno** (US-1301) | El bloque **no se pinta** para alumnos |
-| `NEXT_PUBLIC_REFERRAL_URL_TUTOR` | Bloque "Invita y gana" del **tutor** (B1.11) — campaña DISTINTA en Referral Factory | El bloque **no se pinta** para tutores. ⚠️ **No se cae a la del alumno**: eso lo daría de alta en el programa equivocado |
-| `NEXT_PUBLIC_REFERRAL_EMBED_URL` · `..._TUTOR` | El widget de Referral Factory **embebido** en `/referidos`, en vez de mandar al usuario fuera. Es el subdominio `embed.` de la URL de campaña: la pública manda `frame-ancestors` y el navegador la bloquea en el iframe | `/referidos` sigue existiendo y cae al enlace externo con un aviso discreto — nunca un iframe vacío. Falla cerrado por rol igual que las dos de arriba |
-| `REFERRAL_FACTORY_API_KEY` | **Nada.** No la lee ninguna línea de `src/`. Ponerla o quitarla no cambia el comportamiento; sugiere una atribución de referidos que no existe (`QA-LANZAMIENTO.md` §4.5) | Nada |
+| `REFERRAL_FACTORY_API_KEY` | **Todo «Invita y gana»** (US-1301), desde el 11-sep: el alta del referidor en Referral Factory que emite su código (`POST users` al abrir `/referidos`), la sincronización de conversiones del cron `/api/cron/referrals-sync` y el botón «Traer campañas» de `/admin/referidos`. **Server-only, jamás `NEXT_PUBLIC_`** | `/referidos` **carga igual** —la pantalla se pinta entera desde nuestra base— pero con el aviso «El programa de invitaciones todavía no está activo.» y sin enlaces que copiar; el cron responde `sin-credencial` con **200**. ⚠️ Ese 200 es deliberado —no hay nada roto, hay algo sin configurar— y tiene un precio: el workflow de GitHub **sale en verde sin haber hecho nada**. Fallo mudo de los de la regla de oro 11 |
 | `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | Monitoreo de errores (US-1501) | El SDK ni se inicializa |
 | `RESEND_API_KEY` | Envío real de correo (US-1201) y del formulario de contacto (DL-01) | La cola se queda en `pending` (no `failed`) y el mensaje de contacto se guarda en `contact_messages` pero no sale |
 | `EMAIL_FROM` | Remitente propio | ✅ `Enséñame Ya <hola@ensenameya.com>` desde el 10-sep. El defecto del código sigue siendo `onboarding@resend.dev`, que funciona sin dominio verificado |
 | `NEXT_PUBLIC_SITE_URL` | Base absoluta de las URL de retorno del cobro | Se deduce por entorno: producción → `VERCEL_PROJECT_PRODUCTION_URL`, preview → `VERCEL_BRANCH_URL` (alias fijo de rama). En local, `http://localhost:3000` |
+
+🗑️ **Las cuatro `NEXT_PUBLIC_REFERRAL_URL` / `_URL_TUTOR` / `_EMBED_URL` / `_EMBED_URL_TUTOR` salieron
+de esta tabla el 11-sep**, y no por limpieza cosmética: «Invita y gana» dejó de ser un iframe de
+Referral Factory y pasó a ser la pantalla nativa `/referidos`, igual para alumno y tutor y pintada
+entera desde nuestra base. Ya no las lee ninguna línea de `src/` y se han borrado de `.env.example`.
+**El interruptor dejó de ser una URL pública y pasó a ser una credencial de servidor**, que es la fila
+de arriba. Las campañas tampoco se configuran ya por variable: se gestionan en `/admin/referidos`.
+⚠️ En **Vercel siguen puestas** hasta que alguien las retire a mano (punto de gestión nº 2, §3 C.1).
 
 ### 1.2 El stack de pagos, variable a variable
 
@@ -226,16 +231,24 @@ ahí.
 
 | Variable | `.env.local` | Preview | Production |
 | :-- | :-- | :-- | :-- |
-| `NEXT_PUBLIC_REFERRAL_URL` · `..._EMBED_URL` | ✅ | ✅ | ✅ |
-| `NEXT_PUBLIC_REFERRAL_URL_TUTOR` · `..._EMBED_URL_TUTOR` | — | — | — · **no existe la campaña de tutores**, solo la 50297 |
-| `REFERRAL_FACTORY_API_KEY` | ✅ inerte | ❌ **borrada 10-sep** | ❌ **borrada 10-sep** · no la lee nadie (0 referencias en `src/`) |
+| `REFERRAL_FACTORY_API_KEY` | ✅ **y ya no es inerte: es el interruptor de todo** | 🔴 **borrada el 10-sep — hay que reponerla** | 🔴 **borrada el 10-sep — hay que reponerla** |
+| `NEXT_PUBLIC_REFERRAL_URL` · `..._URL_TUTOR` · `..._EMBED_URL` · `..._EMBED_URL_TUTOR` | 🗑️ fuera de `.env.example` | 🗑️ **retirar a mano** | 🗑️ **retirar a mano** |
+
+⚠️ **Reponer `REFERRAL_FACTORY_API_KEY` es el punto de gestión nº 1** (§3 C.1). Se borró el 10-sep
+porque entonces era **verdad** que no la leía nadie; desde el 11-sep la leen `src/lib/referral-factory.ts`,
+la pantalla `/referidos`, el cron `/api/cron/referrals-sync` y las dos rutas de `/admin/referidos`.
+Sin ella la funcionalidad entera queda apagada **sin que nada se ponga rojo**: la pantalla carga con su
+aviso y el cron devuelve 200 (§1.1). Es exactamente el fallo mudo contra el que avisa la regla 11.
 
 **Ausentes a propósito**
 
 - **`NEXT_PUBLIC_SITE_URL`** — no está en ningún entorno, y así debe quedarse. Vacía, `siteUrl()`
   usa `VERCEL_PROJECT_PRODUCTION_URL`, que desde la migración es `ensenameya.com`. Ponerla a mano
   es la forma de que un preview devuelva al alumno a producción tras pagar (EX-07).
-- **Las `*_TUTOR`** — no es un hueco: esa campaña no existe en Referral Factory.
+- **Las `*_TUTOR`** — ya no son un concepto. La campaña de tutores **sí existe** (**50784** «Enséñame
+  Ya - Tutor»), pero no se elige por variable de entorno: `/referidos` pinta todas las campañas
+  marcadas `visible` en `referral_campaigns`, y quién es visible lo decide el admin en
+  `/admin/referidos`.
 
 > **Vercel no aplica una variable nueva a un despliegue que ya existe.** Las env vars se inyectan al
 > construir: añadirla en Settings y recargar la misma URL devuelve **exactamente el mismo 503** de
@@ -349,11 +362,39 @@ ahí.
 - [x] **`PAYPAL_CLIENT_ID`, `PAYPAL_SECRET`, `PAYPAL_API_URL` y `STRIPE_PUBLISHABLE_KEY` en los dos
   ámbitos — 10-sep.** Sin la publishable no hay formulario de pago aunque la secreta esté puesta, y
   está comprobada en Production y en Preview.
-- [x] `NEXT_PUBLIC_REFERRAL_URL` y `NEXT_PUBLIC_REFERRAL_EMBED_URL` en los dos ámbitos.
-  ⚠️ Las `*_TUTOR` **no aplican**: esa campaña no existe en Referral Factory, solo la 50297.
-  🗑️ Y `REFERRAL_FACTORY_API_KEY` **se borró de Vercel el 10-sep** — cero referencias en `src/`, así
-  que era un secreto expuesto sin razón.
+- [ ] 🔴 **`REFERRAL_FACTORY_API_KEY` en los TRES ámbitos** (Development, Preview y Production).
+  Se borró de Vercel el 10-sep con toda la razón del mundo —entonces no la leía nadie— y el 11-sep
+  dejó de ser verdad: es el interruptor de «Invita y gana» entero. **Sin ella nada se pone rojo**
+  (§1.3). Las cuatro `NEXT_PUBLIC_REFERRAL_*` que sí están puestas **sobran**: retirarlas.
 - [ ] Tras dar de alta cualquiera: **Redeploy**. Vercel no las aplica al despliegue ya construido (§1).
+
+### C.1) Referidos v2 — cinco puntos de GESTIÓN, no de código (11-sep-2026)
+
+«Invita y gana» se entregó el 11-sep como pantalla nativa con atribución real (`20260911120000`,
+`/referidos`, `/admin/referidos`, `/api/cron/referrals-sync`). **El código está; lo que queda no se
+arregla con un commit.** Se apunta aquí porque hasta hoy vivía en un `.md` suelto de la carpeta de
+descargas de alguien, y eso es lo mismo que no existir.
+
+1. [ ] 🔴 **Reponer `REFERRAL_FACTORY_API_KEY` en Vercel**, en **Development, Preview y Production**.
+   Es el nº 1 por una razón: sin ella la funcionalidad entera está apagada y **nada se pone rojo**
+   —la pantalla carga con «El programa de invitaciones todavía no está activo.» y el cron devuelve
+   `sin-credencial` con 200, con lo que el workflow de GitHub sale **en verde sin haber hecho nada**—.
+   En local ya está (`.env.local`). Y acordarse del **Redeploy** (§1).
+2. [ ] 🗑️ **Retirar de Vercel las cuatro `NEXT_PUBLIC_REFERRAL_URL` / `_URL_TUTOR` / `_EMBED_URL` /
+   `_EMBED_URL_TUTOR`.** Ya no las lee ninguna línea de `src/` y salieron de `.env.example`; lo que
+   queda en Vercel es un resto que apunta a la campaña vieja.
+3. [ ] **Apagar la campaña 50297 en Referral Factory.** En la app ya entra `visible = false` por el
+   seed de la migración, pero **en RF sigue `launched`** y su landing
+   (`vercel.referral-factory.com/cXr65Wou`) sigue aceptando altas: alguien puede darse de alta en un
+   programa que la app ya no enseña ni sincroniza.
+4. [ ] **Fijar los textos de recompensa reales desde `/admin/referidos` (DP-32.1).** Los del seed son
+   **EJEMPLOS sin aprobar** —«1 clase gratis», «US$ 10»— y hoy se le están prometiendo al usuario tal
+   cual en la pantalla. Esto lo decide el cliente, no desarrollo.
+5. [ ] **Verificar la cadencia real del workflow en las primeras 48 h.** `referrals-cron.yml` pide
+   `0 * * * *` y GitHub entrega **una pasada cada 2-6 horas** (§4, "tres peajes"). Para esto da igual
+   —la recompensa la contabiliza RF y el usuario no la ve hasta abrir `/referidos`—, pero conviene
+   medirlo una vez en vez de creérselo. ⚠️ Y recordar el tercer peaje: GitHub **solo programa los
+   workflows de `main`**; mientras `referrals-cron.yml` viva solo en `dev`, ese reloj no existe.
 
 ### D) GitHub — Environments (CI de migraciones) — [x] hecho, salvo branch protection
 - [x] Repo → Settings → **Environments** → **`production`** y **`development`** creados; en cada uno el
@@ -363,7 +404,7 @@ ahí.
 - [ ] (Recomendado) Branch protection en `main`: PR + checks verdes. **Sin configurar**: hoy nada
   impide un push directo a `main` → prod.
 - [x] Variable `APP_BASE_URL` = **`https://ensenameya.com`** (10-sep) y secret `CRON_SECRET` (el mismo
-  valor que en Vercel), en Settings → Secrets and variables → Actions. Los cuatro workflows de §4
+  valor que en Vercel), en Settings → Secrets and variables → Actions. Los **seis** workflows de §4
   comparten las dos. ⚠️ Faltar solo ahí costó **30 corridas en rojo**: los workflows están escritos
   para fallar en rojo a propósito y funcionó; lo que no había era nadie mirando el rojo. Diagnóstico
   de diez segundos: `gh variable list` y `gh secret list`.
@@ -575,7 +616,9 @@ order by j.jobname, d.status;
 
 
 
-**Cinco endpoints HTTP y dos sitios donde vive su reloj.** Ninguno es una Edge Function de Supabase,
+**Siete endpoints HTTP y dos sitios donde vive su reloj** (contados el 11-sep: seis `.yml` con
+`schedule:` en `.github/workflows/` más el único `cron` de `vercel.json` — `ci.yml` y
+`supabase-migrations.yml` no llevan reloj). Ninguno es una Edge Function de Supabase,
 a propósito: la decisión está en `20260717120000_us801_daily_real.sql` — Postgres no puede llamar a la
 API de Daily desde aquí, y una función de Deno necesitaría su propio cliente, su propia copia de la
 clave y un pipeline de despliegue que no existe. Van como Route Handlers y reutilizan `lib/daily.ts`,
@@ -587,21 +630,30 @@ clave y un pipeline de despliegue que no existe. Van como Route Handlers y reuti
 | Envío de la cola de correo (US-1201) | `/api/cron/notifications-send` | **GitHub Actions** (`notifications-cron.yml`) | `*/5 * * * *` |
 | Cola de reembolsos (X-01) | `/api/cron/refunds-process` | **GitHub Actions** (`refunds-cron.yml`) | `7,22,37,52 * * * *` |
 | **Ejecución de payouts** | `/api/cron/payouts-process` | **GitHub Actions** (`payouts-cron.yml`) | `13 * * * *` |
+| Resumen de incidencias | `/api/cron/alertas-resumen` | **GitHub Actions** (`alertas-cron.yml`) | `41 * * * *` |
+| **Conversiones de referidos** (US-1301) | `/api/cron/referrals-sync` | **GitHub Actions** (`referrals-cron.yml`) | `0 * * * *` |
 | Barrido de ficheros de cuentas dadas de baja | `/api/cuenta/eliminar/barrido` | **GitHub Actions** (`barrido-bajas-cron.yml`) | `37 5 * * *` |
 
 ⚠️ **El barrido de bajas no cuelga de `/api/cron/`.** Buscar los jobs por ese prefijo lo deja fuera.
 
-Los cinco se autentican igual: `Authorization: Bearer $CRON_SECRET`. Sin la variable responden **503**
+⚠️ **`referrals-sync` tiene un modo de fallo que los otros seis no tienen.** Sin
+`REFERRAL_FACTORY_API_KEY` responde `{"status":"sin-credencial"}` **con 200**, y el workflow está
+escrito para dar por buena esa respuesta: **sale en verde sin haber hecho nada**. Es deliberado —no
+hay nada roto, hay algo sin configurar— pero es exactamente el silencio contra el que avisa la regla
+11 de `CLAUDE.md`. Mientras la variable no esté en Vercel (§3 C.1), `profiles.referral_converted_at`
+se queda a null para siempre y el referidor ve «1 invitado · 0 convertidos» eternamente.
+
+Los siete se autentican igual: `Authorization: Bearer $CRON_SECRET`. Sin la variable responden **503**
 y no corren (falla cerrado a propósito: son endpoints que borran datos, envían correos y **mueven
 dinero**, y sin secreto serían públicos); con un valor que no coincide, **401**.
 
-**Por qué cuatro están en Actions y no en Vercel Cron.** El plan **Hobby limita los crons a uno al
+**Por qué seis están en Actions y no en Vercel Cron.** El plan **Hobby limita los crons a uno al
 día**, y ese único hueco lo gasta la purga de grabaciones. Aunque quedara sitio, la cadencia diaria no
 sirve para ninguno de los otros: un aviso de "tienes 24 h para aceptar esta reserva" que llega mañana
 no vale, un reembolso pedido a las 04:05 esperaría un día entero cuando el §13 de los Términos promete
 devolver "al método de pago original", y un payout que espera un día es un tutor que no cobra. Actions
 da granularidad de minutos, logs y reejecución manual (`workflow_dispatch`). Si el proyecto pasa a
-Pro, los cuatro se mueven a `vercel.json` y los workflows se borran.
+Pro, los seis se mueven a `vercel.json` y los workflows se borran.
 
 El precio son tres peajes, anotados también en los propios workflows:
 
@@ -714,8 +766,10 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
       el mundo**, y nadie lo había notado (§7.5).
 - [x] **Resend cerrado el 10-sep:** dominio `ensenameya.com` verificado, `EMAIL_FROM` puesto y las
       16 variantes de correo enviadas, vistas llegar y aprobadas (§3G).
-- [x] `CRON_SECRET` en Vercel y en GitHub, y `APP_BASE_URL` en GitHub. Los cinco endpoints de §4
-      tienen reloj.
+- [x] `CRON_SECRET` en Vercel y en GitHub, y `APP_BASE_URL` en GitHub. Los endpoints de §4 son
+      **siete** desde el 11-sep. ⚠️ Los dos últimos (`alertas-resumen` y `referrals-sync`) **aún no
+      tienen reloj de verdad**: sus `.yml` viven solo en `dev` y GitHub solo programa los workflows
+      de la rama por defecto. Reloj = merge a `main`.
 - [x] **Claves de dLocal en producción — 10-sep**, con `DLOCALGO_API_BASE`. Era el hueco más grande
       del despliegue de pagos y se cerró midiendo: el webhook pasó de 503 a 400 (§1.2).
 - [x] `WISE_API_TOKEN` en Vercel Production — 10-sep.
@@ -727,8 +781,11 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
 - [ ] Branch protection en `main` (§3D).
 - [ ] **Arreglar el seed para que la cola de correo de dev no vuelva a llenarse**: usa
       `@ensenameya.dev`, dominio sin MX (§3G).
-- [x] `NEXT_PUBLIC_REFERRAL_URL` y `..._EMBED_URL` en Vercel. ⚠️ Las `*_TUTOR` **no aplican**: esa
-      segunda campaña no existe en Referral Factory, solo la 50297. No es un hueco.
+- [ ] 🔴 **`REFERRAL_FACTORY_API_KEY` en Vercel, en los tres ámbitos** — se borró el 10-sep y el
+      11-sep pasó a ser el interruptor de «Invita y gana» entero (§3 C.1). Y **retirar** las cuatro
+      `NEXT_PUBLIC_REFERRAL_*`, que ya no lee nadie. ⚠️ Las campañas de Referral Factory son **tres**
+      (50785 alumnos · 50784 tutores · 50297 la vieja, apagada en la app): que la de tutores «no
+      existía» dejó de ser cierto el 11-sep.
 - [ ] Mínimo de contraseña a 8 en el panel de Auth, dev y prod (§3B).
 - [x] **Migración de dominio — 10-sep.** `ensenameya.com` sirve la app; `www` y `vercel.app` son
       308 hacia él. El correo del cliente (M365 tras Proofpoint) intacto.

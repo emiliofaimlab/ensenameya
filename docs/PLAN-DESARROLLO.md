@@ -88,7 +88,7 @@ El código **no espera**: se construye con *stub* y se cablea lo real cuando el 
 | ~~C-14~~ | ~~Docs para aprobar tutor~~ | US-203 KYC · US-1101 | ✅ **resuelto y construido: SEIS documentos** (`verification-form.tsx`) — **CV, título académico y documento de identidad obligatorios**; certificado, diploma y corte de notas opcionales. `doc_type` es texto (S-13): ampliar el set no toca el esquema | — |
 | C-02/C-04 | Retención / agrupación payout | US-1002 | [ ] pendiente | Config |
 | C-05 | No-show | US-604/802 | 🟠 **medio contestada**: el **§17 de los Términos firmados** fija que el no-show del alumno no se reembolsa. Siguen abiertas la reprogramación tras no-show del **tutor** y la penalización acumulada | Default Doc 2 |
-| C-10 | Reglas de referidos | US-1301 | [ ] pendiente — ⚠️ **no queda default operable**: RF no manda código de vuelta y **la atribución no existe en ninguna forma**, ni cookie ni email. Ver «Referidos» más abajo | — |
+| C-10 | Reglas de referidos | US-1301 | [ ] pendiente — pero **ya no es el mismo pendiente**. ⚠️ Aquí ponía «no queda default operable: la atribución no existe en ninguna forma» y **caducó el 11-sep**: la atribución existe (Referidos v2, `20260911120000`), y no depende de que RF devuelva a nadie porque **el enlace lo emitimos nosotros**. Lo que sigue abierto es lo de siempre por RN-21: **cuánto se gana y cuándo**, que se configura en RF y se escribe en `referral_campaigns.reward_text` desde `/admin/referidos`. ⚠️ Los textos del seed son **ejemplos sin aprobar** y hoy se le prometen al usuario tal cual (DP-32.1) | Los `reward_text` del seed |
 | ~~C-11~~ | ~~Email transaccional~~ | US-1201 | ✅ **resuelto: Resend** (6-ago, `58fd62e`) — el único de los tres candidatos (SendGrid/Mailgun/Resend) que envía y se **prueba sin dominio verificado**, y el dominio propio seguía bloqueado. ✅ **Cerrada del todo el 10-sep**: cuenta creada, `RESEND_API_KEY` puesta, dominio `ensenameya.com` **verificado** y `EMAIL_FROM = Enséñame Ya <hola@ensenameya.com>` | Cola en `notifications` (el stub ya **no** la vacía) |
 | ~~C-06~~ | ~~Checkout invitado~~ | US-602 | ✅ **construido**: la cuenta se crea **dentro** del pago (`8013150`, `src/app/api/checkout/invitado/route.ts`) | — |
 | C-12 | Opt-out de notificaciones | EP-12 | [ ] pendiente | Sin opt-out: todo se encola |
@@ -931,6 +931,12 @@ campaña de verdad se descubrió que **la atribución por `?ref=` no puede funci
 campaña**: US-1302 es código correcto que nunca va a recibir un código. Ver "**Referidos — la campaña
 no funciona como creíamos**" en la sección del 5–6 de agosto.
 
+⚠️ **Y el 11-sep se quedó vieja la tanda entera**, no solo su última frase. «Invita y gana» dejó de
+ser un enlace a RF: es la pantalla nativa `/referidos`, el interruptor pasó de la URL a la credencial
+y US-1302 por fin recibe códigos, porque los emitimos nosotros. Lo único de arriba que sigue en pie es
+**RN-21** —las reglas y el dinero viven en RF— y la razón por la que no se embebía: la URL pública de
+campaña manda `frame-ancestors` y el iframe sale en blanco. Ver «**11 de septiembre — Referidos v2**».
+
 **Tanda 6 · cierre** · ✅ **COMPLETA (29-jul)** — `EY-82` US-1601 y `EY-83` US-1602.
 Resultados completos en **`docs/QA-LANZAMIENTO.md`**.
 
@@ -982,7 +988,7 @@ de los cuatro se queda `To Do` hasta que haya contrato.
 | Necesito | Para | De quién |
 | :-- | :-- | :-- |
 | ~~¿Cuenta Stripe en **test mode**?~~ → ✅ **SÍ (Jose, 29-jul)**: la abre él y pasa las claves de test. **Cumplido**: las `sk_test_` están en local y en Vercel Preview (6-ago) | Sprint 6 AC entero | Jose |
-| ~~**URL de la campaña** de Referral Factory~~ → ✅ **la hay** (`.../cXr65Wou/signup`, en `.env.local`); falta en Vercel, y la **atribución hay que rehacerla** | encender `EY-78` | Jose (cuenta ya creada ✅) |
+| ~~**URL de la campaña** de Referral Factory~~ → ⚠️ **la pregunta dejó de existir el 11-sep**: ya no hace falta ninguna URL de campaña en Vercel —«Invita y gana» es pantalla nativa y el enlace lo emitimos nosotros— y la **atribución se rehízo**. Lo que hace falta de fuera ahora es **reponer `REFERRAL_FACTORY_API_KEY` en Vercel**, que está borrada | ~~encender `EY-78`~~ → encender Referidos v2 | Jose |
 | **DSN de Sentry** (cuenta gratuita) → `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` en Vercel | encender `EY-80` | Jose |
 | ~~Token de Figma nuevo~~ → **no hace falta**: el 403 fue pasajero, el token responde | fidelidad al diseño | — |
 | Go de coste de grabación en Daily + dónde se guardan | `EY-85/86` | Cliente / Emilio |
@@ -1035,6 +1041,12 @@ merge** (`dev`→`main`) y las migraciones pendientes de prod ya no son 12 sino 
   Los tres `RF-xx` son el **lado nuestro del programa de referidos** que RN-21 dejaba fuera (el
   programa vive en Referral Factory): calificar, dar de alta y avisar. `EY-78`/`EY-79` cerraron el
   bloque y la captura del código; esto es la vuelta.
+  ✅ **Al 11-sep dos de los tres están escritos**, aunque no con la forma que decía su título:
+  **RF-04** (`EY-149`, alta automática en RF) lo hace `/referidos` al abrirse por primera vez, y
+  **RF-03** (`EY-148`) no es un webhook —RF no los tiene, sus endpoints `webhooks` y `events` dan
+  404— sino el cron `/api/cron/referrals-sync`, que califica al referido con `PUT users/{id}`.
+  **RF-05** (`EY-150`, aviso al referidor) sigue sin escribir: hoy el referidor se entera abriendo
+  `/referidos`.
 - **Sprints abiertos: tres a la vez.** 6 AC venció el **31-jul** y sigue abierto, 7 venció el
   **4-ago**, 8 vence el **7-ago**. El proyecto lleva **al menos 8 sprints**, no los 4 del backlog v1.0.
 - ⚠️ **Dos épicas que los docs no recogen:**
@@ -1089,7 +1101,7 @@ falla, se desactiva — y ponerla no toca código. _(Ampliada el 6-ago con las c
 | Variable | Qué enciende | Sin ella |
 | :-- | :-- | :-- |
 | `DAILY_API_KEY` | sala de Daily real | sala **simulada** (ya está puesta en local, Preview y Production) |
-| `NEXT_PUBLIC_REFERRAL_URL` | bloque "Invita y gana" (`EY-78`) | el bloque **no se pinta** |
+| ~~`NEXT_PUBLIC_REFERRAL_URL`~~ → **`REFERRAL_FACTORY_API_KEY`** (11-sep) | «Invita y gana» entero (`EY-78`) | la pantalla carga con «El programa de invitaciones todavía no está activo.» y el cron responde `sin-credencial` **con 200** |
 | `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` | monitoreo (`EY-80`) | Sentry **apagado** |
 | `RESEND_API_KEY` | envío real de correo (`EY-73`) | el job **no toca la cola**: los avisos quedan `pending` (no `failed`) y salen todos en la primera pasada con clave |
 | `CRON_SECRET` | los **tres** jobs HTTP (purga de grabaciones, envío de correo, **cola de reembolsos**) | **503 y no corre** — falla cerrado, a propósito: un endpoint que borra datos, dispara correos o **mueve dinero** sin secreto sería público. ✅ Puesta en Vercel y en GitHub (30-ago) |
@@ -1342,7 +1354,12 @@ cuenta conectada).
 código fija `2026-07-29.dahlia`. Irrelevante para los campos que se leen hoy; si algún día un campo
 del webhook aparece vacío sin explicación, mirar esto primero.
 
-### 🔎 Referidos — la atribución no existe
+### 🔎 Referidos — la atribución no existe *(6-ago · **superado el 11-sep**)*
+
+> 🟢 **Esto es la foto del 6-ago y se conserva como historia: explica por qué hubo que rehacerlo.**
+> **Ya no describe el estado de hoy.** Desde el 11-sep la atribución existe de punta a punta y el
+> `?ref=` sí llega, porque el enlace lo emitimos nosotros y no RF. Ver «**11 de septiembre —
+> Referidos v2**» al final del documento.
 
 **No hay atribución de referidos de ninguna clase.** Ni por cookie ni por email. Esto invalida el AC
 de `EY-79` / US-1302, que hay que **rehacer**, no revisar.
@@ -1400,8 +1417,8 @@ column-grants que el proyecto ya usaba.
 | `STRIPE_PUBLISHABLE_KEY` | ✅ | ✅ los dos ámbitos (10-sep) · `pk_live_` en Production | — |
 | `STRIPE_WEBHOOK_SECRET` | ✅ | ✅ **partido por ámbito (10-sep)**: firma de live en Production, de sandbox en Preview | — |
 | `RESEND_API_KEY` | ✅ (10-sep) | ✅ **sí (17-ago)** — comprobado el 30-ago: el cron devuelve `status:"ok"`, no `sin-proveedor` | — |
-| `NEXT_PUBLIC_REFERRAL_URL` | ✅ | ✅ los dos ámbitos | — |
-| `REFERRAL_FACTORY_API_KEY` | ✅ inerte | 🗑️ **borrada de Vercel el 10-sep** — no la lee ningún fichero de `src/` (verificado el 1-sep y otra vez el 10), así que era un secreto expuesto sin razón | — |
+| `NEXT_PUBLIC_REFERRAL_URL` | 🗑️ retirada el 11-sep | 🗑️ **sigue puesta y sobra**: retirarla a mano | — |
+| `REFERRAL_FACTORY_API_KEY` | ✅ | 🔴 **borrada el 10-sep — HAY QUE REPONERLA (los tres ámbitos)** | — |
 | `APP_BASE_URL` | — | — | ✅ **`https://ensenameya.com`** (puesta el 30-ago al host viejo, actualizada al dominio propio el 10-sep) |
 
 ⚠️ **Esto se cumplió al pie de la letra, y nadie lo miró.** El workflow está escrito para fallar en
@@ -1412,6 +1429,13 @@ bandeja de entrada. Segunda cosa que se aprendió midiendo: **la cadencia de "ca
 ficción** — GitHub entrega una corrida cada **2-6 horas** (`docs/ENTORNOS.md` §4).
 ⚠️ De paso: `.env.example` **no documenta `STRIPE_WEBHOOK_SECRET` ni `RESEND_API_KEY`**, aunque el
 código las usa.
+
+🔴 **Y las dos filas de referidos se dieron la vuelta el 11-sep.** Borrar
+`REFERRAL_FACTORY_API_KEY` de Vercel el 10-sep fue lo correcto **ese día** —era un secreto expuesto
+que no leía ningún fichero— y dejó de serlo al día siguiente: con Referidos v2 es el interruptor de
+«Invita y gana» entero. Reponerla es el **punto de gestión nº 1** (`docs/ENTORNOS.md` §3 C.1), y el
+castigo por no hacerlo es mudo: la pantalla carga con su aviso y el cron devuelve **200**, o sea que
+el workflow de GitHub sale **en verde sin haber hecho nada**.
 
 ### ✅ dLocal: cuenta aprobada (sandbox y producción)
 
@@ -1430,8 +1454,8 @@ que no enlazaba a la app, con dos juegos de términos vivos. Hoy `ensenameya.com
 | ~~Purga de grabaciones (RN-42)~~ | ✅ `CRON_SECRET` en Vercel ya estaba. ⚠️ Sigue sin haber nada que purgar, pero **no por el add-on** —que está activo (31-ago)—: a ninguna grabación le ha vencido la retención, la primera el **13-sep**. Que funcione cuando toque **sigue sin demostrarse** | Jose |
 | ~~**Vaciar la cola de correo de dev**~~ | ✅ **hecho el 30-ago**: 336 avisos a `failed` (§4.6). ⚠️ Vuelve a llenarse sola mientras el seed use `@ensenameya.dev` (sin MX): 187 de las 336 iban ahí | Jose |
 | ~~**Ejercitar X-01**~~ | ✅ **hecho el 30-ago**: los 2 `refund_requests` de dev ejecutados contra Stripe *test mode*, **$47,50**. El job **sí mueve dinero**. ⚠️ Salió que NTF-10 avisa al PEDIR el reembolso, no al moverlo | Jose |
-| Referidos (`EY-78`/`EY-79`) | `NEXT_PUBLIC_REFERRAL_URL` en Vercel (lo único que enciende algo: pinta el bloque). ⚠️ **La atribución no es «rehacerla por email»: es hacerla, y aún no se sabe cómo** — RF no manda código de vuelta y su API tampoco recibe hoy a nadie desde aquí. Decisión de producto antes que código (C-10) | Jose / Cliente |
-| Términos de la campaña de RF | están sin rellenar (plantilla con corchetes) | Cliente / Jose |
+| Referidos (`EY-78`/`EY-79`) | ⚠️ **Esta fila decía «la atribución hay que hacerla y aún no se sabe cómo» y caducó el 11-sep**: se hizo (Referidos v2). Lo que falta ya no es código, son **cinco puntos de gestión** (`docs/ENTORNOS.md` §3 C.1): reponer `REFERRAL_FACTORY_API_KEY` en Vercel —está **borrada** y sin ella todo esto está apagado sin ponerse rojo—, retirar las cuatro `NEXT_PUBLIC_REFERRAL_*`, apagar la campaña **50297** en RF, fijar los textos de recompensa reales (DP-32.1) y medir la cadencia real del workflow | Jose / Cliente |
+| Términos de la campaña de RF | están sin rellenar (plantilla con corchetes). ⚠️ Pesa menos desde el 11-sep —la pantalla nativa ya no manda a nadie a la landing de RF— pero **la 50297 sigue `launched` y su landing sigue aceptando altas** hasta que se apague | Cliente / Jose |
 | Cobro real (live mode) | `sk_live_` — o sea el KYC de Stripe del cliente | Cliente |
 | ~~DLocal~~ | ✅ cuenta aprobada (sandbox y producción), 4-sep-2026, y ✅ **credenciales de producción puestas el 10-sep** junto a `DLOCALGO_API_BASE`. Verificado midiendo el webhook: 503 → 400. El checkout transparente ya existe en prod | ~~Jose~~ |
 | Payout por **Stripe** | ✅ **Paga** (decisión D-1 aprobada), como **tercer riel de la tarjeta de Banco** y siempre **después de Wise** en el orden de candidatos. ⚠️ **No es una cuenta conectada**: el onboarding de Stripe Connect salió del producto y del código con el dictado — `src/app/api/tutor/stripe-connect/` y `connect-alta.tsx` **no existen** | — |
@@ -1561,8 +1585,9 @@ fuente. Lo que sí se puede decir sin inventar nada es **qué entró**, por bloq
 ### Inventario de trabajos programados — son más de los que este doc contaba
 
 Los jobs no viven todos en el mismo sitio, y dar uno por inexistente porque no sale en un `grep` del
-repo es un error que ya se pagó. Hoy hay **cinco endpoints** con reloj y **nueve** jobs dentro de la
-propia base de datos.
+repo es un error que ya se pagó. Hoy hay **siete endpoints** con reloj y **nueve** jobs dentro de la
+propia base de datos. *(Eran cinco al 9-sep; el 11-sep se sumaron `alertas-resumen` y
+`referrals-sync`.)*
 
 | Endpoint | Reloj |
 | :-- | :-- |
@@ -1570,6 +1595,8 @@ propia base de datos.
 | `/api/cron/notifications-send` | GitHub Actions, cada 5 min *pedidos* |
 | `/api/cron/refunds-process` | GitHub Actions, minutos 7, 22, 37, 52 |
 | `/api/cron/payouts-process` | GitHub Actions, `13 * * * *` |
+| `/api/cron/alertas-resumen` | GitHub Actions, `41 * * * *` *(11-sep)* |
+| `/api/cron/referrals-sync` | GitHub Actions, `0 * * * *` *(11-sep)* — ⚠️ sin `REFERRAL_FACTORY_API_KEY` responde `sin-credencial` con **200** y el workflow sale en **verde sin hacer nada** |
 | `/api/cuenta/eliminar/barrido` | GitHub Actions, `37 5 * * *` — ⚠️ **no cuelga de `/api/cron/`** |
 
 ⚠️ **La cadencia de GitHub es una ficción**: pide 5 y 15 minutos y entrega **una corrida cada 2-6 h**,
@@ -1633,6 +1660,91 @@ es falso, y hay que corregirlo en ese documento.**
 
 No se ha tocado el código: se registra porque es la diferencia entre lo que el dictado promete y lo
 que el job hace, y quien lea solo el dictado va a dar por cubierto un camino que no lo está.
+
+---
+
+## 11 de septiembre — Referidos v2: «Invita y gana» deja de ser un iframe
+
+**Y con ello la atribución de referidos deja de ser el agujero que este documento llevaba desde el
+6-ago describiendo en presente.** Hasta ayer `/referidos` era un iframe de Referral Factory con un
+`notFound()` delante: el programa lo decidía el panel del que venías, el enlace lo emitía RF y la
+cookie `ey-ref` esperaba un `?ref=` que **no llegaba nunca**, porque la landing de RF no redirige de
+vuelta. `profiles.referral_code` se escribía, se anulaba en la baja y **no lo leía nadie**.
+
+**Qué cambió, en una frase:** el enlace lo emitimos **nosotros**. Ese era el nudo entero.
+
+**El recorrido completo, de punta a punta:**
+
+1. La primera vez que alguien abre `/referidos`, el servidor lo da de alta como **referidor** en RF
+   (`POST users`) en cada campaña visible y guarda `rf_user_id`, `code` y `url` en
+   `referral_memberships`.
+2. Comparte `https://<origen>/?ref=<code>` — nuestro dominio, no el de RF.
+3. El proxy guarda el `?ref=` en la cookie `ey-ref` (30 días). **Esto no se tocó**: era código
+   correcto que nunca recibía nada.
+4. El alta lo aterriza en `profiles.referral_code` (`handle_new_user`, y `callback-status.tsx` para
+   Google). **Tampoco se tocó.**
+5. El cron `/api/cron/referrals-sync` busca a los que ya cumplieron la regla de **su** campaña
+   —alumnos: primer pago; tutores: primera sesión completada—, los crea en RF colgando del referidor
+   (`POST users` con `referrer_code`), los califica (`PUT users/{id}`) y solo entonces escribe
+   `referral_converted_at`, que es el ancla de idempotencia: lo que no se marca vuelve en la pasada
+   siguiente.
+
+**La pantalla se pinta ENTERA desde nuestra base**, con cero llamadas a RF al renderizar. No es
+elegancia: medido el 10-sep, RF tiene **picos de más de 25 s** (3 de 40 llamadas). Toda llamada a RF
+va con timeout y fuera del camino crítico del registro y del pago.
+
+**Lo que se añadió**, para quien venga a buscarlo:
+
+| Qué | Dónde |
+| :-- | :-- |
+| Esquema | `20260911120000_referidos_nativos.sql` — `referral_campaigns`, `referral_memberships`, `profiles.referral_converted_at` y `profiles.referral_rf_user_id`, más las RPC `security definer` `referral_invitees()` (pantalla) y `referral_conversions_pending(int)` (cron) |
+| Cliente de RF | `src/lib/referral-factory.ts` (`server-only`). `src/lib/referral.ts` se queda **solo** con la cookie `ey-ref` |
+| Pantalla de usuario | `src/app/(app)/referidos/` — la misma para alumno y tutor, sin `notFound()` |
+| Pantalla de admin | `src/app/(app)/admin/referidos/` + `POST /api/admin/referidos/sync` y `PATCH /api/admin/referidos/[id]`, con entrada en el menú **desde el primer día** (el olvido de `/admin/notificaciones`, `/admin/operaciones` y `/admin/reembolsos` no se repite) |
+| Cron | `src/app/api/cron/referrals-sync/` + `.github/workflows/referrals-cron.yml`, `0 * * * *`, `CRON_SECRET` obligatoria (503 sin ella) |
+
+**Tres campañas, no una.** Verificado el 11-sep contra la API con la clave real: **50785** «Enséñame
+Ya» (`es`, código `ctAI3ZWp`) → alumnos, visible; **50784** «Enséñame Ya - Tutor» (`en`, código
+`cKAf69gl`) → tutores, visible; y **50297** «Campaign for Enséñame Ya» (`es`, código `cXr65Wou`), la
+vieja, que entra en el seed **no visible**. Que «solo existía la 50297» y que «la campaña de tutores
+no existe» se repitió en cinco documentos durante semanas y **dejó de ser cierto**. Y las campañas
+**ya no se eligen por variable de entorno**: se gestionan en `/admin/referidos`.
+
+**✅ S-32.2 resuelto, y era falso.** El supuesto decía que `POST users` con un correo ya existente en
+esa campaña daría **422**, y el cron llevaba un plan B por si acaso. Medido contra la API real el
+11-sep: **no da 422**, devuelve el **mismo usuario**, con su mismo `id` y su mismo `code`. O sea que
+`createUser` es **idempotente por (campaña, correo)** — y el mismo correo en **otra** campaña sí crea
+un usuario nuevo con código distinto, que es justo lo que hace falta para ser referidor en los dos
+programas a la vez.
+
+**🔴 El interruptor cambió de naturaleza, y esto es lo que hay que recordar.** Era la **URL**
+(`NEXT_PUBLIC_REFERRAL_URL` y sus tres hermanas); ahora es la **credencial**
+`REFERRAL_FACTORY_API_KEY`, server-only y jamás `NEXT_PUBLIC_`. Las cuatro variables públicas ya no
+las lee ninguna línea de `src/` y salieron de `.env.example`; **en Vercel siguen puestas y hay que
+retirarlas**.
+
+⚠️ **Y la credencial está BORRADA de Vercel desde el 10-sep** —se borró con toda la razón: ese día
+era verdad que no la leía nadie—. Sin ella **todo esto está apagado y nada se pone rojo**:
+`/referidos` carga con «El programa de invitaciones todavía no está activo.», nadie recibe enlace, y
+el cron responde `{"status":"sin-credencial"}` con **200**, con lo que el workflow de GitHub sale
+**en verde sin haber hecho nada**. Es el patrón exacto de la regla de oro 11 —el fallo no se lo dice
+a nadie— solo que aquí el silencio es de manual y está documentado a propósito.
+
+**Lo que queda no se arregla con un commit.** Los **cinco puntos de gestión** viven en
+`docs/ENTORNOS.md` §3 C.1: reponer la clave en los tres ámbitos, retirar las cuatro
+`NEXT_PUBLIC_REFERRAL_*`, **apagar la 50297 en RF** (en la app ya entra `visible=false`, pero allí
+sigue `launched` y su landing sigue aceptando altas), **fijar los textos de recompensa reales desde
+`/admin/referidos`** —los del seed son **ejemplos sin aprobar** y hoy se le prometen al usuario tal
+cual (DP-32.1)— y medir la cadencia real del workflow en las primeras 48 h.
+
+⚠️ **Y el aviso de siempre con los relojes de GitHub:** solo programa los workflows de la **rama por
+defecto**. Mientras `referrals-cron.yml` viva solo en `dev`, **ese reloj no existe**.
+
+**Lo que NO cambió: RN-21.** Las reglas, los montos y el pago de la recompensa siguen viviendo
+enteros en Referral Factory. Nosotros damos de alta, atribuimos y avisamos de la conversión; el
+dinero del programa no pasa por `payouts` ni por `payments`, y el veredicto de `EY-209`
+(`docs/QA-LANZAMIENTO.md` §4.8) sigue en pie: no hay split de referido en el esquema porque no tiene
+que haberlo.
 
 ---
 
@@ -1782,7 +1894,7 @@ exactamente en cada `C-xx` que sigue abierta. Sin esto, «C-02 pendiente» no di
 | **C-02** · retención del payout | (1) ¿1 semana, 15 o 30 días? (2) ¿Uniforme para todos los tutores o configurable por tier? (3) En **paquetes** de N sesiones, ¿el plazo cuenta tras completar **toda** la reserva —criterio por defecto— o hay cadencia por sesión en paquetes largos? |
 | **C-05** · no-show | (1) ¿Se confirma el default (no-show del **alumno** = sesión consumida, sin reembolso; del **tutor** = reembolso de esa sesión)? El **§17** de los Términos firmados ya responde la primera mitad. (2) ¿Reprogramación automática ante no-show del tutor, o solo reembolso? (3) ¿Penalización acumulada para tutores con varios no-shows? |
 | **C-09** · tiers | (1) ¿Porcentajes de los 3 tiers? (2) ¿**Nombres** de los tiers (AB-06)? (3) ¿Con qué tier entran los tutores nuevos? (4) ¿Criterios de ascenso: sesiones, rating? |
-| **C-10** · referidos | (1) ¿Beneficio por referido exitoso, para quien refiere y para el nuevo (AB-09)? (2) ¿Qué define una «conversión válida»: registro, primera reserva, primer pago? (3) ¿Límite de referidos por usuario o de payout del programa? (4) ¿Se activa desde el lanzamiento o después? |
+| **C-10** · referidos | (1) ¿Beneficio por referido exitoso, para quien refiere y para el nuevo (AB-09)? — ⚠️ **urge**: los `reward_text` del seed son ejemplos sin aprobar y **hoy se le prometen al usuario tal cual** (DP-32.1, editables en `/admin/referidos`). (2) ¿Qué define una «conversión válida»: registro, primera reserva, primer pago? → **ya tiene default en código desde el 11-sep**: alumno = primer pago, tutor = primera sesión completada; confirmarlo o cambiarlo. (3) ¿Límite de referidos por usuario o de payout del programa? (4) ¿Se activa desde el lanzamiento o después? |
 | **C-12** · opt-out | (1) ¿Cuáles notificaciones son obligatorias y cuáles opcionales? (2) ¿Habrá correos de marketing además de los del sistema? ⚠️ La privacidad publicada declara hoy una finalidad que una campaña promocional infringe: eso se reescribe **antes**, con consentimiento de marketing y baja, y `npm run check:terms` tiene que seguir pasando |
 | **C-15** · moneda y FX | (1) ¿En qué moneda recibe el tutor: su moneda local, USD, o la misma del cobro? (2) ¿La plataforma absorbe el riesgo de tipo de cambio o se traslada al tutor? (3) ¿Se muestra el tipo de cambio aplicado en el detalle del payout? |
 | **C-13** · mercado | (1) ¿En cuántos países y cuáles se opera al lanzamiento? (2) ¿**Venezuela** entra en el MVP o se excluye del primer lanzamiento? — **el único bloqueante de negocio que queda** |
