@@ -229,28 +229,51 @@ Cada historia: **descripción · criterio de aceptación (condensado) · refs de
 ### EP-13 — Referidos · S4
 | US | Historia | MoSCoW | SP | S | Criterio de aceptación | Refs |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
-| US-1301 | Widget de referidos | S | 3 | S4 | Widget Referral Factory en AL02/G03; sin lógica interna (RN-21); reglas 10%/25%. | FL-04, Doc 6 §6.12 |
-| US-1302 | Captura de código de referido | S | 2 | S4 | Capturo `?ref=` al registro → `profiles.referral_code`; sin lógica de comisión interna. | profiles.referral_code, S-18 |
+| US-1301 | Widget de referidos | S | 3 | S4 | ~~Widget Referral Factory en AL02/G03~~ → **rehecha el 11-sep como pantalla nativa `/referidos`** (Referidos v2): igual para alumno y tutor, pintada entera desde nuestra base, con enlaces propios, QR, historial de invitados y `/admin/referidos` para decidir qué campañas se ven. Sigue **sin lógica interna** (RN-21): reglas, montos y pago viven en RF. | FL-04, Doc 6 §6.12, `20260911120000` |
+| US-1302 | Captura de código de referido | S | 2 | S4 | Capturo `?ref=` al registro → `profiles.referral_code`; sin lógica de comisión interna. ✅ **Y desde el 11-sep el `?ref=` llega de verdad**: el código es el del referidor en Referral Factory y el enlace lo emitimos nosotros. | profiles.referral_code, S-18 |
 
-> **La atribución de referidos no existe, y no está a medias.** Lo único implementado es pintar el
-> enlace y el embed de la campaña (`lib/referral.ts`, `US-1301`): quién trajo a quién se queda
-> entero en Referral Factory. La cookie `ey-ref` funciona
-> (`src/lib/supabase/middleware.ts:76-83` → metadata del alta → `handle_new_user` →
-> `profiles.referral_code`), pero espera un `?ref=` que **RF no manda**: la campaña **50297** lleva
-> al referido a una página de oferta alojada por RF y **no ofrece parámetro de código de referido**.
-> Y `referral_code` **no lo lee nadie** después: se escribe, se anula en la baja de cuenta y no
-> entra en ningún cálculo. `REFERRAL_FACTORY_API_KEY` **no se lee en ninguna línea de `src/`**.
-> Así que `US-1302` (`EY-79`) está construida contra una premisa que no se cumple y **qué mecanismo
-> usar sigue siendo pregunta abierta (C-10)**.
+> ✅ **LA ATRIBUCIÓN DE REFERIDOS EXISTE DESDE EL 11-SEP-2026.** El párrafo que había aquí decía lo
+> contrario —«no existe, y no está a medias»— y era verdad hasta ese día; se resume ahora en pasado
+> para que nadie se lo lleve por delante. El nudo era que la landing de RF no redirige de vuelta, así
+> que el `?ref=` **no llegaba nunca** y `profiles.referral_code` quedaba null siempre.
+>
+> **Se deshizo emitiendo nosotros el enlace.** El recorrido: `/referidos` da de alta al usuario como
+> referidor en RF (`POST users`) y guarda su código en `referral_memberships` → el usuario comparte
+> `https://<origen>/?ref=<code>` → el proxy lo guarda en la cookie `ey-ref` (30 días, sin cambios) →
+> el alta lo aterriza en `profiles.referral_code` (sin cambios) → el cron
+> `/api/cron/referrals-sync` detecta la conversión —alumno: primer pago; tutor: primera sesión
+> completada— y la manda a RF. Esquema en `20260911120000_referidos_nativos.sql`.
+>
+> **Y las campañas son tres, no una:** **50785** (alumnos) y **50784** (tutores), visibles, y la
+> vieja **50297**, que entra en el seed no visible. «Solo existe la 50297» y «no existe la campaña de
+> tutores» eran ciertas hasta el 10-sep y hoy no lo son.
+>
+> ⚠️ **El interruptor cambió**: era la URL (`NEXT_PUBLIC_REFERRAL_URL` y sus tres hermanas, ya
+> retiradas del código) y ahora es la credencial **`REFERRAL_FACTORY_API_KEY`**, server-only. **Está
+> borrada de Vercel desde el 10-sep**, así que hoy la funcionalidad está apagada **sin que nada se
+> ponga rojo**: la pantalla carga con su aviso y el cron responde `sin-credencial` con **200**, con
+> lo que el workflow de GitHub sale en verde sin haber hecho nada. Reponerla y los otros cuatro
+> puntos de gestión están en `docs/ENTORNOS.md` §3 C.1.
+>
+> ⚠️ Lo que **sigue abierto en C-10** es el dinero: cuánto gana quien refiere y quien es referido. Los
+> `reward_text` del seed son **ejemplos sin aprobar** y hoy se le prometen al usuario tal cual
+> (DP-32.1); se editan desde `/admin/referidos` sin tocar código.
 >
 > **`EY-148` (RF-03) se cerró sin código:** la integración nativa **Stripe ↔ Referral Factory** de
 > la propia herramienta ya califica al referido por gasto acumulado de un Customer y lo descalifica
 > al reembolsar, que es exactamente lo que iba a hacer el webhook propio. Por eso el checkout
 > reutiliza **un Customer por persona** (`profiles.stripe_customer_id`): con cinco fichas distintas,
 > cinco compras de 20 USD no alcanzan ningún umbral. **RN-21 ("sin lógica interna") sigue en pie.**
-> Quedan `EY-149` (RF-04) y `EY-150` (RF-05), sin sprint, y un bloqueante que no es código: los
-> términos que RF le enseña al referido son **su plantilla sin rellenar**, y ahora hay texto propio
-> del que copiarlos (DD-06).
+> ⚠️ **Al 11-sep esto ya no es lo que califica.** Quien marca la conversión es **nuestro** cron
+> (`/api/cron/referrals-sync`, `PUT users/{id}` con `qualified: true`), así que `RF-03` vuelve a
+> tener código aunque no sea un webhook —RF no los tiene: sus endpoints `webhooks` y `events` dan
+> 404—. **`EY-149` (RF-04, alta automática en RF) también quedó hecho**: lo hace `/referidos` al
+> abrirse por primera vez. El que sigue sin escribir es **`EY-150` (RF-05, aviso al referidor)**: hoy
+> el referidor se entera abriendo la pantalla.
+> Y queda un bloqueante que no es código: los términos que RF le enseña al referido son **su
+> plantilla sin rellenar**, y ahora hay texto propio del que copiarlos (DD-06). Pesa menos —la
+> pantalla nativa ya no manda a nadie a la landing de RF— pero la **50297 sigue `launched` en RF** y
+> su landing sigue aceptando altas hasta que se apague.
 
 ### EP-14 — Seguridad / RLS · [S1]
 | US | Historia | MoSCoW | SP | S | Criterio de aceptación | Refs |
@@ -724,7 +747,7 @@ La columna **Propuesta** cita secciones de la **propuesta comercial**, no de est
 | EP-10 | §4.2.F | SCR-TU06/TU09, AD15 | `payouts`, `payout_items`, `tutor_payout_accounts`, `payout_country_rules`, `payout_banks`, `tutor_payout_preferences`, `payout_manual_channels`, `tutor_manual_payout_destinations` | M7 | NTF-12/16/23 | DP-02/06/07 |
 | EP-11 | §4.3 | SCR-AD01..15 | (todas) + `alert_acks`, `account_suspensions` | M1/M6/M7 | NTF-03/22, **NTF-13 pendiente (US-1106)** | DP-02 |
 | EP-12 | §4.4 | — (transversal) + campana | `notifications` | (todos) | **NTF-01..23** | DP-08 |
-| EP-13 | §3/§4.4 | (widget) | `profiles.referral_code` | — | — | DP-04 |
+| EP-13 | §3/§4.4 | ~~(widget)~~ → **`/referidos`, `/admin/referidos`** (11-sep) | `profiles.referral_code` (+ `referral_converted_at`, `referral_rf_user_id`), `referral_campaigns`, `referral_memberships` | — | — | DP-04 |
 | EP-14 | §7/§8 | (transversal) | (todas) | (todos) | — | — |
 | EP-15 | §17 | SCR-AD13/AD14 | — | M6/M7 | **NTF-13 pendiente** | — |
 | EP-16 | §9/§11 | (todas) | — | — | — | — |

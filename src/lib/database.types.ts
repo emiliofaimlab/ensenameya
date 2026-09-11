@@ -1506,6 +1506,8 @@ export type Database = {
           phone: string | null
           primary_goal: string | null
           referral_code: string | null
+          referral_converted_at: string | null
+          referral_rf_user_id: number | null
           stripe_customer_id: string | null
           timezone: string
           updated_at: string
@@ -1519,6 +1521,8 @@ export type Database = {
           phone?: string | null
           primary_goal?: string | null
           referral_code?: string | null
+          referral_converted_at?: string | null
+          referral_rf_user_id?: number | null
           stripe_customer_id?: string | null
           timezone?: string
           updated_at?: string
@@ -1532,11 +1536,112 @@ export type Database = {
           phone?: string | null
           primary_goal?: string | null
           referral_code?: string | null
+          referral_converted_at?: string | null
+          referral_rf_user_id?: number | null
           stripe_customer_id?: string | null
           timezone?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      referral_campaigns: {
+        Row: {
+          audience: string
+          created_at: string
+          reward_text: string
+          rf_campaign_id: number
+          rf_code: string
+          rf_lang: string | null
+          rf_name: string
+          rf_status: string
+          rf_url: string
+          sort_order: number
+          synced_at: string
+          title: string
+          updated_at: string
+          visible: boolean
+        }
+        Insert: {
+          audience: string
+          created_at?: string
+          reward_text: string
+          rf_campaign_id: number
+          rf_code: string
+          rf_lang?: string | null
+          rf_name: string
+          rf_status: string
+          rf_url: string
+          sort_order?: number
+          synced_at?: string
+          title: string
+          updated_at?: string
+          visible?: boolean
+        }
+        Update: {
+          audience?: string
+          created_at?: string
+          reward_text?: string
+          rf_campaign_id?: number
+          rf_code?: string
+          rf_lang?: string | null
+          rf_name?: string
+          rf_status?: string
+          rf_url?: string
+          sort_order?: number
+          synced_at?: string
+          title?: string
+          updated_at?: string
+          visible?: boolean
+        }
+        Relationships: []
+      }
+      referral_memberships: {
+        Row: {
+          code: string
+          created_at: string
+          profile_id: string
+          qr_url: string | null
+          rf_campaign_id: number
+          rf_user_id: number
+          sharing: Json
+          url: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          profile_id: string
+          qr_url?: string | null
+          rf_campaign_id: number
+          rf_user_id: number
+          sharing?: Json
+          url: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          profile_id?: string
+          qr_url?: string | null
+          rf_campaign_id?: number
+          rf_user_id?: number
+          sharing?: Json
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "referral_memberships_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "referral_memberships_rf_campaign_id_fkey"
+            columns: ["rf_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "referral_campaigns"
+            referencedColumns: ["rf_campaign_id"]
+          },
+        ]
       }
       refund_requests: {
         Row: {
@@ -2716,6 +2821,27 @@ export type Database = {
         Returns: boolean
       }
       recording_allowed: { Args: { p_session_id: string }; Returns: boolean }
+      referral_conversions_pending: {
+        Args: { p_limit?: number }
+        Returns: {
+          audience: string
+          email: string
+          first_name: string
+          profile_id: string
+          referral_code: string
+          rf_campaign_id: number
+        }[]
+      }
+      referral_invitees: {
+        Args: never
+        Returns: {
+          converted_at: string
+          display_name: string
+          id: string
+          rf_campaign_id: number
+          signed_up_at: string
+        }[]
+      }
       refund_payment: {
         Args: { p_amount?: number; p_payment_id: string }
         Returns: Json
@@ -2891,45 +3017,26 @@ export type Database = {
         Args: { p_channel: string; p_handle: string; p_holder_name: string }
         Returns: Json
       }
-      upsert_payout_account:
-        | {
-            Args: {
-              p_account?: string
-              p_account_type?: string
-              p_address_line?: string
-              p_bank_code: string
-              p_branch?: string
-              p_city?: string
-              p_document?: string
-              p_document_type: string
-              p_first_name: string
-              p_last_name: string
-              p_phone?: string
-              p_postcode?: string
-              p_state?: string
-            }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_account?: string
-              p_account_type?: string
-              p_address_line?: string
-              p_bank_code: string
-              p_branch?: string
-              p_city?: string
-              p_dob?: string
-              p_document?: string
-              p_document_type: string
-              p_first_name: string
-              p_last_name: string
-              p_phone?: string
-              p_postcode?: string
-              p_state?: string
-              p_tos_ip?: string
-            }
-            Returns: Json
-          }
+      upsert_payout_account: {
+        Args: {
+          p_account?: string
+          p_account_type?: string
+          p_address_line?: string
+          p_bank_code: string
+          p_branch?: string
+          p_city?: string
+          p_dob?: string
+          p_document?: string
+          p_document_type: string
+          p_first_name: string
+          p_last_name: string
+          p_phone?: string
+          p_postcode?: string
+          p_state?: string
+          p_tos_ip?: string
+        }
+        Returns: Json
+      }
       wise_puede_pagar_a: { Args: { p_tutor: string }; Returns: boolean }
     }
     Enums: {

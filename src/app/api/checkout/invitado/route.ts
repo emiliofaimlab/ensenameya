@@ -8,8 +8,8 @@ import {
   TERMS_GOVERNING_LOCALE,
   TERMS_VERSION,
 } from "@/components/legal/terms-content";
-import { COMPANY } from "@/lib/company";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
+import { renderEmail } from "@/lib/email-templates";
 import { REFERRAL_COOKIE } from "@/lib/referral";
 import { TZ_COOKIE } from "@/lib/tz";
 
@@ -275,37 +275,38 @@ function correoYaRegistrado(
  * manda nada, como en todo el proyecto (la credencial es el interruptor).
  *
  * La dirección NO se interpola en el cuerpo: quien lo recibe ya la conoce, y así
- * no hay texto de nadie dentro del HTML que haya que escapar.
+ * no hay texto de nadie dentro del HTML que haya que escapar. Por eso el
+ * `nombre` que se le pasa al render va VACÍO a propósito — el correo saluda con
+ * un «Hola,» a secas y no con el nombre que tecleó quien creó la cuenta, que
+ * puede no ser el de quien lo recibe.
+ *
+ * El HTML ya no se arma aquí: lo pone `renderEmail` (Doc 33), que es el mismo
+ * diseño que sale de la cola. Antes este correo era el único con una hoja de
+ * estilos propia, y se notaba justo en el correo que más tiene que parecer
+ * nuestro.
  */
-async function avisarAlCorreo(email: string): Promise<void> {
+async function avisarAlCorreo(email: string, baseUrl: string): Promise<void> {
   if (!isEmailConfigured()) return;
 
-  const lineas = [
-    "Hola,",
-    "",
-    "Acabamos de crear una cuenta en Enséñame Ya con esta dirección de correo, desde el formulario de pago.",
-    "",
-    "Si fuiste tú, no tienes que hacer nada.",
-    "",
-    `Si NO fuiste tú, escríbenos a ${COMPANY.email}: esa cuenta puede entrar con la contraseña que se eligió al crearla, así que conviene que la desactivemos.`,
-    "",
-    "— Enséñame Ya",
-  ];
-
-  const html = `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#242424;max-width:520px;margin:0 auto;padding:24px">
-  <p style="margin:0 0 16px">Hola,</p>
-  <p style="margin:0 0 16px">Acabamos de crear una cuenta en Enséñame Ya con esta dirección de correo, desde el formulario de pago.</p>
-  <p style="margin:0 0 16px">Si fuiste tú, no tienes que hacer nada.</p>
-  <p style="margin:0 0 24px">Si <strong>no</strong> fuiste tú, escríbenos a <a href="mailto:${COMPANY.email}" style="color:#fe6a00">${COMPANY.email}</a>: esa cuenta puede entrar con la contraseña que se eligió al crearla, así que conviene que la desactivemos.</p>
-  <p style="margin:0;color:#666;font-size:13px">Enséñame Ya · Recibes este correo porque alguien usó esta dirección para crear una cuenta.</p>
-</div>`;
-
-  const enviado = await sendEmail({
-    to: email,
-    subject: "Se creó una cuenta con tu correo en Enséñame Ya",
-    html,
-    text: lineas.join("\n"),
+  const correo = renderEmail({
+    template: "guest_account_created",
+    payload: null,
+    nombre: "",
+    baseUrl,
   });
+  // `renderEmail` devuelve `null` cuando el id no está en el mapa. Aquí no
+  // debería pasar —es un literal— pero mirarlo cuesta menos que un `!`: si
+  // alguien renombra la plantilla, esto deja de avisar y lo dice, en vez de
+  // reventar dentro de un `after()`, donde la excepción no la ve nadie.
+  if (!correo) {
+    console.error("[checkout/invitado] falta la plantilla guest_account_created");
+    return;
+  }
+
+  // `correo` trae `subject`, `html`, `text` y `baja`: los cuatro son opciones de
+  // `sendEmail`, así que el spread basta y este fichero no tiene que saber si
+  // este correo lleva `List-Unsubscribe` (no lo lleva: es de seguridad).
+  const enviado = await sendEmail({ to: email, ...correo });
   if (!enviado.ok) {
     console.error("[checkout/invitado] aviso de alta no salió:", enviado.error);
   }
@@ -513,8 +514,13 @@ export async function POST(req: Request) {
 
   // El alta deja de ser muda: el dueño de la dirección se entera. Después de
   // responder, para no meter a Resend en el camino del pago.
+  //
+  // El origen sale de la PETICIÓN, como en el job de correo: así el enlace del
+  // correo apunta al despliegue que lo generó y no hay una variable más que
+  // mantener sincronizada entre dev, preview y producción.
+  const origen = new URL(req.url).origin;
   after(async () => {
-    await avisarAlCorreo(email);
+    await avisarAlCorreo(email, origen);
   });
 
   // Ni contraseña, ni tokens, ni nada que venga del cliente admin. La sesión la

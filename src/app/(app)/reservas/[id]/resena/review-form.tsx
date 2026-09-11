@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { SendIcon, StarIcon } from "lucide-react";
 
@@ -32,7 +32,28 @@ export function ReviewForm({
   suggestedName: string | null;
 }) {
   const router = useRouter();
-  const [rating, setRating] = useState(existing?.rating ?? 0);
+  // Las cinco estrellas del correo de reseña (`review_request`) apuntan a
+  // `…/resena?rating=N`: si la pantalla arranca en 0, el enlace lleva aquí pero
+  // NO ahorra el clic, que es TODO el punto de poner estrellas en un correo.
+  //
+  // ⚠️ `existing` gana siempre, y a propósito: quien ya dejó reseña y vuelve a
+  // entrar no puede ver su puntuación pisada por un parámetro de la URL (basta
+  // un enlace viejo del correo, que sigue diciendo `?rating=5`). El parámetro
+  // solo siembra el formulario vacío.
+  //
+  // El rango se valida aquí porque la URL la escribe cualquiera: `?rating=9`
+  // pintaría nueve estrellas encendidas y `submit_review` lo rechazaría después.
+  // `Number("")` es 0 y `Number("abc")` es NaN — las dos comparaciones fallan y
+  // caen a 0, que es el estado de partida de siempre.
+  //
+  // Sin `<Suspense>`: `useSearchParams` solo lo exige cuando la ruta se
+  // prerenderiza, y esta la vuelve dinámica el `requireUser()` de su `page.tsx`.
+  // Mismo montaje que `AdminFilters` y `PanelFiltro`.
+  const params = useSearchParams();
+  const inicial = Number(params.get("rating"));
+  const [rating, setRating] = useState(
+    existing?.rating ?? (inicial >= 1 && inicial <= 5 ? inicial : 0),
+  );
   const [hover, setHover] = useState(0);
   const [comment, setComment] = useState(existing?.comment ?? "");
   // Decisión 18: anónima salvo que consienta firmar. Por defecto, no.

@@ -8,6 +8,10 @@
  * El destino sale de la plantilla y del `payload` que ya escriben los triggers
  * (`booking_id`, `payout_id`…), así que el aviso lleva a la pantalla del hecho.
  * Lo decide `rutaFor`, que es la MISMA que usa el correo.
+ *
+ * ⚠️ Y DESDE EL DOC 33 MANDA LA PLANTILLA, NO EL PAYLOAD. Al revés —que era como
+ * estaba— todo lo que llevara `booking_id` acababa en `/reservas/{id}`, la
+ * pantalla del ALUMNO, incluidos los avisos dirigidos al tutor. Ver `DESTINO`.
  */
 export type NotificationRow = {
   id: string;
@@ -51,6 +55,61 @@ const TEXT: Record<string, string> = {
   // NTF-22 · el respaldo. El texto de verdad lo pone `toNotice` desde el
   // payload; esto solo cubre una fila sin mensaje.
   admin_message: "Tienes un mensaje del equipo de Enséñame Ya",
+
+  // ── Doc 33 ────────────────────────────────────────────────────────────────
+  //
+  // Las plantillas que nacieron con el pliego de correos. Se registran aquí
+  // aunque casi todas se encolen con `channel = 'email'`: la campana pinta
+  // TODAS las filas de `notifications` sin mirar el canal (ver `new_message`
+  // dos líneas más arriba), así que sin su línea saldrían como «Novedad en tu
+  // cuenta (NTF-24)», que no dice nada.
+  //
+  // NO están las tres de Auth ni `guest_account_created` ni `contact_internal`:
+  // esas no pasan por la cola —las manda Supabase, el checkout de invitado y el
+  // formulario de contacto, directas— así que nunca hay una fila que pintar.
+  order_receipt: "Recibimos el pago de tu pedido",
+  booking_pending_student: "Tu reserva espera a que el tutor la acepte",
+  booking_expiring_tutor: "Te queda poco para responder a una reserva",
+  // NTF-11 le sale igual al alumno y al tutor, así que la frase vale para los
+  // dos: «tu mentoría», sin decir con quién.
+  booking_reminder_24h: "Tu mentoría es mañana",
+  session_starting: "Tu mentoría empieza en unos minutos",
+  materials_ready: "Tu tutor subió material para tu clase",
+  review_received_tutor: "Tienes una reseña nueva",
+  payout_account_changed: "Cambiaron los datos de tu cuenta de cobro",
+  welcome_student: "Te damos la bienvenida: busca tu primer tutor",
+  welcome_tutor: "Te faltan dos pasos para empezar a enseñar",
+  account_deletion_requested: "Tu cuenta quedó desactivada",
+  account_deletion_done: "Tu cuenta se cerró",
+  admin_alert: "Hay incidencias esperando revisión",
+  contact_ack: "Recibimos tu mensaje",
+};
+
+/**
+ * Doc 33 · destino FIJO por plantilla: el que no depende de ningún id.
+ *
+ * 🔴 EL FALLO QUE ESTE MAPA EMPIEZA A TAPAR. Hasta hoy `rutaFor` mandaba a
+ * TODO EL MUNDO a la pantalla del alumno: cualquier payload con `booking_id`
+ * caía en `/reservas/{id}`, que es SCR-AL03. `booking_new_tutor` (NTF-07) va al
+ * TUTOR y salía así desde siempre, y la RLS no lo tapa —el tutor puede leer esa
+ * fila—, así que la pantalla renderizaba entera, con las acciones del alumno.
+ * No es una mejora pendiente: es un enlace que lleva al sitio equivocado.
+ *
+ * Se mira ANTES que el payload porque casi todas estas plantillas TAMBIÉN
+ * traen `booking_id`: si se mirara después, no se llegaría nunca aquí.
+ */
+const DESTINO: Record<string, string> = {
+  welcome_student: "/app",
+  welcome_tutor: "/tutor",
+  // El correo invita a ver su FICHA PÚBLICA («las reseñas salen en tu ficha y
+  // pesan en el orden de las búsquedas»), no a gestionar aquella reserva.
+  review_received_tutor: "/tutor",
+  payout_account_changed: "/tutor/payouts",
+  admin_alert: "/admin/alertas",
+  // La baja se pide y se deshace desde ahí, y `/app` es el panel del ALUMNO:
+  // este aviso le llega igual a un tutor. Mismo motivo que `admin_message`.
+  account_deletion_requested: "/account",
+  account_deletion_done: "/account",
 };
 
 /** Cuánto del mensaje del admin cabe en una línea de la campana. */
@@ -77,6 +136,52 @@ export function rutaFor(
   if (typeof conversationId === "string") return `/chat/${conversationId}`;
 
   const bookingId = payload?.booking_id;
+
+  // ── Doc 33 · lo que NO va a la pantalla del alumno ────────────────────────
+  //
+  // Todo este bloque va ANTES de la rama de `booking_id` a propósito: leer el
+  // payload primero es exactamente lo que mandaba al tutor a SCR-AL03.
+  const fijo = DESTINO[template];
+  if (fijo) return fijo;
+
+  // NTF-07 y NTF-17 · la reserva vista DESDE EL TUTOR, que es otra pantalla y
+  // otras acciones (aceptar / rechazar, no pagar / cancelar / reseñar).
+  if (template === "booking_new_tutor" || template === "booking_expiring_tutor") {
+    return typeof bookingId === "string" ? `/tutor/reservas/${bookingId}` : "/tutor/reservas";
+  }
+
+  // NTF-04b · al PEDIDO, que es donde está el recibo con el total.
+  //
+  // Se decide por PLANTILLA y no por «¿hay `order_id` en el payload?», y la
+  // diferencia importa: un pedido son VARIAS reservas —es justo el motivo de
+  // que `order_receipt` exista aparte del recibo por línea— así que si el
+  // payload trajera además un `booking_id`, la rama de abajo lo mandaría al
+  // detalle de UNA de las tres clases que compró, como si fuera la única.
+  // Cerrando por plantilla eso no puede pasar, venga lo que venga en el payload.
+  // Sin `order_id` cae a la lista, que es escueta pero nunca engañosa.
+  if (template === "order_receipt") {
+    const o = payload?.order_id;
+    return typeof o === "string" ? `/pedidos/${o}/confirmacion` : "/reservas";
+  }
+
+  // NTF-08 · a la SALA, que es a donde tiene que ir quien lee «empieza en unos
+  // minutos». El `session_id` lo trae el payload desde `20260911210000`; si un
+  // día faltara, la reserva es un destino honesto y la sala se alcanza desde
+  // ahí, así que se cae a la rama de abajo en vez de inventar una URL.
+  if (template === "session_starting") {
+    // A una variable antes de mirarla, como `conversationId`: el payload es
+    // `Record<string, unknown>` y el estrechamiento no sobrevive de otra forma.
+    const sessionId = payload?.session_id;
+    if (typeof sessionId === "string") return `/room/${sessionId}`;
+  }
+
+  // ⚠️ `booking_reminder_24h` (NTF-11) SE QUEDA AQUÍ, y es el único caso que
+  // este mecanismo no resuelve: `avisar_clases_de_manana` encola DOS filas —una
+  // al alumno y otra al tutor— con la MISMA plantilla y el MISMO payload, así
+  // que por plantilla no hay forma de saber a cuál de los dos se le está
+  // hablando. Va a la pantalla del alumno, que es la equivocada la mitad de las
+  // veces. Arreglarlo de verdad pide el papel del destinatario en la fila (o
+  // dos plantillas), y eso es una migración, no un `if` aquí.
   if (typeof bookingId === "string") return `/reservas/${bookingId}`;
   if (payload?.payout_id) return "/tutor/payouts";
   // Respaldo. Desde `20260831120000` los avisos de dinero (NTF-04/10/15) traen
