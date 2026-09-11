@@ -12,7 +12,8 @@ import {
   type NotificationRow,
 } from "@/lib/notifications";
 import { TZ_COOKIE } from "@/lib/tz";
-import { pickHome, type AppRole } from "./roles";
+import { PANEL_COOKIE } from "@/lib/panel";
+import { pickHome, panelValido, type AppRole } from "./roles";
 
 /**
  * Guardas de ruta por rol (Doc 3), reutilizables en Server Components,
@@ -253,9 +254,51 @@ export async function requireUser(): Promise<
 /**
  * Exige NO tener sesión (login/registro). Si ya hay sesión, manda a su home.
  */
+/**
+ * A dónde pertenece este usuario.
+ *
+ * ⚠️ Existe porque TRES puertas necesitaban esta respuesta y cada una la
+ * calculaba a su manera, con resultados distintos para la MISMA cuenta
+ * (verificado en vivo el 11-sep-2026 con un tutor aprobado):
+ *   · el callback de OAuth  → `/tutor`   ✓
+ *   · `requireGuest()`      → `/admin`, ignorando la cookie del panel
+ *   · la salida de `/onboarding` → `/app`, con la ruta escrita a pelo
+ *
+ * Las dos pistas que se perdían por el camino son siempre las mismas: que el
+ * rol `tutor` solo se concede al APROBAR —así que quien está en revisión no lo
+ * tiene y hay que mirar `tutor_profiles`— y de qué panel venías.
+ *
+ * La consulta de más solo corre en puertas de paso, nunca en una pantalla.
+ */
+export async function destinoDeUsuario(
+  userId: string,
+  roles: AppRole[],
+): Promise<string> {
+  const supabase = await createClient();
+  // El `.eq()` no es redundante con la RLS: `tutor_profiles_select_public` deja
+  // leer la fila de CUALQUIER tutor aprobado, así que sin filtro esto trae
+  // muchas filas y `maybeSingle()` devuelve error en vez de la propia.
+  const { data: tutorProfile, error } = await supabase
+    .from("tutor_profiles")
+    .select("profile_id")
+    .eq("profile_id", userId)
+    .maybeSingle();
+  // Regla de oro 10: si falla, el destino cae al panel de alumno sin que nada
+  // lo diga.
+  if (error) {
+    console.error("[destinoDeUsuario] tutor_profiles", error.code, error.message);
+  }
+  return pickHome(roles, {
+    esTutor: Boolean(tutorProfile),
+    panel: panelValido((await cookies()).get(PANEL_COOKIE)?.value),
+  });
+}
+
 export async function requireGuest(): Promise<void> {
   const ctx = await getSessionContext();
-  if (ctx.user) redirect(pickHome(ctx.roles));
+  if (!ctx.user) return;
+
+  redirect(await destinoDeUsuario(ctx.user.id, ctx.roles));
 }
 
 /**

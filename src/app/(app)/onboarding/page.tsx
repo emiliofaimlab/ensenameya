@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 
 import { storageUrl } from "@/lib/catalog/format";
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  destinoDeUsuario,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/roles";
 import { Container } from "@/components/layout/container";
@@ -24,7 +28,7 @@ export default async function OnboardingPage({
   searchParams: Promise<{ next?: string; paso?: string }>;
 }) {
   const { next, paso } = await searchParams;
-  const { user, onboardingComplete } = await requireUser();
+  const { user, roles, onboardingComplete } = await requireUser();
 
   // ⚠️ El flag sale de `requireUser()` y NO de una segunda consulta a
   // `profiles`, que es de donde salía. Eran dos fuentes de verdad para el mismo
@@ -33,7 +37,14 @@ export default async function OnboardingPage({
   // falla, ver `lib/auth/server.ts`— y esta pantalla, leyendo la columna por su
   // cuenta, se veía completa y devolvía a `/app`. Rebote infinito y mudo.
   // Ahora la respuesta es una sola, así que o entra o no entra.
-  if (onboardingComplete) redirect(safeNext(next, "/app"));
+  // ⚠️ El respaldo era `"/app"` escrito a pelo, y por eso un TUTOR que entrara
+  // por `/signup` —cuyo botón de Google lleva `intent=alumno` por defecto—
+  // acababa en el panel de alumno: el callback lo mandaba aquí, esto veía el
+  // onboarding hecho y lo soltaba en `/app`. El mismo tutor entrando por
+  // `/login` iba a `/tutor`. Verificado en vivo el 11-sep-2026.
+  if (onboardingComplete) {
+    redirect(safeNext(next, await destinoDeUsuario(user.id, roles)));
+  }
 
   // El paso se resuelve en el SERVIDOR para que el primer HTML ya venga con el
   // correcto y no parpadee otro número al hidratar. Solo mira `?paso=`, que es

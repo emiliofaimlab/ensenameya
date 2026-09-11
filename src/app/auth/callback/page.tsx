@@ -21,14 +21,23 @@ export default async function AuthCallbackPage({
     ref?: string;
     terms?: string;
     terms_locale?: string;
+    /** ⚠️ Supabase vuelve por aquí con `?error=…&error_description=…` cuando
+     *  el usuario cancela en Google o el proveedor rechaza. Hasta el
+     *  11-sep-2026 no se leía NADA de esto: el motivo real se tiraba entero y
+     *  el usuario veía «no se pudo completar», viniera de donde viniera. */
+    error?: string;
+    error_description?: string;
   }>;
 }) {
-  const { code, next, intent, ref, terms, terms_locale } = await searchParams;
+  const { code, next, intent, ref, terms, terms_locale, error, error_description } =
+    await searchParams;
 
   return (
     <AuthShell className="max-w-[420px]">
       <CallbackStatus
         code={code ?? null}
+        providerError={error?.trim() || null}
+        providerErrorDescription={error_description?.trim() || null}
         next={next ?? null}
         intent={intent === "alumno" || intent === "tutor" ? intent : null}
         referralCode={ref?.trim() || null}
