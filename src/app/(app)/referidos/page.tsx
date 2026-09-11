@@ -183,9 +183,16 @@ async function ensureMemberships(
     // enlace…»: ahí el reintento es la respuesta correcta y además es seguro,
     // porque `createUser` con el mismo correo y la misma campaña devuelve el
     // MISMO usuario (medido).
-    if (r.reason instanceof ReferralFactoryError && !r.reason.retriable) {
-      rechazadas.add(campaña);
-    }
+    // ⚠️ Y UN ERROR DE LA BASE TAMBIÉN ES UN «NO». Antes solo contaba un
+    // `ReferralFactoryError` permanente, así que un fallo del insert caía por
+    // el hueco y volvía a decir «Preparando tu enlace…». Lo destapó producción
+    // el 11-sep: RF respondía perfectamente y lo que fallaba era un `23505`
+    // —el `code` que devolvía RF ya lo tenía una cuenta dada de baja, ver
+    // `20260911230000`—. La regla se invierte: solo un MAL MINUTO de RF
+    // (timeout, 429, 5xx) sigue siendo «Preparando…»; todo lo demás se dice.
+    const malMinutoDeRf =
+      r.reason instanceof ReferralFactoryError && r.reason.retriable;
+    if (!malMinutoDeRf) rechazadas.add(campaña);
   });
 
   return { codigos, rechazadas };
