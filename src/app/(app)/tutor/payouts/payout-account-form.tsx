@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
-  avisoDeDireccion,
   enmascarar,
   normalizaCuenta,
   normalizaDocumento,
@@ -308,20 +307,6 @@ export function PayoutAccountForm({
 
   const tiposDocumento = Object.keys(regla.document_patterns);
 
-  /**
-   * Para qué sirven la dirección y el teléfono, y qué le falta al tutor.
-   *
-   * Se calcula sobre `guardado` y no sobre `v`: lo que interesa es qué hay EN LA
-   * BASE, no lo que hay a medio teclear en el campo. Y se pasa `null` cuando lo
-   * guardado es de otro país, por lo mismo que esos campos no se prerrellenan:
-   * una dirección de Argentina no cuenta como dirección para cobrar en México.
-   */
-  const avisoDireccion = avisoDeDireccion({
-    regla,
-    guardado: mismoPais ? guardado : null,
-    nombreDelPais: etiquetaPais,
-  });
-
   async function guardar() {
     // ── El segundo número del banco, ANTES de `validarCuenta` ───────────────
     //
@@ -529,9 +514,11 @@ export function PayoutAccountForm({
                     guardado.bank_code
                   }`
                 : ""}
-              . Solo enseñamos los cuatro últimos caracteres; para cambiar la
-              cuenta o el documento, escríbelos de nuevo. Si los dejas en blanco,
-              se quedan como están.
+              {/* Las dos frases que seguían aquí —«solo enseñamos los cuatro
+                  últimos», «si los dejas en blanco se quedan como están»— las
+                  dice ya el placeholder de cada uno de los dos campos
+                  enmascarados, y las dice EN el campo, que es donde hacen
+                  falta. */}
             </>
           ) : (
             <>
@@ -744,100 +731,54 @@ export function PayoutAccountForm({
           </label>
         ) : null}
 
-        {/* ── Lo que pide una de las rutas de pago ────────────────────────────
+        {/* ── LOS CAMPOS QUE ANTES ERAN «EXTRAS» ──────────────────────────────
 
-            🔑 DOS CAMPOS, Y EL TUTOR NO SABE PARA QUIÉN SON. Los exige Stripe
-            para poder pagarle sin que él se dé de alta en ningún sitio (dictado
-            del 9-sep, decisión D-1). El texto NO nombra a Stripe: es la misma
-            promesa que el resto de la pantalla —«jamás se enterará si fue hecho
-            con wise, con dlocal o con stripe»— y por eso habla de «las
-            plataformas con las que trabajamos», que es lo que de verdad pasa.
+            🔑 SE PIDEN SIEMPRE Y A TODO EL MUNDO, los use el riel de ese país o
+            no (decisión del cliente, 11-sep-2026). Hasta hoy la fecha de
+            nacimiento vivía bajo un encabezado —«Para abrirte más rutas de
+            pago»— y la dirección bajo otro con un «(opcional)» y un párrafo que
+            explicaba qué se ganaba rellenándola. Dos secciones y tres párrafos
+            para decir que unos campos cuentan menos que otros, y el resultado
+            medido de decirlo era que se quedaban en blanco.
 
-            Y son opcionales aquí, como la dirección: sin ellos el tutor sigue
-            cobrando por dLocal, por Wise o por PayPal. Lo único que pierde es
-            una ruta. */}
-        <div className="mt-5 border-t border-[#efefef] pt-4">
-          <p className="text-[13px] font-medium text-[#333333]">
-            Para abrirte más rutas de pago
-          </p>
-          <p className="mt-0.5 text-[12px] leading-relaxed text-[#6b6b6b]">
-            Opcional. Con estos dos datos podemos pagarte por más vías y elegir
-            la que menos comisión te cueste. Sin ellos te seguimos pagando
-            igual.
-          </p>
+            Ahora son campos del formulario, con el mismo aspecto que el resto.
 
-          <label className="mt-3 block">
-            <span className="text-xs text-[#6b6b6b]">
-              Fecha de nacimiento{guardado ? " (guardada)" : ""}
-            </span>
-            <input
-              type="date"
-              className={`mt-1 ${CAMPO}`}
-              value={nacimiento}
-              disabled={busy}
-              autoComplete="bday"
-              aria-describedby="ayuda-nacimiento"
-              onChange={(e) => {
-                setNacimiento(e.target.value);
-                setError(null);
-              }}
-            />
+            ⚠️ LO QUE NO CAMBIA ES LA VALIDACIÓN: la base los deja nullable a
+            conciencia (`20260907120000`) y `validarCuenta` no los exige.
+            Pedirlos a todos no es bloquear a nadie — exigirlos aquí le cortaría
+            el guardado a los países que hoy cobran sin ellos, que es peor que un
+            campo vacío. */}
+        <label className="block">
+          <span className="text-xs text-[#6b6b6b]">
+            Fecha de nacimiento{guardado ? " (guardada)" : ""}
+          </span>
+          <input
+            type="date"
+            className={`mt-1 ${CAMPO}`}
+            value={nacimiento}
+            disabled={busy}
+            autoComplete="bday"
+            aria-describedby={guardado ? "ayuda-nacimiento" : undefined}
+            onChange={(e) => {
+              setNacimiento(e.target.value);
+              setError(null);
+            }}
+          />
+          {/* ⚠️ LA ÚNICA AYUDA QUE SOBREVIVIÓ A LA PODA, y solo para quien ya
+              guardó. `beneficiary_dob` no tiene `grant select` para
+              `authenticated`, así que este campo arranca VACÍO también para él:
+              sin esta línea vería «(guardada)» encima de un hueco. Los otros dos
+              campos que se conservan en blanco lo dicen en su `placeholder`, y
+              un `<input type="date">` no tiene placeholder que valga. */}
+          {guardado ? (
             <span
               id="ayuda-nacimiento"
               className="mt-1 block text-[12px] text-[#6b6b6b]"
             >
-              {guardado
-                ? "Déjala en blanco para no cambiarla."
-                : "La del titular de la cuenta, que eres tú."}
+              Déjala en blanco para no cambiarla.
             </span>
-          </label>
-
-          <label className="mt-3 flex cursor-pointer items-start gap-2">
-            <input
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 accent-brand"
-              checked={acepta}
-              disabled={busy}
-              aria-describedby="ayuda-acepta"
-              onChange={(e) => {
-                setAcepta(e.target.checked);
-                setError(null);
-              }}
-            />
-            <span className="text-[12px] leading-relaxed text-[#6b6b6b]">
-              Autorizo a Enséñame Ya a crear a mi nombre las cuentas de cobro
-              necesarias en las plataformas de pago con las que trabaja, y
-              acepto sus condiciones de uso para recibir mis pagos.
-            </span>
-          </label>
-          <span id="ayuda-acepta" className="sr-only">
-            Sin esta autorización seguimos pagándote por las vías que ya tienes
-            configuradas.
-          </span>
-        </div>
-
-        {/* ── Dirección y teléfono del titular ────────────────────────────────
-            Los únicos campos OPCIONALES de este formulario, y por eso son los
-            únicos que llevan su propio encabezado y su propia explicación: al
-            resto no hay nada que explicarle —sin banco no hay transferencia—,
-            pero un campo que se puede dejar en blanco y no dice para qué sirve
-            se queda en blanco siempre. Y si se queda en blanco, `banco_wise` es
-            false para todo el mundo y el riel de Wise está encendido y vacío,
-            que es literalmente el estado del que sale esta pantalla.
-
-            ⚠️ Y no llevan asterisco ni «(obligatorio)» a propósito: la base no
-            los exige (`20260907120000` los dejó nullable a conciencia) y
-            pintarlos como obligatorios aquí le bloquearía el guardado a los
-            ocho países que hoy cobran por dLocal sin ellos. */}
-        <div className="sm:col-span-2 mt-2">
-          <p className="text-[13px] font-semibold text-[#19191f]">
-            Dirección y teléfono del titular{" "}
-            <span className="font-normal text-[#6b6b6b]">(opcional)</span>
-          </p>
-          <p className="mt-1 max-w-[620px] text-[12px] text-[#6b6b6b]">
-            {avisoDireccion}
-          </p>
-        </div>
+          ) : null}
+        </label>
 
         <label className="block sm:col-span-2">
           <span className="text-xs text-[#6b6b6b]">Calle y número</span>
@@ -874,12 +815,6 @@ export function PayoutAccountForm({
             maxLength={32}
             onChange={(e) => set("codigoPostal")(e.target.value)}
           />
-          {/* Se pide también donde no se usa a diario, y decirlo evita el
-              «esto en mi país no existe» que acaba en un campo vacío. */}
-          <span className="mt-1 block text-[12px] text-[#6b6b6b]">
-            Si en tu ciudad no se usa, pon el de tu zona o el de la oficina de
-            correos más cercana.
-          </span>
         </label>
 
         <label className="block">
@@ -900,10 +835,30 @@ export function PayoutAccountForm({
             placeholder="+57 300 123 4567"
             onChange={(e) => set("telefono")(e.target.value)}
           />
-          {/* El `check` de la columna no admite puntos; `normalizaTelefono` los
-              quita antes de mandarlos, así que aquí no se le riñe por ellos. */}
-          <span className="mt-1 block text-[12px] text-[#6b6b6b]">
-            El del titular de la cuenta, con prefijo del país.
+        </label>
+
+        {/* 🔑 LA AUTORIZACIÓN NO ES UN CAMPO Y POR ESO SIGUE APARTE, al final y
+            en toda la anchura. Es lo que sella `tos_acceptance` (dictado del
+            9-sep, decisión D-1) y lo único de este formulario que no se puede
+            acortar quitándole palabras: dice a qué se está autorizando.
+
+            NO nombra a Stripe a propósito — es la misma promesa que el resto de
+            la pantalla, que el tutor «jamás se enterará» de quién ejecutó. */}
+        <label className="flex cursor-pointer items-start gap-2 sm:col-span-2">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4 shrink-0 accent-brand"
+            checked={acepta}
+            disabled={busy}
+            onChange={(e) => {
+              setAcepta(e.target.checked);
+              setError(null);
+            }}
+          />
+          <span className="text-[12px] leading-relaxed text-[#6b6b6b]">
+            Autorizo a Enséñame Ya a crear a mi nombre las cuentas de cobro
+            necesarias en las plataformas de pago con las que trabaja, y acepto
+            sus condiciones de uso para recibir mis pagos.
           </span>
         </label>
       </div>

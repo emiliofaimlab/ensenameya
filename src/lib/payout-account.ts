@@ -320,98 +320,14 @@ export function validarCuenta(
   return null;
 }
 
-/**
- * Qué le decimos al tutor sobre la dirección y el teléfono, que es lo único que
- * distingue estos cuatro campos del resto del formulario: los demás los pide el
- * banco y sin ellos no cobra; estos son opcionales y hay que explicar para qué
- * sirven o se quedan en blanco para siempre — y entonces el riel de Wise está
- * encendido y vacío, que es exactamente el estado del que sale esta pantalla.
- *
- * ⚠️ NO REIMPLEMENTA `wise_puede_pagar_a()`, y no puede: esa función mira además
- * el banco traducido, el tipo de cuenta de Argentina y el tipo de documento de
- * Uruguay, y su `execute` es solo de `service_role`. Lo que sabe este módulo es
- * (a) si el país tiene vía —`wise_account_type`, que sí es legible— y (b) cuáles
- * de los cuatro campos están guardados. Cuando la RPC ya ha contestado,
- * `wise_listo` manda sobre las dos cosas: es el veredicto del servidor y aquí
- * solo se pinta.
- *
- * `wise_listo: null` es «todavía no lo ha dicho nadie» —la primera carga de la
- * página, donde solo hay columnas leídas—, y por eso ese caso NO promete nada.
- *
- * ⚠️ Y `wise_listo: true` tampoco significa que hoy el dinero salga por ahí:
- * dice que los DATOS del tutor le sirven a Wise, no que Wise vaya a pagar. Para
- * eso hacen falta dos cosas más que no se preguntan desde aquí y que el 7-sep
- * NO se cumplían: `WISE_API_TOKEN` en el despliegue (solo está en `.env.local`,
- * `docs/ENTORNOS.md` §1) y saldo en la cuenta (`balances` devuelve `[]`, así que
- * el fondeo falla — `docs/PAGOS-Y-PAYOUTS.md` §9.3). Sin el token el resolvedor
- * salta el riel sin ruido y el tutor cobra por el de siempre, que es por lo que
- * esta frase no miente hoy; el día que el token esté y el saldo no, sí mentiría.
+/*
+ * ⚠️ AQUÍ VIVÍA `avisoDeDireccion()`, y se fue el 11-sep-2026 con la pantalla.
+ * Explicaba en un párrafo por qué la dirección y el teléfono eran OPCIONALES y
+ * qué se ganaba rellenándolos. Ya no hay nada que explicar: el formulario pide
+ * los mismos campos a todo el mundo, los use el riel de ese país o no, así que
+ * el párrafo describía una distinción que la pantalla dejó de hacer. Con él se
+ * fue `enumera()`, que no tenía otro llamador.
  */
-export function avisoDeDireccion(args: {
-  regla: ReglaDePais;
-  guardado: {
-    address_line: string | null;
-    city: string | null;
-    postcode: string | null;
-    phone: string | null;
-    wise_listo: boolean | null;
-  } | null;
-  /** Ya resuelto por quien llama; ver la cabecera del fichero. */
-  nombreDelPais: string;
-}): string {
-  const { regla, guardado, nombreDelPais } = args;
-
-  // Brasil, Ecuador, Perú y Paraguay: son los CUATRO países con fila en
-  // `payout_country_rules` y `wise_account_type` a null, o sea los únicos que
-  // llegan aquí sin vía. Decirle a uno de ellos «te falta el código postal para
-  // que podamos pagarte por transferencia internacional» sería mentirle a quien
-  // no puede cobrar así de ninguna manera. Se piden igual porque dLocal los exige en Perú
-  // (`dlocal-provider.ts:1203-1205`) y porque el país puede entrar mañana.
-  //
-  // ⚠️ Venezuela NO entra en esta lista aunque Wise tampoco le pague (422
-  // `error.route.not.supported`, medido el 7-sep): no tiene fila en
-  // `payout_country_rules` —«no está ni va a estar», `page.tsx`— y su riel es
-  // manual, así que este formulario ni se pinta y esta función no se llama.
-  // Nombrarla aquí sugería un caso que no existe.
-  if (!regla.wise_account_type) {
-    return `En ${nombreDelPais} estos datos no cambian por dónde te pagamos, así que puedes dejarlos en blanco. Los guardamos porque hay bancos y países que los exigen para aceptar la transferencia.`;
-  }
-
-  const faltan = [
-    guardado?.address_line ? null : "la dirección",
-    guardado?.city ? null : "la ciudad",
-    guardado?.postcode ? null : "el código postal",
-    guardado?.phone ? null : "el teléfono",
-  ].filter((x): x is string => x !== null);
-
-  // ⚠️ NINGUNA DE ESTAS FRASES PROMETE QUE LLEGUE ANTES, y eso es a propósito:
-  // lo que está MEDIDO de Wise es el coste —$2,06 por payout a Colombia, «5× más
-  // barato que dLocal» (`docs/PAGOS-Y-PAYOUTS.md` §5 y §7)— y de los plazos no
-  // hay una sola medición en el proyecto. Aquí ponía «que llega antes» y «la vía
-  // más rápida»: es la clase de frase que un tutor recuerda cuando su
-  // transferencia tarda cuatro días.
-  if (faltan.length > 0) {
-    return `Con ${enumera(faltan)} podemos pagarte por transferencia internacional, que nos cuesta bastante menos. Sin ${faltan.length === 4 ? "ellos" : "eso"} cobras igual, por la vía de siempre.`;
-  }
-
-  if (guardado?.wise_listo === true) {
-    return "Listos: con estos datos ya podemos pagarte por transferencia internacional.";
-  }
-  if (guardado?.wise_listo === false) {
-    // El servidor ha dicho que no y el tutor no tiene nada más que rellenar: lo
-    // que falla es su banco, su tipo de cuenta o su tipo de documento, y eso no
-    // se arregla en este formulario. Se le dice que no pierde nada, que es lo
-    // único accionable.
-    return "Guardados. Por tu banco y tu tipo de cuenta seguimos pagándote por la vía de siempre, así que no cambia nada para ti.";
-  }
-  return "Ya los tienes guardados. Los usamos para pagarte por transferencia internacional cuando tu banco lo permite.";
-}
-
-/** «la dirección, la ciudad y el teléfono». Sin coma de Oxford, que en castellano no se pone. */
-function enumera(partes: string[]): string {
-  if (partes.length <= 1) return partes[0] ?? "";
-  return `${partes.slice(0, -1).join(", ")} y ${partes[partes.length - 1]}`;
-}
 
 /*
  * ⚠️ AQUÍ VIVÍA `estadoDeLaCuenta()`, Y SE BORRÓ POR DOS MOTIVOS A LA VEZ.
