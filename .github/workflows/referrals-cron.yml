@@ -1,0 +1,62 @@
+# Manda a Referral Factory los invitados que ya cumplieron (§6 de
+# INSTRUCCIONES-DESARROLLO). Sin este reloj, `profiles.referral_converted_at` se
+# queda a null para siempre: la conversión NO la avisa RF con un webhook —sus
+# endpoints `webhooks` y `events` son 404—, la detecta nuestro cron o no la
+# detecta nadie, y el referidor ve "1 invitado · 0 convertidos" eternamente.
+#
+# POR QUÉ HORARIO Y NO CADA 5 MINUTOS, como el correo. Aquí no espera nadie: la
+# recompensa la contabiliza RF y el usuario no la ve hasta que abre
+# `/referidos`, así que una conversión apuntada dos horas tarde no rompe nada.
+# Y RF tiene picos de más de 25 s: llamarlo doce veces por hora para encontrar
+# la cola vacía sería pagar ese peaje por nada.
+#
+# ⚠️ LA CADENCIA DE ABAJO ES UNA FICCIÓN, y está medida: GitHub entrega **una
+# pasada cada 2-6 horas**, no una cada hora (docs/ENTORNOS.md, "tres peajes").
+# Para esto da igual —ver el párrafo anterior—, pero que nadie planifique con
+# "cada hora". Los otros dos peajes también aplican: GitHub desactiva los
+# programados tras 60 días sin actividad en el repo, y solo programa los
+# workflows de la RAMA POR DEFECTO (`main`): mientras este archivo viva solo en
+# `dev`, este reloj no existe.
+name: Referidos — sincronizar conversiones
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  # Imprescindible, no un adorno: el criterio de aceptación 4 es "pagar una
+  # clase y forzar la pasada" — sin esto habría que esperar horas para ver si la
+  # atribución funciona.
+  workflow_dispatch:
+
+# Si una pasada se alarga (RF y sus picos), la siguiente no se le encima: nada
+# se marca hasta que RF acepta, así que la cola sigue ahí intacta.
+concurrency:
+  group: referrals-cron
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sincronizar conversiones con Referral Factory
+        env:
+          BASE_URL: ${{ vars.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Falta la variable APP_BASE_URL o el secret CRON_SECRET del repo."
+            echo "Sin eso no se puede llamar al endpoint. Ver docs/ENTORNOS.md."
+            exit 1
+          fi
+
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/referrals-sync")
+
+          echo "HTTP $code"
+          cat /tmp/out.json; echo
+
+          # Un 503 es "no hay CRON_SECRET en Vercel" y un 401 es "no coincide":
+          # las dos son configuración a medias, y deben verse en rojo. Un
+          # `{"status":"sin-credencial"}` con 200 NO lo es: es que falta
+          # REFERRAL_FACTORY_API_KEY en Vercel y nada se ha roto por ello.
+          [ "$code" = "200" ]

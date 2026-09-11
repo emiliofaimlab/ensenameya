@@ -9,7 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:push": "npx supabase db push",
-    "db:types": "npx supabase gen types typescript --linked > src/lib/database.types.ts.tmp && grep -q 'export type Database' src/lib/database.types.ts.tmp && mv src/lib/database.types.ts.tmp src/lib/database.types.ts || (rm -f src/lib/database.types.ts.tmp; echo '\u2717 db:types fall\u00f3 \u2014 database.types.ts NO se ha tocado'; exit 1)",
+    "db:types": "npx supabase gen types typescript --linked > src/lib/database.types.ts.tmp && grep -q 'export type Database' src/lib/database.types.ts.tmp && mv src/lib/database.types.ts.tmp src/lib/database.types.ts || (rm -f src/lib/database.types.ts.tmp; echo '✗ db:types falló — database.types.ts NO se ha tocado'; exit 1)",
     "db:seed": "bash -c 'set -a; . ./.env.local; set +a; PATH=\"/opt/homebrew/opt/libpq/bin:$PATH\" psql \"$SUPABASE_DB_URL\" -v ON_ERROR_STOP=1 -f supabase/seed/dev-poblar.sql'",
     "db:seed:imagenes": "node supabase/seed/dev-imagenes.mjs",
     "check:email": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/email-templates.check.ts",
@@ -21,7 +21,10 @@
     "check:wise": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/wise-mapeo.check.ts",
     "check:stripe-payout": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/stripe-payout-mapeo.check.ts",
     "check:metodo": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/metodo-preferido.check.ts",
-    "check:riel": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/riel-viable.check.ts"
+    "check:riel": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/payments/riel-viable.check.ts",
+    "check:correos": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/email-humo.check.ts",
+    "build:correos-auth": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/correos-auth.ts",
+    "check:rutas": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/auth/roles.check.ts"
   },
   "dependencies": {
     "@daily-co/daily-js": "^0.91.0",
@@ -35,6 +38,7 @@
     "lucide-react": "^1.17.0",
     "next": "16.2.7",
     "next-themes": "^0.4.6",
+    "qrcode": "^1.5.4",
     "radix-ui": "^1.5.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
@@ -48,6 +52,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
