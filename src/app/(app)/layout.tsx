@@ -12,7 +12,8 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   // Área autenticada: sin sesión → /login?next=… (SCR-AU01).
-  const { user, roles, fullName, avatarPath, notices } = await requireUser();
+  const { user, roles, fullName, avatarPath, notices, onboardingComplete } =
+    await requireUser();
   // US-1203: la campana se pinta ya en el servidor, sin ida y vuelta extra.
   // EY-177 · el mismo contador que en lo público: el carrito es del navegador
   // (cookie), no de la sesión, así que cruzar de `(public)` a `(app)` no lo
@@ -37,7 +38,11 @@ export default async function AppLayout({
   return (
     <div className="flex min-h-svh flex-col">
       <SiteHeader
-        user={toHeaderUser(user, roles, { fullName, avatarPath })}
+        user={toHeaderUser(user, roles, {
+          fullName,
+          avatarPath,
+          onboardingComplete,
+        })}
         notices={notices}
         cartCount={carrito}
       />

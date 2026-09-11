@@ -130,3 +130,31 @@ export function safeNext(
   if (!limpio.startsWith("/") || /^\/[/\\]/.test(limpio)) return fallback;
   return limpio;
 }
+
+/**
+ * A qué asistente hay que mandar a alguien con el onboarding a medias, o `null`
+ * si no tiene nada pendiente.
+ *
+ * ⚠️ Existe porque CUATRO sitios pintaban o calculaban «el panel de este
+ * usuario» con `pickHome(roles)` a secas, y ninguno miraba el onboarding. Para
+ * quien lo tiene pendiente eso apunta a `/app`, y `/app` responde con un
+ * `redirect()` de SERVIDOR hacia el asistente. Verificado contra un build de
+ * producción el 11-sep-2026: pulsar «Ir a mi panel» desde la home PÚBLICA
+ * dejaba la pantalla en blanco y 102 peticiones al RSC en 5 segundos.
+ *
+ * (Curiosamente el mismo redirect DENTRO de `(app)` renderiza bien: lo que
+ * rompe es cruzar de grupo de rutas y encontrarse el redirect a la vez. Por eso
+ * el síntoma parecía caprichoso.)
+ *
+ * El reparto copia el de `requireUser()` a propósito, para que la barra de
+ * navegación y el guarda no puedan contradecirse: quien se registró para
+ * ENSEÑAR va a su asistente —`?start=1` entra directo al formulario, como
+ * allí— y el resto al de alumno.
+ */
+export function destinoDeAsistente(
+  onboardingComplete: boolean,
+  intendedRole: unknown,
+): string | null {
+  if (onboardingComplete) return null;
+  return intendedRole === "tutor" ? "/tutor/onboarding?start=1" : "/onboarding";
+}

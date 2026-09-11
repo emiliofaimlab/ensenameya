@@ -9,7 +9,13 @@
  *   npm run check:rutas
  */
 import assert from "node:assert/strict";
-import { safeNext, pickHome, ROLE_HOME, type AppRole } from "./roles.ts";
+import {
+  safeNext,
+  pickHome,
+  destinoDeAsistente,
+  ROLE_HOME,
+  type AppRole,
+} from "./roles.ts";
 
 /* ── safeNext: lo que NO debe dejar salir del sitio ───────────────────── */
 
@@ -79,4 +85,24 @@ assert.equal(pickHome(R("alumno"), { panel: "tutor", esTutor: true }), ROLE_HOME
 assert.equal(pickHome(R("alumno")), ROLE_HOME.alumno); // tutor pendiente → panel de alumno
 assert.equal(pickHome(R("alumno", "admin")), ROLE_HOME.admin); // venías de /tutor y te saca a /admin
 
-console.log("✓ roles: safeNext y pickHome se comportan como dice la matriz");
+/* ── destinoDeAsistente: el asistente pendiente manda sobre el panel ───── */
+
+/*
+ * ⚠️ Esto no es aseo: pintar «Panel → /app» para quien tiene el onboarding a
+ * medias manda al usuario a un `redirect()` de SERVIDOR, y desde una ruta
+ * pública eso deja la pantalla EN BLANCO (medido contra un build de producción
+ * el 11-sep-2026: 102 peticiones al RSC en 5 s y cero caracteres en pantalla).
+ */
+assert.equal(destinoDeAsistente(true, undefined), null);
+assert.equal(destinoDeAsistente(true, "tutor"), null); // con el onboarding hecho, nada pendiente
+assert.equal(destinoDeAsistente(false, undefined), "/onboarding");
+assert.equal(destinoDeAsistente(false, "alumno"), "/onboarding");
+assert.equal(destinoDeAsistente(false, "tutor"), "/tutor/onboarding?start=1");
+// Basura en el metadata no convierte a nadie en aspirante a tutor.
+assert.equal(destinoDeAsistente(false, "TUTOR"), "/onboarding");
+assert.equal(destinoDeAsistente(false, 42), "/onboarding");
+assert.equal(destinoDeAsistente(false, null), "/onboarding");
+
+console.log(
+  "✓ roles: safeNext, pickHome y destinoDeAsistente se comportan como dice la matriz",
+);

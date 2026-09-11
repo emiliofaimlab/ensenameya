@@ -1,6 +1,6 @@
 import type { HeaderUser } from "@/components/layout/site-header";
 import { storageUrl } from "@/lib/catalog/format";
-import { panelsFor, pickHome, type AppRole } from "./roles";
+import { destinoDeAsistente, panelsFor, pickHome, type AppRole } from "./roles";
 import type { SessionUser } from "./server";
 
 /**
@@ -19,9 +19,20 @@ import type { SessionUser } from "./server";
 export function toHeaderUser(
   user: SessionUser | null,
   roles: AppRole[] = [],
-  profile: { fullName?: string | null; avatarPath?: string | null } = {},
+  profile: {
+    fullName?: string | null;
+    avatarPath?: string | null;
+    /** ⚠️ Sin esto el enlace «Panel» del header apunta a `/app` para quien tiene
+     *  el onboarding a medias, y `/app` redirige desde el servidor: pantalla en
+     *  blanco. Ver `destinoDeAsistente`. */
+    onboardingComplete?: boolean;
+  } = {},
 ): HeaderUser | null {
   if (!user) return null;
+  const asistente = destinoDeAsistente(
+    profile.onboardingComplete ?? true,
+    user.user_metadata?.intended_role,
+  );
   const metaName = user.user_metadata?.full_name as string | undefined;
   return {
     // La campana lo usa para acotar sus consultas a los avisos propios; ver la
@@ -30,7 +41,13 @@ export function toHeaderUser(
     email: user.email ?? "",
     name: profile.fullName?.trim() || metaName?.trim() || null,
     avatarUrl: storageUrl("avatars", profile.avatarPath),
-    homeHref: pickHome(roles),
-    panels: panelsFor(roles),
+    homeHref: asistente ?? pickHome(roles),
+    // Mientras quede asistente, «Mi cuenta» lleva ahí: `/account` vive bajo
+    // `requireUser()` y rebotaría igual, pero por el camino que rompe.
+    accountHref: asistente ?? "/account",
+    // Y el switch Aprender/Enseñar se apaga solo: con menos de dos entradas el
+    // componente no se pinta, y sus dos destinos (`/app` y `/tutor`) son
+    // exactamente los que el guarda no deja ver todavía.
+    panels: asistente ? [] : panelsFor(roles),
   };
 }

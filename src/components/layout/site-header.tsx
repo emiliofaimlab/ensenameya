@@ -16,11 +16,7 @@ import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "@/components/layout/notifications-bell";
 import { CartBadge } from "@/components/cart/cart-badge";
 import type { AppNotice } from "@/lib/notifications";
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,8 +54,20 @@ export type HeaderUser = {
   name: string | null;
   /** Foto de `profiles` ya resuelta a URL pública, o `null` (van iniciales). */
   avatarUrl: string | null;
-  /** Panel del usuario según su rol (lo resuelve `toHeaderUser` con pickHome). */
+  /** Panel del usuario según su rol (lo resuelve `toHeaderUser` con pickHome).
+   *  Con el onboarding a medias apunta al ASISTENTE, no al panel. */
   homeHref: string;
+  /**
+   * A dónde lleva «Mi cuenta».
+   *
+   * ⚠️ Era `/account` a pelo, y para quien tiene el onboarding a medias eso es
+   * un `redirect()` de servidor: pulsarlo desde una ruta PÚBLICA dejaba la
+   * pantalla en blanco con 1367 peticiones al RSC en 5 segundos (medido contra
+   * un build de producción el 11-sep-2026). Ahora lo resuelve `toHeaderUser`:
+   * mientras quede asistente pendiente apunta ahí, que es a donde el guarda
+   * mandaría de todas formas.
+   */
+  accountHref: string;
   /**
    * Paneles del switch (`panelsFor`). Aprender/Enseñar salen siempre con
    * sesión — "Enseñar" es la puerta al onboarding de tutor; /tutor resuelve
@@ -131,7 +139,9 @@ function PanelSwitch({
       role="group"
       aria-label="Cambiar de panel"
       className="grid gap-1 rounded-[10px] bg-accent p-1"
-      style={{ gridTemplateColumns: `repeat(${panels.length}, minmax(0, 1fr))` }}
+      style={{
+        gridTemplateColumns: `repeat(${panels.length}, minmax(0, 1fr))`,
+      }}
     >
       {panels.map((p) => {
         const active = p.href === activeHref;
@@ -184,7 +194,9 @@ function displayName(user: HeaderUser): string {
 
 /** Iniciales de las DOS primeras palabras del nombre ("Jose Mora" → JM). */
 function initials(user: HeaderUser): string {
-  const words = displayName(user).split(/[\s@._-]+/).filter(Boolean);
+  const words = displayName(user)
+    .split(/[\s@._-]+/)
+    .filter(Boolean);
   const letters = words.slice(0, 2).map((w) => w[0]);
   return (letters.join("") || "?").toUpperCase();
 }
@@ -199,9 +211,7 @@ function UserAvatar({
 }) {
   return (
     <Avatar className={cn("size-8", className)}>
-      {user.avatarUrl ? (
-        <AvatarImage src={user.avatarUrl} alt="" />
-      ) : null}
+      {user.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
       <AvatarFallback className="bg-brand-muted text-[11px] font-semibold text-brand">
         {initials(user)}
       </AvatarFallback>
@@ -591,7 +601,7 @@ export function SiteHeader({
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link href="/account">
+                      <Link href={user.accountHref}>
                         <SettingsIcon />
                         Mi cuenta
                       </Link>
@@ -668,16 +678,18 @@ export function SiteHeader({
                   {admin ? <SearchBox className="px-4" /> : null}
                   <nav className="flex flex-col gap-1 px-4">
                     {/* Sin "Panel" duplicado: abajo ya van el switch y "Mi panel". */}
-                    {navGroups.flatMap((group) => group.links).map((link) => (
-                      <Link
-                        key={link.href}
-                        href={link.href}
-                        onClick={closeMenu}
-                        className="rounded-md px-2 py-2 text-sm hover:bg-muted"
-                      >
-                        {link.label}
-                      </Link>
-                    ))}
+                    {navGroups
+                      .flatMap((group) => group.links)
+                      .map((link) => (
+                        <Link
+                          key={link.href}
+                          href={link.href}
+                          onClick={closeMenu}
+                          className="rounded-md px-2 py-2 text-sm hover:bg-muted"
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
                   </nav>
                   {/*
                     ⚠️ CON SESIÓN, AQUÍ NO VA NADA DE LA CUENTA. Y no es un

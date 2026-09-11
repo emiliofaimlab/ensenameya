@@ -2,7 +2,7 @@ import "server-only";
 
 import { getSessionContext } from "@/lib/auth/server";
 import { hasTutorProfile } from "@/lib/auth/tutor";
-import { pickHome, ROLE_HOME } from "@/lib/auth/roles";
+import { destinoDeAsistente, pickHome, ROLE_HOME } from "@/lib/auth/roles";
 
 /**
  * N-01 · Qué debe ofrecer un CTA público según quién lo esté mirando.
@@ -42,8 +42,20 @@ export type VisitorState = {
 };
 
 export async function getVisitorState(): Promise<VisitorState> {
-  const { user, roles } = await getSessionContext();
+  const { user, roles, onboardingComplete } = await getSessionContext();
   if (!user) return { anonimo: true, homeHref: null, teachHref: null };
+
+  // ⚠️ El asistente pendiente manda sobre el panel, y los DOS destinos apuntan
+  // ahí: mandar a alguien a `/app` o a `/tutor` con el onboarding a medias es
+  // mandarlo a un `redirect()` de servidor, que desde una ruta pública deja la
+  // pantalla en blanco (medido el 11-sep-2026).
+  const pendiente = destinoDeAsistente(
+    onboardingComplete,
+    user.user_metadata?.intended_role,
+  );
+  if (pendiente) {
+    return { anonimo: false, homeHref: pendiente, teachHref: pendiente };
+  }
 
   const homeHref = pickHome(roles);
 

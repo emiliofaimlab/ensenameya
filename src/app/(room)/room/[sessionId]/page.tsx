@@ -12,7 +12,6 @@ import { ACCESS_WINDOW_MIN, withMinutes } from "@/lib/room-window";
 
 export const metadata = { title: "Sala en vivo · Enséñame Ya" };
 
-
 /**
  * SCR-LV01 — sala de clase 1:1 (EP-08). La ventana de acceso y el token los
  * gobierna el server (`join_session`, RN-18); esta página solo pinta el estado
@@ -38,7 +37,8 @@ export default async function RoomPage({
 }: {
   params: Promise<{ sessionId: string }>;
 }) {
-  const { user, roles, fullName, avatarPath } = await requireUser();
+  const { user, roles, fullName, avatarPath, onboardingComplete } =
+    await requireUser();
   const { sessionId } = await params;
 
   const supabase = await createClient();
@@ -63,7 +63,9 @@ export default async function RoomPage({
   ] = await Promise.all([
     supabase
       .from("messages")
-      .select("id, sender_id, body, created_at, attachment_path, attachment_name, attachment_size")
+      .select(
+        "id, sender_id, body, created_at, attachment_path, attachment_name, attachment_size",
+      )
       .eq("booking_id", s.booking_id)
       .order("created_at"),
     supabase
@@ -126,7 +128,11 @@ export default async function RoomPage({
     <LiveRoom
       header={
         <SiteHeader
-          user={toHeaderUser(user, roles, { fullName, avatarPath })}
+          user={toHeaderUser(user, roles, {
+            fullName,
+            avatarPath,
+            onboardingComplete,
+          })}
           notices={notices}
         />
       }
