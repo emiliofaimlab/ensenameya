@@ -1,12 +1,16 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
-import { panelDeCookie, pickHome, safeNext, type AppRole } from "@/lib/auth/roles";
+import {
+  panelDeCookie,
+  pickHome,
+  safeNext,
+  type AppRole,
+} from "@/lib/auth/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,7 +27,11 @@ import {
   AUTH_SUBMIT,
 } from "@/components/auth/field-classes";
 import { FieldError } from "@/components/form/field-error";
-import { describedBy, emailError, requiredError } from "@/components/form/validation";
+import {
+  describedBy,
+  emailError,
+  requiredError,
+} from "@/components/form/validation";
 
 /** Errores por campo (RV-14) + el del intento fallido, que no es de un campo. */
 type Errores = Partial<Record<"email" | "password" | "form", string>>;
@@ -35,7 +43,6 @@ export function LoginForm({
   next: string | null;
   oauthError: boolean;
 }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errores, setErrores] = useState<Errores>({});
@@ -88,28 +95,81 @@ export function LoginForm({
     // `tutor_profiles_select_public` deja leer la fila de CUALQUIER tutor
     // aprobado, así que sin filtro esto traía todas y `maybeSingle()` devolvía
     // error —nunca la propia—, dejando `esTutor` en falso siempre.
-    const [{ data: rolesData }, { data: tutorProfile }] = await Promise.all([
-      supabase.from("user_roles").select("role"),
+    const [
+      { data: rolesData, error: errRoles },
+      { data: tutorProfile, error: errTutor },
+      { data: perfil, error: errPerfil },
+    ] = await Promise.all([
+      // ⚠️ Este `.eq()` tampoco sobra: `has_role('admin')` deja a un admin LEER
+      // `user_roles` entera, así que sin filtro esto traía los roles de todo el
+      // mundo y `pickHome` decidía con los de otros. Mismo fallo que tenía el
+      // callback de OAuth.
+      supabase.from("user_roles").select("role").eq("user_id", data.user.id),
       supabase
         .from("tutor_profiles")
         .select("profile_id")
         .eq("profile_id", data.user.id)
         .maybeSingle(),
+      supabase
+        .from("profiles")
+        .select("onboarding_complete")
+        .eq("id", data.user.id)
+        .maybeSingle(),
     ]);
+    // Regla de oro 10: sin esto, un fallo de la consulta de roles es
+    // indistinguible de «solo es alumno» y nadie se entera.
+    if (errRoles)
+      console.error("[login] roles", errRoles.code, errRoles.message);
+    if (errTutor)
+      console.error("[login] tutor_profiles", errTutor.code, errTutor.message);
+    if (errPerfil)
+      console.error("[login] perfil", errPerfil.code, errPerfil.message);
+
     const roles = (rolesData ?? []).map((r) => r.role as AppRole);
-    // `panel`: el último panel en el que estuvo este navegador (`ey-panel`).
-    // Manda sobre la prioridad de rol, así que quien administra pero estaba
-    // enseñando vuelve a `/tutor` y no a `/admin`.
-    router.push(
-      safeNext(
-        next,
-        pickHome(roles, {
-          esTutor: Boolean(tutorProfile),
-          panel: panelDeCookie(),
-        }),
-      ),
-    );
-    router.refresh();
+
+    /*
+     * ⚠️ EL MISMO TRATAMIENTO QUE EL CALLBACK DE OAUTH, y por la misma razón.
+     *
+     * Esto era `router.push(pickHome(...))` + `router.refresh()` sin mirar
+     * `onboarding_complete`, que es exactamente la forma del fallo que dejaba
+     * la pantalla en blanco al entrar con Google: se navegaba a `/app`, allí
+     * `requireUser()` respondía con un `redirect()` de SERVIDOR hacia
+     * `/onboarding`, y ese redirect alcanzado a mitad de una navegación de
+     * cliente dejaba al router de Next con el árbol vacío.
+     *
+     * Dos capas, iguales a las de allí:
+     *  1. El destino se resuelve AQUÍ, onboarding incluido, así que no se
+     *     navega a una ruta que vaya a redirigir. El reparto copia el de
+     *     `requireUser()` para que las dos puertas contesten igual.
+     *  2. Se navega con una carga entera, que cierra la clase completa —
+     *     incluido cualquier `?next=` a una ruta con guarda de rol. De paso se
+     *     cae el `router.refresh()`, que estaba para que el servidor releyera
+     *     las cookies recién escritas.
+     *
+     * ⚠️ No pude dispararlo en vivo: reproducirlo exige teclear una contraseña
+     * y eso no lo hago. Lo que hay es que la forma del código era idéntica a la
+     * del callback, y allí sí está medido (0 caracteres y ~20 peticiones por
+     * segundo antes; página entera y 0 después).
+     */
+    const pendiente = perfil?.onboarding_complete === false;
+    let destino = safeNext(next, "");
+    if (pendiente) {
+      destino =
+        data.user.user_metadata?.intended_role === "tutor"
+          ? "/tutor/onboarding?start=1"
+          : destino
+            ? `/onboarding?next=${encodeURIComponent(destino)}`
+            : "/onboarding";
+    } else if (!destino) {
+      // `panel`: el último panel en el que estuvo este navegador (`ey-panel`).
+      // Manda sobre la prioridad de rol, así que quien administra pero estaba
+      // enseñando vuelve a `/tutor` y no a `/admin`.
+      destino = pickHome(roles, {
+        esTutor: Boolean(tutorProfile),
+        panel: panelDeCookie(),
+      });
+    }
+    window.location.replace(destino);
   }
 
   return (
@@ -158,10 +218,7 @@ export function LoginForm({
           <FieldError id="email-error" message={errores.email} />
         </div>
         <div className="grid gap-2">
-          <Label
-            htmlFor="password"
-            className={AUTH_LABEL}
-          >
+          <Label htmlFor="password" className={AUTH_LABEL}>
             Contraseña
           </Label>
           <div className="relative">
@@ -172,7 +229,9 @@ export function LoginForm({
               autoComplete="current-password"
               required
               aria-invalid={Boolean(errores.password)}
-              aria-describedby={describedBy(errores.password && "password-error")}
+              aria-describedby={describedBy(
+                errores.password && "password-error",
+              )}
               placeholder="Tu contraseña"
               className={`${AUTH_FIELD} pr-20`}
             />
@@ -196,7 +255,11 @@ export function LoginForm({
         {/* Fallo del intento (credenciales): no cuelga de ningún campo, pero
             sigue siendo `role="alert"` para que se anuncie. Antes solo existía
             como aviso flotante, que se va solo y no siempre se lee. */}
-        <FieldError id="login-error" message={errores.form} className="text-sm" />
+        <FieldError
+          id="login-error"
+          message={errores.form}
+          className="text-sm"
+        />
         {/*
           ⚠️ Este mensaje ya no nombra a Google, y es un arreglo, no una
           rebaja. Por `/auth/callback` pasan TRES flujos —entrar con Google,
@@ -216,11 +279,7 @@ export function LoginForm({
             intentarlo desde aquí.
           </p>
         ) : null}
-        <Button
-          type="submit"
-          disabled={loading}
-          className={AUTH_SUBMIT}
-        >
+        <Button type="submit" disabled={loading} className={AUTH_SUBMIT}>
           {loading ? "Entrando…" : "Iniciar sesión"}
         </Button>
       </form>

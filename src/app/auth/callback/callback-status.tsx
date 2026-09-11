@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { createClient } from "@/lib/supabase/client";
-import { panelDeCookie, pickHome, safeNext, type AppRole } from "@/lib/auth/roles";
+import {
+  panelDeCookie,
+  pickHome,
+  safeNext,
+  type AppRole,
+} from "@/lib/auth/roles";
 
 /**
  * A dónde lleva la intención elegida en AU02. Mismo reparto que el alta por
@@ -259,15 +264,31 @@ export function CallbackStatus({
        * acaba de decir «quiero enseñar» entra al flujo de enseñar; volver a la
        * lista de tutores importa menos.
        */
-      if (intent) {
-        const destinoIntencion = homeDeIntencion(intent);
-        target =
-          intent === "alumno" && target
-            ? `${destinoIntencion}?next=${encodeURIComponent(target)}`
-            : destinoIntencion;
-      }
+      // La decisión vive entera en el bloque de abajo: necesita saber si el
+      // onboarding está pendiente, y eso es una consulta.
 
-      if (!target) {
+      /*
+       * ⚠️ ESTO SE CONSULTA SIEMPRE, Y EL `onboarding_complete` ES EL MOTIVO.
+       *
+       * El destino tiene que quedar RESUELTO aquí, porque navegar a una ruta
+       * que luego redirige desde el servidor es exactamente la pantalla en
+       * blanco que se reportó. Reproducida contra un build de producción el
+       * 11-sep-2026: `router.replace("/app")` → `/app` responde con un
+       * `redirect()` hacia `/onboarding` → el router de Next se queda con el
+       * árbol VACÍO y se pone a pedir el RSC de esa URL ~20 veces por segundo,
+       * para siempre. El servidor contesta 87 bytes con `"f":[]` («ya estás al
+       * día»), el cliente sigue sin nada que pintar, y vuelve a pedir.
+       *
+       * La misma URL cargada DE CERO renderiza perfectamente: el fallo es solo
+       * del camino de navegación de cliente. Y por eso solo lo veían algunas
+       * personas — las que tenían el onboarding pendiente — y por eso
+       * `next dev` no lo enseñaba.
+       *
+       * Regla que sale de aquí: **el callback no navega a ninguna ruta que
+       * vaya a redirigir**. Lo que `requireUser()` decidiría al llegar se
+       * decide antes, en esta pantalla.
+       */
+      {
         // Mismo cálculo que el login por correo, `esTutor` incluido: el rol
         // `tutor` solo se concede al APROBAR, así que sin esa pista quien está
         // en revisión entraba con Google al panel de alumno.
@@ -279,6 +300,7 @@ export function CallbackStatus({
         const [
           { data: roleRows, error: errRoles },
           { data: tutorProfile, error: errTutor },
+          { data: perfil, error: errPerfil },
         ] = await Promise.all([
           // ⚠️ Este `.eq()` tampoco es decorativo: `has_role('admin')` deja a
           // un admin LEER la tabla entera, así que sin filtro esto traía los
@@ -288,6 +310,11 @@ export function CallbackStatus({
             .from("tutor_profiles")
             .select("profile_id")
             .eq("profile_id", user.id)
+            .maybeSingle(),
+          supabase
+            .from("profiles")
+            .select("onboarding_complete")
+            .eq("id", user.id)
             .maybeSingle(),
         ]);
         // ⚠️ Regla de oro 10 otra vez, y aquí la mentira es cara: un fallo de
@@ -303,17 +330,81 @@ export function CallbackStatus({
             errTutor.message,
           );
         }
-        target = pickHome((roleRows ?? []).map((r) => r.role as AppRole), {
-          esTutor: Boolean(tutorProfile),
-          // El último panel de este navegador (`ey-panel`), que ya no se borra
-          // al cerrar sesión. Solo aplica a quien vuelve: un alta trae `intent`
-          // y sale por arriba.
-          panel: panelDeCookie(),
-        });
+        if (errPerfil) {
+          console.error("[callback] perfil", errPerfil.code, errPerfil.message);
+        }
+
+        /*
+         * EL DESTINO, EN UN SOLO SITIO Y EN ESTE ORDEN. Cada rama aterriza en
+         * una ruta que RENDERIZA; ninguna en una que vaya a redirigir.
+         *
+         *  1. «Quiero enseñar» → su asistente, siempre. Sabe manejar los dos
+         *     casos por sí mismo (bienvenida si empieza, «Ya eres tutor» si el
+         *     perfil está aprobado), así que nunca redirige.
+         *  2. Asistente de alumno PENDIENTE → se va a él directo, llevándose
+         *     el `next` para volver al terminar. Ésta es la rama que antes iba
+         *     a `/app` y dejaba que `requireUser()` redirigiera desde el
+         *     servidor: la pantalla en blanco.
+         *  3. Con el onboarding ya hecho, manda el `next`; y si no hay, el rol.
+         *
+         * ⚠️ Con el onboarding HECHO no se pasa por `/onboarding` ni aunque
+         * venga `intent=alumno` —que es el valor por DEFECTO del selector de
+         * `/signup`, o sea que llega sin que nadie lo elija—. Esa pantalla
+         * redirige nada más entrar, y eso es justo lo que no puede ocurrir en
+         * medio de una navegación de cliente.
+         */
+        const pendiente = perfil?.onboarding_complete === false;
+        const aspiranteATutor =
+          intent === "tutor" ||
+          (!intent && user.user_metadata?.intended_role === "tutor");
+        const conNext = (base: string) =>
+          target ? `${base}?next=${encodeURIComponent(target)}` : base;
+
+        if (aspiranteATutor) {
+          // `?start=1` solo cuando la intención viene del metadata y no de esta
+          // pantalla: quien acaba de pulsar «Quiero enseñar» merece ver primero
+          // la bienvenida, igual que hace `requireUser()` al rebotar.
+          target =
+            intent === "tutor"
+              ? "/tutor/onboarding"
+              : "/tutor/onboarding?start=1";
+        } else if (pendiente) {
+          target = conNext("/onboarding");
+        } else if (!target) {
+          target = pickHome(
+            (roleRows ?? []).map((r) => r.role as AppRole),
+            {
+              esTutor: Boolean(tutorProfile),
+              // El último panel de este navegador (`ey-panel`), que ya no se
+              // borra al cerrar sesión.
+              panel: panelDeCookie(),
+            },
+          );
+        }
       }
       setDest(target);
-      router.replace(target);
-      router.refresh();
+      /*
+       * ⚠️ CARGA ENTERA, y no `router.replace()` + `router.refresh()`.
+       *
+       * Esto es la red que hace que la pantalla en blanco no pueda volver por
+       * otra puerta. El bloque de arriba evita los redirects de servidor que
+       * CONOCEMOS (el del onboarding), pero no puede conocerlos todos: un
+       * `?next=` a cualquier ruta con guarda de rol acabaría igual, y la próxima
+       * guarda que alguien añada también.
+       *
+       * Lo medido el 11-sep-2026 contra un build de producción: un `redirect()`
+       * de servidor alcanzado a mitad de una navegación de CLIENTE deja al
+       * router de Next con el árbol vacío, y desde ahí pide el RSC de esa URL
+       * ~20 veces por segundo para siempre, pintando nada. La MISMA URL cargada
+       * de cero renderiza perfecta. Así que se carga de cero.
+       *
+       * El coste es un viaje más, en una pantalla que ya es un spinner después
+       * de ida y vuelta a Google: no se nota. Y de regalo se cae el
+       * `router.refresh()`, que estaba ahí justo para que el servidor volviera
+       * a leer las cookies de sesión recién escritas — cosa que una carga
+       * entera hace por definición.
+       */
+      window.location.replace(target);
     }
 
     // ⚠️ `void run()` a secas dejaba el spinner girando PARA SIEMPRE si algo
