@@ -13,6 +13,7 @@ import type {
 
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import { Button } from "@/components/ui/button";
 import { AddToCalendar } from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
@@ -352,6 +353,7 @@ export function LiveRoom({
   productTitle,
   sessionRef,
   timeZone,
+  formato,
   isTutor,
   currentUserId,
   firstSessionAt,
@@ -391,6 +393,8 @@ export function LiveRoom({
   /** RV-18/RN-01 · la resuelve la página en servidor; sin ella el SSR
    *  formatea en UTC y la hora no coincide con la del navegador. */
   timeZone: string;
+  /** 12 h o 24 h (`ey-h12`): viaja con `timeZone`, que es la otra mitad. */
+  formato: FormatoHora;
   isTutor: boolean;
   currentUserId: string;
   firstSessionAt: string | null;
@@ -1270,6 +1274,7 @@ export function LiveRoom({
               className="min-h-0 flex-1 bg-background p-3 text-foreground"
             >
               <ChatThread
+                formato={formato}
                 fill
                 // El aviso de retención ocupa media columna en un panel de
                 // 360px y ya se lee entero en la ficha de la reserva.
@@ -1375,7 +1380,12 @@ export function LiveRoom({
               </p>
             </div>
             <p className="text-sm text-muted-foreground">
-              {new Date(startAt).toLocaleString("es", { timeZone, dateStyle: "full", timeStyle: "short" })}
+              {new Date(startAt).toLocaleString("es", {
+                timeZone,
+                dateStyle: "full",
+                timeStyle: "short",
+                ...opcionesDeHora(formato),
+              })}
             </p>
             {/* Solo en esta rama: quien llega con la sala ya abierta viene a
                 entrar, y apuntar en la agenda una clase que empieza en diez

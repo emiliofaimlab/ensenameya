@@ -2,7 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowRightIcon, CheckCircle2Icon, ClockIcon } from "lucide-react";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { resolveOrder, type LineaResuelta } from "@/lib/orders/queries";
 import { cartLineKey } from "@/lib/cart/cookie";
 import { Precio } from "@/components/precio/precio";
@@ -40,7 +44,11 @@ export default async function ConfirmacionPedidoPage({
   const { id } = await params;
   await requireUser();
 
-  const [pedido, tz] = await Promise.all([resolveOrder(id), getUserTimezone()]);
+  const [pedido, tz, formato] = await Promise.all([
+    resolveOrder(id),
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   if (!pedido) notFound();
 
   const sinResolver = pedido.order.status === "pending_payment";
@@ -140,7 +148,7 @@ export default async function ConfirmacionPedidoPage({
                 <ul className="mt-1.5 flex flex-col gap-1 text-[13px] text-[#333333]">
                   {l.slotsIso.map((iso) => (
                     <li key={iso} className="first-letter:uppercase">
-                      {formatSessionTime(iso, tz)}
+                      {formatSessionTime(iso, tz, formato)}
                     </li>
                   ))}
                 </ul>

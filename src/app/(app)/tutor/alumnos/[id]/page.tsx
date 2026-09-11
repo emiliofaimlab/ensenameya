@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
-import { getUserTimezone } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { formatMoney } from "@/lib/catalog/format";
@@ -11,6 +11,7 @@ import {
   isUpcoming,
   BOOKING_STATUS_LABEL,
 } from "@/lib/booking";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import {
   PanelCard,
   StatusPill,
@@ -44,12 +45,16 @@ const BOOKING_PILL: Record<string, PillTone> = {
  * inválida reventaría el render entero con un RangeError: se traga y se
  * devuelve null.
  */
-function horaLocalDelAlumno(timeZone: string | null): string | null {
+function horaLocalDelAlumno(
+  timeZone: string | null,
+  formato: FormatoHora,
+): string | null {
   if (!timeZone) return null;
   try {
     return new Date().toLocaleTimeString("es", {
       hour: "2-digit",
       minute: "2-digit",
+      ...opcionesDeHora(formato),
       timeZone,
     });
   } catch {
@@ -78,7 +83,10 @@ export default async function AlumnoDelTutorPage({
 }) {
   const { id } = await params;
   const { userId } = await requireTutorProfile();
-  const tz = await getUserTimezone();
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   const supabase = await createClient();
 
   // 404 si no hay reserva que dé acceso (reserva cancelada, alumno de otro
@@ -105,7 +113,7 @@ export default async function AlumnoDelTutorPage({
       .sort()[0] ?? null;
 
   const nombre = studentName(student);
-  const horaAlumno = horaLocalDelAlumno(student.timezone);
+  const horaAlumno = horaLocalDelAlumno(student.timezone, formato);
 
   return (
     <TutorShell
@@ -133,7 +141,7 @@ export default async function AlumnoDelTutorPage({
         <Cifra label="Sesiones dictadas" value={String(dictadas)} />
         <Cifra
           label="Próxima sesión"
-          value={proxima ? formatSessionTime(proxima, tz) : "—"}
+          value={proxima ? formatSessionTime(proxima, tz, formato) : "—"}
           /* Tu hora local, no la suya: la agenda del tutor manda (RN-01/02). */
           hint={proxima ? "tu hora local" : undefined}
           // Una fecha no es una cifra: a 24 px se corta en cualquier pantalla.
@@ -165,7 +173,9 @@ export default async function AlumnoDelTutorPage({
                       {b.products?.title ?? "Mentoría"}
                     </p>
                     <p className="text-xs text-[#6b6b6b] first-letter:uppercase">
-                      {primera ? formatSessionTime(primera, tz) : "Por agendar"}
+                      {primera
+                        ? formatSessionTime(primera, tz, formato)
+                        : "Por agendar"}
                       {" · "}
                       {formatMoney(b.total_amount, b.currency)}
                     </p>

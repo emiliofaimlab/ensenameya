@@ -1,7 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import { TriangleAlertIcon } from "lucide-react";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { Precio } from "@/components/precio/precio";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
@@ -42,7 +46,12 @@ export default async function CancelBookingPage({
 }) {
   const { id } = await params;
   await requireUser();
-  const tz = await getUserTimezone();
+  // Zona y formato juntos: las dos mitades de «qué hora es para quien mira»,
+  // y las dos lecturas baratas — en paralelo, nunca encadenadas.
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -123,7 +132,7 @@ export default async function CancelBookingPage({
             <div className="flex justify-between gap-4">
               <dt className="text-[#6b6b6b]">Próxima sesión</dt>
               <dd className="font-medium text-[#333333] first-letter:uppercase">
-                {formatSessionTime(next.start_at, tz)}
+                {formatSessionTime(next.start_at, tz, formato)}
               </dd>
             </div>
           ) : null}

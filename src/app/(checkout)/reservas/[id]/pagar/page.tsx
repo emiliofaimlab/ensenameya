@@ -2,7 +2,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { Precio } from "@/components/precio/precio";
 import { bookingFormatLabel, formatSessionTime, tutorCards } from "@/lib/booking";
@@ -49,7 +53,12 @@ export default async function PagarReservaPage({
 }) {
   const { id } = await params;
   await requireUser();
-  const tz = await getUserTimezone();
+  // Zona y formato juntos: las dos mitades de «qué hora es para quien mira»,
+  // y las dos lecturas baratas — en paralelo, nunca encadenadas.
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   const supabase = await createClient();
 
   // RLS hace de guardia: `bookings_select_own` filtra por `student_id`, así que
@@ -129,7 +138,7 @@ export default async function PagarReservaPage({
             {sessions.map((s) => (
               <li key={s.id} className="flex flex-wrap items-baseline gap-x-2.5">
                 <span className="text-xs text-[#6b6b6b] first-letter:uppercase">
-                  {formatSessionTime(s.start_at, tz)}
+                  {formatSessionTime(s.start_at, tz, formato)}
                 </span>
                 {/* N-27 · el número que el cliente pidió para «hacerle seguimiento
                     a las transacciones». Aquí es donde más sentido tiene: es el

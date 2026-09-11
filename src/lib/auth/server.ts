@@ -12,6 +12,11 @@ import {
   type NotificationRow,
 } from "@/lib/notifications";
 import { TZ_COOKIE } from "@/lib/tz";
+import {
+  formatoDeCookie,
+  HORA_COOKIE,
+  type FormatoHora,
+} from "@/lib/hora";
 import { PANEL_COOKIE } from "@/lib/panel";
 import {
   destinoDeAsistente,
@@ -212,6 +217,24 @@ export const getUserTimezone = cache(async (): Promise<string> => {
  */
 export const getViewerTimezone = cache(async (): Promise<string> => {
   return (await zonaDelPerfil()) ?? (await zonaDelNavegador()) ?? "UTC";
+});
+
+/**
+ * ¿12 h o 24 h? La preferencia que dejó el conmutador en la cookie `ey-h12`.
+ *
+ * Gemela de `getViewerTimezone()` y montada igual —`cache()` por petición, una
+ * lectura de cookie— porque responden a la misma pregunta en dos mitades: la
+ * zona dice QUÉ hora es para quien mira, y esto CÓMO se escribe. Van juntas a
+ * todas partes: cualquier pantalla que ya pida `tz` para formatear una hora
+ * tiene que pedir esto también, o dirá «13:30» donde el resto del sitio dice
+ * «1:30 p. m.».
+ *
+ * Sin cookie, 24 h: es lo que pintaba el sitio antes de que existiera el
+ * conmutador, y lo que siguen pintando los correos (ver `lib/hora.ts`).
+ */
+export const getFormatoHora = cache(async (): Promise<FormatoHora> => {
+  const jar = await cookies();
+  return formatoDeCookie(jar.get(HORA_COOKIE)?.value);
 });
 
 /** Roles del usuario actual (vacío si anónimo). */

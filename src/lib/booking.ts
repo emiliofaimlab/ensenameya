@@ -1,6 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/lib/database.types";
+// ⚠️ Relativo y CON extensión, a diferencia del `@/` de arriba: aquél es un
+// `import type` y `--experimental-strip-types` lo borra antes de resolverlo,
+// pero esto son VALORES y node sí tiene que encontrarlos. Este módulo lo carga
+// `node` a pelo vía `catalog/format.ts` (`npm run check:email`), y el alias no
+// se resuelve ahí. Mismo motivo que documenta `catalog/format.ts`.
+import {
+  FORMATO_POR_DEFECTO,
+  opcionesDeHora,
+  type FormatoHora,
+} from "./hora.ts";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 type SessionStatus = Database["public"]["Enums"]["session_status"];
@@ -34,13 +44,24 @@ export const BOOKING_STATUS_LABEL: Record<BookingStatus, string> = {
  * la del usuario: ese era el bug de "hora del servidor", R24-12). En componentes
  * cliente puede omitirse: `undefined` = tz del navegador, que ya es la correcta.
  */
-export function formatSessionTime(iso: string, timeZone?: string): string {
+export function formatSessionTime(
+  iso: string,
+  timeZone?: string,
+  /**
+   * 12 h o 24 h, de la cookie `ey-h12` (ver `lib/hora.ts`). Opcional y con
+   * 24 h por defecto a propósito: así los sitios que NO tienen visitante
+   * —los correos, los jobs, `check:email`— siguen llamando con dos argumentos
+   * y pintando lo de siempre, sin fingir una preferencia que ahí no existe.
+   */
+  formato: FormatoHora = FORMATO_POR_DEFECTO,
+): string {
   return new Date(iso).toLocaleString("es", {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    ...opcionesDeHora(formato),
     timeZone,
   });
 }

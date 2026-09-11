@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { CompassIcon } from "lucide-react";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   BOOKING_STATUS_LABEL,
@@ -63,7 +67,12 @@ function summary(upcoming: number, awaiting: number): string {
  */
 export default async function AppHome() {
   const { user } = await requireUser();
-  const tz = await getUserTimezone();
+  // Zona y formato juntos: son las dos mitades de «qué hora es para quien
+  // mira», y las dos son lecturas baratas que no deben encadenarse.
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   const supabase = await createClient();
 
   // ⚠️ LAS RESERVAS Y SUS FICHAS DE TUTOR VAN JUNTAS, EN LA MISMA RAMA. Las
@@ -231,6 +240,7 @@ export default async function AppHome() {
                       title={b.products?.title ?? "Mentoría"}
                       when={s?.start_at ?? null}
                       timeZone={tz}
+                      formato={formato}
                       status={BOOKING_STATUS_LABEL[b.status]}
                       note={
                         // El botón de sala y este texto tienen que decir lo
@@ -320,7 +330,9 @@ export default async function AppHome() {
           Las tres son las mismas que monta `/agendar`, con los mismos módulos.
           `null` = todavía no tiene ninguna reserva terminada, y entonces no se
           monta: el estado vacío de esta pantalla ya está arriba. */}
-      {historial ? <HistorialCard data={historial} timeZone={tz} /> : null}
+      {historial ? (
+        <HistorialCard data={historial} timeZone={tz} formato={formato} />
+      ) : null}
 
       {/* Las dos tarjetas del Figma. «Invita y gana» (US-1301) ya no depende de
           que haya una variable de campaña puesta: desde `20260911120000` las

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
+  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ShoppingCartIcon,
@@ -11,6 +12,8 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
+import { FormatoHoraToggle } from "@/components/layout/formato-hora-toggle";
 import { ImporteLocal, Precio } from "@/components/precio/precio";
 import { HOLD_POLICY } from "@/lib/policy";
 import {
@@ -73,20 +76,27 @@ function tzLabel(timeZone: string): string {
   return off ? `(${off}) ${timeZone}` : timeZone;
 }
 
-const timeLabel = (iso: string, timeZone: string) =>
+/* ⚠️ Los DOS formateadores llevan el formato, no solo el de la lista. La hora de
+   la lista y la del resumen «Tu selección» son la misma clase a dos dedos de
+   distancia: si una dijera «1:30 p. m.» y la otra «13:30» parecerían dos horas
+   distintas. `opcionesDeHora` en vez de `hour12` a pelo por lo que explica
+   `lib/hora.ts`: sin `hourCycle` explícito, la medianoche puede salir «24:05». */
+const timeLabel = (iso: string, timeZone: string, formato: FormatoHora) =>
   new Date(iso).toLocaleTimeString("es", {
     hour: "2-digit",
     minute: "2-digit",
+    ...opcionesDeHora(formato),
     timeZone,
   });
 
-const chipLabel = (iso: string, timeZone: string) =>
+const chipLabel = (iso: string, timeZone: string, formato: FormatoHora) =>
   new Date(iso).toLocaleString("es", {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
+    ...opcionesDeHora(formato),
     timeZone,
   });
 
@@ -146,9 +156,14 @@ function moverMes(ym: string, delta: number): string {
  * UNA hora y un desplegable la resuelve en un gesto; aquí hay que elegir N y
  * **verlas todas a la vez** para no repetir ni dejar huecos. Un `<select>` que
  * hay que abrir seis veces, y que tapa el calendario cada vez, es peor que una
- * rejilla de chips. Lo que sí se le copia es el ancho fijo de la columna: el
- * salto de altura que B3.4 arregló allí aquí no ocurre porque los chips ya no
- * están debajo del calendario, sino al lado.
+ * lista. Lo que sí se le copia es el ancho fijo de la columna: el salto de
+ * altura que B3.4 arregló allí aquí no ocurre porque las horas ya no están
+ * debajo del calendario, sino al lado.
+ *
+ * ⚠️ Y son una LISTA VERTICAL, no los chips envueltos que había: una hora por
+ * fila, que se lee en orden en vez de en zigzag. El precio de la vertical es el
+ * alto —un día de paso fino son casi 2.000 px—, y se paga con un tope y scroll
+ * dentro de la caja; la cuenta está donde se aplica.
  *
  * ⚠️ El menú lateral del panel se quita en la PÁGINA, no aquí (`page.tsx`
  * pasa `sidebar={false}`). Ese es el ancho que hace que quepan las dos zonas.
@@ -164,6 +179,7 @@ export function SlotPicker({
   currency,
   durationMin,
   timeZone,
+  formato,
   enCarrito: enCarritoInicial,
 }: {
   productId: string;
@@ -186,6 +202,11 @@ export function SlotPicker({
    * ver la nota de `dayKey`. Sin ella el SSR agrupa por la zona del servidor.
    */
   timeZone: string;
+  /**
+   * 12 h o 24 h de la cookie `ey-h12`, resuelto en el servidor igual que
+   * `timeZone` y por el mismo motivo: aquí no se lee `document.cookie`.
+   */
+  formato: FormatoHora;
   /**
    * Líneas que ya hay en el carrito, leídas de la cookie en SERVIDOR. Es el
    * `initial` de `cart-badge.tsx` y está por lo mismo: sin él «Ir al carrito»
@@ -398,11 +419,13 @@ export function SlotPicker({
           se los come la de horas EN EL PEOR ANCHO. A 1024 exactos la cuenta es:
           944 de contenido − 24 de hueco − la columna derecha, menos el `p-5` de
           la tarjeta, los 300 del calendario y sus 20+20 de hueco y sangrado.
-          Con 360 quedaban 179 px para los chips → DOS por fila; con 320 quedan
-          219 → tres, que es el mínimo para que un día de ocho horas no se lea
-          como una lista vertical. Arriba de 1280 sobra sitio en las dos
-          versiones. 320 sigue siendo el ancho de panel de la casa (el de la
-          ficha ronda los 330). */}
+          Con 360 quedaban 179 px para las horas; con 320 quedan 219. El número
+          se queda aunque su motivo original —tres chips por fila— haya muerto
+          con la lista vertical: 179 px de fila, con la hora a la izquierda y el
+          tilde a la derecha, es una fila estrecha, y el calendario de al lado
+          sigue midiendo 300. Arriba de 1280 sobra sitio en las dos versiones.
+          320 sigue siendo el ancho de panel de la casa (el de la ficha ronda
+          los 330). */}
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         {/*
           ZONA 1 · ELEGIR — el día y la hora, en la MISMA tarjeta y uno al lado
@@ -420,7 +443,9 @@ export function SlotPicker({
           La rejilla del mes no baja de ~300 px sin que las celdas dejen de ser
           pulsables con el pulgar (7 columnas + 6 huecos de 8 px → 36 px por
           celda, contra los 40 de alto que ya tenían). La columna de horas
-          necesita al menos otros ~300 para poner tres chips por fila. Con el
+          necesita al menos otros ~300 para que su cabecera —título del día,
+          píldora de progreso y conmutador 12/24— quepa sin envolverse en tres
+          renglones, que es lo que empuja la lista fuera de la vista. Con el
           `p-5` de `PanelCard` y el hueco de 20, eso son 300+20+300+40 = 660 px
           de ventana como suelo: `md` es el primer corte que los da (768 − 48 de
           aire = 720). Por debajo se apilan, que es lo correcto en un teléfono.
@@ -538,10 +563,22 @@ export function SlotPicker({
                   a medida porque es la píldora del panel y ya trae los tonos —
                   ⚠️ sin pisarle la altura (N-15).
                 */}
-                <StatusPill role="status" tone={completa ? "green" : "gray"}>
-                  {selected.size} de {required}{" "}
-                  {required === 1 ? "elegida" : "elegidas"}
-                </StatusPill>
+                <div className="flex items-center gap-2">
+                  <StatusPill role="status" tone={completa ? "green" : "gray"}>
+                    {selected.size} de {required}{" "}
+                    {required === 1 ? "elegida" : "elegidas"}
+                  </StatusPill>
+
+                  {/*
+                    ⚠️ ESTE CONMUTADOR NO ES DE ESTA PANTALLA: escribe la cookie
+                    `ey-h12` y refresca el árbol, así que a partir del clic TODO
+                    el sitio escribe las horas igual. Está aquí porque es donde
+                    se leen treinta horas seguidas —o sea, donde a alguien le
+                    molesta el formato— pero lo que cambia es la preferencia, no
+                    esta lista. El valor baja ya resuelto desde `page.tsx`.
+                  */}
+                  <FormatoHoraToggle valor={formato} />
+                </div>
               </div>
 
               <p className="mt-1 text-xs text-[#6b6b6b]">
@@ -550,7 +587,33 @@ export function SlotPicker({
               </p>
 
               {openSlots.length > 0 ? (
-                <div className="mt-3.5 flex flex-wrap gap-2">
+                /*
+                  ⚠️ LISTA VERTICAL, UNA HORA POR FILA — Y CON TOPE DE ALTO.
+                  En vertical un día abierto de 09:00 a 18:00 con paso de 15 min
+                  son 37 filas: ~1.900 px que empujarían el total, el botón y la
+                  tarjeta de confirmar fuera de la pantalla, y a ninguno de los
+                  tres se llega scrolleando si lo que se está mirando es una
+                  columna infinita.
+                  El tope sale de medir la columna de al lado, que es lo que
+                  debe empatar: 40 px de cabecera de días + 6 semanas de 40 con
+                  hueco de 8 = 328 px de rejilla, más el título del mes y la
+                  línea de la zona ≈ 400. Restando la cabecera de ESTA columna
+                  (título + píldora + conmutador + subtítulo ≈ 64), quedan ~340:
+                  `22rem` = 352 px. A 52 px de fila (44 de alto + 8 de hueco)
+                  eso son SEIS filas enteras y un trozo de la séptima —el trozo
+                  es intencionado: es lo que dice «sigue habiendo horarios»
+                  mejor que ninguna sombra—.
+                  El `pb-2` es para que la última fila no acabe pegada al borde
+                  al llegar abajo, y el `-mx-0.5 px-0.5` deja 2 px a los lados
+                  para que el anillo de foco no lo recorte el `overflow`.
+                  El `key={openDay}` remonta la caja al cambiar de día: sin él,
+                  el navegador conserva el scroll y el día siguiente se abriría
+                  empezado por la mitad.
+                */
+                <div
+                  key={openDay}
+                  className="mt-3.5 -mx-0.5 flex max-h-[22rem] flex-col gap-2 overflow-y-auto px-0.5 pb-2"
+                >
                   {openSlots.map((iso) => {
                     const on = selected.has(iso);
                     /*
@@ -578,7 +641,8 @@ export function SlotPicker({
                             : undefined
                         }
                         className={cn(
-                          "inline-flex h-9 items-center rounded-full border-[1.5px] px-3.5 text-[13px] font-medium transition-colors",
+                          "flex h-11 w-full shrink-0 items-center justify-between gap-3 rounded-[10px] border-[1.5px] px-3.5 text-sm font-medium transition-colors",
+                          "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none",
                           on
                             ? "border-brand bg-brand text-white"
                             : pisado
@@ -586,7 +650,23 @@ export function SlotPicker({
                               : "border-[#e0e0e0] bg-card text-[#19191f] hover:border-brand",
                         )}
                       >
-                        {timeLabel(iso, timeZone)}
+                        <span>{timeLabel(iso, timeZone, formato)}</span>
+                        {/*
+                          La marca de la derecha, y NO es adorno: en una lista
+                          larga el color de fondo solo se rastrea comparando
+                          filas entre sí, y el que no distingue el azul del gris
+                          no la rastrea en absoluto. El tilde dice «ésta es
+                          tuya» de un vistazo; el «Se pisa» saca del `title`
+                          —que es hover, o sea que en un táctil no existe— la
+                          única razón por la que una fila está apagada.
+                        */}
+                        {on ? (
+                          <CheckIcon className="size-4 shrink-0" aria-hidden />
+                        ) : pisado ? (
+                          <span className="shrink-0 text-xs font-normal">
+                            Se pisa
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -639,12 +719,12 @@ export function SlotPicker({
                   className="flex items-center justify-between gap-2 text-[13px] text-[#19191f]"
                 >
                   <span className="first-letter:uppercase">
-                    {chipLabel(iso, timeZone)}
+                    {chipLabel(iso, timeZone, formato)}
                   </span>
                   <button
                     type="button"
                     onClick={() => toggle(iso)}
-                    aria-label={`Quitar ${chipLabel(iso, timeZone)}`}
+                    aria-label={`Quitar ${chipLabel(iso, timeZone, formato)}`}
                     className="text-[#6b6b6b] transition-colors hover:text-destructive"
                   >
                     <XIcon className="size-3.5" />

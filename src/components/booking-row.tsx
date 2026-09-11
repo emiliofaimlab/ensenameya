@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CalendarDaysIcon } from "lucide-react";
 
 import { formatSessionTime } from "@/lib/booking";
+import type { FormatoHora } from "@/lib/hora";
 import { StatusPill } from "@/components/layout/panel-shell";
 
 /**
@@ -18,6 +19,7 @@ export function BookingRow({
   note,
   action,
   timeZone,
+  formato,
 }: {
   href: string;
   tutor?: string;
@@ -46,6 +48,13 @@ export function BookingRow({
   action?: React.ReactNode;
   /** tz IANA del usuario: es server component, sin ella saldría la hora del servidor (R24-12). */
   timeZone: string;
+  /**
+   * 12 h o 24 h (`ey-h12`). OBLIGATORIA como `timeZone` y por lo mismo: con
+   * valor por defecto, una lista que se olvide de pasarla no falla —pinta
+   * 24 h calladamente— y el sitio queda diciendo «13:30» en una pantalla y
+   * «1:30 p. m.» en la siguiente para la misma clase.
+   */
+  formato: FormatoHora;
 }) {
   return (
     <li className="flex flex-wrap items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
@@ -77,7 +86,7 @@ export function BookingRow({
           </Link>
           <p className="text-xs text-[#6b6b6b] first-letter:uppercase">
             {when
-              ? `${formatSessionTime(when, timeZone)} · tu hora local`
+              ? `${formatSessionTime(when, timeZone, formato)} · tu hora local`
               : "Sin horario aún"}
           </p>
           <StatusPill className="mt-1.5">{status}</StatusPill>

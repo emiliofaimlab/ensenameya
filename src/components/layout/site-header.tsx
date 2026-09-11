@@ -35,6 +35,7 @@ import {
 import { Container } from "@/components/layout/container";
 import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
 import { SignOutDialog } from "@/components/layout/sign-out-dialog";
+import type { FormatoHora } from "@/lib/hora";
 import { cn } from "@/lib/utils";
 import { panelDeCookie, ROLE_HOME } from "@/lib/auth/roles";
 import { isAdminRoute, isOnboardingRoute, panelFromPath } from "@/lib/panel";
@@ -249,6 +250,7 @@ export function SiteHeader({
   user,
   notices = [],
   cartCount = 0,
+  formato,
 }: {
   user?: HeaderUser | null;
   /** US-1203 · avisos ya consultados por el layout (server). */
@@ -260,6 +262,9 @@ export function SiteHeader({
    * al navegar dentro de su propio segmento y este número se quedaría viejo.
    */
   cartCount?: number;
+  /** 12 h o 24 h (`ey-h12`). La cabecera no pinta horas: solo la baja a la
+   *  campana, que es cliente y no puede leer la cookie sin parpadear. */
+  formato?: FormatoHora;
 }) {
   const pathname = usePathname();
   /**
@@ -511,7 +516,11 @@ export function SiteHeader({
                   md:flex` sin nada en el cajón, y eso dejaba a QUIEN ENTRABA
                   DESDE EL MÓVIL SIN NINGÚN ACCESO A SUS AVISOS. */}
               {user ? (
-                <NotificationsBell initial={notices} userId={user.id} />
+                <NotificationsBell
+                  initial={notices}
+                  userId={user.id}
+                  formato={formato}
+                />
               ) : null}
 
               {user ? (
@@ -797,6 +806,7 @@ export function SiteHeader({
                           <NotificationsBell
                             initial={notices}
                             userId={user.id}
+                            formato={formato}
                             variante="fila"
                           />
                         </div>

@@ -1,6 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 
-import { getSessionContext, getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getSessionContext,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
 import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
@@ -79,7 +84,11 @@ export default async function CheckoutPage({
   // las horas sin ella —y por tanto en la del servidor durante el SSR, UTC en
   // Vercel— mientras el calendario que las eligió y `/reservas/[id]/pagar` sí la
   // usan. O sea que podía enseñar una hora distinta de la reservada.
-  const tz = await getUserTimezone();
+  // …y en qué formato se escribe, que es la otra mitad de la misma promesa.
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   // 🔑 QUIÉN COBRA LO DECIDE EL PAÍS DEL ALUMNO (dictado del 9-sep-2026).
   //
   // Aquí se leía `tutor_profiles.payout_country` y se ruteaba con él. Ya no: esa
@@ -191,6 +200,7 @@ export default async function CheckoutPage({
         tutorId={product.tutor.id}
         slots={slots}
         timeZone={tz}
+        formato={formato}
         durationMin={product.sessionDurationMin}
         total={bookingTotal(product)}
         currency={product.currency}

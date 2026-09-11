@@ -1,4 +1,4 @@
-import { requireUser } from "@/lib/auth/server";
+import { getFormatoHora, requireUser } from "@/lib/auth/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
 import { cartCount } from "@/lib/cart/resolve";
 import { listConversations } from "@/components/chat/conversations";
@@ -28,7 +28,9 @@ export default async function AppLayout({
 
   // Los avisos ya vienen en `requireUser()` (`session_bootstrap`): eran una
   // consulta más, y encadenada, porque necesitaban el id de la sesión.
-  const carrito = await cartCount();
+  // Las dos lecturas de cookie de la cabecera, juntas: el contador del
+  // carrito y el formato de hora que baja a la campana.
+  const [carrito, formato] = await Promise.all([cartCount(), getFormatoHora()]);
 
   // El modo de la ruta (asistente AL01/TU01 con "Guardar y salir", admin con su
   // píldora y su pie) NO se decide aquí: este layout se renderiza una vez y se
@@ -45,6 +47,7 @@ export default async function AppLayout({
         })}
         notices={notices}
         cartCount={carrito}
+        formato={formato}
       />
       {/* Columna flexible: el fondo de cada pantalla lo pone ELLA, así que para
           que llegue hasta abajo tiene que poder estirarse. Sin esto, `main`

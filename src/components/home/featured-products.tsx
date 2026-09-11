@@ -90,10 +90,15 @@ export function FeaturedProducts({
                   />
 
                   <div className="flex flex-1 flex-col gap-3 p-5">
-                    {/* N-12 · dos líneas y corta. Sin esto un título largo
+                    {/* N-12 · UNA línea y corta. Sin esto un título largo
                         estiraba la tarjeta y bajaba el "Ver detalle →" de las
-                        cuatro columnas a alturas distintas. */}
-                    <h3 className="line-clamp-2 text-[15px] font-semibold">
+                        cuatro columnas a alturas distintas; con dos líneas el
+                        contenido de esta tarjeta seguía bajando respecto a sus
+                        vecinas. El recorte se asume y el `title` lo compensa. */}
+                    <h3
+                      title={p.title}
+                      className="line-clamp-1 text-[15px] font-semibold"
+                    >
                       {p.title}
                     </h3>
 

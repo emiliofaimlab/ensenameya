@@ -2,7 +2,7 @@ import { EyeIcon, VideoIcon } from "lucide-react";
 import Link from "next/link";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
-import { getUserTimezone } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import {
@@ -12,6 +12,7 @@ import {
   porProximidad,
   sesionVigente,
 } from "@/lib/booking";
+import type { FormatoHora } from "@/lib/hora";
 import { salaDeLaReserva } from "@/lib/room-window";
 import {
   AcceptCountdown,
@@ -224,10 +225,13 @@ function FilaDeReserva({
   reserva,
   student,
   tz,
+  formato,
 }: {
   reserva: Reserva;
   student: StudentIdentity | undefined;
   tz: string;
+  /** 12 h o 24 h: viaja con `tz` porque las dos deciden la misma línea. */
+  formato: FormatoHora;
 }) {
   // Bajo qué chips se ve esta fila. Ver `filtrosDe` y `PanelFiltro`.
   const f = filtrosDe([reserva]);
@@ -266,7 +270,7 @@ function FilaDeReserva({
           />
           {" · "}
           <span className="first-letter:uppercase">
-            {cuando ? formatSessionTime(cuando, tz) : "Por agendar"}
+            {cuando ? formatSessionTime(cuando, tz, formato) : "Por agendar"}
           </span>
           {" · "}
           {formatMoney(reserva.total_amount, reserva.currency)}
@@ -332,7 +336,7 @@ function fechaDeReserva(b: Reserva): string | null {
  */
 export default async function TutorReservasPage() {
   const { userId } = await requireTutorProfile();
-  const tz = await getUserTimezone();
+  const [tz, formato] = await Promise.all([getUserTimezone(), getFormatoHora()]);
   // ⚠️ Esta pantalla ya NO lee `searchParams`, y no es un descuido: el filtro
   // vive en el cliente (`PanelFiltro`). Además de ahorrar las once consultas de
   // cada clic, deja de meter `?f=` en la clave del segmento de página, así que
@@ -506,7 +510,7 @@ export default async function TutorReservasPage() {
                         {" · "}
                         <span className="first-letter:uppercase">
                           {cuando
-                            ? formatSessionTime(cuando, tz)
+                            ? formatSessionTime(cuando, tz, formato)
                             : "Por agendar"}
                         </span>
                         {" · "}
@@ -541,6 +545,7 @@ export default async function TutorReservasPage() {
                       reserva={b}
                       student={students.get(b.student_id)}
                       tz={tz}
+                      formato={formato}
                     />
                   ))}
                 </ul>
@@ -564,6 +569,7 @@ export default async function TutorReservasPage() {
                       reserva={b}
                       student={students.get(b.student_id)}
                       tz={tz}
+                      formato={formato}
                     />
                   ))}
                 </ul>

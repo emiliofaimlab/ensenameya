@@ -5,6 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BellIcon } from "lucide-react";
 
+import {
+  FORMATO_POR_DEFECTO,
+  opcionesDeHora,
+  type FormatoHora,
+} from "@/lib/hora";
 import { createClient } from "@/lib/supabase/client";
 import {
   NOTICES_LIMIT,
@@ -55,8 +60,15 @@ export function NotificationsBell({
   initial,
   userId,
   variante = "icono",
+  formato = FORMATO_POR_DEFECTO,
 }: {
   initial: AppNotice[];
+  /**
+   * 12 h o 24 h (`ey-h12`) para la fecha de cada aviso. La resuelve el layout
+   * en servidor y baja por `SiteHeader`: leer la cookie aquí haría parpadear
+   * las horas al hidratar. 24 h si falta, que es lo que pintaba antes.
+   */
+  formato?: FormatoHora;
   /**
    * ⚠️ De quién son estos avisos, y hace falta de verdad. La RLS de
    * `notifications` tiene DOS políticas de lectura y la de admin abre la tabla
@@ -335,6 +347,7 @@ export function NotificationsBell({
                       month: "short",
                       hour: "2-digit",
                       minute: "2-digit",
+                      ...opcionesDeHora(formato),
                     })}
                   </time>
                 </>

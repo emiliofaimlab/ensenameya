@@ -122,7 +122,12 @@ export function TutorCard({
       </span>
 
       <div>
-        <h3 className="line-clamp-2 text-base font-bold">{name}</h3>
+        {/* Una línea, como ya hacía el `truncate` de la variante `list`: un
+            nombre de dos líneas bajaba todo el interior de ESTA tarjeta y la
+            desalineaba de sus vecinas de fila. El `title` guarda el entero. */}
+        <h3 title={name} className="line-clamp-1 text-base font-bold">
+          {name}
+        </h3>
         <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-[#666666]">
           <BadgeCheckIcon className="size-3.5 text-brand" />
           Tutor verificado
