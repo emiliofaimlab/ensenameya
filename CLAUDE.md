@@ -30,7 +30,7 @@ npm run dev        # → http://localhost:3000 (contra dev cloud)
 | `npm run db:push` | Aplica migraciones al proyecto **dev** enlazado |
 | `npm run db:types` | Regenera `src/lib/database.types.ts` (aborta sin tocar el fichero si falla) |
 | `npm run lint` · `npm run typecheck` | Lint y typecheck |
-| `npm run check:*` | **Once comprobaciones ejecutables** sin red ni credenciales: `email`, `correos`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel` |
+| `npm run check:*` | **Trece comprobaciones ejecutables** sin red ni credenciales: `email`, `correos`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel`, `rutas`, `enlaces` |
 
 Enlace del CLI a dev: `npx supabase link --project-ref lbtpnszjjsxbeileqsja`.
 Tras tocar el esquema: `npm run db:push` **y** `npm run db:types`. A prod llega por **CI**
@@ -86,6 +86,22 @@ al mergear a `main`.
     opcional iba vacío** (supabase-js no serializa `undefined` → menos argumentos → ambiguo),
     o sea justo al revés de lo que promete la pantalla. Lo arregla `20260910220000`. Y ojo:
     un `drop` se lleva por delante los `grant execute`, que hay que reponer.
+
+13. ⚠️ **Un `redirect()` de servidor alcanzado por una navegación de CLIENTE que
+    cruza de grupo de rutas deja la pantalla EN BLANCO.** No es un 500 ni un
+    error: el router de Next se queda con el árbol vacío y pide el RSC de esa URL
+    en bucle —medido: **1367 peticiones en 5 segundos** y cero caracteres en
+    pantalla—. La MISMA URL cargada de cero renderiza perfecta, así que
+    `next dev` lo disfraza de «Compiling…» y solo lo sufren algunos usuarios:
+    los que cumplen la condición que dispara el redirect. Mordió **dos veces** el
+    11-sep (entrar con Google, y «Mi cuenta» desde la home pública).
+    **La regla: fuera de `(app)` no se enlaza a una ruta con guarda escribiéndola
+    a mano.** El destino se resuelve en servidor —`toHeaderUser`,
+    `getVisitorState`, `destinoDeUsuario`, `destinoDeAsistente`— y se pinta ya
+    resuelto. Lo vigila `npm run check:enlaces`; lo que se le escape (un `href`
+    calculado, una guarda nueva) lo degrada a una recarga
+    `components/layout/red-anti-blanco.tsx`. Y esto **solo se verifica contra
+    `npm run build` + `npm start`**, nunca contra `next dev`.
 
 ## Patrón RLS
 

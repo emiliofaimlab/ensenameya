@@ -6,6 +6,7 @@ import { DropdownDismiss } from "@/components/layout/dropdown-dismiss";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { TimezoneSync } from "@/components/layout/timezone-sync";
+import { RedAntiBlanco } from "@/components/layout/red-anti-blanco";
 import { siteUrl } from "@/lib/site-url";
 
 // Única familia del diseño: Poppins en los 4 pesos que usan las 3.691 capas de texto del Figma.
@@ -19,7 +20,6 @@ const geistMono = Geist_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
 });
-
 
 export const metadata: Metadata = {
   // §5.6 · Base contra la que Next resuelve las URL RELATIVAS de los metadatos
@@ -59,6 +59,9 @@ export default function RootLayout({
               público, quien iniciaba sesión y entraba directo a su panel no
               dejaba nunca la cookie, y el servidor caía a UTC. */}
           <TimezoneSync />
+          {/* Último recurso: si una navegación deja el árbol vacío, recarga
+              entera. Ver el porqué en el propio componente. */}
+          <RedAntiBlanco />
           <DropdownDismiss />
           <Toaster />
         </ThemeProvider>
