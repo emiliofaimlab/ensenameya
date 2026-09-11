@@ -6,10 +6,13 @@ import { panelMenu } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatShortDate } from "@/lib/booking";
+// El buzón real del §39 del contrato, de una sola fuente (lib/company.ts).
+import { COMPANY } from "@/lib/company";
 import {
   createUser,
   isReferralFactoryConfigured,
   qrUrlDe,
+  ReferralFactoryError,
 } from "@/lib/referral-factory";
 import type { Json } from "@/lib/database.types";
 import {
@@ -74,19 +77,31 @@ type Campaña = {
  * `authenticated` no puede insertar aquí a propósito (nadie se inventa un
  * código ajeno), por eso el `service_role`.
  */
+type AltaEnRf = {
+  codigos: Map<number, string>;
+  /**
+   * Campañas en las que RF dijo que NO y no va a cambiar de opinión (un 4xx que
+   * no es reintentable). Se separan de las que fallaron por un mal minuto
+   * porque la pantalla tiene que decir cosas distintas: «Preparando tu
+   * enlace…» es verdad en el segundo caso y MENTIRA en el primero.
+   */
+  rechazadas: Set<number>;
+};
+
 async function ensureMemberships(
   perfil: { id: string; email: string | null; nombre: string | null },
   campañas: Campaña[],
   yaTiene: Map<number, string>,
-): Promise<Map<number, string>> {
+): Promise<AltaEnRf> {
+  const nada: AltaEnRf = { codigos: yaTiene, rechazadas: new Set() };
   const faltan = campañas.filter((c) => !yaTiene.has(c.rf_campaign_id));
   // La credencial es el interruptor (CLAUDE.md): sin ella no se llama a RF y
   // las tarjetas lo dicen. Nada revienta.
-  if (faltan.length === 0 || !isReferralFactoryConfigured()) return yaTiene;
+  if (faltan.length === 0 || !isReferralFactoryConfigured()) return nada;
 
   const email = perfil.email?.trim();
   // RF exige correo para dar de alta. Sin él no hay nada que intentar.
-  if (!email) return yaTiene;
+  if (!email) return nada;
   const first_name = perfil.nombre?.trim().split(/\s+/)[0] || email.split("@")[0];
 
   // ⚠️ FUERA DEL `allSettled` NO, DENTRO DE UN `try` SÍ. `createAdminClient()`
@@ -99,7 +114,7 @@ async function ensureMemberships(
     admin = createAdminClient();
   } catch (e) {
     console.error("[referidos] sin service_role, no se puede dar de alta en RF", e);
-    return yaTiene;
+    return nada;
   }
 
   const resultados = await Promise.allSettled(
@@ -140,21 +155,40 @@ async function ensureMemberships(
     }),
   );
 
-  const conEnlace = new Map(yaTiene);
-  for (const r of resultados) {
-    if (r.status === "fulfilled") conEnlace.set(r.value[0], r.value[1]);
-    // Una campaña que falle no bloquea la pantalla: su tarjeta sale con
-    // «Preparando tu enlace…» y se reintenta en la visita siguiente.
+  const codigos = new Map(yaTiene);
+  const rechazadas = new Set<number>();
+
+  resultados.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      codigos.set(r.value[0], r.value[1]);
+      return;
+    }
+
+    const campaña = faltan[i].rf_campaign_id;
+    console.error(`[referidos] alta en RF · campaña ${campaña}`, r.reason);
+
+    // ⚠️ UN 4xx QUE NO ES REINTENTABLE NO ES «PREPARANDO TU ENLACE…», y
+    // enseñarlo así es la peor de las dos mentiras posibles: promete algo que
+    // no va a llegar NUNCA y, con el refresco de los 10 s, además vuelve a
+    // pegarle a RF en cada carga.
     //
-    // ✅ Y el reintento es seguro: MEDIDO el 11-sep contra la API real, `POST
-    // users` con un correo que ya existe en esa campaña devuelve el MISMO
-    // usuario en vez de un 422. O sea que a quien el cron ya dio de alta en RF
-    // al convertirlo, esta llamada le devuelve su usuario de siempre y la fila
-    // se inserta igual. El supuesto S-32.2 del §10 —que daba por hecho el 422 y
-    // auguraba «Preparando tu enlace…» eterno— es FALSO.
-    else console.error("[referidos] alta en RF", r.reason);
-  }
-  return conEnlace;
+    // El caso real que lo destapó (11-sep, preview de dev): RF **rechaza los
+    // dominios sin MX**. `camila.duarte@ensenameya.dev` devuelve
+    // `422 The email must be a valid email address`, y 18 de las cuentas de
+    // prueba de dev usan ese dominio. No es un fallo del programa —un usuario
+    // de verdad trae un correo de verdad— pero la pantalla tenía que saberlo
+    // decir.
+    //
+    // Un mal minuto de RF (timeout, 429, 5xx) SÍ se queda en «Preparando tu
+    // enlace…»: ahí el reintento es la respuesta correcta y además es seguro,
+    // porque `createUser` con el mismo correo y la misma campaña devuelve el
+    // MISMO usuario (medido).
+    if (r.reason instanceof ReferralFactoryError && !r.reason.retriable) {
+      rechazadas.add(campaña);
+    }
+  });
+
+  return { codigos, rechazadas };
 }
 
 export default async function ReferidosPage() {
@@ -202,8 +236,8 @@ export default async function ReferidosPage() {
   );
   // Si la lectura falló no se intenta ningún alta: RF crearía usuarios que ya
   // existen y devolvería 422 a partir de la segunda carga.
-  const conEnlace = membershipsRes.error
-    ? codigos
+  const { codigos: conEnlace, rechazadas } = membershipsRes.error
+    ? { codigos, rechazadas: new Set<number>() }
     : await ensureMemberships(
         { id: user.id, email: user.email, nombre: fullName },
         visibles,
@@ -341,12 +375,16 @@ export default async function ReferidosPage() {
                     <p className="mt-3 text-[12.5px] text-[#6b6b6b]">
                       {sinCredencial
                         ? "El programa de invitaciones todavía no está activo."
-                        : "Preparando tu enlace…"}
-                      {/* Sin credencial no hay nada que esperar: el refresco
-                          solo se monta cuando el enlace de verdad está en
-                          camino, y así no se pide la pantalla cada 10 s en un
-                          entorno donde RF ni está configurado. */}
-                      {sinCredencial ? null : <RefrescarCuandoLlegueElEnlace />}
+                        : rechazadas.has(c.rf_campaign_id)
+                          ? `No hemos podido preparar tu enlace con este correo. Escríbenos a ${COMPANY.email.toLowerCase()} y lo resolvemos.`
+                          : "Preparando tu enlace…"}
+                      {/* El refresco SOLO cuando el enlace está de verdad en
+                          camino. Sin credencial no hay nada que esperar, y con
+                          un rechazo permanente pedir la pantalla cada 10 s es
+                          pegarle a RF para que vuelva a decir que no. */}
+                      {sinCredencial || rechazadas.has(c.rf_campaign_id) ? null : (
+                        <RefrescarCuandoLlegueElEnlace />
+                      )}
                     </p>
                   )}
 
