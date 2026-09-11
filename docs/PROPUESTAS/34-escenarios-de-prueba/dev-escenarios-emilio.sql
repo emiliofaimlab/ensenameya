@@ -104,6 +104,29 @@ from auth.users u
 where lower(u.email) = lower('emilio+alumno@faimlab.com')
 on conflict (provider_id, provider) do nothing;
 
+-- ⚠️ La cuenta de TUTOR se registró con Google, así que solo tiene identidad
+-- `google`. Escribirle `encrypted_password` NO la deja entrar por contraseña:
+-- GoTrue resuelve el login por `auth.identities`, y sin una fila `email` el
+-- usuario existe, la contraseña es correcta y el login falla igual — en
+-- silencio y sin pista (es la misma lección que encabeza `dev-poblar.sql`).
+-- Se le AÑADE la vía de contraseña; la de Google sigue intacta al lado, que es
+-- como funciona el account linking de Supabase. Así las cinco cuentas del Doc
+-- 34 se abren de la misma manera y nadie tiene que acordarse de la excepción.
+update auth.users
+   set encrypted_password = extensions.crypt('Ensename2026!', extensions.gen_salt('bf')),
+       email_confirmed_at = coalesce(email_confirmed_at, now())
+ where lower(email) = lower('emilio@faimlab.com');
+
+insert into auth.identities (id, user_id, provider_id, identity_data, provider,
+                             last_sign_in_at, created_at, updated_at)
+select gen_random_uuid(), u.id, u.id::text,
+       jsonb_build_object('sub', u.id::text, 'email', u.email,
+                          'email_verified', true, 'phone_verified', false),
+       'email', now(), now(), now()
+from auth.users u
+where lower(u.email) = lower('emilio@faimlab.com')
+on conflict (provider_id, provider) do nothing;
+
 drop table if exists _ey;
 create temporary table _ey as
 select
