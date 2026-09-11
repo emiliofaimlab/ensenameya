@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 
 import { getSessionContext } from "@/lib/auth/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+// ⚠️ El catálogo se lee con la SESIÓN, no con `service_role`. Ver el bloque
+// de la moneda, más abajo: no es una preferencia, es que no puede.
+import { createClient } from "@/lib/supabase/server";
 import { exponenteDe, formatEnMoneda } from "@/lib/dinero";
 
 /**
@@ -321,7 +324,20 @@ export async function PATCH(
     const guardada = actual.data?.reward_currency?.trim().toUpperCase() ?? null;
 
     if (moneda !== guardada) {
-      const prods = await admin
+      // ⚠️ CON EL CLIENTE DE SESIÓN, NO CON `admin`. Regla de oro 9: a
+      // `service_role` se le olvidó el `grant select` sobre `products` —hoy
+      // solo tiene REFERENCES, TRIGGER y TRUNCATE, medido— así que leerlo con
+      // el admin devolvía `permission denied for table products` Y EL GUARDADO
+      // ENTERO FALLABA. No lo vio ni el build ni el typecheck: salió al pulsar
+      // «Guardar» en la preview.
+      //
+      // Se arregla aquí y no con una migración porque el catálogo es PÚBLICO:
+      // `anon` y `authenticated` ya tienen `select` sobre `products`, y quien
+      // llama a este handler es un admin con sesión. Darle el grant a
+      // `service_role` sería ampliar privilegios para leer algo que ya se
+      // puede leer sin ellos.
+      const sesion = await createClient();
+      const prods = await sesion
         .from("products")
         .select("currency")
         .eq("status", "active");

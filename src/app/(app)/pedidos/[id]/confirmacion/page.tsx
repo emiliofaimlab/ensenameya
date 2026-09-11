@@ -177,8 +177,14 @@ export default async function ConfirmacionPedidoPage({
           </ul>
 
           <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-[#e0e0e0] pt-4">
+            {/* ⚠️ «pagado» solo cuando alguien pagó. Con un crédito de por
+                medio la cifra grande es lo que CUESTA el pedido, no lo que
+                salió de un bolsillo: el desglose va debajo. Mismo arreglo que
+                en la confirmación de reserva. */}
             <span className="text-base font-semibold text-[#19191f]">
-              {tumbado ? "Total del pedido" : "Total pagado"}
+              {tumbado || pedido.creditoTotal > 0
+                ? "Total del pedido"
+                : "Total pagado"}
             </span>
             {/* Ya cobrado, y aun así convertido a la tasa de HOY: es la misma
                 etiqueta orientativa que en el resto del sitio y por eso lleva su
@@ -192,6 +198,36 @@ export default async function ConfirmacionPedidoPage({
               />
             </span>
           </div>
+
+          {pedido.creditoTotal > 0 ? (
+            <dl className="mt-2.5 flex flex-col gap-1">
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-[12.5px] text-[#6b6b6b]">Tu crédito</dt>
+                <dd className="text-[13px] font-medium text-brand">
+                  −{" "}
+                  <Precio
+                    amountMinor={pedido.creditoTotal}
+                    currency={pedido.currency}
+                    className="inline"
+                  />
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-[12.5px] text-[#6b6b6b]">
+                  {pedido.total - pedido.creditoTotal === 0
+                    ? "Pagaste"
+                    : "Pagaste con tu método de pago"}
+                </dt>
+                <dd className="text-[13px] font-medium text-[#333333]">
+                  <Precio
+                    amountMinor={Math.max(0, pedido.total - pedido.creditoTotal)}
+                    currency={pedido.currency}
+                    className="inline"
+                  />
+                </dd>
+              </div>
+            </dl>
+          ) : null}
         </PanelCard>
 
         <div className="mt-6 flex flex-wrap gap-3">

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { GiftIcon } from "lucide-react";
 
-import { formatSessionTime } from "@/lib/booking";
 import { PrecioEnLinea } from "@/components/precio/precio";
 import {
   PanelCard,
@@ -84,21 +83,121 @@ export function regaloPorAgendar(r: RegaloRecibido): boolean {
   );
 }
 
-/** Días completos que quedan, o `null` si no caduca o ya venció. */
-function diasRestantes(expiresAt: string | null): number | null {
-  if (!expiresAt) return null;
-  const ms = Date.parse(expiresAt) - Date.now();
-  return ms > 0 ? Math.floor(ms / 86_400_000) : null;
+/**
+ * El día de calendario de un instante EN LA ZONA DE QUIEN MIRA (RN-01/02).
+ *
+ * `en-CA` da `2026-09-11` y es la forma más corta de sacar el día local sin
+ * dependencias. Devuelve ese día como marca UTC para poder restar dos sin que
+ * el huso vuelva a meterse.
+ */
+function diaLocal(d: Date, tz: string): number {
+  const [a, m, dia] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(d)
+    .split("-")
+    .map(Number);
+  return Date.UTC(a, m - 1, dia);
+}
+
+/** Días de CALENDARIO que faltan, en la zona del usuario. `null` si la fecha no
+ *  se puede leer — nunca 0, que aquí significaría «caduca hoy». */
+function diasHasta(iso: string, tz: string): number | null {
+  const cuando = new Date(iso);
+  if (Number.isNaN(cuando.getTime())) return null;
+  // El reloj se lee en una función de módulo y no dentro del render: misma
+  // razón que `isUpcoming()` en `lib/booking` (pureza de react-hooks).
+  return Math.round(
+    (diaLocal(cuando, tz) - diaLocal(new Date(), tz)) / 86_400_000,
+  );
+}
+
+/** «10 dic», y «10 ene 2027» cuando el año no es el de hoy. El plazo del regalo
+ *  son 90 días (`gift_expiry_days()`), así que cruza el fin de año a menudo y
+ *  sin el año un «10 ene» no dice si quedan días o casi un año. */
+function fechaLocal(iso: string, tz: string): string {
+  const cuando = new Date(iso);
+  if (Number.isNaN(cuando.getTime())) return "—";
+  const año = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric" }).format(
+      d,
+    );
+  return cuando.toLocaleDateString("es", {
+    day: "numeric",
+    month: "short",
+    timeZone: tz,
+    ...(año(cuando) === año(new Date()) ? {} : { year: "numeric" }),
+  });
+}
+
+/**
+ * ── EL PLAZO, COMO PIEZA ────────────────────────────────────────────────────
+ *
+ * ⚠️ **SIN HORA, Y NO ES UN DESCUIDO.** Sobre un plazo de 90 días, «jue, 10 dic,
+ * 17:32» es ruido con una trampa dentro: invita a leer que a las 17:33 el regalo
+ * se pierde. El día basta; cuando de verdad queda poco, lo dice el TONO.
+ *
+ * ⚠️ **El criterio de urgencia es el de `/referidos`** —rojo si caduca hoy o
+ * mañana, ámbar a ≤7 días, gris el resto (`recompensaDe`, en
+ * `src/app/(app)/referidos/page.tsx`)— para que las dos pantallas donde alguien
+ * mira un crédito con fecha se lean igual. Está copiado, no importado, porque
+ * ese criterio vive hoy en funciones privadas de esa página; el sitio donde
+ * debería vivir es `lib/`, y sacarlo de ahí toca un fichero que no es este.
+ *
+ * Se cuentan días de CALENDARIO en la zona de quien mira y no horas: algo que
+ * vence esta noche tiene que decir «hoy» en Madrid y en Caracas, y restar
+ * milisegundos lo contaría como «mañana» para media Europa.
+ */
+function plazo(
+  expiresAt: string | null,
+  tz: string,
+): { texto: string; tono: PillTone } {
+  const dias = expiresAt ? diasHasta(expiresAt, tz) : null;
+  // Sin fecha el regalo no vence, y decirlo es responder a la pregunta del
+  // cliente («¿hasta cuándo puedes agendarlo?») también en ese caso. Una fecha
+  // ilegible no llega aquí: `regaloPorAgendar` compara ese mismo instante y un
+  // `NaN` la deja en false, así que ese regalo se pinta ya como cerrado.
+  if (expiresAt === null || dias === null)
+    return { texto: "Sin fecha límite", tono: "gray" };
+  if (dias <= 0) return { texto: "Caduca hoy", tono: "red" };
+  if (dias === 1) return { texto: "Caduca mañana", tono: "red" };
+  if (dias <= 7) return { texto: `Caduca en ${dias} días`, tono: "amber" };
+  return { texto: `Caduca el ${fechaLocal(expiresAt, tz)}`, tono: "gray" };
 }
 
 /**
  * La tarjeta accionable: un regalo cobrado, sin agendar y en fecha.
  *
+ * ── EL ORDEN ES LA PANTALLA ────────────────────────────────────────────────
+ *
+ * Se ordena por lo que quien mira tiene que HACER, no por lo bonito:
+ *
+ *   1. **De qué es** — el título de la mentoría, su formato y su tutor.
+ *   2. **Que no paga** — la duda con la que se llega al checkout.
+ *   3. **Hasta cuándo** — lo único que caduca aquí.
+ *   4. **La dedicatoria** — un detalle cálido, no un dato.
+ *   5. **El botón.**
+ *
+ * ⚠️ **2 y 3 SON PIEZAS, NO FRASES**, y ese es el arreglo de fondo (Emilio,
+ * 11-sep: «la información puede pulirse y resaltar elementos en específico»).
+ * Escritas en prosa pesaban menos que la dedicatoria —que es lo más bonito y lo
+ * menos accionable—, así que todo pesaba parecido y no destacaba nada. Como
+ * `StatusPill` con su tono, se leen de un vistazo y sin leerlas.
+ *
  * Mobile-first a propósito (US-1601, correo de Verónica del 3-sep): en 390 px
- * es una sola columna, el botón ocupa el ancho y mide 44 px de alto, y la
- * tarjeta entera se queda en unos 230 px para NO empujar las reservas de
- * verdad por debajo del pliegue — que es justo lo que haría un bloque
- * decorativo grande puesto encima de una lista.
+ * es una sola columna, el botón ocupa el ancho y mide 44 px de alto, y los dos
+ * chips caben en una fila (y envuelven si no).
+ *
+ * ⚠️ **Y la tarjeta ENCOGE con este cambio, no crece**, que es la condición
+ * para que «Activas» siga por encima del pliegue: los dos chips ocupan 26 px
+ * donde antes había dos párrafos —el del precio y el del plazo— de unos 70, y
+ * en el caso normal la línea del precio ya ni se pinta. Medido a ojo sobre la
+ * suma de alturas declaradas: ~290 px con dedicatoria de cuatro líneas, frente
+ * a ~330 antes. El día que alguien añada una pieza aquí, esta es la cuenta que
+ * hay que rehacer.
  */
 export function RegaloPorAgendar({
   regalo,
@@ -112,10 +211,11 @@ export function RegaloPorAgendar({
   // la cadena opcional TypeScript no puede estrechar el `number | null` en la
   // rama de abajo, y `<PrecioEnLinea>` pide un número.
   const totalHoy = p?.totalHoy ?? null;
-  const dias = diasRestantes(regalo.expiresAt);
-  // «Quedan pocos días» es información, no decoración: a los 90 días de plazo
-  // (`gift_expiry_days()`) el aviso solo tiene sentido cuando aprieta.
-  const urge = dias !== null && dias <= 14;
+  // ⚠️ Las TRES respuestas posibles a «¿pago algo?», resueltas una vez y antes
+  // del JSX porque las necesitan dos sitios (el chip y la línea de debajo).
+  // `null` NO es «gratis»: es «no lo sabemos», y se dice distinto.
+  const cubreTodo = totalHoy !== null && regalo.amount >= totalHoy;
+  const caducidad = plazo(regalo.expiresAt, timeZone);
 
   return (
     <PanelCard className="border-[1.5px] border-brand/40 bg-[#f5faff]">
@@ -161,65 +261,108 @@ export function RegaloPorAgendar({
         </div>
       </div>
 
-      {/* La dedicatoria, entera y entrecomillada: es el único remitente que hay
-          (ver la cabecera). `line-clamp-4` porque `comprar_regalo` la corta en
-          500 caracteres y a pantalla completa eso son ocho líneas que empujarían
-          la lista de reservas fuera del pliegue en un móvil. */}
+      {/* ── 2 y 3 · LO QUE DECIDE ALGO ───────────────────────────────────────
+          Los dos datos accionables, juntos y en la misma fila, justo debajo de
+          QUÉ es y por encima de todo lo demás. Van en `flex-wrap`: a 360 px con
+          los dos textos largos («Pagas solo la diferencia» + «Caduca el 10 dic
+          2027») el segundo chip baja de línea en vez de estirar la tarjeta y
+          sacar la barra horizontal del documento.
+
+          ⚠️ Regla de oro 4 · el instante vive en UTC y `plazo()` lo convierte
+          con el `timeZone` de quien mira. Es OBLIGATORIO pasarlo: esto es un
+          componente de servidor y sin él se contarían los días desde la
+          medianoche de Vercel (UTC), que es el bug R24-12. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {/* ⚠️ QUÉ SE PROMETE Y QUÉ NO. El regalo congeló el precio del día en
+            que se compró; lo que cubre al canjearlo es `least(amount, gross)`
+            (`credito_aplicable`, `20260912110000:1461`), así que si el tutor
+            subió el precio entretanto el destinatario PAGA LA DIFERENCIA.
+            Poner «Gratis» sin mirar el precio de hoy sería exactamente la
+            mentira creíble de la regla de oro 10, con el agravante de que se
+            descubre en la pantalla de pagar. Por eso el chip tiene TRES textos
+            y no dos — y el del precio ilegible es AZUL y no verde: dice lo
+            único cierto («está pagada») sin prometer que cubre el total.
+
+            `whitespace-nowrap` como en `/referidos`: el chip declara 26 px de
+            alto y `shrink-0`, así que si su texto se partiera en dos líneas
+            reventaría por dentro. Los cuatro textos caben incluso a 320 px
+            (el más largo mide ~170 de los 248 útiles), y lo que no cabe es la
+            FILA, que para eso envuelve. */}
+        {totalHoy === null ? (
+          <StatusPill tone="blue" className="whitespace-nowrap">
+            Ya está pagada
+          </StatusPill>
+        ) : cubreTodo ? (
+          <StatusPill tone="green" className="whitespace-nowrap">
+            Gratis · ya está pagada
+          </StatusPill>
+        ) : (
+          <StatusPill tone="amber" className="whitespace-nowrap">
+            Pagas solo la diferencia
+          </StatusPill>
+        )}
+
+        <StatusPill tone={caducidad.tono} className="whitespace-nowrap">
+          {caducidad.texto}
+        </StatusPill>
+      </div>
+
+      {/* La cifra, SOLO cuando hay una cifra que decir. En el caso normal —el
+          regalo cubre el 100 %— el chip verde ya lo dice entero y una frase
+          repitiéndolo es justo el peso de más que aplanaba la tarjeta. Los
+          otros dos casos traen números que el chip no puede llevar dentro. */}
+      {totalHoy === null ? (
+        <p className="mt-2 text-[13px] text-[#333333]">
+          Está pagada por{" "}
+          <PrecioEnLinea
+            amountMinor={regalo.amount}
+            currency={regalo.currency}
+            className="font-semibold"
+          />
+          .
+        </p>
+      ) : cubreTodo ? null : (
+        <p className="mt-2 text-[13px] text-[#333333]">
+          Cubre{" "}
+          <PrecioEnLinea
+            amountMinor={regalo.amount}
+            currency={regalo.currency}
+            className="font-semibold"
+          />{" "}
+          de los{" "}
+          <PrecioEnLinea amountMinor={totalHoy} currency={regalo.currency} /> que
+          cuesta hoy: la diferencia la pagas tú al agendarla.
+        </p>
+      )}
+
+      {/* ── 4 · LA DEDICATORIA ───────────────────────────────────────────────
+          Entera y entrecomillada, porque es el único remitente que hay (ver la
+          cabecera), pero AHORA POR DEBAJO de lo accionable y en gris: antes iba
+          pegada al título y con más contraste que el plazo, así que lo más
+          bonito tapaba lo único que hay que decidir. El borde deja de ser azul
+          para que el color de la tarjeta se concentre en los dos chips.
+
+          `line-clamp-4` porque `comprar_regalo` la corta en 500 caracteres y a
+          pantalla completa eso son ocho líneas que empujarían «Activas» fuera
+          del pliegue en un móvil.
+
+          💡 AQUÍ IRÍA EL NOMBRE DE QUIEN REGALA, el día que exista: una línea
+          `— Ana` a pie de cita, o «Un regalo de Ana» en el antetítulo si no hay
+          dedicatoria. Hoy no se puede y no es un olvido —`mis_creditos` no
+          expone `purchased_by` a propósito, ver la cabecera del fichero—, así
+          que sacarlo pide una migración, no un cambio de maqueta. El cliente lo
+          pidió como «sería bueno, pero no es algo del otro mundo» (11-sep). */}
       {regalo.giftMessage ? (
-        <blockquote className="mt-3 border-l-2 border-[#b3d7ff] pl-3 text-[13px] leading-relaxed text-[#333333] italic">
+        <blockquote className="mt-3 border-l-2 border-[#d6d6d6] pl-3 text-[12.5px] leading-relaxed text-[#595959] italic">
           <p className="line-clamp-4 break-words">{regalo.giftMessage}</p>
         </blockquote>
       ) : null}
 
-      {/* ⚠️ QUÉ SE PROMETE Y QUÉ NO. El regalo congeló el precio del día en que
-          se compró; lo que cubre al canjearlo es `least(amount, gross)`
-          (`credito_aplicable`, `20260912110000:1461`), así que si el tutor
-          subió el precio entretanto el destinatario PAGA LA DIFERENCIA. Decir
-          «no pagarás nada» sin mirar el precio de hoy sería exactamente la
-          mentira creíble de la regla de oro 10, con el agravante de que se
-          descubre en la pantalla de pagar. */}
-      <p className="mt-3 text-[13px] text-[#333333]">
-        {totalHoy === null ? (
-          <>
-            Está pagada por{" "}
-            <PrecioEnLinea
-              amountMinor={regalo.amount}
-              currency={regalo.currency}
-              className="font-semibold"
-            />
-            .
-          </>
-        ) : regalo.amount >= totalHoy ? (
-          <>
-            <span className="font-semibold">Ya está pagada:</span> al agendarla
-            no pagarás nada.
-          </>
-        ) : (
-          <>
-            Cubre{" "}
-            <PrecioEnLinea
-              amountMinor={regalo.amount}
-              currency={regalo.currency}
-              className="font-semibold"
-            />{" "}
-            de los{" "}
-            <PrecioEnLinea amountMinor={totalHoy} currency={regalo.currency} />{" "}
-            que cuesta hoy: la diferencia la pagas tú al agendarla.
-          </>
-        )}
-      </p>
-
-      {/* Regla de oro 4 · el instante vive en UTC y se pinta en la hora local
-          de quien mira. `timeZone` es OBLIGATORIO aquí: esto es un componente
-          de servidor y sin él saldría la hora de Vercel (UTC), que es el bug
-          R24-12. */}
-      {regalo.expiresAt ? (
-        <p className="mt-1.5 text-xs text-[#6b6b6b]">
-          {`Puedes agendarla hasta el ${formatSessionTime(regalo.expiresAt, timeZone)} · tu hora local`}
-        </p>
-      ) : null}
-
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      {/* ── 5 · EL BOTÓN ─────────────────────────────────────────────────────
+          Solo. El chip de urgencia que antes le hacía compañía subió con el
+          plazo a su fila: una píldora al lado del botón se lee como parte del
+          botón. */}
+      <div className="mt-4">
         {p && regalo.productId ? (
           // El camino NORMAL de reserva de esa mentoría: calendario del tutor y
           // después el checkout, donde el selector le ofrece este regalo. Es un
@@ -253,12 +396,6 @@ export function RegaloPorAgendar({
             y lo resolvemos contigo: tu regalo sigue pagado.
           </p>
         )}
-
-        {urge ? (
-          <StatusPill tone="amber">
-            {dias === 0 ? "Caduca hoy" : `Quedan ${dias} días`}
-          </StatusPill>
-        ) : null}
       </div>
     </PanelCard>
   );
@@ -333,9 +470,13 @@ export function RegalosCerrados({
                 <p className="truncate text-[13.5px] font-medium text-[#333333]">
                   {r.producto?.titulo ?? "Una mentoría"}
                 </p>
+                {/* Sin hora, igual que el chip de plazo de la tarjeta viva y
+                    que `/referidos`: en un regalo ninguna de estas dos fechas
+                    tiene un minuto que importe, y el «· tu hora local» dejaba
+                    de tener sentido en cuanto no hay hora que situar. */}
                 {fecha ? (
                   <p className="text-xs text-[#6b6b6b]">
-                    {`${verbo} ${formatSessionTime(fecha, timeZone)} · tu hora local`}
+                    {`${verbo} ${fechaLocal(fecha, timeZone)}`}
                   </p>
                 ) : null}
               </div>

@@ -84,6 +84,23 @@ export type SujetoDelCredito =
  * un fallo de esta consulta no puede dejar a nadie encerrado sin poder pagar. La
  * contrapartida es que quien tuviera un crédito pagaría sin usarlo, y de eso
  * avisa el propio selector, que también mira su `error` y lo dice en pantalla.
+ *
+ * ⚠️🎁 TRAMPA DEL NOMBRE: UN REGALO NO SE ELIGE, PERO AQUÍ SIGUE DICIENDO `true`.
+ *
+ * Desde que `SelectorDeCredito` aplica solo los créditos de regalo (no tienen
+ * uso alternativo: van atados a esa mentoría y ya se cobraron), leer esta
+ * función por su nombre invita a rematarla con un «si es un regalo no hay nada
+ * que elegir → `false`». **Eso rompe el canje entero, y en silencio.** Con
+ * `false` el padre abre el cobro de una, `/api/pagos/checkout` sella
+ * `checkout_amount = gross_amount`, y desde ese instante `aplicar_credito` se
+ * niega por el cerrojo de arriba: el regalo ya no se puede aplicar NUNCA y el
+ * destinatario acaba pagando de su bolsillo una mentoría que alguien le regaló.
+ * Ni el typecheck ni el build ven eso.
+ *
+ * La pregunta que contesta esta función no es «¿hay algo que ELEGIR?», es «¿hay
+ * algo que HACER antes de abrir el cobro?» — y aplicar el regalo es hacer algo,
+ * en la única ventana en la que se puede. Quien quiera ahorrarse el viaje que lo
+ * haga en el render de servidor, como dice el párrafo del coste; aquí no.
  */
 export async function hayQueElegirCredito(
   supabase: Cliente,
