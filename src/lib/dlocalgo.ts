@@ -258,7 +258,10 @@ export type TasaDlocalGo = {
  * una a una: una tasa a 0 convertiría cualquier importe en cero.
  */
 export async function listarTasasDeCambio(): Promise<TasaDlocalGo[] | null> {
-  const bruto = await dlocalgoFetch<unknown>("GET", "/v1/currency-exchanges");
+  return parsearTasas(await dlocalgoFetch<unknown>("GET", "/v1/currency-exchanges"));
+}
+
+function parsearTasas(bruto: unknown): TasaDlocalGo[] | null {
   if (!Array.isArray(bruto)) return null;
   const filas: TasaDlocalGo[] = [];
   for (const x of bruto) {
@@ -297,6 +300,68 @@ export async function tasaDeCambio(
   const o = monedaOrigen.toUpperCase();
   const d = monedaDestino.toUpperCase();
   return filas.find((t) => t.source_currency === o && t.target_currency === d)?.value ?? null;
+}
+
+/**
+ * ── LAS MISMAS TASAS, PERO PARA PINTAR ──────────────────────────────────────
+ *
+ * `listarTasasDeCambio` va por `dlocalgoFetch`, que pone `cache: "no-store"`
+ * porque su llamador manda dinero. Una pantalla no: pide la tabla en CADA
+ * render, y la de `/tutor/payouts` es la más lenta del panel. Esto es la misma
+ * petición cacheada una hora por Next —la tasa de un aviso orientativo no
+ * cambia de minuto a minuto— y **no la puede usar el job**: la que fija un
+ * `transfer_amount` tiene que ser la de ahora mismo.
+ *
+ * Devuelve la tasa EFECTIVA y no la publicada, o sea con el mismo recorte que
+ * aplica el adaptador de dLocal al liquidar (`tasaEfectiva` ·
+ * `spreadDeLiquidacion`). ⚠️ Que sea el mismo número NO significa que sea el
+ * mismo pago: dLocal solo paga en siete de los 55 países con formulario
+ * bancario, y en el resto ejecutan Wise o Stripe con su tasa y su comisión. El
+ * recorte se aplica igual y a sabiendas, porque tira SIEMPRE hacia abajo: de los
+ * dos errores posibles, quedarse corto con el dinero de otro es el barato.
+ *
+ * `null` = no hay nada que enseñar, y se enseña nada. Sin credencial (el caso de
+ * producción hoy) o si la petición falla: la línea no se pinta y la pantalla no
+ * se entera.
+ *
+ * ⚠️ NO RECIBE LA MONEDA a propósito, aunque el llamador solo quiera una: sin
+ * argumentos se puede pedir DENTRO del `Promise.all` de la pantalla, en paralelo
+ * con las consultas. Pasándole `regla.currency` habría que esperar a que la
+ * consulta de reglas terminase, y eso es un peldaño más de cascada en la
+ * pantalla más lenta del panel — justo lo que el fichero de arriba lleva tres
+ * comentarios evitando.
+ */
+export async function tasasParaPintar(): Promise<TasaDlocalGo[] | null> {
+  const cred = credenciales();
+  if (!cred) return null;
+
+  const r = await fetch(`${dlocalgoBase()}/v1/currency-exchanges`, {
+    headers: { Authorization: cabeceraAuth(cred.apiKey, cred.secretKey) },
+    next: { revalidate: 3600 },
+    // 🔴 EL TOPE NO ES UN AFINADO, ES LO QUE HACE QUE ESTO SE PUEDA PONER EN LA
+    // PANTALLA. Va dentro del `Promise.all` de `/tutor/payouts`, así que sin
+    // plazo un dLocal que no contesta no degrada el aviso: deja al tutor
+    // mirando «Cargando…» en la pantalla de su dinero. Medido el 11-sep-2026,
+    // este endpoint tarda 0,54 s; cuatro segundos es siete veces eso.
+    signal: AbortSignal.timeout(4000),
+  }).catch(() => null);
+  if (!r?.ok) return null;
+
+  return parsearTasas(await r.json().catch(() => null));
+}
+
+/** El par que interesa de esa tabla, ya con el factor aplicado. */
+export function tasaParaPintar(
+  filas: TasaDlocalGo[] | null,
+  monedaOrigen: string,
+  monedaDestino: string,
+): number | null {
+  const o = monedaOrigen.toUpperCase();
+  const d = monedaDestino.toUpperCase();
+  if (!filas || !o || !d || o === d) return null;
+  const publicada =
+    filas.find((t) => t.source_currency === o && t.target_currency === d)?.value ?? null;
+  return publicada === null ? null : tasaEfectiva(publicada, spreadDeLiquidacion());
 }
 
 /**

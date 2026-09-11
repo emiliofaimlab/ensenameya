@@ -16,7 +16,7 @@ import {
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
-import { avisoDeImporteAproximado } from "@/lib/payments/dlocal-provider";
+import { tasaParaPintar, tasasParaPintar } from "@/lib/dlocalgo";
 import { WithdrawButton } from "./withdraw-button";
 import { PayoutAccountForm } from "./payout-account-form";
 import { PaypalConectar } from "./paypal-conectar";
@@ -207,6 +207,7 @@ export default async function TutorPayoutsPage() {
     { data: itemsData, error: errorItems },
     { rieles, familias: familiasDelPais },
     { data: bancosData },
+    tasas,
   ] = await Promise.all([
     supabase.rpc("tutor_balance"),
     supabase
@@ -288,6 +289,12 @@ export default async function TutorPayoutsPage() {
           .eq("country", paisDeCobro)
           .order("name")
       : Promise.resolve({ data: null }),
+    // La tabla de tasas, cacheada una hora, para poder decirle al tutor cuánto
+    // es eso en su moneda. Va aquí —y por eso `tasasParaPintar` no recibe la
+    // moneda— para no añadir un peldaño a la cascada: el par se elige abajo,
+    // cuando ya se sabe la regla del país. Sin credencial devuelve `null` y no
+    // se pinta nada.
+    tasasParaPintar(),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -351,7 +358,6 @@ export default async function TutorPayoutsPage() {
    * banco imposible de rellenar.
    */
   const familias = familiasDelPais.filter((f) => f !== "banco" || regla !== null);
-  const pideBanco = familias.includes("banco");
 
   // Se pidió arriba, con el resto. Solo se lee dentro de la rama de banco.
   const bancos = (bancosData ?? []) as BancoDePais[];
@@ -391,23 +397,74 @@ export default async function TutorPayoutsPage() {
   });
   const preferida = preferenciaVigente(prefData?.method ?? null, metodos);
 
-  /**
-   * ⚠️ EL DIFERENCIAL DE CAMBIO LO ASUME EL TUTOR (decisión del cliente,
-   * 2-sep-2026), y por eso esto se dice en la tarjeta y no en un anexo.
-   *
-   * `POST /v1/payouts` de dLocal Go no tiene moneda de origen: el importe va
-   * SIEMPRE en la de destino, así que hay que fijar o lo que recibe el tutor o
-   * lo que sale de nuestro balance, nunca las dos. Se fija lo segundo, y la
-   * cantidad en moneda local la determina el cambio del día. El texto sale del
-   * DATO (`payout_country_rules.currency`): en Ecuador esa columna es 'USD' y
-   * `avisoDeImporteAproximado` devuelve `null` sin que nadie escriba «si es EC».
-   */
-  const avisoDeCambio =
-    pideBanco && regla
-      ? avisoDeImporteAproximado(MONEDA_DEL_SALDO, regla.currency)
-      : null;
-
   const cuentaDeEstePais = cuenta !== null && cuenta.country === paisDeCobro;
+
+  /**
+   * §5.2 · CUÁNTO ES ESO EN SU MONEDA, y por qué lleva un «≈» delante.
+   *
+   * ⚠️ EL DIFERENCIAL DE CAMBIO LO ASUME EL TUTOR (decisión del cliente,
+   * 2-sep-2026): `POST /v1/payouts` de dLocal Go no tiene moneda de origen, así
+   * que se fija lo que sale de NUESTRO balance (`payouts.amount`, en USD) y la
+   * cantidad en moneda local la determina el cambio del día.
+   *
+   * Hasta hoy eso se contaba en un párrafo de cuatro líneas y el número no
+   * aparecía por ninguna parte. Ahora aparece el número —que es lo que el tutor
+   * quería— y el párrafo se ha quedado en un «≈».
+   *
+   * 🔴 SIGUE SIN PODER PROMETERSE, y conviene ser exacto sobre POR QUÉ, porque
+   * la versión corta («lleva el mismo factor que aplica el adaptador») es falsa
+   * en casi todas partes:
+   *   · el factor de liquidación (`DLOCALGO_FX_SPREAD`, 4,7 % medido) es el de
+   *     **dLocal**, y dLocal solo PAGA en siete de los 55 países con formulario
+   *     bancario: en Colombia y en los 47 de la fila por defecto quien paga es
+   *     Wise o Stripe, con su tasa y su comisión. Se aplica igual, y a sabiendas:
+   *     es un recorte que tira SIEMPRE hacia abajo, y de los dos errores
+   *     posibles el que se puede cometer con el dinero de otro es el de
+   *     quedarse corto. Un número por encima del que llega es una reclamación;
+   *     uno por debajo es una sorpresa buena.
+   *   · quién ejecuta lo decide `payoutProviderFor` el día del lote;
+   *   · la tasa es la de HOY y el pago es el lunes.
+   * Por eso no se pinta en «Ya cobrado»: ese dinero se cambió el día que salió,
+   * a una tasa que ya no es esta, y convertirlo hoy sería inventar un importe
+   * que el tutor puede cotejar con su banco.
+   *
+   * ⚠️ Y NO BASTA CON QUE EL PAÍS TENGA BANCO: manda el MÉTODO, porque PayPal es
+   * el único riel que cambia la MONEDA y no solo la tasa. `paypal-provider.ts`
+   * manda `currency: input.currency`, o sea USD: a un tutor mexicano que cobra
+   * por PayPal, «≈ 3.500,00 MXN» no es una aproximación, es otra moneda.
+   *
+   * Sin preferencia la condición es tener CUENTA BANCARIA de este país, y no el
+   * orden de `metodos`: los rieles de banco van delante de PayPal en todas las
+   * filas de ruteo, así que con datos bancarios registrados el que paga es uno
+   * de ellos. Sin cuenta no se promete moneda, que es además el estado en el que
+   * la pantalla ya le está pidiendo que complete una.
+   *
+   * `null` en Ecuador (su `currency` es USD), sin credencial de dLocal —el caso
+   * de producción hoy— y en las monedas que esa tabla no publica. Entonces no se
+   * pinta la línea: es la regla de siempre, la credencial es el interruptor.
+   */
+  const cobraPorBanco = preferida ? preferida === "banco" : cuentaDeEstePais;
+  const monedaLocal = cobraPorBanco && regla ? regla.currency : null;
+  const tasaLocal = monedaLocal
+    ? tasaParaPintar(tasas, MONEDA_DEL_SALDO, monedaLocal)
+    : null;
+
+  /** «≈ 115.343 CLP» a partir de un saldo en dólares, o `null` si no hay con qué. */
+  const enMonedaLocal = (
+    lista: { currency: string; amount: number }[],
+  ): string | null => {
+    if (!monedaLocal || !tasaLocal) return null;
+    const enDolares = lista.find((m) => m.currency === MONEDA_DEL_SALDO);
+    if (!enDolares || enDolares.amount <= 0) return null;
+    // `formatMoney` no sirve aquí: divide entre 100 siempre y hay monedas de
+    // cero decimales (CLP, PYG). Se convierte a unidad MAYOR primero y se deja
+    // que `Intl` ponga los decimales que esa moneda tenga, que son los suyos.
+    return `≈ ${new Intl.NumberFormat("es", {
+      style: "currency",
+      currency: monedaLocal,
+    }).format((enDolares.amount / 100) * tasaLocal)}`;
+  };
+
   const destinoDe = (canal: string) =>
     destinos.find((d) => d.channel === canal) ?? null;
 
@@ -455,7 +512,9 @@ export default async function TutorPayoutsPage() {
         // pantalla en un muro. Lo que importa AL ELEGIR es dónde y en qué
         // moneda cae el dinero; el resto se lee al rellenar, que es cuando
         // sirve, y por eso baja al bloque del formulario.
-        descripcion: `A tu cuenta en ${nombrePais(paisDeCobro!)}, en ${regla?.currency ?? MONEDA_DEL_SALDO}${avisoDeCambio ? " (importe aproximado)" : ""}.`,
+        // El «(importe aproximado)» que colgaba aquí se fue con el párrafo del
+        // cambio: lo aproximado ahora se ve arriba, con su «≈» y su cifra.
+        descripcion: `A tu cuenta en ${nombrePais(paisDeCobro!)}, en ${regla?.currency ?? MONEDA_DEL_SALDO}.`,
         automatico: m.automatico,
         listo: cuentaDeEstePais,
         detalle: cuentaDeEstePais
@@ -463,14 +522,18 @@ export default async function TutorPayoutsPage() {
           : cuenta
             ? `Tienes datos de ${nombrePais(cuenta.country)} guardados, pero a ${nombrePais(paisDeCobro!)} no llega esa transferencia.`
             : null,
-        // El aviso del cambio se va al formulario: es una condición que hay que
-        // leer ANTES de registrar nada, y abrir el formulario ES antes. En la
-        // tarjeta se queda el «(importe aproximado)» de la línea de arriba, que
-        // es lo que hace falta para comparar métodos.
         aviso: null,
-        subtarea: faltaDireccion
-          ? "Con tu dirección y tu teléfono se abre una segunda ruta a esta misma cuenta, que nos sale más barata. Sin ellos te seguimos pagando igual."
-          : null,
+        // Sigue siendo útil —dice que a lo guardado le falta algo— pero ya no
+        // explica para qué sirve cada campo: el formulario los pide a todos por
+        // igual desde el 11-sep, así que esa explicación describía una
+        // distinción que la pantalla dejó de hacer.
+        //
+        // ⚠️ NO NOMBRA CUÁLES, y no es vaguedad: `faltaDireccion` es verdadero
+        // si falta CUALQUIERA de los cuatro, así que «te faltan la dirección y
+        // el teléfono» era falso para quien solo tenía el código postal en
+        // blanco. Los cuatro campos se prerrellenan al abrir el formulario, de
+        // modo que el hueco se ve; lo que hace falta aquí es que mire.
+        subtarea: faltaDireccion ? "Te faltan datos del titular." : null,
         conectar: false,
       };
     }
@@ -526,18 +589,15 @@ export default async function TutorPayoutsPage() {
     if (m.clave === "banco" && regla && paisDeCobro) {
       formularios.banco = (
         <>
-          <p className="mt-3 max-w-[62ch] text-[12.5px] leading-[1.55] text-[#4d4d4d]">
-            Tienen que ser los de una cuenta a tu nombre en{" "}
-            {nombrePais(paisDeCobro)}: el titular y el documento se comprueban
-            contra el banco, y si no coinciden la transferencia se rechaza.
-          </p>
-          {/* La condición del cambio, aquí y no en la tarjeta: es lo que hay
-              que leer antes de registrar coordenadas, y este es el momento. */}
-          {avisoDeCambio ? (
-            <p className="mt-2 max-w-[62ch] rounded-[8px] border border-[#e8d5a8] bg-[#fdf7e6] p-3 text-[12.5px] leading-[1.55] text-[#19191f]">
-              {avisoDeCambio}
-            </p>
-          ) : null}
+          {/* ⚠️ AQUÍ HABÍA DOS PÁRRAFOS Y AHORA NO HAY NINGUNO (11-sep-2026).
+              Uno decía que la cuenta tiene que estar a nombre del tutor; el otro
+              —en recuadro ámbar— explicaba en cuatro líneas que el importe en
+              moneda local es aproximado. Los dos se leían ANTES de tocar el
+              primer campo, que es cuando nadie lee. Lo que decían no se ha
+              perdido: lo del titular lo dice cada rótulo («Nombre del titular»,
+              «Apellidos del titular») y lo dice el error de la RPC si no cuadra,
+              que llega en el momento en que sirve; y lo del cambio es ahora un
+              número con un «≈» delante, arriba, junto al saldo. */}
           <PayoutAccountForm
           // ⚠️ `key` por país, y no es decorativo: el formulario guarda su
           // estado en `useState`, que NO se reinicializa cuando cambian las
@@ -761,7 +821,12 @@ export default async function TutorPayoutsPage() {
           liquidaciones pagadas»): decía la norma, no el cuándo, y multiplicada
           por tres convertía la fila de cifras en un párrafo. La regla del plazo
           ya está en el subtítulo de la pantalla y la del lote en «Frecuencia».
-          El retiro pasa de botón de texto a círculo azul junto al monto. */}
+          El retiro pasa de botón de texto a círculo azul junto al monto.
+
+          ⚠️ Lo único que sí baja del monto es OTRA CIFRA, no una regla: el
+          mismo importe en la moneda del tutor. Y solo en los dos que todavía no
+          se han pagado — «Ya cobrado» se cambió el día que salió y a otra tasa,
+          así que ahí sería un número inventado. Ver `enMonedaLocal`. */}
       <div id="saldo" className="grid scroll-mt-24 gap-4 sm:grid-cols-3">
         <PanelCard className="border-brand p-5">
           {/* ⚠️ `dl`/`dt`/`dd` y no dos `p` sueltos: rótulo y cifra son un par,
@@ -801,6 +866,17 @@ export default async function TutorPayoutsPage() {
                 hasBalance={hasAvailable}
               />
             </dd>
+            {/* El `title` es lo único que queda del párrafo que explicaba por
+                qué esto no se puede prometer. Está donde lo encuentra quien se
+                lo pregunte, y no delante de quien no. */}
+            {enMonedaLocal(balance.available) ? (
+              <dd
+                className="mt-0.5 text-[13px] tabular-nums text-[#6b6b6b]"
+                title="Aproximado: el cambio lo fija quien ejecute la transferencia el día que la haga."
+              >
+                {enMonedaLocal(balance.available)}
+              </dd>
+            ) : null}
           </dl>
         </PanelCard>
         <PanelCard className="p-5">
@@ -816,6 +892,14 @@ export default async function TutorPayoutsPage() {
             >
               {moneyLine(balance.in_retention)}
             </dd>
+            {enMonedaLocal(balance.in_retention) ? (
+              <dd
+                className="mt-0.5 text-[13px] tabular-nums text-[#6b6b6b]"
+                title="Aproximado: el cambio lo fija quien ejecute la transferencia el día que la haga."
+              >
+                {enMonedaLocal(balance.in_retention)}
+              </dd>
+            ) : null}
           </dl>
         </PanelCard>
         <PanelCard className="p-5">
