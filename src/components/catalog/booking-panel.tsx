@@ -16,6 +16,7 @@ import { cartCount } from "@/lib/cart/resolve";
 import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
 import { ImporteEnUsd, ImporteLocal } from "@/components/precio/precio";
 import { textosDePrecio } from "@/lib/fx";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import { listProductSlots } from "@/lib/catalog/queries";
 import type { ProductCardData } from "@/lib/catalog/queries";
 
@@ -61,11 +62,12 @@ const slotDay = (iso: string, timeZone: string) =>
     day: "2-digit",
   }).format(new Date(iso));
 
-/** Hora del hueco en la zona del visitante. */
-const slotTime = (iso: string, timeZone: string) =>
+/** Hora del hueco en la zona del visitante, escrita como él la pidió. */
+const slotTime = (iso: string, timeZone: string, formato: FormatoHora) =>
   new Date(iso).toLocaleTimeString("es", {
     hour: "2-digit",
     minute: "2-digit",
+    ...opcionesDeHora(formato),
     timeZone,
   });
 
@@ -187,6 +189,7 @@ export async function BookingPanel({
   ctaFijo = true,
   footer,
   timeZone,
+  formato,
 }: {
   products: ProductCardData[];
   selectedId?: string;
@@ -219,6 +222,8 @@ export async function BookingPanel({
   /** Zona del visitante (`getViewerTimezone`): con sesión, la suya; sin sesión,
    *  la del navegador. Sin ella el SSR pintaría la hora del servidor (R24-22). */
   timeZone: string;
+  /** 12 h o 24 h (`ey-h12`): viaja con `timeZone`, que es la otra mitad. */
+  formato: FormatoHora;
   hrefFor: (next: { p?: string; d?: string; h?: string; m?: string }) => string;
   /**
    * §5.12 · título del panel por prop. Cuando viene MANDA sobre la lógica de
@@ -593,7 +598,7 @@ export async function BookingPanel({
             Próximo:{" "}
             <b className="font-semibold">
               {slotDayLabel(proximo[1], timeZone)} ·{" "}
-              {slotTime(proximo[1], timeZone)}
+              {slotTime(proximo[1], timeZone, formato)}
             </b>
           </span>
           {/* Día y hora a la vez. Sin `m`: el mes se deduce del día, y el día
@@ -831,7 +836,7 @@ export async function BookingPanel({
                       value={hora ?? ""}
                       options={times.map((iso) => ({
                         value: iso,
-                        label: slotTime(iso, timeZone),
+                        label: slotTime(iso, timeZone, formato),
                         href: hrefFor({
                           p: chosen.id,
                           d: day,

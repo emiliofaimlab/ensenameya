@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { bookingFormatLabel, formatSessionTime, BOOKING_STATUS_LABEL, SESSION_STATUS_LABEL } from "@/lib/booking";
@@ -78,7 +78,10 @@ export default async function TutorBookingDetailPage({
 }) {
   const { id } = await params;
   const { user } = await requireUser();
-  const tz = await getUserTimezone();
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -194,7 +197,7 @@ export default async function TutorBookingDetailPage({
                         <p className="text-[13px] font-medium text-[#404040]">
                           Sesión {i + 1} ·{" "}
                           <span className="first-letter:uppercase">
-                            {formatSessionTime(s.start_at, tz)}
+                            {formatSessionTime(s.start_at, tz, formato)}
                           </span>
                         </p>
                         {/* N-27 · el número que hay que dar por teléfono o por
@@ -316,6 +319,7 @@ export default async function TutorBookingDetailPage({
           </h2>
           {chatOpen ? (
             <ChatThread
+              formato={formato}
               bookingId={booking.id}
               currentUserId={user.id}
               firstSessionAt={sessions[0]?.start_at ?? null}

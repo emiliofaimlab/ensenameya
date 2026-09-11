@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { PrecioEnLinea } from "@/components/precio/precio";
 import {
@@ -20,7 +24,10 @@ import {
   PanelShell,
   StatusPill,
 } from "@/components/layout/panel-shell";
-import { AddToCalendar } from "@/components/calendar/add-to-calendar";
+import {
+  AddToCalendar,
+  AvisoCopiaCalendario,
+} from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { TutorSummary } from "@/components/tutor-summary";
 import { RecordingLink } from "@/components/room/recording-link";
@@ -72,7 +79,12 @@ export default async function BookingDetailPage({
 }) {
   const { id } = await params;
   const { user } = await requireUser();
-  const tz = await getUserTimezone();
+  // Zona y formato juntos: las dos mitades de «qué hora es para quien mira»,
+  // y las dos lecturas baratas — en paralelo, nunca encadenadas.
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -230,67 +242,74 @@ export default async function BookingDetailPage({
                 Las sesiones se agendan cuando el tutor acepta la reserva.
               </p>
             ) : (
-              <ul className="mt-3.5 divide-y divide-[#e0e0e0]">
-                {sessions.map((s, i) => (
-                  <li
-                    key={s.id}
-                    className="flex flex-wrap items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-[#19191f]">
-                        Sesión {i + 1}
-                      </p>
-                      <p className="text-[13px] text-[#6b6b6b] first-letter:uppercase">
-                        {formatSessionTime(s.start_at, tz)} · tu hora local
-                      </p>
-                      {/* N-27 · el número que se dicta por teléfono. NO es un
-                          código interno de los que barre M-06: los `RN-xx` y
-                          `US-xx` no significan nada para un alumno, este lo pidió
-                          el cliente para poder seguir una clase y su cobro. El
-                          "Sesión 1 · 2 · 3" de arriba se queda porque es el
-                          ordinal dentro del paquete y sigue valiendo para las
-                          reservas anteriores a la migración, que no tienen
-                          número (`SessionRef` devuelve null y no pinta nada). */}
-                      <SessionRef nro={s.session_ref} className="mt-1" />
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <StatusPill>
-                        {SESSION_STATUS_LABEL[s.status] ?? s.status}
-                      </StatusPill>
-                      {/* El gate real de la ventana (RN-18) lo pone el server;
-                          la sala muestra la cuenta regresiva. Aquí solo se
-                          decide si enseñar el botón. */}
-                      {ROOM_BOOKING.has(booking.status) && roomOpen(s) ? (
-                        <Button
-                          asChild
-                          className="h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
-                        >
-                          <Link href={`/room/${s.id}`}>Entrar a sala</Link>
-                        </Button>
-                      ) : null}
-                      {/* US-1802 · la grabación vive 30 días desde la clase. El
-                          nº de sesión viaja con el botón: una grabación se
-                          reclama por correo ("la de la 7K3M9Q-2") y el uuid de
-                          la URL no sirve para eso. */}
-                      {s.status === "completed" ? (
-                        <RecordingLink sessionId={s.id} nroSesion={s.session_ref} />
-                      ) : null}
-                      {/* Un evento de calendario es una CLASE, no una reserva:
-                          por eso va aquí, en la fila de cada sesión, y no una
-                          vez arriba. Fuera de las canceladas, que no van a
-                          existir. */}
-                      {s.status !== "cancelled" ? (
-                        <AddToCalendar
-                          sessionId={s.id}
-                          titulo={booking.products?.title ?? "Mentoría"}
-                          inicio={s.start_at}
-                          fin={s.end_at}
-                        />
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {/* El aviso de EY-188 vive AQUÍ, una sola vez, y no dentro de
+                    cada `AddToCalendar`: en un paquete de 8 clases el alumno
+                    leía ocho copias del mismo párrafo, y vale para todas. */}
+                <AvisoCopiaCalendario className="mt-1.5" />
+                <ul className="mt-3.5 divide-y divide-[#e0e0e0]">
+                  {sessions.map((s, i) => (
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-[#19191f]">
+                          Sesión {i + 1}
+                        </p>
+                        <p className="text-[13px] text-[#6b6b6b] first-letter:uppercase">
+                          {formatSessionTime(s.start_at, tz, formato)} · tu hora local
+                        </p>
+                        {/* N-27 · el número que se dicta por teléfono. NO es un
+                            código interno de los que barre M-06: los `RN-xx` y
+                            `US-xx` no significan nada para un alumno, este lo pidió
+                            el cliente para poder seguir una clase y su cobro. El
+                            "Sesión 1 · 2 · 3" de arriba se queda porque es el
+                            ordinal dentro del paquete y sigue valiendo para las
+                            reservas anteriores a la migración, que no tienen
+                            número (`SessionRef` devuelve null y no pinta nada). */}
+                        <SessionRef nro={s.session_ref} className="mt-1" />
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <StatusPill>
+                          {SESSION_STATUS_LABEL[s.status] ?? s.status}
+                        </StatusPill>
+                        {/* El gate real de la ventana (RN-18) lo pone el server;
+                            la sala muestra la cuenta regresiva. Aquí solo se
+                            decide si enseñar el botón. */}
+                        {ROOM_BOOKING.has(booking.status) && roomOpen(s) ? (
+                          <Button
+                            asChild
+                            className="h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
+                          >
+                            <Link href={`/room/${s.id}`}>Entrar a sala</Link>
+                          </Button>
+                        ) : null}
+                        {/* US-1802 · la grabación vive 30 días desde la clase. El
+                            nº de sesión viaja con el botón: una grabación se
+                            reclama por correo ("la de la 7K3M9Q-2") y el uuid de
+                            la URL no sirve para eso. */}
+                        {s.status === "completed" ? (
+                          <RecordingLink sessionId={s.id} nroSesion={s.session_ref} />
+                        ) : null}
+                        {/* Un evento de calendario es una CLASE, no una reserva:
+                            por eso va aquí, en la fila de cada sesión, y no una
+                            vez arriba. Fuera de las canceladas, que no van a
+                            existir. */}
+                        {s.status !== "cancelled" ? (
+                          <AddToCalendar
+                            sessionId={s.id}
+                            titulo={booking.products?.title ?? "Mentoría"}
+                            inicio={s.start_at}
+                            fin={s.end_at}
+                            conAviso={false}
+                          />
+                        ) : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </PanelCard>
 
@@ -454,6 +473,7 @@ export default async function BookingDetailPage({
             </PanelCardTitle>
             {chatOpen ? (
               <ChatThread
+                formato={formato}
                 bookingId={booking.id}
                 currentUserId={user.id}
                 firstSessionAt={sessions[0]?.start_at ?? null}

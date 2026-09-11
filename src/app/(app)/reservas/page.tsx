@@ -1,6 +1,10 @@
 import Link from "next/link";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { PrecioEnLinea } from "@/components/precio/precio";
 import {
@@ -85,7 +89,12 @@ function leerRegalos(supabase: SupabaseClient<Database>) {
  */
 export default async function ReservasPage() {
   const { user } = await requireUser();
-  const tz = await getUserTimezone();
+  // Zona y formato juntos: son las dos mitades de «qué hora es para quien
+  // mira», y las dos son lecturas baratas que no deben encadenarse.
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
 
   const supabase = await createClient();
 
@@ -307,6 +316,7 @@ export default async function ReservasPage() {
         title={b.products?.title ?? "Mentoría"}
         when={when(b)}
         timeZone={tz}
+        formato={formato}
         status={BOOKING_STATUS_LABEL[b.status]}
         note={<PrecioEnLinea amountMinor={b.total_amount} currency={b.currency} />}
         action={

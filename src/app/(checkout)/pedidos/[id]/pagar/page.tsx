@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { resolveOrder } from "@/lib/orders/queries";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { Precio } from "@/components/precio/precio";
@@ -47,7 +51,11 @@ export default async function PagarPedidoPage({
   const { id } = await params;
   await requireUser();
 
-  const [pedido, tz] = await Promise.all([resolveOrder(id), getUserTimezone()]);
+  const [pedido, tz, formato] = await Promise.all([
+    resolveOrder(id),
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   // RLS: un pedido ajeno no se lee, así que aquí ya es 404. La autorización es
   // `orders_select_student`, no una comprobación de este fichero.
   if (!pedido) notFound();
@@ -127,7 +135,7 @@ export default async function PagarPedidoPage({
                 <ul className="mt-1.5 flex flex-col gap-1 text-[13px] text-[#333333]">
                   {l.slotsIso.map((iso) => (
                     <li key={iso} className="first-letter:uppercase">
-                      {formatSessionTime(iso, tz)}
+                      {formatSessionTime(iso, tz, formato)}
                     </li>
                   ))}
                 </ul>

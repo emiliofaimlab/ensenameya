@@ -1,9 +1,10 @@
 import Link from "next/link";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
-import { getUserTimezone } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildSlotPreview, buildUsedBy, horasSemana } from "@/lib/availability";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import { cn } from "@/lib/utils";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
@@ -26,13 +27,16 @@ const WEEKDAY_HEAD = ["L", "M", "M", "J", "V", "S", "D"];
  * El signo del offset se cambia por el menos tipográfico (−, U+2212): `Intl`
  * devuelve el guion de teclado y a 13 px se lee como un separador.
  */
-function relojDeLaZona(timeZone: string): { hora: string; gmt: string } | null {
+function relojDeLaZona(
+  timeZone: string,
+  formato: FormatoHora,
+): { hora: string; gmt: string } | null {
   try {
     const ahora = new Date();
     const hora = ahora.toLocaleTimeString("es", {
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
+      ...opcionesDeHora(formato),
       timeZone,
     });
     const gmt =
@@ -61,43 +65,53 @@ export default async function TutorAvailabilityPage() {
   const { userId, approvalStatus } = await requireTutorProfile();
 
   const supabase = await createClient();
-  const [{ data: rules }, { data: exceptions }, { data: products }, { data: links }, tz] =
-    await Promise.all([
-      supabase
-        .from("availability_rules")
-        .select("id, weekday, start_time, end_time, is_active")
-        .eq("tutor_id", userId)
-        .order("weekday")
-        .order("start_time"),
-      supabase
-        .from("availability_exceptions")
-        .select("id, date, type, start_time, end_time, reason")
-        .eq("tutor_id", userId)
-        .gte("date", new Date().toISOString().slice(0, 10))
-        .order("date"),
-      // N-04 · qué mentorías cuelgan de cada franja. Hace falta para avisar
-      // ANTES de borrar: al desaparecer la franja desaparece su enlace (FK on
-      // delete cascade), y si era el único de esa mentoría, la mentoría vuelve
-      // a ofrecerse en TODA la disponibilidad del tutor. Borrar un horario
-      // puede abrir una oferta en vez de cerrarla, y eso no se adivina.
-      // Y también en qué convierte cada franja: la duración y el paso son lo que
-      // decide si «08:00–17:00» son 9 clases de 60 o 18 de 30. Ver
-      // `buildSlotPreview`.
-      supabase
-        .from("products")
-        .select("id, title, session_duration_min, start_time_increment_min")
-        .eq("tutor_id", userId),
-      // Sin `.eq()`: la RLS de `product_availability_rules` ya lo acota a los
-      // productos del propio tutor (política `..._write_own`, que al ser `for
-      // all` cubre también el select).
-      supabase.from("product_availability_rules").select("rule_id, product_id"),
-      // §3.1 · la cabecera dice en QUÉ zona abre el tutor y qué hora es ahí
-      // ahora. `getUserTimezone` prefiere `profiles.timezone` sobre la cookie
-      // del navegador, que es lo correcto aquí: los horarios se guardan e
-      // interpretan en la zona del PERFIL (`get_available_slots`), no en la del
-      // sitio desde el que el tutor se haya conectado hoy.
-      getUserTimezone(),
-    ]);
+  const [
+    { data: rules },
+    { data: exceptions },
+    { data: products },
+    { data: links },
+    tz,
+    formato,
+  ] = await Promise.all([
+    supabase
+      .from("availability_rules")
+      .select("id, weekday, start_time, end_time, is_active")
+      .eq("tutor_id", userId)
+      .order("weekday")
+      .order("start_time"),
+    supabase
+      .from("availability_exceptions")
+      .select("id, date, type, start_time, end_time, reason")
+      .eq("tutor_id", userId)
+      .gte("date", new Date().toISOString().slice(0, 10))
+      .order("date"),
+    // N-04 · qué mentorías cuelgan de cada franja. Hace falta para avisar
+    // ANTES de borrar: al desaparecer la franja desaparece su enlace (FK on
+    // delete cascade), y si era el único de esa mentoría, la mentoría vuelve
+    // a ofrecerse en TODA la disponibilidad del tutor. Borrar un horario
+    // puede abrir una oferta en vez de cerrarla, y eso no se adivina.
+    // Y también en qué convierte cada franja: la duración y el paso son lo que
+    // decide si «08:00–17:00» son 9 clases de 60 o 18 de 30. Ver
+    // `buildSlotPreview`.
+    supabase
+      .from("products")
+      .select("id, title, session_duration_min, start_time_increment_min")
+      .eq("tutor_id", userId),
+    // Sin `.eq()`: la RLS de `product_availability_rules` ya lo acota a los
+    // productos del propio tutor (política `..._write_own`, que al ser `for
+    // all` cubre también el select).
+    supabase.from("product_availability_rules").select("rule_id, product_id"),
+    // §3.1 · la cabecera dice en QUÉ zona abre el tutor y qué hora es ahí
+    // ahora. `getUserTimezone` prefiere `profiles.timezone` sobre la cookie
+    // del navegador, que es lo correcto aquí: los horarios se guardan e
+    // interpretan en la zona del PERFIL (`get_available_slots`), no en la del
+    // sitio desde el que el tutor se haya conectado hoy.
+    getUserTimezone(),
+    // Cómo se ESCRIBE esa hora, que es la otra mitad de la pregunta. Va en
+    // la misma rama: es una lectura de cookie, encadenarla sería gratis y
+    // aun así sumaría un peldaño a la cascada.
+    getFormatoHora(),
+  ]);
 
   // rule_id → títulos de las mentorías que la usan. El paso 4 del asistente
   // monta el mismo gestor y necesita el mismo mapa, así que vive en `lib`.
@@ -120,7 +134,7 @@ export default async function TutorAvailabilityPage() {
   // fila (`horasSemana`), y por eso no puede descuadrar con ellas. Sin ninguna
   // franja se dice «0 h», que es la verdad: no es un hueco, es que no abres.
   const abre = horasSemana(rules ?? []) || "0 h";
-  const reloj = relojDeLaZona(tz);
+  const reloj = relojDeLaZona(tz, formato);
 
   // Calendario del mes ACTUAL: azul = weekday con regla activa; ámbar = fecha
   // con excepción. Server-render puro: pinta el estado, no navega meses.

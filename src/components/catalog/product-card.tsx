@@ -133,8 +133,12 @@ export function ProductCard({
       <div
         className={`flex flex-1 flex-col ${compact ? "gap-2 p-3.5" : "gap-3 p-[18px]"}`}
       >
+        {/* UNA línea, no dos: un título de dos líneas empujaba el resto de la
+            tarjeta y la dejaba distinta de sus vecinas de la misma fila. Se
+            asume el recorte, y por eso el `title` lleva el texto entero. */}
         <h3
-          className={`line-clamp-2 font-bold text-[#242424] ${compact ? "text-sm" : "text-base"}`}
+          title={product.title}
+          className={`line-clamp-1 font-bold text-[#242424] ${compact ? "text-sm" : "text-base"}`}
         >
           {product.title}
         </h3>

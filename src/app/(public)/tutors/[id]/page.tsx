@@ -13,7 +13,11 @@ import {
   StarIcon,
 } from "lucide-react";
 
-import { getSessionContext, getViewerTimezone } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getSessionContext,
+  getViewerTimezone,
+} from "@/lib/auth/server";
 import { ContactTutor } from "@/components/chat/contact-tutor";
 import { tutorResponseTime } from "@/components/chat/conversations";
 import { responseTimeLabel } from "@/components/chat/types";
@@ -159,13 +163,16 @@ export default async function TutorProfilePage({
   // La zona del visitante también entra aquí: la usan el panel de reserva Y la
   // estadística «tutor desde». Estaba resuelta con un `await` dentro del JSX,
   // que la dejaba en serie detrás de todo lo demás.
-  const [data, reviews, respuestaMin, { user }, timeZone] = await Promise.all([
-    getTutorDetail(id),
-    listTutorReviews(id),
-    tutorResponseTime(id),
-    getSessionContext(),
-    getViewerTimezone(),
-  ]);
+  const [data, reviews, respuestaMin, { user }, timeZone, formato] =
+    await Promise.all([
+      getTutorDetail(id),
+      listTutorReviews(id),
+      tutorResponseTime(id),
+      getSessionContext(),
+      getViewerTimezone(),
+      // 12 h / 24 h: en la MISMA tanda que la zona, por lo mismo que ella.
+      getFormatoHora(),
+    ]);
   if (!data) notFound();
   const { tutor, products } = data;
 
@@ -930,6 +937,7 @@ export default async function TutorProfilePage({
               selectedTime={sp.h}
               month={sp.m}
               timeZone={timeZone}
+              formato={formato}
               hrefFor={hrefFor}
               // §5.12 · el título manda por prop: en esta página el panel es
               // «Reserva con Valentina», no «Reserva estas mentorías».

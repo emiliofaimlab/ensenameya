@@ -2,10 +2,11 @@ import Link from "next/link";
 import { EyeIcon, VideoIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
-import { getUserTimezone } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { aceptaAntesDe, formatSessionTime } from "@/lib/booking";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import {
   APROXIMADO,
   enMonedaLocal,
@@ -139,18 +140,19 @@ function fechaLarga(d: Date, tz: string): string {
  * `isUpcoming` en `lib/booking.ts`: leer el reloj en una closure de render
  * dispara la regla de pureza de `react-hooks`.
  */
-function cuando(iso: string, tz: string): string {
+function cuando(iso: string, tz: string, formato: FormatoHora): string {
   const hoy = new Date();
   const mañana = new Date(hoy.getTime() + 86_400_000);
   const dia = claveDelDia(iso, tz);
   const hora = new Date(iso).toLocaleTimeString("es", {
     hour: "2-digit",
     minute: "2-digit",
+    ...opcionesDeHora(formato),
     timeZone: tz,
   });
   if (dia === claveDelDia(hoy.toISOString(), tz)) return `Hoy, ${hora}`;
   if (dia === claveDelDia(mañana.toISOString(), tz)) return `Mañana, ${hora}`;
-  return formatSessionTime(iso, tz);
+  return formatSessionTime(iso, tz, formato);
 }
 
 /**
@@ -161,7 +163,9 @@ function cuando(iso: string, tz: string): string {
  */
 export default async function TutorHomePage() {
   const { userId, approvalStatus } = await requireTutorProfile();
-  const tz = await getUserTimezone();
+  // Las dos mitades de «qué hora es para quien mira»: la zona y cómo se
+  // escribe. En paralelo —son dos lecturas baratas— y no encadenadas.
+  const [tz, formato] = await Promise.all([getUserTimezone(), getFormatoHora()]);
   const supabase = await createClient();
 
   const [
@@ -551,7 +555,9 @@ export default async function TutorHomePage() {
                           />
                           {" · "}
                           <span className="first-letter:uppercase">
-                            {inicio ? formatSessionTime(inicio, tz) : "Por agendar"}
+                            {inicio
+                              ? formatSessionTime(inicio, tz, formato)
+                              : "Por agendar"}
                           </span>
                           {" · "}
                           {formatMoney(b.total_amount, b.currency)}
@@ -651,7 +657,7 @@ export default async function TutorHomePage() {
                           `cuando()` es `formatSessionTime`, y el locale `es`
                           escribe el día en minúscula («mié, 16 sept»). */}
                       <p className="text-[11.5px] text-[#6b6b6b] first-letter:uppercase">
-                        {cuando(s.start_at, tz)}
+                        {cuando(s.start_at, tz, formato)}
                       </p>
                     </div>
                     {/* G-04 · chat · ojo · videocámara, en ese orden y como

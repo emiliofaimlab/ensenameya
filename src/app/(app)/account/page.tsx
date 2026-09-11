@@ -1,5 +1,5 @@
 import { storageUrl } from "@/lib/catalog/format";
-import { requireUser } from "@/lib/auth/server";
+import { getFormatoHora, requireUser } from "@/lib/auth/server";
 import { panelMenu } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
 import { PanelShell } from "@/components/layout/panel-shell";
@@ -36,6 +36,7 @@ export default async function AccountPage() {
     { data: feedToken },
     { data: estadoBaja },
     { items, badges },
+    formato,
   ] = await Promise.all([
     Promise.all([
     supabase
@@ -68,6 +69,9 @@ export default async function AccountPage() {
     // El menú lateral es el del panel del rol (undefined = alumno por defecto).
     // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
     panelMenu(user.id, roles),
+    // El reloj de «tu zona horaria» lo escribe la preferencia 12 h/24 h. Aquí
+    // dentro para no encadenar una lectura de cookie detrás de cuatro consultas.
+    getFormatoHora(),
   ]);
 
   const avatarUrl = storageUrl("avatars", profile?.avatar_path);
@@ -96,6 +100,7 @@ export default async function AccountPage() {
         email={user.email ?? ""}
         fullName={profile?.full_name ?? ""}
         timezone={profile?.timezone ?? "UTC"}
+        formato={formato}
         avatarUrl={avatarUrl}
         isTutor={roles.includes("tutor")}
         /* La cara de la tarjeta «Tu perfil de tutor»: `null` = nunca empezó

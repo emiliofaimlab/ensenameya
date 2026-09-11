@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ChatMessage } from "@/components/chat/chat-thread";
-import { getUserTimezone } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
 import { listNotices } from "@/lib/notifications-server";
 import { SiteHeader } from "@/components/layout/site-header";
@@ -60,6 +60,8 @@ export default async function RoomPage({
     { data: consents },
     notices,
     { data: conversationId },
+    tz,
+    formato,
   ] = await Promise.all([
     supabase
       .from("messages")
@@ -108,6 +110,11 @@ export default async function RoomPage({
     // `bookings_ensure_conversation` (`20260817210000`) —, pero se trata como
     // opcional igual: sin id, el botón no se pinta en vez de reventar la sala.
     supabase.rpc("conversation_of_booking", { p_booking_id: s.booking_id }),
+    // RN-01/RN-02 · zona y formato de quien mira. Estaban resueltos con un
+    // `await` DENTRO del JSX, que es la peor de las cascadas: no se ve al leer
+    // la función y corre detrás de todo lo demás.
+    getUserTimezone(),
+    getFormatoHora(),
   ]);
 
   const initialMessages: ChatMessage[] = (msgs ?? []).map((m) => ({
@@ -134,9 +141,11 @@ export default async function RoomPage({
             onboardingComplete,
           })}
           notices={notices}
+          formato={formato}
         />
       }
-      timeZone={await getUserTimezone()}
+      timeZone={tz}
+      formato={formato}
       sessionId={s.id}
       bookingId={s.booking_id}
       conversationId={conversationId ?? null}

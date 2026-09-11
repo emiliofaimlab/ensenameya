@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { TriangleAlertIcon } from "lucide-react";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { formatSessionTime } from "@/lib/booking";
@@ -46,7 +46,10 @@ export default async function TutorCancelBookingPage({
 }) {
   const { id } = await params;
   const { user } = await requireUser();
-  const tz = await getUserTimezone();
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -99,7 +102,7 @@ export default async function TutorCancelBookingPage({
                 className="flex flex-wrap items-center justify-between gap-2 text-[13px]"
               >
                 <span className="font-medium text-[#333333] first-letter:uppercase">
-                  {formatSessionTime(s.start_at, tz)}
+                  {formatSessionTime(s.start_at, tz, formato)}
                 </span>
                 {/* N-27 · el nº que el alumno usará si llama a preguntar. */}
                 <SessionRef nro={s.session_ref} />

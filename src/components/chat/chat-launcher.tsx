@@ -1,4 +1,4 @@
-import { getSessionContext } from "@/lib/auth/server";
+import { getFormatoHora, getSessionContext } from "@/lib/auth/server";
 import { ChatBubble } from "./chat-bubble";
 import { listConversations } from "./conversations";
 
@@ -35,7 +35,12 @@ export async function ChatLauncher() {
   const { user, roles } = await getSessionContext();
   if (!user) return null;
 
-  const todas = await listConversations();
+  // La bandeja y el formato de hora, juntos: el segundo es una lectura de
+  // cookie y encadenarla detrás de la lista sería un peldaño de cascada regalado.
+  const [todas, formato] = await Promise.all([
+    listConversations(),
+    getFormatoHora(),
+  ]);
 
   /*
    * ── EL FILTRO DE HILOS VACÍOS, REESCRITO ─────────────────────────────────
@@ -98,6 +103,7 @@ export async function ChatLauncher() {
 
   return (
     <ChatBubble
+      formato={formato}
       conversations={conversations}
       currentUserId={user.id}
       esTutor={roles.includes("tutor")}

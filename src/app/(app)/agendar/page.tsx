@@ -1,6 +1,10 @@
 import Link from "next/link";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import {
   PanelCard,
   PanelCardTitle,
@@ -42,7 +46,12 @@ export const metadata = { title: "Agendar · Enséñame Ya" };
  */
 export default async function AgendarPage() {
   const { user } = await requireUser();
-  const tz = await getUserTimezone();
+  // Zona y formato juntos: son las dos mitades de «qué hora es para quien
+  // mira», y las dos son lecturas baratas que no deben encadenarse.
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
 
   // Las tres van juntas: son independientes entre sí y encadenarlas sumaría
   // tres viajes a la latencia de la pantalla para nada. Mismo criterio que el
@@ -75,7 +84,9 @@ export default async function AgendarPage() {
           nuevo el siguiente, y repetir del historial el que exige recordar. */}
       {misTutores ? <TutoresCard data={misTutores} /> : null}
       {sugerencias ? <SugerenciasCard data={sugerencias} /> : null}
-      {historial ? <HistorialCard data={historial} timeZone={tz} /> : null}
+      {historial ? (
+        <HistorialCard data={historial} timeZone={tz} formato={formato} />
+      ) : null}
 
       {vacia ? (
         <PanelCard>

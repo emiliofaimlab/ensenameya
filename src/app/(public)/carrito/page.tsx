@@ -9,10 +9,11 @@ import {
   ShoppingCartIcon,
 } from "lucide-react";
 
-import { getViewerTimezone } from "@/lib/auth/server";
+import { getFormatoHora, getViewerTimezone } from "@/lib/auth/server";
 import { resolveCart, type CartResolvedLine } from "@/lib/cart/resolve";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import { bookingFormatLabel, formatSessionTime } from "@/lib/booking";
+import type { FormatoHora } from "@/lib/hora";
 import { HOLD_POLICY } from "@/lib/policy";
 import { Button } from "@/components/ui/button";
 import { Precio } from "@/components/precio/precio";
@@ -75,9 +76,12 @@ export default async function CarritoPage({
    */
   searchParams: Promise<{ falla?: string }>;
 }) {
-  const [carrito, tz, sp] = await Promise.all([
+  const [carrito, tz, formato, sp] = await Promise.all([
     resolveCart(),
     getViewerTimezone(),
+    // La otra mitad de RN-01/RN-02: la zona dice QUÉ hora es y esto CÓMO se
+    // escribe. En la misma rama para no añadir un peldaño a la cascada.
+    getFormatoHora(),
     searchParams,
   ]);
   const { lines, totalEstimado, currency, compradas } = carrito;
@@ -144,7 +148,13 @@ export default async function CarritoPage({
           <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px] lg:items-start">
             <div className="flex flex-col gap-5">
               {agruparPorTutor(lines).map((g) => (
-                <GrupoDeTutor key={g.clave} grupo={g} tz={tz} falla={falla} />
+                <GrupoDeTutor
+                  key={g.clave}
+                  grupo={g}
+                  tz={tz}
+                  formato={formato}
+                  falla={falla}
+                />
               ))}
               {/* ⚠️ A la IZQUIERDA en móvil, y no es una preferencia estética.
                   Alineado a la derecha cae justo debajo de la burbuja de chat
@@ -230,7 +240,7 @@ export default async function CarritoPage({
                 </p>
               ) : null}
 
-              <PasoAlPago comprables={comprables} tz={tz} />
+              <PasoAlPago comprables={comprables} tz={tz} formato={formato} />
 
               {/* El carrito NO retiene nada, y se dice aquí y no en letra
                   pequeña: es la contrapartida de la opción A (Doc 23 §23.3.5) y
@@ -290,9 +300,11 @@ export default async function CarritoPage({
 function PasoAlPago({
   comprables,
   tz,
+  formato,
 }: {
   comprables: CartResolvedLine[];
   tz: string;
+  formato: FormatoHora;
 }) {
   if (comprables.length === 0) {
     return (
@@ -319,7 +331,7 @@ function PasoAlPago({
           lista. `PagarPedido` no se fía solo de eso —cruza el índice con la
           mentoría que manda el `hint`—, pero el emparejamiento normal sale de
           aquí. Si algún día cambia el filtro, cambia en los dos sitios. */}
-      <PagarPedido lineas={comprables.map((l) => paraElError(l, tz))} />
+      <PagarPedido lineas={comprables.map((l) => paraElError(l, tz, formato))} />
       <p className="mt-2 flex items-start gap-1.5 text-xs leading-relaxed text-[#6b6b6b]">
         <InfoIcon className="mt-px size-3.5 shrink-0" />
         {/* La contrapartida de P-1, dicha antes de pulsar y no después de
@@ -357,7 +369,7 @@ function hrefDePago(l: CartResolvedLine): string {
  * dame más detalles»—, y estas dos cosas son la respuesta. El resto (precio,
  * tutor, duración) ya está en la tarjeta a la que apunta el enlace del aviso.
  *
- * ⚠️ SE FORMATEA AQUÍ, EN SERVIDOR, con `formatSessionTime(iso, tz)` y la zona
+ * ⚠️ SE FORMATEA AQUÍ, EN SERVIDOR, con `formatSessionTime(iso, tz, formato)` y la zona
  * de `getViewerTimezone()` — la misma que usan las fichas de hora de la lista
  * (RN-01/RN-02). Dejarlo para el navegador daría la zona del NAVEGADOR, que no
  * tiene por qué ser la del perfil: el mismo horario saldría escrito de dos
@@ -369,9 +381,15 @@ function hrefDePago(l: CartResolvedLine): string {
  * dentro de un aviso de tres líneas o —peor— elegir una y presentarla como LA
  * culpable.
  */
-function paraElError(l: CartResolvedLine, tz: string): LineaDelPedido {
+function paraElError(
+  l: CartResolvedLine,
+  tz: string,
+  formato: FormatoHora,
+): LineaDelPedido {
   const [primero, ...resto] = l.slotsIso;
-  const cuando = primero ? formatSessionTime(primero, tz) : "sin horario";
+  const cuando = primero
+    ? formatSessionTime(primero, tz, formato)
+    : "sin horario";
   return {
     key: l.key,
     productId: l.line.productId,
@@ -446,10 +464,12 @@ function agruparPorTutor(lines: CartResolvedLine[]): GrupoTutor[] {
 function GrupoDeTutor({
   grupo,
   tz,
+  formato,
   falla,
 }: {
   grupo: GrupoTutor;
   tz: string;
+  formato: FormatoHora;
   /** Clave de la línea que tumbó el último intento de pago, o `null`. */
   falla: string | null;
 }) {
@@ -496,6 +516,7 @@ function GrupoDeTutor({
             key={l.key}
             l={l}
             tz={tz}
+            formato={formato}
             señalada={l.key === falla}
           />
         ))}
@@ -519,10 +540,12 @@ function GrupoDeTutor({
 function LineaDelCarrito({
   l,
   tz,
+  formato,
   señalada,
 }: {
   l: CartResolvedLine;
   tz: string;
+  formato: FormatoHora;
   /**
    * Es la línea que tumbó el último intento de pago (P-1: todo o nada).
    *
@@ -614,7 +637,7 @@ function LineaDelCarrito({
                 className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[12.5px] text-[#333333] first-letter:uppercase"
               >
                 <CalendarIcon className="size-3.5 shrink-0 text-[#6b6b6b]" />
-                {formatSessionTime(iso, tz)}
+                {formatSessionTime(iso, tz, formato)}
               </li>
             ))}
           </ul>

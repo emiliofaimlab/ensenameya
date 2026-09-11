@@ -14,6 +14,7 @@ import { ArrowLeftIcon, MessageCircleIcon, XIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
+import type { FormatoHora } from "@/lib/hora";
 import { ChatThread } from "./chat-thread";
 import {
   conversationSubtitle,
@@ -116,9 +117,16 @@ export function ChatBubble({
   conversations,
   currentUserId,
   esTutor,
+  formato,
 }: {
   conversations: Conversation[];
   currentUserId: string;
+  /**
+   * 12 h o 24 h (`ey-h12`) para la hora de cada mensaje. Llega ya resuelta
+   * desde `ChatLauncher`, que es servidor: la burbuja es cliente y leer la
+   * cookie aquí haría parpadear las horas al hidratar.
+   */
+  formato: FormatoHora;
   /**
    * Solo para redactar el estado vacío. Es lo único que cambia entre un tutor
    * y un alumno en toda la burbuja, y sin este dato la frase tenía que hablarle
@@ -531,6 +539,7 @@ export function ChatBubble({
                 </p>
               ) : (
                 <ChatThread
+                  formato={formato}
                   // Sin `key` React reutilizaría el hilo anterior con su estado:
                   // borrador a medio escribir y suscripción de Realtime incluidos.
                   key={abierta.id}

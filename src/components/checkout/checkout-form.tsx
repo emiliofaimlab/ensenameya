@@ -36,6 +36,7 @@ import {
 } from "@/lib/checkout/hold";
 import { Precio, PrecioEnLinea, usePrecio } from "@/components/precio/precio";
 import { formatSessionTime, type TutorCardData } from "@/lib/booking";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import { TutorSummary } from "@/components/tutor-summary";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
@@ -51,12 +52,21 @@ import { Button } from "@/components/ui/button";
  * (`products.session_duration_min` es NULLABLE) no hay hora de fin y no se
  * pinta ninguna.
  */
-function horaFin(iso: string, minutos: number | null, timeZone: string): string | null {
+function horaFin(
+  iso: string,
+  minutos: number | null,
+  timeZone: string,
+  formato: FormatoHora,
+): string | null {
   if (!minutos) return null;
-  return new Date(new Date(iso).getTime() + minutos * 60_000).toLocaleTimeString(
-    "es",
-    { hour: "2-digit", minute: "2-digit", timeZone },
-  );
+  return new Date(
+    new Date(iso).getTime() + minutos * 60_000,
+  ).toLocaleTimeString("es", {
+    hour: "2-digit",
+    minute: "2-digit",
+    ...opcionesDeHora(formato),
+    timeZone,
+  });
 }
 
 /** Lo que hace falta para pagar, una vez resuelta la reserva. */
@@ -199,6 +209,7 @@ export function CheckoutForm({
   precioPorSesion,
   durationMin,
   timeZone,
+  formato,
   simulado,
   aceptaSola,
 }: {
@@ -263,6 +274,13 @@ export function CheckoutForm({
    * así que el checkout podía enseñar UNA HORA DISTINTA de la que se eligió.
    */
   timeZone: string;
+  /**
+   * 12 h o 24 h (`ey-h12`), resuelto en SERVIDOR como `timeZone` y por lo
+   * mismo: leer la cookie aquí dejaría el primer render con el formato de por
+   * defecto y lo cambiaría al hidratar — un parpadeo en la hora de la clase
+   * que se está a punto de pagar.
+   */
+  formato: FormatoHora;
   /** Lo decide `payment_routing_rules`, no el código: con un proveedor real no
    *  hay aviso de pruebas ni botón de simular fallo. */
   simulado: boolean;
@@ -685,10 +703,10 @@ export function CheckoutForm({
               se rompió la última vez. */}
           <ul className="mt-4 flex flex-col gap-2 border-t border-[#e0e0e0] pt-4 text-[13px] text-[#333333]">
             {slots.map((iso) => {
-              const fin = horaFin(iso, durationMin, timeZone);
+              const fin = horaFin(iso, durationMin, timeZone, formato);
               return (
                 <li key={iso} className="first-letter:uppercase">
-                  {formatSessionTime(iso, timeZone)}
+                  {formatSessionTime(iso, timeZone, formato)}
                   {fin ? ` – ${fin}` : ""}
                 </li>
               );

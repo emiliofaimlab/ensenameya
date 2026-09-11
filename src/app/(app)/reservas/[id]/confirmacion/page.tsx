@@ -2,10 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CheckIcon, ClockIcon, MailIcon, MessageSquareIcon, VideoIcon } from "lucide-react";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getUserTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { Precio } from "@/components/precio/precio";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
+import { opcionesDeHora } from "@/lib/hora";
 import { parseRequirements } from "@/lib/product-requirements";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
@@ -45,7 +50,12 @@ export default async function ConfirmationPage({
 }) {
   const { id } = await params;
   await requireUser();
-  const tz = await getUserTimezone();
+  // Zona y formato juntos: las dos mitades de «qué hora es para quien mira»,
+  // y las dos lecturas baratas — en paralelo, nunca encadenadas.
+  const [tz, formato] = await Promise.all([
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
   const supabase = await createClient();
 
   const { data: booking } = await supabase
@@ -94,10 +104,14 @@ export default async function ConfirmationPage({
   );
 
   const range = (s: { start_at: string; end_at: string }) =>
-    `${formatSessionTime(s.start_at, tz)} – ${new Date(s.end_at).toLocaleTimeString(
-      "es",
-      { hour: "2-digit", minute: "2-digit", timeZone: tz },
-    )}`;
+    `${formatSessionTime(s.start_at, tz, formato)} – ${new Date(
+      s.end_at,
+    ).toLocaleTimeString("es", {
+      hour: "2-digit",
+      minute: "2-digit",
+      ...opcionesDeHora(formato),
+      timeZone: tz,
+    })}`;
 
   return (
     <div className="flex-1 bg-muted py-14">

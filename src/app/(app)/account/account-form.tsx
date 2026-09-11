@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 
 import { createClient } from "@/lib/supabase/client";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,25 +39,23 @@ import {
 type TutorApproval = Database["public"]["Enums"]["tutor_approval_status"];
 
 /**
- * La hora que es AHORA en una zona IANA, `HH:MM` en 24 h (RN-01/RN-02: la BD
- * guarda UTC, la pantalla enseña hora local). Devuelve `null` —y no una hora
- * falsa— si la zona no la conoce el runtime: `Intl` lanza con un identificador
- * que no existe, y una zona guardada hace meses puede haber desaparecido.
+ * La hora que es AHORA en una zona IANA (RN-01/RN-02: la BD guarda UTC, la
+ * pantalla enseña hora local), escrita en 12 h o 24 h según `ey-h12`. Devuelve
+ * `null` —y no una hora falsa— si la zona no la conoce el runtime: `Intl` lanza
+ * con un identificador que no existe, y una zona guardada hace meses puede
+ * haber desaparecido.
  *
- * ⚠️ `hourCycle: "h23"` explícito y no solo `hour12: false`. Los dos piden 24
- * horas, pero `hour12:false` a secas deja al runtime elegir entre `h23` (00:05)
- * y `h24` (24:05), y hay motores que resuelven a `h24`: la medianoche saldría
- * «24:05», que nadie escribe así. Este Chrome resuelve `h23`, o sea que la
- * línea no cambia nada hoy; existe para que no dependa del motor.
+ * ⚠️ El `hourCycle` explícito que documentaba esta función se mudó a
+ * `opcionesDeHora` (`lib/hora.ts`), que lo pone en los DOS sentidos y por el
+ * mismo motivo: `hour12` a secas deja al runtime elegir el ciclo.
  */
-function horaEnZona(tz: string): string | null {
+function horaEnZona(tz: string, formato: FormatoHora): string | null {
   try {
     return new Intl.DateTimeFormat("es", {
       timeZone: tz,
       hour: "2-digit",
       minute: "2-digit",
-      hour12: false,
-      hourCycle: "h23",
+      ...opcionesDeHora(formato),
     }).format(new Date());
   } catch {
     return null;
@@ -142,11 +141,19 @@ export function AccountForm({
   estadoBaja,
   calendario,
   referidos,
+  formato,
 }: {
   userId: string;
   email: string;
   fullName: string;
   timezone: string;
+  /**
+   * 12 h o 24 h (`ey-h12`), resuelto en SERVIDOR. Llega por prop y no se lee la
+   * cookie aquí: en cliente el primer render saldría con el formato por defecto
+   * y cambiaría al hidratar — un parpadeo justo en el reloj que esta tarjeta
+   * usa para demostrar que la zona elegida es la buena.
+   */
+  formato: FormatoHora;
   avatarUrl: string | null;
   /** El ROL `tutor`, que solo llega al aprobar (US-1101). Lo siguen usando la
    *  baja de cuenta y el diálogo de eliminar, que preguntan por el rol. */
@@ -276,7 +283,7 @@ export function AccountForm({
   const [ahora, setAhora] = useState<string | null>(null);
 
   useEffect(() => {
-    const pinta = () => setAhora(horaEnZona(zona));
+    const pinta = () => setAhora(horaEnZona(zona, formato));
     // ⚠️ La primera puesta en hora va en un `setTimeout(…, 0)` y NO en un
     // `pinta()` suelto dentro del efecto: eso último es justo lo que prohíbe
     // `react-hooks/set-state-in-effect` (React 19). Mismo patrón —y mismo
@@ -289,7 +296,10 @@ export function AccountForm({
       clearTimeout(primera);
       clearInterval(id);
     };
-  }, [zona]);
+    // `formato` entra en las dependencias porque `pinta` lo lee: el conmutador
+    // 12/24 h hace `router.refresh()`, que en un componente de cliente ya
+    // montado repinta con la prop nueva sin desmontar el efecto.
+  }, [zona, formato]);
 
   // §7.4 · Los bloqueos de la baja, EN LA TARJETA y no solo dentro del diálogo.
   //

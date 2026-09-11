@@ -1,4 +1,4 @@
-import { getSessionContext } from "@/lib/auth/server";
+import { getFormatoHora, getSessionContext } from "@/lib/auth/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
 import { cartCount } from "@/lib/cart/resolve";
 import { listConversations } from "@/components/chat/conversations";
@@ -21,7 +21,9 @@ export default async function PublicLayout({
   // importa: un anónimo puede apuntar mentorías antes de registrarse.
   // Mismo empujón que en `(app)`: la burbuja la pide al final del árbol.
   if (user) void listConversations().catch(() => {});
-  const carrito = await cartCount();
+  // Las dos lecturas de cookie de la cabecera, juntas: el contador del
+  // carrito y el formato de hora que baja a la campana.
+  const [carrito, formato] = await Promise.all([cartCount(), getFormatoHora()]);
   return (
     <div className="flex min-h-svh flex-col">
       {/* `TimezoneSync` estaba aquí y subió al layout raíz (RV-03): montado solo
@@ -35,6 +37,7 @@ export default async function PublicLayout({
         })}
         notices={notices}
         cartCount={carrito}
+        formato={formato}
       />
       {/* `flex flex-col` (y no solo `flex-1`) para que la pantalla de carga
           pueda estirarse hasta el pie con `flex-1`. Sin esto medía lo que

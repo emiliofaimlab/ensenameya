@@ -10,6 +10,7 @@ import {
 import { ScrollCarousel } from "@/components/ui/scroll-carousel";
 import { Button } from "@/components/ui/button";
 import { BOOKING_STATUS_LABEL, formatSessionTime } from "@/lib/booking";
+import type { FormatoHora } from "@/lib/hora";
 import { PrecioEnLinea } from "@/components/precio/precio";
 import type { PanelHistorial } from "./historial";
 import type { Database } from "@/lib/database.types";
@@ -59,10 +60,14 @@ function tono(status: BookingStatus): PillTone {
 export function HistorialCard({
   data,
   timeZone,
+  formato,
 }: {
   data: PanelHistorial;
   /** tz IANA del usuario: es server component, sin ella saldría la del servidor (R24-12). */
   timeZone: string;
+  /** 12 h o 24 h (`ey-h12`): la otra mitad de «qué hora es para quien mira».
+   *  Obligatoria como `timeZone`, para que olvidarla no pase en silencio. */
+  formato: FormatoHora;
 }) {
   return (
     <PanelCard>
@@ -135,7 +140,7 @@ export function HistorialCard({
                 <div className="text-xs text-[#6b6b6b]">
                   <p className="first-letter:uppercase">
                     {r.cuando
-                      ? formatSessionTime(r.cuando, timeZone)
+                      ? formatSessionTime(r.cuando, timeZone, formato)
                       : "Sin horario"}
                   </p>
                   {/* En 248 px el bloque de dos líneas pondría el dólar en un

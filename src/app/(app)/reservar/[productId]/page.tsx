@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
-import { getUserTimezone, requireUser } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductDetail, rangoPublicado } from "@/lib/catalog/queries";
 import { bookingTotal, tutorNames } from "@/lib/booking";
@@ -50,7 +50,7 @@ export default async function ReservarPage({
   if (!product) notFound();
 
   const supabase = await createClient();
-  const [{ data: slots }, names, tz, enCarrito] = await Promise.all([
+  const [{ data: slots }, names, tz, formato, enCarrito] = await Promise.all([
     // ⚠️ El rango va EXPLÍCITO. Sin él la RPC caía a su default de 21 días
     // mientras la ficha pública pedía 60 y `create_booking` revalidaba contra
     // 30: tres ventanas para los mismos huecos. Aquí el síntoma era el
@@ -67,6 +67,11 @@ export default async function ReservarPage({
     // (UTC en Vercel) y el calendario del cliente por el del navegador: dos
     // rejillas distintas para los mismos datos (R24-12 / R24-22).
     getUserTimezone(),
+    // 12 h o 24 h, igual que la zona: se resuelve AQUÍ y baja como prop. Leer la
+    // cookie desde el cliente pintaría el primer render en 24 h y lo cambiaría
+    // al hidratar — un parpadeo en cada hora de la lista. No cuesta viaje: es
+    // la cookie, memoizada con `cache()`.
+    getFormatoHora(),
     // Cuántas mentorías hay ya apuntadas, para decidir si se pinta «Ir al
     // carrito». Se resuelve en SERVIDOR por lo mismo que la insignia de la
     // cabecera (`cart-badge.tsx`): así el botón sale en el primer render en
@@ -177,6 +182,7 @@ export default async function ReservarPage({
         currency={product.currency}
         durationMin={product.sessionDurationMin}
         timeZone={tz}
+        formato={formato}
         enCarrito={enCarrito}
       />
     </PanelShell>

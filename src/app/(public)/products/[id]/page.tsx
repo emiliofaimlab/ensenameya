@@ -14,7 +14,11 @@ import {
   ZapIcon,
 } from "lucide-react";
 
-import { getSessionContext, getViewerTimezone } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getSessionContext,
+  getViewerTimezone,
+} from "@/lib/auth/server";
 import { ContactTutor } from "@/components/chat/contact-tutor";
 import { tutorResponseTime } from "@/components/chat/conversations";
 import { responseTimeLabel } from "@/components/chat/types";
@@ -165,10 +169,12 @@ export default async function ProductPage({
    * botón escribe o abre el alta (§3.4). Va por `getSessionContext()`, que es
    * `getClaims()` + `cache()`, no `auth.getUser()`.
    */
-  const [product, resenas, timeZone, { user }] = await Promise.all([
+  const [product, resenas, timeZone, formato, { user }] = await Promise.all([
     getProductDetail(id),
     listProductReviews(id),
     getViewerTimezone(),
+    // 12 h / 24 h: en la MISMA tanda que la zona, por lo mismo que ella.
+    getFormatoHora(),
     getSessionContext(),
   ]);
   if (!product) notFound();
@@ -888,6 +894,7 @@ export default async function ProductPage({
                    precio del hero. Ver `ctaFijo` en `booking-panel.tsx`. */
                 ctaFijo={false}
                 timeZone={timeZone}
+                formato={formato}
                 details
                 compact
                 // G-03 · «⚡ Se confirma al instante al pagar» / «El tutor

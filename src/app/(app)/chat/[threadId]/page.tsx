@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { requireUser } from "@/lib/auth/server";
+import { getFormatoHora, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
@@ -92,8 +92,11 @@ export default async function ChatPage({
 }: {
   params: Promise<{ threadId: string }>;
 }) {
-  const { user } = await requireUser();
-  const { threadId } = await params;
+  const [{ user }, { threadId }, formato] = await Promise.all([
+    requireUser(),
+    params,
+    getFormatoHora(),
+  ]);
 
   // 1) ¿Es una conversación mía?
   let conversation = await getConversation(threadId);
@@ -141,6 +144,7 @@ export default async function ChatPage({
           )}
         />
         <ChatThread
+          formato={formato}
           conversationId={conversation.id}
           // La reserva más reciente del par, si la hay: es lo que etiqueta el
           // mensaje (retención de 30 días) y lo que permite adjuntar.

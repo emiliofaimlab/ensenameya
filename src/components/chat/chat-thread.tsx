@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import { PaperclipIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import {
+  FORMATO_POR_DEFECTO,
+  opcionesDeHora,
+  type FormatoHora,
+} from "@/lib/hora";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,6 +159,7 @@ export function ChatThread({
   blocked,
   visible = true,
   onIncoming,
+  formato = FORMATO_POR_DEFECTO,
 }: {
   /** El hilo. Lo pasan las pantallas nuevas (bandeja, `/chat/[id]`). */
   conversationId?: string;
@@ -173,6 +179,16 @@ export function ChatThread({
   fill?: boolean;
   /** Oculta el aviso de retención: solo la sala, que ya lo tiene en la ficha. */
   sinAvisoDeRetencion?: boolean;
+  /**
+   * 12 h o 24 h (`ey-h12`) para la hora de cada mensaje. La resuelve en
+   * SERVIDOR quien monte el hilo: leer la cookie aquí dejaría el primer
+   * render con el formato de por defecto y lo cambiaría al hidratar.
+   *
+   * Opcional —y 24 h si falta— porque este componente lo montan cinco sitios,
+   * uno de ellos dentro de una burbuja de cliente: sin valor por defecto, el
+   * que se olvide no compila, y esto es una marca de tiempo, no una promesa.
+   */
+  formato?: FormatoHora;
   /** ¿El par ya compró? Decide los adjuntos y el aviso de los topes. */
   hasBooking?: boolean;
   /**
@@ -679,6 +695,7 @@ export function ChatThread({
                   {new Date(m.createdAt).toLocaleTimeString("es", {
                     hour: "2-digit",
                     minute: "2-digit",
+                    ...opcionesDeHora(formato),
                   })}
                 </time>
               </div>
