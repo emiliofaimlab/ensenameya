@@ -705,6 +705,129 @@ export type Database = {
           },
         ]
       }
+      credits: {
+        Row: {
+          amount: number
+          beneficiary_email: string | null
+          beneficiary_id: string | null
+          checkout_amount: number | null
+          checkout_opened_at: string | null
+          consumed_amount: number
+          consumed_at: string | null
+          created_at: string
+          currency: string
+          destino: string
+          expires_at: string | null
+          gift_message: string | null
+          id: string
+          issued_at: string | null
+          kind: string
+          payer_country: string | null
+          product_id: string | null
+          provider: string | null
+          provider_metadata: Json | null
+          provider_payment_id: string | null
+          purchased_by: string | null
+          referral_campaign_id: number | null
+          referred_profile_id: string | null
+          source: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          beneficiary_email?: string | null
+          beneficiary_id?: string | null
+          checkout_amount?: number | null
+          checkout_opened_at?: string | null
+          consumed_amount?: number
+          consumed_at?: string | null
+          created_at?: string
+          currency: string
+          destino: string
+          expires_at?: string | null
+          gift_message?: string | null
+          id?: string
+          issued_at?: string | null
+          kind: string
+          payer_country?: string | null
+          product_id?: string | null
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payment_id?: string | null
+          purchased_by?: string | null
+          referral_campaign_id?: number | null
+          referred_profile_id?: string | null
+          source: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          beneficiary_email?: string | null
+          beneficiary_id?: string | null
+          checkout_amount?: number | null
+          checkout_opened_at?: string | null
+          consumed_amount?: number
+          consumed_at?: string | null
+          created_at?: string
+          currency?: string
+          destino?: string
+          expires_at?: string | null
+          gift_message?: string | null
+          id?: string
+          issued_at?: string | null
+          kind?: string
+          payer_country?: string | null
+          product_id?: string | null
+          provider?: string | null
+          provider_metadata?: Json | null
+          provider_payment_id?: string | null
+          purchased_by?: string | null
+          referral_campaign_id?: number | null
+          referred_profile_id?: string | null
+          source?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credits_beneficiary_id_fkey"
+            columns: ["beneficiary_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credits_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credits_purchased_by_fkey"
+            columns: ["purchased_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credits_referral_campaign_id_fkey"
+            columns: ["referral_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "referral_campaigns"
+            referencedColumns: ["rf_campaign_id"]
+          },
+          {
+            foreignKeyName: "credits_referred_profile_id_fkey"
+            columns: ["referred_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       late_payment_refunds: {
         Row: {
           amount: number
@@ -1032,9 +1155,14 @@ export type Database = {
       payments: {
         Row: {
           booking_id: string
+          checkout_amount: number | null
+          checkout_opened_at: string | null
           created_at: string
+          credit_amount: number
+          credit_id: string | null
           currency: string
           failed_at: string | null
+          funding_provider: string | null
           fx_rate: number | null
           gross_amount: number
           id: string
@@ -1042,6 +1170,7 @@ export type Database = {
           payee_country: string | null
           payer_country: string | null
           platform_fee_amount: number
+          platform_funded_amount: number
           provider: string | null
           provider_metadata: Json | null
           provider_payment_id: string | null
@@ -1054,9 +1183,14 @@ export type Database = {
         }
         Insert: {
           booking_id: string
+          checkout_amount?: number | null
+          checkout_opened_at?: string | null
           created_at?: string
+          credit_amount?: number
+          credit_id?: string | null
           currency: string
           failed_at?: string | null
+          funding_provider?: string | null
           fx_rate?: number | null
           gross_amount: number
           id?: string
@@ -1064,6 +1198,7 @@ export type Database = {
           payee_country?: string | null
           payer_country?: string | null
           platform_fee_amount: number
+          platform_funded_amount?: number
           provider?: string | null
           provider_metadata?: Json | null
           provider_payment_id?: string | null
@@ -1076,9 +1211,14 @@ export type Database = {
         }
         Update: {
           booking_id?: string
+          checkout_amount?: number | null
+          checkout_opened_at?: string | null
           created_at?: string
+          credit_amount?: number
+          credit_id?: string | null
           currency?: string
           failed_at?: string | null
+          funding_provider?: string | null
           fx_rate?: number | null
           gross_amount?: number
           id?: string
@@ -1086,6 +1226,7 @@ export type Database = {
           payee_country?: string | null
           payer_country?: string | null
           platform_fee_amount?: number
+          platform_funded_amount?: number
           provider?: string | null
           provider_metadata?: Json | null
           provider_payment_id?: string | null
@@ -1102,6 +1243,83 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: true
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: false
+            referencedRelation: "credits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: false
+            referencedRelation: "mis_creditos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: false
+            referencedRelation: "mis_regalos_comprados"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payout_adjustments: {
+        Row: {
+          amount: number
+          created_at: string
+          credit_id: string
+          id: string
+          payout_id: string
+          reason: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          credit_id: string
+          id?: string
+          payout_id: string
+          reason?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          credit_id?: string
+          id?: string
+          payout_id?: string
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payout_adjustments_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: true
+            referencedRelation: "credits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_adjustments_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: true
+            referencedRelation: "mis_creditos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_adjustments_credit_id_fkey"
+            columns: ["credit_id"]
+            isOneToOne: true
+            referencedRelation: "mis_regalos_comprados"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payout_adjustments_payout_id_fkey"
+            columns: ["payout_id"]
+            isOneToOne: false
+            referencedRelation: "payouts"
             referencedColumns: ["id"]
           },
         ]
@@ -1278,6 +1496,7 @@ export type Database = {
       }
       payouts: {
         Row: {
+          adjustment_amount: number
           amount: number
           created_at: string
           currency: string
@@ -1287,6 +1506,7 @@ export type Database = {
           id: string
           paid_at: string | null
           payee_country: string | null
+          platform_funded_amount: number
           provider: string | null
           provider_metadata: Json | null
           provider_payout_id: string | null
@@ -1297,6 +1517,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          adjustment_amount?: number
           amount: number
           created_at?: string
           currency: string
@@ -1306,6 +1527,7 @@ export type Database = {
           id?: string
           paid_at?: string | null
           payee_country?: string | null
+          platform_funded_amount?: number
           provider?: string | null
           provider_metadata?: Json | null
           provider_payout_id?: string | null
@@ -1316,6 +1538,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          adjustment_amount?: number
           amount?: number
           created_at?: string
           currency?: string
@@ -1325,6 +1548,7 @@ export type Database = {
           id?: string
           paid_at?: string | null
           payee_country?: string | null
+          platform_funded_amount?: number
           provider?: string | null
           provider_metadata?: Json | null
           provider_payout_id?: string | null
@@ -1548,6 +1772,10 @@ export type Database = {
         Row: {
           audience: string
           created_at: string
+          reward_amount: number | null
+          reward_currency: string | null
+          reward_expires_days: number
+          reward_kind: string
           reward_text: string
           rf_campaign_id: number
           rf_code: string
@@ -1564,6 +1792,10 @@ export type Database = {
         Insert: {
           audience: string
           created_at?: string
+          reward_amount?: number | null
+          reward_currency?: string | null
+          reward_expires_days?: number
+          reward_kind?: string
           reward_text: string
           rf_campaign_id: number
           rf_code: string
@@ -1580,6 +1812,10 @@ export type Database = {
         Update: {
           audience?: string
           created_at?: string
+          reward_amount?: number | null
+          reward_currency?: string | null
+          reward_expires_days?: number
+          reward_kind?: string
           reward_text?: string
           rf_campaign_id?: number
           rf_code?: string
@@ -2509,6 +2745,142 @@ export type Database = {
       }
     }
     Views: {
+      fondeo_del_ciclo: {
+        Row: {
+          a_pagar: number | null
+          currency: string | null
+          funding_provider: string | null
+          ordenes: number | null
+          pone_la_plataforma: number | null
+          respaldado_por_caja: number | null
+        }
+        Relationships: []
+      }
+      mis_creditos: {
+        Row: {
+          amount: number | null
+          consumed_amount: number | null
+          consumed_at: string | null
+          created_at: string | null
+          currency: string | null
+          destino: string | null
+          expires_at: string | null
+          gift_message: string | null
+          id: string | null
+          issued_at: string | null
+          kind: string | null
+          product_id: string | null
+          referral_campaign_id: number | null
+          restante: number | null
+          source: string | null
+          status: string | null
+        }
+        Insert: {
+          amount?: number | null
+          consumed_amount?: number | null
+          consumed_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          destino?: string | null
+          expires_at?: string | null
+          gift_message?: string | null
+          id?: string | null
+          issued_at?: string | null
+          kind?: string | null
+          product_id?: string | null
+          referral_campaign_id?: number | null
+          restante?: never
+          source?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount?: number | null
+          consumed_amount?: number | null
+          consumed_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          destino?: string | null
+          expires_at?: string | null
+          gift_message?: string | null
+          id?: string | null
+          issued_at?: string | null
+          kind?: string | null
+          product_id?: string | null
+          referral_campaign_id?: number | null
+          restante?: never
+          source?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credits_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credits_referral_campaign_id_fkey"
+            columns: ["referral_campaign_id"]
+            isOneToOne: false
+            referencedRelation: "referral_campaigns"
+            referencedColumns: ["rf_campaign_id"]
+          },
+        ]
+      }
+      mis_regalos_comprados: {
+        Row: {
+          amount: number | null
+          beneficiary_email: string | null
+          canjeado: boolean | null
+          consumed_at: string | null
+          created_at: string | null
+          currency: string | null
+          expires_at: string | null
+          gift_message: string | null
+          id: string | null
+          issued_at: string | null
+          product_id: string | null
+          status: string | null
+        }
+        Insert: {
+          amount?: number | null
+          beneficiary_email?: string | null
+          canjeado?: never
+          consumed_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          expires_at?: string | null
+          gift_message?: string | null
+          id?: string | null
+          issued_at?: string | null
+          product_id?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount?: number | null
+          beneficiary_email?: string | null
+          canjeado?: never
+          consumed_at?: string | null
+          created_at?: string | null
+          currency?: string | null
+          expires_at?: string | null
+          gift_message?: string | null
+          id?: string | null
+          issued_at?: string | null
+          product_id?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credits_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tutors_public: {
         Row: {
           approval_status:
@@ -2592,12 +2964,23 @@ export type Database = {
       admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       afinidad_peso_reciente: { Args: { p_cuando: string }; Returns: number }
       anonymize_account: { Args: { p_user_id: string }; Returns: Json }
+      aplicar_credito: {
+        Args: { p_booking_id: string; p_credit_id: string }
+        Returns: Json
+      }
       assign_tutor_tier: {
         Args: { p_tier_id: string; p_tutor_id: string }
         Returns: string
       }
+      avisar_clases_de_manana: { Args: never; Returns: number }
+      avisar_clases_que_empiezan: { Args: never; Returns: number }
+      avisar_creditos_por_expirar: { Args: never; Returns: Json }
       avisar_payouts_sin_reclamar: {
         Args: { p_dias?: number }
+        Returns: number
+      }
+      avisar_reservas_por_expirar: {
+        Args: { p_horas?: number }
         Returns: number
       }
       build_payout_for_tutor: {
@@ -2608,6 +2991,8 @@ export type Database = {
         }
         Returns: string
       }
+      caducar_creditos: { Args: never; Returns: Json }
+      caducar_notificaciones: { Args: never; Returns: number }
       calendar_feed: { Args: { p_token: string }; Returns: Json }
       calendar_feed_token: { Args: never; Returns: string }
       cancel_account_deletion: { Args: { p_user_id: string }; Returns: Json }
@@ -2617,6 +3002,14 @@ export type Database = {
       }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
+      comprar_regalo: {
+        Args: {
+          p_message?: string
+          p_product_id: string
+          p_recipient_email: string
+        }
+        Returns: string
+      }
       conectar_cuenta_paypal: {
         Args: {
           p_email: string
@@ -2626,12 +3019,34 @@ export type Database = {
         }
         Returns: undefined
       }
+      confirm_credit_booking: {
+        Args: { p_booking_id: string; p_student: string }
+        Returns: string
+      }
+      confirm_credit_order: {
+        Args: { p_order_id: string; p_student: string }
+        Returns: Json
+      }
+      confirm_gift_payment: {
+        Args: {
+          p_amount_charged?: number
+          p_credit_id: string
+          p_event_id?: string
+          p_success?: boolean
+        }
+        Returns: string
+      }
       confirm_order_payment: {
         Args: { p_event_id?: string; p_order_id: string; p_success?: boolean }
         Returns: Json
       }
       confirm_payment: {
-        Args: { p_booking_id: string; p_event_id?: string; p_success?: boolean }
+        Args: {
+          p_amount_charged?: number
+          p_booking_id: string
+          p_event_id?: string
+          p_success?: boolean
+        }
         Returns: string
       }
       confirm_simulated_order_payment: {
@@ -2656,9 +3071,40 @@ export type Database = {
         Returns: string
       }
       create_order: { Args: { p_lines: Json }; Returns: string }
+      credito_aplicable: {
+        Args: {
+          p_amount: number
+          p_booking_currency: string
+          p_booking_product: string
+          p_consumed: number
+          p_credit_currency: string
+          p_credit_product: string
+          p_gross: number
+          p_kind: string
+          p_num_sessions: number
+          p_source: string
+        }
+        Returns: Json
+      }
+      creditos_disponibles: {
+        Args: { p_booking_id: string }
+        Returns: {
+          credit_id: string
+          cubre: number
+          etiqueta: string
+          kind: string
+          motivo: string
+          source: string
+          usable: boolean
+        }[]
+      }
       datos_de_cobro_del_tutor: { Args: { p_tutor: string }; Returns: Json }
       delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
       destino_connect: { Args: { p_payout_id: string }; Returns: string }
+      emitir_credito_de_referido: {
+        Args: { p_referido: string }
+        Returns: string
+      }
       enqueue_notification: {
         Args: {
           p_channel: string
@@ -2685,6 +3131,18 @@ export type Database = {
       }
       f_unaccent: { Args: { "": string }; Returns: string }
       find_open_order: { Args: { p_lines: Json }; Returns: string }
+      fondeo_del_cobro: {
+        Args: {
+          p_credit_amount: number
+          p_credit_provider: string
+          p_credit_source: string
+          p_credit_total: number
+          p_gross_amount: number
+          p_provider_cobro: string
+          p_tutor_net_amount: number
+        }
+        Returns: Record<string, unknown>
+      }
       gen_calendar_feed_token: { Args: never; Returns: string }
       generar_referencia_reserva: { Args: never; Returns: string }
       get_available_slots: {
@@ -2694,6 +3152,7 @@ export type Database = {
           slot_start: string
         }[]
       }
+      gift_expiry_days: { Args: never; Returns: number }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
@@ -2709,7 +3168,12 @@ export type Database = {
           rating: number
         }[]
       }
+      iso_utc: { Args: { p_momento: string }; Returns: string }
       join_session: { Args: { p_session_id: string }; Returns: Json }
+      liberar_credito_de_pago: {
+        Args: { p_payment_id: string }
+        Returns: number
+      }
       manage_payout: {
         Args: {
           p_action: string
@@ -2720,6 +3184,22 @@ export type Database = {
         Returns: string
       }
       manual_destination: { Args: { p_tutor_id: string }; Returns: Json }
+      marcar_cobro_abierto: {
+        Args: { p_booking_ids: string[] }
+        Returns: number
+      }
+      marcar_cobro_regalo: {
+        Args: {
+          p_credit_id: string
+          p_metadata?: Json
+          p_provider_payment_id: string
+        }
+        Returns: boolean
+      }
+      marcar_cobro_regalo_abierto: {
+        Args: { p_credit_id: string; p_provider: string }
+        Returns: number
+      }
       mark_conversation_read: {
         Args: { p_conversation_id: string }
         Returns: string
@@ -2794,11 +3274,13 @@ export type Database = {
       pending_email_notifications: {
         Args: { p_limit?: number }
         Returns: {
+          contexto: Json
           email: string
           id: string
           nombre: string
           payload: Json
           template: string
+          timezone: string
           type: string
         }[]
       }
@@ -2812,6 +3294,9 @@ export type Database = {
       purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
       purge_tutor_views: { Args: never; Returns: Json }
+      quitar_credito: { Args: { p_booking_id: string }; Returns: Json }
+      reclamar_mis_regalos: { Args: never; Returns: number }
+      reclamar_regalos_por_correo: { Args: { p_user: string }; Returns: number }
       record_terms_acceptance: {
         Args: { p_locale?: string; p_version: string }
         Returns: undefined
@@ -2821,6 +3306,16 @@ export type Database = {
         Returns: boolean
       }
       recording_allowed: { Args: { p_session_id: string }; Returns: boolean }
+      reembolsar_con_credito: {
+        Args: {
+          p_delta: number
+          p_key: string
+          p_payment_id: string
+          p_reason: string
+          p_ya_devuelto: number
+        }
+        Returns: Json
+      }
       referral_conversions_pending: {
         Args: { p_limit?: number }
         Returns: {
@@ -2859,6 +3354,10 @@ export type Database = {
       respond_booking: {
         Args: { p_accept: boolean; p_booking_id: string }
         Returns: string
+      }
+      revertir_regalo: {
+        Args: { p_credit_id: string; p_motivo?: string }
+        Returns: Json
       }
       review_document: {
         Args: { p_approve: boolean; p_doc_id: string; p_notes?: string }
@@ -3037,6 +3536,7 @@ export type Database = {
         }
         Returns: Json
       }
+      uuid_o_nulo: { Args: { p_texto: string }; Returns: string }
       wise_puede_pagar_a: { Args: { p_tutor: string }; Returns: boolean }
     }
     Enums: {

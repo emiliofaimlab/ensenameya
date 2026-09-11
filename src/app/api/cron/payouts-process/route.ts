@@ -59,6 +59,27 @@ import type { PayoutInput, PayoutResult, PspProvider } from "@/lib/payments/port
  *     tutor la incidencia NTF-16 por una indecisión nuestra, y exigiría un
  *     `manage_payout('retry')` a mano para algo que se arregla solo.
  *
+ * ── 🔑 UNA ORDEN YA NO ES SOLO CLASES: TAMBIÉN PUEDE LLEVAR UNA RECOMPENSA ──
+ * Desde `20260912100000` / `20260912110000`, `build_payout_for_tutor` mete las
+ * recompensas de referido del tutor (`credits` con `destino='payout'`) dentro de
+ * su próxima orden como `payout_adjustments`, y prefiere ENGANCHARLAS a una
+ * orden que ya existe antes que crear una. O sea que la orden que este job manda
+ * puede ser «clases + premio», y la invariante de siempre cambia:
+ *
+ *     payouts.amount = suma(payout_items) + suma(payout_adjustments)
+ *
+ * Eso toca exactamente DOS cosas aquí y ninguna más:
+ *   · el cotejo previo al envío, que antes comparaba contra las líneas a secas y
+ *     con eso dejaba 'scheduled' PARA SIEMPRE —y en silencio— toda orden con
+ *     recompensa, arrastrando con ella las clases reales del mismo tutor;
+ *   · `platform_funded_amount`, que se CUENTA en la respuesta: una recompensa no
+ *     tiene caja detrás en ningún PSP, así que es dinero que operaciones tiene
+ *     que transferir antes de la pasada siguiente o la orden morirá por saldo.
+ *
+ * Lo que NO cambia: el importe que viaja al proveedor sigue siendo `amount`, una
+ * sola transferencia. El tutor cobra sus clases y su premio juntos, que es lo
+ * que promete el diagrama aprobado («se le suma a su próximo cobro»).
+ *
  * ── LO QUE HOY BLOQUEA CASI TODO, DICHO AQUÍ PARA QUE NO SE DEPURE A CIEGAS ─
  *   · **El balance.** Las diez filas de `payment_routing_rules` dicen
  *     `charge_provider='stripe'` con `payout_provider='dlocal'`. O sea que todo
@@ -123,11 +144,40 @@ type OrdenDePago = {
   tutor_id: string;
   status: string;
   currency: string;
+  /**
+   * 🔴 TODO LO QUE SE LE MANDA AL TUTOR — Y DESDE `20260912100000` YA NO ES LA
+   * SUMA DE `payout_items`.
+   *
+   * La identidad que manda ahora, y que declara el `comment` de la columna, es
+   * `amount = suma(payout_items) + suma(payout_adjustments)`. Lo que viaja a la
+   * API del PSP sigue siendo esta cifra entera y nada más —una transferencia,
+   * no dos—; el único sitio de este archivo que tiene que saber que hay dos
+   * orígenes debajo es el cotejo previo al envío.
+   */
   amount: number;
   provider: string | null;
   provider_payout_id: string | null;
   provider_metadata: unknown;
   funding_provider: string | null;
+  /**
+   * 🔑 LA RECOMPENSA DE REFERIDO DEL TUTOR QUE VIAJA EN ESTA ORDEN
+   * (`payout_adjustments`, `20260912100000`).
+   *
+   * No es una línea de `payout_items` porque no hay `payments` detrás: no hay
+   * clase, no hay alumno y no hay split. Se lee por una sola razón —que el
+   * cotejo de abajo sepa cuánto de `amount` no puede tener líneas— y por ninguna
+   * otra: **no se usa como importe**. El que se manda es `amount`.
+   */
+  adjustment_amount: number;
+  /**
+   * De `amount`, cuánto NO está en el balance de `funding_provider` y lo tiene
+   * que poner la plataforma antes del ciclo: una recompensa (que no cobró nadie,
+   * la regala la plataforma) o el tramo de un regalo que no cubre el neto del
+   * tutor. Aquí no decide nada —el saldo lo dice el proveedor, no esta columna—;
+   * se lee para poder CONTARLO en la respuesta, que es la cifra con la que
+   * operaciones sabe cuánto transferir antes de la pasada siguiente.
+   */
+  platform_funded_amount: number;
   payee_country: string | null;
   scheduled_for: string | null;
   /** Lo bumpea el trigger `payouts_set_updated_at` en cada escritura nuestra. */
@@ -135,7 +185,7 @@ type OrdenDePago = {
 };
 
 const COLUMNAS =
-  "id, tutor_id, status, currency, amount, provider, provider_payout_id, provider_metadata, funding_provider, payee_country, scheduled_for, updated_at";
+  "id, tutor_id, status, currency, amount, provider, provider_payout_id, provider_metadata, funding_provider, adjustment_amount, platform_funded_amount, payee_country, scheduled_for, updated_at";
 
 /** El rastro que este job deja en `provider_metadata`. Sin PII, nunca. */
 type Rastro = {
@@ -281,6 +331,17 @@ export async function GET(req: Request) {
   // otros. Son lo que se mira desde el log de Actions.
   let pagados = 0;
   let importePagado = 0;
+  /**
+   * De `importePagado`, cuánto salió de NUESTRO bolsillo y no de lo que cobró el
+   * PSP: recompensas de referido y el tramo de un regalo que no cubría el neto
+   * del tutor (`payouts.platform_funded_amount`, `20260912100000`).
+   *
+   * No es un contador de incidencias: es contabilidad. Sin él, el día que las
+   * recompensas empiecen a moverse, `importePagado` sube y nada dice cuánto de
+   * esa subida es dinero regalado — que es justo el número que hay que cuadrar
+   * contra la transferencia que operaciones hizo al PSP.
+   */
+  let importePuestoPorLaPlataforma = 0;
   let enviados = 0;
   let seguidos = 0;
   let adoptados = 0;
@@ -455,12 +516,38 @@ export async function GET(req: Request) {
         continue;
       }
 
-      // El importe, contra sus líneas. `payouts.amount` es un agregado y
-      // `payout_items` es de dónde salió; que el total que va a la API cuadre con
-      // sus líneas es la regla de oro 2 aplicada al lado de salida, y es justo
-      // para esto que `20260901130000` concedió el `select` sobre `payout_items`.
-      // Un descuadre no se manda y no se marca 'failed': es un problema de
-      // integridad nuestro, no un rechazo del PSP.
+      // ── EL IMPORTE, CONTRA SUS DOS ORÍGENES ───────────────────────────────
+      //
+      // `payouts.amount` es un agregado y lo que hay debajo es de dónde salió;
+      // que el total que va a la API cuadre con eso es la regla de oro 2 aplicada
+      // al lado de salida, y es justo para esto que `20260901130000` concedió el
+      // `select` sobre `payout_items` y `20260912100000` el de
+      // `payout_adjustments` (regla de oro 9 — `service_role` se salta la RLS,
+      // pero NO los grants). Un descuadre no se manda y no se marca 'failed': es
+      // un problema de integridad nuestro, no un rechazo del PSP.
+      //
+      // 🔴 COTEJAR SOLO CONTRA LAS LÍNEAS DEJÓ DE SER CIERTO, Y ERA CARO. Desde
+      // `20260912100000` una orden puede llevar además la recompensa de referido
+      // del tutor, que NO es una línea porque no hay `payments` detrás. Con el
+      // cotejo viejo, toda orden con recompensa salía `descuadrados++` →
+      // `console.error` → `continue`: sin 500, sin 'failed', sin build en rojo y
+      // sin nada en el estado de la fila — el fallo mudo de la regla de oro 11 en
+      // su forma más cara. La orden se quedaba 'scheduled' PARA SIEMPRE y, como
+      // `build_payout_for_tutor` prefiere ENGANCHAR la recompensa a una orden que
+      // ya existe, con ella se congelaban también las clases reales de ese tutor.
+      // El crédito, mientras, ya había quedado 'consumed' y
+      // `credits_recompensa_unica` impide reemitirlo: la recompensa solo se
+      // recuperaba con SQL a mano.
+      //
+      // ⚠️ Y SE COTEJA CONTRA LA TABLA, NO CONTRA `payouts.adjustment_amount`.
+      // Esa columna y `amount` las sube el MISMO `update` de
+      // `build_payout_for_tutor`, así que compararlas entre sí no comprueba nada:
+      // o mienten las dos o ninguna. Quien sabe cuánto se le debe de verdad es
+      // `payout_adjustments` —una fila por crédito, con `credit_id` único, que es
+      // también la idempotencia del lote—, igual que `payout_items` lo es para
+      // las clases. Sale una consulta más por orden nueva, como mucho diez por
+      // pasada y una vez por hora: al lado de las llamadas al PSP que hace este
+      // job, no se nota.
       const { data: lineas, error: eLineas } = await admin
         .from("payout_items")
         .select("amount")
@@ -471,15 +558,59 @@ export async function GET(req: Request) {
         continue;
       }
       const suma = (lineas ?? []).reduce((s, l) => s + (l.amount ?? 0), 0);
-      if (suma !== fila.amount) {
+
+      // ⚠️ SIN GATE POR `adjustment_amount > 0`, y es deliberado. Ahorrarse la
+      // consulta cuando la columna vale 0 daría por buena precisamente la avería
+      // que no se ve: recompensas anotadas en la tabla con la columna sin subir
+      // —y por tanto `amount` sin subir— es un premio que se paga a nadie
+      // mientras su crédito ya está 'consumed'. Preguntar siempre cuesta una
+      // consulta; no preguntar cuesta la recompensa.
+      const { data: ajustes, error: eAjustes } = await admin
+        .from("payout_adjustments")
+        .select("amount")
+        .eq("payout_id", fila.id);
+      if (eAjustes) {
+        reintentables++;
+        console.error("[C2] no se pudieron leer las recompensas del payout", {
+          ...base,
+          error: eAjustes.message,
+        });
+        continue;
+      }
+      const sumaAjustes = (ajustes ?? []).reduce((s, a) => s + (a.amount ?? 0), 0);
+
+      if (suma + sumaAjustes !== fila.amount) {
         descuadrados++;
-        console.error("[C2] ⚠️ el importe del payout no cuadra con sus líneas — NO se manda", {
+        console.error("[C2] ⚠️ el importe del payout no cuadra con sus líneas + sus recompensas — NO se manda", {
           ...base,
           sumaDeLineas: suma,
           lineas: (lineas ?? []).length,
+          sumaDeRecompensas: sumaAjustes,
+          recompensas: (ajustes ?? []).length,
+          ajusteDeclarado: fila.adjustment_amount,
         });
-        if (simulacro) ensayo.push({ ...base, haria: `nada: descuadre (líneas suman ${suma})` });
+        if (simulacro) {
+          ensayo.push({
+            ...base,
+            haria: `nada: descuadre (líneas ${suma} + recompensas ${sumaAjustes} ≠ ${fila.amount})`,
+          });
+        }
         continue;
+      }
+
+      // El total cuadra pero el agregado denormalizado no. El dinero que se manda
+      // es correcto —`amount` coincide con lo que hay debajo— así que NO se
+      // bloquea: congelar las clases de un tutor por un desajuste contable sería
+      // cambiar su cobro por un cuadre. Pero se grita, porque quien miente
+      // entonces es `payouts.adjustment_amount`, y de esa columna cuelgan el
+      // `descuadradas` de `payouts_backlog()` y la vista `fondeo_del_ciclo`, o
+      // sea las dos cifras con las que operaciones decide cuánto transferir.
+      if (sumaAjustes !== fila.adjustment_amount) {
+        console.warn("[C2] ⚠️ `payouts.adjustment_amount` no cuadra con `payout_adjustments` (el pago SÍ sale)", {
+          ...base,
+          sumaDeRecompensas: sumaAjustes,
+          ajusteDeclarado: fila.adjustment_amount,
+        });
       }
     }
 
@@ -623,7 +754,11 @@ export async function GET(req: Request) {
     const entrada: PayoutInput = {
       payoutId: fila.id,
       // ⚠️ DE LA FILA Y DE NINGÚN OTRO SITIO (regla de oro 2). Ya se ha
-      // comprobado contra `payout_items` unas líneas más arriba.
+      // comprobado contra `payout_items` **y** `payout_adjustments` unas líneas
+      // más arriba. Es el total que recibe el tutor —sus clases más la
+      // recompensa que viaje en la orden— en UNA sola transferencia: el premio
+      // no se manda aparte, que es literalmente lo que promete el diagrama
+      // aprobado («se le suma a su próximo cobro y le llega solo»).
       amountMinor: fila.amount,
       currency: fila.currency,
       // Vacío solo puede llegar en una orden EN VUELO, y a esas no se les crea
@@ -726,6 +861,11 @@ export async function GET(req: Request) {
         }
         pagados++;
         importePagado += fila.amount;
+        // De lo que acaba de salir, lo que no había cobrado ningún PSP. Va aquí
+        // y no en `enviado`: mientras la orden esté en vuelo el dinero todavía
+        // puede volver, y contar como gastado lo que aún no lo está es cómo se
+        // cuadra mal un ciclo.
+        importePuestoPorLaPlataforma += fila.platform_funded_amount;
         // Traza de conciliación: con estos ids se cierra el círculo entre esta
         // base y el panel del proveedor sin adivinar nada. Sin PII: ni nombre, ni
         // documento, ni número de cuenta.
@@ -1128,6 +1268,66 @@ export async function GET(req: Request) {
     .eq("status", "processing")
     .lt("updated_at", ayer);
 
+  // ── 🔴 EL DINERO PROPIO QUE HAY QUE PONER ANTES DE LA PASADA SIGUIENTE ────
+  //
+  // `payouts.platform_funded_amount` (`20260912100000`) es la parte de una orden
+  // que NO está en el balance de su `funding_provider`: una recompensa de
+  // referido —que no la cobró nadie, la regala la plataforma— o el tramo de un
+  // regalo que no llega a cubrir el neto del tutor. Si nadie transfiere ese
+  // dinero al PSP ANTES de que corra esta pasada, la orden no se queda esperando:
+  // el proveedor la rechaza por saldo, y este job escribe 'failed' porque un
+  // rechazo del proveedor es exactamente lo único que lo escribe. Con 'failed'
+  // sale NTF-16, o sea que el tutor se entera por correo de una incidencia que es
+  // nuestra y que se arreglaba con una transferencia.
+  //
+  // Por eso se informa aquí y no solo en el panel del admin: este endpoint es lo
+  // que se mira desde el log de Actions cada hora, y hasta hoy era el único sitio
+  // del sistema que sabía que había órdenes esperando SIN saber que alguna
+  // esperaba dinero nuestro.
+  //
+  // ⚠️ SE LEE DE `public.fondeo_del_ciclo` Y NO SE SUMA AQUÍ A MANO. Es la misma
+  // vista que mira operaciones (`20260912100000`), agrupada por (balance, moneda)
+  // porque una transferencia se hace a UN proveedor y en UNA moneda — y porque
+  // dos aritméticas del mismo número acaban siendo dos cifras distintas en dos
+  // pantallas, que es el error que `fondeo_del_cobro()` existe para no repetir.
+  // Cubre 'pending'/'scheduled'/'on_hold', o sea lo que todavía no ha salido: lo
+  // que ya está en vuelo no se puede fondear, ya se mandó.
+  //
+  // ⚠️ NO ROMPE LA PASADA SI FALLA, igual que los avisos de más abajo: informar
+  // es lo menos importante que hace este job. `null` significa «no se pudo
+  // preguntar», que NO es lo mismo que «no hay nada que fondear».
+  // ⚠️ `balance` y `moneda` nullables porque así los declara el tipo generado de
+  // una VISTA: PostgREST no puede prometer `not null` a través de una, aunque la
+  // columna de `payouts` lo sea. No se tapa con un `?? ""`: una fila sin balance
+  // es justo el aviso que el `comment` de la vista manda no esconder.
+  let fondeoPendiente:
+    | { balance: string | null; moneda: string | null; ordenes: number; aPagar: number; poneLaPlataforma: number }[]
+    | null = null;
+  try {
+    const { data: fondeo, error: eFondeo } = await admin
+      .from("fondeo_del_ciclo")
+      .select("funding_provider, currency, ordenes, a_pagar, pone_la_plataforma")
+      .gt("pone_la_plataforma", 0);
+    if (eFondeo) throw eFondeo;
+    fondeoPendiente = (fondeo ?? []).map((f) => ({
+      // `balance` null es un aviso, no un dato: hay órdenes que nadie sabe de qué
+      // balance pagar. Se deja pasar tal cual en vez de esconderlo en un
+      // `?? "(sin constar)"`, que es como un aviso se convierte en una etiqueta.
+      balance: f.funding_provider,
+      moneda: f.currency,
+      ordenes: Number(f.ordenes ?? 0),
+      aPagar: Number(f.a_pagar ?? 0),
+      poneLaPlataforma: Number(f.pone_la_plataforma ?? 0),
+    }));
+    if (fondeoPendiente.length > 0 && !simulacro) {
+      console.warn("[C2] ⚠️ hay órdenes esperando dinero de la plataforma: sin transferir, morirán por saldo", {
+        fondeoPendiente,
+      });
+    }
+  } catch (e) {
+    console.error("[C2] no se pudo leer el fondeo pendiente del ciclo", e);
+  }
+
   if (simulacro) {
     return NextResponse.json({
       status: "simulacro",
@@ -1140,6 +1340,10 @@ export async function GET(req: Request) {
       enVuelo: enVueloTotal ?? 0,
       sinIdentificar: sinIdentificar ?? 0,
       atascadas: atascadas ?? 0,
+      // Lo que operaciones tiene que transferir antes de que esto corra de
+      // verdad. En un ensayo es de lo más útil que hay: se ve ANTES de mover un
+      // dólar. `null` = no se pudo preguntar.
+      fondeoPendiente,
       lote: { enVuelo: LOTE_EN_VUELO, nuevos: LOTE_NUEVOS },
     });
   }
@@ -1157,6 +1361,10 @@ export async function GET(req: Request) {
         revisadas: cola.length,
         pagados,
         importePagado,
+        // Se cuenta también aquí por el mismo motivo que `importePagado`: el
+        // dinero que salió de nuestro bolsillo no deja de haber salido porque el
+        // lote se parara después.
+        importePuestoPorLaPlataforma,
         enviados,
         adoptados,
         enCola: enCola ?? 0,
@@ -1201,6 +1409,11 @@ export async function GET(req: Request) {
     // Es la cifra que debe cuadrar con el panel del proveedor al final del día.
     pagados,
     importePagado,
+    // Y de eso, cuánto lo puso la plataforma en vez de un cobro: recompensas de
+    // referido y el tramo de regalo que no cubría el neto del tutor. Es lo que
+    // hay que cuadrar contra las transferencias que operaciones hizo a los PSP,
+    // no contra lo que cobró ninguno.
+    importePuestoPorLaPlataforma,
     // Creados en esta pasada y en vuelo: todavía no son dinero en la cuenta
     // del tutor.
     enviados,
@@ -1220,6 +1433,11 @@ export async function GET(req: Request) {
     // 🔴 En vuelo y sin tocarse desde hace más de un día. Es lo que delata un
     // atasco, y lo que antes se comía el lote entero en silencio.
     atascadas: atascadas ?? 0,
+    // 🔴 LO QUE HAY QUE TRANSFERIR ANTES DE LA PASADA SIGUIENTE, por (balance,
+    // moneda). Si no está vacío y nadie mueve ese dinero, esas órdenes se van a
+    // 'failed' por saldo y sus tutores reciben NTF-16 por una gestión nuestra.
+    // `null` = no se pudo preguntar, que no es «no hay nada».
+    fondeoPendiente,
     // Identidades muertas archivadas: el `retry` del admin poniéndose en marcha.
     difuntos,
     // Reclamadas hace poco: se barren en la pasada siguiente, no antes.
@@ -1247,7 +1465,10 @@ export async function GET(req: Request) {
       sinEjecutor,
       // La orden no tiene país de destino congelado.
       sinPais,
-      // `payouts.amount` no cuadra con la suma de `payout_items`.
+      // `payouts.amount` no cuadra con `suma(payout_items) + suma(payout_adjustments)`.
+      // ⚠️ Desde `20260912100000` las recompensas del tutor viajan dentro de la
+      // orden sin ser líneas: cotejar solo contra `payout_items` metía aquí a
+      // TODA orden con recompensa y la dejaba 'scheduled' para siempre.
       descuadrados,
     },
     reintentables,
