@@ -322,11 +322,10 @@ export default async function AppHome() {
           monta: el estado vacío de esta pantalla ya está arriba. */}
       {historial ? <HistorialCard data={historial} timeZone={tz} /> : null}
 
-      {/* Las dos tarjetas del Figma. "Invita y gana" (US-1301) solo aparece con
-          campaña configurada: el programa vive entero en Referral Factory. */}
-      {/* B1.11 · esta pantalla es el panel del ALUMNO, así que su programa es
-          el de alumnos siempre. Un tutor que además compra ve el suyo desde
-          `/account`, que sí mira el rol. */}
+      {/* Las dos tarjetas del Figma. «Invita y gana» (US-1301) ya no depende de
+          que haya una variable de campaña puesta: desde `20260911120000` las
+          campañas son filas y la pantalla existe siempre, así que esta tarjeta
+          se pinta siempre y no puede llevar a un `notFound()`. */}
       <ReferralCard />
 
       <PanelCard>

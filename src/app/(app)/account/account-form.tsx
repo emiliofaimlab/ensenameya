@@ -644,10 +644,15 @@ export function AccountForm({
       {/* «Invita y gana» — no está en el paquete, así que se conserva. Va en
           media fila y no a ancho completo: es una tarjeta de cuatro líneas y
           estirada a 944 px se queda vacía por dentro.
-          ⚠️ `empty:hidden` — `ReferralCard` renderiza `null` cuando su campaña
-          no está configurada (HOY SIEMPRE para el tutor, que no tiene
-          `NEXT_PUBLIC_REFERRAL_URL_TUTOR` porque esa campaña no existe). Sin
-          esto quedaría un envoltorio vacío que igualmente cobra su `gap`. */}
+          `empty:hidden` se queda, pero ya no protege de nada: desde Referidos
+          v2 (11-sep-2026) `ReferralCard` devuelve SIEMPRE una tarjeta — la
+          pantalla `/referidos` existe para todo el mundo y las campañas se
+          deciden en `/admin/referidos`, no por variable de entorno. Lo que
+          decía este comentario —que el tutor no tenía campaña porque faltaba
+          `NEXT_PUBLIC_REFERRAL_URL_TUTOR`— es falso por partida triple: la
+          variable ya no existe, la campaña de tutores es la 50784 y está en el
+          seed, y la tarjeta no puede renderizar `null`. Se deja el `empty:hidden`
+          porque cuesta cero y cubre a quien vacíe esta rejilla mañana. */}
       <div className="grid items-start gap-5 empty:hidden md:grid-cols-2 [&>*]:min-w-0">
         {referidos}
       </div>

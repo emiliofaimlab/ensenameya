@@ -677,10 +677,11 @@ export default async function TutorHomePage() {
               fija: esa es `sticky` y una tarjeta más la deja más alta que el
               viewport, que es cuando `sticky` deja de pegarse.
 
-              B1.11 · esta pantalla es el panel del TUTOR, así que su programa
-              es el de tutores siempre —igual que `/app` fija el del alumno—. Se
-              pinta sola solo si su campaña está configurada; si no, `null`. */}
-          <ReferralCard isTutor />
+              ⚠️ SIN `isTutor` desde el 11-sep: ya no hay una campaña por rol
+              —`/referidos` pinta todas las visibles— así que el tutor invita
+              alumnos y tutores desde el mismo sitio. Y ya no puede renderizar
+              `null`: la pantalla existe siempre. */}
+          <ReferralCard />
         </div>
 
         <div className="flex flex-col gap-5 lg:order-1 lg:sticky lg:top-24">

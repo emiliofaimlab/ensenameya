@@ -12,6 +12,7 @@ import {
   CalendarPlusIcon,
   CreditCardIcon,
   FolderTreeIcon,
+  GiftIcon,
   HomeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
@@ -95,6 +96,12 @@ const STUDENT_ITEMS: Item[] = [
   { href: "/agendar", label: "Agendar", icon: CalendarPlusIcon },
   { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
+  // Referidos v2 · «Invita y gana» ya no es un iframe de Referral Factory, es
+  // una pantalla nuestra — y la MISMA para alumno y para tutor: dentro se
+  // pintan las campañas visibles que le tocan a cada uno, así que el menú no
+  // tiene que decidir nada. Va la última porque no es trabajo pendiente: se
+  // entra cuando se quiere invitar a alguien, no a diario.
+  { href: "/referidos", label: "Invita y gana", icon: GiftIcon },
 ];
 
 /** Menú del tutor (TU06). Mismos criterios: solo rutas que existen. */
@@ -196,6 +203,12 @@ export const TUTOR_ITEMS: Item[] = [
       { href: "/account#avisos", label: "Avisos" },
     ],
   },
+  // Referidos v2 · «Invita y gana» ya no es un iframe de Referral Factory, es
+  // una pantalla nuestra — y la MISMA para alumno y para tutor: dentro se
+  // pintan las campañas visibles que le tocan a cada uno, así que el menú no
+  // tiene que decidir nada. Va la última porque no es trabajo pendiente: se
+  // entra cuando se quiere invitar a alguien, no a diario.
+  { href: "/referidos", label: "Invita y gana", icon: GiftIcon },
 ];
 
 /**
@@ -263,6 +276,11 @@ export const ADMIN_ITEMS: Item[] = [
   // el tope de la columna son ~158 px a 14/600 y ahí ya va justa «Mentorías
   // impartidas» con 20. «Notificaciones» son 14 y entra de sobra.
   { href: "/admin/notificaciones", label: "Notificaciones", icon: MailIcon },
+  // Referidos v2 · qué campañas de Referral Factory se enseñan en «Invita y
+  // gana» y con qué texto. Entra CON puerta desde el primer día a propósito:
+  // /admin/notificaciones, /admin/operaciones y /admin/reembolsos vivieron
+  // meses sin entrada en el menú y se llegaba escribiendo la URL.
+  { href: "/admin/referidos", label: "Referidos", icon: GiftIcon },
 ];
 
 /**
