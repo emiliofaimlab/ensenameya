@@ -87,13 +87,11 @@ entregabilidad, y el remitente sí.**
 
 **Qué hace falta, en orden:**
 
-1. **Verificar el dominio en Resend.** ⚠️ `ensenameya.com` lleva **Microsoft 365
-   detrás de Proofpoint** y ahí el correo no se toca de pasada: los `MX` y el
-   `SPF` del ápice **no se tocan**. Se verifica un **subdominio** de envío (tipo
-   `send.ensenameya.com`), que se lleva sus propios registros y deja el buzón
-   `info@ensenameya.com` intacto. Esto es una tarea de DNS con su propio riesgo,
-   no un clic — es el motivo por el que `src/lib/email.ts` sigue mandando desde
-   `onboarding@resend.dev`.
+1. **Verificar el dominio en Resend** — ✅ **YA ESTÁ HECHO.** Comprobado contra
+   la API de Resend el 11-sep: `ensenameya.com`, `status: "verified"`, dado de
+   alta el **10-sep 15:40 UTC**. Los `MX` y el `SPF` del ápice siguen intactos,
+   que era lo que había que proteger del Microsoft 365 detrás de Proofpoint.
+   Desde entonces los envíos salen de `hola@ensenameya.com`.
 2. **Dashboard → Authentication → Emails → SMTP Settings**, en dev y en prod:
    host de Resend, usuario `resend`, contraseña = la `RESEND_API_KEY`, remitente
    = la dirección del dominio verificado.
@@ -138,5 +136,5 @@ revierte el código.
 | 1 | **Reembolso: ¿pedido o cobrado?** | **Sigue abierta; el texto ya no miente.** ⚠️ NTF-10 sale cuando **la base de datos anota** el reembolso, NO cuando el PSP lo acepta: los tres caminos (`cancel_booking` de RN-37, el reembolso manual del admin y `expire_stale_bookings`) escriben `payments.status = 'refunded'` y el trigger encola ahí mismo. Quien habla con el PSP es `/api/cron/refunds-process`, que lee la cola `refund_requests` y **no toca `payments` ni encola nada** — verificado leyendo el job. Por eso el correo dice «está en camino» y «entre 3 y 10 días hábiles», y **nunca** «ya lo tienes». | Producto decide: acuse al pedirlo (lo de hoy), aviso al liquidarlo, o los dos. El segundo habría que construirlo entero — el webhook de Stripe **no** escucha reembolsos liquidados. |
 | 2 | **El reloj de NTF-08 / NTF-11** | **Resuelta.** `20260911210000` los encola desde **`pg_cron`**, dentro de Postgres, y no desde GitHub Actions — cuya cadencia es una ficción (pide `*/5`, entrega una cada 2-6 h). Y `caducar_notificaciones` **mata en la cola** lo que ya no puede llegar a tiempo, porque el envío sigue yendo por el reloj lento. | Mirar `cron.job_run_details` **agregando por `jobname` y `status`** tras aplicar la migración: un job de `pg_cron` que falla no se lo dice a nadie. Y arreglado en dev ≠ arreglado en prod. |
 | 3 | **S-49 y el enlace de baja** | **Abierta, y apagada a propósito.** Siete correos son no esenciales y deberían llevar «dejar de recibir estos avisos», pero su destino `/account#avisos` **no existe**. `BAJA_TIENE_DESTINO = false` y en su lugar va la cabecera `List-Unsubscribe` como `mailto:` (RFC 2369, válida, la respetan Gmail y Outlook, y no necesita pantalla). | Construir S-49. El día que exista: `BAJA_TIENE_DESTINO` a `true`, el `mailto:` a URL, y el enlace del pie vuelve solo — la marca `baja` ya está puesta correo por correo. |
-| 4 | **El remitente definitivo** | **Abierta.** Sigue siendo `onboarding@resend.dev` (`EMAIL_FROM` sin poner). No es un olvido: verificar el dominio son registros DNS sobre M365 + Proofpoint. | El §2 entero. Es la decisión que **bloquea a las otras cuatro en impacto**: sin ella, los 34 correos salen bien diseñados desde una dirección que no es nuestra. |
+| 4 | **El remitente definitivo** | **Resuelta, y de paso arreglado un fallo mudo.** `ensenameya.com` está verificado en Resend desde el 10-sep. 🔴 Pero `EMAIL_FROM` **no está puesto** y el respaldo de `src/lib/email.ts` era `onboarding@resend.dev`, que con dominio verificado solo entrega a la dirección de la cuenta y responde **403 a cualquier otra** — y un 403 no es `retriable`, así que el job marcaba la notificación **`failed` PERMANENTE**: cada correo a un usuario real se quemaba al primer intento, sin reintento ni error visible. El respaldo pasa a ser `hola@ensenameya.com`. | Poner `EMAIL_FROM` en Vercel igualmente (dev y prod), que es lo que permite cambiar el remitente sin tocar código. Y decidir si `hola@` debe ser un buzón de verdad: hoy es solo remitente y quien responda ahí no encuentra a nadie — el buzón atendido es `info@`. |
 | 5 | **Los correos de referidos** | **Abierta, y fuera de nuestro alcance por diseño.** Ninguno de los 34 ids es de referidos. Las reglas, los montos y el pago viven **enteros en Referral Factory** (RN-21), y los correos de recompensa los manda RF con su propia marca. Nosotros solo emitimos el enlace `?ref=`. | Decidir si queremos correo propio («tu referido reservó su primera mentoría»). Sería plantilla nueva **+ trigger nuevo** — y entonces aplica el orden de despliegue del §3. |

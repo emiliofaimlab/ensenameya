@@ -14,10 +14,12 @@ import { COMPANY } from "@/lib/company";
  * bloqueado (`ensenameya.com` servía otra web) y esa diferencia fue la que
  * decidió.
  *
- * ⚠️ Desde el 10-sep-2026 `ensenameya.com` **sí** es la app, pero el remitente
- * sigue siendo el de pruebas: verificar el dominio en Resend son registros DNS
- * en un dominio que lleva Microsoft 365 detrás de Proofpoint, y ahí el correo
- * no se toca de pasada (ver `docs/ENTORNOS.md`). Es una tarea, no un olvido.
+ * ⚠️ El dominio propio YA ESTÁ VERIFICADO en Resend (10-sep-2026), así que ese
+ * argumento caducó: se pudo verificar sin tocar los `MX` ni el `SPF` del ápice,
+ * que es lo que había que proteger del Microsoft 365 detrás de Proofpoint (ver
+ * `docs/ENTORNOS.md`). Lo que queda pendiente es distinto y más pequeño: el
+ * SMTP de Resend en **Supabase Auth**, que es otro proceso y no pasa por aquí
+ * (`docs/PROPUESTAS/33-correos/README.md` §2).
  *
  * Todo el acoplamiento al proveedor vive en `sendEmail`. Cambiarlo es reescribir
  * esa función: ni el job, ni las plantillas, ni la base de datos se enteran.
@@ -33,12 +35,35 @@ export function isEmailConfigured(): boolean {
 }
 
 /**
- * Remitente. `onboarding@resend.dev` funciona sin verificar nada y sirve para
- * probar; el día que el dominio esté verificado en Resend, esto pasa a ser
- * `hola@ensenameya.com` poniendo `EMAIL_FROM`, sin tocar código.
+ * Remitente.
+ *
+ * 🔴 EL RESPALDO ERA `onboarding@resend.dev` Y ESO SE VOLVIÓ UN FALLO MUDO el
+ * 10-sep-2026, el día que `ensenameya.com` quedó VERIFICADO en Resend
+ * (comprobado contra su API: `status: "verified"`, 15:40 UTC).
+ *
+ * Con el dominio verificado, el remitente de pruebas deja de ser «lo que hay
+ * mientras tanto» y pasa a ser peor que nada: Resend solo entrega desde
+ * `onboarding@resend.dev` **a la propia dirección de la cuenta**, y a cualquier
+ * otra responde `403`. Y un 403 no es `retriable` aquí abajo —correctamente: es
+ * un problema del mensaje, no del proveedor—, así que el job hace
+ * `mark_notification(p_ok := false)` y la notificación queda **`failed`, que es
+ * PERMANENTE**. O sea: sin `EMAIL_FROM`, cada correo a un usuario real se
+ * quemaba en el primer intento, sin reintento, sin excepción y sin build en
+ * rojo. Lo único que se movía era el contador `fallosPermanentes` del JSON del
+ * job, que no mira nadie.
+ *
+ * Por eso el respaldo ya no es el de pruebas: es la dirección del dominio
+ * verificado, que es además la que se viene usando de hecho (los envíos del
+ * 10-sep salieron de `hola@ensenameya.com`). `EMAIL_FROM` sigue mandando por
+ * encima para poder cambiarla sin tocar código.
+ *
+ * ⚠️ `hola@` es solo REMITENTE, no un buzón: el correo de verdad del proyecto
+ * es `info@ensenameya.com` (§39 del contrato, M365 detrás de Proofpoint), y es
+ * el que sale en el pie de los 34 correos y en su `List-Unsubscribe`. Si algún
+ * día alguien responde a `hola@`, ahí no hay nadie.
  */
 function from(): string {
-  return process.env.EMAIL_FROM ?? "Enséñame Ya <onboarding@resend.dev>";
+  return process.env.EMAIL_FROM ?? "Enséñame Ya <hola@ensenameya.com>";
 }
 
 /**
