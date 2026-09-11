@@ -31,6 +31,9 @@ import { roomOpen } from "@/lib/room-window";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
+/** Cuánto vale el enlace firmado de un material. Ver la carga, más abajo. */
+const MATERIAL_URL_TTL = 60 * 60;
+
 /**
  * MN-05 · Reservas cuya sala puede abrirse. `completed` entra porque el cron
  * cierra la reserva a los 10 min de acabar la clase y la sala sigue viva 7 días:
@@ -82,7 +85,7 @@ export default async function BookingDetailPage({
       // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
       // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
       // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
-      "id, status, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at), payments(status, gross_amount, currency, paid_at, refunded_amount)",
+      "id, status, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at), payments(status, gross_amount, currency, paid_at, refunded_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -101,6 +104,45 @@ export default async function BookingDetailPage({
   // aviso operativo, no una condición económica de las que se congelan
   // (regla de oro 2, que habla del importe, no de esto).
   const requisitos = parseRequirements(booking.products?.requirements);
+
+  // ── Material de clase (Doc 33) ────────────────────────────────────────────
+  //
+  // Existe porque el correo `materials_ready` lleva AQUÍ. Hasta el Doc 33 el
+  // tutor podía subir material y el alumno no tenía dónde verlo: las políticas
+  // de `tutor_materials` eran solo del dueño y de admin, y el bucket es
+  // privado. Un correo que dice «ver el material» y lleva a una pantalla que no
+  // lo enseña es exactamente lo que el pliego prohíbe, así que la política del
+  // alumno y esta tarjeta entran en el mismo lote que el correo.
+  //
+  // Quien filtra es la RLS (`tutor_materials_select_student`): esta consulta
+  // pide por producto y devuelve vacío si la política no deja ver nada. Se pide
+  // sin ventana de estado a propósito — la política ya decide qué reservas
+  // cuentan, y repetir aquí la lista de estados es la forma de que un día
+  // dejen de coincidir.
+  const { data: materiales } = booking.product_id
+    ? await supabase
+        .from("tutor_materials")
+        .select("id, file_name, size_bytes, storage_path, created_at")
+        .eq("product_id", booking.product_id)
+        .order("created_at", { ascending: false })
+    : { data: null };
+
+  // El bucket es privado: el enlace se firma aquí, en el servidor, y caduca.
+  // Una hora es lo que dura una sesión de mirar la pantalla; si el alumno
+  // vuelve mañana, recarga y se firma otra vez.
+  const conEnlace = materiales?.length
+    ? await Promise.all(
+        materiales.map(async (m) => {
+          const { data } = await supabase.storage
+            .from("tutor-materials")
+            .createSignedUrl(m.storage_path, MATERIAL_URL_TTL);
+          return { ...m, url: data?.signedUrl ?? null };
+        }),
+      )
+    : [];
+  // Un fichero cuya firma falló no se pinta: un enlace roto en una lista de
+  // descargas se lee como «el tutor subió algo y se perdió».
+  const material = conEnlace.filter((m) => m.url);
 
   // V-6 · aquí se pinta la ficha del tutor, no solo su nombre: esta es LA
   // pantalla de la queja («tras reservar no hay forma de llegar al tutor»).
@@ -274,6 +316,38 @@ export default async function BookingDetailPage({
                   <li key={`${i}-${r}`} className="flex items-start gap-2.5">
                     <span className="mt-[7px] size-1.5 shrink-0 rounded-full bg-brand" />
                     <span className="text-[13.5px] text-[#404040]">{r}</span>
+                  </li>
+                ))}
+              </ul>
+            </PanelCard>
+          ) : null}
+
+          {/* Material de clase. Va DESPUÉS de los requisitos y antes del pago,
+              por el mismo motivo que ellos: quien abre esto el día antes viene
+              a preparar la clase, no a revisar la factura.
+
+              Sin material no se pinta la tarjeta — una sección vacía que diga
+              «tu tutor no ha subido nada» es ruido, y encima suena a reproche. */}
+          {material.length > 0 ? (
+            <PanelCard>
+              <PanelCardTitle>Material de clase</PanelCardTitle>
+              <p className="mt-1.5 text-[13px] text-[#6b6b6b]">
+                Lo subió tu tutor para esta mentoría.
+              </p>
+              <ul className="mt-3.5 flex flex-col gap-2.5">
+                {material.map((m) => (
+                  <li key={m.id} className="flex items-baseline justify-between gap-3">
+                    <a
+                      href={m.url ?? "#"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[13.5px] text-brand-foreground underline underline-offset-2"
+                    >
+                      {m.file_name}
+                    </a>
+                    <span className="shrink-0 text-[12px] text-[#8b93a3]">
+                      {Math.max(1, Math.round(m.size_bytes / 1024))} KB
+                    </span>
                   </li>
                 ))}
               </ul>

@@ -1,0 +1,48 @@
+# NTF-13 · el resumen de incidencias a los administradores (Doc 33 §7.3).
+#
+# Se pide "cada hora" y se programa cada hora, pero la cadencia REAL de los
+# programados de GitHub, medida sobre corridas de este repo, es una pasada cada
+# 2-6 horas. Por eso el endpoint mira una ventana de SEIS horas y no de una: con
+# una hora se perdería todo lo ocurrido entre pasadas. El solape lo corta la
+# clave de idempotencia, que lleva la hora dentro — como mucho un resumen por
+# administrador y por hora.
+#
+# Si en la ventana no hubo incidencias, el endpoint responde `sin-incidencias` y
+# no encola nada: un "0 incidencias" cada hora es la forma más rápida de que el
+# aviso acabe en una carpeta y ahí se quede el día que traiga tres.
+name: Resumen de incidencias
+
+on:
+  schedule:
+    - cron: "41 * * * *"
+  workflow_dispatch: # para poder forzar una pasada sin esperar
+
+concurrency:
+  group: alertas-cron
+  cancel-in-progress: false
+
+jobs:
+  resumir:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Encolar el resumen
+        env:
+          BASE_URL: ${{ vars.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$BASE_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Falta la variable APP_BASE_URL o el secret CRON_SECRET del repo."
+            echo "Sin eso no se puede llamar al endpoint. Ver docs/ENTORNOS.md."
+            exit 1
+          fi
+
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$BASE_URL/api/cron/alertas-resumen")
+
+          echo "HTTP $code"
+          cat /tmp/out.json; echo
+
+          # Un 503 es "no hay CRON_SECRET en Vercel" y un 401 es "no coincide":
+          # las dos son configuración a medias, y deben verse en rojo.
+          [ "$code" = "200" ]

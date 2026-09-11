@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { isEmailConfigured, sendEmail } from "@/lib/email";
+import { renderEmail, type Contexto } from "@/lib/email-templates";
 import { COMPANY } from "@/lib/company";
 import {
   CONTACT_KIND_SPECS,
@@ -76,82 +77,30 @@ type AdjuntoOk = {
   mime_type: string;
 };
 
-function textoPlano(m: {
-  name: string;
-  email: string;
-  message: string;
-  sesion: string;
-  tipo: string;
-  adjuntos: AdjuntoOk[];
-}) {
-  return [
-    `Nombre:  ${m.name}`,
-    `Correo:  ${m.email}`,
-    `Cuenta:  ${m.sesion}`,
-    `Tipo:    ${m.tipo}`,
-    // La lista solo aparece si hay algo que listar: un «Adjuntos: (ninguno)» en
-    // el 90 % de los correos es ruido en la bandeja de quien atiende.
-    ...(m.adjuntos.length > 0
-      ? [
-          `Adjuntos (${m.adjuntos.length}):`,
-          ...m.adjuntos.map(
-            (a) => `  · ${a.file_name} — ${humanSize(a.size_bytes)}`,
-          ),
-        ]
-      : []),
-    "",
-    m.message,
-  ].join("\n");
-}
-
-function html(m: {
-  name: string;
-  email: string;
-  message: string;
-  sesion: string;
-  tipo: string;
-  adjuntos: AdjuntoOk[];
-}) {
-  // Escapado a mano: el cuerpo lo escribe un desconocido y va a parar a un
-  // cliente de correo. Sin esto, un `<script>` o una etiqueta rota viaja tal cual.
-  // El nombre del fichero también lo elige quien escribe, así que pasa por aquí.
-  const esc = (s: string) =>
-    s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-
-  // ⚠️ Los ficheros NO viajan adjuntos al correo: pesan hasta 25 MB cada uno y
-  // el bucket es privado a propósito. Se listan por nombre y tamaño, y se abren
-  // desde `support-attachments` con URL firmada.
-  const lista =
-    m.adjuntos.length > 0
-      ? `<p style="margin:16px 0 4px"><strong>Adjuntos (${m.adjuntos.length}):</strong></p>
-         <ul style="margin:0 0 16px;padding-left:20px;color:#475467">
-           ${m.adjuntos
-             .map(
-               (a) =>
-                 `<li>${esc(a.file_name)} — ${humanSize(a.size_bytes)}</li>`,
-             )
-             .join("")}
-         </ul>
-         <p style="margin:0 0 16px;color:#98a2b3;font-size:13px">
-           Están en el bucket privado <code>${SUPPORT_BUCKET}</code>, no en este correo.
-         </p>`
-      : "";
-
-  return `
-    <div style="font-family:system-ui,sans-serif;font-size:15px;color:#101828">
-      <p style="margin:0 0 4px"><strong>Nombre:</strong> ${esc(m.name)}</p>
-      <p style="margin:0 0 4px"><strong>Correo:</strong> ${esc(m.email)}</p>
-      <p style="margin:0 0 4px"><strong>Tipo:</strong> ${esc(m.tipo)}</p>
-      <p style="margin:0 0 16px;color:#475467"><strong>Cuenta:</strong> ${esc(m.sesion)}</p>
-      ${lista}
-      <div style="white-space:pre-wrap;border-left:3px solid #fe6a00;padding-left:12px">${esc(
-        m.message,
-      )}</div>
-    </div>`;
+/**
+ * Cuándo llegó, en texto. Va al correo interno (ficha) y al acuse (pie de la
+ * cita), y por eso lleva el huso escrito al lado.
+ *
+ * ⚠️ Se pinta en UTC y NO en el huso de nadie, al revés que todo lo demás de la
+ * plataforma (regla de oro 4). Aquí no hay a quién preguntárselo: el formulario
+ * es PÚBLICO, quien escribe puede no tener cuenta, y `profiles.timezone` —que es
+ * de donde sale el huso en el resto de correos— no existe para un anónimo.
+ * Entre inventarse un huso y decir cuál es, se dice cuál es: así quien atiende
+ * la bandeja puede cruzar el sello con `contact_messages.created_at`, que
+ * también está en UTC, sin restar nada de cabeza.
+ */
+function selloDeLlegada(cuando: Date): string {
+  return (
+    new Intl.DateTimeFormat("es", {
+      timeZone: "UTC",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(cuando) + " (UTC)"
+  );
 }
 
 /**
@@ -329,6 +278,17 @@ export async function POST(req: Request) {
   // Límite por IP. No es antispam serio —para eso haría falta un captcha, que
   // dLocal no pide y que añade fricción a un formulario que tienen que poder
   // usar— pero corta el caso tonto de alguien pulsando enviar veinte veces.
+  //
+  // ⚠️ Y desde que hay ACUSE (el `after()` del final) esto dejó de ser solo
+  // antispam: es lo único que impide que este endpoint escriba a cualquier
+  // dirección que alguien teclee, con texto suyo dentro. Subir `MAX_POR_IP` es
+  // aflojar eso, no solo dejar pasar más mensajes.
+  //
+  // ⚠️ TECHO CONOCIDO: sin cabecera de IP este `if` no entra y NO hay límite.
+  // En Vercel siempre viene, así que en producción no se abre; en local sí, y
+  // ahí no hay clave de Resend, así que tampoco sale nada. `checkout/invitado`
+  // resolvió lo mismo mandando esos casos a un cubo COMÚN ("sin-ip") en vez de
+  // apagar el límite; aquí no se ha copiado todavía.
   if (ip) {
     const desde = new Date(Date.now() - VENTANA_MIN * 60_000).toISOString();
     const { count } = await admin
@@ -396,31 +356,71 @@ export async function POST(req: Request) {
   // cambia lo que anotamos, pero no lo que respondemos: para quien escribe, el
   // mensaje ha llegado.
   const sesion = senderId ? `registrada (${senderId})` : "sin sesión";
-  const correo = {
-    name,
-    email,
-    message,
-    sesion,
+
+  // La ficha que comparten los DOS correos: el interno y el acuse. Es el mismo
+  // objeto a propósito —quien escribe tiene que ver exactamente lo que vamos a
+  // leer nosotros—, y va dentro de `contexto` porque es lo que `renderEmail`
+  // espera: el `payload` es lo que dejó un trigger, y aquí no hay trigger.
+  //
+  // ⚠️ Nada de esto se escapa aquí. `cita()` y `ficha()` de `email-sistema.ts`
+  // escapan por dentro, y hacerlo dos veces enseñaría `&amp;lt;` en la bandeja.
+  // Por eso el `esc` local que tenía este fichero ya no existe.
+  //
+  // ⚠️ Los ficheros siguen SIN viajar adjuntos: pesan hasta 25 MB cada uno y el
+  // bucket es privado a propósito. Se listan por nombre y tamaño, y se abren
+  // desde `support-attachments` con URL firmada.
+  const contacto: NonNullable<Contexto["contacto"]> = {
+    nombre: name,
+    correo: email,
     tipo: spec.label,
-    adjuntos,
+    sesion,
+    mensaje: message,
+    recibido: selloDeLlegada(new Date()),
+    adjuntos: adjuntos.map((a) => ({
+      nombre: a.file_name,
+      tamano: humanSize(a.size_bytes),
+    })),
   };
+
+  // El origen sale de la PETICIÓN y no de una constante, igual que en el job de
+  // correo: así el «Abrir en el panel» del correo interno lleva al despliegue
+  // que atendió el mensaje y no al que se escribió en una variable hace meses.
+  const origen = new URL(req.url).origin;
 
   if (!isEmailConfigured()) {
     // Se queda en 'pending', que es el default de la columna: "todavía no",
     // no "falló". El día que se ponga RESEND_API_KEY se puede reenviar.
+    //
+    // ⚠️ Y el acuse de abajo tampoco sale, que es lo correcto: sin clave no hay
+    // correo de ninguna clase, y el mensaje ya está guardado.
+    return NextResponse.json({ status: "ok" });
+  }
+
+  const interno = renderEmail({
+    template: "contact_internal",
+    payload: null,
+    // Sin saludo: este correo no va a una persona, va a una bandeja. La
+    // plantilla lo declara con `saludo: null`, así que el nombre sobra.
+    nombre: "",
+    baseUrl: origen,
+    contexto: { contacto },
+  });
+
+  // `renderEmail` devuelve `null` cuando el id no está en el mapa. Con un
+  // literal no debería pasar nunca, pero si pasa el mensaje ya está guardado y
+  // `delivery` se queda en 'pending' —"todavía no", no "falló"—, que es
+  // exactamente el estado del que se puede reenviar.
+  if (!interno) {
+    console.error("[contacto] falta la plantilla contact_internal");
     return NextResponse.json({ status: "ok" });
   }
 
   const enviado = await sendEmail({
     to: COMPANY.email,
-    // El tipo va en el asunto y no solo en el cuerpo: quien atiende la bandeja
-    // ordena por ahí, y «documentos» o «capturas» dicen de un vistazo si el
-    // mensaje trae algo que mirar.
-    subject: `Contacto web (${spec.label.toLowerCase()}) — ${name}`,
-    text: textoPlano(correo),
-    html: html(correo),
+    ...interno,
     // Para poder contestar pulsando "Responder" en vez de copiar la dirección
-    // del cuerpo a mano.
+    // del cuerpo a mano. NO lo pone la plantilla: el asunto y el cuerpo son del
+    // Doc 33, pero a dónde va la respuesta es cosa de esta ruta.
     replyTo: email,
   });
 
@@ -437,6 +437,54 @@ export async function POST(req: Request) {
           },
     )
     .eq("id", fila.id);
+
+  /**
+   * EL ACUSE A QUIEN ESCRIBE. Hasta hoy este formulario tragaba el mensaje sin
+   * decir nada: la pantalla contestaba «gracias» y en la bandeja de quien
+   * escribió no aparecía nada. Si nuestra respuesta tardaba un día, no tenía
+   * forma de saber si el mensaje había salido siquiera.
+   *
+   * Va DIRECTO y no por `notifications`, por lo de siempre: la cola la vacía un
+   * job que en producción entrega cada 2-6 horas, y un acuse que llega mañana
+   * no acusa nada. Y además quien escribe puede no tener cuenta —el formulario
+   * es público—, así que no hay `recipient_id` que encolar.
+   *
+   * Dentro de `after()` para que el «gracias» de la pantalla no espere a
+   * Resend: el mensaje ya está guardado y la respuesta ya se decidió arriba.
+   * Que el acuse salga o no NO cambia `delivery`, que es el registro del correo
+   * INTERNO —el que de verdad no se puede perder—.
+   *
+   * ⚠️ UN ACUSE CONVIERTE ESTE ENDPOINT PÚBLICO EN UN REFLECTOR DE CORREO: a
+   * partir de aquí cualquiera puede hacer que nuestro remitente escriba a la
+   * dirección que teclee, con un texto suyo dentro (la cita del mensaje). Lo
+   * único que lo acota es el tope por IP de más arriba —3 en 10 minutos—, que
+   * por eso ya NO es solo antispam: es lo que separa «acuse» de «lanzadera de
+   * correo con nuestra reputación de dominio». Si algún día se sube ese tope,
+   * se sube sabiendo esto; y si se afloja del todo, el acuse se va con él.
+   */
+  after(async () => {
+    const acuse = renderEmail({
+      template: "contact_ack",
+      payload: null,
+      // Aquí sí saluda por el nombre: va a una persona, y es el que ella misma
+      // tecleó. `render` lo escapa.
+      nombre: name,
+      baseUrl: origen,
+      contexto: { contacto },
+    });
+    if (!acuse) {
+      console.error("[contacto] falta la plantilla contact_ack");
+      return;
+    }
+
+    const salio = await sendEmail({ to: email, ...acuse });
+    if (!salio.ok) {
+      // Se registra y no se reintenta: el acuse es una cortesía, el mensaje ya
+      // está a salvo en `contact_messages` y quien atiende la bandeja lo va a
+      // leer igual. Reintentar aquí sería montar una segunda cola.
+      console.error("[contacto] el acuse no salió:", salio.error);
+    }
+  });
 
   return NextResponse.json({ status: "ok" });
 }

@@ -79,6 +79,13 @@ export function NotificationsBell({
       // Ver la nota del prop `userId`: sin esto, un admin se traía los avisos
       // de toda la plataforma en cuanto abría la campana.
       .eq("recipient_id", userId)
+      // ⚠️ Sin esto la campana desmiente al correo. `caducar_notificaciones()`
+      // (`20260911210000`) marca `failed` los avisos con hora dentro —«tu clase
+      // empieza en unos minutos»— que la cola no alcanzó a enviar a tiempo, y
+      // esos NO se mandan. Pero la campana pinta todas las filas sin mirar el
+      // estado, así que el mismo aviso mentiroso seguía apareciendo aquí tres
+      // horas después por la otra puerta.
+      .neq("status", "failed")
       .order("created_at", { ascending: false })
       .limit(NOTICES_LIMIT);
     setNotices(((data ?? []) as NotificationRow[]).map(toNotice));

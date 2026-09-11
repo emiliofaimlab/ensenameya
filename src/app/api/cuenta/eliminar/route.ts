@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isEmailConfigured, sendEmail } from "@/lib/email";
+import { renderEmail } from "@/lib/email-templates";
 import {
   rpcNueva,
   type AnonymizeResult,
@@ -121,6 +123,80 @@ export async function GET() {
   });
 }
 
+/**
+ * EL ACUSE DE LA BAJA — y por qué NO puede ir por la cola de `notifications`.
+ *
+ * Hasta hoy pedir la baja era mudo: ni prueba de que se pidió, ni forma de
+ * enterarse si la pidió otro. Y esta es de las pocas operaciones de la
+ * plataforma que no tiene deshacer una vez completada, así que el correo no es
+ * cortesía: es el único rastro que le queda a la persona fuera de la app —y la
+ * app, precisamente, es lo que acaba de dejar de tener—.
+ *
+ * ⚠️ NO VA POR LA COLA, y en la baja INMEDIATA no es solo latencia:
+ *
+ *   · `anonymize_account` BORRA las notificaciones de esa persona
+ *     (`delete from public.notifications where recipient_id = …`), así que una
+ *     fila encolada un instante antes se va con ellas. Encolarla DESPUÉS
+ *     sobreviviría, pero entonces el acuse depende de un orden que ningún test
+ *     vigila y que se rompe el día que alguien mueva una línea;
+ *   · y reescribe `auth.users.email` a `cuenta-eliminada+<uuid>@ensenameya.invalid`,
+ *     que es de donde `pending_email_notifications` saca la dirección. Hay
+ *     salida —esa RPC hace `coalesce(payload->>'email', u.email)` justamente
+ *     para este caso (`20260911170000`)—, pero obliga a meter la dirección real
+ *     de una persona que acaba de pedir que la borremos en un `payload` que se
+ *     queda en la tabla hasta que el job pase. Escribirle ya y no guardarla es
+ *     lo contrario de eso, y es lo que se hace aquí.
+ *
+ * Por eso la dirección se captura ARRIBA, de la sesión, antes de tocar nada, y
+ * viaja hasta aquí por parámetro. La rama `programada` no tiene ninguno de los
+ * dos problemas —la cuenta sigue entera— pero se manda igual de directo, por lo
+ * de siempre: la cola entrega cada 2-6 horas en producción, y «alguien ha
+ * pedido borrar tu cuenta» que llega mañana no avisa de nada.
+ *
+ * Nada de esto puede romper la baja: va en `after()`, y un fallo se registra y
+ * se queda ahí. La operación ya está hecha en base de datos cuando se llega
+ * aquí; devolver un error por un correo sería contarle a la persona que no se
+ * dio de baja cuando sí.
+ */
+function avisarDeLaBaja(opts: {
+  template: "account_deletion_requested" | "account_deletion_done";
+  para: string;
+  nombre: string;
+  baseUrl: string;
+}): void {
+  after(async () => {
+    if (!isEmailConfigured()) return;
+
+    const correo = renderEmail({
+      template: opts.template,
+      payload: null,
+      nombre: opts.nombre,
+      baseUrl: opts.baseUrl,
+    });
+    if (!correo) {
+      console.error("[EY-192] falta la plantilla", opts.template);
+      return;
+    }
+
+    const salio = await sendEmail({ to: opts.para, ...correo });
+    if (!salio.ok) {
+      console.error("[EY-192] el acuse de baja no salió:", opts.template, salio.error);
+    }
+  });
+}
+
+/**
+ * El nombre para el saludo, sacado del METADATA de la sesión y no de `profiles`.
+ *
+ * Es el mismo valor —`handle_new_user` copia uno al otro— y así el acuse de la
+ * baja inmediata no depende de una fila que `anonymize_account` está a punto de
+ * reescribir. Si no hay nombre, `renderEmail` saluda con un «Hola,» a secas.
+ */
+function nombreDeLaSesion(user: { user_metadata?: Record<string, unknown> | null }): string {
+  const bruto = user.user_metadata?.full_name;
+  return typeof bruto === "string" ? bruto : "";
+}
+
 export async function POST(req: Request) {
   const { confirmacion } = (await req.json().catch(() => ({}))) as {
     confirmacion?: string;
@@ -181,6 +257,17 @@ export async function POST(req: Request) {
   // lo que está esperando es dinero suyo, y necesita poder entrar a verlo
   // llegar —y a arrepentirse—. Ver la cabecera de la migración.
   if (peticion.status === "programada" || peticion.status === "ya_programada") {
+    // ⚠️ También en `ya_programada`, que es el doble clic o la pestaña vieja.
+    // Repetir el acuse es ruido; NO mandarlo cuando la primera vez se cayó
+    // Resend es dejar a alguien sin enterarse de que su cuenta está en la cola
+    // de borrado. Entre los dos, el ruido.
+    avisarDeLaBaja({
+      template: "account_deletion_requested",
+      para: email,
+      nombre: nombreDeLaSesion(ctx.user),
+      baseUrl: new URL(req.url).origin,
+    });
+
     return NextResponse.json({
       status: "programada",
       en_espera: peticion.en_espera,
@@ -242,6 +329,21 @@ export async function POST(req: Request) {
       barrido.pendientes,
     );
   }
+
+  // El último correo que va a recibir, y el único rastro que le queda fuera de
+  // la app. Va AQUÍ —después del barrido, antes del `signOut`— y con la
+  // dirección de la variable `email`, capturada de la sesión mucho antes de
+  // llamar a `anonymize_account`: preguntarle ahora a la base cuál es el correo
+  // de esta persona devolvería `cuenta-eliminada+<uuid>@ensenameya.invalid`.
+  // Lo mismo vale para el nombre, que sale del objeto de sesión que ya
+  // teníamos en memoria y no de `profiles`, que acaba de quedar anonimizado.
+  // El porqué completo, en el docblock de `avisarDeLaBaja`.
+  avisarDeLaBaja({
+    template: "account_deletion_done",
+    para: email,
+    nombre: nombreDeLaSesion(ctx.user),
+    baseUrl: new URL(req.url).origin,
+  });
 
   // La sesión del navegador ya está muerta —`anonymize_account` borra las filas
   // de `auth.sessions` y `auth.refresh_tokens`—, pero la cookie sigue en el

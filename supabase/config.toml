@@ -223,6 +223,13 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
+#
+# ⚠️ ESTO NO ES LO QUE PASA EN LA NUBE. Dice `false` y en **producción está
+# ENCENDIDA** (dev no). Es la asimetría que esconde los fallos de auth en dev y
+# la que bloquea el checkout de invitado. Este fichero no la gobierna: el
+# interruptor real está en Dashboard → Authentication → Sign In / Providers,
+# proyecto por proyecto. Se deja el valor por defecto a propósito, para no
+# sugerir que tocarlo aquí cambia algo.
 enable_confirmations = false
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false
@@ -243,7 +250,53 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
+# ═══════════════════════════════════════════════════════════════════════════
+# Doc 33 · las TRES plantillas de correo que no manda nuestro código
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 🔴 **ESTE FICHERO NO SE APLICA A LA NUBE.** Ni una línea de aquí llega a dev
+# ni a prod. Este proyecto no tiene stack local y el CI solo corre
+# `supabase db push`, **nunca `supabase config push`**: lo único que viaja son
+# las migraciones. Lo de abajo es la fuente de verdad para un humano, no un
+# despliegue.
+#
+# Para que estos correos salgan de verdad hay que PEGARLOS A MANO en
+# Dashboard → Authentication → Emails, **proyecto por proyecto** (dev y prod son
+# dos pegados distintos). Asunto y cuerpo, los dos. Runbook completo, con el
+# orden y con lo del SMTP de Resend:
+#
+#     docs/PROPUESTAS/33-correos/README.md
+#
+# El HTML lo genera `npm run build:correos-auth` desde `src/lib/email-templates.ts`
+# (ids `auth_confirm_signup`, `auth_reset_password`, `auth_change_email`), para
+# que estos tres se vean como los otros 31. **No se editan a mano**: se
+# regeneran, como `database.types.ts`.
+#
+# Los nombres son los de Supabase, no los nuestros: `confirmation` (no `signup`),
+# `recovery` (no `reset_password`) y `email_change` (no `change_email`). Un
+# nombre inventado deja la sección sin efecto y sin error.
+#
+# `content_path` va relativo a la RAÍZ del repo, no a `supabase/` — es el mismo
+# formato del ejemplo de `invite` que traía el fichero por defecto.
+
+[auth.email.template.confirmation]
+subject = "Confirma tu correo para entrar a Enséñame Ya"
+content_path = "./supabase/templates/confirm_signup.html"
+
+[auth.email.template.recovery]
+subject = "Restablece tu contraseña"
+content_path = "./supabase/templates/reset_password.html"
+
+[auth.email.template.email_change]
+subject = "Confirma tu nueva dirección de correo"
+content_path = "./supabase/templates/change_email.html"
+
+# Sin plantilla propia: `invite` y `magic_link` no envían nunca. No invitamos a
+# nadie, y la app no ofrece enlace mágico — el único `type: "magiclink"` del repo
+# está en `supabase/seed/dev-imagenes.mjs`, y usa `generateLink`, que DEVUELVE el
+# enlace sin mandar correo: esa plantilla no se renderiza jamás. Si algún día se
+# usan, saldrán en inglés y con la marca de Supabase hasta que tengan su id en
+# `email-templates.ts` y su bloque aquí.
 # [auth.email.template.invite]
 # subject = "You have been invited"
 # content_path = "./supabase/templates/invite.html"
