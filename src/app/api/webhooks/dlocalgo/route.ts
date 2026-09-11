@@ -56,6 +56,37 @@ type EstadoReserva = Database["public"]["Enums"]["booking_status"];
  *    redundante: cubre el cobro creado por otra vía y hace que la comparación
  *    de `yaAcreditado` no dependa de que el sellado previo ocurriera.
  *
+ * ── 🎁 EL TERCER SUJETO: UN COBRO QUE NO TIENE RESERVA ─────────────────────
+ *
+ * «Regalar una mentoría» cobra por adelantado una fila de `credits` con
+ * `source='gift'` (`20260912110000` §10). Ese cobro tiene que ir a
+ * `confirm_gift_payment` y **jamás a `confirm_payment`**: no hay `payments`, no
+ * hay `bookings`, y la segunda trataría un id de crédito como uno de reserva.
+ *
+ * CÓMO SE DISTINGUE AQUÍ —y es donde este webhook tiene mejor mano que el de
+ * Stripe—: **por `credits.provider_payment_id`**, que es exactamente para lo que
+ * existe `credits_provider_pid_idx`. El `DP-…` se sella al ABRIR el cobro
+ * (`marcar_cobro_regalo`, desde `api/pagos/checkout`) porque dLocal lo exige
+ * antes de redirigir, así que cuando llega la notificación ya está escrito. Y
+ * ese `payment_id` es el del cuerpo FIRMADO, no algo que mande un navegador.
+ *
+ * De respaldo se mira el sujeto del `order_id` (`credits.id`), que es el único
+ * camino que tiene Stripe. Los dos apuntan a la misma fila; tener los dos es lo
+ * que hace que un `order_id` que no se pueda parsear no acabe en «ignorado» con
+ * 200 y el regalo cobrado y sin activar (regla de oro 11).
+ *
+ * 🔴 LA IDEMPOTENCIA DEL REGALO NO ES `payment_webhook_events`: su PK es
+ * `(event_id, booking_id)` con `booking_id NOT NULL` (`20260827160000:59-68`),
+ * así que un regalo no cabe ahí. La pone `confirm_gift_payment` POR ESTADO —si
+ * el crédito ya no está en 'pending_payment', devuelve su estado y no hace
+ * nada— y con dLocal eso importa el doble: su firma no caduca y su notificación
+ * es un PING repetible durante 30 días.
+ *
+ * ⚠️ Y EL REGALO NO TIENE X-02: `late_payment_refunds` solo admite `booking_id`
+ * o `order_id` (check de `20260827170000`), así que un cobro de regalo que llega
+ * tarde no se puede devolver desde aquí sin una migración. Se grita y la salida
+ * es manual. Ver `cobroDeRegaloEntrante`.
+ *
  * ── QUÉ SIGUE SIN EJERCITARSE ──────────────────────────────────────────────
  * Nadie ha visto llegar una notificación real: exige pagar un cobro en el
  * formulario alojado de dLocal con una tarjeta de prueba. El algoritmo de firma
@@ -77,6 +108,20 @@ const YA_CONTABILIZADO = ["paid", "refunded", "partially_refunded"];
  * mismo porqué que en el webhook de Stripe; ver `20260912110000` §7.
  */
 const DESCUADRE = "23514";
+
+/**
+ * 🎁 Las columnas del regalo que este archivo necesita, y ninguna más. Mismo
+ * tipo y mismo criterio que en el webhook de Stripe: `credits` no se lee con
+ * `.select("*")` en ninguna parte (sus grants son por columna a propósito).
+ */
+type RegaloCobrado = {
+  id: string;
+  status: string;
+  currency: string;
+  provider_payment_id: string | null;
+};
+
+const COLUMNAS_REGALO = "id, status, currency, provider_payment_id";
 
 export async function POST(req: Request) {
   // ⚠️ EL CUERPO CRUDO. `req.text()` y no `req.json()`: la firma es un HMAC
@@ -128,6 +173,232 @@ export async function POST(req: Request) {
 
   const admin = createAdminClient();
   const ref = evento.ref;
+
+  /**
+   * 🎁 ¿ESTE COBRO ES DE UN REGALO? — dos redes, y la buena es la primera.
+   *
+   *   1. `credits.provider_payment_id = <DP-…>`. Es la que diseñó la migración
+   *      (`credits_provider_pid_idx`) y aquí SIEMPRE está escrita: dLocal exige
+   *      sellar su identificador antes de redirigir, así que el checkout ya lo
+   *      hizo con `marcar_cobro_regalo`. Y no depende de que el `order_id`
+   *      sobreviva ni de cómo se parsee.
+   *   2. el sujeto del `order_id` (`credits.id`), por si el cobro se abrió por
+   *      otra vía o el sello no llegó a escribirse.
+   *
+   * ⚠️ LOS DOS `error` SE RELANZAN. Regla de oro 9: a `service_role` puede
+   * faltarle el grant y eso muerde en tiempo de ejecución. Leerlo como «no es un
+   * regalo» mandaría el cobro al camino de la reserva, que respondería «ajeno»
+   * con 200 y dejaría el regalo cobrado y sin activar para siempre.
+   */
+  const regaloDelCobro = async (): Promise<RegaloCobrado | null> => {
+    const { data: porReferencia, error: eRef } = await admin
+      .from("credits")
+      .select(COLUMNAS_REGALO)
+      .eq("provider_payment_id", paymentId)
+      .eq("source", "gift")
+      .maybeSingle();
+    if (eRef) throw new Error(eRef.message);
+    if (porReferencia) return porReferencia;
+
+    if (!ref) return null;
+    const { data: porSujeto, error: eSujeto } = await admin
+      .from("credits")
+      .select(COLUMNAS_REGALO)
+      .eq("id", ref.id)
+      .eq("source", "gift")
+      .maybeSingle();
+    if (eSujeto) throw new Error(eSujeto.message);
+    return porSujeto;
+  };
+
+  /**
+   * 🎁 ACREDITAR EL COBRO DE UN REGALO. Gemelo del de Stripe —si tocas uno,
+   * mira el otro— con la única diferencia que separa a los dos webhooks: el
+   * importe sale de la RELECTURA del cobro (`GET /v1/payments/{id}`, dentro de
+   * `eventoDePago`) y no del cuerpo del POST, que es `{"payment_id":"DP-283"}` y
+   * nada más. O sea que ni el importe ni el estado los elige quien manda la
+   * notificación.
+   *
+   * ⚠️ **NO HAY X-02 PARA EL REGALO**: `late_payment_refunds` exige `booking_id`
+   * u `order_id` (check de `20260827170000`) y un regalo no tiene ninguno. Un
+   * cobro que llegue cuando el regalo ya no lo espera NO se devuelve solo, y
+   * aquí menos que en Stripe: dLocal no tiene clave de idempotencia en
+   * reembolsos, así que el único tirante sería esa fila que no se puede
+   * escribir. Se grita como incidente y la salida es MANUAL.
+   */
+  const cobroDeRegaloEntrante = async (regalo: RegaloCobrado): Promise<NextResponse> => {
+    const sujeto = `regalo ${regalo.id}`;
+    const importeCobrado = evento.amountMinor;
+
+    if (importeCobrado === null) {
+      // No se inventa. Queda en pie la otra mitad del cerrojo, el marcador
+      // `credits.checkout_amount` que selló `marcar_cobro_regalo_abierto` y que
+      // `confirm_gift_payment` compara igual. Se grita porque un PAID sin
+      // `amount` es su API cambiando de forma.
+      console.error("[conciliación] ⚠️ regalo confirmado sin importe: no se concilia", {
+        sujeto,
+        cobro: paymentId,
+        evento: evento.id,
+        tipo: evento.rawType,
+      });
+    } else {
+      // La moneda antes que el importe, por lo mismo que en la reserva: un
+      // número en otra moneda es perfectamente comparable y perfectamente falso.
+      const monedaCobrada = evento.currency?.toUpperCase() ?? null;
+      const monedaDebida = regalo.currency.toUpperCase();
+
+      if (monedaCobrada === null || monedaCobrada !== monedaDebida) {
+        console.error("[conciliación] 🔴 el cobro del regalo llegó en otra moneda", {
+          sujeto,
+          pasarela: dlocalProvider.key,
+          cobro: paymentId,
+          evento: evento.id,
+          cobrado: `${importeCobrado} ${monedaCobrada ?? "(sin moneda)"}`,
+          debido: monedaDebida,
+        });
+        return NextResponse.json(
+          {
+            status: "descuadre",
+            sujeto,
+            error:
+              `el cobro llegó en ${monedaCobrada ?? "(sin moneda)"} y el regalo está en ` +
+              `${monedaDebida}: no se activa`,
+          },
+          { status: 500 },
+        );
+      }
+    }
+
+    // El sello, otra vez y con el mismo criterio que en la reserva: normalmente
+    // ya está puesto por el checkout —de hecho es por donde lo hemos
+    // encontrado—, y repetirlo cubre el cobro abierto por otra vía. Va ANTES de
+    // confirmar porque después `marcar_cobro_regalo` ya no escribe: solo acepta
+    // mientras el regalo sigue en 'pending_payment'.
+    //
+    // ⚠️ El `p_metadata` añade una clave HERMANA de `checkout`, no la pisa: el
+    // `||` de la RPC es un merge de PRIMER NIVEL.
+    if (regalo.status === "pending_payment") {
+      const { data: sellada, error } = await admin.rpc("marcar_cobro_regalo", {
+        p_credit_id: regalo.id,
+        p_provider_payment_id: paymentId,
+        p_metadata: {
+          webhook: {
+            pasarela: dlocalProvider.key,
+            evento: evento.id,
+            sellado_en: new Date().toISOString(),
+          },
+        },
+      });
+      // Un `false` aquí es raro: el regalo estaba pendiente hace dos consultas y
+      // ha dejado de estarlo entre medias. No tumba el webhook —el dinero se
+      // acredita igual y `confirm_gift_payment` decide— pero se ve.
+      if (error || sellada !== true) {
+        console.error("[webhook] 🔴 no se pudo sellar el DP- en el regalo", {
+          sujeto,
+          cobro: paymentId,
+          error: error?.message ?? "no se tocó ninguna fila",
+        });
+      }
+    }
+
+    const salida = await admin.rpc("confirm_gift_payment", {
+      p_credit_id: regalo.id,
+      p_success: true,
+      // ⚠️ Hoy la función no lo mira: su idempotencia es POR ESTADO, porque
+      // `payment_webhook_events` no puede guardar un regalo (`booking_id not
+      // null`). Se manda porque identifica el hecho —y con dLocal esa clave es
+      // `dlocalgo:<payment_id>:<status>`, sintetizada por el adaptador— y porque
+      // el día que exista dónde anotarlo, ya está puesto.
+      p_event_id: evento.id,
+      p_amount_charged: importeCobrado ?? undefined,
+    });
+
+    if (salida.error) {
+      if (salida.error.code === DESCUADRE) {
+        // A gritos antes que en silencio: la transacción se fue entera, dLocal
+        // va a reintentar cada 10 minutos durante 30 días con el dinero cobrado
+        // y el regalo sin activar, y la salida es MANUAL.
+        console.error("[conciliación] 🔴 lo cobrado no es lo que vale el regalo: NO se activa", {
+          sujeto,
+          pasarela: dlocalProvider.key,
+          cobro: paymentId,
+          evento: evento.id,
+          cobradoPorLaPasarela: importeCobrado,
+          segunLaBase: salida.error.message,
+          pista: salida.error.hint,
+        });
+        return NextResponse.json(
+          { status: "descuadre", sujeto, error: salida.error.message },
+          { status: 500 },
+        );
+      }
+      throw new Error(salida.error.message);
+    }
+
+    // 🔴 EL COBRO LLEGÓ Y EL REGALO YA NO LO ESPERABA. 'active' es el camino
+    // bueno y también la reentrega limpia; 'consumed', un regalo ya canjeado.
+    // Cualquier otro estado significa que alguien pagó por algo que ya no
+    // existe y que la función no ha tocado nada. 200 y no 500 a propósito:
+    // reintentar treinta días no devuelve un euro, solo repite este log.
+    const estado = salida.data;
+    if (estado !== "active" && estado !== "consumed") {
+      console.error("[X-02] 🔴 cobro de un regalo que ya no lo esperaba: NO se devuelve solo", {
+        sujeto,
+        estadoDelRegalo: estado,
+        pasarela: dlocalProvider.key,
+        cobro: paymentId,
+        evento: evento.id,
+        // A qué cobro apunta el regalo AHORA: si no es este `DP-…`, lo pagó otro
+        // y este es el de más. Es el primer dato que necesita quien vaya a
+        // devolver el dinero a mano.
+        cobroDelRegalo: regalo.provider_payment_id,
+        importe: importeCobrado,
+        queHacer:
+          "devolver el cargo a mano desde el panel de dLocal: late_payment_refunds no admite un regalo",
+      });
+      return NextResponse.json({ status: "regalo-huerfano", sujeto, estado });
+    }
+
+    return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto });
+  };
+
+  /**
+   * 🎁 La pregunta se hace SOLO cuando el evento va a tocar algo, y va antes de
+   * todo lo demás —incluido el `if (!ref)`— porque la red buena de aquí es el
+   * `DP-…`, que no depende del `order_id`. Un PENDING no acredita ni tumba
+   * nada, así que no hace falta saber de quién es para responderle.
+   */
+  if (evento.kind === "cobro-confirmado" || evento.kind === "cobro-fallido") {
+    const regalo = await regaloDelCobro();
+    if (regalo) {
+      if (evento.kind === "cobro-confirmado") return await cobroDeRegaloEntrante(regalo);
+
+      /**
+       * EXPIRED o CANCELLED sobre un regalo: **no se revoca**, y es una decisión.
+       * `confirm_gift_payment(p_success => false)` existe y lo dejaría en
+       * 'revoked'; no se llama porque un regalo no retiene ningún horario (al
+       * revés que una reserva, donde `expired` tiene que liberar el hueco) y
+       * porque pueden convivir dos cobros abiertos para el mismo regalo — ver
+       * `caducidadRegalo` en `api/pagos/checkout`. Tumbarlo porque uno caducó
+       * dejaría el otro vivo y pagable contra un regalo muerto, y sin X-02 para
+       * regalos eso es dinero cobrado que nadie devuelve. Al revés no se pierde
+       * nada: la fila sigue 'pending_payment' y `caducar_creditos()` la barre a
+       * los 30 días. El razonamiento completo está en el webhook de Stripe.
+       */
+      console.error("[webhook] cobro de un regalo caducado o fallido: no se revoca", {
+        sujeto: `regalo ${regalo.id}`,
+        estadoDelRegalo: regalo.status,
+        cobro: paymentId,
+        estadoEnElProveedor: estadoProveedor,
+        evento: evento.id,
+      });
+      return NextResponse.json({
+        status: "regalo-sin-cobrar",
+        tipo: evento.rawType,
+        sujeto: `regalo ${regalo.id}`,
+      });
+    }
+  }
 
   if (!ref) {
     // Firmado y real, pero sin sujeto reconocible en su `order_id` (un cobro

@@ -597,6 +597,192 @@ const nombreRaro = renderEmail({
 });
 assert.ok(!nombreRaro!.html.includes("<script>"), "coló un script por el nombre");
 
+// ── NTF-31..37 · CRÉDITOS Y REGALOS (`20260912110000`) ─────────────────────
+//
+// Lo que se comprueba aquí no es que rendericen —de eso ya se encarga el bucle
+// del contrato, y el «no existe la plantilla» lo caza la lista leída de las
+// migraciones—, sino las tres cosas que estos siete correos pueden decir MAL
+// sin que nada se rompa: prometer dinero que la plataforma no entrega, enseñar
+// una cifra que no significa lo que parece, y hablarle a la persona
+// equivocada. Las tres se envían perfectamente formateadas.
+
+const regalos = (template: string, payload: Record<string, unknown>) =>
+  renderEmail({ template, payload, nombre: "Lucía Fernández", baseUrl: BASE, ahora: AHORA })!;
+
+/**
+ * 🔴 EL TOPE NO ES UN PRECIO. Con `kind = 'mentoria'` el `amount` es un MÁXIMO:
+ * `credito_aplicable` rechaza la mentoría que lo supere («esta mentoría supera
+ * el tope de tu recompensa») y el sobrante de una más barata es de la
+ * plataforma. Un correo que pinte esos 24 dólares como si fueran saldo promete
+ * una mentoría gratis que el checkout va a rechazar — que es la peor forma de
+ * enterarse, y la misma que `/referidos` evita con la frase de al lado.
+ */
+const mentoriaGratis = regalos("reward_earned", {
+  credit_id: "cr-1", kind: "mentoria", amount: 2400, currency: "USD", destino: "cobro",
+});
+assert.ok(/de hasta/.test(mentoriaGratis.text), "NTF-31 enseña el tope de la mentoría gratis como si fuera un precio");
+assert.ok(
+  /no se puede aplicar a una que cueste más/.test(mentoriaGratis.text),
+  "NTF-31 promete una mentoría gratis sin decir que tiene tope",
+);
+
+/**
+ * 🔴 AL TUTOR NO SE LE PIDE NADA. Con `destino = 'payout'` el crédito se suma
+ * solo a su liquidación y no caduca (`credits_payout_no_caduca` prohíbe
+ * ponerle fecha): mandarlo a `/agendar` a canjear algo es mandarlo a arreglar
+ * lo que no está roto, exactamente el mismo fallo que NTF-23 tuvo con Wise.
+ */
+const premioDeTutor = regalos("reward_earned", {
+  credit_id: "cr-1", kind: "saldo", amount: 5000, currency: "USD", destino: "payout",
+});
+assert.ok(premioDeTutor.text.includes("/tutor/payouts"), "NTF-31 no lleva al tutor a sus cobros");
+assert.ok(!premioDeTutor.text.includes("/agendar"), "NTF-31 manda al tutor a canjear algo que se le paga solo");
+assert.ok(
+  premioDeTutor.text.includes("No tienes que hacer nada"),
+  "NTF-31 dejó de decirle al tutor que su recompensa le llega sola",
+);
+
+/**
+ * 🔴 NTF-33 NO PUEDE DECIR EL IMPORTE, y esta aserción es lo único que lo
+ * sostiene. Su payload trae `amount` y `currency` pero NO `kind`, y sin `kind`
+ * la cifra significa dos cosas distintas: dinero gastable con `saldo`, un tope
+ * que nunca fue de nadie con `mentoria`. Pintarla es mentir en la mitad de los
+ * casos. El día que el barrido encole `kind`, esto se cambia a propósito.
+ */
+const recompensaCaducada = regalos("reward_expired", {
+  credit_id: "cr-1", amount: 987654, currency: "USD",
+});
+assert.ok(
+  !recompensaCaducada.text.includes("876"),
+  "NTF-33 pinta un importe que sin `kind` no significa lo mismo (tope vs saldo)",
+);
+
+/**
+ * 🔴 NTF-36 NO SABE A QUIÉN LE HABLA: `avisar_creditos_por_expirar` lo encola a
+ * `coalesce(beneficiary_id, purchased_by)`, o sea al destinatario si ya reclamó
+ * el regalo y a quien lo pagó mientras no. Mismos payload y plantilla para los
+ * dos, así que el cuerpo tiene que decir las dos cosas — igual que
+ * `booking_reminder_24h`, y por el mismo motivo estructural.
+ */
+const regaloCaduca = regalos("gift_expiring", {
+  credit_id: "cr-2", product_id: "p-1", expires_at: "2026-09-20T12:00:00Z", dias: 7,
+});
+assert.ok(/Si el regalo es para ti/.test(regaloCaduca.text), "NTF-36 dejó de hablarle a quien lo recibe");
+assert.ok(/Si lo regalaste tú/.test(regaloCaduca.text), "NTF-36 dejó de hablarle a quien lo pagó");
+
+/**
+ * 🔴 EL `dias` DEL PAYLOAD ES UN TRAMO, NO UN NÚMERO DE DÍAS, y pintarlo tal
+ * cual produce dos frases que se contradicen con la fecha que va tres líneas
+ * más abajo. `avisar_creditos_por_expirar` lo calcula con un `case`: 1 si el
+ * crédito vence dentro de 24 horas y 7 en cualquier otro punto de la ventana —
+ * está ahí para que la clave de idempotencia distinga los dos avisos, no para
+ * leerlo. Los dos casos de abajo son reales y se miden en el huso de Bogotá:
+ *
+ *   · tramo 1 con vencimiento a las 22:17 de HOY  → «caduca mañana», falso.
+ *   · tramo 7 con vencimiento dentro de 6 días    → «en 7 días» encima de
+ *     «Caduca el 20 de septiembre», que es el tipo de incoherencia que manda a
+ *     la gente a soporte a preguntar cuál de las dos vale.
+ *
+ * Manda `expires_at` leído en el huso del destinatario (RN-35); el tramo solo
+ * cubre la fecha ilegible.
+ */
+const caducaHoyEnBogota = renderEmail({
+  template: "gift_expiring",
+  payload: { credit_id: "cr-2", product_id: "p-1", expires_at: "2026-09-15T03:17:00Z", dias: 1 },
+  nombre: "Lucía Fernández",
+  baseUrl: BASE,
+  timezone: "America/Bogota",
+  ahora: AHORA,
+})!;
+assert.ok(
+  /caduca hoy/i.test(caducaHoyEnBogota.subject),
+  "NTF-36 no cuenta el plazo en el huso de quien lee",
+);
+assert.ok(
+  !/mañana/.test(caducaHoyEnBogota.text),
+  "NTF-36 dice «mañana» por el tramo del payload cuando en el huso de quien lee vence hoy",
+);
+
+const tramoDeSieteQueSonSeis = renderEmail({
+  template: "reward_expiring",
+  payload: {
+    credit_id: "cr-1", kind: "saldo", restante: 1800, currency: "USD",
+    expires_at: "2026-09-21T03:17:00Z", dias: 7,
+  },
+  nombre: "Lucía Fernández",
+  baseUrl: BASE,
+  timezone: "America/Bogota",
+  ahora: AHORA,
+})!;
+assert.ok(
+  tramoDeSieteQueSonSeis.text.includes("20 de septiembre"),
+  "NTF-32 no fecha la caducidad en el huso de quien lee",
+);
+assert.ok(
+  !/en 7 días/.test(tramoDeSieteQueSonSeis.text),
+  "NTF-32 dice «en 7 días» encima de una fecha que está a seis: el `dias` del payload es un tramo",
+);
+
+/**
+ * 🔴 NTF-37 SE ENCOLA DOS VECES Y LO ÚNICO QUE DISTINGUE LAS COPIAS ES
+ * `amount`: la de quien compró lo lleva, la de quien recibió no —a propósito,
+ * lo que alguien pagó por ti no es asunto tuyo—. La rama mira si es un NÚMERO y
+ * no si el importe se pudo formatear, porque con la moneda ausente `dinero()`
+ * devuelve null y el comprador acabaría leyendo el correo del destinatario.
+ */
+const compradorCaducado = regalos("gift_expired", {
+  credit_id: "cr-2", product_id: "p-1", amount: 4200, currency: "USD",
+});
+const destinatarioCaducado = regalos("gift_expired", { credit_id: "cr-2", product_id: "p-1" });
+assert.ok(compradorCaducado.text.includes("42"), "NTF-37 no le dice al comprador cuánto costó el regalo");
+assert.ok(/regalaste/.test(compradorCaducado.text), "NTF-37 no le habla al comprador como tal");
+assert.ok(
+  !/regalaste|compraste/.test(destinatarioCaducado.text),
+  "NTF-37 le habla al destinatario como si hubiera pagado el regalo",
+);
+const sinMoneda = regalos("gift_expired", { credit_id: "cr-2", product_id: "p-1", amount: 4200 });
+assert.ok(
+  /regalaste/.test(sinMoneda.text),
+  "NTF-37 manda al comprador el correo del destinatario en cuanto falta la moneda",
+);
+
+// Y ninguna de las dos promete devolver el dinero: el cargo ya se liquidó y
+// `credits` no tiene camino automático de vuelta. Devolverlo es política
+// comercial —se hace a mano con `status = 'refunded'`— y comprometerla desde
+// una plantilla es comprometer a operaciones sin que operaciones se entere.
+assert.ok(
+  !/reembols|te lo devolvemos|se te devuelve/i.test(compradorCaducado.text + destinatarioCaducado.text),
+  "NTF-37 promete un reembolso que no existe automáticamente",
+);
+
+/**
+ * 🔴 NTF-35 ES LA ÚNICA PLANTILLA QUE PUEDE LLEGARLE A ALGUIEN SIN CUENTA, y
+ * las dos aserciones de abajo son lo que impide que ese caso se pierda.
+ *
+ * El botón va a `/reservas` —que tiene guarda, y está bien: un enlace de correo
+ * es una carga de documento, no una navegación de cliente, así que la regla de
+ * oro 13 no aplica y la cadena `/reservas` → `/login?next=` → `/signup?next=`
+ * acaba en la misma pantalla, que además reclama el regalo al pintarse—. Pero
+ * ese rebote NO puede decirle a nadie lo único que de verdad importa: que el
+ * alta tiene que ir con ESA dirección, porque `reclamar_regalos_por_correo` ata
+ * por `lower(btrim(email))` y un alta con otro correo deja el regalo huérfano.
+ * Por eso la instrucción y el enlace público van escritos en el cuerpo.
+ */
+const regaloRecibido = regalos("gift_received", {
+  credit_id: "cr-2", product_id: "p-1", gift_message: "¡Felicidades! <3 & a por el siguiente",
+});
+assert.ok(
+  regaloRecibido.html.includes(`${BASE}/signup?next=/reservas`),
+  "NTF-35 no ofrece una puerta sin guarda a quien todavía no tiene cuenta",
+);
+assert.ok(
+  /misma dirección de correo/i.test(regaloRecibido.text),
+  "NTF-35 dejó de decir que hay que registrarse con ESE correo, que es lo que ata el regalo",
+);
+// La dedicatoria la escribe un desconocido: llega entera y llega escapada.
+assert.ok(regaloRecibido.text.includes("¡Felicidades!"), "la dedicatoria del regalo no llegó al correo");
+assert.ok(!regaloRecibido.html.includes("<3 &"), "la dedicatoria entró en el HTML sin escapar");
+
 /**
  * ⚠️ EL RECUENTO SE CUENTA, NO SE ESCRIBE. El «31 casos borde» que había aquí
  * fue cierto el día que alguien lo tecleó y dejó de serlo en el correo

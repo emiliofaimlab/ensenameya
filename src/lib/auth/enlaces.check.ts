@@ -30,8 +30,13 @@ import { join, relative } from "node:path";
 /** Primer segmento de cada ruta que vive bajo un layout con guarda. */
 const GUARDADAS = [
   "account", "admin", "agendar", "app", "chat", "onboarding",
-  "pagos", "pedidos", "referidos", "reservar", "reservas", "room", "tutor",
+  "pagos", "pedidos", "referidos", "regalar", "reservar", "reservas",
+  "room", "tutor",
 ];
+// `regalar` cubre las cinco pantallas del regalo, las de `(app)` y la de pago
+// —`/regalar/<creditId>/pagar` vive en `(checkout)`—. Entra en la lista por lo
+// mismo que `pedidos` y `reservas`: el grupo de rutas no guarda nada, guarda la
+// página con su `requireUser()`, y desde fuera de `(app)` el efecto es idéntico.
 
 /**
  * Dónde se aplica: lo que puede pintarse FUERA de `(app)`. Dentro de `(app)`

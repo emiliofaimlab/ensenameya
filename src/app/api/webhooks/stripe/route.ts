@@ -72,6 +72,43 @@ type EstadoReserva = Database["public"]["Enums"]["booking_status"];
  * «¿sigue esperándose este cobro?» pasa a ser **de todas las líneas a la vez**
  * (P-1): si una sola ha dejado de esperarlo, el pedido no se puede entregar
  * entero y se devuelve el cargo ENTERO sin acreditar nada.
+ *
+ * ── ⚠️⚠️ 🎁 Y UN TERCER SUJETO QUE **NO TIENE RESERVA**: EL REGALO ──────────
+ *
+ * «Regalar una mentoría» cobra por adelantado una fila de `credits` con
+ * `source='gift'` (`20260912110000` §10). Ese cobro llega por aquí como
+ * cualquier otro y hay que mandarlo a `confirm_gift_payment`, **jamás a
+ * `confirm_payment`**: no hay `payments`, no hay `bookings` y la segunda
+ * acabaría tratando un id de crédito como un id de reserva.
+ *
+ * CÓMO SE DISTINGUE, y esto es lo único que hay que entender del bloque:
+ * **preguntándole a la base, no a la etiqueta del evento**. `CobroRef` no tiene
+ * variante de regalo (ver la cabecera de `api/pagos/checkout`), así que un cobro
+ * de regalo llega rotulado `{tipo:"booking"}` con un `credits.id` dentro. Ese
+ * uuid viaja en el `client_reference_id` FIRMADO por Stripe —no lo pone el
+ * navegador— y lo que se hace con él es preguntar si existe en `credits` con
+ * `source='gift'`. Un uuid es de una tabla o de la otra, nunca de las dos.
+ *
+ * ⚠️ Y SE PREGUNTA ANTES QUE NADA, porque el fallo de no preguntar es MUDO: sin
+ * ese paso, `cobroEntrante` buscaría la reserva `<credits.id>`, no la
+ * encontraría, devolvería «ajeno» con 200 y Stripe dejaría de reintentar. Un
+ * regalo cobrado y sin activar, para siempre, sin un solo error en ninguna
+ * parte (regla de oro 11). Por eso el `error` de esa consulta se RELANZA: un
+ * grant que falte no se puede leer como «no es un regalo» (regla de oro 9).
+ *
+ * 🔴 Y LA IDEMPOTENCIA DEL REGALO NO ES LA DE AQUÍ: `payment_webhook_events`
+ * tiene PK `(event_id, booking_id)` con `booking_id NOT NULL` desde
+ * `20260827160000:59-68`, así que **un regalo no se puede deduplicar ahí**. La
+ * pone `confirm_gift_payment` POR ESTADO: si el crédito ya no está en
+ * 'pending_payment', devuelve su estado y no hace nada. Basta porque un regalo
+ * tiene un solo cobro y un solo sujeto — la matriz (evento × N líneas) que
+ * obligó a la clave compuesta no existe aquí. Quien venga a «arreglar» la
+ * deduplicación del regalo con esa tabla se va a chocar con el `not null`.
+ *
+ * ⚠️ LO QUE NO TIENE EL REGALO ES X-02: `late_payment_refunds` solo admite
+ * `booking_id` o `order_id` (check de `20260827170000`), así que un cobro de
+ * regalo que llega tarde NO se puede devolver por aquí sin una migración. Se
+ * grita y se deja escrito; ver `cobroDeRegaloEntrante`.
  */
 
 /** Node, no edge: la verificación de firma usa crypto de Node. Es el runtime por defecto. */
@@ -91,6 +128,23 @@ const YA_CONTABILIZADO = ["paid", "refunded", "partially_refunded"];
  * quien lo lea tiene que ver los dos importes sin abrir un stack trace.
  */
 const DESCUADRE = "23514";
+
+/**
+ * 🎁 Las columnas del regalo que este archivo necesita, y ninguna más.
+ *
+ * `credits` no se lee con `.select("*")` en ninguna parte: al navegador se le
+ * dan columnas sueltas y a `service_role` solo `select`, así que pedir lo que no
+ * se usa es ampliar la superficie por pereza. `provider_payment_id` entra
+ * porque es lo que distingue una reentrega de un cobro nuevo.
+ */
+type RegaloCobrado = {
+  id: string;
+  status: string;
+  currency: string;
+  provider_payment_id: string | null;
+};
+
+const COLUMNAS_REGALO = "id, status, currency, provider_payment_id";
 
 export async function POST(req: Request) {
   // ⚠️ EL CUERPO CRUDO. `req.text()` y no `req.json()`, y viaja como cadena
@@ -129,6 +183,213 @@ export async function POST(req: Request) {
 
   /** Para los registros: `booking <uuid>` o `pedido <uuid>`. */
   const etiqueta = ref.tipo === "order" ? `pedido ${ref.id}` : `booking ${ref.id}`;
+
+  /**
+   * 🎁 ¿ESTE COBRO ES DE UN REGALO? — la pregunta que hay que hacer antes de
+   * tratar el sujeto como una reserva. El porqué entero está en la cabecera.
+   *
+   * Se busca por el SUJETO y solo por el sujeto, y eso merece una frase: el
+   * `credits_provider_pid_idx` existe para reencontrar el regalo por su
+   * `provider_payment_id`, pero con Stripe esa columna **todavía no está
+   * escrita** cuando llega este evento — el `pi_` no existe hasta que alguien
+   * paga, así que el checkout no pudo sellarlo (a diferencia de dLocal, que
+   * sella su `DP-…` antes de redirigir). Buscar por ahí aquí sería una consulta
+   * de más que no puede acertar. El `id` del crédito, en cambio, viaja en el
+   * `client_reference_id` firmado desde que el cobro se abre.
+   */
+  const regaloDelCobro = async (): Promise<RegaloCobrado | null> => {
+    const { data, error } = await admin
+      .from("credits")
+      .select(COLUMNAS_REGALO)
+      .eq("id", ref.id)
+      .eq("source", "gift")
+      .maybeSingle();
+
+    // ⚠️ SE RELANZA. Regla de oro 9: a `service_role` puede faltarle el grant y
+    // eso muerde en TIEMPO DE EJECUCIÓN. Tratarlo como «no es un regalo»
+    // mandaría el cobro al camino de la reserva, que respondería «ajeno» con
+    // 200 y dejaría el regalo cobrado y sin activar para siempre.
+    if (error) throw new Error(error.message);
+    return data;
+  };
+
+  /**
+   * 🎁 ACREDITAR EL COBRO DE UN REGALO.
+   *
+   * Hace lo mismo que `cobroEntrante` y en el mismo orden —moneda, sello,
+   * confirmación— con dos diferencias que no son de estilo:
+   *
+   *   · la conciliación de importe se compara contra `credits.amount` y la hace
+   *     `confirm_gift_payment` DENTRO de la base (regla de oro 2). Aquí solo se
+   *     le pasa lo que dijo la pasarela;
+   *   · **no hay X-02**. `late_payment_refunds` exige `booking_id` o `order_id`
+   *     (check de `20260827170000`) y un regalo no tiene ninguno, así que un
+   *     cobro que llegue cuando el regalo ya no lo espera NO se puede devolver
+   *     desde aquí sin una migración. Se grita como incidente y la salida es
+   *     MANUAL, igual que la del descuadre. Devolver el dinero «a mano» desde el
+   *     panel de Stripe es seguro; hacerlo aquí sin la fila que lo registre
+   *     sería un reembolso sin constancia, y con dos entregas simultáneas, dos.
+   */
+  const cobroDeRegaloEntrante = async (regalo: RegaloCobrado): Promise<NextResponse> => {
+    const pi = evento.chargeRef;
+    const sujeto = `regalo ${regalo.id}`;
+
+    /**
+     * 🔴 LO QUE STRIPE COBRÓ DE VERDAD. Sale del evento (`amount_total` de la
+     * Checkout Session), nunca de nuestra base: comparar `credits.amount`
+     * consigo mismo no concilia nada.
+     */
+    const importeCobrado = evento.amountMinor;
+
+    if (importeCobrado === null) {
+      // No se inventa. Sin importe queda en pie la otra mitad del cerrojo, el
+      // marcador `credits.checkout_amount` que selló
+      // `marcar_cobro_regalo_abierto` y que `confirm_gift_payment` compara
+      // igual. Se grita porque una Session confirmada sin `amount_total` es una
+      // forma que no conocemos.
+      console.error("[conciliación] ⚠️ regalo confirmado sin importe: no se concilia", {
+        sujeto,
+        evento: evento.id,
+        tipo: evento.rawType,
+        session: evento.objectRef,
+      });
+    } else {
+      // ⚠️ LA MONEDA ANTES QUE EL IMPORTE, por lo mismo que en la reserva: M-01,
+      // el *adaptive pricing* que cobró «PAB 46,80» por «45,00 US$». Un importe
+      // en otra moneda es un número perfectamente comparable y una comparación
+      // perfectamente falsa.
+      const monedaCobrada = evento.currency?.toUpperCase() ?? null;
+      const monedaDebida = regalo.currency.toUpperCase();
+
+      if (monedaCobrada === null || monedaCobrada !== monedaDebida) {
+        console.error("[conciliación] 🔴 el cobro del regalo llegó en otra moneda", {
+          sujeto,
+          pasarela: stripeProvider.key,
+          evento: evento.id,
+          session: evento.objectRef,
+          cobrado: `${importeCobrado} ${monedaCobrada ?? "(sin moneda)"}`,
+          debido: monedaDebida,
+        });
+        return NextResponse.json(
+          {
+            status: "descuadre",
+            sujeto,
+            error:
+              `el cobro llegó en ${monedaCobrada ?? "(sin moneda)"} y el regalo está en ` +
+              `${monedaDebida}: no se activa`,
+          },
+          { status: 500 },
+        );
+      }
+    }
+
+    /**
+     * EL SELLO DEL `pi_`, Y AQUÍ TIENE OTRA CASA: `credits.provider_payment_id`
+     * en vez de `payments`. Va ANTES de confirmar por el mismo motivo de
+     * siempre —que una reentrega que llegue en medio encuentre la referencia—
+     * y porque después ya no se puede: `marcar_cobro_regalo` solo escribe
+     * mientras el regalo sigue en 'pending_payment'.
+     *
+     * ⚠️ El `p_metadata` añade una clave HERMANA de `checkout`, no la pisa: el
+     * `||` de la RPC es un merge de PRIMER NIVEL, así que mandar `{checkout:…}`
+     * borraría el rastro de quién abrió el cobro.
+     */
+    // La condición es el estado y no «¿ya está sellado?»: la RPC solo escribe
+    // mientras el regalo siga en 'pending_payment', así que llamarla en una
+    // reentrega —donde ya está 'active'— sería pedirle un no-op y tener que
+    // distinguir después ese `false` bueno de uno malo.
+    if (pi && regalo.status === "pending_payment") {
+      const { data: sellada, error } = await admin.rpc("marcar_cobro_regalo", {
+        p_credit_id: regalo.id,
+        p_provider_payment_id: pi,
+        p_metadata: {
+          webhook: {
+            pasarela: stripeProvider.key,
+            evento: evento.id,
+            sellado_en: new Date().toISOString(),
+          },
+        },
+      });
+      // Aquí un `false` SÍ es raro: el regalo estaba pendiente hace dos
+      // consultas y ha dejado de estarlo entre medias. No tumba el webhook —el
+      // dinero se acredita igual y `confirm_gift_payment` decide— pero se ve.
+      if (error || sellada !== true) {
+        console.error("[webhook] 🔴 no se pudo sellar el pi_ en el regalo", {
+          sujeto,
+          pi,
+          error: error?.message ?? "no se tocó ninguna fila",
+        });
+      }
+    }
+
+    const salida = await admin.rpc("confirm_gift_payment", {
+      p_credit_id: regalo.id,
+      p_success: true,
+      // ⚠️ HOY LA FUNCIÓN NO LO MIRA, y se le pasa igual. Su idempotencia es POR
+      // ESTADO porque `payment_webhook_events` no puede guardar un regalo (su PK
+      // exige `booking_id not null`). Se manda porque es el dato que identifica
+      // el hecho y porque el día que exista dónde anotarlo, ya está puesto.
+      p_event_id: evento.id,
+      p_amount_charged: importeCobrado ?? undefined,
+    });
+
+    if (salida.error) {
+      if (salida.error.code === DESCUADRE) {
+        // Mismo criterio que en la reserva: a gritos antes que en silencio. La
+        // transacción se fue entera, Stripe va a reintentar tres días con el
+        // dinero cobrado y el regalo sin activar, y la salida es MANUAL.
+        console.error("[conciliación] 🔴 lo cobrado no es lo que vale el regalo: NO se activa", {
+          sujeto,
+          pasarela: stripeProvider.key,
+          evento: evento.id,
+          session: evento.objectRef,
+          cobradoPorLaPasarela: importeCobrado,
+          segunLaBase: salida.error.message,
+          pista: salida.error.hint,
+        });
+        return NextResponse.json(
+          { status: "descuadre", sujeto, error: salida.error.message },
+          { status: 500 },
+        );
+      }
+      throw new Error(salida.error.message);
+    }
+
+    /**
+     * 🔴 EL COBRO LLEGÓ Y EL REGALO YA NO LO ESPERABA — el X-02 que no tiene red.
+     *
+     * `confirm_gift_payment` devuelve el estado en el que dejó (o encontró) el
+     * regalo. 'active' es el camino bueno Y la reentrega limpia; 'consumed' es
+     * un regalo que además ya se canjeó. Cualquier otro ('revoked', 'expired',
+     * 'refunded') significa que alguien pagó por algo que ya no existe y que la
+     * función NO ha tocado nada.
+     *
+     * No se reembolsa desde aquí —ver el bloque de esta función— así que lo que
+     * queda es que se vea. 200 y no 500 a propósito: reintentar no lo arregla, y
+     * tres días de reentregas solo repetirían este log sin devolver un euro.
+     */
+    const estado = salida.data;
+    if (estado !== "active" && estado !== "consumed") {
+      console.error("[X-02] 🔴 cobro de un regalo que ya no lo esperaba: NO se devuelve solo", {
+        sujeto,
+        estadoDelRegalo: estado,
+        pasarela: stripeProvider.key,
+        evento: evento.id,
+        session: evento.objectRef,
+        pi,
+        // A qué cobro apunta el regalo AHORA: si no es este `pi_`, lo pagó otra
+        // Session y esta es la de más. Es el primer dato que necesita quien
+        // vaya a devolver el dinero a mano.
+        cobroDelRegalo: regalo.provider_payment_id,
+        importe: importeCobrado,
+        queHacer:
+          "devolver el cargo a mano desde el panel de Stripe: late_payment_refunds no admite un regalo",
+      });
+      return NextResponse.json({ status: "regalo-huerfano", sujeto, estado });
+    }
+
+    return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto });
+  };
 
   /**
    * `confirm_payment` ya es idempotente por tres vías: descarta el `event_id`
@@ -639,12 +900,56 @@ export async function POST(req: Request) {
 
     // Cobro confirmado — instantáneo o diferido, el mismo filtro para los dos:
     // el diferido es justo el caso en que la reserva lleva mucho rato muerta.
-    case "cobro-confirmado":
+    case "cobro-confirmado": {
+      // 🎁 La pregunta va PRIMERO: si el sujeto es un regalo, `cobroEntrante`
+      // buscaría una reserva que no existe y respondería «ajeno» con 200.
+      const regalo = await regaloDelCobro();
+      if (regalo) return await cobroDeRegaloEntrante(regalo);
       return await cobroEntrante();
+    }
 
     // Fallo terminal. `expired` es además el que libera el horario cuando el
     // alumno abandona el checkout.
     case "cobro-fallido": {
+      /**
+       * 🎁 UN REGALO NO SE TUMBA AQUÍ, Y ES UNA DECISIÓN, NO UN OLVIDO.
+       *
+       * `confirm_gift_payment(p_success => false)` existe y deja el regalo en
+       * 'revoked'. No se llama, y el motivo es la asimetría con la reserva:
+       *
+       *   · una reserva RETIENE UN HORARIO, así que `expired` tiene que
+       *     cancelarla — el hueco es de otra persona desde ese momento;
+       *   · un regalo no retiene nada (`comprar_regalo` no crea `bookings` ni
+       *     `sessions` ni toca la agenda), y su caducidad ya la lleva la base:
+       *     nace con 30 días y la barre `caducar_creditos()`.
+       *
+       * Y lo que decide: la Session de un regalo vive hasta ~12 h (ver
+       * `caducidadRegalo` en `api/pagos/checkout`), así que pueden convivir dos
+       * cobros abiertos para el mismo regalo. Revocarlo porque UNO caducó
+       * dejaría el otro vivo y pagable contra un regalo muerto — y sin X-02 para
+       * regalos, eso es dinero cobrado que nadie devuelve. Al revés no se pierde
+       * nada: el regalo sigue 'pending_payment', cualquiera de los dos cobros lo
+       * activa y, si no lo paga nadie, el barrido se lo lleva.
+       *
+       * El día que `late_payment_refunds` admita un regalo, revocar aquí pasa a
+       * ser seguro y esta rama se puede cerrar como la de la reserva.
+       */
+      const regalo = await regaloDelCobro();
+      if (regalo) {
+        console.error("[webhook] cobro de un regalo caducado o fallido: no se revoca", {
+          sujeto: `regalo ${regalo.id}`,
+          estadoDelRegalo: regalo.status,
+          evento: evento.id,
+          tipo: evento.rawType,
+          session: evento.objectRef,
+        });
+        return NextResponse.json({
+          status: "regalo-sin-cobrar",
+          tipo: evento.rawType,
+          sujeto: `regalo ${regalo.id}`,
+        });
+      }
+
       // `null`: no hay cobro que conciliar. `confirm_payment` ni mira el
       // argumento cuando `p_success` es falso — ahí lo que hace es lo contrario,
       // devolver al alumno el crédito que financiaba el pago que se cayó.

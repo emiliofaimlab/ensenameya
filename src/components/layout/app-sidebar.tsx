@@ -14,6 +14,7 @@ import {
   CreditCardIcon,
   FolderTreeIcon,
   GiftIcon,
+  HeartHandshakeIcon,
   HomeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
@@ -111,6 +112,15 @@ const STUDENT_ITEMS: Item[] = [
   { href: "/agendar", label: "Agendar", icon: CalendarPlusIcon },
   { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
+  // «Regalar una mentoría»: comprar para OTRA persona, que elige ella el día y
+  // la hora. No duplica «Agendar» —eso es reservar para uno mismo— ni «Invita y
+  // gana», que es el programa de referidos. Icono distinto del regalo a
+  // propósito: `GiftIcon` ya es el de la fila de abajo y dos regalos seguidos en
+  // la misma columna se leen como la misma cosa.
+  //
+  // Pantalla COMPARTIDA, igual que «Invita y gana»: regalar no es una acción de
+  // alumno, así que la entrada va también en `TUTOR_ITEMS`.
+  { href: "/regalar", label: "Regalar", icon: HeartHandshakeIcon },
   // Referidos v2 · «Invita y gana» ya no es un iframe de Referral Factory, es
   // una pantalla nuestra — y la MISMA para alumno y para tutor: dentro se
   // pintan las campañas visibles que le tocan a cada uno, así que el menú no
@@ -218,6 +228,12 @@ export const TUTOR_ITEMS: Item[] = [
       { href: "/account#avisos", label: "Avisos" },
     ],
   },
+  // La misma pantalla que ve el alumno, y por el mismo motivo que «Invita y
+  // gana»: regalar una mentoría no es una acción de alumno. Sin esta entrada,
+  // un tutor que entra a `/regalar` desde su panel se queda con el menú de
+  // tutor **entero apagado** (`matchLength` devuelve -1 en todos), o sea con un
+  // menú que no dice dónde estás, que es lo único que un menú tiene que hacer.
+  { href: "/regalar", label: "Regalar", icon: HeartHandshakeIcon },
   // Referidos v2 · «Invita y gana» ya no es un iframe de Referral Factory, es
   // una pantalla nuestra — y la MISMA para alumno y para tutor: dentro se
   // pintan las campañas visibles que le tocan a cada uno, así que el menú no

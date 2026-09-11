@@ -1516,6 +1516,494 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       ],
     };
   },
+
+  // ══ I · Recompensas y regalos ═════════════════════════════════════════════
+  //
+  // Las siete que encola `20260912110000`. Son la MISMA fila de `credits` vista
+  // desde tres sitios —la recompensa que gana quien invita, el regalo que
+  // alguien compra, y la caducidad de cualquiera de los dos—: lo único que
+  // cambia entre ellas es QUIÉN PUSO EL DINERO (`source`) y POR DÓNDE SALE
+  // (`destino`).
+  //
+  // ⚠️ NINGUNA DE LAS SIETE PUEDE NOMBRAR LA MENTORÍA, Y NO ES UN OLVIDO. El
+  // contexto lo resuelve `pending_email_notifications` colgando de
+  // `payload->>'booking_id'` (`20260911170000`, el lateral de la reserva), y un
+  // crédito NO TIENE RESERVA todavía — ese es justo el punto del regalo: se
+  // agenda después. Lo que el payload trae es `product_id`, que sirve de ENLACE
+  // (`/products/<id>` es público) pero NO de texto: un uuid no se le enseña a
+  // nadie. Así que estos correos dicen «una mentoría» en genérico, que es lo
+  // único cierto. El día que ese lateral aprenda a resolver un `product_id`
+  // suelto, aquí ya hay `ficha`/`tarjetaClase` esperando.
+  //
+  // ⚠️ Y NINGUNA ES «NO ESENCIAL» (`baja`), a diferencia de los siete correos
+  // que sí lo son. Estos hablan de dinero y de bienes que YA son de quien los
+  // lee —ganó una recompensa, le regalaron una mentoría, algo suyo caduca—, no
+  // de promoción. El día que S-49 exista, no son estos los que se apagan.
+
+  /**
+   * NTF-31 · la recompensa que la campaña de referidos promete al REFERIDOR.
+   *
+   * Tres formas y una sola fila, exactamente como las pinta `/referidos`
+   * (`recompensaDe`), y con el mismo orden de lectura: **`destino` manda sobre
+   * `kind`**, porque se congela al emitir y es lo que decide si esto se gasta o
+   * si llega solo. Derivarlo del rol al escribir sería contradecir a la base.
+   *
+   *   · `destino = 'payout'` → el TUTOR. Se suma a su liquidación y **no tiene
+   *     fecha de caducidad** (`credits_payout_no_caduca` prohíbe ponérsela), así
+   *     que este correo no le pide nada: pedirle que canjee algo que le llega
+   *     solo es mandarlo a arreglar lo que no está roto.
+   *   · `kind = 'mentoria'` → una mentoría gratis con TOPE. `amount` es el
+   *     MÁXIMO, no un saldo: `credito_aplicable` rechaza la mentoría que lo
+   *     supere («esta mentoría supera el tope de tu recompensa») y el sobrante
+   *     de una más barata es de la plataforma. Decirlo aquí es lo que evita la
+   *     sorpresa en el checkout.
+   *   · `kind = 'saldo'` → dinero que se descuenta en el cobro; se paga la
+   *     diferencia.
+   *
+   * ⚠️ EL PAYLOAD NO TRAE `expires_at`, así que este correo NO DICE LA FECHA.
+   * Teclear «30 días» aquí sería copiar el `reward_expires_days` de la campaña
+   * a un sitio donde nadie lo va a actualizar el día que el cliente lo cambie;
+   * la fecha exacta la tiene `/referidos`, y NTF-32 la dice cuando se acerca.
+   */
+  reward_earned: (x) => {
+    const importe = dinero(x.p?.amount, x.p?.currency);
+
+    if (x.p?.destino === "payout") {
+      return {
+        asunto: con("Ganaste una recompensa por invitar", importe),
+        familia: "ok",
+        epigrafe: "Invita y gana",
+        titulo: "Tu invitación ya cuenta",
+        preheader: importe
+          ? `${importe} que se suman solos a tu próximo cobro.`
+          : "Tu recompensa se suma sola a tu próximo cobro.",
+        motivo: "Recibes este correo porque alguien entró en Enséñame Ya con tu invitación.",
+        cuerpo: [
+          parrafo(
+            "La persona que invitaste ya cumplió lo que pedía la campaña, así que la recompensa es tuya.",
+          ),
+          importeGrande("Tu recompensa", importe, {
+            sub: "Se suma a tu próximo cobro",
+            color: VERDE,
+          }),
+          caja(
+            "<strong>No tienes que hacer nada.</strong> Se suma sola a tu próxima liquidación: no hay nada que canjear ni que reservar, y no tiene fecha de caducidad.",
+            "ok",
+          ),
+          boton("Ver mis cobros", `${x.base}/tutor/payouts#saldo`),
+          enlaceSecundario("Seguir invitando", `${x.base}/referidos`),
+        ],
+      };
+    }
+
+    const mentoria = x.p?.kind === "mentoria";
+    const saldo = x.p?.kind === "saldo";
+    return {
+      asunto: mentoria
+        ? "Ganaste una mentoría gratis"
+        : con(saldo ? "Ganaste saldo por invitar" : "Ganaste una recompensa por invitar", importe),
+      familia: "ok",
+      epigrafe: "Invita y gana",
+      titulo: "Tu invitación ya cuenta",
+      preheader: mentoria
+        ? "Tienes una mentoría gratis esperándote."
+        : importe
+          ? `${importe} para tus próximas mentorías.`
+          : "Tienes una recompensa esperándote.",
+      motivo: "Recibes este correo porque alguien entró en Enséñame Ya con tu invitación.",
+      cuerpo: [
+        parrafo(
+          "La persona que invitaste ya cumplió lo que pedía la campaña, así que la recompensa es tuya.",
+        ),
+        // ⚠️ La ETIQUETA cambia con `kind` y no es cosmética: el mismo número es
+        // un tope con `mentoria` y dinero gastable con `saldo`. «US$ 24,00» a
+        // secas encima de una mentoría gratis se lee como un precio.
+        importeGrande(mentoria ? "Vale por una mentoría de hasta" : "Tu recompensa", importe, {
+          sub: mentoria ? null : "Para tus próximas mentorías",
+          color: VERDE,
+        }),
+        mentoria
+          ? caja(
+              "Se canjea <strong>entera y en una sola mentoría</strong>: no se puede aplicar a una que cueste más que ese tope, y si eliges una más barata la diferencia no se guarda. En un paquete de varias sesiones cubre una y pagas el resto.",
+              "ok",
+            )
+          : saldo
+            ? caja(
+                "Se descuenta al reservar: <strong>pagas solo la diferencia</strong>. Puedes repartirlo entre varias mentorías hasta agotarlo.",
+                "ok",
+              )
+            : null,
+        nota(
+          "Tu recompensa tiene fecha de caducidad: la ves en «Invita y gana» y te avisamos antes de que venza.",
+        ),
+        boton(
+          mentoria ? "Reservar mi mentoría gratis" : saldo ? "Usar mi saldo" : "Ver mi recompensa",
+          mentoria || saldo ? `${x.base}/agendar` : `${x.base}/referidos`,
+        ),
+        enlaceSecundario("Ver todas mis recompensas", `${x.base}/referidos`),
+      ],
+    };
+  },
+
+  /**
+   * NTF-32 · a 7 días y a 1 día. `dias` trae el TRAMO (1 o 7) y es lo que hace
+   * que sean dos correos como mucho por crédito, por muchas pasadas que dé el
+   * barrido: la clave de idempotencia lo lleva dentro (`CRED:exp7` / `CRED:exp1`).
+   *
+   * ⚠️ Aquí NUNCA aterriza un tutor con `destino = 'payout'`: ese crédito no
+   * tiene `expires_at` y `avisar_creditos_por_expirar` filtra por fecha. Por eso
+   * el cuerpo puede hablar de canjear sin condicionarlo — y por eso `destino` no
+   * hace falta en este payload.
+   */
+  reward_expiring: (x) => {
+    const importe = dinero(x.p?.restante, x.p?.currency);
+    const mentoria = x.p?.kind === "mentoria";
+    const saldo = x.p?.kind === "saldo";
+    // Dos constantes y no un `may()`: `may` devuelve `string | null` y un null
+    // dentro de una plantilla de texto se imprime como «null» — que es justo lo
+    // que el check de contexto vacío persigue.
+    const Que = mentoria ? "Tu mentoría gratis" : saldo ? "Tu saldo" : "Tu recompensa";
+    const tramo = x.p?.dias;
+    // ⚠️ `plazo` sale de `expires_at`, NO del `dias` del payload: ver
+    // `plazoDeCaducidad`. El tramo es solo el respaldo.
+    const plazo = plazoDeCaducidad(
+      x.p?.expires_at,
+      typeof tramo === "number" ? tramo : null,
+      x.tz,
+      x.ahora,
+    );
+    // El día de la caducidad, EN EL HUSO DE QUIEN LEE (RN-35): una fecha que
+    // cambia de día seis husos más allá es peor que ninguna.
+    const fecha = dia(x.p?.expires_at, x.tz);
+    return {
+      asunto: plazo ? `${Que} caduca ${plazo}` : `${Que} está a punto de caducar`,
+      familia: "alerta",
+      epigrafe: "Caduca pronto",
+      titulo: plazo === "hoy" ? "Caduca hoy" : plazo === "mañana" ? "Te queda un día" : "Se te acaba el plazo",
+      preheader: fecha
+        ? `${Que} caduca el ${fecha} y sigue sin usarse.`
+        : `${Que} está a punto de caducar y sigue sin usarse.`,
+      motivo: "Recibes este correo porque tienes una recompensa a punto de caducar.",
+      cuerpo: [
+        parrafo(
+          `${Que} sigue sin usarse y caduca ${plazo ?? "pronto"}. Cuando venza no se puede recuperar.`,
+        ),
+        importeGrande(mentoria ? "Vale por una mentoría de hasta" : "Te queda", importe, {
+          sub: fecha ? `Caduca el ${fecha}` : null,
+          color: ROJO,
+        }),
+        mentoria
+          ? caja(
+              "Se canjea entera y en una sola mentoría, así que basta con que reserves una que no pase de ese tope.",
+              "alerta",
+            )
+          : saldo
+            ? caja(
+                "Se descuenta al reservar: <strong>pagas solo la diferencia</strong>.",
+                "alerta",
+              )
+            : null,
+        boton(
+          mentoria ? "Reservar mi mentoría gratis" : saldo ? "Usar mi saldo" : "Usar mi recompensa",
+          `${x.base}/agendar`,
+        ),
+        enlaceSecundario("Ver mis recompensas", `${x.base}/referidos`),
+      ],
+    };
+  },
+
+  /**
+   * NTF-33 · caducó.
+   *
+   * ⚠️ NO DICE EL IMPORTE, Y ES DELIBERADO. El payload trae `amount` y
+   * `currency` pero **no trae `kind`**, y sin `kind` ese número no significa lo
+   * mismo: con `saldo` es dinero que se podía gastar, y con `mentoria` es un
+   * TOPE que nunca fue dinero de nadie. «Caducaron US$ 24,00» es falso en la
+   * mitad de los casos y suena a deuda en la otra mitad, así que no se pinta. El
+   * día que el barrido encole también `kind`, la cifra puede volver: el bloque
+   * que la pintaría está escrito ahí arriba, en NTF-32.
+   */
+  reward_expired: (x) => ({
+    asunto: "Tu recompensa caducó sin usarse",
+    familia: "cuenta",
+    epigrafe: "Recompensa caducada",
+    titulo: "Se pasó el plazo",
+    preheader: "La recompensa que ganaste por invitar venció sin usarse.",
+    motivo: "Recibes este correo porque una recompensa de tu cuenta acaba de caducar.",
+    cuerpo: [
+      parrafo(
+        "La recompensa que ganaste por invitar a alguien venció sin usarse, así que ya no se puede canjear.",
+      ),
+      caja(
+        "Las recompensas cuentan su plazo desde el día en que se ganan, y una vez vencidas no se pueden reactivar.",
+        "cuenta",
+      ),
+      parrafo(
+        "Puedes ganar otra: cada persona que entre con tu enlace y cumpla lo que pide la campaña te da una recompensa nueva.",
+        { top: 18 },
+      ),
+      boton("Volver a invitar", `${x.base}/referidos`),
+    ],
+  }),
+
+  /**
+   * NTF-34 · el recibo del regalo, a QUIEN LO PAGÓ.
+   *
+   * La dirección del destinatario SÍ se pinta, al revés que en el resto de
+   * correos: es el dato que el comprador necesita comprobar —una letra de más y
+   * el regalo espera en un buzón que no existe— y es su propio dato volviendo a
+   * él. Va por `ficha`, que escapa lo que recibe.
+   *
+   * ⚠️ No dice «le hemos avisado». `confirm_gift_payment` solo encola NTF-35
+   * cuando el destinatario YA tiene cuenta con el correo confirmado; en el otro
+   * camino lo manda el Route Handler con Resend, y desde aquí no se puede saber
+   * cuál de los dos ocurrió. Lo que sí es cierto siempre —y es lo que se
+   * escribe— es que el regalo espera atado a esa dirección.
+   */
+  gift_purchased: (x) => {
+    const importe = dinero(x.p?.amount, x.p?.currency);
+    // A una variable antes de mirarla: el payload es `Record<string, unknown>` y
+    // el estrechamiento no sobrevive de otra forma (igual que `admin_message`).
+    const destinatario = x.p?.recipient_email;
+    const para =
+      typeof destinatario === "string" && destinatario.trim() ? destinatario.trim() : null;
+    const producto = x.p?.product_id;
+    const idProducto = typeof producto === "string" && producto ? producto : null;
+    return {
+      asunto: con("Gracias por tu regalo", importe),
+      familia: "compra",
+      epigrafe: "Recibo del regalo",
+      titulo: "Tu regalo ya está activo",
+      preheader: para
+        ? `${para} ya puede elegir día y hora.`
+        : "Quien lo recibe ya puede elegir día y hora.",
+      motivo: "Recibes este correo porque regalaste una mentoría en Enséñame Ya.",
+      cuerpo: [
+        parrafo(
+          "Tu pago quedó registrado y el regalo está activo. Quien lo recibe elige el día y la hora que le vengan bien, y tú no tienes que hacer nada más.",
+        ),
+        ficha(
+          "Tu regalo",
+          [
+            ["Para", para],
+            ["Importe", importe],
+          ],
+          NARANJA_FG,
+          "#fff3ea",
+        ),
+        caja(
+          "Si esa dirección todavía no tiene cuenta en Enséñame Ya, el regalo <strong>la espera igualmente</strong>: en cuanto se registre con ese mismo correo, le aparecerá en «Mis reservas».",
+          "compra",
+        ),
+        nota(
+          "El regalo tiene fecha de caducidad y la ves en «Mis regalos». Te avisamos antes de que venza.",
+        ),
+        boton("Ver mis regalos", `${x.base}/regalar/mis-regalos`),
+        idProducto
+          ? enlaceSecundario("Ver la mentoría que regalaste", `${x.base}/products/${idProducto}`)
+          : null,
+      ],
+    };
+  },
+
+  /**
+   * NTF-35 · a QUIEN LO RECIBE, y la única plantilla del proyecto que puede
+   * aterrizar en una bandeja SIN CUENTA: `confirm_gift_payment` solo la encola
+   * cuando el destinatario ya existe con el correo confirmado, y el resto de las
+   * veces la manda el Route Handler con Resend —mismo caso y mismo patrón que
+   * `guest_account_created`— usando esta misma plantilla.
+   *
+   * ─── A DÓNDE LLEVA, Y POR QUÉ A `/reservas` AUNQUE TENGA GUARDA ────────────
+   *
+   * La regla de oro 13 —la pantalla en blanco— es de las navegaciones de
+   * CLIENTE que cruzan de grupo de rutas. Un enlace de correo NO es eso: es
+   * siempre una carga de documento nueva, así que la guarda se resuelve como lo
+   * que es, un redirect del servidor, y la cadena entera termina donde tiene que
+   * terminar:
+   *
+   *   `/reservas` → `requireUser()` → `/login?next=/reservas` →
+   *   `redirect(hrefSignup("/reservas"))` → `/signup?next=/reservas` → alta →
+   *   `/reservas`
+   *
+   * —y `/reservas` es justo la pantalla que llama a `reclamar_mis_regalos()` al
+   * pintarse, así que el regalo aparece solo. `/login` rebota a `/signup`
+   * cuando trae `next` a propósito (M-05): quien llega ahí empujado por una
+   * guarda no suele tener cuenta, que es exactamente este caso.
+   *
+   * ⚠️ Lo que ese rebote NO puede decirle a nadie es la ÚNICA instrucción que
+   * de verdad importa —**con ESTA misma dirección**, porque
+   * `reclamar_regalos_por_correo` ata por `lower(btrim(email))` y un alta con
+   * otro correo deja el regalo huérfano—. Por eso va escrita en el cuerpo, con
+   * su propio enlace a `/signup`, que sí es público y no tiene guarda ninguna.
+   *
+   * ⚠️ DE QUIÉN VIENE NO SE PUEDE DECIR, y no es un olvido: `mis_creditos` no
+   * expone `purchased_by`, y aunque lo hiciera sería un uuid sin nombre que
+   * leer. El único rastro de quien regala es la DEDICATORIA, y ahí es donde la
+   * gente firma — misma decisión y mismo motivo que en
+   * `components/regalo/regalo-recibido.tsx`.
+   */
+  gift_received: (x) => {
+    const producto = x.p?.product_id;
+    const idProducto = typeof producto === "string" && producto ? producto : null;
+    // Texto libre de un desconocido: `cita` lo escapa y convierte los saltos de
+    // línea DESPUÉS de escapar. No se toca aquí.
+    const dedicatoria = x.p?.gift_message;
+    return {
+      asunto: "Te han regalado una mentoría",
+      familia: "ok",
+      epigrafe: "Un regalo para ti",
+      titulo: "Alguien te regaló una mentoría",
+      preheader: "Ya está pagada: solo tienes que elegir el día y la hora.",
+      motivo: "Recibes este correo porque alguien regaló una mentoría a esta dirección.",
+      cuerpo: [
+        parrafo(
+          "Alguien ha pagado por ti una mentoría <strong>1 a 1 en vivo</strong> en Enséñame Ya. Está pagada entera: eliges el día y la hora que te vengan bien y no tienes que pagar nada.",
+        ),
+        cita(typeof dedicatoria === "string" ? dedicatoria : null, "Quien te lo regala"),
+        caja(
+          "La verás en <strong>«Mis reservas»</strong> como un regalo pendiente de agendar. Desde ahí eliges horario, y el día de la clase entras a la videollamada por el mismo sitio.",
+          "ok",
+        ),
+        boton("Ver mi regalo", `${x.base}/reservas`),
+        caja(
+          "¿Es tu primera vez en Enséñame Ya? Crea tu cuenta <strong>con esta misma dirección de correo</strong>: es lo que ata el regalo a tu cuenta, y aparecerá solo.",
+          "cuenta",
+        ),
+        enlaceSecundario("Crear mi cuenta", `${x.base}/signup?next=/reservas`),
+        idProducto
+          ? enlaceSecundario("Ver la mentoría que te regalaron", `${x.base}/products/${idProducto}`)
+          : null,
+        nota("El regalo tiene fecha de caducidad: agéndalo con tiempo. Te avisamos antes de que venza."),
+      ],
+    };
+  },
+
+  /**
+   * NTF-36 · el regalo caduca, a 7 días y a 1 día.
+   *
+   * ⚠️ ESTE CORREO NO SABE A QUIÉN LE HABLA, y el texto está escrito con eso
+   * delante. `avisar_creditos_por_expirar` lo encola a
+   * `coalesce(beneficiary_id, purchased_by)`: al DESTINATARIO si ya reclamó el
+   * regalo, y a QUIEN LO PAGÓ mientras siga sin reclamar. Los dos payloads son
+   * idénticos, así que distinguirlos aquí es imposible por construcción — el
+   * mismo caso que `booking_reminder_24h` (ver su ⚠️ en `rutaFor`). De ahí que
+   * el cuerpo diga las dos cosas y cada uno lea la suya: adivinar sería acertar
+   * la mitad de las veces y mandar a la otra mitad a una pantalla vacía.
+   */
+  gift_expiring: (x) => {
+    const tramo = x.p?.dias;
+    // Mismo criterio que NTF-32: manda `expires_at` en el huso de quien lee, y
+    // el tramo del payload solo cubre la fecha ilegible (ver `plazoDeCaducidad`).
+    const plazo = plazoDeCaducidad(
+      x.p?.expires_at,
+      typeof tramo === "number" ? tramo : null,
+      x.tz,
+      x.ahora,
+    );
+    const fecha = dia(x.p?.expires_at, x.tz);
+    const producto = x.p?.product_id;
+    const idProducto = typeof producto === "string" && producto ? producto : null;
+    return {
+      asunto: plazo
+        ? `Un regalo caduca ${plazo} y sigue sin agendar`
+        : "Un regalo está a punto de caducar",
+      familia: "alerta",
+      epigrafe: "Caduca pronto",
+      titulo: "La mentoría regalada sigue sin agendar",
+      preheader: fecha
+        ? `El regalo caduca el ${fecha} y todavía no tiene día ni hora.`
+        : "El regalo caduca pronto y todavía no tiene día ni hora.",
+      motivo: "Recibes este correo porque hay un regalo de Enséñame Ya a punto de caducar.",
+      cuerpo: [
+        parrafo(
+          fecha
+            ? `Hay una mentoría regalada que caduca el <strong>${esc(fecha)}</strong> y todavía no se ha agendado. Cuando venza ya no se podrá usar.`
+            : "Hay una mentoría regalada que caduca pronto y todavía no se ha agendado. Cuando venza ya no se podrá usar.",
+        ),
+        caja(
+          "<strong>Si el regalo es para ti:</strong> entra en «Mis reservas», elige día y hora y listo — no pagas nada.<br>" +
+            "<strong>Si lo regalaste tú:</strong> avísale a quien lo recibe. Si todavía no tiene cuenta, le basta con registrarse con el correo al que se lo mandaste.",
+          "alerta",
+        ),
+        boton("Ver mis reservas", `${x.base}/reservas`),
+        enlaceSecundario("Lo regalé yo: ver mis regalos", `${x.base}/regalar/mis-regalos`),
+        idProducto
+          ? enlaceSecundario("Ver la mentoría regalada", `${x.base}/products/${idProducto}`)
+          : null,
+      ],
+    };
+  },
+
+  /**
+   * NTF-37 · caducó. Se encola DOS VECES, con payloads distintos, y esa
+   * diferencia es el único modo de saber a quién se le está hablando:
+   *
+   *   · a quien lo COMPRÓ  → `{credit_id, product_id, amount, currency}`
+   *   · a quien lo RECIBIÓ → `{credit_id, product_id}` — sin importe, y a
+   *     propósito: lo que alguien pagó por ti no es asunto tuyo.
+   *
+   * ⚠️ Por eso la rama mira si `amount` ES UN NÚMERO, y no si el importe se pudo
+   * formatear: con la moneda ausente `dinero()` devolvería null y el comprador
+   * leería el correo del destinatario, que le habla de un regalo que no es suyo.
+   *
+   * 🔴 Y NINGUNA DE LAS DOS PROMETE UN REEMBOLSO. El cargo ya se liquidó y
+   * `credits` no tiene camino automático de vuelta: devolverlo es política
+   * comercial —no está en el diagrama— y se hace a mano con `status =
+   * 'refunded'`. Escribir «te lo devolvemos» aquí sería comprometer a
+   * operaciones desde una plantilla, que es la peor forma de decidir eso.
+   */
+  gift_expired: (x) => {
+    const producto = x.p?.product_id;
+    const idProducto = typeof producto === "string" && producto ? producto : null;
+    const importeCrudo = x.p?.amount;
+
+    if (typeof importeCrudo === "number") {
+      return {
+        asunto: "El regalo que compraste caducó sin agendarse",
+        familia: "cuenta",
+        epigrafe: "Regalo caducado",
+        titulo: "Nadie llegó a agendarlo",
+        preheader: "La mentoría que regalaste venció sin que se eligiera día ni hora.",
+        motivo: "Recibes este correo porque regalaste una mentoría en Enséñame Ya.",
+        cuerpo: [
+          parrafo(
+            "La mentoría que regalaste venció sin que se eligiera día ni hora, así que el regalo ya no se puede usar.",
+          ),
+          importeGrande("Importe del regalo", dinero(importeCrudo, x.p?.currency), {
+            sub: "Caducó sin agendarse",
+          }),
+          caja(
+            "El importe <strong>no vuelve solo</strong>. Si crees que hubo un problema —que el aviso no llegó, por ejemplo— escríbenos y lo miramos contigo.",
+            "cuenta",
+          ),
+          boton("Ver mis regalos", `${x.base}/regalar/mis-regalos`),
+          enlaceSecundario("Escribir a soporte", SOPORTE),
+        ],
+      };
+    }
+
+    return {
+      asunto: "Tu regalo caducó sin agendarse",
+      familia: "cuenta",
+      epigrafe: "Regalo caducado",
+      titulo: "Se pasó el plazo para agendarlo",
+      preheader: "El regalo que tenías pendiente venció sin día ni hora.",
+      motivo: "Recibes este correo porque tenías un regalo pendiente de agendar en Enséñame Ya.",
+      cuerpo: [
+        parrafo(
+          "El regalo que tenías pendiente venció sin que llegaras a elegir día y hora, así que ya no se puede agendar.",
+        ),
+        parrafo(
+          "La mentoría sigue estando ahí: si te interesa, puedes reservarla por tu cuenta cuando quieras.",
+          { top: 18 },
+        ),
+        boton(
+          idProducto ? "Ver la mentoría" : "Buscar una mentoría",
+          idProducto ? `${x.base}/products/${idProducto}` : `${x.base}/search`,
+        ),
+      ],
+    };
+  },
 };
 
 // ── Ayudas que usan varias plantillas ───────────────────────────────────────
@@ -1532,6 +2020,34 @@ function primerNombre(nombre: string): string {
 function netoTutor(x: Ctx): string | null {
   const neto = dinero(x.c.neto_tutor ?? x.c.payout?.neto, x.c.moneda ?? x.c.payout?.moneda);
   return neto ? `${neto} para ti` : null;
+}
+
+/**
+ * «hoy» · «mañana» · «en 5 días» — contados EN EL HUSO DEL DESTINATARIO.
+ *
+ * ⚠️ EL `dias` DEL PAYLOAD NO ES UN NÚMERO DE DÍAS, ES UN TRAMO. Lo pone
+ * `avisar_creditos_por_expirar` con un `case`: **1** si el crédito vence dentro
+ * de las próximas 24 horas y **7** en cualquier otro punto de la ventana. Está
+ * ahí para que la clave de idempotencia distinga los dos avisos
+ * (`CRED:exp1` / `CRED:exp7`), no para pintarlo.
+ *
+ * Pintarlo tal cual da las dos mentiras que se ven a simple vista en la galería:
+ * «caduca mañana» sobre algo que en Bogotá vence esta noche, y «caduca en 7
+ * días» justo encima de una fecha que está a seis. Así que manda `expires_at`
+ * leído en el huso de quien lee (RN-35) y el tramo solo cubre el caso de que esa
+ * fecha no se pueda leer — donde, además, «en menos de un día» es lo único que
+ * el tramo 1 garantiza.
+ */
+function plazoDeCaducidad(
+  expiresAt: unknown,
+  tramo: number | null,
+  tz: string,
+  ahora: Date,
+): string | null {
+  const d = diasHasta(expiresAt, tz, ahora);
+  if (d !== null) return d <= 0 ? "hoy" : d === 1 ? "mañana" : `en ${d} días`;
+  if (tramo === null) return null;
+  return tramo <= 1 ? "en menos de un día" : `en ${tramo} días`;
 }
 
 /** «Del 1 al 10 de septiembre» */
