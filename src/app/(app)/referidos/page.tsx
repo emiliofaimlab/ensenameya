@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import Link from "next/link";
 import { GraduationCapIcon, UsersIcon } from "lucide-react";
 
 import { requireUser, getUserTimezone } from "@/lib/auth/server";
@@ -6,6 +7,7 @@ import { panelMenu } from "@/lib/auth/panel-items";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatShortDate } from "@/lib/booking";
+import { formatMoney } from "@/lib/catalog/format";
 // El buzón real del §39 del contrato, de una sola fuente (lib/company.ts).
 import { COMPANY } from "@/lib/company";
 import {
@@ -20,7 +22,10 @@ import {
   PanelCard,
   PanelCardTitle,
   StatusPill,
+  type PillTone,
 } from "@/components/layout/panel-shell";
+import { PrecioEnLinea } from "@/components/precio/precio";
+import { Button } from "@/components/ui/button";
 import { LinkActions, RefrescarCuandoLlegueElEnlace } from "./link-actions";
 
 export const metadata = { title: "Invita y gana · Enséñame Ya" };
@@ -51,6 +56,18 @@ type Campaña = {
   title: string;
   reward_text: string;
   visible: boolean;
+  /**
+   * Qué ofrece de verdad la campaña (`20260912110000`, §2). NO es `reward_text`,
+   * que es la frase que escribe el admin y puede decir misa: `reward_kind` es lo
+   * que mira `emitir_credito_de_referido` para acuñar —o no acuñar— el premio, y
+   * su default es `'ninguna'` a propósito.
+   *
+   * Se lee aquí por una sola razón: con todas las campañas visibles en
+   * `'ninguna'`, «todavía no has ganado ninguna recompensa» promete algo que no
+   * va a llegar nunca. Ese es el tipo de mentira creíble contra la que avisa la
+   * regla de oro 10, solo que con la campaña en el papel de la consulta muda.
+   */
+  reward_kind: string;
 };
 
 /**
@@ -202,38 +219,76 @@ export default async function ReferidosPage() {
   const { user, roles, fullName } = await requireUser();
   const supabase = await createClient();
 
-  const [{ items, badges }, tz, cabeceras, campañasRes, membershipsRes, invitadosRes] =
-    await Promise.all([
-      // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
-      panelMenu(user.id, roles),
-      getUserTimezone(),
-      headers(),
-      // Sin filtro de `visible` en SQL a propósito: la RLS ya lo aplica para
-      // quien no es admin, y al admin le hacen falta las apagadas para poder
-      // leer el programa de un invitado que entró por una campaña ya retirada.
-      // El filtro para lo que SE OFRECE va en JS, dos líneas más abajo.
-      supabase
-        .from("referral_campaigns")
-        .select("rf_campaign_id, audience, title, reward_text, visible")
-        .order("sort_order"),
-      supabase
-        .from("referral_memberships")
-        .select("rf_campaign_id, code")
-        .eq("profile_id", user.id),
-      supabase.rpc("referral_invitees"),
-    ]);
+  const [
+    { items, badges },
+    tz,
+    cabeceras,
+    campañasRes,
+    membershipsRes,
+    invitadosRes,
+    creditosRes,
+  ] = await Promise.all([
+    // El menú sigue al panel del que vienes, no al rol (ver `panelItems`).
+    panelMenu(user.id, roles),
+    getUserTimezone(),
+    headers(),
+    // Sin filtro de `visible` en SQL a propósito: la RLS ya lo aplica para
+    // quien no es admin, y al admin le hacen falta las apagadas para poder
+    // leer el programa de un invitado que entró por una campaña ya retirada.
+    // El filtro para lo que SE OFRECE va en JS, dos líneas más abajo.
+    supabase
+      .from("referral_campaigns")
+      .select(
+        "rf_campaign_id, audience, title, reward_text, visible, reward_kind",
+      )
+      .order("sort_order"),
+    supabase
+      .from("referral_memberships")
+      .select("rf_campaign_id, code")
+      .eq("profile_id", user.id),
+    supabase.rpc("referral_invitees"),
+    /**
+     * Las recompensas de verdad (`20260912110000`).
+     *
+     * ⚠️ POR LA VISTA, NUNCA POR `credits`. Esa tabla tiene `grant select` **por
+     * columnas** —el cobro del regalo se queda fuera a propósito—, así que un
+     * `.select("*")` sobre ella contesta `permission denied` en EJECUCIÓN: ni
+     * el typecheck ni el build lo ven. `mis_creditos` es `security_invoker`, o
+     * sea que hereda `credits_select_own` y solo devuelve lo mío; el
+     * `.eq("beneficiary_id", …)` que uno escribiría por costumbre no existe
+     * aquí, y no hace falta.
+     *
+     * ⚠️ Y SOLO `source = 'referral'`. La vista trae también los REGALOS que me
+     * han hecho, y esos se agendan desde «Mis reservas»: mezclarlos en «Invita
+     * y gana» le pondría a alguien un regalo de su madre en la casilla de lo
+     * que ganó invitando.
+     */
+    supabase
+      .from("mis_creditos")
+      .select(
+        "id, kind, destino, status, amount, consumed_amount, restante, currency, expires_at, consumed_at",
+      )
+      .eq("source", "referral")
+      .order("issued_at", { ascending: false, nullsFirst: false }),
+  ]);
 
   // ⚠️ Regla de oro 10. `const { data } = …` convertiría cualquiera de estos
-  // tres fallos en una lista vacía, que aquí es la mentira más creíble que hay:
-  // «todavía nadie ha entrado con tu enlace» se lee igual de bien roto que
+  // cuatro fallos en una lista vacía, que aquí es la mentira más creíble que
+  // hay: «todavía nadie ha entrado con tu enlace» se lee igual de bien roto que
   // funcionando. Por eso se miran, se registran, y abajo se distingue «cero»
   // de «no lo sé».
+  //
+  // 🔴 Y EN LOS CRÉDITOS DUELE MÁS QUE EN NINGUNO: «0 recompensas» por un
+  // `permission denied` se lee palabra por palabra igual que «no has ganado
+  // nada», y lo que hay detrás es dinero emitido a nombre de esta persona.
   if (campañasRes.error)
     console.error("[referidos] campañas", campañasRes.error.code, campañasRes.error.message);
   if (membershipsRes.error)
     console.error("[referidos] memberships", membershipsRes.error.code, membershipsRes.error.message);
   if (invitadosRes.error)
     console.error("[referidos] invitados", invitadosRes.error.code, invitadosRes.error.message);
+  if (creditosRes.error)
+    console.error("[referidos] créditos", creditosRes.error.code, creditosRes.error.message);
 
   const todas: Campaña[] = campañasRes.data ?? [];
   const visibles = todas.filter((c) => c.visible);
@@ -278,6 +333,33 @@ export default async function ReferidosPage() {
   const deCampaña = new Map(todas.map((c) => [c.rf_campaign_id, c] as const));
   const sinCredencial = !isReferralFactoryConfigured();
 
+  // `null` = no se pudo leer, exactamente igual que `invitados`. Nunca `[]`.
+  const recompensas = creditosRes.error
+    ? null
+    : (creditosRes.data ?? [])
+        .map((c) => recompensaDe(c, tz))
+        .filter((r): r is Recompensa => r !== null);
+
+  // Las que se pueden gastar HOY van primero y ordenadas por urgencia: la que
+  // caduca el martes tiene que estar por delante de la que caduca en un mes, y
+  // el orden de emisión —que es el que trae la consulta— las mezclaba.
+  const usables = (recompensas ?? [])
+    .filter((r) => r.usable)
+    .sort((a, b) => a.caducaEn - b.caducaEn);
+  const gastadas = (recompensas ?? []).filter((r) => !r.usable);
+
+  /**
+   * ¿Hay algún programa visible que de verdad reparta algo?
+   *
+   * Con las campañas en `reward_kind = 'ninguna'` —su default— no se emite un
+   * solo crédito por mucho que alguien convierta, así que «todavía no has ganado
+   * ninguna» sería prometer algo que no va a llegar. Si la consulta de campañas
+   * falló no se sabe, y entonces se dice lo neutro: no se afirma nada sobre unos
+   * programas que no hemos podido leer.
+   */
+  const reparteAlgo =
+    Boolean(campañasRes.error) || visibles.some((c) => c.reward_kind !== "ninguna");
+
   return (
     <PanelShell
       items={items}
@@ -293,12 +375,35 @@ export default async function ReferidosPage() {
           {
             label: "Invitados",
             valor: invitados === null ? null : invitados.length,
+            pie: null as string | null,
             destacada: false,
           },
-          { label: "Convertidos", valor: convertidos, destacada: false },
-          // La recompensa se cuenta por conversión (RN-21: el monto lo fija RF,
-          // nosotros solo contamos cuántas se ganaron).
-          { label: "Recompensas", valor: convertidos, destacada: true },
+          {
+            label: "Convertidos",
+            valor: convertidos,
+            pie: null as string | null,
+            destacada: false,
+          },
+          /**
+           * ⚠️ ESTE NÚMERO ERA, LITERALMENTE, `convertidos`. Era honesto mientras
+           * no había nada que dar —RN-21 decía que el monto lo fijaba RF y
+           * nosotros solo contábamos conversiones—, pero desde
+           * `20260912110000` la recompensa es una fila de `credits` con su
+           * importe, su caducidad y su estado, y una conversión NO es una
+           * recompensa: la campaña puede no repartir nada (`reward_kind =
+           * 'ninguna'`), el crédito puede haberse gastado o caducado, y entre la
+           * conversión y la emisión está el cron horario de `referrals-sync`.
+           * Ahora se cuentan las recompensas, y el pie dice cuántas sirven hoy.
+           */
+          {
+            label: "Recompensas",
+            valor: recompensas === null ? null : recompensas.length,
+            pie:
+              recompensas && recompensas.length > 0
+                ? `${usables.length} por usar`
+                : null,
+            destacada: true,
+          },
         ].map((t) => (
           <PanelCard
             key={t.label}
@@ -314,6 +419,12 @@ export default async function ReferidosPage() {
             <p className="mt-0.5 text-[22px] leading-tight font-bold text-[#19191f] tabular-nums sm:text-[26px]">
               {t.valor ?? "—"}
             </p>
+            {/* §5.0 · una línea de 11 px que envuelve si hace falta: a 390 px la
+                tarjeta tiene ~90 px de ancho útil y dos líneas son mejores que
+                una barra horizontal. */}
+            {t.pie ? (
+              <p className="mt-0.5 text-[11px] text-[#6b6b6b]">{t.pie}</p>
+            ) : null}
           </PanelCard>
         ))}
       </div>
@@ -406,6 +517,131 @@ export default async function ReferidosPage() {
               );
             })}
           </div>
+        )}
+      </div>
+
+      {/**
+       * ── TUS RECOMPENSAS ───────────────────────────────────────────────────
+       *
+       * ⚠️ VA DEBAJO DE «TUS ENLACES», Y NO ES UN DESCUIDO. La nota de §5.0 de
+       * los tres contadores dice por qué existen en una sola fila: para no
+       * empujar las tarjetas de enlace —que es a lo que se viene— por debajo del
+       * pliegue. Meter aquí arriba una sección entera haría justo eso. Lo que
+       * avisa de que hay algo que mirar es el contador naranja, que ya cuenta
+       * recompensas de verdad.
+       */}
+      <div className="flex flex-col gap-3">
+        <h2
+          id="recompensas"
+          className="text-base font-semibold text-[#19191f]"
+        >
+          Tus recompensas
+        </h2>
+
+        {recompensas === null ? (
+          // Regla de oro 10, el caso que más duele de los cuatro de esta
+          // pantalla: se dice que no se pudo leer, y se dice que lo que hubiera
+          // sigue ahí. Un «0» aquí sería indistinguible de la verdad.
+          <PanelCard>
+            <p className="text-[13px] text-[#6b6b6b]">
+              No pudimos cargar tus recompensas ahora mismo. Vuelve a intentarlo
+              en un momento: si tenías alguna, sigue donde estaba.
+            </p>
+          </PanelCard>
+        ) : recompensas.length === 0 ? (
+          <PanelCard>
+            <p className="text-[13px] text-[#6b6b6b]">
+              {reparteAlgo
+                ? "Todavía no has ganado ninguna. Cuando alguien que invitaste cumpla lo que pide su programa, tu recompensa aparece aquí sola: no hay nada que reclamar."
+                : "Los programas activos no reparten recompensas ahora mismo."}
+            </p>
+          </PanelCard>
+        ) : (
+          <>
+            {usables.length > 0 ? (
+              // Una columna hasta 1024, igual que los enlaces: el importe y su
+              // aviso de caducidad comparten fila y a dos columnas se estrechan.
+              <div className="grid gap-3 lg:grid-cols-2">
+                {usables.map((r) => (
+                  <PanelCard
+                    key={r.id}
+                    className="flex flex-col gap-2.5 p-4 sm:p-5"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <PanelCardTitle className="text-[16px]">
+                          {r.titulo}
+                        </PanelCardTitle>
+                        <p className="mt-1 text-[20px] leading-tight font-bold text-[#19191f]">
+                          {/* La misma cifra que el checkout: en la moneda de
+                              quien mira, con su USD al lado cuando hay tasa. */}
+                          <PrecioEnLinea
+                            amountMinor={r.importe}
+                            currency={r.moneda}
+                          />
+                        </p>
+                      </div>
+                      <StatusPill tone={r.tono} className="whitespace-nowrap">
+                        {r.aviso}
+                      </StatusPill>
+                    </div>
+
+                    <p className="text-[12.5px] text-[#6b6b6b]">{r.detalle}</p>
+
+                    {/* `mt-auto`: con dos tarjetas de distinta altura los dos
+                        botones quedan alineados abajo. Alto 44 (§5.0) y ancho
+                        completo en móvil, que es el objetivo táctil de verdad. */}
+                    {r.cta ? (
+                      <Button
+                        asChild
+                        variant={r.cta.principal ? "default" : "outline"}
+                        className="mt-auto h-11 w-full font-semibold sm:w-fit sm:px-5"
+                      >
+                        <Link href={r.cta.href}>{r.cta.label}</Link>
+                      </Button>
+                    ) : null}
+                  </PanelCard>
+                ))}
+              </div>
+            ) : null}
+
+            {/* Las que ya no sirven NO se esconden —que se vea que existieron y
+                en qué acabaron— pero no compiten con las usables: una lista
+                compacta, en gris, sin un solo botón. */}
+            {gastadas.length > 0 ? (
+              <PanelCard className="p-0">
+                <h3 className="px-4 pt-4 text-[11px] font-semibold tracking-[0.05em] text-[#6b6b6b] uppercase sm:px-5">
+                  Ya no disponibles
+                </h3>
+                <ul className="mt-1 divide-y divide-[#efefef]">
+                  {gastadas.map((r) => (
+                    <li
+                      key={r.id}
+                      className="grid grid-cols-[1fr_auto] items-center gap-2 px-4 py-3 sm:px-5"
+                    >
+                      {/* `min-w-0` + `truncate`: es lo que impide que un título
+                          largo junto al chip saque la barra horizontal a 390. */}
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-medium text-[#595959]">
+                          {r.titulo} ·{" "}
+                          <PrecioEnLinea
+                            amountMinor={r.importe}
+                            currency={r.moneda}
+                          />
+                        </p>
+                        <p className="mt-0.5 text-[12px] text-[#6b6b6b]">
+                          {r.detalle}
+                        </p>
+                      </div>
+                      <StatusPill tone={r.tono} className="whitespace-nowrap">
+                        {r.aviso}
+                      </StatusPill>
+                    </li>
+                  ))}
+                </ul>
+              </PanelCard>
+            ) : null}
+          </>
         )}
       </div>
 
@@ -563,4 +799,286 @@ function filaDe(
         : "Dio su primera clase",
     recompensa: convertido ? (c?.reward_text ?? null) : null,
   };
+}
+
+/**
+ * ── LA RECOMPENSA, YA MASTICADA PARA PINTARLA ───────────────────────────────
+ *
+ * Una fila de `mis_creditos` no se puede enseñar tal cual: lo que la persona
+ * necesita saber son tres cosas —QUÉ es, CUÁNTO vale y CUÁNDO caduca— y ninguna
+ * de las tres es una columna. `kind` + `destino` deciden la primera, `amount` y
+ * `restante` no significan lo mismo según `kind`, y la caducidad no se lee de
+ * `status`. Se resuelve aquí, una vez, y el JSX solo coloca.
+ */
+type Recompensa = {
+  id: string;
+  titulo: string;
+  detalle: string;
+  /**
+   * Unidades mínimas que vale HOY. Con `kind = 'mentoria'` es el TOPE entero
+   * (`amount`), porque ese crédito se canjea entero o no se canjea; con `saldo`
+   * es lo que queda por gastar (`restante`), que es lo único que sirve para algo
+   * cuando ya se usó una parte. Es la misma distinción que hace
+   * `credito_aplicable()` en la base.
+   */
+  importe: number;
+  moneda: string;
+  usable: boolean;
+  /** Lo que dice el chip: la urgencia, o en qué acabó. */
+  aviso: string;
+  tono: PillTone;
+  /** Milisegundos de su caducidad, `Infinity` si no caduca. Solo para ORDENAR. */
+  caducaEn: number;
+  cta: { href: string; label: string; principal: boolean } | null;
+};
+
+/**
+ * Una fila de la vista. Todas las columnas salen anulables —es una vista— y por
+ * eso las cuatro que deciden algo se comprueban antes de usarlas: un `!` aquí
+ * sería inventarse un importe o un estado. Mismo `if` que hace el selector del
+ * checkout con esta misma vista.
+ */
+type FilaDeCredito = {
+  id: string | null;
+  kind: string | null;
+  destino: string | null;
+  status: string | null;
+  amount: number | null;
+  consumed_amount: number | null;
+  restante: number | null;
+  currency: string | null;
+  expires_at: string | null;
+  consumed_at: string | null;
+};
+
+function recompensaDe(c: FilaDeCredito, tz: string): Recompensa | null {
+  if (
+    !c.id ||
+    !c.kind ||
+    !c.destino ||
+    !c.status ||
+    c.amount === null ||
+    !c.currency
+  ) {
+    return null;
+  }
+
+  const restante = c.restante ?? 0;
+  const caduca = c.expires_at ? new Date(c.expires_at).getTime() : null;
+  const caducaEn = caduca === null || Number.isNaN(caduca) ? Infinity : caduca;
+
+  /**
+   * 🔴 `status = 'active'` NO SIGNIFICA VIGENTE, y aquí eso no es un matiz.
+   * `caducar_creditos()` es un barrido DIARIO (03:17), así que un crédito
+   * vencido a las 00:01 sigue diciendo `'active'` durante ~27 horas. Quien
+   * ORDENA la caducidad es el barrido; quien la DECIDE es esta fecha — que es
+   * exactamente lo que mira `aplicar_credito` antes de dejar canjear
+   * (`20260912110000`, §8.2, con su propio ⚠️ al lado). Si la pantalla mirara
+   * solo el estado, ofrecería un «Reservar mi mentoría gratis» que el checkout
+   * va a rechazar, que es la peor forma de enterarse.
+   */
+  const vencida = caducaEn <= Date.now();
+  const usable = c.status === "active" && !vencida && restante > 0;
+
+  // Los tres títulos salen de las dos columnas que de verdad mandan, y `destino`
+  // va PRIMERO: se congela al emitir y es lo que decide si esto se gasta o si
+  // llega solo. Derivarlo del rol al pintar sería contradecir a la base.
+  const titulo =
+    c.destino === "payout"
+      ? "Dinero para tu próximo cobro"
+      : c.kind === "mentoria"
+        ? "Una mentoría gratis"
+        : "Saldo para tus mentorías";
+
+  if (!usable) {
+    // Las que ya no sirven dicen EN QUÉ ACABARON y con qué fecha. `'refunded'` y
+    // `'pending_payment'` son del regalo y no deberían llegar aquí (esta lista
+    // filtra `source = 'referral'`), pero se contemplan: un estado sin texto se
+    // pinta como una fila muda y nadie sabe qué mirar.
+    const fin =
+      c.status === "consumed"
+        ? {
+            aviso: "Usada",
+            detalle: c.consumed_at
+              ? `La usaste el ${fechaLocal(c.consumed_at, tz)}.`
+              : "Ya la usaste.",
+          }
+        : c.status === "expired" || vencida
+          ? {
+              aviso: "Caducada",
+              detalle: c.expires_at
+                ? `Caducó el ${fechaLocal(c.expires_at, tz)} sin usarse.`
+                : "Caducó sin usarse.",
+            }
+          : c.status === "revoked"
+            ? { aviso: "Anulada", detalle: "Ya no está disponible." }
+            : c.status === "refunded"
+              ? { aviso: "Devuelta", detalle: "Su importe volvió a su origen." }
+              : { aviso: "No disponible", detalle: "Todavía no se puede usar." };
+
+    return {
+      id: c.id,
+      titulo,
+      // El importe de una gastada es el que TUVO (`amount`), no lo que queda:
+      // «Usada · US$ 0,00» no le dice nada a nadie.
+      importe: c.amount,
+      moneda: c.currency,
+      detalle: fin.detalle,
+      aviso: fin.aviso,
+      tono: "neutral",
+      usable: false,
+      caducaEn,
+      cta: null,
+    };
+  }
+
+  // ── Las que sí se pueden usar ──────────────────────────────────────────────
+
+  if (c.destino === "payout") {
+    /**
+     * El tutor no canjea nada: el diagrama dice «le llega solo», y la base lo
+     * sostiene —`credits_payout_no_caduca` prohíbe ponerle fecha—. Lo único que
+     * se le ofrece es el sitio donde verá el ajuste cuando salga el lote.
+     */
+    return {
+      id: c.id,
+      titulo,
+      importe: restante,
+      moneda: c.currency,
+      detalle:
+        "Se suma sola a tu próximo cobro: no hay nada que canjear ni que reservar, y no caduca.",
+      aviso: "Te llega solo",
+      tono: "green",
+      usable: true,
+      caducaEn,
+      cta: {
+        href: "/tutor/payouts#saldo",
+        label: "Ver tus cobros",
+        principal: false,
+      },
+    };
+  }
+
+  // A partir de aquí es dinero que se gasta EN EL CHECKOUT, así que el empujón
+  // es hacia reservar. `/agendar` y no `/tutors`: es la ruta del panel, con
+  // sesión, y vale igual para un tutor que además tiene una mentoría gratis (su
+  // única guarda es `requireUser`). El canje en sí ocurre en el checkout, antes
+  // del formulario de pago; desde aquí no se canjea nada.
+  const expira = c.expires_at;
+  const dias = expira ? diasHasta(expira, tz) : null;
+  // `dias === null` con fecha puesta solo pasa si esa fecha no se puede leer, y
+  // entonces se dice lo mismo que ya asume el resto del cálculo (`caducaEn` es
+  // `Infinity` y `vencida` es false): que no caduca. Inventar una urgencia a
+  // partir de un dato ilegible sería peor que no decirla.
+  const aviso =
+    !expira || dias === null
+      ? "No caduca"
+      : dias <= 0
+        ? "Caduca hoy"
+        : dias === 1
+          ? "Caduca mañana"
+          : dias <= 7
+            ? `Caduca en ${dias} días`
+            : `Caduca el ${fechaLocal(expira, tz)}`;
+  // Tres niveles y no dos: una que caduca esta semana no se puede leer igual que
+  // una recién ganada, y la de hoy tampoco igual que la del viernes.
+  const tono: PillTone =
+    dias === null ? "green" : dias <= 1 ? "red" : dias <= 7 ? "amber" : "gray";
+
+  if (c.kind === "mentoria") {
+    return {
+      id: c.id,
+      titulo,
+      // 🔴 EL TOPE, NO «LO QUE QUEDA». Con `kind = 'mentoria'` el `amount` es un
+      // máximo y el crédito se consume ENTERO al canjearlo: el sobrante es de la
+      // plataforma (`credits_mentoria_entera` + la cabecera de la migración).
+      // Decirlo aquí es lo que evita la sorpresa en el checkout.
+      importe: c.amount,
+      moneda: c.currency,
+      detalle:
+        "Vale por una mentoría de hasta ese importe. Se canjea entera: no se puede aplicar a una más cara, y si eliges una más barata la diferencia no se guarda.",
+      aviso,
+      tono,
+      usable: true,
+      caducaEn,
+      cta: {
+        href: "/agendar",
+        label: "Reservar mi mentoría gratis",
+        principal: true,
+      },
+    };
+  }
+
+  const consumido = c.consumed_amount ?? 0;
+  return {
+    id: c.id,
+    titulo,
+    importe: restante,
+    moneda: c.currency,
+    detalle:
+      consumido > 0
+        ? `Ya has usado ${formatMoney(consumido, c.currency)} de ${formatMoney(c.amount, c.currency)}. El resto se descuenta al reservar: pagas solo la diferencia.`
+        : "Se descuenta al reservar tu próxima mentoría: pagas solo la diferencia.",
+    aviso,
+    tono,
+    usable: true,
+    caducaEn,
+    cta: { href: "/agendar", label: "Usar mi saldo", principal: true },
+  };
+}
+
+/**
+ * El día de calendario de un instante EN LA ZONA DE QUIEN MIRA (RN-01/02).
+ *
+ * `en-CA` da `2026-09-11` y es la forma más corta de sacar el día local sin
+ * dependencias: restar milisegundos sería contar horas, no días, y algo que
+ * vence esta noche saldría «mañana» para media Europa. Devuelve el día como
+ * marca UTC para poder restar dos de ellos sin que el huso vuelva a meterse.
+ */
+function diaLocal(d: Date, tz: string): number {
+  const [a, m, dia] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  })
+    .format(d)
+    .split("-")
+    .map(Number);
+  return Date.UTC(a, m - 1, dia);
+}
+
+/** Días de calendario que faltan, en la zona del usuario. `null` si la fecha no
+ *  se puede leer — nunca 0, que aquí significaría «caduca hoy». */
+function diasHasta(iso: string, tz: string): number | null {
+  const cuando = new Date(iso);
+  if (Number.isNaN(cuando.getTime())) return null;
+  // El reloj se lee en una función de módulo y no dentro del render: es la misma
+  // razón por la que `isUpcoming()` vive donde vive (pureza de react-hooks).
+  return Math.round(
+    (diaLocal(cuando, tz) - diaLocal(new Date(), tz)) / 86_400_000,
+  );
+}
+
+/**
+ * «3 oct», y «3 ene 2027» cuando el año no es el de hoy.
+ *
+ * No es `formatShortDate` con otro nombre: aquí el año hace falta. Una
+ * recompensa dura hasta 365 días (`referral_campaigns_reward_dias_check`), así
+ * que quien gane una en diciembre ve un «caduca el 3 ene» que sin el año no dice
+ * si quedan tres días o quince meses. La zona horaria se pasa SIEMPRE: sin ella
+ * el SSR formatearía en la del servidor, que en Vercel es UTC (R24-12).
+ */
+function fechaLocal(iso: string, tz: string): string {
+  const cuando = new Date(iso);
+  if (Number.isNaN(cuando.getTime())) return "—";
+  const año = (d: Date) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric" }).format(d);
+  const mismoAño = año(cuando) === año(new Date());
+  return cuando.toLocaleDateString("es", {
+    day: "numeric",
+    month: "short",
+    timeZone: tz,
+    ...(mismoAño ? {} : { year: "numeric" }),
+  });
 }
