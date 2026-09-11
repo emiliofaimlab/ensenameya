@@ -433,17 +433,22 @@ export default async function TutorPayoutsPage() {
    * manda `currency: input.currency`, o sea USD: a un tutor mexicano que cobra
    * por PayPal, «≈ 3.500,00 MXN» no es una aproximación, es otra moneda.
    *
-   * Sin preferencia la condición es tener CUENTA BANCARIA de este país, y no el
-   * orden de `metodos`: los rieles de banco van delante de PayPal en todas las
-   * filas de ruteo, así que con datos bancarios registrados el que paga es uno
-   * de ellos. Sin cuenta no se promete moneda, que es además el estado en el que
-   * la pantalla ya le está pidiendo que complete una.
+   * Sin preferencia manda el orden de `payment_routing_rules`, donde los rieles
+   * de banco van DELANTE de PayPal en todas las filas. O sea que con preferencia
+   * no elegida el banco gana, salvo que el banco no pueda: el único caso es que
+   * el tutor no tenga cuenta bancaria y sí tenga conectado un destino que no lo
+   * es. Esa es la condición, y no «tiene cuenta bancaria» a secas — que dejaba
+   * sin cifra justo al tutor que todavía está decidiendo por dónde cobrar, que
+   * es a quien más le sirve verla.
    *
-   * `null` en Ecuador (su `currency` es USD), sin credencial de dLocal —el caso
-   * de producción hoy— y en las monedas que esa tabla no publica. Entonces no se
-   * pinta la línea: es la regla de siempre, la credencial es el interruptor.
+   * `null` en Ecuador (su `currency` es USD), sin credencial de dLocal y en las
+   * monedas que esa tabla no publica. Entonces no se pinta la línea: es la regla
+   * de siempre, la credencial es el interruptor.
    */
-  const cobraPorBanco = preferida ? preferida === "banco" : cuentaDeEstePais;
+  const cobraPorBanco = preferida
+    ? preferida === "banco"
+    : familias.includes("banco") &&
+      (cuentaDeEstePais || destinos.length === 0);
   const monedaLocal = cobraPorBanco && regla ? regla.currency : null;
   const tasaLocal = monedaLocal
     ? tasaParaPintar(tasas, MONEDA_DEL_SALDO, monedaLocal)

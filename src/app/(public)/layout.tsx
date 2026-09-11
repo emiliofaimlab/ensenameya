@@ -14,7 +14,7 @@ export default async function PublicLayout({
   // Roles además del usuario: el header necesita saber a qué panel enlazar.
   // US-1203: los avisos vienen en el MISMO viaje que roles y perfil
   // (`session_bootstrap`); sin sesión llegan vacíos y la campana ni se monta.
-  const { user, roles, fullName, avatarPath, notices } =
+  const { user, roles, fullName, avatarPath, notices, onboardingComplete } =
     await getSessionContext();
   // EY-177 · el contador del carrito. Se lee de la cookie, no de la base, así
   // que no cuesta un viaje y funciona igual SIN sesión — que es el caso que
@@ -28,7 +28,11 @@ export default async function PublicLayout({
           en lo público, quien entraba directo a /app o /reservas nunca dejaba la
           cookie y el servidor le pintaba las horas en UTC. */}
       <SiteHeader
-        user={toHeaderUser(user, roles, { fullName, avatarPath })}
+        user={toHeaderUser(user, roles, {
+          fullName,
+          avatarPath,
+          onboardingComplete,
+        })}
         notices={notices}
         cartCount={carrito}
       />

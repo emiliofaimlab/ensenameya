@@ -13,7 +13,12 @@ import {
 } from "@/lib/notifications";
 import { TZ_COOKIE } from "@/lib/tz";
 import { PANEL_COOKIE } from "@/lib/panel";
-import { pickHome, panelValido, type AppRole } from "./roles";
+import {
+  destinoDeAsistente,
+  pickHome,
+  panelValido,
+  type AppRole,
+} from "./roles";
 
 /**
  * Guardas de ruta por rol (Doc 3), reutilizables en Server Components,
@@ -274,6 +279,15 @@ export async function destinoDeUsuario(
   userId: string,
   roles: AppRole[],
 ): Promise<string> {
+  // El asistente pendiente manda: mandar a alguien a su panel con el onboarding
+  // a medias es mandarlo a un `redirect()` que ya sabemos lo que hace.
+  const ctx = await getSessionContext();
+  const pendiente = destinoDeAsistente(
+    ctx.onboardingComplete,
+    ctx.user?.user_metadata?.intended_role,
+  );
+  if (pendiente) return pendiente;
+
   const supabase = await createClient();
   // El `.eq()` no es redundante con la RLS: `tutor_profiles_select_public` deja
   // leer la fila de CUALQUIER tutor aprobado, así que sin filtro esto trae
