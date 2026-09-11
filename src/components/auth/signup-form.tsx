@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GoogleButton } from "@/components/auth/google-button";
+import { GoogleTermsNote } from "@/components/auth/google-terms-note";
 import type { SignupIntent } from "@/components/auth/auth-links";
 import {
   TERMS_GOVERNING_LOCALE,
@@ -263,24 +264,7 @@ export function SignupForm({
         label="Registrarme con Google"
         className={`${AUTH_FIELD} font-medium`}
       />
-      {/* El aviso va bajo el botón porque es lo que sustituye a la casilla en
-          ESTE camino: si no se pide marcar nada, hay que decir qué se acepta
-          al pulsar. Mismos enlaces y misma versión que la casilla. */}
-      <p className="-mt-2 text-[12.5px] leading-snug text-muted-foreground">
-        Al continuar con Google aceptas los{" "}
-        <Link href="/terms" className="text-brand hover:underline" {...legal(enModal)}>
-          Términos y Condiciones
-        </Link>{" "}
-        (
-        <Link href="/terms/es" className="hover:underline" {...legal(enModal)}>
-          versión en español
-        </Link>
-        ) y la{" "}
-        <Link href="/privacy" className="text-brand hover:underline" {...legal(enModal)}>
-          Política de privacidad
-        </Link>
-        .
-      </p>
+      <GoogleTermsNote enModal={enModal} />
       <AuthDivider />
 
       {/*
@@ -417,6 +401,10 @@ export function SignupForm({
  * Los legales, dentro del modal, se abren aparte: seguir el enlace en la misma
  * pestaña cierra el diálogo y tira lo que llevabas escrito. Fuera del modal
  * navegan como siempre — es una pantalla entera, no hay nada que perder.
+ *
+ * Lo usa la casilla del alta POR CORREO. El camino de Google tiene su propio
+ * aviso en `GoogleTermsNote`, que lleva dentro la misma regla porque también
+ * lo enseña `/login`.
  */
 function legal(enModal: boolean) {
   return enModal

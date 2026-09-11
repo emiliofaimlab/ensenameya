@@ -11,6 +11,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GoogleButton } from "@/components/auth/google-button";
+import { GoogleTermsNote } from "@/components/auth/google-terms-note";
+import {
+  TERMS_GOVERNING_LOCALE,
+  TERMS_VERSION,
+} from "@/components/legal/terms-content";
 import { AuthDivider } from "@/components/auth/auth-divider";
 import {
   AUTH_FIELD,
@@ -109,11 +114,28 @@ export function LoginForm({
 
   return (
     <div className="flex flex-col gap-5">
+      {/*
+        ⚠️ `terms` también aquí desde el 11-sep-2026, y no es simetría por
+        gusto: este botón NO solo inicia sesión, también DA DE ALTA. Verificado
+        en vivo con una cuenta de Google que no existía: se creaba igual, pero
+        sin `intent`, sin referido y con CERO filas en `terms_acceptances`,
+        para siempre. Con `?terms=` en la URL de vuelta, AU04 deja la misma
+        constancia que por `/signup`, y la RPC es idempotente por (usuario,
+        versión), así que a quien ya tiene cuenta no le crea filas nuevas ni le
+        pisa la fecha de la primera vez.
+
+        Lo que NO se pasa aquí es `intent` ni `ref`: quien entra por esta
+        pantalla no ha elegido a qué viene ni trae campaña.
+      */}
       <GoogleButton
         next={next}
+        terms={{ version: TERMS_VERSION, locale: TERMS_GOVERNING_LOCALE }}
         label="Continuar con Google"
         className={`${AUTH_FIELD} font-medium`}
       />
+      {/* Si por aquí puede nacer una cuenta, por aquí hay que decir qué se
+          acepta al pulsar. Mismo texto que `/signup`, del mismo componente. */}
+      <GoogleTermsNote />
       <AuthDivider />
       {/* `noValidate`: valida `onSubmit` y el mensaje se pinta bajo el campo,
           en español y anunciable (RV-14). Ver signup-form. */}
@@ -175,9 +197,23 @@ export function LoginForm({
             sigue siendo `role="alert"` para que se anuncie. Antes solo existía
             como aviso flotante, que se va solo y no siempre se lee. */}
         <FieldError id="login-error" message={errores.form} className="text-sm" />
+        {/*
+          ⚠️ Este mensaje ya no nombra a Google, y es un arreglo, no una
+          rebaja. Por `/auth/callback` pasan TRES flujos —entrar con Google,
+          recuperar la contraseña y confirmar el correo— y los tres salen por
+          `/login?error=oauth`. O sea que confirmar el correo desde el móvil
+          decía «no se pudo completar el inicio con Google», que es mentira y
+          además no ayuda.
+
+          Y la causa más común no era ninguna de las tres: el `code_verifier`
+          es una cookie del NAVEGADOR, así que abrir el enlace en otro
+          dispositivo falla siempre. Eso es lo que conviene decir.
+        */}
         {oauthError ? (
           <p role="alert" className="text-sm text-destructive">
-            No se pudo completar el inicio con Google. Intenta de nuevo.
+            No se pudo completar el acceso. El enlace pudo caducar, usarse dos
+            veces, o abrirse en un navegador distinto del que lo pidió. Vuelve a
+            intentarlo desde aquí.
           </p>
         ) : null}
         <Button

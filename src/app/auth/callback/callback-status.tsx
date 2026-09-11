@@ -18,6 +18,8 @@ function homeDeIntencion(intent: "alumno" | "tutor"): string {
 
 export function CallbackStatus({
   code,
+  providerError,
+  providerErrorDescription,
   next,
   intent,
   referralCode,
@@ -25,6 +27,11 @@ export function CallbackStatus({
   termsLocale,
 }: {
   code: string | null;
+  /** `?error=` y `?error_description=` con los que vuelve Supabase cuando el
+   *  usuario cancela en Google o el proveedor rechaza. Solo se registran: al
+   *  usuario se le sigue enseñando un mensaje, no el texto del proveedor. */
+  providerError: string | null;
+  providerErrorDescription: string | null;
   next: string | null;
   intent: "alumno" | "tutor" | null;
   referralCode: string | null;
@@ -51,11 +58,25 @@ export function CallbackStatus({
 
     async function run() {
       if (!code) {
+        // Antes esto era mudo y trataba igual tres cosas muy distintas: que el
+        // usuario cancelara en Google, que el proveedor rechazara con un motivo
+        // concreto, y que alguien abriera /auth/callback a pelo. El motivo lo
+        // manda Supabase y no costaba nada mirarlo.
+        if (providerError) {
+          console.error(
+            "[callback] el proveedor rechazó",
+            providerError,
+            providerErrorDescription ?? "(sin descripción)",
+          );
+        }
         router.replace("/login?error=oauth");
         return;
       }
 
-      const supabase = createClient();
+      // Apaga el auto-canje de `?code=`: aquí lo canjea la línea de abajo,
+      // que necesita el `code_verifier` intacto. El porqué largo, en
+      // `lib/supabase/client.ts`.
+      const supabase = createClient({ detectSessionInUrl: false });
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) {
         router.replace("/login?error=oauth");
@@ -75,10 +96,23 @@ export function CallbackStatus({
       // La RPC es idempotente por (usuario, versión): volver a entrar con
       // Google no crea filas nuevas ni pisa la fecha de la primera vez.
       if (termsVersion) {
-        await supabase.rpc("record_terms_acceptance", {
-          p_version: termsVersion,
-          p_locale: termsLocale ?? "en",
-        });
+        // ⚠️ Regla de oro 10. Esto era un `await` a pelo: si la RPC fallaba
+        // —caduca la sesión, cambia un grant, se cae la red— el alta seguía
+        // adelante sin constancia legal y sin rastro en ninguna parte. No se
+        // aborta el flujo (dejar al usuario fuera es peor que entrar sin la
+        // fila), pero deja de ser invisible.
+        const { error: errTerms } = await supabase.rpc(
+          "record_terms_acceptance",
+          { p_version: termsVersion, p_locale: termsLocale ?? "en" },
+        );
+        if (errTerms) {
+          console.error(
+            "[callback] no se grabó la aceptación de términos",
+            termsVersion,
+            errTerms.code,
+            errTerms.message,
+          );
+        }
       }
 
       // El usuario, una sola vez: lo necesitan la intención, el referido y
@@ -102,17 +136,81 @@ export function CallbackStatus({
       // queda todavía el de tutor. Un alta por Google que no lo escriba pierde
       // ese enganche sin que nada falle a la vista.
       if (intent && !user.user_metadata?.intended_role) {
-        await supabase.auth.updateUser({ data: { intended_role: intent } });
+        // Si esto falla, el asistente de alumno no sabrá que a esta persona le
+        // queda además el de tutor, y no fallará nada a la vista: exactamente
+        // el tipo de pérdida que hay que poder ver en la consola.
+        const { error: errIntent } = await supabase.auth.updateUser({
+          data: { intended_role: intent },
+        });
+        if (errIntent) {
+          console.error(
+            "[callback] no se guardó intended_role",
+            intent,
+            errIntent.message,
+          );
+        } else {
+          /*
+           * ⚠️ `updateUser` guarda el metadata pero NO reemite el JWT, y el
+           * servidor lee los claims del token (`getClaims()`), no de la base.
+           * O sea que `intended_role` no existía para nadie del lado servidor
+           * hasta que el token caducara —hasta una hora—, y `requireUser()`,
+           * que decide con él a qué asistente mandarte, veía el valor viejo.
+           *
+           * Eso es lo que hacía que quien elegía «Quiero enseñar» y pulsaba
+           * «Ahora no» acabara rellenando el formulario de ALUMNO: el rebote
+           * de `requireUser` no sabía todavía que era un aspirante a tutor.
+           * Verificado en vivo el 11-sep-2026.
+           *
+           * Un refresco lo reemite con el metadata dentro. Solo corre aquí,
+           * que es donde acabamos de escribirlo: un viaje más en el alta, cero
+           * en los logins.
+           */
+          const { error: errRefresh } = await supabase.auth.refreshSession();
+          if (errRefresh) {
+            console.error(
+              "[callback] el JWT se quedó sin intended_role",
+              errRefresh.message,
+            );
+          }
+        }
       }
-      // US-1302: el metadata de Google no trae el código, así que el perfil
-      // lo crea sin él. `is("referral_code", null)` deja intacta cualquier
-      // atribución previa: se referencia una vez, no en cada login.
-      if (referralCode) {
-        await supabase
+      /*
+       * US-1302: el metadata de Google no trae el código, así que el perfil lo
+       * crea sin él y hay que estamparlo aquí.
+       *
+       * ⚠️ SOLO EN ALTAS NUEVAS, y esto no es una precaución teórica.
+       * Verificado en vivo el 11-sep-2026: una cuenta VETERANA —mismo `id`,
+       * `onboarding_complete` ya en `true`— que entrara por un enlace con
+       * `?ref=` se quedaba con el código del referidor. El `.is(…, null)` de
+       * abajo impide PISAR una atribución previa, pero no comprueba que la
+       * cuenta acabe de nacer: bastaba un LOGIN, no hacía falta un alta. O
+       * sea que cualquiera podía atribuirse usuarios que ya existían con solo
+       * hacerles entrar por su enlace, y como el primero que pasa se lo queda
+       * para siempre, tampoco había forma de corregirlo después.
+       *
+       * ponytail: la ventana de 5 min es el TECHO de este arreglo. Auth no
+       * dice «este usuario es nuevo» por ninguna parte y `created_at` es lo
+       * más cercano que hay; el margen cubre un onboarding lento de Google sin
+       * llegar a abarcar una sesión posterior. Si algún día hiciera falta
+       * exactitud, el sitio es `handle_new_user`, que sí sabe que está
+       * insertando una fila nueva.
+       */
+      const reciénNacida =
+        Date.now() - new Date(user.created_at).getTime() < 5 * 60 * 1000;
+      if (referralCode && reciénNacida) {
+        const { error: errRef } = await supabase
           .from("profiles")
           .update({ referral_code: referralCode })
           .eq("id", user.id)
           .is("referral_code", null);
+        if (errRef) {
+          console.error(
+            "[callback] no se estampó el referido",
+            referralCode,
+            errRef.code,
+            errRef.message,
+          );
+        }
       }
 
       // Destino, por orden: `?next=` interno seguro → la intención de AU02 →
@@ -137,8 +235,36 @@ export function CallbackStatus({
        * —`/onboarding` redirige si `onboarding_complete`, y `/tutor/onboarding`
        * enseña "Ya eres tutor" si el perfil está aprobado.
        */
-      if (!target && intent) {
-        target = homeDeIntencion(intent);
+      /*
+       * ⚠️ Y la intención gana también al `next`, que es lo que faltaba.
+       *
+       * Con `if (!target && intent)` la intención solo decidía cuando `next`
+       * venía vacío — o sea, casi nunca: el MODAL, que es la puerta principal
+       * de alta, rellena `next` SIEMPRE con la ruta actual
+       * (`signup-dialog.tsx`). Verificado en vivo el 11-sep-2026:
+       * `/signup?next=/tutors` + «Quiero enseñar» + Google aterrizaba en
+       * `/tutors`, una lista pública, sin que nada llevara al recién llegado
+       * hacia ser tutor. El selector no decidía nada por este camino.
+       *
+       * Peor aún: `/tutors` es PÚBLICA, así que `requireUser()` —que sí sabe
+       * rescatar a un aspirante a tutor— no llegaba a correr nunca.
+       *
+       * El `next` no se tira, se traslada: `/onboarding` sabe volver a él al
+       * terminar (lee `?next=`), así que quien viene a aprender hace el
+       * asistente y aterriza donde estaba.
+       *
+       * ponytail: para `intent=tutor` el `next` SÍ se pierde, y es el techo de
+       * este arreglo. `/tutor/onboarding` no lee `?next=` (lo dice también
+       * `requireUser`), y darle soporte es tocar el asistente entero. Quien
+       * acaba de decir «quiero enseñar» entra al flujo de enseñar; volver a la
+       * lista de tutores importa menos.
+       */
+      if (intent) {
+        const destinoIntencion = homeDeIntencion(intent);
+        target =
+          intent === "alumno" && target
+            ? `${destinoIntencion}?next=${encodeURIComponent(target)}`
+            : destinoIntencion;
       }
 
       if (!target) {
@@ -150,14 +276,33 @@ export function CallbackStatus({
         // política `tutor_profiles_select_public` deja leer la fila de CUALQUIER
         // tutor aprobado, así que sin filtro esto trae muchas filas y
         // `maybeSingle()` devuelve error en vez de la propia.
-        const [{ data: roleRows }, { data: tutorProfile }] = await Promise.all([
-          supabase.from("user_roles").select("role"),
+        const [
+          { data: roleRows, error: errRoles },
+          { data: tutorProfile, error: errTutor },
+        ] = await Promise.all([
+          // ⚠️ Este `.eq()` tampoco es decorativo: `has_role('admin')` deja a
+          // un admin LEER la tabla entera, así que sin filtro esto traía los
+          // roles de todo el mundo y `pickHome` decidía con los de otros.
+          supabase.from("user_roles").select("role").eq("user_id", user.id),
           supabase
             .from("tutor_profiles")
             .select("profile_id")
             .eq("profile_id", user.id)
             .maybeSingle(),
         ]);
+        // ⚠️ Regla de oro 10 otra vez, y aquí la mentira es cara: un fallo de
+        // la consulta de roles es indistinguible de «esta persona solo es
+        // alumno», así que un admin o un tutor acaba en /app y nada lo dice.
+        if (errRoles) {
+          console.error("[callback] roles", errRoles.code, errRoles.message);
+        }
+        if (errTutor) {
+          console.error(
+            "[callback] tutor_profiles",
+            errTutor.code,
+            errTutor.message,
+          );
+        }
         target = pickHome((roleRows ?? []).map((r) => r.role as AppRole), {
           esTutor: Boolean(tutorProfile),
           // El último panel de este navegador (`ey-panel`), que ya no se borra
@@ -171,8 +316,25 @@ export function CallbackStatus({
       router.refresh();
     }
 
-    void run();
-  }, [code, next, intent, referralCode, termsVersion, termsLocale, router]);
+    // ⚠️ `void run()` a secas dejaba el spinner girando PARA SIEMPRE si algo
+    // lanzaba: la excepción ocurre dentro de un efecto ya montado, así que no
+    // hay `error.tsx` que la recoja ni pantalla que cambie. El usuario se
+    // quedaba mirando «Verificando tu cuenta…» sin nada más que hacer.
+    void run().catch((e) => {
+      console.error("[callback] el flujo se cayó entero", e);
+      router.replace("/login?error=oauth");
+    });
+  }, [
+    code,
+    providerError,
+    providerErrorDescription,
+    next,
+    intent,
+    referralCode,
+    termsVersion,
+    termsLocale,
+    router,
+  ]);
 
   return (
     <div className="rounded-[20px] border bg-card p-9 text-center shadow-sm">

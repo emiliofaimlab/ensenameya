@@ -1,5 +1,5 @@
 import type { Database } from "@/lib/database.types";
-import { PANEL_COOKIE, type Panel } from "@/lib/panel";
+import { PANEL_COOKIE, type Panel } from "../panel.ts";
 
 /**
  * Helpers de rol **seguros para el navegador** (sin acceso a cookies/DB).
@@ -61,10 +61,23 @@ export function pickHome(
  */
 export function panelDeCookie(): Panel | null {
   if (typeof document === "undefined") return null;
-  const valor = document.cookie
-    .split("; ")
-    .find((c) => c.startsWith(`${PANEL_COOKIE}=`))
-    ?.slice(PANEL_COOKIE.length + 1);
+  return panelValido(
+    document.cookie
+      .split("; ")
+      .find((c) => c.startsWith(`${PANEL_COOKIE}=`))
+      ?.slice(PANEL_COOKIE.length + 1),
+  );
+}
+
+/**
+ * Valida un valor CRUDO de la cookie `ey-panel`.
+ *
+ * Existe aparte porque hay dos lectores: éste, de cliente, y el de servidor en
+ * `lib/auth/server.ts`, que la saca de `cookies()`. Una cookie manipulada no
+ * abre nada: `pickHome` vuelve a comprobar los permisos reales antes de
+ * hacerle caso.
+ */
+export function panelValido(valor: string | null | undefined): Panel | null {
   return valor === "alumno" || valor === "tutor" || valor === "admin"
     ? valor
     : null;
@@ -100,6 +113,20 @@ export function safeNext(
   fallback = "/app",
 ): string {
   if (!next) return fallback;
-  if (!next.startsWith("/") || next.startsWith("//")) return fallback;
-  return next;
+  /*
+   * ⚠️ Se normaliza COMO LO HACE EL NAVEGADOR antes de decidir, no después.
+   *
+   * Verificado en vivo el 11-sep-2026: `/login?entrar=1&next=/\example.com`
+   * + entrar con Google dejaba al usuario en `http://example.com/`. El filtro
+   * de antes solo miraba `//`, y `"/\evil.com".startsWith("//")` es false —
+   * pero al resolver la URL el navegador convierte `\` en `/`, así que eso es
+   * `//evil.com`, o sea protocol-relative, o sea fuera del sitio. Y no hacía
+   * falta ni un clic: lo ejecutaba el `router.replace()` del callback.
+   *
+   * Los tabuladores y los saltos de línea se borran por lo mismo: el navegador
+   * los ignora al resolver, así que `/\t/evil.com` colaba igual.
+   */
+  const limpio = next.replace(/[\t\n\r]/g, "");
+  if (!limpio.startsWith("/") || /^\/[/\\]/.test(limpio)) return fallback;
+  return limpio;
 }
