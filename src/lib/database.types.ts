@@ -1004,6 +1004,8 @@ export type Database = {
       }
       orders: {
         Row: {
+          checkout_amount: number | null
+          checkout_opened_at: string | null
           created_at: string
           currency: string
           id: string
@@ -1015,6 +1017,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          checkout_amount?: number | null
+          checkout_opened_at?: string | null
           created_at?: string
           currency: string
           id?: string
@@ -1026,6 +1030,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          checkout_amount?: number | null
+          checkout_opened_at?: string | null
           created_at?: string
           currency?: string
           id?: string
@@ -3037,7 +3043,12 @@ export type Database = {
         Returns: string
       }
       confirm_order_payment: {
-        Args: { p_event_id?: string; p_order_id: string; p_success?: boolean }
+        Args: {
+          p_amount_charged?: number
+          p_event_id?: string
+          p_order_id: string
+          p_success?: boolean
+        }
         Returns: Json
       }
       confirm_payment: {

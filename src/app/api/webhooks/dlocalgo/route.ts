@@ -14,10 +14,18 @@ type EstadoReserva = Database["public"]["Enums"]["booking_status"];
  * `paid`. El navegador no confirma pagos.
  *
  * ⚠️ LLAMA A LA MISMA `confirm_payment` / `confirm_order_payment` QUE EL DE
- * STRIPE, y eso es el requisito, no una casualidad (regla de oro 2): el importe
- * sale de `payments.gross_amount`, congelado por `create_booking`, y **jamás
- * del cuerpo del webhook**. De hecho aquí ni siquiera se podría hacer trampa
- * con el importe aunque se quisiera — el cuerpo no trae ninguno.
+ * STRIPE, y eso es el requisito, no una casualidad (regla de oro 2): lo que se
+ * DEBE sale de `payments.gross_amount` menos `payments.credit_amount`, congelado
+ * por `create_booking`, y lo calcula la propia función dentro de la base.
+ *
+ * 🔴 LO QUE SÍ VIAJA AHORA ES LO QUE dLOCAL COBRÓ, y hay que leer de dónde:
+ * **de `GET /v1/payments/{id}`, jamás del cuerpo del POST**. El cuerpo no trae
+ * importe —ni lo traerá—, así que quien mande la notificación no puede elegirlo;
+ * el número sale de la misma relectura que ya decide el estado. Con eso
+ * `confirm_payment` concilia lo cobrado contra lo debido y aborta si no cuadra,
+ * que es la mitad en profundidad del cerrojo contra el crédito acuñado (aplicar
+ * crédito, abrir el cobro descontado y quitar el crédito después). Ver el bloque
+ * de `importeCobrado`.
  *
  * ── POR QUÉ ES UN FICHERO APARTE Y NO UNA RAMA DEL DE STRIPE ────────────────
  * Porque lo que separa a los dos es la FIRMA, y la firma es lo primero que
@@ -61,6 +69,14 @@ export const runtime = "nodejs";
 
 /** Estados de `payments` en los que el cobro ya está contabilizado. */
 const YA_CONTABILIZADO = ["paid", "refunded", "partially_refunded"];
+
+/**
+ * `check_violation` — el errcode con el que `confirm_payment` levanta las DOS
+ * comprobaciones de importe (la del argumento `p_amount_charged` y la del
+ * marcador `payments.checkout_amount` de `marcar_cobro_abierto`). Mismo valor y
+ * mismo porqué que en el webhook de Stripe; ver `20260912110000` §7.
+ */
+const DESCUADRE = "23514";
 
 export async function POST(req: Request) {
   // ⚠️ EL CUERPO CRUDO. `req.text()` y no `req.json()`: la firma es un HMAC
@@ -131,23 +147,79 @@ export async function POST(req: Request) {
    * `event_id` para ESA reserva, y con un pedido va `confirm_order_payment`,
    * que recorre las N líneas EN UNA TRANSACCIÓN. Nunca se acredita una línea
    * de un pedido por separado (EY-176).
+   *
+   * Devuelve `null` si todo fue bien, o la RESPUESTA que hay que dar si la
+   * conciliación de importes tumbó la transacción — no lanza en ese caso,
+   * porque un `throw` acaba en un 500 de Next con el cuerpo vacío y lo que hace
+   * falta ahí es un cuerpo que diga el desajuste.
    */
-  const llamar = async (exito: boolean) => {
-    if (ref.tipo === "order") {
-      const { error } = await admin.rpc("confirm_order_payment", {
-        p_order_id: ref.id,
-        p_success: exito,
-        p_event_id: evento.id,
+  const llamar = async (
+    exito: boolean,
+    /**
+     * 🔴 LO QUE dLOCAL COBRÓ DE VERDAD, en unidades menores, o `null` si la
+     * relectura del cobro no lo trae. Sin valor por defecto a propósito: quien
+     * llame tiene que decidir, porque un parámetro opcional aquí es la forma más
+     * barata de volver a dejar la conciliación inerte en silencio (regla 11).
+     */
+    importeCobrado: number | null,
+  ): Promise<NextResponse | null> => {
+    // ⚠️ `undefined` Y NO LA CLAVE AUSENTE: supabase-js no serializa las claves
+    // `undefined` (el mecanismo de la regla de oro 12), así que el argumento no
+    // viaja y PostgREST usa el `default null`. La clave se escribe igualmente
+    // para que la vea el COMPILADOR: si la RPC no la aceptara, eso es un error
+    // de tipos y no un `PGRST202` en producción.
+    const salida =
+      ref.tipo === "order"
+        ? await admin.rpc("confirm_order_payment", {
+            p_order_id: ref.id,
+            p_success: exito,
+            p_event_id: evento.id,
+            p_amount_charged: importeCobrado ?? undefined,
+          })
+        : await admin.rpc("confirm_payment", {
+            p_booking_id: ref.id,
+            p_success: exito,
+            p_event_id: evento.id,
+            p_amount_charged: importeCobrado ?? undefined,
+          });
+
+    const error = salida.error;
+    if (!error) return null;
+
+    if (error.code === DESCUADRE) {
+      /**
+       * 🔴 LO COBRADO NO ES LO DEBIDO. La RPC abortó la transacción, y eso se
+       * lleva por delante también el `insert` en `payment_webhook_events`: el
+       * evento no queda marcado como procesado y dLocal lo va a reintentar cada
+       * 10 minutos durante 30 DÍAS con el dinero ya cobrado y la reserva sin
+       * confirmar.
+       *
+       * Es lo correcto —a gritos antes que en silencio— y por eso sale por 500
+       * con los dos importes en el log y el desajuste en el cuerpo. Un 200 mudo
+       * aquí dejaría una reserva pagada de menos que no mira nadie, que es la
+       * regla de oro 11 con dinero dentro. La salida es MANUAL y está escrita en
+       * `docs/QA-LANZAMIENTO.md`.
+       */
+      console.error("[conciliación] 🔴 lo cobrado no es lo debido: NO se acredita", {
+        sujeto: etiqueta,
+        pasarela: dlocalProvider.key,
+        cobro: paymentId,
+        evento: evento.id,
+        tipo: evento.rawType,
+        cobradoPorLaPasarela: importeCobrado,
+        // El otro lado lo dice la propia función, que es quien lo leyó de
+        // `payments`. Repetir aquí la resta sería una segunda fuente de verdad
+        // para el importe debido — lo que prohíbe la regla de oro 2.
+        segunLaBase: error.message,
+        pista: error.hint,
       });
-      if (error) throw new Error(error.message);
-      return;
+      return NextResponse.json(
+        { status: "descuadre", sujeto: etiqueta, error: error.message },
+        { status: 500 },
+      );
     }
-    const { error } = await admin.rpc("confirm_payment", {
-      p_booking_id: ref.id,
-      p_success: exito,
-      p_event_id: evento.id,
-    });
-    if (error) throw new Error(error.message);
+
+    throw new Error(error.message);
   };
 
   /** El sello, en TODAS las líneas. Ver el porqué en el webhook de Stripe. */
@@ -335,9 +407,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: "ajeno", sujeto: etiqueta });
     }
 
+    // `currency` entra en el select por la comprobación de moneda de más abajo,
+    // no para comparar importes: lo debido lo calcula `confirm_payment` dentro
+    // de la base (regla de oro 2). Es la misma consulta, no una de más.
     const { data: pagos, error: ePagos } = await admin
       .from("payments")
-      .select("booking_id, status, provider_payment_id")
+      .select("booking_id, status, provider_payment_id, currency")
       .in("booking_id", lineas.map((b) => b.id));
     if (ePagos) throw new Error(ePagos.message);
 
@@ -362,12 +437,88 @@ export async function POST(req: Request) {
       );
     }
 
+    /**
+     * 🔴 LO QUE dLOCAL COBRÓ DE VERDAD — la mitad en profundidad del cerrojo
+     * del crédito.
+     *
+     * Sale DEL COBRO RELEÍDO, nunca de nuestra base (comparar `gross_amount`
+     * consigo mismo no concilia nada) y nunca del cuerpo del POST (que no trae
+     * importe: es `{"payment_id":"DP-283"}` y nada más). Es el `amount` de
+     * `GET /v1/payments/{id}` pasado a unidades menores por `eventoDePago` →
+     * `evento.amountMinor`, y eso importa por dos motivos:
+     *
+     *   · dLocal habla en unidad MAYOR («45.00») y `payments.gross_amount` en
+     *     menor; la conversión conoce las monedas sin céntimos (CLP, PYG) y vive
+     *     en `aUnidadMenor`, en un solo sitio. Aquí no se multiplica por 100.
+     *   · el número viene de la MISMA relectura que decide el estado, así que no
+     *     lo elige quien manda la notificación. Es la diferencia nº 1 del
+     *     encabezado de este archivo, usada a favor.
+     *
+     * ⚠️ CON UN PEDIDO ES EL TOTAL DEL CARGO, NO EL DE UNA LÍNEA: un pedido de N
+     * mentorías es UN cobro `DP-…` (P-3). Repartirlo es cosa de
+     * `confirm_order_payment`, que conoce el `gross_amount` y el `credit_amount`
+     * de cada línea.
+     *
+     * ⚠️ Y NO ES `balance_currency`. El cobro se crea en `payments.currency`
+     * (`amount: aUnidadMayor(totalMenor, input.currency)` en el adaptador) y la
+     * relectura devuelve esa misma moneda; `balance_currency` es la del SALDO del
+     * comercio (USD) y no tiene nada que ver con lo que se le cobró al alumno.
+     */
+    const importeCobrado = evento.amountMinor;
+
+    if (importeCobrado === null) {
+      // No se inventa. Sin importe, la conciliación POR ARGUMENTO no actúa y
+      // queda en pie la del MARCADOR (`payments.checkout_amount`, que sella
+      // `marcar_cobro_abierto`), que es la otra mitad del cerrojo. Se grita
+      // porque un `PAID` sin `amount` es su API cambiando de forma.
+      console.error("[conciliación] ⚠️ cobro confirmado sin importe: no se concilia", {
+        sujeto: etiqueta,
+        cobro: paymentId,
+        evento: evento.id,
+        tipo: evento.rawType,
+      });
+    } else {
+      /**
+       * ⚠️ LA MONEDA SE COMPRUEBA ANTES DE COMPARAR NADA: `gross_amount` está en
+       * unidades menores de `payments.currency`, y un importe en otra moneda es
+       * un número perfectamente comparable y una comparación perfectamente
+       * falsa. El precedente es M-01 en Stripe (cobró «PAB 46,80» por «45,00
+       * US$» convirtiendo por geolocalización sin avisar); aquí el cobro se crea
+       * en nuestra moneda y esto no debería saltar nunca — que es exactamente el
+       * motivo de que, si salta, tenga que parar el webhook.
+       */
+      const monedaCobrada = evento.currency?.toUpperCase() ?? null;
+      const monedasDebidas = [...new Set(cobros.map((p) => p.currency.toUpperCase()))];
+
+      if (monedaCobrada === null || monedasDebidas.some((m) => m !== monedaCobrada)) {
+        console.error("[conciliación] 🔴 el cobro llegó en otra moneda que la reserva", {
+          sujeto: etiqueta,
+          pasarela: dlocalProvider.key,
+          cobro: paymentId,
+          evento: evento.id,
+          cobrado: `${importeCobrado} ${monedaCobrada ?? "(sin moneda)"}`,
+          debido: monedasDebidas.join(", "),
+        });
+        return NextResponse.json(
+          {
+            status: "descuadre",
+            sujeto: etiqueta,
+            error:
+              `el cobro llegó en ${monedaCobrada ?? "(sin moneda)"} y lo debido está en ` +
+              `${monedasDebidas.join(", ")}: no se acredita`,
+          },
+          { status: 500 },
+        );
+      }
+    }
+
     // Se sella ANTES de confirmar para que `yaAcreditado` sea fiable ante una
     // reentrega que llegue en medio. Normalmente ya está puesto por el
     // adaptador; esto lo hace idempotente y cubre el cobro creado por otra vía.
     await sellarReferencia(paymentId);
 
-    await llamar(true);
+    const descuadre = await llamar(true, importeCobrado);
+    if (descuadre) return descuadre;
     return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto: etiqueta });
   };
 
@@ -382,9 +533,14 @@ export async function POST(req: Request) {
       return await cobroEntrante();
 
     // Terminal: EXPIRED o CANCELLED. Libera el horario.
-    case "cobro-fallido":
-      await llamar(false);
+    case "cobro-fallido": {
+      // `null`: no hay cobro que conciliar. `confirm_payment` ni mira el
+      // argumento con `p_success` falso — ahí hace lo contrario, devolver el
+      // crédito que financiaba el pago que se cayó.
+      const descuadre = await llamar(false, null);
+      if (descuadre) return descuadre;
       return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto: etiqueta });
+    }
 
     default:
       return NextResponse.json({ status: "ignorado", tipo: evento.rawType });

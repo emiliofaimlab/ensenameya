@@ -21,8 +21,30 @@ import type { Database } from "@/lib/database.types";
 /** Espejo de `public.order_status` (20260827150000). */
 export type OrderStatus = Database["public"]["Enums"]["order_status"];
 
-/** Espejo de `public.orders` (20260827150000). */
-export type OrderRow = Database["public"]["Tables"]["orders"]["Row"];
+/**
+ * Espejo de `public.orders` (20260827150000) **acotado a lo que la consulta
+ * pide de verdad** (`lib/orders/queries.ts:83`).
+ *
+ * ⚠️ NO es la fila entera, y por eso es un `Pick`. Lo era hasta que
+ * `20260912120000` le añadió a `orders` el sello del cobro
+ * (`checkout_opened_at` / `checkout_amount`) y el typecheck se cayó: la
+ * consulta lista sus columnas una a una —que es la regla de la casa, nunca
+ * `tabla.*`— así que el tipo tiene que decir eso y no «todo lo que tenga la
+ * tabla algún día». Añadir las dos columnas a la consulta habría sido pedir
+ * a la base dos datos que esta pantalla no usa.
+ */
+export type OrderRow = Pick<
+  Database["public"]["Tables"]["orders"]["Row"],
+  | "id"
+  | "student_id"
+  | "status"
+  | "provider"
+  | "currency"
+  | "provider_payment_id"
+  | "lines_fingerprint"
+  | "created_at"
+  | "updated_at"
+>;
 
 /** Una línea del carrito tal y como la come `create_order(p_lines jsonb)`. */
 export type LineaDePedido = {

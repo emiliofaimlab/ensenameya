@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -11,6 +11,14 @@ import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
 import { DatosInvitado } from "@/components/checkout/datos-invitado";
+import {
+  SelectorDeCredito,
+  type CambioDeCredito,
+} from "@/components/checkout/selector-de-credito";
+import {
+  ConfirmarConCredito,
+  hayQueElegirCredito,
+} from "@/components/checkout/confirmar-con-credito";
 import {
   interpretar,
   irAPagar,
@@ -54,6 +62,15 @@ function horaFin(iso: string, minutos: number | null, timeZone: string): string 
 /** Lo que hace falta para pagar, una vez resuelta la reserva. */
 type Apertura =
   | { fase: "abriendo" }
+  /**
+   * 💳 La reserva existe y el alumno tiene crédito que aplicar (o quitar), pero
+   * el cobro TODAVÍA NO SE HA ABIERTO. Es la única ventana en la que el crédito
+   * se puede tocar —los dos cerrojos de `20260912110000` §8 se niegan en cuanto
+   * hay un cobro abierto por otro importe—, y por eso es una fase y no un
+   * adorno dentro de "lista": mientras se está aquí, no hay Session ni marcador
+   * sellado que proteger. El porqué completo, en `hayQueElegirCredito`.
+   */
+  | { fase: "eligiendo"; bookingId: string }
   | { fase: "error"; mensaje: string }
   /**
    * Estos horarios YA están comprados: existe una reserva de este alumno que
@@ -80,6 +97,19 @@ type Apertura =
       embed: Embed | null;
       /** dLocal transparente: sus campos de tarjeta, dentro de esta pantalla. */
       transparente: DlocalTransparente | null;
+    }
+  /**
+   * 💳 El crédito cubre el total: no hay pasarela a la que ir —un cargo de 0 en
+   * Stripe es un 400— y lo que va en su sitio es un botón de confirmar contra
+   * `POST /api/pagos/credito`. Es una fase propia y no un `embed: null` más:
+   * ese null ya significaba dos cosas (simulado o dLocal) y una tercera lo
+   * habría convertido en el sitio donde se equivoca la próxima pantalla.
+   */
+  | {
+      fase: "credito";
+      bookingId: string;
+      retencionHasta: string | null;
+      creditoTotal: number;
     };
 
 /**
@@ -143,6 +173,16 @@ type Apertura =
  * `expire_stale_bookings`. Ese es el coste que el cliente aceptó con D-2; lo
  * que se arregla arriba son las salidas en las que la persona DICE que ya no
  * quiere ese hueco.
+ *
+ * ⚠️ 💳 Y «EL FORMULARIO AL LLEGAR» TIENE DESDE HOY UNA EXCEPCIÓN: si el alumno
+ * tiene crédito para esta reserva, el formulario ESPERA a que elija. No es una
+ * pausa de cortesía —es que abrir el cobro sella `payments.checkout_amount` y a
+ * partir de ahí ni se puede aplicar un crédito ni quitar el que hubiera (los dos
+ * cerrojos de `20260912110000` §8, el candado contra un acuñador de crédito). O
+ * sea que la única ventana para elegir es ANTES, y por eso hay un botón de
+ * «Continuar al pago» que antes no hacía falta. Quien no tiene ningún crédito
+ * —casi todos— no ve nada de esto: la pantalla se comporta exactamente igual que
+ * ayer. El porqué largo está en `hayQueElegirCredito`.
  */
 export function CheckoutForm({
   productId,
@@ -237,11 +277,26 @@ export function CheckoutForm({
 }) {
   const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
+  /**
+   * 💳 Lo último que ha dicho el selector de crédito. `null` = todavía no ha
+   * dicho nada, o sea que aún está leyendo; de eso depende que «Continuar al
+   * pago» esté apagado, para que nadie abra —y selle— el cobro un segundo antes
+   * de ver el crédito que podía aplicar.
+   */
+  const [credito, setCredito] = useState<CambioDeCredito | null>(null);
+  /**
+   * Cuánto de este cobro lo pone un crédito, según lo que devolvió
+   * `aplicar_credito` EN EL SERVIDOR. No es una cuenta del navegador y no decide
+   * nada: es lo que hace que el resumen y el botón dejen de anunciar el bruto
+   * cuando ya no es lo que se va a cobrar (regla de oro 2).
+   */
+  const creditoAplicado = credito?.tipo === "aplicado" ? credito.cubre : 0;
+  const aPagar = Math.max(0, total - creditoAplicado);
   // El botón repite la cifra GRANDE del total que tiene justo encima —o sea la
   // local si la hay—, no el dólar: si dijeran números distintos, el que se lee
   // al pulsar es el del botón. El dólar no se pierde, está en la línea pequeña
   // del total, a dos centímetros.
-  const { local: totalLocal, usd: totalUsd } = usePrecio(total, currency);
+  const { local: totalLocal, usd: totalUsd } = usePrecio(aPagar, currency);
   const [pagando, setPagando] = useState(false);
 
   /**
@@ -273,6 +328,134 @@ export function CheckoutForm({
    */
   const abiertoPara = useRef<string | null>(null);
   const clave = `${productId}|${[...slots].sort().join(",")}`;
+  /**
+   * Ya se tomó la decisión inicial: abrir el cobro de una, o esperar a que el
+   * alumno elija su crédito. Existe por una carrera concreta —el selector puede
+   * avisar de que el crédito cubre el total ANTES de que vuelva
+   * `hayQueElegirCredito`—, y sin él esa respuesta tardía devolvería la pantalla
+   * a la elección cuando ya estaba en el botón de confirmar.
+   */
+  const decidido = useRef(false);
+  /** La reserva que se está pagando, en cuanto se resuelve. La necesita el
+   *  callback del selector, que no vive dentro del efecto que la encuentra. */
+  const reservaAbierta = useRef<string | null>(null);
+  /** Ya se abrió el cobro por el camino sin pasarela. Ver el bucle de abajo. */
+  const sinPasarela = useRef(false);
+
+  /**
+   * 2) EL COBRO. Quién cobra lo decide el servidor leyendo `payments.provider`,
+   * el snapshot que `create_booking` acaba de congelar desde
+   * `payment_routing_rules`. El navegador no elige proveedor: pregunta. Y el
+   * importe sale de `payments.gross_amount` menos lo que ponga el crédito,
+   * nunca de aquí.
+   *
+   * Está fuera del efecto porque se llama desde DOS sitios: al llegar, cuando no
+   * hay ningún crédito que elegir, y al pulsar «Continuar al pago» después de
+   * elegirlo.
+   */
+  const abrirCobro = useCallback(async (bookingId: string) => {
+    setApertura({ fase: "abriendo" });
+    const res = await fetch("/api/pagos/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bookingId }),
+    });
+    const salida = (await res.json().catch(() => ({}))) as RespuestaDeCobro;
+
+    if (!res.ok) {
+      setApertura({
+        fase: "error",
+        mensaje: salida.error ?? "No se pudo abrir el pago.",
+      });
+      return;
+    }
+
+    // A2 · ver `respuesta-de-cobro.ts`. Aquí `embed: null` significa «camino
+    // simulado» (así lo lee el render), así que la traducción tiene que ser
+    // explícita: antes CUALQUIER respuesta sin `clientSecret` acababa en ese
+    // null, y una redirección habría pintado el botón de simular pago.
+    const accion = interpretar(salida);
+
+    if (accion.tipo === "redireccion") {
+      // La reserva ya está creada y el hold corriendo; la pestaña se va a la
+      // pasarela. Si la persona vuelve sin pagar, `ResumePayment` reabre EL
+      // MISMO cobro (el adaptador lo recuerda por `provider_payment_id`).
+      irAPagar(accion.url);
+      return;
+    }
+    if (accion.tipo === "error") {
+      setApertura({ fase: "error", mensaje: accion.mensaje });
+      return;
+    }
+    // 💳 No queda nada que cobrar. Sin esta rama la respuesta caía al `default`
+    // de `interpretar` y salía un error: la mentoría gratis era incanjeable.
+    if (accion.tipo === "credito") {
+      setApertura({
+        fase: "credito",
+        bookingId,
+        retencionHasta: salida.retencionHasta ?? null,
+        creditoTotal: accion.creditoTotal,
+      });
+      return;
+    }
+
+    setApertura({
+      fase: "lista",
+      bookingId,
+      retencionHasta: salida.retencionHasta ?? null,
+      embed: accion.tipo === "embebido" ? accion.embed : null,
+      // dLocal, dentro de la pantalla. Va en el MISMO commit que las otras dos
+      // pantallas de cobro: dejar una atrás deja dos formularios distintos
+      // para el mismo producto.
+      transparente: accion.tipo === "transparente" ? accion.transparente : null,
+    });
+  }, []);
+
+  /**
+   * 💳 Lo que dice el selector cada vez que cambia algo (y una primera vez al
+   * terminar su lectura, también cuando no hay ningún crédito).
+   *
+   * ⚠️ EL COBRO SOLO SE ABRE EN UN CASO: cuando el crédito cubre el total.
+   * Ese camino de `/api/pagos/checkout` devuelve `modo: 'credito'` y **no llama
+   * a `marcar_cobro_abierto`** —está escrito en su propio comentario y es a
+   * propósito—, así que no queda ningún cobro sellado y el alumno todavía puede
+   * quitar el crédito si se equivocó. Con un crédito PARCIAL no se abre nada
+   * hasta que él lo pida: ahí el marcador sí se sella y quitarlo después ya no
+   * se podría.
+   */
+  const alCambiarElCredito = useCallback(
+    (cambio: CambioDeCredito) => {
+      setCredito(cambio);
+      // Del ref y no del estado a propósito: abrir el cobro es un efecto, y
+      // dentro de un actualizador de `setApertura` se ejecutaría dos veces en
+      // StrictMode — dos POST a `/api/pagos/checkout` por un clic.
+      const bookingId = reservaAbierta.current;
+      if (!bookingId) return;
+
+      if (cambio.tipo === "aplicado" && cambio.aPagar === 0) {
+        /*
+         * ⚠️ EL CANDADO QUE IMPIDE EL BUCLE, y no es teórico: al pasar a la fase
+         * "credito" el selector se vuelve a montar, vuelve a leer y vuelve a
+         * avisar de que el crédito cubre el total. Sin esto, ese aviso llamaría
+         * otra vez a `abrirCobro`, que remontaría el selector, que volvería a
+         * avisar: un POST a `/api/pagos/checkout` por vuelta, para siempre.
+         */
+        if (sinPasarela.current) return;
+        sinPasarela.current = true;
+        decidido.current = true;
+        void abrirCobro(bookingId);
+        return;
+      }
+      // Volvió a haber algo que cobrar (quitó el crédito, o aplicó uno parcial):
+      // el candado se suelta para que el siguiente «cubre el total» sí abra.
+      sinPasarela.current = false;
+      // Quitó el crédito estando ya en el bloque de confirmar: vuelta a elegir.
+      setApertura((previo) =>
+        previo.fase === "credito" ? { fase: "eligiendo", bookingId } : previo,
+      );
+    },
+    [abrirCobro],
+  );
 
   useEffect(() => {
     /*
@@ -378,53 +561,33 @@ export function CheckoutForm({
         }
       }
 
-      // 2) El cobro. Quién cobra lo decide el servidor leyendo
-      // `payments.provider`, el snapshot que `create_booking` acaba de congelar
-      // desde `payment_routing_rules`. El navegador no elige proveedor:
-      // pregunta. Y el importe sale de `payments.gross_amount`, nunca de aquí.
-      const res = await fetch("/api/pagos/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId }),
-      });
-      const salida = (await res.json().catch(() => ({}))) as RespuestaDeCobro;
+      // El callback del selector vive fuera de este efecto y necesita saber qué
+      // reserva se está pagando.
+      reservaAbierta.current = bookingId;
 
-      if (!res.ok) {
-        setApertura({
-          fase: "error",
-          mensaje: salida.error ?? "No se pudo abrir el pago.",
-        });
+      /*
+       * 💳 2) ¿HAY CRÉDITO QUE ELEGIR? Y VA ANTES DE ABRIR EL COBRO, NO DESPUÉS.
+       *
+       * Abrir el cobro sella `payments.checkout_amount`, y desde ese instante
+       * `aplicar_credito` y `quitar_credito` se niegan si el importe no cuadra
+       * —el cerrojo contra un acuñador de crédito, §8 de `20260912110000`—. O
+       * sea que después ya no hay elección posible: ni aplicar ni quitar. El
+       * porqué largo está en `hayQueElegirCredito`.
+       *
+       * Quien no tiene ni un crédito (casi todos) no nota nada: se sigue de
+       * largo a la línea de abajo y la pantalla queda como estaba.
+       */
+      const preguntar = await hayQueElegirCredito(supabase, bookingId);
+      // El selector ya decidió por su cuenta mientras esto viajaba.
+      if (decidido.current) return;
+      decidido.current = true;
+      if (preguntar) {
+        setApertura({ fase: "eligiendo", bookingId });
         return;
       }
 
-      // A2 · ver `respuesta-de-cobro.ts`. Aquí `embed: null` significa «camino
-      // simulado» (así lo lee el render), así que la traducción tiene que ser
-      // explícita: antes CUALQUIER respuesta sin `clientSecret` acababa en ese
-      // null, y una redirección habría pintado el botón de simular pago.
-      const accion = interpretar(salida);
-
-      if (accion.tipo === "redireccion") {
-        // La reserva ya está creada y el hold corriendo; la pestaña se va a la
-        // pasarela. Si la persona vuelve sin pagar, `ResumePayment` reabre EL
-        // MISMO cobro (el adaptador lo recuerda por `provider_payment_id`).
-        irAPagar(accion.url);
-        return;
-      }
-      if (accion.tipo === "error") {
-        setApertura({ fase: "error", mensaje: accion.mensaje });
-        return;
-      }
-
-      setApertura({
-        fase: "lista",
-        bookingId,
-        retencionHasta: salida.retencionHasta ?? null,
-        embed: accion.tipo === "embebido" ? accion.embed : null,
-        // dLocal, dentro de la pantalla. Va en el MISMO commit que las otras dos
-        // pantallas de cobro: dejar una atrás deja dos formularios distintos
-        // para el mismo producto.
-        transparente: accion.tipo === "transparente" ? accion.transparente : null,
-      });
+      // 3) El cobro.
+      await abrirCobro(bookingId);
     }
 
     // ⚠️ SIN LIMPIEZA QUE CANCELE NADA, y es deliberado: desmontar esta pantalla
@@ -434,7 +597,7 @@ export function CheckoutForm({
     // entre `create_booking` y el checkout, cortar dejaría la reserva creada y
     // sin cobro abierto, que es peor que terminar y no pintar nada.
     void abrir(alumnoId);
-  }, [clave, productId, slots, alumnoId, tutorId, durationMin, router]);
+  }, [clave, productId, slots, alumnoId, tutorId, durationMin, router, abrirCobro]);
 
   /**
    * Camino simulado (`payment_routing_rules` aún en 'simulated'): no hay
@@ -540,11 +703,42 @@ export function CheckoutForm({
               className="text-[#333333]"
             />
           </div>
+          {/* 💳 LO QUE PONE EL CRÉDITO, cuando hay uno aplicado.
+
+              Sin esta línea el resumen enseñaría el bruto arriba y la pasarela
+              cobraría otra cosa abajo, que es la contradicción que este bloque
+              existe para no tener. Y la palabra importa: un crédito NO es un
+              descuento —la mentoría vale lo mismo y el tutor cobra lo mismo—,
+              solo cambia quién la financia. Por eso «Tu crédito» y no «Dto.».
+
+              La cifra la escribió `aplicar_credito` en el servidor y llega tal
+              cual por el callback del selector: aquí no se resta nada para
+              decidir un cobro (regla de oro 2), solo para pintar una resta que
+              ya está hecha en `payments`. */}
+          {creditoAplicado > 0 ? (
+            // `flex-wrap` y no un `justify-between` pelado como el subtotal: esta
+            // fila lleva el signo menos delante y, con moneda local, la cifra es
+            // la más larga del resumen («− ≈ 4.380 CLP (12,00 US$)»). En un móvil
+            // estrecho baja de línea en vez de empujar la tarjeta a lo ancho.
+            <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 text-sm">
+              <span className="text-[#6b6b6b]">Tu crédito</span>
+              <span className="text-success">
+                −{" "}
+                <PrecioEnLinea
+                  amountMinor={creditoAplicado}
+                  currency={currency}
+                  className="font-semibold"
+                />
+              </span>
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <span className="text-base font-semibold text-[#19191f]">Total</span>
+            <span className="text-base font-semibold text-[#19191f]">
+              {creditoAplicado > 0 ? "A pagar" : "Total"}
+            </span>
             <span className="text-right">
               <Precio
-                amountMinor={total}
+                amountMinor={aPagar}
                 currency={currency}
                 className="text-[26px] leading-none font-bold text-brand"
                 notaClassName="mt-1"
@@ -628,15 +822,74 @@ export function CheckoutForm({
 
         {/* D-2 · el contador. Va arriba del formulario y no escondido en el
             resumen: es la contrapartida de que el horario se retenga por
-            visita, y una advertencia que no se ve no advierte. */}
-        {apertura.fase === "lista" ? (
+            visita, y una advertencia que no se ve no advierte.
+
+            💳 También en la fase de crédito: que no haya nada que pagar no
+            significa que el horario deje de vencer. Mientras no se confirme, la
+            reserva sigue en `pending_payment` y `expire_stale_bookings` se la
+            lleva igual. */}
+        {apertura.fase === "lista" || apertura.fase === "credito" ? (
           <HoldCountdown hasta={apertura.retencionHasta} className="mt-3.5" />
+        ) : null}
+
+        {/* 💳 EL SELECTOR DE CRÉDITO, ANTES DEL FORMULARIO DE PAGO.
+
+            Solo en las dos fases que llevan la reserva dentro: sin `bookingId`
+            no hay nada que leer, y en esta pantalla la reserva no existe hasta
+            que `create_booking` contesta. Quien no tenga ningún crédito no llega
+            aquí —`hayQueElegirCredito` manda derecho a abrir el cobro— y quien
+            llegue verá lo que el componente decida pintar.
+
+            ⚠️ Y DESAPARECE EN CUANTO HAY PASARELA MONTADA ("lista"), que es lo
+            contrario de un descuido: con el cobro ya abierto, sus botones de
+            aplicar y quitar solo saben chocar contra el cerrojo. Lo que queda en
+            su lugar es la línea «Tu crédito» del resumen de la izquierda, que
+            informa sin prometer que se pueda cambiar. */}
+        {apertura.fase === "eligiendo" || apertura.fase === "credito" ? (
+          <SelectorDeCredito
+            bookingId={apertura.bookingId}
+            onCambio={alCambiarElCredito}
+            className="mt-3.5"
+          />
         ) : null}
 
         {alumnoId && apertura.fase === "abriendo" ? (
           <p className="mt-3.5 text-[13px] text-[#6b6b6b]" aria-live="polite">
             Preparando tu pago seguro…
           </p>
+        ) : null}
+
+        {/* La puerta que obliga a poner el cerrojo del crédito: hasta aquí se
+            puede cambiar de idea; a partir de aquí, no. El botón está apagado
+            mientras el selector no haya hablado —pulsar antes abriría y SELLARÍA
+            el cobro justo antes de que apareciera el crédito que se podía
+            aplicar— y la letra de debajo lo dice en cristiano, porque es una
+            decisión que no se puede deshacer desde ninguna pantalla. */}
+        {apertura.fase === "eligiendo" ? (
+          <div className="mt-4">
+            {/* El selector no pinta nada mientras lee, así que sin esta línea
+                aquí habría un botón apagado y ninguna explicación. */}
+            {credito === null ? (
+              <p
+                className="mb-3 text-[13px] text-[#6b6b6b]"
+                aria-live="polite"
+              >
+                Comprobando tus créditos…
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              className="h-[49px] w-full rounded-[10px] px-6 font-semibold sm:w-auto"
+              disabled={credito === null}
+              onClick={() => void abrirCobro(apertura.bookingId)}
+            >
+              Continuar al pago
+            </Button>
+            <p className="mt-2 text-[12.5px] text-[#6b6b6b]">
+              Tu horario sigue retenido mientras eliges. Después de continuar
+              ya no podrás cambiar el crédito de esta reserva.
+            </p>
+          </div>
         ) : null}
 
         {/* Estos horarios ya están pagados. Se navega a la reserva en el propio
@@ -714,10 +967,33 @@ export function CheckoutForm({
           </div>
         ) : null}
 
+        {/* 💳 El crédito lo paga todo: no hay pasarela que montar y en su sitio
+            va el botón de confirmar contra `POST /api/pagos/credito`.
+
+            Es un POST propio y no esta misma apertura porque `/api/pagos/checkout`
+            se dispara al ENTRAR en la pantalla: confirmar allí convertiría
+            «mirar el precio» en «comprar». Y el importe que se pinta es para
+            LEERLO, no para decidir nada — quien revalida la cobertura es la RPC,
+            en el servidor. */}
+        {apertura.fase === "credito" ? (
+          <ConfirmarConCredito
+            sujeto={{ tipo: "booking", id: apertura.bookingId }}
+            destino={`/reservas/${apertura.bookingId}/confirmacion`}
+            etiqueta="Confirmar reserva"
+            importe={{ minor: apertura.creditoTotal, currency }}
+            className="mt-3.5"
+          />
+        ) : null}
+
         {/* El aviso solo cuando el cobro ES simulado. Dejarlo fijo fue un bug
             real: al encender Stripe, la pantalla seguía diciendo que no se movía
-            dinero mientras el botón llevaba a una pasarela de verdad. */}
-        {simulado ? (
+            dinero mientras el botón llevaba a una pasarela de verdad.
+
+            💳 Y tampoco cuando no hay cobro: con el crédito cubriendo el total
+            no se rutea a ningún proveedor —`/api/pagos/checkout` corta antes de
+            resolver la cadena—, así que hablar de «el cobro está simulado»
+            describiría algo que no está pasando. */}
+        {simulado && apertura.fase !== "credito" ? (
           <p className="mt-4 rounded-lg bg-warning-muted px-4 py-3 text-[13px] text-warning">
             Entorno de pruebas: el cobro está simulado, no se mueve dinero real.
           </p>

@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
+import { ConfirmarConCredito } from "@/components/checkout/confirmar-con-credito";
 import {
   interpretar,
   irAPagar,
@@ -15,7 +16,7 @@ import {
 } from "@/components/checkout/respuesta-de-cobro";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { usePrecio } from "@/components/precio/precio";
+import { PrecioEnLinea, usePrecio } from "@/components/precio/precio";
 
 /** Igual que en el checkout de una reserva: primero se abre el cobro, luego se pinta. */
 type Apertura =
@@ -28,7 +29,58 @@ type Apertura =
       fase: "transparente";
       retencionHasta: string | null;
       transparente: DlocalTransparente;
-    };
+    }
+  /** El crédito cubre las N líneas: no hay pasarela, hay un botón de confirmar. */
+  | { fase: "credito"; retencionHasta: string | null; creditoTotal: number };
+
+/**
+ * Lo que ponen los créditos en ESTE pedido, sumando línea a línea.
+ *
+ * ⚠️ SON DOS CONSULTAS Y NO UNA porque el crédito se aplica POR RESERVA
+ * (`aplicar_credito(p_booking_id, …)`) y `payments` no tiene `order_id`: se
+ * resuelven las líneas del pedido y se leen sus pagos. Es exactamente lo que
+ * hace `/api/pagos/checkout` con `service_role`, solo que aquí con la sesión del
+ * alumno y su RLS (`bookings_select_own` + `payments_select_student`).
+ *
+ * ⚠️ Y NO DECIDE NINGÚN COBRO. Lo que se cobra lo compone el Route Handler
+ * leyendo esos mismos snapshots (regla de oro 2); esto solo existe para que la
+ * pantalla no siga anunciando el bruto cuando ya no es lo que se va a cobrar.
+ * Hoy casi siempre da 0 —al pedido no se le puede aplicar un crédito desde
+ * ninguna pantalla, porque el selector es por reserva—, y da igual: el día que
+ * una línea llegue con un regalo dentro, el botón de abajo tiene que decir la
+ * verdad sin que nadie se acuerde de tocarlo.
+ *
+ * Se mira el `error` de las dos (regla de oro 10): un `const { data } = …`
+ * convertiría un fallo de consulta en «no hay crédito», que es una mentira
+ * creíble sobre el importe que alguien está a punto de pagar. Ante la duda se
+ * devuelve `null` y la pantalla no promete nada.
+ */
+async function creditoDelPedido(orderId: string): Promise<number | null> {
+  const supabase = createClient();
+
+  const { data: lineas, error: eLineas } = await supabase
+    .from("bookings")
+    .select("id")
+    .eq("order_id", orderId);
+
+  if (eLineas) {
+    console.error("[order-payment] no se pudieron leer las líneas:", eLineas.message);
+    return null;
+  }
+  const ids = (lineas ?? []).map((b) => b.id);
+  if (ids.length === 0) return null;
+
+  const { data: pagos, error: ePagos } = await supabase
+    .from("payments")
+    .select("credit_amount")
+    .in("booking_id", ids);
+
+  if (ePagos) {
+    console.error("[order-payment] no se pudieron leer los pagos:", ePagos.message);
+    return null;
+  }
+  return (pagos ?? []).reduce((suma, p) => suma + (p.credit_amount ?? 0), 0);
+}
 
 /**
  * EY-176 · EL PAGO DE UN PEDIDO — un cobro, N mentorías (P-3).
@@ -50,6 +102,14 @@ type Apertura =
  * servidor sumando `payments.gross_amount` de cada línea; lo que se cobra lo
  * compone `/api/pagos/checkout` leyendo esos mismos snapshots (regla de oro 2).
  * Este componente no suma nada.
+ *
+ * ⚠️ 💳 AQUÍ NO HAY SELECTOR DE CRÉDITO, y no es un olvido: el crédito se aplica
+ * POR RESERVA y esta pantalla solo conoce el pedido. Ofrecer uno exigiría
+ * decidir a qué línea va —una decisión de producto que nadie ha tomado— y
+ * pasarle las N reservas desde el servidor. Lo que sí hay es el camino de
+ * llegada: un pedido cuyas líneas YA vengan cubiertas (un regalo) se confirma
+ * abajo sin pasar por ninguna pasarela, y lo que ponga un crédito parcial se
+ * descuenta de lo que anuncia el botón.
  */
 export function OrderPayment({
   orderId,
@@ -63,10 +123,14 @@ export function OrderPayment({
 }) {
   const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
+  /** Lo que ponen los créditos de las líneas. `null` = no se pudo saber. */
+  const [credito, setCredito] = useState<number | null>(null);
+  const creditoAplicado = credito ?? 0;
+  const aPagar = Math.max(0, total - creditoAplicado);
   // El botón repite la cifra GRANDE del total que tiene encima —la local si la
   // hay—, no el dólar: si dijeran números distintos, el que se lee al pulsar es
   // el del botón. El USD sigue visible en la línea pequeña de ese total.
-  const { local: totalLocal, usd: totalUsd } = usePrecio(total, currency);
+  const { local: totalLocal, usd: totalUsd } = usePrecio(aPagar, currency);
   const [pagando, setPagando] = useState(false);
   // Qué pedido se abrió ya. Con la clave dentro y no un booleano, StrictMode no
   // abre dos veces y una navegación a OTRO pedido sí vuelve a abrir.
@@ -78,15 +142,22 @@ export function OrderPayment({
 
     async function abrir() {
       setApertura({ fase: "abriendo" });
-      const res = await fetch("/api/pagos/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // ⚠️ `orderId`, no `bookingId`: el Route Handler los trata como
-        // excluyentes y de esa distinción depende que el webhook acredite las N
-        // líneas y no una.
-        body: JSON.stringify({ orderId }),
-      });
+      // En paralelo con la apertura a propósito: lo que ponen los créditos solo
+      // cambia lo que se PINTA, así que no tiene por qué añadir un viaje a la
+      // profundidad de la cascada que hay antes del formulario de pago.
+      const [res, sumaDeCreditos] = await Promise.all([
+        fetch("/api/pagos/checkout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // ⚠️ `orderId`, no `bookingId`: el Route Handler los trata como
+          // excluyentes y de esa distinción depende que el webhook acredite las N
+          // líneas y no una.
+          body: JSON.stringify({ orderId }),
+        }),
+        creditoDelPedido(orderId),
+      ]);
       const salida = (await res.json().catch(() => ({}))) as RespuestaDeCobro;
+      setCredito(sumaDeCreditos);
 
       if (!res.ok) {
         setApertura({
@@ -115,6 +186,13 @@ export function OrderPayment({
       // el formulario es uno y la confirmación es la del pedido.
       if (accion.tipo === "transparente") {
         setApertura({ fase: "transparente", retencionHasta, transparente: accion.transparente });
+        return;
+      }
+      // 💳 Las N líneas están cubiertas al 100 %: no hay a quién cobrar. Sin
+      // esta rama la respuesta caía al `default` de `interpretar` y el pedido
+      // salía con un error en vez de con su botón de confirmar.
+      if (accion.tipo === "credito") {
+        setApertura({ fase: "credito", retencionHasta, creditoTotal: accion.creditoTotal });
         return;
       }
       if (accion.tipo === "simulado") {
@@ -177,6 +255,28 @@ export function OrderPayment({
         </p>
       ) : null}
 
+      {/* 💳 Lo que ponen los créditos de las líneas, cuando queda algo por
+          cobrar. En la fase "credito" no se pinta: allí lo dice el propio bloque
+          de confirmar, y decirlo dos veces con dos cifras que tienen que coincidir
+          es la forma habitual de que un día no coincidan.
+
+          Un crédito NO es un descuento: la mentoría vale lo mismo y el tutor
+          cobra lo mismo, solo cambia quién la financia. De ahí «Tu crédito». */}
+      {apertura.fase !== "abriendo" &&
+      apertura.fase !== "error" &&
+      apertura.fase !== "credito" &&
+      creditoAplicado > 0 ? (
+        <p className="mt-3.5 text-[13px] text-[#4b4b4b]">
+          Tu crédito cubre{" "}
+          <PrecioEnLinea
+            amountMinor={creditoAplicado}
+            currency={currency}
+            className="font-semibold text-[#19191f]"
+          />{" "}
+          de este pedido: abajo solo se cobra la diferencia.
+        </p>
+      ) : null}
+
       {apertura.fase === "lista" ? (
         <div className="mt-3.5">
           {/* La casilla de «guardar esta tarjeta» la pinta Stripe dentro de
@@ -197,6 +297,21 @@ export function OrderPayment({
             returnUrl={`/pedidos/${orderId}/confirmacion`}
           />
         </div>
+      ) : null}
+
+      {/* 💳 El pedido entero lo pagan los créditos: ni Session ni redirección,
+          un botón contra `POST /api/pagos/credito`. Es él quien llama a
+          `confirm_credit_order`, que exige que las N líneas estén cubiertas al
+          100 % y aborta entera si una sola no lo está — el todo o nada de P-1,
+          igual que en el camino simulado de aquí al lado. */}
+      {apertura.fase === "credito" ? (
+        <ConfirmarConCredito
+          sujeto={{ tipo: "order", id: orderId }}
+          destino={`/pedidos/${orderId}/confirmacion`}
+          etiqueta="Confirmar pedido"
+          importe={{ minor: apertura.creditoTotal, currency }}
+          className="mt-3.5"
+        />
       ) : null}
 
       {apertura.fase === "simulado" ? (

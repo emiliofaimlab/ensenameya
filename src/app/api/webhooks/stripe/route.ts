@@ -17,7 +17,7 @@ type EstadoReserva = Database["public"]["Enums"]["booking_status"];
  * pagos: el alumno puede cerrar la pestaña justo después de pagar y el dinero
  * existe igual, o puede volver a la página de éxito sin haber pagado nada.
  *
- * ── Las cuatro trampas que tiene este archivo ──────────────────────────────
+ * ── Las seis trampas que tiene este archivo ────────────────────────────────
  * 1. `req.text()`, nunca `req.json()`. Stripe firma un HMAC sobre la cadena
  *    EXACTA del cuerpo; `JSON.parse` + `stringify` reordena claves y cambia
  *    espacios, y la firma deja de cuadrar. El cuerpo se lee UNA vez y entra
@@ -38,6 +38,13 @@ type EstadoReserva = Database["public"]["Enums"]["booking_status"];
  *    tocarla.
  * 5. ⚠️ EY-176 · **un evento puede acreditar N reservas.** Ver el bloque de
  *    abajo; es la trampa más cara del fichero y la que costó la ficha entera.
+ * 6. 🔴 **LO QUE STRIPE COBRÓ SE LE PASA A LA BASE, Y SI NO CUADRA ESTO
+ *    DEVUELVE 500 SIN ACREDITAR NADA.** Es la mitad en profundidad del cerrojo
+ *    contra el crédito acuñado: aplicar un crédito, abrir el cobro ya
+ *    descontado y quitar el crédito después dejaba la reserva pagada entera con
+ *    el crédito otra vez disponible. `confirm_payment` compara desde
+ *    `20260912110000` §7, pero solo si alguien le dice cuánto se cobró — y ese
+ *    alguien es este archivo. Ver el bloque de `importeCobrado`.
  *
  * Lo que este archivo YA NO sabe, desde el puerto de pagos: cómo se llaman los
  * eventos de Stripe, cómo se firma un webhook y cómo se pide un reembolso. Todo
@@ -72,6 +79,18 @@ export const runtime = "nodejs";
 
 /** Estados de `payments` en los que el cobro ya está contabilizado. */
 const YA_CONTABILIZADO = ["paid", "refunded", "partially_refunded"];
+
+/**
+ * `check_violation` — el errcode con el que `confirm_payment` levanta las DOS
+ * comprobaciones de importe (la del argumento `p_amount_charged` y la del
+ * marcador `payments.checkout_amount` que sella `marcar_cobro_abierto`). Ver
+ * `20260912110000_los_creditos_y_los_regalos.sql` §7.
+ *
+ * Se distingue de cualquier otro fallo de la RPC porque merece otra respuesta:
+ * un descuadre no es un error de infraestructura, es dinero que no cuadra, y
+ * quien lo lea tiene que ver los dos importes sin abrir un stack trace.
+ */
+const DESCUADRE = "23514";
 
 export async function POST(req: Request) {
   // ⚠️ EL CUERPO CRUDO. `req.text()` y no `req.json()`, y viaja como cadena
@@ -124,23 +143,84 @@ export async function POST(req: Request) {
    * entre la línea 2 y la 3, quedarían dos acreditadas y una muriendo. Dentro
    * de la función, o entran las N o no entra ninguna, y el reintento de Stripe
    * encuentra el trabajo entero por hacer.
+   *
+   * Devuelve `null` si todo fue bien, o la RESPUESTA que hay que dar si la
+   * conciliación de importes tumbó la transacción. No lanza en ese caso a
+   * propósito: un `throw` acaba en un 500 de Next con el cuerpo vacío, y lo que
+   * hace falta ahí es un cuerpo que diga el desajuste.
    */
-  const llamar = async (exito: boolean) => {
-    if (ref.tipo === "order") {
-      const { error } = await admin.rpc("confirm_order_payment", {
-        p_order_id: ref.id,
-        p_success: exito,
-        p_event_id: evento.id,
+  const llamar = async (
+    exito: boolean,
+    /**
+     * 🔴 LO QUE LA PASARELA COBRÓ DE VERDAD, en unidades menores, o `null` si
+     * este evento no lo trae.
+     *
+     * NO tiene valor por defecto a propósito: quien llame tiene que decidir.
+     * Un parámetro opcional aquí sería la forma más barata de volver a dejar la
+     * conciliación inerte sin que nada lo diga — que es exactamente el estado
+     * del que venimos (regla de oro 11).
+     */
+    importeCobrado: number | null,
+  ): Promise<NextResponse | null> => {
+    // ⚠️ `undefined` Y NO LA CLAVE AUSENTE, y no es un descuido: supabase-js no
+    // serializa las claves `undefined` (es el mismo mecanismo de la regla de oro
+    // 12), así que el argumento no viaja y PostgREST usa el `default null` de la
+    // función. Se escribe la clave igualmente para que el COMPILADOR la vea: si
+    // la RPC no la aceptara, esto es un error de tipos y no un `PGRST202` en
+    // producción.
+    const salida =
+      ref.tipo === "order"
+        ? await admin.rpc("confirm_order_payment", {
+            p_order_id: ref.id,
+            p_success: exito,
+            p_event_id: evento.id,
+            p_amount_charged: importeCobrado ?? undefined,
+          })
+        : await admin.rpc("confirm_payment", {
+            p_booking_id: ref.id,
+            p_success: exito,
+            p_event_id: evento.id,
+            p_amount_charged: importeCobrado ?? undefined,
+          });
+
+    const error = salida.error;
+    if (!error) return null;
+
+    if (error.code === DESCUADRE) {
+      /**
+       * 🔴 LO COBRADO NO ES LO DEBIDO. La RPC abortó la transacción, y hay que
+       * saber lo que eso arrastra: se revierte TAMBIÉN el `insert` en
+       * `payment_webhook_events`, así que el evento no queda marcado como
+       * procesado y Stripe lo va a reintentar durante tres días con el dinero ya
+       * cobrado y la reserva sin confirmar.
+       *
+       * Es lo correcto —a gritos antes que en silencio— y por eso sale por 500
+       * con el desajuste escrito en el cuerpo Y en el log, con los dos importes.
+       * Un 200 mudo aquí dejaría una reserva pagada de menos que no mira nadie,
+       * que es la regla de oro 11 con dinero dentro. La salida es MANUAL y está
+       * escrita en `docs/QA-LANZAMIENTO.md`.
+       */
+      console.error("[conciliación] 🔴 lo cobrado no es lo debido: NO se acredita", {
+        sujeto: etiqueta,
+        pasarela: stripeProvider.key,
+        evento: evento.id,
+        tipo: evento.rawType,
+        session: evento.objectRef,
+        cobradoPorLaPasarela: importeCobrado,
+        // El otro lado lo dice la propia función, que es quien lo leyó de
+        // `payments`: «dice 18000 y lo debido es 13500 (bruto 18000 menos 4500
+        // de crédito)». Repetir aquí la resta sería una segunda fuente de verdad
+        // para el importe, que es justo lo que prohíbe la regla de oro 2.
+        segunLaBase: error.message,
+        pista: error.hint,
       });
-      if (error) throw new Error(error.message);
-      return;
+      return NextResponse.json(
+        { status: "descuadre", sujeto: etiqueta, error: error.message },
+        { status: 500 },
+      );
     }
-    const { error } = await admin.rpc("confirm_payment", {
-      p_booking_id: ref.id,
-      p_success: exito,
-      p_event_id: evento.id,
-    });
-    if (error) throw new Error(error.message);
+
+    throw new Error(error.message);
   };
 
   /**
@@ -403,9 +483,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: "ajeno", sujeto: etiqueta });
     }
 
+    // `currency` entra en el select por la comprobación de moneda de más abajo,
+    // no para comparar importes: el importe debido lo calcula `confirm_payment`
+    // dentro de la base (regla de oro 2). Es la misma consulta, no una de más.
     const { data: pagos, error: ePagos } = await admin
       .from("payments")
-      .select("booking_id, status, provider_payment_id")
+      .select("booking_id, status, provider_payment_id, currency")
       .in(
         "booking_id",
         lineas.map((b) => b.id),
@@ -454,6 +537,82 @@ export async function POST(req: Request) {
       );
     }
 
+    /**
+     * 🔴 LO QUE STRIPE COBRÓ DE VERDAD — la mitad en profundidad del cerrojo
+     * del crédito.
+     *
+     * Sale DEL EVENTO, nunca de nuestra base: comparar `gross_amount` consigo
+     * mismo no concilia nada. En Stripe es el `amount_total` de la Checkout
+     * Session, que es lo que `verifyWebhook` deja en `evento.amountMinor` (ver
+     * el adaptador) — ya en unidades menores, que es como vive el dinero aquí, y
+     * ya en la moneda de la Session.
+     *
+     * Los dos eventos que llegan a este punto lo traen: `checkout.session.
+     * completed` y `checkout.session.async_payment_succeeded` son los dos de
+     * Checkout Session, y esa tiene `amount_total`. No hay impuestos ni envío
+     * que sumar —la Session se crea solo con `line_items` de `price_data`—, así
+     * que el total ES la suma de las líneas.
+     *
+     * ⚠️ CON UN PEDIDO ES EL TOTAL DEL CARGO, NO EL DE UNA LÍNEA. Un pedido de
+     * N mentorías es UNA Session con N `line_items` y un solo cargo (P-3), así
+     * que aquí solo hay un número. Repartirlo entre las líneas es cosa de
+     * `confirm_order_payment`, que es quien conoce el `gross_amount` y el
+     * `credit_amount` de cada una.
+     */
+    const importeCobrado = evento.amountMinor;
+
+    if (importeCobrado === null) {
+      // No se inventa. Sin importe, la conciliación POR ARGUMENTO no actúa y
+      // queda en pie la del MARCADOR (`payments.checkout_amount`, que sella
+      // `marcar_cobro_abierto`), que es la otra mitad del cerrojo. Se grita
+      // porque un cobro confirmado sin `amount_total` es una Session con una
+      // forma que no conocemos, y eso hay que verlo aunque no rompa nada hoy.
+      console.error("[conciliación] ⚠️ cobro confirmado sin importe: no se concilia", {
+        sujeto: etiqueta,
+        evento: evento.id,
+        tipo: evento.rawType,
+        session: evento.objectRef,
+      });
+    } else {
+      /**
+       * ⚠️ LA MONEDA SE COMPRUEBA ANTES DE COMPARAR NADA. `gross_amount` está en
+       * unidades menores de `payments.currency`; un `amount_total` en OTRA
+       * moneda es un número perfectamente comparable y una comparación
+       * perfectamente falsa.
+       *
+       * No es teoría: es M-01. El *adaptive pricing* de Stripe cobró «PAB 46,80»
+       * por una compra de «45,00 US$» convirtiendo por geolocalización sin
+       * avisar, y hoy se apaga al crear la Session (`adaptive_pricing:
+       * {enabled: false}` en el adaptador, apagado ahí y no en el panel a
+       * propósito). Si algún día volviera a encenderse, tiene que PARAR este
+       * webhook y no colarse por debajo dando un descuadre falso — o, peor, un
+       * cuadre falso.
+       */
+      const monedaCobrada = evento.currency?.toUpperCase() ?? null;
+      const monedasDebidas = [...new Set(cobros.map((p) => p.currency.toUpperCase()))];
+
+      if (monedaCobrada === null || monedasDebidas.some((m) => m !== monedaCobrada)) {
+        console.error("[conciliación] 🔴 el cobro llegó en otra moneda que la reserva", {
+          sujeto: etiqueta,
+          pasarela: stripeProvider.key,
+          evento: evento.id,
+          session: evento.objectRef,
+          cobrado: `${importeCobrado} ${monedaCobrada ?? "(sin moneda)"}`,
+          debido: monedasDebidas.join(", "),
+        });
+        return NextResponse.json(
+          {
+            status: "descuadre",
+            sujeto: etiqueta,
+            error:
+              `el cobro llegó en ${monedaCobrada ?? "(sin moneda)"} y lo debido está en ` +
+              `${monedasDebidas.join(", ")}: no se acredita`,
+          },
+          { status: 500 },
+        );
+      }
+    }
+
     // Camino normal. Se guarda el PaymentIntent y no la Session porque es el
     // que traen los eventos de reembolso y disputa.
     //
@@ -463,7 +622,8 @@ export async function POST(req: Request) {
     // pagado y sin referencia. Mejor 500 y que Stripe reintente.
     if (pi) await sellarReferencia(pi);
 
-    await llamar(true);
+    const descuadre = await llamar(true, importeCobrado);
+    if (descuadre) return descuadre;
     return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto: etiqueta });
   };
 
@@ -484,9 +644,14 @@ export async function POST(req: Request) {
 
     // Fallo terminal. `expired` es además el que libera el horario cuando el
     // alumno abandona el checkout.
-    case "cobro-fallido":
-      await llamar(false);
+    case "cobro-fallido": {
+      // `null`: no hay cobro que conciliar. `confirm_payment` ni mira el
+      // argumento cuando `p_success` es falso — ahí lo que hace es lo contrario,
+      // devolver al alumno el crédito que financiaba el pago que se cayó.
+      const descuadre = await llamar(false, null);
+      if (descuadre) return descuadre;
       break;
+    }
 
     default:
       return NextResponse.json({ status: "ignorado", tipo: evento.rawType });

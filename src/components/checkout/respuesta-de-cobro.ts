@@ -22,7 +22,15 @@ import type { Embed } from "@/components/checkout/stripe-embed";
  * aquí, una vez. Lo desconocido es un ERROR VISIBLE, no un checkout simulado.
  */
 export type RespuestaDeCobro = {
-  modo?: "embebido" | "transparente" | "redireccion" | "simulado";
+  modo?: "embebido" | "transparente" | "redireccion" | "simulado" | "credito";
+  /**
+   * `modo: "credito"` · lo que el crédito cubre, en unidades mínimas. Es el
+   * importe ENTERO de la reserva o del pedido: este modo solo se devuelve
+   * cuando no queda nada que cobrar. Viene para poder decirlo en pantalla
+   * («tu clase gratis cubre los 45,00 US$»), no para decidir nada — quien
+   * revalida la cobertura es la RPC, en el servidor (regla de oro 2).
+   */
+  creditoTotal?: number;
   clientSecret?: string;
   publishableKey?: string;
   /**
@@ -47,6 +55,13 @@ export type Apertura =
   /** dLocal transparente: sus campos de tarjeta, dentro de nuestra pantalla. */
   | { tipo: "transparente"; transparente: DlocalTransparente }
   | { tipo: "redireccion"; url: string }
+  /**
+   * No hay pasarela a la que ir: el crédito cubre el total. La pantalla pide
+   * confirmación a `/api/pagos/credito`, que es un POST propio y no esta misma
+   * llamada, porque `/api/pagos/checkout` se dispara al ENTRAR en la pantalla:
+   * confirmar aquí convertiría «mirar el precio» en «comprar».
+   */
+  | { tipo: "credito"; creditoTotal: number }
   | { tipo: "simulado" }
   | { tipo: "error"; mensaje: string };
 
@@ -91,6 +106,12 @@ export function interpretar(salida: RespuestaDeCobro): Apertura {
     return salida.redirectUrl
       ? { tipo: "redireccion", url: salida.redirectUrl }
       : { tipo: "error", mensaje: "La pasarela no devolvió a dónde ir a pagar." };
+  }
+  // Antes que la forma, como todos los demás: este modo NO trae `clientSecret`
+  // ni `redirectUrl` —no hay nada que abrir— así que sin esta rama caería al
+  // error del final y la clase gratis sería incanjeable.
+  if (salida.modo === "credito") {
+    return { tipo: "credito", creditoTotal: salida.creditoTotal ?? 0 };
   }
   if (salida.modo === "simulado" || salida.simulated === true) {
     return { tipo: "simulado" };
