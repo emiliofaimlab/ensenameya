@@ -3,7 +3,7 @@ import { TriangleAlertIcon } from "lucide-react";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/catalog/format";
+import { Precio } from "@/components/precio/precio";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { PanelShell } from "@/components/layout/panel-shell";
@@ -145,8 +145,15 @@ export default async function CancelBookingPage({
         </dl>
         <div className="mt-3.5 flex items-baseline justify-between border-t border-[#e0e0e0] pt-3.5">
           <span className="text-sm text-[#6b6b6b]">Total a reembolsar</span>
-          <span className="text-lg font-bold text-brand">
-            {formatMoney(refund, booking.currency)}
+          {/* `refund` lo calcula esta pantalla con `lib/policy.ts`; aquí solo
+              se PINTA en la moneda de quien mira. El reembolso llega en USD, y
+              por eso el dólar sigue debajo. */}
+          <span className="text-right">
+            <Precio
+              amountMinor={refund}
+              currency={booking.currency}
+              className="text-lg font-bold text-brand"
+            />
           </span>
         </div>
         <p className="mt-2 text-xs text-[#6b6b6b]">

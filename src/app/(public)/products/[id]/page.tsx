@@ -37,6 +37,7 @@ import {
   listTutorReviews,
 } from "@/lib/catalog/queries";
 import { initialsFrom, priceDisplay, storageUrl } from "@/lib/catalog/format";
+import { ImporteEnUsd, ImporteLocal } from "@/components/precio/precio";
 import type { Faq } from "@/lib/tutor-faqs";
 
 /**
@@ -638,9 +639,23 @@ export default async function ProductPage({
                 >
                   <div className="min-w-0 text-start lg:flex lg:items-baseline lg:gap-2.5">
                     <p className="text-[22px] leading-tight font-bold lg:text-[26px]">
-                      {precio.amount}
+                      <ImporteLocal
+                        amountMinor={precio.amountMinor}
+                        currency={product.currency}
+                      />
                     </p>
+                    {/* La línea pequeña de esta franja NO está libre —lleva la
+                        duración y el «clase en vivo»—, así que el dólar entra
+                        aquí como una etiqueta más en vez de usar el bloque de
+                        dos líneas de `<Precio>`. `ImporteEnUsd` se pinta solo
+                        cuando hay conversión: sin ella la cifra grande ya es el
+                        dólar y repetirlo sobraría. */}
                     <p className="mt-0.5 flex items-center gap-2 text-xs text-white/90 lg:mt-0 lg:gap-3.5 lg:text-sm">
+                      <ImporteEnUsd
+                        amountMinor={precio.amountMinor}
+                        currency={product.currency}
+                        className="whitespace-nowrap"
+                      />
                       <span className="whitespace-nowrap">{precio.note}</span>
                       {duracion ? (
                         <span

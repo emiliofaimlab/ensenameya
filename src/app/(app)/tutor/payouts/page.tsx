@@ -9,21 +9,29 @@ import {
   preferenciaVigente,
   rielesDelPais,
 } from "@/lib/payments";
-import { PAYOUT_BADGE, nombrePais, type TutorBalance } from "@/lib/payouts";
+import {
+  APROXIMADO,
+  MONEDA_DEL_SALDO,
+  PAYOUT_BADGE,
+  enMonedaLocal,
+  monedaDeCobroDelTutor,
+  nombrePais,
+  type MoneyByCurrency,
+  type TutorBalance,
+} from "@/lib/payouts";
 import {
   PanelCard,
   StatusPill,
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { TutorShell } from "@/components/layout/tutor-shell";
-import { tasaParaPintar, tasasParaPintar } from "@/lib/dlocalgo";
 import { WithdrawButton } from "./withdraw-button";
 import { PayoutAccountForm } from "./payout-account-form";
 import { PaypalConectar } from "./paypal-conectar";
 import { PayoutManualForm } from "./payout-manual-form";
 import { MetodosDeCobro, type TarjetaMetodo } from "./metodos-de-cobro";
 import { LOGOS } from "./logos";
-import { leerCanalesManuales, leerDestinosManuales } from "./rpc";
+import { leerCanalesManuales, leerDestinosManuales } from "@/lib/payout-manual";
 import {
   type BancoDePais,
   type CanalManual,
@@ -47,15 +55,6 @@ const PAYOUT_PILL: Record<string, PillTone> = {
 
 /** Los estados que todavía no han pagado: van arriba de «Movimientos». */
 const UPCOMING = new Set(["scheduled", "processing", "pending"]);
-
-/**
- * La moneda en la que llevamos el saldo del tutor y en la que se crean los
- * `payouts`. Es una constante y no una lectura porque hoy `payouts.currency` es
- * USD en las diez filas de ruteo, y porque el adaptador de dLocal Go reserva su
- * estado `sin-decidir` justamente para el día que deje de serlo (solo publica
- * pares DESDE dólar en `/v1/currency-exchanges`).
- */
-const MONEDA_DEL_SALDO = "USD";
 
 /**
  * `payouts.provider` → cómo se llama esa vía para el tutor.
@@ -83,6 +82,85 @@ const VIA: Record<string, string> = {
 function moneyLine(list: { currency: string; amount: number }[]): string {
   if (list.length === 0) return "—";
   return list.map((m) => formatMoney(m.amount, m.currency)).join(" · ");
+}
+
+/**
+ * §5.2 · Un tile de saldo, con su par de monedas cuando lo hay.
+ *
+ * ⚠️ EL ORDEN SE INVIERTE (petición del cliente, 11-sep-2026): arriba y en
+ * grande la moneda del TUTOR, debajo y en pequeño los dólares de los que sale.
+ * Hasta hoy era al revés, con el argumento de que el saldo se lleva en USD; el
+ * cliente responde que el tutor no cuenta en la moneda de nuestro balance, y
+ * manda.
+ *
+ * ⚠️ Y EL «≈» Y EL AVISO DE «APROXIMADO» SUBEN CON LA CIFRA. Si la estimación
+ * pasa a ser el número principal, lo que dice que es una estimación tiene que
+ * viajar con ella: si no, el tutor lee como exacto un importe que nadie le ha
+ * prometido.
+ *
+ * Sin moneda local —sin credencial de dLocal, país que ya cobra en USD, tutor
+ * que cobra por PayPal— la cifra grande vuelve a ser el USD y no hay segunda
+ * línea: exactamente lo que se pintaba hasta hoy. Un tile sin cifra grande no
+ * es una opción.
+ *
+ * Vive aquí, y no copiado dos veces en el JSX, porque un par de monedas en dos
+ * sitios diverge sin que el typecheck diga ni mu — que es como estaba.
+ */
+function TileDeSaldo({
+  rotulo,
+  montos,
+  local,
+  className,
+  accion,
+  nota,
+}: {
+  rotulo: string;
+  montos: MoneyByCurrency[];
+  /** El mismo importe en la moneda del tutor, o `null`. Ver `enMonedaLocal`. */
+  local: string | null;
+  className?: string;
+  /** El botón de retiro, que es la acción de SU número y por eso va dentro. */
+  accion?: React.ReactNode;
+  nota?: React.ReactNode;
+}) {
+  const usd = moneyLine(montos);
+  return (
+    <PanelCard className={className}>
+      {/* ⚠️ `dl`/`dt`/`dd` y no dos `p` sueltos: rótulo y cifra son un par, y
+          sin la relación semántica un lector de pantalla lee «Disponible para
+          retirar» y «112,50 US$» como dos frases sin vínculo. Es lo mismo que
+          ya hace «Cómo cobras» tres bloques más abajo. */}
+      <dl>
+        <dt className="text-xs text-[#6b6b6b]">{rotulo}</dt>
+        {/* ⚠️ `items-start` y SIN `truncate`, medido el 11-sep-2026 contra
+            `npm start`: al ascender la moneda local a cifra grande la cadena se
+            alarga de golpe —«37,50 US$» son diez caracteres, «≈ 119.099 COP»
+            son trece, y un saldo en pesos colombianos trae seis dígitos— y con
+            el círculo de la acción comiéndose 36 px del tile se leía
+            «≈ 119.09…». Un importe cortado no es un importe: envolver a dos
+            líneas es feo, esconder la mitad del dinero de alguien es un ticket. */}
+        <dd className="mt-1.5 flex items-start justify-between gap-3">
+          <span
+            className="min-w-0 text-2xl leading-tight font-bold tabular-nums text-[#19191f]"
+            /* Con local, el aviso de que es aproximada. Sin ella, el importe
+               entero y solo cuando hay más de una moneda, que es cuando la
+               cadena crece sin control (las monedas se unen con « · »). Con una
+               sola moneda sería un tooltip que repite lo que ya se ve. */
+            title={local ? APROXIMADO : montos.length > 1 ? usd : undefined}
+          >
+            {local ?? usd}
+          </span>
+          {accion}
+        </dd>
+        {local ? (
+          <dd className="mt-0.5 text-[13px] tabular-nums text-[#6b6b6b]">
+            {usd}
+          </dd>
+        ) : null}
+        {nota}
+      </dl>
+    </PanelCard>
+  );
 }
 
 /**
@@ -207,7 +285,7 @@ export default async function TutorPayoutsPage() {
     { data: itemsData, error: errorItems },
     { rieles, familias: familiasDelPais },
     { data: bancosData },
-    tasas,
+    monedaDeCobro,
   ] = await Promise.all([
     supabase.rpc("tutor_balance"),
     supabase
@@ -289,12 +367,14 @@ export default async function TutorPayoutsPage() {
           .eq("country", paisDeCobro)
           .order("name")
       : Promise.resolve({ data: null }),
-    // La tabla de tasas, cacheada una hora, para poder decirle al tutor cuánto
-    // es eso en su moneda. Va aquí —y por eso `tasasParaPintar` no recibe la
-    // moneda— para no añadir un peldaño a la cascada: el par se elige abajo,
-    // cuando ya se sabe la regla del país. Sin credencial devuelve `null` y no
-    // se pinta nada.
-    tasasParaPintar(),
+    // En qué moneda cobra de verdad y a qué tasa, para poder decirle al tutor
+    // cuánto es eso en lo suyo. Va aquí, con el resto, porque no depende de
+    // nada de este bloque: así no añade un peldaño a la cascada de la pantalla
+    // más lenta del panel. Y es COMPARTIDA con el dashboard `/tutor` —que pinta
+    // estos mismos dos importes— a propósito: el porqué, y por qué está
+    // memoizada, en `monedaDeCobroDelTutor`. Sin credencial de dLocal devuelve
+    // `null` y no se pinta la segunda línea.
+    monedaDeCobroDelTutor(userId),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -402,73 +482,26 @@ export default async function TutorPayoutsPage() {
   /**
    * §5.2 · CUÁNTO ES ESO EN SU MONEDA, y por qué lleva un «≈» delante.
    *
-   * ⚠️ EL DIFERENCIAL DE CAMBIO LO ASUME EL TUTOR (decisión del cliente,
-   * 2-sep-2026): `POST /v1/payouts` de dLocal Go no tiene moneda de origen, así
-   * que se fija lo que sale de NUESTRO balance (`payouts.amount`, en USD) y la
-   * cantidad en moneda local la determina el cambio del día.
+   * 🔑 LA DECISIÓN ENTERA —en qué moneda cobra de verdad, con qué tasa, y por
+   * qué manda el MÉTODO y no el país— vive en `monedaDeCobroDelTutor`, con sus
+   * cinco párrafos. Bajó a `lib/payouts.ts` el 11-sep-2026 porque el dashboard
+   * `/tutor` pinta LOS MISMOS DOS IMPORTES y se había quedado en dólares: dos
+   * cifras distintas para el mismo dinero a un clic de distancia.
    *
-   * Hasta hoy eso se contaba en un párrafo de cuatro líneas y el número no
-   * aparecía por ninguna parte. Ahora aparece el número —que es lo que el tutor
-   * quería— y el párrafo se ha quedado en un «≈».
-   *
-   * 🔴 SIGUE SIN PODER PROMETERSE, y conviene ser exacto sobre POR QUÉ, porque
-   * la versión corta («lleva el mismo factor que aplica el adaptador») es falsa
-   * en casi todas partes:
-   *   · el factor de liquidación (`DLOCALGO_FX_SPREAD`, 4,7 % medido) es el de
-   *     **dLocal**, y dLocal solo PAGA en siete de los 55 países con formulario
-   *     bancario: en Colombia y en los 47 de la fila por defecto quien paga es
-   *     Wise o Stripe, con su tasa y su comisión. Se aplica igual, y a sabiendas:
-   *     es un recorte que tira SIEMPRE hacia abajo, y de los dos errores
-   *     posibles el que se puede cometer con el dinero de otro es el de
-   *     quedarse corto. Un número por encima del que llega es una reclamación;
-   *     uno por debajo es una sorpresa buena.
-   *   · quién ejecuta lo decide `payoutProviderFor` el día del lote;
-   *   · la tasa es la de HOY y el pago es el lunes.
-   * Por eso no se pinta en «Ya cobrado»: ese dinero se cambió el día que salió,
-   * a una tasa que ya no es esta, y convertirlo hoy sería inventar un importe
-   * que el tutor puede cotejar con su banco.
-   *
-   * ⚠️ Y NO BASTA CON QUE EL PAÍS TENGA BANCO: manda el MÉTODO, porque PayPal es
-   * el único riel que cambia la MONEDA y no solo la tasa. `paypal-provider.ts`
-   * manda `currency: input.currency`, o sea USD: a un tutor mexicano que cobra
-   * por PayPal, «≈ 3.500,00 MXN» no es una aproximación, es otra moneda.
-   *
-   * Sin preferencia manda el orden de `payment_routing_rules`, donde los rieles
-   * de banco van DELANTE de PayPal en todas las filas. O sea que con preferencia
-   * no elegida el banco gana, salvo que el banco no pueda: el único caso es que
-   * el tutor no tenga cuenta bancaria y sí tenga conectado un destino que no lo
-   * es. Esa es la condición, y no «tiene cuenta bancaria» a secas — que dejaba
-   * sin cifra justo al tutor que todavía está decidiendo por dónde cobrar, que
-   * es a quien más le sirve verla.
-   *
-   * `null` en Ecuador (su `currency` es USD), sin credencial de dLocal y en las
-   * monedas que esa tabla no publica. Entonces no se pinta la línea: es la regla
-   * de siempre, la credencial es el interruptor.
+   * Una vez por tile y a una variable: esto se llamaba DOS veces en cada uno
+   * (la condición y el contenido), o sea cuatro conversiones para pintar dos
+   * números.
    */
-  const cobraPorBanco = preferida
-    ? preferida === "banco"
-    : familias.includes("banco") &&
-      (cuentaDeEstePais || destinos.length === 0);
-  const monedaLocal = cobraPorBanco && regla ? regla.currency : null;
-  const tasaLocal = monedaLocal
-    ? tasaParaPintar(tasas, MONEDA_DEL_SALDO, monedaLocal)
-    : null;
+  const localDisponible = enMonedaLocal(balance.available, monedaDeCobro);
+  const localRetencion = enMonedaLocal(balance.in_retention, monedaDeCobro);
 
-  /** «≈ 115.343 CLP» a partir de un saldo en dólares, o `null` si no hay con qué. */
-  const enMonedaLocal = (
-    lista: { currency: string; amount: number }[],
-  ): string | null => {
-    if (!monedaLocal || !tasaLocal) return null;
-    const enDolares = lista.find((m) => m.currency === MONEDA_DEL_SALDO);
-    if (!enDolares || enDolares.amount <= 0) return null;
-    // `formatMoney` no sirve aquí: divide entre 100 siempre y hay monedas de
-    // cero decimales (CLP, PYG). Se convierte a unidad MAYOR primero y se deja
-    // que `Intl` ponga los decimales que esa moneda tenga, que son los suyos.
-    return `≈ ${new Intl.NumberFormat("es", {
-      style: "currency",
-      currency: monedaLocal,
-    }).format((enDolares.amount / 100) * tasaLocal)}`;
-  };
+  /**
+   * Lo que el tutor lee EN GRANDE en «Disponible para retirar» — y lo que tiene
+   * que decir también el aviso de arriba, que cuenta ese mismo dinero. Dos
+   * cifras distintas para lo mismo a dos centímetros una de otra es la clase de
+   * cosa que abre un ticket.
+   */
+  const disponibleDestacado = localDisponible ?? moneyLine(balance.available);
 
   const destinoDe = (canal: string) =>
     destinos.find((d) => d.channel === canal) ?? null;
@@ -756,7 +789,7 @@ export default async function TutorPayoutsPage() {
              * forzar un clic. Ahora dice lo que de verdad gana el tutor al
              * elegir, y deja de ser una alarma.
              */
-            titulo: `Tienes ${moneyLine(balance.available)} listos para cobrar`,
+            titulo: `Tienes ${disponibleDestacado} listos para cobrar`,
             detalle:
               "Si eliges tu cuenta preferida lo intentaremos por ahí primero; si no, elegimos nosotros la vía más barata que llegue a tu país.",
             boton: "Elegir método",
@@ -766,7 +799,7 @@ export default async function TutorPayoutsPage() {
             // Esta rama SÍ es urgente y su texto sí es cierto: sin ninguna
             // cuenta completa no hay riel que pueda ejecutar, y el dinero se
             // queda esperando de verdad.
-            titulo: `Tienes ${moneyLine(balance.available)} listos y todavía no tienes dónde cobrarlos`,
+            titulo: `Tienes ${disponibleDestacado} listos y todavía no tienes dónde cobrarlos`,
             detalle: `El pago del lunes ${diaDelProximoLote()} no podrá salir hasta que completes una cuenta de cobro.`,
             boton: "Completar una cuenta",
             urgente: true,
@@ -828,100 +861,61 @@ export default async function TutorPayoutsPage() {
           ya está en el subtítulo de la pantalla y la del lote en «Frecuencia».
           El retiro pasa de botón de texto a círculo azul junto al monto.
 
-          ⚠️ Lo único que sí baja del monto es OTRA CIFRA, no una regla: el
-          mismo importe en la moneda del tutor. Y solo en los dos que todavía no
-          se han pagado — «Ya cobrado» se cambió el día que salió y a otra tasa,
-          así que ahí sería un número inventado. Ver `enMonedaLocal`. */}
+          ⚠️ Lo único que acompaña al monto es OTRA CIFRA, no una regla: el
+          mismo importe en la otra moneda. Y desde el 11-sep-2026 la GRANDE es
+          la del tutor y el USD el que baja (petición del cliente): el detalle,
+          y lo que pasa cuando no hay moneda local, en `TileDeSaldo`. Solo en
+          los dos que todavía no se han pagado — «Ya cobrado» se cambió el día
+          que salió y a otra tasa, así que ahí sería un número inventado. */}
       <div id="saldo" className="grid scroll-mt-24 gap-4 sm:grid-cols-3">
-        <PanelCard className="border-brand p-5">
-          {/* ⚠️ `dl`/`dt`/`dd` y no dos `p` sueltos: rótulo y cifra son un par,
-              y sin la relación semántica un lector de pantalla lee «Disponible
-              para retirar» y «112,50 US$» como dos frases sin vínculo. Es lo
-              mismo que ya hace «Cómo cobras» tres bloques más abajo. No cambia
-              ni un píxel: el `dd` no trae sangría porque el preflight de
-              Tailwind le quita el margen. */}
-          <dl>
-            <dt className="text-xs text-[#6b6b6b]">Disponible para retirar</dt>
-            <dd className="mt-1.5 flex items-center justify-between gap-3">
-              {/* El `title` solo cuando hay más de una moneda: es el único caso
-                  en que la cifra puede no caber (el círculo se come 36 px del
-                  tile) y un importe cortado sin forma de leerlo entero es peor
-                  que uno que envuelve. Con una sola moneda sería un tooltip que
-                  repite lo que ya se ve. */}
-              <span
-                className="min-w-0 truncate text-2xl font-bold tabular-nums text-[#19191f]"
-                title={
-                  balance.available.length > 1
-                    ? moneyLine(balance.available)
-                    : undefined
-                }
-              >
-                {moneyLine(balance.available)}
-              </span>
-              {/* 🔑 SE MIRAN LAS DOS COSAS: que haya saldo Y que haya por dónde
-                  pagarlo. Antes solo miraba el saldo, y eso creaba órdenes que
-                  ningún riel podía ejecutar: se quedaban en 'scheduled' para
-                  siempre, sin fallar y sin avisar a nadie. Es el mismo fallo
-                  silencioso que documenta `riel-viable.ts`, un piso más arriba.
+        <TileDeSaldo
+          className="border-brand p-5"
+          rotulo="Disponible para retirar"
+          montos={balance.available}
+          local={localDisponible}
+          accion={
+            /* 🔑 SE MIRAN LAS DOS COSAS: que haya saldo Y que haya por dónde
+               pagarlo. Antes solo miraba el saldo, y eso creaba órdenes que
+               ningún riel podía ejecutar: se quedaban en 'scheduled' para
+               siempre, sin fallar y sin avisar a nadie. Es el mismo fallo
+               silencioso que documenta `riel-viable.ts`, un piso más arriba.
 
-                  `hayAlgunaLista` ya está calculado unas líneas antes para
-                  decidir el texto del aviso; aquí solo se reusa. */}
-              <WithdrawButton
-                disabled={!hasAvailable || !hayAlgunaLista}
-                hasBalance={hasAvailable}
-              />
-            </dd>
-            {/* El `title` es lo único que queda del párrafo que explicaba por
-                qué esto no se puede prometer. Está donde lo encuentra quien se
-                lo pregunte, y no delante de quien no. */}
-            {enMonedaLocal(balance.available) ? (
-              <dd
-                className="mt-0.5 text-[13px] tabular-nums text-[#6b6b6b]"
-                title="Aproximado: el cambio lo fija quien ejecute la transferencia el día que la haga."
-              >
-                {enMonedaLocal(balance.available)}
+               `hayAlgunaLista` ya está calculado unas líneas antes para decidir
+               el texto del aviso; aquí solo se reusa. */
+            <WithdrawButton
+              disabled={!hasAvailable || !hayAlgunaLista}
+              hasBalance={hasAvailable}
+            />
+          }
+        />
+        <TileDeSaldo
+          className="p-5"
+          rotulo="En retención"
+          montos={balance.in_retention}
+          local={localRetencion}
+        />
+        {/* ⚠️ «Ya cobrado» SE QUEDA EN DÓLARES, y el porqué está entero en
+            `enMonedaLocal`: ese dinero se cambió el día que salió, a una tasa
+            que ya no es esta, y convertirlo hoy sería inventar un importe que el
+            tutor puede cotejar con su banco.
+
+            Lo que sí cambia es que ahora se dice. Con los otros dos tiles en su
+            moneda, este en USD parece un olvido; la nota lo explica en una línea
+            y solo cuando hay con qué compararlo — sin par de monedas en la fila
+            no hay nada que justificar y sobraría. */}
+        <TileDeSaldo
+          className="p-5"
+          rotulo="Ya cobrado"
+          montos={balance.paid_out}
+          local={null}
+          nota={
+            localDisponible || localRetencion ? (
+              <dd className="mt-1 text-[12px] leading-[1.4] text-[#6b6b6b]">
+                En dólares: se cambió a la tasa del día que salió.
               </dd>
-            ) : null}
-          </dl>
-        </PanelCard>
-        <PanelCard className="p-5">
-          <dl>
-            <dt className="text-xs text-[#6b6b6b]">En retención</dt>
-            <dd
-              className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]"
-              title={
-                balance.in_retention.length > 1
-                  ? moneyLine(balance.in_retention)
-                  : undefined
-              }
-            >
-              {moneyLine(balance.in_retention)}
-            </dd>
-            {enMonedaLocal(balance.in_retention) ? (
-              <dd
-                className="mt-0.5 text-[13px] tabular-nums text-[#6b6b6b]"
-                title="Aproximado: el cambio lo fija quien ejecute la transferencia el día que la haga."
-              >
-                {enMonedaLocal(balance.in_retention)}
-              </dd>
-            ) : null}
-          </dl>
-        </PanelCard>
-        <PanelCard className="p-5">
-          <dl>
-            <dt className="text-xs text-[#6b6b6b]">Ya cobrado</dt>
-            <dd
-              className="mt-1.5 truncate text-2xl font-bold tabular-nums text-[#19191f]"
-              title={
-                balance.paid_out.length > 1
-                  ? moneyLine(balance.paid_out)
-                  : undefined
-              }
-            >
-              {moneyLine(balance.paid_out)}
-            </dd>
-          </dl>
-        </PanelCard>
+            ) : null
+          }
+        />
       </div>
 
       {/* Cómo cobras (204:54) — R29-03b. §5.3 renombra los cuatro rótulos:
@@ -979,7 +973,8 @@ export default async function TutorPayoutsPage() {
             <dd className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[#19191f]">
               {preferida ? (
                 <StatusPill tone="blue">
-                  {tarjetas.find((t) => t.clave === preferida)?.nombre ?? preferida}
+                  {tarjetas.find((t) => t.clave === preferida)?.nombre ??
+                    preferida}
                 </StatusPill>
               ) : (
                 <StatusPill tone="amber">Sin elegir</StatusPill>
@@ -1033,7 +1028,6 @@ export default async function TutorPayoutsPage() {
             </div>
           ) : null}
         </dl>
-
       </PanelCard>
 
       {/* 🔑 Las cuentas de cobro.
@@ -1048,8 +1042,8 @@ export default async function TutorPayoutsPage() {
         {fallaLaCuenta ? (
           <p className="mt-2 max-w-[620px] text-[13px] font-medium text-[#bf3333]">
             No hemos podido leer tus datos de cobro ahora mismo. Vuelve a cargar
-            la página; si sigue igual, escríbenos antes de volver a rellenarlos —
-            lo que tengas guardado sigue estando.
+            la página; si sigue igual, escríbenos antes de volver a rellenarlos
+            — lo que tengas guardado sigue estando.
           </p>
         ) : !paisDeCobro ? (
           <p className="mt-2 max-w-[70ch] text-[13px] leading-[1.6] text-[#4d4d4d]">
@@ -1066,9 +1060,12 @@ export default async function TutorPayoutsPage() {
         ) : tarjetas.length === 0 ? (
           <p className="mt-2 max-w-[70ch] text-[13px] leading-[1.6] text-[#4d4d4d]">
             Hoy no tenemos ninguna vía para hacerte llegar dinero a{" "}
-            {nombrePais(paisDeCobro)}, así que no te pedimos datos que no
-            íbamos a poder usar. <strong>Sigues vendiendo igual y tu saldo se
-            sigue acumulando</strong>: te avisaremos en cuanto se abra.
+            {nombrePais(paisDeCobro)}, así que no te pedimos datos que no íbamos
+            a poder usar.{" "}
+            <strong>
+              Sigues vendiendo igual y tu saldo se sigue acumulando
+            </strong>
+            : te avisaremos en cuanto se abra.
             {cuenta
               ? ` Los datos de ${nombrePais(cuenta.country)} que registraste siguen guardados.`
               : ""}
@@ -1112,19 +1109,23 @@ export default async function TutorPayoutsPage() {
             <table className="w-full min-w-[680px] border-collapse">
               <thead>
                 <tr>
-                  {["Fecha", "Vía · destino", "Reservas", "Estado", "Importe"].map(
-                    (h, i) => (
-                      <th
-                        key={h}
-                        scope="col"
-                        className={`border-b border-[#e0e0e0] pb-2.5 pr-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6b6b6b] ${
-                          i === 4 ? "pr-0 text-right" : "text-left"
-                        }`}
-                      >
-                        {h}
-                      </th>
-                    ),
-                  )}
+                  {[
+                    "Fecha",
+                    "Vía · destino",
+                    "Reservas",
+                    "Estado",
+                    "Importe",
+                  ].map((h, i) => (
+                    <th
+                      key={h}
+                      scope="col"
+                      className={`border-b border-[#e0e0e0] pb-2.5 pr-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[#6b6b6b] ${
+                        i === 4 ? "pr-0 text-right" : "text-left"
+                      }`}
+                    >
+                      {h}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>

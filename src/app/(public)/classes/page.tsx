@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { monedaDelVisitante } from "@/lib/fx";
 import { ArrowRightIcon, ChevronDownIcon, SearchIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,7 @@ import { Pager } from "@/components/catalog/pager";
 import { ProductCard } from "@/components/catalog/product-card";
 import {
   MODELS,
-  PRICE_RANGES,
+  tramosDePrecio,
   SESSION_RANGES,
   LEVELS,
   LANGUAGES,
@@ -65,7 +66,12 @@ export default async function ClassesPage({
     lang: LANGUAGES.some((l) => l.id === sp.lang) ? sp.lang : undefined,
   };
 
-  const price = PRICE_RANGES.find((r) => r.id === active.price);
+  // La moneda del visitante, para que los tramos de precio se lean en la misma
+  // moneda que los precios de las tarjetas. Está memoizada con `cache()` y sus
+  // tasas van por `fetch` cacheado una hora, así que este `await` no añade un
+  // peldaño de cascada a la consulta de abajo.
+  const fx = await monedaDelVisitante();
+  const price = tramosDePrecio(fx).find((r) => r.id === active.price);
   const sessions = SESSION_RANGES.find((r) => r.id === active.sessions);
 
   const [{ products, hasMore, total }, categories] = await Promise.all([
@@ -110,7 +116,7 @@ export default async function ClassesPage({
    * exactamente como los chips del hero (RV-16). Por debajo de `lg` se pintan
    * ellas y el panel se esconde; desde 1024 al revés (R1).
    */
-  const filtrosMovil = productFilterGroups(categories).map((g) => ({
+  const filtrosMovil = productFilterGroups(categories, fx).map((g) => ({
     key: g.key,
     label: g.title,
     current: g.options.find((o) => o.id === active[g.key])?.label,
@@ -254,6 +260,7 @@ export default async function ClassesPage({
       <Container>
         <Section className="grid gap-8 lg:grid-cols-[248px_1fr]">
           <ProductFilters
+            fx={fx}
             categories={categories}
             active={active}
             hrefFor={(next) => buildHref({ ...next, sort })}

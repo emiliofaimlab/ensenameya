@@ -199,11 +199,12 @@ export async function dlocalgoFetch<T>(
  * dirección que nadie reporta —de menos—. Los dos son monedas de payout de
  * dLocal Go (CL y PY), así que el caso no es teórico.
  */
-const SIN_CENTIMOS = new Set(["CLP", "PYG", "JPY", "KRW", "VND", "ISK"]);
-
-export function exponenteDe(currency: string): 0 | 2 {
-  return SIN_CENTIMOS.has(currency.toUpperCase()) ? 0 : 2;
-}
+// La tabla se mudó a `lib/dinero.ts`, que es un módulo NEUTRO: este fichero es
+// `server-only`, así que un Client Component no podía importarla y `formatMoney`
+// seguía dividiendo entre 100 siempre. Se reexporta para no tocar a los ocho
+// llamadores de aquí, y para que payout y vitrina no puedan divergir.
+import { exponenteDe } from "./dinero";
+export { exponenteDe };
 
 /** De unidades menores a lo que dLocal Go espera en el cuerpo. */
 export function aUnidadMayor(amountMinor: number, currency: string): number {
@@ -362,6 +363,35 @@ export function tasaParaPintar(
   const publicada =
     filas.find((t) => t.source_currency === o && t.target_currency === d)?.value ?? null;
   return publicada === null ? null : tasaEfectiva(publicada, spreadDeLiquidacion());
+}
+
+/**
+ * ── LA MISMA TABLA, PERO PARA EL ALUMNO ─────────────────────────────────────
+ *
+ * 🔴 LA DIFERENCIA CON `tasaParaPintar` ES EL SIGNO DEL ERROR, y por eso son
+ * dos funciones y no una con un booleano.
+ *
+ * `tasaParaPintar` recorta con `spreadDeLiquidacion()` porque estima lo que
+ * RECIBE un tutor: de los dos errores posibles, quedarse corto con el dinero de
+ * otro es el barato. Aplicar ese mismo recorte a un precio de vitrina invierte
+ * el signo: le enseñaría al alumno MENOS de lo que se le va a cobrar, que es
+ * exactamente la queja que ya costó apagar el `adaptive_pricing` de Stripe
+ * (`stripe-provider.ts`: se prometían 45,00 US$ y se cobraban PAB 46,80).
+ *
+ * Así que esta devuelve la tasa PUBLICADA, sin tocar. Y aun así la cifra es
+ * orientativa y hay que rotularla como tal: el cobro se abre en USD, y lo que
+ * acabe en el extracto lo fija el emisor de la tarjeta con su propio tipo y su
+ * comisión de moneda extranjera. Quien la pinte pone el «≈» y lo dice.
+ */
+export function tasaDeVitrina(
+  filas: TasaDlocalGo[] | null,
+  monedaOrigen: string,
+  monedaDestino: string,
+): number | null {
+  const o = monedaOrigen.toUpperCase();
+  const d = monedaDestino.toUpperCase();
+  if (!filas || !o || !d || o === d) return null;
+  return filas.find((t) => t.source_currency === o && t.target_currency === d)?.value ?? null;
 }
 
 /**

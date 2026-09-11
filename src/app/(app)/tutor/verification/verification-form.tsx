@@ -76,26 +76,36 @@ const TOPE = maxLabel(KYC_MAX_BYTES);
  * alimenta un desplegable, y lo que se ve debajo es solo lo que el tutor ya
  * tiene — mismo patrón que el portafolio: elegir plataforma + añadir.
  *
- * `requerido` marca los tres que la aprobación exige de verdad (CV, título y
- * documento de identidad). Se DESTACAN, no se imponen: ningún paso del
- * asistente bloquea (EX-02) y este tampoco.
+ * `requerido` marca lo que la aprobación exige de verdad. ⚠️ Desde el
+ * 11-sep-2026 es UNO: la cédula de identidad. El CV y el título eran
+ * `requerido: true` y el cliente los baja a opcionales — se siguen pudiendo
+ * subir y se siguen mirando en la revisión, pero ya no se anuncian como un
+ * requisito. Lo que NO cambia es que aquí nada bloquea (EX-02, «se destacan, no
+ * se imponen»): ni `submit_documents_for_review` ni `review_tutor` se han
+ * tocado, así que esta marca es y sigue siendo TEXTO.
+ *
+ * ⚠️ Y por eso los literales de abajo no dicen «los tres» ni asumen plural:
+ * salen todos de `KYC_REQUERIDOS`, que hoy tiene un elemento y mañana los que
+ * diga el cliente.
  *
  * Ampliar o reordenar el set = tocar esta lista. La BD (`doc_type` es texto) y
  * la pantalla de revisión del admin son genéricas y no se enteran.
  */
 const KYC_DOCS = [
-  { type: "cv", label: "Currículum vitae", hint: `PDF, máx ${TOPE}`, requerido: true },
-  { type: "degree", label: "Título académico", hint: `PDF, máx ${TOPE}`, requerido: true },
+  { type: "cv", label: "Currículum vitae", hint: `PDF, máx ${TOPE}`, requerido: false },
+  { type: "degree", label: "Título académico", hint: `PDF, máx ${TOPE}`, requerido: false },
   { type: "id_document", label: "Documento de identidad", hint: `Cédula o pasaporte · PDF/JPG, máx ${TOPE}`, requerido: true },
   { type: "certificate", label: "Certificado", hint: `PDF, máx ${TOPE}`, requerido: false },
   { type: "diploma", label: "Diploma", hint: `PDF/JPG, máx ${TOPE}`, requerido: false },
   { type: "transcript", label: "Corte de notas (transcript)", hint: `PDF, máx ${TOPE}`, requerido: false },
 ] as const;
 
-/** Los tres de arriba, ya filtrados: se nombran en dos sitios de la pantalla. */
+/** Los de arriba marcados, ya filtrados: se nombran en dos sitios de la pantalla. */
 const KYC_REQUERIDOS = KYC_DOCS.filter((d) => d.requerido);
 
-/** "el CV, el título y la cédula" — enumeración en castellano, con «y» final. */
+/** "el título y la cédula" — enumeración en castellano, con «y» final. Con un
+ *  solo elemento devuelve ese elemento, que es el caso normal desde que la
+ *  cédula es el único documento requerido. */
 function enumerar(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   return `${items.slice(0, -1).join(", ")} y ${items.at(-1)}`;
@@ -154,7 +164,7 @@ function FileRow({
 }: {
   label: string;
   hint: string;
-  /** De los tres que pide la aprobación: se dice en la fila, no solo arriba. */
+  /** De lo que pide la aprobación: se dice en la fila, no solo arriba. */
   requerido?: boolean;
   status?: DocStatus;
   stagedName?: string;
@@ -912,8 +922,12 @@ export function VerificationForm({
                 ? `Elige el tipo y añádelo · ${KYC_HINT}`
                 : `${docsListos} ${docsListos === 1 ? "documento añadido" : "documentos añadidos"} · ${
                     faltanRequeridos.length === 0
-                      ? "tienes los tres requeridos"
-                      : `${faltanRequeridos.length === 1 ? "falta 1" : `faltan ${faltanRequeridos.length}`} de los requeridos`
+                      ? "ya está lo que pide la aprobación"
+                      : // Se nombra lo que falta en vez de contarlo («faltan 2 de
+                        // los requeridos»): con UN solo requerido la cuenta no
+                        // dice nada y el nombre sí — «falta el documento de
+                        // identidad» es la frase entera.
+                        `${faltanRequeridos.length === 1 ? "falta" : "faltan"} ${enumerar(faltanRequeridos.map((d) => d.label.toLowerCase()))}`
                   }`}
               {/* §6.2 · El motivo, en rojo y en la misma línea: es lo único de
                   este resumen sobre lo que hay que ACTUAR. */}
@@ -940,9 +954,14 @@ export function VerificationForm({
               faltanRequeridos.length > 0 ? "text-[#9a6b00]" : "text-success",
             )}
           >
+            {/* ⚠️ Una sola frase para el caso que falta, y NO la de antes
+                («Requeridos: X, Y, Z. Te falta Y»): con un único requerido esa
+                enumeraba lo mismo dos veces en la misma línea. El resto de
+                documentos no se nombran aquí a propósito — están en el selector
+                de arriba y no son un requisito. */}
             {faltanRequeridos.length === 0
-              ? "Ya tienes los tres documentos que pide la aprobación."
-              : `Requeridos para aprobar tu perfil: ${enumerar(KYC_REQUERIDOS.map((d) => d.label))}. Te ${faltanRequeridos.length === 1 ? "falta" : "faltan"} ${enumerar(faltanRequeridos.map((d) => d.label))}.`}
+              ? "Ya tienes lo que pide la aprobación. El resto de documentos es opcional."
+              : `Para aprobar tu perfil necesitamos: ${enumerar(faltanRequeridos.map((d) => d.label))}. El resto es opcional y suma.`}
           </p>
 
           {/* El selector: mismo gesto que el portafolio de abajo — elegir qué es

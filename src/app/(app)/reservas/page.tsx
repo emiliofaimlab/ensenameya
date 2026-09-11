@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/catalog/format";
+import { PrecioEnLinea } from "@/components/precio/precio";
 import {
   BOOKING_STATUS_LABEL,
   porProximidad,
@@ -113,7 +113,7 @@ export default async function ReservasPage() {
         when={when(b)}
         timeZone={tz}
         status={BOOKING_STATUS_LABEL[b.status]}
-        note={formatMoney(b.total_amount, b.currency)}
+        note={<PrecioEnLinea amountMinor={b.total_amount} currency={b.currency} />}
         action={
           sala ? (
             <Button

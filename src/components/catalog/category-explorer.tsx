@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { monedaDelVisitante } from "@/lib/fx";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ChevronDownIcon, SearchIcon } from "lucide-react";
@@ -14,7 +15,7 @@ import { ProductCard } from "@/components/catalog/product-card";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import {
   MODELS,
-  PRICE_RANGES,
+  tramosDePrecio,
   SESSION_RANGES,
   LEVELS,
   LANGUAGES,
@@ -86,7 +87,11 @@ export async function CategoryExplorer({
     lang: LANGUAGES.some((l) => l.id === sp.lang) ? sp.lang : undefined,
     tema: sp.tema,
   };
-  const price = PRICE_RANGES.find((r) => r.id === active.price);
+  // Los tramos de precio, en la misma moneda que los precios de las tarjetas de
+  // esta misma pantalla. Este componente ya es `async`, así que la moneda se
+  // pide aquí en vez de hilarla por props desde las dos páginas que lo montan.
+  const tramos = tramosDePrecio(await monedaDelVisitante());
+  const price = tramos.find((r) => r.id === active.price);
   const sessions = SESSION_RANGES.find((r) => r.id === active.sessions);
 
   // Sin categoría en la ruta, "Temas" hace de filtro principal.
@@ -192,8 +197,8 @@ export async function CategoryExplorer({
     {
       key: "price",
       label: "Precio",
-      current: PRICE_RANGES.find((r) => r.id === active.price)?.label,
-      options: PRICE_RANGES.map((r) => ({
+      current: price?.label,
+      options: tramos.map((r) => ({
         label: r.label,
         active: active.price === r.id,
         href: buildHref({

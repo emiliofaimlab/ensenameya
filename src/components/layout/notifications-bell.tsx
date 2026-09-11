@@ -197,15 +197,20 @@ export function NotificationsBell({
         <Button
           variant="ghost"
           size="icon"
-          // Verónica (3-sep-2026, captura 29): la fila con sesión a 390 «no
-          // existe en diseño; mejor 2 botones, notificaciones a la izquierda y
-          // usuario a la derecha, sin que estén unidos». El borde que llevaba la
-          // fila entera pasa a cada control: aquí un círculo de 42 —el alto de
-          // la píldora del avatar de AL02— con el mismo #e0e0e0 (`border-border`)
-          // y, de paso, 42 px de objetivo táctil. Desde 768 vuelve a ser el
-          // ícono pelado de 32 que ya había: esa fila nunca llevó borde y la
-          // píldora del avatar tiene el suyo. `size-[42px]` pisa el `size-8` de
-          // `size="icon"` (cn/twMerge se queda con el último).
+          // El círculo de 42 con borde nació de Verónica (3-sep-2026, captura
+          // 29): a 390 la fila con sesión «no existe en diseño; mejor 2 botones,
+          // notificaciones a la izquierda y usuario a la derecha, sin que estén
+          // unidos», así que el borde de la fila pasó a cada control.
+          //
+          // ⚠️ ESA FILA YA NO EXISTE (11-sep-2026): la barra por debajo de 1024
+          // se redujo a logo · lupa · carrito · ☰, y la campana se mudó al
+          // bloque de identidad del cajón. Las medidas se quedan porque siguen
+          // siendo las correctas EN SU NUEVO SITIO —42 px de objetivo táctil en
+          // una lista que se pulsa con el pulgar—, pero el porqué es otro, y lo
+          // que se lee arriba es el de la fila que ya no está.
+          // Desde 768 vuelve a ser el ícono pelado de 32 del grupo de acciones
+          // de escritorio, que nunca llevó borde. `size-[42px]` pisa el `size-8`
+          // de `size="icon"` (cn/twMerge se queda con el último).
           className="relative size-[42px] rounded-full border-border md:size-8 md:border-transparent"
           aria-label={
             unread > 0 ? `Avisos (${unread} sin leer)` : "Avisos"

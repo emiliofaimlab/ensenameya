@@ -15,7 +15,7 @@ import {
 } from "@/components/checkout/respuesta-de-cobro";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
-import { formatMoney } from "@/lib/catalog/format";
+import { usePrecio } from "@/components/precio/precio";
 
 /** Igual que en el checkout de una reserva: primero se abre el cobro, luego se pinta. */
 type Apertura =
@@ -63,6 +63,10 @@ export function OrderPayment({
 }) {
   const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
+  // El botón repite la cifra GRANDE del total que tiene encima —la local si la
+  // hay—, no el dólar: si dijeran números distintos, el que se lee al pulsar es
+  // el del botón. El USD sigue visible en la línea pequeña de ese total.
+  const { local: totalLocal, usd: totalUsd } = usePrecio(total, currency);
   const [pagando, setPagando] = useState(false);
   // Qué pedido se abrió ya. Con la clave dentro y no un booleano, StrictMode no
   // abre dos veces y una navegación a OTRO pedido sí vuelve a abrir.
@@ -206,7 +210,9 @@ export function OrderPayment({
               disabled={pagando}
               onClick={() => confirmarSimulado(true)}
             >
-              {pagando ? "Procesando…" : `Confirmar pago · ${formatMoney(total, currency)}`}
+              {pagando
+                ? "Procesando…"
+                : `Confirmar pago · ${totalLocal ?? totalUsd}`}
             </Button>
             <Button
               variant="outline"

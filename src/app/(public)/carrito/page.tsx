@@ -11,10 +11,11 @@ import {
 
 import { getViewerTimezone } from "@/lib/auth/server";
 import { resolveCart, type CartResolvedLine } from "@/lib/cart/resolve";
-import { formatMoney, initialsFrom, storageUrl } from "@/lib/catalog/format";
+import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import { bookingFormatLabel, formatSessionTime } from "@/lib/booking";
 import { HOLD_POLICY } from "@/lib/policy";
 import { Button } from "@/components/ui/button";
+import { Precio } from "@/components/precio/precio";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
@@ -207,8 +208,19 @@ export default async function CarritoPage({
                       prometer una cifra que no depende de nosotros. */}
                   Total estimado
                 </span>
-                <span className="text-[30px] leading-none font-bold text-brand">
-                  {currency ? formatMoney(totalEstimado, currency) : "—"}
+                <span className="text-right">
+                  {currency ? (
+                    <Precio
+                      amountMinor={totalEstimado}
+                      currency={currency}
+                      className="text-[30px] leading-none font-bold text-brand"
+                      notaClassName="mt-1"
+                    />
+                  ) : (
+                    <span className="text-[30px] leading-none font-bold text-brand">
+                      —
+                    </span>
+                  )}
                 </span>
               </div>
               {currency === null && comprables.length > 0 ? (
@@ -574,8 +586,13 @@ function LineaDelCarrito({
 
             <div className="flex shrink-0 flex-col items-end gap-1.5">
               {p ? (
-                <span className="text-[17px] leading-none font-bold text-[#19191f]">
-                  {formatMoney(l.total, p.currency)}
+                <span className="text-right">
+                  <Precio
+                    amountMinor={l.total}
+                    currency={p.currency}
+                    className="text-[17px] leading-none font-bold text-[#19191f]"
+                    notaClassName="mt-0.5"
+                  />
                 </span>
               ) : null}
               <RemoveLine lineKey={l.key} etiqueta={titulo} />

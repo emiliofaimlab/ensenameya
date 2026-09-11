@@ -4,7 +4,7 @@ import { CheckIcon, ClockIcon, MailIcon, MessageSquareIcon, VideoIcon } from "lu
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/catalog/format";
+import { Precio } from "@/components/precio/precio";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
 import { parseRequirements } from "@/lib/product-requirements";
 import { SessionRef } from "@/components/room/session-ref";
@@ -199,8 +199,15 @@ export default async function ConfirmationPage({
             <span className="text-sm text-[#6b6b6b]">
               {pagoPendiente ? "Total de la reserva" : "Total pagado"}
             </span>
-            <span className="text-lg font-bold text-brand">
-              {formatMoney(booking.total_amount, booking.currency)}
+            {/* Ya cobrado, y convertido igual a la tasa de HOY: es la misma
+                etiqueta orientativa de todo el sitio, con su «≈». Lo que fue al
+                extracto es el USD de la línea de abajo. */}
+            <span className="text-right">
+              <Precio
+                amountMinor={booking.total_amount}
+                currency={booking.currency}
+                className="text-lg font-bold text-brand"
+              />
             </span>
           </div>
         </section>

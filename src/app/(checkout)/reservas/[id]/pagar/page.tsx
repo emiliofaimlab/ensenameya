@@ -4,7 +4,7 @@ import { ArrowLeftIcon } from "lucide-react";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/catalog/format";
+import { Precio } from "@/components/precio/precio";
 import { bookingFormatLabel, formatSessionTime, tutorCards } from "@/lib/booking";
 import { ResumePayment } from "@/components/checkout/resume-payment";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
@@ -141,8 +141,15 @@ export default async function PagarReservaPage({
 
           <div className="mt-3.5 flex items-baseline justify-between border-t border-[#e0e0e0] pt-3.5">
             <span className="font-semibold text-[#19191f]">Total</span>
-            <span className="text-lg font-bold text-brand">
-              {formatMoney(booking.total_amount, booking.currency)}
+            {/* La moneda de quien mira arriba y el USD debajo (11-sep-2026):
+                lo que se COBRA sigue siendo el dólar, y en la pantalla del pago
+                es donde menos se puede perder ese dato de vista. */}
+            <span className="text-right">
+              <Precio
+                amountMinor={booking.total_amount}
+                currency={booking.currency}
+                className="text-lg font-bold text-brand"
+              />
             </span>
           </div>
 

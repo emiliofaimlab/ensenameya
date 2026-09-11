@@ -26,7 +26,7 @@ import {
   liberarHolds,
   mensajeDeApertura,
 } from "@/lib/checkout/hold";
-import { formatMoney } from "@/lib/catalog/format";
+import { Precio, PrecioEnLinea, usePrecio } from "@/components/precio/precio";
 import { formatSessionTime, type TutorCardData } from "@/lib/booking";
 import { TutorSummary } from "@/components/tutor-summary";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
@@ -237,6 +237,11 @@ export function CheckoutForm({
 }) {
   const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
+  // El botón repite la cifra GRANDE del total que tiene justo encima —o sea la
+  // local si la hay—, no el dólar: si dijeran números distintos, el que se lee
+  // al pulsar es el del botón. El dólar no se pierde, está en la línea pequeña
+  // del total, a dos centímetros.
+  const { local: totalLocal, usd: totalUsd } = usePrecio(total, currency);
   const [pagando, setPagando] = useState(false);
 
   /**
@@ -529,12 +534,21 @@ export function CheckoutForm({
 
           <div className="mt-4 flex items-center justify-between border-t border-[#e0e0e0] pt-4 text-sm">
             <span className="text-[#6b6b6b]">Subtotal</span>
-            <span className="text-[#333333]">{formatMoney(total, currency)}</span>
+            <PrecioEnLinea
+              amountMinor={total}
+              currency={currency}
+              className="text-[#333333]"
+            />
           </div>
           <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <span className="text-base font-semibold text-[#19191f]">Total</span>
-            <span className="text-[26px] leading-none font-bold text-brand">
-              {formatMoney(total, currency)}
+            <span className="text-right">
+              <Precio
+                amountMinor={total}
+                currency={currency}
+                className="text-[26px] leading-none font-bold text-brand"
+                notaClassName="mt-1"
+              />
             </span>
           </div>
           {/* Solo en paquetes: en una sesión suelta el precio por sesión ES el
@@ -727,7 +741,7 @@ export function CheckoutForm({
             >
               {pagando
                 ? "Procesando…"
-                : `Confirmar pago · ${formatMoney(total, currency)}`}
+                : `Confirmar pago · ${totalLocal ?? totalUsd}`}
             </Button>
             {/* Simular fallo solo tiene sentido con el proveedor simulado: con
                 Stripe el rechazo lo decide la pasarela. */}

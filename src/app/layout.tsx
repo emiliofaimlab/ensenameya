@@ -7,6 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { TimezoneSync } from "@/components/layout/timezone-sync";
 import { RedAntiBlanco } from "@/components/layout/red-anti-blanco";
+import { ProveedorDeMoneda } from "@/components/precio/precio";
+import { monedaDelVisitante } from "@/lib/fx";
 import { siteUrl } from "@/lib/site-url";
 
 // Única familia del diseño: Poppins en los 4 pesos que usan las 3.691 capas de texto del Figma.
@@ -30,11 +32,19 @@ export const metadata: Metadata = {
   description: "Marketplace de mentorías 1:1 en vivo entre alumnos y tutores.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // La moneda en la que se pintan los precios (11-sep-2026). Se resuelve AQUÍ y
+  // no en cada grupo de rutas porque el dinero sale en los cuatro —catálogo,
+  // panel, carrito y checkout— y hilarlo por props serían cuatro sitios que se
+  // desincronizan. El coste real es una lectura de cabecera: la tabla de tasas
+  // va por `fetch` con `revalidate: 3600`, compartida entre peticiones, y
+  // `cache()` la deduplica dentro de cada una. `null` = se pinta el USD a
+  // secas, que es lo que se pintaba antes de este cambio.
+  const moneda = await monedaDelVisitante();
   return (
     <html
       lang="es"
@@ -50,7 +60,9 @@ export default function RootLayout({
           forcedTheme="light"
           disableTransitionOnChange
         >
-          <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+          <ProveedorDeMoneda valor={moneda}>
+            <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+          </ProveedorDeMoneda>
           {/* RV-03 · Deja la zona del navegador en la cookie `ey-tz` para que el
               servidor pinte los horarios en la hora de quien mira (R24-22).
               Vive AQUÍ y no en el layout público —donde estaba— porque las

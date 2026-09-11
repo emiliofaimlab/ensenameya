@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/catalog/format";
+import { PrecioEnLinea } from "@/components/precio/precio";
 import {
   BOOKING_STATUS_LABEL,
   SESSION_STATUS_LABEL,
@@ -357,9 +357,17 @@ export default async function BookingDetailPage({
           <PanelCard>
             <PanelCardTitle>Pago</PanelCardTitle>
             <dl className="mt-3.5 flex flex-col gap-3">
+              {/* Una fila de `dl` es UNA línea, así que aquí va la versión de
+                  una línea: «≈ 4.380 CLP (12,00 US$)». El dólar entre paréntesis
+                  y no en una segunda línea, pero va — es lo que se cobró. */}
               <PanelRow
                 label="Total"
-                value={formatMoney(booking.total_amount, booking.currency)}
+                value={
+                  <PrecioEnLinea
+                    amountMinor={booking.total_amount}
+                    currency={booking.currency}
+                  />
+                }
               />
               {payment?.paid_at ? (
                 <PanelRow
@@ -375,7 +383,12 @@ export default async function BookingDetailPage({
               {payment && payment.refunded_amount > 0 ? (
                 <PanelRow
                   label="Reembolsado"
-                  value={formatMoney(payment.refunded_amount, payment.currency)}
+                  value={
+                    <PrecioEnLinea
+                      amountMinor={payment.refunded_amount}
+                      currency={payment.currency}
+                    />
+                  }
                 />
               ) : null}
             </dl>

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { formatMoney } from "@/lib/catalog/format";
+import { ImporteLocal, Precio } from "@/components/precio/precio";
 import { HOLD_POLICY } from "@/lib/policy";
 import {
   PanelCard,
@@ -658,8 +658,12 @@ export function SlotPicker({
 
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-sm text-[#6b6b6b]">Total</span>
-            <span className="text-base font-bold text-[#19191f]">
-              {formatMoney(total, currency)}
+            <span className="text-right">
+              <Precio
+                amountMinor={total}
+                currency={currency}
+                className="text-base font-bold text-[#19191f]"
+              />
             </span>
           </div>
 
@@ -786,9 +790,14 @@ export function SlotPicker({
             <p className="text-[11px] text-[#6b6b6b]">
               {selected.size} de {required}
             </p>
-            <p className="text-[13px] font-bold text-[#19191f]">
-              {formatMoney(total, currency)}
-            </p>
+            {/* La franja fija de móvil mide 45px: aquí no cabe el bloque de
+                dos líneas y va la cifra local sola. El USD no se pierde — está
+                en el resumen de arriba, en esta misma pantalla. */}
+            <ImporteLocal
+              amountMinor={total}
+              currency={currency}
+              className="block text-[13px] font-bold text-[#19191f]"
+            />
           </div>
           <Button
             type="button"

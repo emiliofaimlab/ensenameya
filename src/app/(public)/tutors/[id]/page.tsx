@@ -30,7 +30,8 @@ import {
 } from "@/components/catalog/tutor-reviews";
 import { getTutorDetail, listTutorReviews } from "@/lib/catalog/queries";
 import type { CategoryTag, ProductCardData } from "@/lib/catalog/queries";
-import { formatMoney, initialsFrom, storageUrl } from "@/lib/catalog/format";
+import { initialsFrom, storageUrl } from "@/lib/catalog/format";
+import { PrecioEnLinea } from "@/components/precio/precio";
 
 /**
  * "básico e intermedio" — la «y» se vuelve «e» delante de palabra que empieza
@@ -44,29 +45,6 @@ function listaEs(items: string[]): string {
   const ultimo = items[items.length - 1]!;
   const conjuncion = /^(i|hi)/i.test(ultimo) ? "e" : "y";
   return `${items.slice(0, -1).join(", ")} ${conjuncion} ${ultimo}`;
-}
-
-/**
- * «desde US$ 15» de «Lo que enseño». El «desde» ya dice que es un mínimo, así
- * que unos céntimos a cero solo hacen ruido en una línea de 12,5 px; con
- * céntimos de verdad se escriben enteros, que es lo único que no puede mentir.
- *
- * ⚠️ No sustituye a `formatMoney`/`priceDisplay`: esto es una CIFRA DE VITRINA,
- * no lo que se cobra. Lo que se cobra sigue saliendo del panel y de la tarjeta,
- * con su formato de siempre.
- */
-function desdeMoney(amountMinor: number, currency: string): string {
-  return amountMinor % 100 === 0
-    ? // ⚠️ `minimumFractionDigits` también, y no es redundante: para USD el
-      // mínimo por defecto es 2, y un máximo de 0 por debajo del mínimo hace
-      // que `Intl.NumberFormat` lance `RangeError` — o sea, tumba la página.
-      new Intl.NumberFormat("es", {
-        style: "currency",
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(amountMinor / 100)
-    : formatMoney(amountMinor, currency);
 }
 
 /** "Marzo 2026" en la zona del visitante (RN-02); `null` si no hay fecha. */
@@ -807,12 +785,28 @@ export default async function TutorProfilePage({
                           >
                             {cat.name}
                           </Link>
+                          {/* El «desde» va con la cifra DENTRO de la frase, así
+                              que es la versión de una línea: «desde ≈ 14.200 CLP
+                              (15,00 US$)». Antes esto tenía su propio
+                              `Intl.NumberFormat` para comerse los céntimos —dos
+                              formateadores de dinero en la casa—; ahora lo pinta
+                              el mismo componente que las tarjetas de abajo, que
+                              es lo que evita que la misma clase salga con dos
+                              cifras distintas en la misma pantalla. */}
                           <p className="mt-0.5 text-[12.5px] text-[#6b6b6b]">
                             {items.length}{" "}
                             {items.length === 1 ? "mentoría" : "mentorías"} ·{" "}
-                            {soloPaquete
-                              ? `paquete de ${barato.packageNumSessions} sesiones`
-                              : `desde ${desdeMoney(barato.priceAmount, barato.currency)}`}
+                            {soloPaquete ? (
+                              `paquete de ${barato.packageNumSessions} sesiones`
+                            ) : (
+                              <>
+                                desde{" "}
+                                <PrecioEnLinea
+                                  amountMinor={barato.priceAmount}
+                                  currency={barato.currency}
+                                />
+                              </>
+                            )}
                           </p>
                         </div>
                         {chips.length > 0 ? (

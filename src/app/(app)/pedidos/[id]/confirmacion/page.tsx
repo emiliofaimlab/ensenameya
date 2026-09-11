@@ -5,7 +5,7 @@ import { ArrowRightIcon, CheckCircle2Icon, ClockIcon } from "lucide-react";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { resolveOrder, type LineaResuelta } from "@/lib/orders/queries";
 import { cartLineKey } from "@/lib/cart/cookie";
-import { formatMoney } from "@/lib/catalog/format";
+import { Precio } from "@/components/precio/precio";
 import { formatSessionTime } from "@/lib/booking";
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
@@ -129,8 +129,12 @@ export default async function ConfirmacionPedidoPage({
                       con {l.tutorNombre ?? "tu tutor"} · {estadoLegible(l.status)}
                     </p>
                   </div>
-                  <span className="shrink-0 text-[15px] font-bold text-[#19191f]">
-                    {formatMoney(l.total, l.currency)}
+                  <span className="shrink-0 text-right">
+                    <Precio
+                      amountMinor={l.total}
+                      currency={l.currency}
+                      className="text-[15px] font-bold text-[#19191f]"
+                    />
                   </span>
                 </div>
                 <ul className="mt-1.5 flex flex-col gap-1 text-[13px] text-[#333333]">
@@ -176,8 +180,16 @@ export default async function ConfirmacionPedidoPage({
             <span className="text-base font-semibold text-[#19191f]">
               {tumbado ? "Total del pedido" : "Total pagado"}
             </span>
-            <span className="text-[26px] leading-none font-bold text-brand">
-              {formatMoney(pedido.total, pedido.currency)}
+            {/* Ya cobrado, y aun así convertido a la tasa de HOY: es la misma
+                etiqueta orientativa que en el resto del sitio y por eso lleva su
+                «≈». Lo que se cobró de verdad es el USD, que va debajo. */}
+            <span className="text-right">
+              <Precio
+                amountMinor={pedido.total}
+                currency={pedido.currency}
+                className="text-[26px] leading-none font-bold text-brand"
+                notaClassName="mt-1"
+              />
             </span>
           </div>
         </PanelCard>

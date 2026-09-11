@@ -12,7 +12,7 @@ import { PriceRange } from "@/components/catalog/price-range";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import { AVAILABILITY, TutorFilters } from "@/components/catalog/tutor-filters";
 import { LANGUAGES } from "@/components/catalog/product-filters";
-import { formatMoney } from "@/lib/catalog/format";
+import { textosDePrecio } from "@/lib/fx";
 import {
   listApprovedTutors,
   listActiveCategories,
@@ -141,6 +141,26 @@ export default async function TutorsPage({
   const priceBaseHref = buildHref({ ...current, pmin: undefined, pmax: undefined });
 
   /**
+   * El rango elegido, para el rótulo de la píldora móvil. Va por
+   * `textosDePrecio` y no por `formatMoney` porque el `current` de una píldora
+   * es un STRING y no admite componente.
+   *
+   * ⚠️ Aquí va SOLO la cifra local: la píldora es un chip de 40 px con scroll
+   * horizontal y el par completo no cabe. El dólar está a la vista en esta
+   * misma pantalla por partida doble —el deslizador que abre esta píldora lo
+   * pinta bajo el rango, y cada tarjeta de tutor lleva su «Desde … (US$ …)»—.
+   *
+   * No cuesta dos viajes: `monedaDelVisitante()` está memoizada con `cache()`
+   * y el layout raíz ya la resolvió para esta petición.
+   */
+  const rango = price
+    ? await Promise.all([
+        textosDePrecio(price.min, "USD"),
+        textosDePrecio(price.max, "USD"),
+      ])
+    : null;
+
+  /**
    * Filtros MÓVILES (Verónica, 3-sep-2026: «dropdowns en slider uno al lado
    * del otro … estilo Shein», IMG_4157). Mismas opciones que `TutorFilters` y
    * la misma URL —cada href sale de `buildHref` sobre `current`, como los chips
@@ -167,8 +187,8 @@ export default async function TutorsPage({
           {
             key: "price",
             label: "Inversión por sesión",
-            current: price
-              ? `${formatMoney(price.min, "USD")} – ${formatMoney(price.max, "USD")}`
+            current: rango
+              ? `${rango[0].local ?? rango[0].usd} – ${rango[1].local ?? rango[1].usd}`
               : undefined,
             panel: (
               <PriceRange
