@@ -54,6 +54,7 @@ const ESPERA_BURBUJA_MS = 400;
 export function NotificationsBell({
   initial,
   userId,
+  variante = "icono",
 }: {
   initial: AppNotice[];
   /**
@@ -64,6 +65,16 @@ export function NotificationsBell({
    * largo está en `lib/notifications-server.ts`, que es donde se descubrió.
    */
   userId: string;
+  /**
+   * Cómo se pinta el DISPARADOR, no el desplegable:
+   *
+   *   · `icono` — el círculo de siempre, para la barra del header.
+   *   · `fila`  — una fila de lista: icono pelado, «Avisos», y el contador a la
+   *     derecha. Es la del cajón móvil, donde la campana convive con «Mi panel»
+   *     y «Cerrar sesión» y un círculo con borde la hacía parecer otra cosa
+   *     (Jose, 11-sep-2026, sobre la preview).
+   */
+  variante?: "icono" | "fila";
 }) {
   const router = useRouter();
   const [notices, setNotices] = useState<AppNotice[]>(initial);
@@ -192,37 +203,77 @@ export function NotificationsBell({
         setAbierta(open);
         if (open) void load();
       }}
+      /**
+       * ⚠️ `modal={false}` EN LA FILA, Y NO ES UN AFINADO: sin esto el
+       * desplegable no se abre. Medido el 11-sep-2026 contra `npm start`, y
+       * abriendo y cerrando en el mismo clic —el contenido llegaba al DOM con
+       * su tamaño real y `aria-expanded` volvía a `false` acto seguido—, que es
+       * peor que un fallo ruidoso porque no deja rastro en consola.
+       *
+       * La causa es el ANIDAMIENTO: la variante de fila vive dentro del `Sheet`,
+       * que es un `Dialog` de Radix y por tanto una capa modal. Un
+       * `DropdownMenu` también modal monta la SUYA encima, las dos reclaman el
+       * descarte por clic-fuera y el foco, y la de fuera se lleva por delante a
+       * la de dentro. No modal, conviven.
+       *
+       * En la barra (`icono`) NO se toca: ahí no hay diálogo alrededor y el
+       * modal es lo correcto —bloquea el scroll de detrás mientras se leen los
+       * avisos—.
+       */
+      modal={variante !== "fila"}
     >
       <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          // El círculo de 42 con borde nació de Verónica (3-sep-2026, captura
-          // 29): a 390 la fila con sesión «no existe en diseño; mejor 2 botones,
-          // notificaciones a la izquierda y usuario a la derecha, sin que estén
-          // unidos», así que el borde de la fila pasó a cada control.
-          //
-          // ⚠️ ESA FILA YA NO EXISTE (11-sep-2026): la barra por debajo de 1024
-          // se redujo a logo · lupa · carrito · ☰, y la campana se mudó al
-          // bloque de identidad del cajón. Las medidas se quedan porque siguen
-          // siendo las correctas EN SU NUEVO SITIO —42 px de objetivo táctil en
-          // una lista que se pulsa con el pulgar—, pero el porqué es otro, y lo
-          // que se lee arriba es el de la fila que ya no está.
-          // Desde 768 vuelve a ser el ícono pelado de 32 del grupo de acciones
-          // de escritorio, que nunca llevó borde. `size-[42px]` pisa el `size-8`
-          // de `size="icon"` (cn/twMerge se queda con el último).
-          className="relative size-[42px] rounded-full border-border md:size-8 md:border-transparent"
-          aria-label={
-            unread > 0 ? `Avisos (${unread} sin leer)` : "Avisos"
-          }
-        >
-          <BellIcon className="size-[18px]" />
-          {unread > 0 ? (
-            <span className="absolute top-1 right-1 grid size-4 place-items-center rounded-full bg-primary text-[10px] font-bold text-white">
-              {unread > 9 ? "9+" : unread}
-            </span>
-          ) : null}
-        </Button>
+        {variante === "fila" ? (
+          /* La fila del cajón: mismo alto, mismo hueco y mismo icono pelado que
+             «Mi panel», «Mi cuenta» y «Cerrar sesión», que son sus vecinas. El
+             círculo con borde de la otra variante la hacía leer como un control
+             distinto en medio de una lista. El contador se va a la DERECHA —no
+             encima del icono— porque en una fila ahí es donde se buscan los
+             números, y además deja de tapar la campana. */
+          <Button
+            variant="ghost"
+            className="h-auto w-full justify-start gap-2.5 rounded-md px-2 py-3 text-sm font-normal text-foreground hover:bg-muted"
+            aria-label={unread > 0 ? `Avisos (${unread} sin leer)` : "Avisos"}
+          >
+            <BellIcon className="size-[18px]" />
+            <span>Avisos</span>
+            {unread > 0 ? (
+              <span
+                aria-hidden
+                className="ms-auto grid size-5 place-items-center rounded-full bg-primary text-[11px] leading-none font-bold text-white"
+              >
+                {unread > 9 ? "9+" : unread}
+              </span>
+            ) : null}
+          </Button>
+        ) : (
+          <Button
+            variant="ghost"
+            size="icon"
+            // El círculo de 42 con borde nació de Verónica (3-sep-2026, captura
+            // 29): a 390 la fila con sesión «no existe en diseño; mejor 2
+            // botones, notificaciones a la izquierda y usuario a la derecha, sin
+            // que estén unidos», así que el borde de la fila pasó a cada control.
+            //
+            // ⚠️ ESA FILA YA NO EXISTE (11-sep-2026): la barra por debajo de
+            // 1024 se redujo a logo · lupa · carrito · ☰ y la campana se mudó al
+            // cajón, donde va con `variante="fila"`. O sea que hoy este círculo
+            // solo se ve de 768 para arriba, en el grupo de acciones del
+            // escritorio; el tramo `size-[42px]` se queda porque `(auth)` monta
+            // el header sin sesión y algún día puede volver a hacer falta a 390.
+            // `size-[42px]` pisa el `size-8` de `size="icon"` (twMerge se queda
+            // con el último).
+            className="relative size-[42px] rounded-full border-border md:size-8 md:border-transparent"
+            aria-label={unread > 0 ? `Avisos (${unread} sin leer)` : "Avisos"}
+          >
+            <BellIcon className="size-[18px]" />
+            {unread > 0 ? (
+              <span className="absolute top-1 right-1 grid size-4 place-items-center rounded-full bg-primary text-[10px] font-bold text-white">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            ) : null}
+          </Button>
+        )}
       </DropdownMenuTrigger>
 
       {/*

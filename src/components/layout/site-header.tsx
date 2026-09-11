@@ -782,19 +782,23 @@ export function SiteHeader({
                             aquí igual. Sin esto el cajón se queda tapando el
                             destino, que es la trampa de siempre de este Sheet.
 
-                            El texto va `aria-hidden` a propósito: el nombre
-                            accesible —con las no leídas contadas— ya lo pone el
-                            botón de la campana, y repetirlo lo diría dos veces. */}
+                            `variante="fila"` la pinta como una fila de lista más
+                            —icono pelado, «Avisos», contador a la derecha— en vez
+                            del círculo con borde de la barra: aquí sus vecinas
+                            son «Mi cuenta» y «Cerrar sesión», y el círculo la
+                            hacía leer como otra cosa. El rótulo vive DENTRO del
+                            botón, que es lo que hace que el nombre accesible y
+                            el visible sean el mismo. */}
                         <div
-                          className="flex items-center gap-2 py-1"
                           onClick={(e) => {
                             if ((e.target as Element).closest?.("a")) closeMenu();
                           }}
                         >
-                          <NotificationsBell initial={notices} userId={user.id} />
-                          <span aria-hidden className="text-sm text-foreground">
-                            Avisos
-                          </span>
+                          <NotificationsBell
+                            initial={notices}
+                            userId={user.id}
+                            variante="fila"
+                          />
                         </div>
 
                         {/* ⚠️ `SignOutDialog` vive FUERA del Sheet (al final del
