@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import { ProductCover } from "@/components/catalog/product-cover";
+import { Precio } from "@/components/precio/precio";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import {
@@ -132,12 +133,13 @@ export function FeaturedProducts({
 
                     <div className="mt-auto flex items-baseline justify-between gap-2">
                       <span className="min-w-0">
-                        <span className="block text-lg font-semibold">
-                          {precio.amount}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {precio.note}
-                        </span>
+                        <Precio
+                          amountMinor={precio.amountMinor}
+                          currency={p.currency}
+                          nota={precio.note}
+                          className="text-lg font-semibold"
+                          notaClassName="truncate text-xs"
+                        />
                       </span>
                       {sessions ? (
                         <span className="shrink-0 text-xs text-muted-foreground">

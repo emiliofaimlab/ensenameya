@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { XIcon } from "lucide-react";
+import { CopyIcon, PencilIcon, XIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import {
   horasSemana,
+  seSolapan,
   type PreviewDeFranja,
   type Rule,
 } from "@/lib/availability";
@@ -55,10 +56,10 @@ const DESDE_POR_DEFECTO = "09:00";
 const HASTA_POR_DEFECTO = "10:00";
 
 /**
- * `id` del formulario de alta. Es único en la pantalla —solo hay un día
- * abierto a la vez— y no cambia al moverse de fila, que es justo lo que
- * necesita el `aria-controls` del botón de la cabecera para seguir apuntando a
- * él.
+ * `id` del formulario. Sigue siendo único en la pantalla —solo hay un día
+ * abierto a la vez, y editar reusa ESE MISMO formulario en vez de montar otro—
+ * y no cambia al moverse de fila, que es justo lo que necesita el
+ * `aria-controls` del botón de la cabecera para seguir apuntando a él.
  */
 const ID_FORMULARIO = "form-franja";
 
@@ -93,6 +94,23 @@ const hhmm = (t: string) => t.slice(0, 5); // 'HH:MM:SS' → 'HH:MM'
  * mueve— porque es lo que dice dónde va a caer lo que estás escribiendo; un
  * formulario al pie de la lista no lo dice.
  *
+ * ── Paquete de edición (11-sep-2026) ────────────────────────────────────────
+ *
+ * ⚠️ **EDITAR una franja es un `update`, NUNCA un borrar + crear.** Es la razón
+ * de que hasta hoy no se pudiera editar y se resolviera "quitando y volviendo a
+ * poner": eso arrastra los enlaces a mentorías por la FK `on delete cascade`
+ * (`20260817200000`) y, si era el único de alguna, esa mentoría pasa a
+ * ofrecerse en TODA la disponibilidad. O sea que corregir «09:00» por «09:30»
+ * podía ABRIR una oferta, en silencio. La RLS ya daba `update` desde
+ * `20260709130000`; lo que faltaba era la pantalla.
+ *
+ * ⚠️ **Copiar deja de estar escondido.** Estaba dentro del formulario de alta,
+ * solo si el día ya tenía franjas, y había que desplegarlo para ver DOS
+ * destinos fijos. Ahora es una acción de la fila del día —al lado de sus
+ * franjas, que es de lo que habla— y los destinos se eligen uno a uno. «Lunes a
+ * viernes» y «toda la semana» siguen ahí, pero como preselección, no como los
+ * únicos destinos posibles.
+ *
  * N-04 · desde que la disponibilidad se elige por mentoría, una franja puede
  * tener mentorías colgando. Borrarla ya no es una operación local: ver
  * `pedirBorrado`.
@@ -101,7 +119,6 @@ export function AvailabilityManager({
   userId,
   rules,
   usedBy = {},
-  slotPreview = {},
   titulo,
 }: {
   userId: string;
@@ -109,18 +126,13 @@ export function AvailabilityManager({
   /** N-04 · rule_id → títulos de las mentorías que usan esa franja. */
   usedBy?: Record<string, string[]>;
   /**
-   * `rule_id` → si esta franja pisa a otra del mismo día. Lo calcula
-   * `buildSlotPreview` en servidor, con la misma aritmética que
-   * `get_available_slots`.
-   *
-   * ⚠️ §3.2 · de este objeto ya solo se pinta `solapa`. El «→ 9 clases de 60
-   * min» que iba en el chip se retira por el paquete v2 («el chip lleva solo la
-   * franja»), pero el cálculo se conserva entero: el aviso de solape sale de él
-   * y es la única pantalla donde el tutor se entera de que tiene horarios
-   * repetidos.
-   *
-   * Opcional y con default vacío porque el paso 4 del asistente de onboarding
-   * (EY-183) monta este mismo gestor y ahí todavía no hay mentorías creadas.
+   * ⚠️ DEROGADA por el paquete de edición, y se conserva solo para no romper a
+   * quien la pasa. El aviso de solape era lo ÚNICO que quedaba de este objeto
+   * —el «→ 9 clases de 60 min» se fue con §3.2— y ahora se calcula aquí con
+   * `seSolapan`, porque venir de servidor era exactamente el problema: el paso
+   * 4 del asistente monta este mismo gestor SIN esta prop (allí no hay
+   * mentorías todavía), así que justo donde el tutor escribe sus franjas por
+   * primera vez no se avisaba de nada.
    */
   slotPreview?: Record<string, PreviewDeFranja>;
   /**
@@ -136,12 +148,18 @@ export function AvailabilityManager({
   // Día bajo el que está abierto el formulario, o `null` si está cerrado. Un
   // solo día: es lo que impide que vuelvan los siete formularios.
   const [abierto, setAbierto] = useState<number | null>(null);
+  // Franja que el formulario está EDITANDO, o `null` si está dando de alta. Es
+  // el mismo formulario: dos formularios idénticos con distinto verbo es lo que
+  // §3.2 se dedicó a quitar de esta pantalla.
+  const [editando, setEditando] = useState<Rule | null>(null);
   // ⚠️ Las horas son ESTADO y no campos sueltos del `<form>`: al cambiar de día
   // el formulario se desmonta de una fila y se monta en otra, y unos `<input>`
   // no controlados perderían por el camino lo que el tutor acababa de escribir.
   const [desde, setDesde] = useState(DESDE_POR_DEFECTO);
   const [hasta, setHasta] = useState(HASTA_POR_DEFECTO);
-  const [copiando, setCopiando] = useState(false);
+  // Día cuyo panel de copia está abierto, y los días marcados como destino.
+  const [copiandoDia, setCopiandoDia] = useState<number | null>(null);
+  const [destinos, setDestinos] = useState<Set<number>>(new Set());
   // Franja pendiente de confirmar borrado (solo las que usa alguna mentoría).
   const [borrando, setBorrando] = useState<Rule | null>(null);
 
@@ -174,35 +192,100 @@ export function AvailabilityManager({
     list.sort((a, b) => a.start_time.localeCompare(b.start_time));
   }
 
-  function alternarFormulario() {
-    setAbierto(abierto === null ? DIA_POR_DEFECTO : null);
-    setCopiando(false);
+  /**
+   * Qué franjas pisan a otra del mismo día. Mismo criterio que `seSolapan` usa
+   * en servidor para `buildSlotPreview`: solo entre ACTIVAS —una pausada no se
+   * ofrece, así que no pisa nada— e intervalos medio abiertos.
+   */
+  const solapadas = new Set<string>();
+  for (const list of byDay.values()) {
+    const activas = list.filter((r) => r.is_active);
+    for (const a of activas) {
+      if (activas.some((b) => b.id !== a.id && seSolapan(a, b))) solapadas.add(a.id);
+    }
   }
 
-  async function addRule(weekday: number, e: FormEvent<HTMLFormElement>) {
+  /** Cierra formulario y panel de copia, y devuelve el formulario a su estado limpio. */
+  function cerrarTodo() {
+    setAbierto(null);
+    setEditando(null);
+    setCopiandoDia(null);
+    setDesde(DESDE_POR_DEFECTO);
+    setHasta(HASTA_POR_DEFECTO);
+  }
+
+  function alternarFormulario() {
+    // Cerrar solo si lo que hay abierto es el ALTA: con una edición abierta el
+    // botón dice «+ Añadir franja» y tiene que hacer eso, no cerrar otra cosa.
+    if (abierto !== null && !editando) return cerrarTodo();
+    cerrarTodo();
+    setAbierto(DIA_POR_DEFECTO);
+  }
+
+  /**
+   * Abre el formulario en modo edición, bajo la fila de la franja y con sus
+   * horas ya puestas. El selector «Día» sigue vivo: mover una franja de día es
+   * la corrección más obvia después de la hora, y en un `update` sale gratis.
+   */
+  function editar(rule: Rule) {
+    setCopiandoDia(null);
+    setEditando(rule);
+    setAbierto(rule.weekday);
+    setDesde(hhmm(rule.start_time));
+    setHasta(hhmm(rule.end_time));
+  }
+
+  /**
+   * Alta y edición en el mismo sitio: lo único que cambia es la escritura final.
+   *
+   * ⚠️ El DUPLICADO EXACTO no se inserta y no es un error: se avisa y ya, igual
+   * que hace la copia desde siempre. Es validación de cliente a propósito —no
+   * hay `unique` ni `exclude` en la tabla y no puede haberlos: hay franjas que
+   * se solapan a posta desde antes de esto, y un solape sí sigue estando
+   * permitido. Lo que no aporta nada es la MISMA franja dos veces, que es
+   * justo lo que hace quien no está seguro de si ya pulsó.
+   */
+  async function guardarFranja(weekday: number, e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!desde || !hasta || hasta <= desde) {
       return toast.error("La hora de fin debe ser mayor a la de inicio.");
     }
 
+    const dia = WEEKDAYS[weekday].toLowerCase();
+    const repetida = (byDay.get(weekday) ?? []).some(
+      (r) =>
+        r.id !== editando?.id &&
+        hhmm(r.start_time) === desde &&
+        hhmm(r.end_time) === hasta,
+    );
+    if (repetida) {
+      return toast.info(`El ${dia} ya tiene ese horario.`);
+    }
+
     setBusy(true);
     const supabase = createClient();
-    const { error } = await supabase.from("availability_rules").insert({
-      tutor_id: userId,
-      weekday,
-      start_time: desde,
-      end_time: hasta,
-    });
+    // ⚠️ `update` y no borrar + insertar: un `delete` arrastra los enlaces a
+    // mentorías (FK `on delete cascade`) y puede acabar abriendo una oferta en
+    // toda la disponibilidad del tutor. Editando, los enlaces ni se enteran.
+    const { error } = editando
+      ? await supabase
+          .from("availability_rules")
+          .update({ weekday, start_time: desde, end_time: hasta })
+          .eq("id", editando.id)
+      : await supabase.from("availability_rules").insert({
+          tutor_id: userId,
+          weekday,
+          start_time: desde,
+          end_time: hasta,
+        });
     setBusy(false);
     if (error) return toast.error(error.message || "No se pudo guardar el horario.");
-    toast.success(`Franja añadida el ${WEEKDAYS[weekday].toLowerCase()}.`);
-    setAbierto(null);
-    setCopiando(false);
-    // Vuelta a las horas de partida: el formulario se cierra al guardar, así
-    // que la próxima vez que se abra tiene que estar limpio y no con lo que se
-    // escribió hace dos franjas.
-    setDesde(DESDE_POR_DEFECTO);
-    setHasta(HASTA_POR_DEFECTO);
+    toast.success(
+      editando ? `Franja del ${dia} actualizada.` : `Franja añadida el ${dia}.`,
+    );
+    // El formulario se cierra al guardar, así que la próxima vez que se abra
+    // tiene que estar limpio y no con lo que se escribió hace dos franjas.
+    cerrarTodo();
     router.refresh();
   }
 
@@ -231,8 +314,22 @@ export function AvailabilityManager({
     const { error } = await supabase.from("availability_rules").delete().eq("id", id);
     setBusy(false);
     if (error) return toast.error("No se pudo eliminar.");
+    if (editando?.id === id) cerrarTodo();
     setBorrando(null);
     router.refresh();
+  }
+
+  /**
+   * Abre (o cierra) el panel de copia de un día. Arranca con «lunes a viernes»
+   * ya marcado: era uno de los dos únicos destinos que había antes de este
+   * paquete y sigue siendo lo primero que quiere cualquier tutor.
+   */
+  function alternarCopia(day: number) {
+    const abriendo = copiandoDia !== day;
+    setAbierto(null);
+    setEditando(null);
+    setCopiandoDia(abriendo ? day : null);
+    setDestinos(new Set(abriendo ? ENTRE_SEMANA.filter((d) => d !== day) : []));
   }
 
   /**
@@ -243,6 +340,7 @@ export function AvailabilityManager({
   async function copiar(desdeDia: number, hacia: number[]) {
     const origen = byDay.get(desdeDia) ?? [];
     if (origen.length === 0) return;
+    if (hacia.length === 0) return toast.info("Marca al menos un día de destino.");
 
     const nuevas = hacia.flatMap((day) => {
       const yaTiene = byDay.get(day) ?? [];
@@ -262,7 +360,7 @@ export function AvailabilityManager({
     });
 
     if (nuevas.length === 0) {
-      setCopiando(false);
+      setCopiandoDia(null);
       return toast.info("Esos días ya tenían este horario.");
     }
 
@@ -270,9 +368,11 @@ export function AvailabilityManager({
     const supabase = createClient();
     const { error } = await supabase.from("availability_rules").insert(nuevas);
     setBusy(false);
-    setCopiando(false);
+    setCopiandoDia(null);
     if (error) return toast.error(error.message || "No se pudo copiar el horario.");
-    toast.success(`Horario copiado a ${hacia.length} días.`);
+    toast.success(
+      `Horario copiado a ${hacia.length} ${hacia.length === 1 ? "día" : "días"}.`,
+    );
     router.refresh();
   }
 
@@ -291,12 +391,16 @@ export function AvailabilityManager({
             «expandido» y deja al usuario sin forma de saltar a lo que se
             expandió. Y `aria-expanded:bg-primary/80` porque la variante naranja
             no trae estado abierto (la `outline` sí, ver `button.tsx`): abierto
-            y cerrado se pintaban igual. */}
+            y cerrado se pintaban igual.
+
+            `!editando` en el estado: con una edición abierta este botón NO está
+            expandido —lleva a otra cosa—, y anunciarlo como tal mandaría al
+            lector a un formulario que dice «Guardar cambios». */}
         <Button
           type="button"
           size="lg"
           disabled={busy}
-          aria-expanded={abierto !== null}
+          aria-expanded={abierto !== null && !editando}
           aria-controls={ID_FORMULARIO}
           onClick={alternarFormulario}
           className="ml-auto rounded-[10px] px-4 text-[13px] aria-expanded:bg-primary/80"
@@ -322,6 +426,7 @@ export function AvailabilityManager({
           const list = byDay.get(day) ?? [];
           const vacio = list.length === 0;
           const estaAbierto = abierto === day;
+          const nombreDia = WEEKDAYS[day].toLowerCase();
           const otros = DISPLAY_ORDER.filter((d) => d !== day);
           // §3.2 · horas abiertas del día, a la izquierda de los chips. Misma
           // función que suma la semana entera: si el total y las filas se
@@ -369,15 +474,16 @@ export function AvailabilityManager({
                      no cabe, que es lo que hace falta a 390. */
                   <span className="flex min-w-0 flex-1 basis-[220px] flex-wrap items-center gap-1.5">
                     {list.map((r) => {
-                      const vista = slotPreview[r.id];
+                      const horas = `${hhmm(r.start_time)} a ${hhmm(r.end_time)}`;
+                      const enEdicion = editando?.id === r.id;
                       return (
                         <span
                           key={r.id}
-                          className={`group/chip inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium ${
+                          className={`inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium ${
                             r.is_active
                               ? "bg-brand/10 text-[#0b4f96]"
                               : "bg-muted text-[#9c9c9c] line-through"
-                          }`}
+                          } ${enEdicion ? "ring-2 ring-brand/50" : ""}`}
                         >
                           {hhmm(r.start_time)}–{hhmm(r.end_time)}
                           {/* ⚠️ EL AVISO DE SOLAPE SE QUEDA (§3.2 lo dice con
@@ -386,8 +492,12 @@ export function AvailabilityManager({
                               del mismo día se pisan, `get_available_slots` une
                               los inicios y los huecos repetidos se ofrecen UNA
                               vez, así que el tutor cree tener el doble de lo que
-                              tiene y esta es la única pantalla que se lo dice. */}
-                          {vista?.solapa ? (
+                              tiene y esta es la única pantalla que se lo dice.
+                              Desde el paquete de edición se calcula AQUÍ, no en
+                              servidor: así el paso 4 del asistente —donde el
+                              tutor escribe sus franjas por primera vez— también
+                              lo avisa. */}
+                          {solapadas.has(r.id) ? (
                             /* ⚠️ `#8a5f10` y no el `#a67314` del calendario:
                                sobre el fondo del chip (azul al 10 %, o sea
                                #e6f2ff) ese ámbar se queda en 3,64:1 y no llega
@@ -400,29 +510,58 @@ export function AvailabilityManager({
                               se solapa
                             </span>
                           ) : null}
-                          {/* ⚠️ El aspa era el icono a pelo: 14×14 px de área
-                              pulsable. Desde §3.2 es el ÚNICO control del chip
-                              —se fueron «→ N clases» y «· N mentorías»— y la
-                              puerta al diálogo que avisa de qué mentorías
-                              cuelgan de la franja, o sea el objetivo más
-                              pequeño de la pantalla con la consecuencia más
-                              grande. La caja de 24 px cumple el mínimo de
-                              2.5.8 sin tocar el dibujo ni la altura del chip
-                              (28 px). Y `#4d7fb0` en vez de `#7aa8d6`, que
-                              sobre el chip daba 2,20:1 contra el 3:1 que pide
-                              1.4.11 para un icono. */}
+                          {/* ⚠️ Cajas de 24 px para los dos iconos, que es el
+                              mínimo de 2.5.8, sin tocar el dibujo ni la altura
+                              del chip (28 px). Y `#4d7fb0` en vez de `#7aa8d6`,
+                              que sobre el chip daba 2,20:1 contra el 3:1 que
+                              pide 1.4.11 para un icono.
+
+                              ⚠️ El `aria-label` nombra la franja ENTERA —día y
+                              horas—: en un día de tres franjas hay tres lápices
+                              y tres aspas seguidos, y «Editar» a secas no dice
+                              cuál de ellos (2.4.6). */}
                           <button
                             type="button"
-                            aria-label={`Quitar la franja de ${hhmm(r.start_time)} a ${hhmm(r.end_time)} del ${WEEKDAYS[r.weekday].toLowerCase()}`}
+                            aria-label={`Editar la franja de ${horas} del ${nombreDia}`}
+                            aria-expanded={enEdicion}
+                            aria-controls={ID_FORMULARIO}
+                            disabled={busy}
+                            onClick={() => (enEdicion ? cerrarTodo() : editar(r))}
+                            className="ml-0.5 grid size-6 shrink-0 place-items-center rounded-full text-[#4d7fb0] transition-colors hover:text-[#0b4f96] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                          >
+                            <PencilIcon className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Quitar la franja de ${horas} del ${nombreDia}`}
                             disabled={busy}
                             onClick={() => pedirBorrado(r)}
-                            className="-mr-1.5 grid size-6 shrink-0 place-items-center rounded-full text-[#4d7fb0] transition-colors hover:text-destructive"
+                            className="-mr-1.5 grid size-6 shrink-0 place-items-center rounded-full text-[#4d7fb0] transition-colors hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           >
                             <XIcon className="size-3.5" />
                           </button>
                         </span>
                       );
                     })}
+
+                    {/* ⚠️ COPIAR VIVE AQUÍ, en la fila del día, y no dentro del
+                        formulario de alta como hasta hoy: allí había que abrir
+                        el formulario, elegir el día en un `<select>` y desplegar
+                        un panel para llegar a dos destinos fijos. Es una acción
+                        SOBRE las franjas de este día, así que se pone al lado de
+                        ellas. No aparece en un día cerrado porque copiaría la
+                        nada. */}
+                    <button
+                      type="button"
+                      aria-label={`Copiar el horario del ${nombreDia} a otros días`}
+                      aria-expanded={copiandoDia === day}
+                      aria-controls={`copia-${day}`}
+                      disabled={busy}
+                      onClick={() => alternarCopia(day)}
+                      className="grid size-6 shrink-0 place-items-center rounded-full text-[#4d7fb0] transition-colors hover:bg-brand/10 hover:text-[#0b4f96] aria-expanded:bg-brand/10 aria-expanded:text-[#0b4f96] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    >
+                      <CopyIcon className="size-3.5" />
+                    </button>
                   </span>
                 )}
               </div>
@@ -430,7 +569,7 @@ export function AvailabilityManager({
               {estaAbierto ? (
                 <form
                   id={ID_FORMULARIO}
-                  onSubmit={(e) => addRule(day, e)}
+                  onSubmit={(e) => guardarFranja(day, e)}
                   className="mt-3 rounded-[12px] bg-muted p-3"
                 >
                   {/* ⚠️ `htmlFor`/`id` en los tres campos y no solo el `<label>`
@@ -440,7 +579,8 @@ export function AvailabilityManager({
                   <div className="flex flex-wrap items-center gap-2">
                     {/* El selector de día MUEVE el formulario a la fila de ese
                         día: es la forma de que «bajo qué día estoy escribiendo»
-                        no haya que recordarlo. */}
+                        no haya que recordarlo. Editando, además, MUEVE la franja
+                        de día — que en un `update` no cuesta nada. */}
                     <label htmlFor="franja-dia" className="text-[13px] text-[#6b6b6b]">
                       Día{" "}
                       <select
@@ -453,7 +593,6 @@ export function AvailabilityManager({
                           // el foco al selector que se monte en la otra fila.
                           moviendoDia.current = true;
                           setAbierto(Number(e.target.value));
-                          setCopiando(false);
                         }}
                         className="h-9 rounded-[8px] border border-input bg-card px-2 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                       >
@@ -491,21 +630,19 @@ export function AvailabilityManager({
                         className="h-9 rounded-[8px] border border-input bg-card px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                       />
                     </label>
-                    {/* §3.2 · «Copiar a otros días» sigue en el formulario.
-                        Solo si hay algo que copiar: en un día cerrado copiaría
-                        la nada. ⚠️ `type="button"`: ahora está DENTRO del
-                        `<form>` y sin eso enviaría el alta. */}
-                    {!vacio ? (
+                    {/* Editar sí necesita salida: el alta se cierra con el mismo
+                        botón que la abrió, pero a una edición se entra desde un
+                        lápiz que está a media lista. */}
+                    {editando ? (
                       <Button
                         type="button"
                         variant="outline"
                         size="lg"
                         disabled={busy}
-                        aria-expanded={copiando}
-                        onClick={() => setCopiando(!copiando)}
+                        onClick={cerrarTodo}
                         className="rounded-[8px] px-3 text-[13px]"
                       >
-                        Copiar a otros días
+                        Cancelar
                       </Button>
                     ) : null}
                     <Button
@@ -514,40 +651,104 @@ export function AvailabilityManager({
                       size="lg"
                       className="ml-auto rounded-[8px] px-4 text-[13px]"
                     >
-                      Añadir franja
+                      {editando ? "Guardar cambios" : "Añadir franja"}
                     </Button>
                   </div>
-
-                  {copiando ? (
-                    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#e0e0e0] pt-3">
-                      <span className="text-[13px] text-[#6b6b6b]">
-                        Copiar el horario del {WEEKDAYS[day].toLowerCase()} a
-                      </span>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="lg"
-                        disabled={busy}
-                        onClick={() =>
-                          copiar(day, ENTRE_SEMANA.filter((d) => d !== day))
-                        }
-                        className="rounded-full bg-card px-3 text-[13px]"
-                      >
-                        Lunes a viernes
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="lg"
-                        disabled={busy}
-                        onClick={() => copiar(day, otros)}
-                        className="rounded-full bg-card px-3 text-[13px]"
-                      >
-                        Toda la semana
-                      </Button>
-                    </div>
-                  ) : null}
                 </form>
+              ) : null}
+
+              {copiandoDia === day ? (
+                <div id={`copia-${day}`} className="mt-3 rounded-[12px] bg-muted p-3">
+                  {/* `aria-labelledby` sobre el grupo: sin él, las siete
+                      casillas se anuncian como «Martes, casilla» sueltas y no
+                      dicen martes ¿para qué? (1.3.1). */}
+                  <p
+                    id={`copia-${day}-titulo`}
+                    className="text-[13px] text-[#6b6b6b]"
+                  >
+                    Copiar el horario del {nombreDia} a
+                  </p>
+                  <div
+                    role="group"
+                    aria-labelledby={`copia-${day}-titulo`}
+                    className="mt-2 flex flex-wrap gap-1.5"
+                  >
+                    {otros.map((d) => {
+                      const marcado = destinos.has(d);
+                      return (
+                        /* Etiqueta de 36 px de alto con la casilla dentro: el
+                           objetivo táctil es la etiqueta entera, no el cuadrito
+                           de 16 px (2.5.8). El estado NO va solo por color
+                           —cambia borde Y fondo, y la casilla marcada se ve—
+                           porque el color solo no basta (1.4.1). El foco es el
+                           anillo NATIVO de la casilla: por eso no lleva
+                           `outline-none`. */
+                        <label
+                          key={d}
+                          className={`inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border px-3 text-[13px] transition-colors ${
+                            marcado
+                              ? "border-brand bg-brand/10 text-[#0b4f96]"
+                              : "border-input bg-card text-[#4d4d4d]"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={marcado}
+                            disabled={busy}
+                            onChange={() =>
+                              setDestinos((p) => {
+                                const next = new Set(p);
+                                if (!next.delete(d)) next.add(d);
+                                return next;
+                              })
+                            }
+                            className="size-4 accent-brand"
+                          />
+                          {WEEKDAYS[d]}
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[#e0e0e0] pt-3">
+                    {/* Los dos destinos de antes sobreviven como PRESELECCIÓN:
+                        siguen siendo lo que el 90 % quiere y ahora se pueden
+                        retocar después de pulsarlos. */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      disabled={busy}
+                      onClick={() =>
+                        setDestinos(new Set(ENTRE_SEMANA.filter((d) => d !== day)))
+                      }
+                      className="rounded-full bg-card px-3 text-[13px]"
+                    >
+                      Lunes a viernes
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="lg"
+                      disabled={busy}
+                      onClick={() => setDestinos(new Set(otros))}
+                      className="rounded-full bg-card px-3 text-[13px]"
+                    >
+                      Toda la semana
+                    </Button>
+                    <Button
+                      type="button"
+                      size="lg"
+                      disabled={busy}
+                      onClick={() => copiar(day, [...destinos])}
+                      className="ml-auto rounded-[8px] px-4 text-[13px]"
+                    >
+                      {destinos.size > 0
+                        ? `Copiar a ${destinos.size} ${destinos.size === 1 ? "día" : "días"}`
+                        : "Copiar"}
+                    </Button>
+                  </div>
+                </div>
               ) : null}
             </li>
           );
@@ -574,7 +775,8 @@ export function AvailabilityManager({
                   </strong>
                   . Si es el único horario de alguna de ellas, esa mentoría
                   volverá a ofrecerse en toda tu disponibilidad. Las sesiones ya
-                  reservadas no se tocan.
+                  reservadas no se tocan. Si solo quieres corregir la hora, usa
+                  el lápiz: editar no toca los enlaces.
                 </>
               ) : null}
             </DialogDescription>

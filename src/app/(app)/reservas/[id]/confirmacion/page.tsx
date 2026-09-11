@@ -4,7 +4,7 @@ import { CheckIcon, ClockIcon, MailIcon, MessageSquareIcon, VideoIcon } from "lu
 
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { formatMoney } from "@/lib/catalog/format";
+import { Precio } from "@/components/precio/precio";
 import { formatSessionTime, tutorNames } from "@/lib/booking";
 import { parseRequirements } from "@/lib/product-requirements";
 import { SessionRef } from "@/components/room/session-ref";
@@ -54,7 +54,11 @@ export default async function ConfirmationPage({
       // N-27 · `session_ref` es el "N.º de sesión" (`7K3M9Q-2`) que el cliente
       // pidió para seguir una clase y su cobro. Esta pantalla es lo más
       // parecido a un resguardo que ve el alumno: es donde lo va a copiar.
-      "id, status, total_amount, currency, products(title, tutor_id, requirements), sessions(start_at, end_at, session_ref)",
+      // `payments(credit_amount)`: sin esto la pantalla decía «Total pagado
+      // 45,00 US$» a quien canjeó una mentoría gratis y NO pagó nada. Visto en
+      // la preview el 12-sep. El importe es el de la reserva; lo que cambia es
+      // quién lo puso.
+      "id, status, total_amount, currency, products(title, tutor_id, requirements), sessions(start_at, end_at, session_ref), payments(credit_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -66,6 +70,17 @@ export default async function ConfirmationPage({
   // llega por otro camino y a su ritmo. Decir "reserva registrada" con el pago
   // aún pendiente sería prometer algo que todavía no ha pasado.
   const pagoPendiente = booking.status === "pending_payment";
+
+  /**
+   * Cuánto de esta reserva lo puso un crédito (una mentoría gratis, un saldo o
+   * un regalo). `payments` es 1:1 con `bookings`, pero PostgREST lo devuelve
+   * como array; `?? 0` cubre la reserva que todavía no tiene cobro.
+   */
+  const conCredito =
+    (Array.isArray(booking.payments)
+      ? booking.payments[0]?.credit_amount
+      : (booking.payments as { credit_amount: number } | null)?.credit_amount) ?? 0;
+  const pagadoDeVerdad = Math.max(0, booking.total_amount - conCredito);
 
   // Lo que hay que traer a clase. Esta pantalla es la primera —y muchas veces
   // la única— que el alumno lee entero después de pagar, así que es donde el
@@ -195,14 +210,57 @@ export default async function ConfirmationPage({
 
           <div className="mt-3.5 flex items-baseline justify-between border-t border-[#e0e0e0] pt-3.5">
             {/* «pagado» solo cuando lo está. Mientras el webhook no llega,
-                el importe es el de la reserva, no un recibo. */}
+                el importe es el de la reserva, no un recibo.
+                ⚠️ Y con un crédito de por medio TAMPOCO es «pagado»: la cifra
+                grande es lo que cuesta la mentoría, no lo que salió del
+                bolsillo de nadie. El desglose va debajo. */}
             <span className="text-sm text-[#6b6b6b]">
-              {pagoPendiente ? "Total de la reserva" : "Total pagado"}
+              {pagoPendiente || conCredito > 0
+                ? "Total de la reserva"
+                : "Total pagado"}
             </span>
-            <span className="text-lg font-bold text-brand">
-              {formatMoney(booking.total_amount, booking.currency)}
+            {/* Ya cobrado, y convertido igual a la tasa de HOY: es la misma
+                etiqueta orientativa de todo el sitio, con su «≈». Lo que fue al
+                extracto es el USD de la línea de abajo. */}
+            <span className="text-right">
+              <Precio
+                amountMinor={booking.total_amount}
+                currency={booking.currency}
+                className="text-lg font-bold text-brand"
+              />
             </span>
           </div>
+
+          {/* El desglose honesto: cuánto puso el crédito y cuánto la tarjeta.
+              Solo cuando hay crédito — sin él, la línea de arriba ya lo dice
+              todo y esto sería ruido. */}
+          {conCredito > 0 ? (
+            <dl className="mt-2.5 flex flex-col gap-1">
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-[12.5px] text-[#6b6b6b]">Tu crédito</dt>
+                <dd className="text-[13px] font-medium text-brand">
+                  −{" "}
+                  <Precio
+                    amountMinor={conCredito}
+                    currency={booking.currency}
+                    className="inline"
+                  />
+                </dd>
+              </div>
+              <div className="flex items-baseline justify-between gap-4">
+                <dt className="text-[12.5px] text-[#6b6b6b]">
+                  {pagadoDeVerdad === 0 ? "Pagaste" : "Pagaste con tu método de pago"}
+                </dt>
+                <dd className="text-[13px] font-medium text-[#333333]">
+                  <Precio
+                    amountMinor={pagadoDeVerdad}
+                    currency={booking.currency}
+                    className="inline"
+                  />
+                </dd>
+              </div>
+            </dl>
+          ) : null}
         </section>
 
         {/* Requerimientos de sesión — antes de "Próximos pasos" a propósito:

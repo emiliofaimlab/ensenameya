@@ -27,9 +27,30 @@ import { cadenaDeCobro, nuncaLlego, porQueNadie, recorreLaCadena, type Salida } 
  * fallaría. Además es la que congela el snapshot financiero, y cuanto menos se
  * toque, mejor.
  *
- * EL IMPORTE NO VIENE DEL CLIENTE. Se lee de `payments.gross_amount`, que es lo
- * que `create_booking` congeló al reservar (regla de oro 2). Un checkout que
- * acepta el precio que le manda el navegador es un checkout regalado.
+ * EL IMPORTE NO VIENE DEL CLIENTE, Y DESDE LOS CRÉDITOS SON DOS COLUMNAS. Se
+ * lee de `payments.gross_amount` —lo que `create_booking` congeló al reservar—
+ * MENOS `payments.credit_amount`, que es lo que `aplicar_credito` anotó ahí
+ * (regla de oro 2). El espíritu no cambia: las dos salen de la base y ninguna
+ * del navegador. Un checkout que acepta el precio que le manda el navegador es
+ * un checkout regalado; uno que acepta el DESCUENTO que le manda el navegador
+ * lo es exactamente igual.
+ *
+ * ⚠️ `gross_amount` NO BAJA al aplicar un crédito, y por eso la resta se hace
+ * aquí y no allí: un crédito no descuenta el precio, cambia QUIÉN LO FINANCIA.
+ * El tutor cobra su `tutor_net_amount` íntegro y la diferencia la pone la
+ * plataforma o el regalo ya cobrado (`payments.funding_provider` /
+ * `platform_funded_amount`, `20260912100000`).
+ *
+ * ── EL COBRO SE SELLA AL ABRIRLO, Y ESO ES UN CERROJO, NO UN APUNTE ─────────
+ * Justo antes de abrir el cobro se llama a `marcar_cobro_abierto`, que escribe
+ * en `payments` CUÁNDO se abrió y POR CUÁNTO (el importe lo saca ella de la
+ * base). Sin esa marca, la secuencia «aplicar crédito → abrir el cobro por
+ * `gross − credit` → quitar el crédito → pagar la Session vieja» deja la
+ * reserva pagada entera **y el crédito otra vez disponible**: un acuñador de
+ * crédito gratis e ilimitado desde una cuenta de alumno normal, sin carrera.
+ * `aplicar_credito` y `quitar_credito` miran esa marca, y `confirm_payment`
+ * concilia en profundidad lo cobrado contra `gross_amount − credit_amount`.
+ * El porqué entero está en la cabecera de `20260912110000` (§3).
  *
  * ── EL COBRO TIENE RESPALDO, Y ESTE ES EL ÚNICO SITIO QUE PUEDE TENERLO ─────
  * `payment_routing_rules.charge_providers` es una LISTA ORDENADA desde
@@ -67,6 +88,61 @@ import { cadenaDeCobro, nuncaLlego, porQueNadie, recorreLaCadena, type Salida } 
  * remoto, qué credencial le falta y cómo se le pide un cobro. Lo que queda aquí
  * —la caducidad, la clave de idempotencia y el rescate del Customer perdido— se
  * queda a propósito: es política de ESTA reserva, no del proveedor.
+ *
+ * ── 🎁 Y DESDE EL REGALO, UN COBRO PUEDE NO TENER RESERVA ──────────────────
+ *
+ * «Regalar una mentoría» es una fila de `credits` con `source='gift'`
+ * (`20260912110000` §10): quien regala paga el precio ÍNTEGRO por adelantado y
+ * el destinatario agenda después, por el camino normal, financiando su reserva
+ * con ese crédito. O sea que aquí hay un tercer sujeto de cobro, y es el primero
+ * que **no cuelga de `payments`** — cuya `booking_id` es `not null unique` desde
+ * `20260709140000:97`.
+ *
+ * Lo que eso cambia, punto por punto:
+ *
+ *   · EL IMPORTE sigue sin venir del navegador (regla de oro 2): sale de
+ *     `credits.amount`, que congeló `comprar_regalo` en servidor con la misma
+ *     aritmética de `create_booking_line`. Lo que cambia es la tabla, no la
+ *     regla.
+ *   · EL CERROJO es otro porque `marcar_cobro_abierto` solo acepta
+ *     `booking_ids`. El hermano del regalo es `marcar_cobro_regalo_abierto`, y
+ *     se llama con la misma incondicionalidad y el mismo abortar-si-falla.
+ *   · EL RUTEO es el mismo dictado (§1): lo decide el país del PAGADOR, y quien
+ *     paga un regalo es quien lo regala. `comprar_regalo` ya congeló
+ *     `charge_providers[1]` en `credits.provider` leyendo
+ *     `pais_de_cobro_por_zona(profiles.timezone)` del comprador, exactamente
+ *     como hace `create_booking_line` con `payments.provider`.
+ *   · `credits.provider` HACE LAS DOS FIGURAS —el snapshot y el «cobrador»— y
+ *     eso es una simplificación real, no un atajo: `marcar_cobro_regalo_abierto`
+ *     la mueve al candidato que de verdad abre el cobro, mientras que
+ *     `payments.provider` necesita `set_charge_provider` porque `service_role`
+ *     no tiene su `grant update`. De esa columna cuelga el `funding_provider`
+ *     del payout cuando el regalo se canjee (§8.2), así que dejarla apuntando al
+ *     preferido cuando cobró el segundo es dinero buscado en el balance
+ *     equivocado.
+ *   · NO HAY HORARIO RETENIDO: un regalo no crea reserva, ni `sessions`, ni toca
+ *     la agenda del tutor. Por eso `retencionHasta` viaja en `null` y la
+ *     caducidad del cobro se calcula de otra forma (ver `caducidadRegalo`).
+ *
+ * 🔴 Y LA COSTURA QUE HAY QUE CONOCER: **el regalo viaja por el puerto como
+ * `{tipo:"booking", id:<credits.id>}`**. `CobroRef` (`lib/payments/port.ts`)
+ * tiene dos variantes y ninguna es el regalo, así que el sujeto se transporta
+ * por la que significa «uno suelto», con el id del CRÉDITO dentro. No es
+ * gratis y conviene decir exactamente qué compra y qué cuesta:
+ *
+ *   · compra que los dos adaptadores sigan funcionando sin tocarlos — Stripe
+ *     escribe el uuid pelado en `client_reference_id` y dLocal lo mete en su
+ *     `order_id` con el prefijo `booking-`, que es lo único que
+ *     `refDeOrdenExterna` sabe parsear de vuelta;
+ *   · cuesta que la ETIQUETA del evento mienta al llegar al webhook. Por eso
+ *     allí **el sujeto se resuelve contra la base y no contra la etiqueta**: se
+ *     pregunta primero a `credits` si ese uuid es un regalo. Un uuid es de una
+ *     tabla o de la otra, nunca de las dos, así que la pregunta no es ambigua —
+ *     pero tiene que hacerse, y por eso está escrita en los dos webhooks.
+ *
+ * El día que `CobroRef` gane una tercera variante (`{tipo:"gift"}`), esto se
+ * cae solo: el checkout la pone, los adaptadores le dan su formato y el webhook
+ * deja de preguntar. Mientras tanto, la pregunta es el contrato.
  */
 
 /**
@@ -200,6 +276,61 @@ function caducidadSesion(creadaEn: string | null): number {
   return Math.max(Math.floor(nacimiento / 1000) + CADUCIDAD_MIN * 60, suelo);
 }
 
+/**
+ * 🎁 CUÁNDO DEBE MORIR EL COBRO DE UN REGALO — y no se puede copiar el de
+ * arriba, aunque lo parezca.
+ *
+ * `caducidadSesion` es determinista porque se calcula desde `created_at` y
+ * porque una reserva vive SIETE MINUTOS: `created_at + 40 min` siempre está en
+ * el futuro cuando alguien está pagando, y el suelo defensivo (`now + 31 min`,
+ * que NO es determinista) es un caso que en la práctica no ocurre.
+ *
+ * Un regalo vive **30 días** en `pending_payment` (`comprar_regalo` se lo pone,
+ * y lo barre `caducar_creditos()`), así que `created_at + 40 min` está en el
+ * pasado en cuanto el comprador vuelva más tarde — y entonces el suelo actúa
+ * SIEMPRE. Y el suelo se mueve con cada petición, o sea que la clave de
+ * idempotencia dejaría de ser determinista por sujeto. Eso no es cosmético:
+ *
+ *   · en Stripe, cada recarga de la pantalla abriría una Checkout Session nueva
+ *     (inofensivo pero sucio: varias Sessions vivas para el mismo regalo);
+ *   · en dLocal es PEOR, porque su clave de idempotencia es el `order_id` del
+ *     cobro: cada recarga abriría un COBRO nuevo, y el anterior sigue vivo y
+ *     pagable (ver `ChargeInput.idempotencyKey`).
+ *
+ * DECISIÓN: una VENTANA FIJA de 12 h anclada en `created_at`. El valor es
+ * `created_at + n·12 h`, con `n` el menor entero que lo deja por delante del
+ * mínimo de Stripe; o sea que no se mueve durante doce horas seguidas (lo que
+ * sostiene «recargar reencuentra el mismo cobro») y siempre cae entre los 31
+ * minutos y las 12 h y media desde ahora, dentro de la horquilla legal de
+ * Stripe (30 min – 24 h). Anclarla en `created_at` y no en el reloj de pared es
+ * lo que evita que a todos los regalos les cambie la clave a la vez.
+ *
+ * Que el cobro muera a las ~12 h no le quita nada a nadie: el regalo NO retiene
+ * ningún horario, así que un cobro caducado solo obliga a volver a abrirlo. Lo
+ * único que caduca de verdad es la fila, y de eso se encarga el cron.
+ */
+const VENTANA_REGALO_SEG = 12 * 60 * 60;
+
+function caducidadRegalo(creadaEn: string | null): number {
+  const ahora = Math.floor(Date.now() / 1000);
+  const minimo = ahora + (MINIMO_STRIPE_MIN + 1) * 60;
+
+  const nacimiento = Date.parse(creadaEn ?? "");
+  // Sin `created_at` legible no hay ancla posible: se usa el mínimo, que es lo
+  // mismo que hace `caducidadSesion` y por el mismo motivo (mejor un cobro corto
+  // que un 400 de Stripe que deja al comprador sin pantalla).
+  if (!Number.isFinite(nacimiento)) return minimo;
+
+  const inicio = Math.floor(nacimiento / 1000);
+  const ventanas = Math.max(1, Math.ceil((minimo - inicio) / VENTANA_REGALO_SEG));
+  // Techo defensivo: si el reloj de la base fuera por delante del de este
+  // proceso más de doce horas, `inicio + 12 h` podría pasarse de las 24 h que
+  // Stripe acepta y la Session no se crearía. Solo actúa con los relojes rotos
+  // —y ahí deja de ser determinista, que es exactamente el mal menor: una
+  // Session de más contra ninguna Session.
+  return Math.min(inicio + ventanas * VENTANA_REGALO_SEG, ahora + 23 * 60 * 60);
+}
+
 /** `payments.provider_metadata` ya narrado, que es `jsonb` y llega como `Json`. */
 type Metadata = Record<string, Json | undefined>;
 
@@ -267,8 +398,40 @@ type Cobro = {
    * Las reservas cuya fila de `payments` hay que anotar: una para una reserva
    * suelta, N para un pedido. Todas comparten cobro, así que todas comparten
    * cobrador.
+   *
+   * 🎁 **VACÍA EN UN REGALO**, que es el primer sujeto de cobro sin reserva. Y
+   * por eso no basta con dejarla vacía y seguir: `marcar_cobro_abierto([])`
+   * devolvería 0, la comprobación de abajo compararía 0 contra 0 y el checkout
+   * abriría un cobro **sin cerrojo**, en silencio y con la forma exacta de un
+   * éxito. Quien recorra este campo tiene que preguntar antes por `regaloId`.
    */
   reservas: string[];
+  /**
+   * 🎁 EL REGALO QUE SE ESTÁ COBRANDO (`credits.id`), o `null` en los otros dos
+   * caminos. Es el DISCRIMINANTE de este fichero, y hace falta uno explícito
+   * porque `ref.tipo` no sirve: un regalo viaja como `{tipo:"booking"}` (ver la
+   * cabecera), así que la etiqueta del puerto no distingue.
+   *
+   * De él cuelgan las cuatro cosas que un cobro sin reserva hace distinto:
+   * qué RPC pone el cerrojo, qué RPC anota quién cobró, qué reloj calcula la
+   * caducidad y si hay o no horario retenido que prometer.
+   */
+  regaloId: string | null;
+  /**
+   * 💳 CUÁNTO DE ESTE COBRO LO PONE UN CRÉDITO — la suma de
+   * `payments.credit_amount` de las líneas.
+   *
+   * NO es un descuento y no se resta de `gross_amount` en ninguna parte: lo que
+   * cambia es quién financia el tramo. Aquí sirve para dos cosas y las dos son
+   * de este fichero:
+   *
+   *   · saber si queda algo que cobrar (`sum(lineas) === 0` → no hay pasarela a
+   *     la que ir: ver la rama del crédito, más abajo);
+   *   · entrar en la CLAVE DE IDEMPOTENCIA. Sin eso, cambiar de crédito y
+   *     volver al checkout reutiliza la Session anterior —que es inmutable— y
+   *     el alumno paga el importe viejo.
+   */
+  creditoTotal: number;
   /** Lo que ya hubiera en `provider_metadata`, para no pisarlo al anotar. */
   metadata: Metadata;
   /** El nacimiento del hold: de aquí salen el contador y la caducidad. */
@@ -288,18 +451,33 @@ export async function POST(req: Request) {
   // (§20.14) la pinta Stripe dentro de su formulario: ver el bloque de
   // `saved_payment_method_options` en `lib/payments/stripe-provider.ts` antes
   // de volver a añadirla.
-  const { bookingId, orderId } = (await req.json().catch(() => ({}))) as {
+  //
+  // 🎁 Y desde el regalo son TRES sujetos posibles, no dos. `regaloId` es un
+  // `credits.id`; `creditId` se acepta como alias suyo porque esta pantalla y
+  // este handler se escribieron a la vez y es el nombre que usa la RPC
+  // (`p_credit_id`). Los dos son el mismo uuid y no hay nada que decidir entre
+  // ellos; el día que sobre uno, se quita de aquí y no de la pantalla.
+  const cuerpo = (await req.json().catch(() => ({}))) as {
     bookingId?: string;
     orderId?: string;
+    regaloId?: string;
+    creditId?: string;
   };
-  if (!bookingId && !orderId) {
-    return NextResponse.json({ error: "falta bookingId u orderId" }, { status: 400 });
+  const { bookingId, orderId } = cuerpo;
+  const regaloId = cuerpo.regaloId ?? cuerpo.creditId;
+
+  const sujetos = [bookingId, orderId, regaloId].filter(Boolean);
+  if (sujetos.length === 0) {
+    return NextResponse.json(
+      { error: "falta bookingId, orderId o regaloId" },
+      { status: 400 },
+    );
   }
-  if (bookingId && orderId) {
-    // Con los dos no se sabe a quién acreditar el dinero. Se para aquí en vez
+  if (sujetos.length > 1) {
+    // Con más de uno no se sabe a quién acreditar el dinero. Se para aquí en vez
     // de elegir uno por orden de aparición.
     return NextResponse.json(
-      { error: "bookingId y orderId son excluyentes" },
+      { error: "bookingId, orderId y regaloId son excluyentes" },
       { status: 400 },
     );
   }
@@ -333,29 +511,40 @@ export async function POST(req: Request) {
     const { data: payment } = await admin
       .from("payments")
       .select(
-        "id, provider, gross_amount, currency, payer_country, provider_metadata",
+        "id, provider, gross_amount, credit_amount, currency, payer_country, provider_metadata",
       )
       .eq("booking_id", id)
       .maybeSingle();
     if (!payment) return { error: "sin pago asociado", status: 500 };
 
     const metadata = objeto(payment.provider_metadata);
+    // `credit_amount` es `not null default 0`, pero llega tipado como `number`
+    // desde una fila que ya vino de la base: el `?? 0` es para el día en que una
+    // consulta vieja no lo pida y no para la columna.
+    const credito = payment.credit_amount ?? 0;
 
     return {
       ref: { tipo: "booking", id },
-      // ⚠️ EL IMPORTE SALE DE `payments.gross_amount`, NUNCA DEL NAVEGADOR
-      // (regla de oro 2).
+      // ⚠️ EL IMPORTE SALE DE `payments`, NUNCA DEL NAVEGADOR (regla de oro 2),
+      // Y AHORA SON DOS COLUMNAS: `gross_amount` es el precio congelado y
+      // `credit_amount` es cuánto de él lo pone un crédito. La pasarela cobra la
+      // diferencia; `gross_amount` no se toca porque el tutor cobra lo mismo.
+      //
+      // Si la resta diera 0 no se abre cobro ninguno: eso lo corta la rama del
+      // crédito, después de resolver el sujeto, antes de tocar a nadie.
       lineas: [
         {
           concepto: booking.products?.title ?? "Mentoría",
-          amountMinor: payment.gross_amount,
+          amountMinor: payment.gross_amount - credito,
         },
       ],
+      creditoTotal: credito,
       currency: payment.currency,
       provider: payment.provider,
       cobrador: cobradorAnotado(metadata),
       payerCountry: payment.payer_country,
       reservas: [id],
+      regaloId: null,
       metadata,
       creadoEn: booking.created_at,
       returnPath: `/reservas/${id}/confirmacion`,
@@ -402,12 +591,19 @@ export async function POST(req: Request) {
     }
 
     // Los importes, con `service_role` y en UNA consulta. Uno por línea, y cada
-    // uno es el que congeló `create_booking_line`: el total del cargo es su
-    // suma y no se calcula en ningún otro sitio (regla de oro 2).
+    // uno es el que congeló `create_booking_line` menos lo que ponga un crédito
+    // en ESA línea: el total del cargo es su suma y no se calcula en ningún otro
+    // sitio (regla de oro 2).
+    //
+    // ⚠️ El crédito se aplica POR RESERVA (`aplicar_credito(p_booking_id, …)`),
+    // así que en un pedido puede haber líneas con crédito y líneas sin él. La
+    // resta va línea a línea a propósito: un descuento repartido sobre el total
+    // dejaría de cuadrar con `payments.credit_amount` de cada fila, que es
+    // contra lo que `confirm_payment` concilia al confirmar el pedido entero.
     const { data: pagos } = await admin
       .from("payments")
       .select(
-        "booking_id, provider, gross_amount, currency, payer_country, provider_metadata",
+        "booking_id, provider, gross_amount, credit_amount, currency, payer_country, provider_metadata",
       )
       .in(
         "booking_id",
@@ -423,8 +619,13 @@ export async function POST(req: Request) {
       ref: { tipo: "order", id },
       lineas: filas.map((b) => ({
         concepto: b.products?.title ?? "Mentoría",
-        amountMinor: porReserva.get(b.id)!.gross_amount,
+        amountMinor:
+          porReserva.get(b.id)!.gross_amount - (porReserva.get(b.id)!.credit_amount ?? 0),
       })),
+      creditoTotal: filas.reduce(
+        (suma, b) => suma + (porReserva.get(b.id)!.credit_amount ?? 0),
+        0,
+      ),
       // La moneda y la pasarela del pedido, que `create_order` ya obligó a ser
       // únicas entre las líneas: aquí solo se leen.
       currency: order.currency,
@@ -447,6 +648,7 @@ export async function POST(req: Request) {
        * su país no rutea. Se intersecan más abajo.
        */
       reservas: filas.map((b) => b.id),
+      regaloId: null,
       metadata: objeto(porReserva.get(filas[0]!.id)?.provider_metadata),
       creadoEn: order.created_at,
       returnPath: `/pedidos/${id}/confirmacion`,
@@ -454,14 +656,215 @@ export async function POST(req: Request) {
     };
   };
 
-  const resuelto = orderId
-    ? await cobroDePedido(orderId)
-    : await cobroDeReserva(bookingId!);
+  /**
+   * 🎁 EL REGALO — el primer sujeto de cobro que no tiene reserva.
+   *
+   * La forma es la misma que las dos de arriba y eso es lo importante: a partir
+   * del `return`, el resto del fichero no distingue. Lo que cambia es de dónde
+   * salen los campos, y son DOS consultas por un motivo que no es estético:
+   *
+   *   · la VISTA con el cliente de SESIÓN, que es donde está la autorización.
+   *     `mis_regalos_comprados` es `security_invoker` y filtra por
+   *     `purchased_by = (select auth.uid())`, así que un regalo que no
+   *     compraste tú sencillamente no existe. Igual que `cobroDeReserva` se
+   *     apoya en la RLS de `bookings`: la propiedad no la comprueba este
+   *     archivo, la comprueba la base.
+   *   · la TABLA con `service_role`, para las tres columnas del cobro
+   *     (`provider`, `payer_country`, `provider_metadata`) que la vista no
+   *     expone **a propósito** — son del cobro del regalo y el destinatario no
+   *     tiene por qué verlas (§1 de `20260912110000`). `credits` tiene `grant
+   *     select` para `service_role` y nada más: ni insert ni update, porque
+   *     todos sus escritores son `security definer` (S7).
+   *
+   * ⚠️ Y NO SE LEE `credits` CON EL CLIENTE DE SESIÓN «para ahorrar una
+   * consulta»: al navegador no se le da `grant select` de tabla sino POR
+   * COLUMNAS, y esas tres están fuera. Sería un `permission denied` en tiempo de
+   * ejecución que el typecheck no ve (regla de oro 9).
+   */
+  const cobroDeRegalo = async (id: string): Promise<Cobro | Fallo> => {
+    const { data: regalo, error: eRegalo } = await supabase
+      .from("mis_regalos_comprados")
+      .select("id, status, amount, currency, product_id, created_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    // Regla de oro 10: se mira el `error`. Un `const { data } = …` aquí
+    // convertiría «no se pudo leer» en «no es tuyo» y devolvería un 404 por un
+    // fallo de permisos — la mentira creíble de siempre, esta vez en la puerta
+    // de un cobro.
+    if (eRegalo) {
+      console.error("[pagos/checkout] no se pudo leer el regalo:", {
+        regalo: id,
+        error: eRegalo.message,
+      });
+      return { error: "no pudimos leer el regalo", status: 500 };
+    }
+    if (!regalo) return { error: "regalo no encontrado", status: 404 };
+    if (regalo.status !== "pending_payment") {
+      // Ya cobrado, ya canjeado, ya revocado o ya caducado: no se abre un cobro
+      // nuevo. El cerrojo de `marcar_cobro_regalo_abierto` dice lo mismo dentro
+      // de la base; esto solo lo dice antes y con un mensaje.
+      return { error: `el regalo está en ${regalo.status}`, status: 409 };
+    }
+
+    // La vista declara todo nullable —lo hace el generador de tipos con
+    // cualquier vista, no es que estas columnas lo sean— pero en `credits` son
+    // `not null` (`amount`, `currency`, `created_at`) o las obliga
+    // `credits_forma_por_origen` (`product_id` en un regalo). Si alguna llegara
+    // vacía, lo que hay delante no es un regalo cobrable.
+    if (
+      regalo.amount === null ||
+      regalo.currency === null ||
+      regalo.product_id === null
+    ) {
+      console.error("[pagos/checkout] 🔴 regalo sin importe, moneda o producto:", { regalo: id });
+      return { error: "ese regalo no se puede cobrar", status: 500 };
+    }
+
+    const { data: fila, error: eFila } = await admin
+      .from("credits")
+      .select("provider, payer_country, provider_metadata")
+      .eq("id", id)
+      .maybeSingle();
+    if (eFila || !fila) {
+      console.error("[pagos/checkout] 🔴 no se pudo leer el cobro del regalo:", {
+        regalo: id,
+        error: eFila?.message ?? "sin fila",
+      });
+      return { error: "no pudimos abrir el pago del regalo", status: 500 };
+    }
+
+    // ⚠️ EL TÍTULO SE LEE CON EL CLIENTE DE SESIÓN, NO CON `admin`:
+    // `service_role` NO tiene `grant select` sobre `products` (comprobado en
+    // dev, 12-sep-2026), así que la consulta «obvia» sería un `permission
+    // denied` en ejecución (regla de oro 9). El comprador sí la ve, por
+    // `products_select_public`.
+    //
+    // Y sin embed desde `credits`: esa tabla tiene TRES FK a `profiles` y una a
+    // `products`, o sea el `PGRST201` de la regla 10 servido en bandeja
+    // (habría que nombrarla `products!credits_product_id_fkey(title)`). Una
+    // consulta por id no tiene esa ambigüedad.
+    //
+    // Aquí el `error` no decide nada, y es el único sitio de esta función donde
+    // eso vale: el concepto es una ETIQUETA, no un importe. Si el tutor
+    // desactivó la mentoría después de que se la regalaran, la política la
+    // esconde y el cobro sale como «Mentoría» — que es feo y es verdad.
+    const { data: producto } = await supabase
+      .from("products")
+      .select("title")
+      .eq("id", regalo.product_id)
+      .maybeSingle();
+
+    return {
+      // 🔴 `tipo:"booking"` CON EL ID DE UN CRÉDITO. Es la costura de la
+      // cabecera: `CobroRef` no tiene variante de regalo, así que el sujeto
+      // viaja por la que significa «uno suelto». Quien lea esto en el webhook
+      // tiene que preguntarle a `credits`, no a la etiqueta.
+      ref: { tipo: "booking", id },
+      // ⚠️ EL IMPORTE SALE DE `credits.amount` (regla de oro 2), que congeló
+      // `comprar_regalo` en servidor con la aritmética de `create_booking_line`.
+      // Aquí no hay resta que hacer: un regalo NO se financia con un crédito,
+      // un regalo ES el crédito. Se cobra entero y por eso `creditoTotal` es 0.
+      lineas: [
+        {
+          concepto: producto?.title ?? "Mentoría",
+          amountMinor: regalo.amount,
+        },
+      ],
+      // 0 de verdad, no «todavía no se sabe»: esto entra en la clave de
+      // idempotencia (`-k0`) y es constante para todo regalo. Y por lo mismo la
+      // salida de `aPagar <= 0` es inalcanzable aquí: `credits.amount` tiene
+      // `check (amount > 0)`.
+      creditoTotal: 0,
+      currency: regalo.currency,
+      // El snapshot del riel, que en un regalo es `credits.provider`: lo congeló
+      // `comprar_regalo` con `charge_providers[1]` del país del COMPRADOR.
+      provider: fila.provider,
+      cobrador: cobradorAnotado(objeto(fila.provider_metadata)),
+      payerCountry: fila.payer_country,
+      // Sin reservas, literalmente: un regalo no crea ninguna. Ver el campo.
+      reservas: [],
+      regaloId: id,
+      metadata: objeto(fila.provider_metadata),
+      creadoEn: regalo.created_at,
+      returnPath: `/regalar/${id}/confirmacion`,
+      // ⚠️ `booking-` Y NO `regalo-`, Y NO ES UN DESCUIDO. Esta cadena es el
+      // `order_id` del cobro en dLocal, y lo único que `refDeOrdenExterna` sabe
+      // parsear de vuelta es `^(booking|order)-<uuid>`
+      // (`lib/payments/dlocal-provider.ts`). Con cualquier otro prefijo el
+      // webhook recibiría el cobro SIN SUJETO y respondería «ignorado» con 200:
+      // el regalo cobrado y sin activar, para siempre y sin ruido. Va con el
+      // mismo prefijo que el `ref` de arriba y por la misma razón.
+      claveBase: `booking-${id}`,
+    };
+  };
+
+  const resuelto = regaloId
+    ? await cobroDeRegalo(regaloId)
+    : orderId
+      ? await cobroDePedido(orderId)
+      : await cobroDeReserva(bookingId!);
 
   if ("error" in resuelto) {
     return NextResponse.json({ error: resuelto.error }, { status: resuelto.status });
   }
   const cobrar = resuelto;
+
+  // Sube aquí desde debajo de la cadena porque ahora hay una salida ANTES de
+  // resolverla —la del crédito— y el contador del hold viaja en todas.
+  //
+  // 🎁 Y en un regalo es `null` A PROPÓSITO, no «todavía no se sabe»: no hay
+  // horario retenido porque no hay reserva (`comprar_regalo` no crea `bookings`
+  // ni `sessions` ni toca la agenda del tutor). Un contador aquí le prometería
+  // al comprador que le guardamos un hueco que nadie le está guardando; el hueco
+  // lo elige el destinatario cuando agende, y para eso tiene los 90 días de
+  // `gift_expiry_days()`.
+  const retencion = cobrar.regaloId ? null : retencionHasta(cobrar.creadoEn);
+
+  // Cómo se nombra este cobro en los registros. Con un regalo `reservas` está
+  // vacía a propósito, y un log que dijera `sujeto: []` no serviría para
+  // investigar nada — que es justo para lo que existen los dos 503 de abajo.
+  const enElLog = cobrar.regaloId ? [`regalo ${cobrar.regaloId}`] : cobrar.reservas;
+
+  /**
+   * 💳 CUANDO NO QUEDA NADA QUE COBRAR — y esto es una salida, no un descuento.
+   *
+   * Un crédito que cubre el total (un regalo, o una mentoría gratis que llega
+   * al precio) deja `gross_amount - credit_amount = 0` en todas las líneas. No
+   * hay a quién mandar al alumno: **abrir un cargo de 0 en Stripe es un 400**, y
+   * en dLocal es peor porque el 400 llega después de haber creado el pago.
+   *
+   * Se corta ANTES de resolver la cadena, de leer el perfil y de dar de alta al
+   * Customer en Stripe. Lo último no es ahorro de llamadas: el bloque de
+   * `ensureCustomer` de más abajo deja escrito que desde D-2 el alta en Stripe
+   * ocurre POR VISITA a esta pantalla, o sea que el correo y el nombre del
+   * alumno salen hacia un tercero solo por entrar. Si el cobro entero lo paga un
+   * crédito, ese envío no tiene ninguna justificación: no hay pasarela en esta
+   * compra.
+   *
+   * ⚠️ Y NO SE SELLA EL COBRO AQUÍ. `marcar_cobro_abierto` dice «hay un checkout
+   * vivo por ahí», y por este camino no lo hay. Sellarlo sería además
+   * contraproducente: dejaría `checkout_amount = 0` y con eso `quitar_credito`
+   * —que solo consiente un marcador por el BRUTO— rechazaría al alumno que se
+   * equivocó de crédito y quiere cambiarlo, sin ninguna Session que proteger.
+   *
+   * La confirmación NO se hace desde aquí: la hace `POST /api/pagos/credito`, y
+   * el porqué está en la cabecera de ese fichero. En una línea: esta petición
+   * sale sola al ABRIR la pantalla, así que confirmar aquí convertiría «entrar a
+   * mirar el precio» en «compra hecha».
+   */
+  // 🎁 Y un REGALO no sale nunca por aquí, aunque su línea también venga de un
+  // crédito: lo que se cobra es `credits.amount`, que tiene `check (amount > 0)`.
+  // No es lo mismo un cobro FINANCIADO por un crédito (esta salida) que el cobro
+  // DE un crédito, que es lo que se está pagando cuando alguien regala.
+  const aPagar = cobrar.lineas.reduce((suma, l) => suma + l.amountMinor, 0);
+  if (aPagar <= 0) {
+    return NextResponse.json({
+      modo: "credito",
+      creditoTotal: cobrar.creditoTotal,
+      retencionHasta: retencion,
+    });
+  }
 
   /**
    * 🔑 UN SOLO ALUMNO, UNA SOLA RUTA — el simplificador del dictado.
@@ -498,8 +901,39 @@ export async function POST(req: Request) {
   // existe para impedir. El respaldo respalda a un cobro real, no convierte en
   // real uno que nació de mentira.
   const cabeza = adapterFor(cadena[0] ?? null);
-  const retencion = retencionHasta(cobrar.creadoEn);
   if (!cabeza.opensRemoteCheckout) {
+    /**
+     * 🎁 UN REGALO NO TIENE CAMINO SIMULADO, Y NO SE LE INVENTA UNO.
+     *
+     * El simulado de la reserva no es un maquillaje: lo termina
+     * `confirm_simulated_payment`, una RPC de `authenticated` que exige ser
+     * dueño **y** `provider = 'simulated'` (regla de oro 2). Para el regalo esa
+     * función no existe —`confirm_gift_payment` es solo de `service_role` y la
+     * llama el webhook— así que devolver `modo:"simulado"` aquí le pintaría al
+     * comprador un botón de pagar que NADA puede confirmar: el regalo se
+     * quedaría en 'pending_payment' hasta que lo barra `caducar_creditos()`, y
+     * la pantalla habría dicho que se pagó.
+     *
+     * En la práctica no debería ocurrir: `comprar_regalo` se niega a crear el
+     * regalo si `ruta_de_pago()` no nombra a nadie, así que para llegar aquí hay
+     * que haber borrado la regla DESPUÉS de comprarlo. Se responde 503 —el
+     * mismo que la cadena agotada— y se grita, porque es configuración rota y no
+     * un estado normal.
+     */
+    if (cobrar.regaloId) {
+      console.error("[pagos/checkout] 🔴 el regalo rutea a un proveedor que no cobra:", {
+        regalo: cobrar.regaloId,
+        cadena,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "No pudimos abrir el pago ahora mismo. Vuelve a intentarlo en unos minutos; si sigue igual, escríbenos a info@ensenameya.com.",
+        },
+        { status: 503 },
+      );
+    }
+
     // El contador viaja también por aquí: con el proveedor simulado no hay
     // formulario que montar, pero el horario se retiene exactamente igual y la
     // pantalla tiene que poder decir hasta cuándo.
@@ -510,6 +944,161 @@ export async function POST(req: Request) {
       simulated: true,
       retencionHasta: retencion,
     });
+  }
+
+  /**
+   * 🔴 SELLAR EL COBRO ANTES DE ABRIRLO — EL CERROJO CONTRA EL ACUÑADOR.
+   *
+   * `marcar_cobro_abierto` escribe en cada `payments` de este sujeto
+   * `checkout_opened_at = now()` y `checkout_amount = gross_amount -
+   * credit_amount`, **leyendo el importe de la base**: aquí se le pasan los
+   * sujetos, nunca el dinero (regla de oro 2). De esa marca cuelgan los tres
+   * cerrojos de `20260912110000`: `aplicar_credito` y `quitar_credito` se
+   * niegan si hay un cobro abierto por otro importe, y `confirm_payment`
+   * concilia lo cobrado contra `gross − credit` antes de escribir `paid`.
+   *
+   * Sin esta llamada NO HAY CERROJO. Y no porque falte «un apunte»: el diseño
+   * original lo hacía depender de `provider_payment_id` o de
+   * `provider_metadata.checkout`, y ninguna de las dos se escribe por el camino
+   * normal —la primera la escriben los webhooks DESPUÉS de que el dinero se
+   * mueva, la segunda solo cuando gana un candidato distinto del snapshot, o
+   * sea casi nunca—. Con las dos vacías, esto funciona y da dinero gratis:
+   * aplicar el crédito → abrir la Session por `gross − credit` (inmutable desde
+   * ese instante) → `quitar_credito` → pagar la Session vieja. La reserva queda
+   * pagada entera y el crédito vuelve a `active`. Ilimitado, sin carrera, desde
+   * una cuenta de alumno normal.
+   *
+   * ── POR QUÉ INCONDICIONAL ──────────────────────────────────────────────────
+   * Porque el bug de origen fue exactamente «se anota solo cuando hace falta»
+   * (`anotarCobrador`, abajo, que se llama en el `if` de `:872` y por eso casi
+   * nunca corre). Aquí no hay condición que valga: **si se va a abrir un cobro,
+   * se sella**. Incluido cuando el crédito es 0, que es el caso normal — la
+   * marca es la que dice «hay una Session viva», y eso es verdad se use crédito
+   * o no; sin ella, aplicar un crédito DESPUÉS de abrir el cobro tendría el
+   * mismo final, solo que al revés.
+   *
+   * ── POR QUÉ ANTES Y NO DESPUÉS ─────────────────────────────────────────────
+   * Va delante de `recorreLaCadena`, no detrás. La asimetría decide:
+   *   · marca sin Session (la cadena se cae después) = el alumno no puede
+   *     cambiar su crédito durante los ≤ 7 minutos que le quedan de vida a la
+   *     reserva (`HOLD_POLICY`), tras los cuales `expire_stale_bookings` la
+   *     cancela y `liberar_credito_de_pago` le devuelve el crédito entero;
+   *   · Session sin marca = la imprenta de arriba, abierta.
+   * Uno es una molestia acotada y el otro es dinero. Y por lo mismo esto va
+   * ANTES del alta del Customer en Stripe: cuanto menos haya entre sellar y
+   * abrir, menos ventana.
+   *
+   * ── POR QUÉ SÍ SE ABORTA, SI `anotarCobrador` NO ABORTA ────────────────────
+   * Son dos cosas distintas y conviene no leerlas como la misma. `anotarCobrador`
+   * corre con el cobro YA ABIERTO y lo que se pierde si falla es conciliación:
+   * tumbar la pantalla ahí cambiaría un problema de contabilidad por uno de
+   * venta. Esto corre ANTES: si falla, todavía no hay nada abierto y seguir
+   * sería abrir el cobro a sabiendas de que el cerrojo no está puesto.
+   *
+   * ⚠️ El camino simulado de arriba sale sin sellar, y es correcto: no abre
+   * cobro ninguno, así que no hay Session inmutable que proteger. El de crédito
+   * total tampoco, por lo que dice su propio bloque.
+   */
+  /**
+   * 🎁 EL MISMO CERROJO, OTRA RPC — porque `marcar_cobro_abierto` solo acepta
+   * `booking_ids` y un regalo no tiene reserva.
+   *
+   * `marcar_cobro_regalo_abierto` escribe en `credits` `checkout_opened_at =
+   * now()`, `checkout_amount = c.amount` —**leído de la base**, aquí se le pasa
+   * el sujeto y el riel, jamás el dinero (regla de oro 2)— y mueve
+   * `credits.provider` al candidato por el que se va a empezar.
+   *
+   * Se llama con el mismo criterio que su hermana y no hay ninguno distinto que
+   * inventar: INCONDICIONAL (si se va a abrir un cobro, se sella), ANTES de
+   * abrirlo (una marca sin cobro es una molestia; un cobro sin marca es la
+   * imprenta) y ABORTANDO si falla (todavía no hay nada abierto, así que seguir
+   * sería abrir el cobro a sabiendas de que el cerrojo no está puesto).
+   *
+   * ⚠️ Y ADEMÁS MUEVE EL RIEL, que en el regalo es lo que en la reserva hace
+   * `set_charge_provider`: de `credits.provider` cuelga el `funding_provider`
+   * del payout el día que el regalo se canjee. Aquí se sella con la CABEZA de la
+   * cadena, que es por quien se va a empezar; si acaba cobrando otro, se vuelve
+   * a llamar con el ganador (ver `anotarCobroDelRegalo`).
+   *
+   * `cadena[0]` existe con seguridad en este punto: si fuera `null` o un
+   * proveedor que no abre cobros, la pregunta de `cabeza.opensRemoteCheckout`
+   * de arriba ya habría devuelto el camino simulado.
+   */
+  if (cobrar.regaloId) {
+    const { data: sellado, error: errorSello } = await admin.rpc(
+      "marcar_cobro_regalo_abierto",
+      { p_credit_id: cobrar.regaloId, p_provider: cadena[0]! },
+    );
+
+    if (errorSello) {
+      console.error("[pagos/checkout] 🔴 no se pudo sellar el cobro del regalo:", {
+        regalo: cobrar.regaloId,
+        riel: cadena[0],
+        error: errorSello.message,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "No pudimos abrir el pago ahora mismo. Vuelve a intentarlo en unos minutos; si sigue igual, escríbenos a info@ensenameya.com.",
+        },
+        { status: 503 },
+      );
+    }
+
+    // La RPC solo sella mientras `credits.status` sigue en 'pending_payment', y
+    // devuelve cuántas filas tocó. Cero significa que el regalo dejó de estar
+    // pendiente entre la lectura de arriba y esta línea —lo cobró otra pestaña,
+    // lo revocó el barrido— y abrir el cobro igualmente sería cobrarlo dos
+    // veces.
+    if ((sellado ?? 0) !== 1) {
+      console.error("[pagos/checkout] 🔴 el regalo ya no admitía cobro al sellarlo:", {
+        regalo: cobrar.regaloId,
+        selladas: sellado,
+      });
+      return NextResponse.json(
+        { error: "Este pago ya no está pendiente. Recarga la página para ver su estado." },
+        { status: 409 },
+      );
+    }
+  } else {
+    const { data: sellados, error: errorSello } = await admin.rpc("marcar_cobro_abierto", {
+      p_booking_ids: cobrar.reservas,
+    });
+
+    // Regla de oro 10: se mira el `error`. Un `const { data } = …` aquí convertiría
+    // «no se pudo sellar» en «se selló», que es la mentira creíble que deja la
+    // imprenta abierta sin que nadie se entere (regla de oro 11).
+    if (errorSello) {
+      console.error("[pagos/checkout] 🔴 no se pudo sellar el cobro antes de abrirlo:", {
+        sujeto: cobrar.reservas,
+        error: errorSello.message,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "No pudimos abrir el pago ahora mismo. Vuelve a intentarlo en unos minutos; si sigue igual, escríbenos a info@ensenameya.com.",
+        },
+        { status: 503 },
+      );
+    }
+
+    // Y la cuenta: la RPC solo sella las filas cuyo `payments.status` sigue en
+    // 'pending', así que sellar MENOS de las que se van a cobrar significa que
+    // alguna línea ya tiene su pago resuelto. Las comprobaciones de arriba miran
+    // `bookings.status`, que es otra columna: este es el único sitio donde se ve
+    // la discrepancia. Abrir el cobro igualmente sería cobrar por algo ya
+    // cobrado, así que se para.
+    if ((sellados ?? 0) !== cobrar.reservas.length) {
+      console.error("[pagos/checkout] 🔴 el sellado no cubrió todas las líneas:", {
+        sujeto: cobrar.reservas,
+        selladas: sellados,
+        esperadas: cobrar.reservas.length,
+      });
+      return NextResponse.json(
+        { error: "Este pago ya no está pendiente. Recarga la página para ver su estado." },
+        { status: 409 },
+      );
+    }
   }
 
   // ⚠️ AQUÍ ESTABA EL `missingChargeConfig()` DEL ÚNICO PROVEEDOR, Y ERA EL
@@ -559,7 +1148,14 @@ export async function POST(req: Request) {
   if (customer !== perfil?.stripe_customer_id) await guardarCustomer(customer);
 
   const base = siteUrl();
-  const caduca = caducidadSesion(cobrar.creadoEn);
+  // 🎁 Dos relojes, y el del regalo no es el de la reserva: aquel se calcula
+  // desde un hold de siete minutos y este desde una fila que vive treinta días.
+  // El porqué entero está en `caducidadRegalo`; lo que hay que saber aquí es que
+  // los dos son DETERMINISTAS por sujeto, que es lo que sostiene que recargar la
+  // pantalla reencuentre el cobro abierto en vez de abrir otro.
+  const caduca = cobrar.regaloId
+    ? caducidadRegalo(cobrar.creadoEn)
+    : caducidadSesion(cobrar.creadoEn);
   const crearSesion = (psp: PspProvider, cliente: string, claveIdem: string) =>
     psp.charge({
       ref: cobrar.ref,
@@ -626,7 +1222,33 @@ export async function POST(req: Request) {
   // ganador, y lo que sostiene el montaje del formulario al llegar (D-2) es
   // justo que no cambie. Recargar el checkout tiene que reencontrar el cobro que
   // ya estaba abierto, sea de quien sea.
-  const clave = `${cobrar.claveBase}-c${caduca}-${VERSION_PARAMS}`;
+  //
+  // 💳 Y POR LO MISMO ENTRA EL CRÉDITO (`-k`), QUE ES LO ÚNICO DE ESTA CLAVE QUE
+  // EL ALUMNO PUEDE MOVER A VOLUNTAD. `gross_amount` está congelado desde
+  // `create_booking`, así que hasta hoy el importe de la Session era una función
+  // del sujeto y la clave podía no nombrarlo. Con los créditos ya no: aplicar
+  // uno, quitarlo o cambiarlo por otro cambia lo que hay que cobrar **sin
+  // cambiar la reserva**. Sin el `-k`, volver al checkout después de tocar el
+  // crédito devolvería la Session anterior —Stripe la sirve cacheada porque la
+  // clave coincide— con el importe viejo dentro, y una Session es INMUTABLE: el
+  // alumno acabaría pagando lo que debía antes. Con él, cada importe debido abre
+  // su propia Session y la vieja muere sola al caducar.
+  //
+  // Sigue siendo determinista por sujeto mientras nadie toque el crédito, que es
+  // lo que sostiene el montaje del formulario al llegar (D-2): recargar la
+  // pantalla reencuentra el mismo cobro.
+  //
+  // El formato pasa de `<tipo>-<uuid>-c<epoch>-v<n>` a
+  // `<tipo>-<uuid>-c<epoch>-k<credito>-v<n>`. `refDeOrdenExterna` de dLocal lo
+  // aguanta: su `RE_ORDEN` está anclado al principio (`^(booking|order)-<uuid>`)
+  // y solo lee el prefijo.
+  //
+  // Y por eso `VERSION_PARAMS` NO sube a v6: meter el `-k` ya cambia la clave de
+  // toda reserva que tuviera un checkout abierto el día del despliegue, que es
+  // exactamente lo que la subida de versión compra (abrir una Session nueva en
+  // vez de chocar contra la clave vieja con parámetros distintos). Subir las dos
+  // cosas haría el mismo trabajo dos veces.
+  const clave = `${cobrar.claveBase}-c${caduca}-k${cobrar.creditoTotal}-${VERSION_PARAMS}`;
 
   /**
    * UN candidato: se le pregunta si puede y, si puede, se le pide el cobro.
@@ -730,7 +1352,7 @@ export async function POST(req: Request) {
     // ni tiene por qué saber quién es 'stripe'. Al log entero, fuera una frase
     // suya.
     console.error("[pagos/checkout] la cadena se paró en seco:", {
-      sujeto: cobrar.reservas,
+      sujeto: enElLog,
       porQue: recorrido.mensaje,
     });
     return NextResponse.json(
@@ -759,7 +1381,7 @@ export async function POST(req: Request) {
      * agotada es un error de configuración, no una invitación a fingir un cobro.
      */
     console.error("[pagos/checkout] ningún proveedor pudo abrir el cobro:", {
-      sujeto: cobrar.reservas,
+      sujeto: enElLog,
       porQue: porQueNadie(recorrido.intentos),
     });
     return NextResponse.json(
@@ -867,9 +1489,115 @@ export async function POST(req: Request) {
     }
   };
 
-  // Se anota solo cuando hace falta: si ganó el snapshot, `payments.provider` ya
-  // lo dice, y si ganó el que ya estaba anotado, no hay nada nuevo que decir.
-  if (recorrido.clave !== cobrar.provider && recorrido.clave !== cobrar.cobrador) {
+  /**
+   * 🎁 LO MISMO EN UN REGALO — y aquí NO es condicional, por dos motivos que
+   * conviene separar.
+   *
+   * ── 1 · LA REFERENCIA DEL PSP, QUE dLOCAL EXIGE ANTES DE REDIRIGIR ─────────
+   * Con Stripe el `pi_` lo sella el webhook al volver. Con dLocal no se puede
+   * esperar: `GET /v1/payments` no lista los cobros PENDING, el filtro por
+   * `order_id` se ignora y repetir el `POST` da `5009 Order id is duplicated`
+   * en vez del cobro anterior (medido, 1-sep-2026). O sea que **la memoria es
+   * nuestra o no hay memoria**, y sin ella cada recarga de la pantalla de pago
+   * abre un cobro NUEVO mientras el anterior sigue vivo y pagable.
+   *
+   * Para una reserva esa memoria la escribe el propio adaptador
+   * (`sellarRef` → `payments.provider_payment_id`). Para un regalo no puede:
+   * no hay fila de `payments` que sellar, y `credits` no admite `update` de
+   * `service_role` a propósito (S7 de `20260912110000`). La escribe esta
+   * llamada, con `marcar_cobro_regalo`, que es `security definer` y que solo
+   * acepta mientras el regalo siga en 'pending_payment'.
+   *
+   * ✅ Y SE LEE. Quien reabre el checkout es `refGuardada()`, en el adaptador
+   * de dLocal, que durante un rato solo miró `payments` — y con eso recargar
+   * `/regalar/<id>/pagar` abría un SEGUNDO cobro real, porque el uuid de un
+   * regalo no existe en esa tabla y la consulta no fallaba: devolvía vacío.
+   * Hoy `sujetoDelCobro()` resuelve las dos tablas en paralelo antes de crear
+   * nada (`lib/payments/dlocal-provider.ts`). Con Stripe nunca pasó: allí la
+   * memoria es la clave de idempotencia, determinista por sujeto.
+   *
+   * ── 2 · EL RIEL, QUE ES DE DÓNDE SALDRÁ EL DINERO DEL TUTOR ───────────────
+   * `credits.provider` dice DÓNDE ESTÁ LA CAJA con la que se pagará al tutor
+   * cuando el regalo se canjee (`aplicar_credito` la copia a
+   * `payments.funding_provider`). Si la cadena se cayó al segundo candidato y
+   * esa columna sigue nombrando al primero, el payout busca el saldo en el PSP
+   * equivocado. Se mueve con la misma RPC del cerrojo, que es la única que
+   * puede tocarla.
+   *
+   * Igual que `anotarCobrador`, esto NO aborta: corre con el cobro ya abierto y
+   * lo que se pierde si falla es conciliación. Tumbar la pantalla aquí cambiaría
+   * un problema de contabilidad por uno de venta. Se grita en el log, que es
+   * donde se mira cuando un payout no cuadra.
+   */
+  const anotarCobroDelRegalo = async (quien: string, regalo: string) => {
+    // ⚠️ SE COMPARA CONTRA LO QUE SE SELLÓ, NO CONTRA `cobrar.provider`. El
+    // cerrojo de arriba ya movió `credits.provider` a la CABEZA de la cadena, así
+    // que el snapshot que se leyó al resolver el sujeto está viejo desde
+    // entonces. Compararlo con él deja el caso que más importa sin corregir:
+    // cabeza = el cobrador anotado, que falla, y acaba cobrando el snapshot —
+    // `quien === cobrar.provider`, no se movería nada, y la columna se quedaría
+    // nombrando al que NO cobró.
+    const rielSellado = cadena[0] ?? null;
+    if (quien !== rielSellado) {
+      const { data: movido, error } = await admin.rpc("marcar_cobro_regalo_abierto", {
+        p_credit_id: regalo,
+        p_provider: quien,
+      });
+      if (error || (movido ?? 0) !== 1) {
+        console.error(
+          `[pagos/checkout] 🔴 el cobro del regalo lo abrió '${quien}' y credits.provider ` +
+            `sigue en '${rielSellado}' para ${regalo}: ${error?.message ?? "no se tocó ninguna fila"}`,
+        );
+      }
+    }
+
+    // Solo los cobros de dLocal traen identificador al abrirse: Stripe devuelve
+    // un `client_secret` y su `pi_` no existe hasta que alguien paga. No hay
+    // nada que sellar en ese caso, y no es un hueco — ver arriba.
+    const providerRef = "providerRef" in cobro ? cobro.providerRef : null;
+    if (!providerRef) return;
+
+    // El rastro se MEZCLA, no se pisa: si antes abrió otro candidato, su cobro
+    // sigue vivo en su proveedor y alguien va a tener que conciliarlo (mismo
+    // criterio que `anotarCobrador`). Ojo: el `||` de la RPC es un merge de
+    // PRIMER NIVEL, así que `checkout` se reemplaza entero y los `previos` hay
+    // que recomponerlos aquí.
+    const rastro = objeto(cobrar.metadata.checkout).previos;
+    const previos = [
+      ...(Array.isArray(rastro) ? rastro : []),
+      ...(cobrar.cobrador && cobrar.cobrador !== quien ? [cobrar.cobrador] : []),
+    ];
+
+    const { data: sellada, error } = await admin.rpc("marcar_cobro_regalo", {
+      p_credit_id: regalo,
+      p_provider_payment_id: providerRef,
+      p_metadata: {
+        checkout: {
+          cobrador: quien,
+          anotado_en: new Date().toISOString(),
+          ...(previos.length > 0 ? { previos } : {}),
+        },
+      },
+    });
+
+    if (error || sellada !== true) {
+      console.error("[pagos/checkout] 🔴 no se pudo sellar la referencia del cobro del regalo:", {
+        regalo,
+        cobrador: quien,
+        referencia: providerRef,
+        error: error?.message ?? "el regalo ya no estaba pendiente",
+      });
+    }
+  };
+
+  if (cobrar.regaloId) {
+    // Sin condición: aunque gane el snapshot hay que sellar la referencia del
+    // PSP, que es lo que permite reencontrar el cobro. `anotarCobrador` sí puede
+    // ser condicional porque con una reserva ese sello lo pone el adaptador.
+    await anotarCobroDelRegalo(recorrido.clave, cobrar.regaloId);
+  } else if (recorrido.clave !== cobrar.provider && recorrido.clave !== cobrar.cobrador) {
+    // Se anota solo cuando hace falta: si ganó el snapshot, `payments.provider` ya
+    // lo dice, y si ganó el que ya estaba anotado, no hay nada nuevo que decir.
     await anotarCobrador(recorrido.clave);
   }
 

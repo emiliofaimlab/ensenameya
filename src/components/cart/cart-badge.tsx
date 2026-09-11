@@ -55,7 +55,12 @@ export function CartBadge({ initial }: { initial: number }) {
       variant="ghost"
       size="icon"
       asChild
-      className="relative rounded-full"
+      /* `max-lg:size-10` · en la barra móvil el carrito comparte fila con la
+         lupa y la hamburguesa y se pulsa con el pulgar; los 32 de `size="icon"`
+         cumplen 2.5.8 pero se quedan cortos para el objetivo cómodo. La copia
+         de escritorio vive dentro de un contenedor `lg:`, así que esta variante
+         no la alcanza y la barra publicada no se mueve. */
+      className="relative rounded-full max-lg:size-10"
     >
       <Link
         href="/carrito"

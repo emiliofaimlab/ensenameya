@@ -26,6 +26,8 @@ export type LineaResuelta = {
    * pago no puede decir un número distinto del que va a la pasarela.
    */
   total: number;
+  /** Lo que de esta línea financió un crédito (0 si ninguno). */
+  credito: number;
   currency: string;
   /**
    * M-02 · `products.auto_accept_bookings` de ESTA línea. Va por línea porque
@@ -60,6 +62,12 @@ export type PedidoResuelto = {
    * que se cobra allí.
    */
   total: number;
+  /**
+   * Lo que pusieron los créditos en TODO el pedido. `total - creditoTotal` es
+   * lo que de verdad salió del bolsillo de alguien — y por eso la confirmación
+   * no puede llamar «Total pagado» a `total` sin mirar esto.
+   */
+  creditoTotal: number;
   currency: string;
   /** ¿Siguen TODAS las líneas esperando el mismo cobro? (P-1, todo o nada.) */
   cobrable: boolean;
@@ -92,7 +100,7 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
   const { data: lineas } = await supabase
     .from("bookings")
     .select(
-      "id, status, product_id, session_duration_min, products(title, tutor_id, auto_accept_bookings, requirements), sessions(start_at, status), payments(gross_amount, currency)",
+      "id, status, product_id, session_duration_min, products(title, tutor_id, auto_accept_bookings, requirements), sessions(start_at, status), payments(gross_amount, credit_amount, currency)",
     )
     .eq("order_id", orderId);
 
@@ -128,6 +136,10 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
         .sort(),
       durationMin: b.session_duration_min,
       total: pago?.gross_amount ?? 0,
+      // Cuánto de esta línea lo puso un crédito. La pantalla de confirmación
+      // lo necesita para no decir «Total pagado» sobre dinero que no salió
+      // de nadie — el mismo arreglo que en la confirmación de reserva.
+      credito: pago?.credit_amount ?? 0,
       currency: pago?.currency ?? order.currency,
       // Sin producto legible se asume que NO acepta sola. Es el mismo respaldo
       // explícito que usa `confirm_payment` en SQL: sin dato, la reserva espera
@@ -147,6 +159,8 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
     order,
     lineas: resueltas,
     total: resueltas.reduce((s, l) => s + l.total, 0),
+    /** Lo que pusieron los créditos en TODO el pedido, sumando sus líneas. */
+    creditoTotal: resueltas.reduce((s, l) => s + l.credito, 0),
     currency: order.currency,
     // P-1 · el pedido se cobra entero o no se cobra. Basta con que una línea
     // haya dejado de esperar el cobro —la venció el cron, la canceló otro

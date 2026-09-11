@@ -14,6 +14,8 @@ import { AddToCart } from "@/components/cart/add-to-cart";
 import { GoToCart } from "@/components/cart/go-to-cart";
 import { cartCount } from "@/lib/cart/resolve";
 import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
+import { ImporteEnUsd, ImporteLocal } from "@/components/precio/precio";
+import { textosDePrecio } from "@/lib/fx";
 import { listProductSlots } from "@/lib/catalog/queries";
 import type { ProductCardData } from "@/lib/catalog/queries";
 
@@ -319,6 +321,23 @@ export async function BookingPanel({
 
   /** Clases con hueco el día elegido (las que ofrece el selector). */
   const dayProducts = products.filter((p) => productsByDay.get(day)?.has(p.id));
+  /**
+   * El precio de cada opción del desplegable, ya en la moneda del visitante.
+   *
+   * Se precalcula aquí y no dentro del `.map()` del JSX porque el `label` de una
+   * `<option>` es un string y no admite componente, así que la conversión tiene
+   * que hacerla el servidor. No cuesta N viajes: `monedaDelVisitante()` está
+   * memoizada con `cache()` por petición, y las tasas van por `fetch` cacheado.
+   */
+  const precioDeOpcion = new Map(
+    await Promise.all(
+      dayProducts.map(async (p) => {
+        const d = priceDisplay(p);
+        const { local, usd } = await textosDePrecio(d.amountMinor, p.currency);
+        return [p.id, `${local ?? usd} · ${d.note}`] as const;
+      }),
+    ),
+  );
   // RV-08 · el precio de la clase elegida, ya resuelto a "lo que se cobra".
   // El rótulo cambia con el modelo: en un paquete el importe es del paquete
   // entero, no de una sesión, y llamarlo igual sería otra media verdad.
@@ -728,10 +747,9 @@ export async function BookingPanel({
                 placeholder="Elige una mentoría"
                 value={chosen?.id ?? ""}
                 options={dayProducts.map((p) => {
-                  const precioClase = priceDisplay(p);
                   return {
                     value: p.id,
-                    label: `${p.title} · ${precioClase.amount} · ${precioClase.note}`,
+                    label: `${p.title} · ${precioDeOpcion.get(p.id)}`,
                     // Igual que con el día: cambiar de clase suelta la hora.
                     // Los huecos son de la mentoría, no del tutor. Es EL MISMO
                     // destino que tenía la tarjeta que esto sustituye.
@@ -866,14 +884,25 @@ export async function BookingPanel({
             className={`mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 ${siCompacto("lg:mt-2.5")}`}
           >
             <span className="text-[15px] text-[#6b6b6b]">{totalLabel}</span>
-            <span className="text-[30px] font-bold text-[#19191f]">
-              {precio.amount}
-            </span>
+            <ImporteLocal
+              amountMinor={precio.amountMinor}
+              currency={chosen.currency}
+              className="text-[30px] font-bold text-[#19191f]"
+            />
           </div>
           {/* De dónde sale la cifra. En P08 el desglose por sesión de un
               paquete dice ya todo lo que diría la nota ("paquete · 6
               sesiones"), así que sustituye — no se apilan las dos. */}
+          {/* El dólar entra aquí, en la línea que ya explicaba de dónde sale
+              la cifra: en un panel de reserva no caben tres renglones de
+              precio. `ImporteEnUsd` no pinta nada si no hay conversión, así que
+              esta línea queda exactamente como estaba. */}
           <p className="text-right text-[13px] text-[#6b6b6b]">
+            <ImporteEnUsd
+              amountMinor={precio.amountMinor}
+              currency={chosen.currency}
+              className="after:content-['_·_']"
+            />
             {(details ? perSessionLabel(chosen) : null) ?? precio.note}
           </p>
         </>

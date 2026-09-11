@@ -1,11 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
+import { PrecioEnLinea } from "@/components/precio/precio";
 
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { RatingStars } from "@/components/catalog/rating";
-import { formatMoney, initialsFrom, storageUrl } from "@/lib/catalog/format";
+import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import type { FeaturedTutor } from "@/lib/catalog/queries";
 
 export function FeaturedTutors({ tutors }: { tutors: FeaturedTutor[] }) {
@@ -85,7 +86,11 @@ export function FeaturedTutors({ tutors }: { tutors: FeaturedTutor[] }) {
                   <RatingStars avg={t.ratingAvg} count={t.ratingCount} />
                   {t.priceFromMinor !== null && t.currency ? (
                     <p className="text-sm font-semibold">
-                      Desde {formatMoney(t.priceFromMinor, t.currency)}
+                      Desde{" "}
+                      <PrecioEnLinea
+                        amountMinor={t.priceFromMinor}
+                        currency={t.currency}
+                      />
                     </p>
                   ) : null}
                   <Button

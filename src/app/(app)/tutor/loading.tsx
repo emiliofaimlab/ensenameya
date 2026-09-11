@@ -15,6 +15,13 @@ import { PageLoading } from "@/components/layout/page-loading";
  *
  * Sin `badges` a propósito: los contadores salen de la base y aquí todavía no
  * han llegado. Pintar ceros sería mentir y luego corregirse a la vista.
+ *
+ * ⚠️ Y CON EL ACORDEÓN YA EN SU SITIO, sin pasarle nada. Desde el 11-sep-2026
+ * los subniveles del tutor se pliegan (G-01 reabierta), y qué grupo sale
+ * abierto lo decide `AppSidebar` a partir del `pathname` EN EL PRIMER RENDER
+ * —no de un efecto—, así que este esqueleto y la pantalla de verdad calculan lo
+ * mismo y el menú no brinca al hidratar. Si algún día ese estado pasara a
+ * calcularse después de montar, este fichero es el que lo delata.
  */
 export default function TutorLoading() {
   return (

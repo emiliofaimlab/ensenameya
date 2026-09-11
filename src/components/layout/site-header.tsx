@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useSyncExternalStore } from "react";
+import { useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -28,7 +28,7 @@ import {
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
+  SheetDescription,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
@@ -187,6 +187,14 @@ const navGroups = [
   },
 ];
 
+/**
+ * Una línea del cajón: 44 px de alto (20 de texto + `py-3`), que es el objetivo
+ * táctil que pide la casa, y el mismo para la cuenta y para la navegación — en
+ * un cajón que se usa con el pulgar no hay enlaces de primera y de segunda.
+ */
+const itemCajon =
+  "flex items-center gap-2.5 rounded-md px-2 py-3 text-sm text-foreground hover:bg-muted";
+
 /** Cómo llamar al usuario: su nombre; el correo solo si no hay nombre. */
 function displayName(user: HeaderUser): string {
   return user.name?.trim() || user.email;
@@ -285,35 +293,6 @@ export function SiteHeader({
    */
   const conBuscador = !admin && !onboarding;
 
-  /**
-   * ¿La fila de acciones ocupa el ancho ENTERO a 390 con dos controles en los
-   * extremos (campana a la izquierda, píldora del avatar a la derecha)?
-   *
-   * Sí siempre que haya sesión. El Figma dibuja aquí la `avatar-row` de «AL02
-   * — Dashboard — Mobile» (358x42, r999, borde #e0e0e0, pad 6/12/6/6, contenido
-   * pegado a la derecha con `main:max`), y hasta el 8-sep la fila ENTERA era
-   * esa píldora, con la campana suelta dentro a la izquierda. Verónica
-   * (3-sep-2026, captura 29): «esta barra no existe en diseño; me gusta, pero
-   * mejor 2 botones, notificaciones a la izquierda y usuario a la derecha, sin
-   * que estén unidos». Así que el borde deja la fila y se lo queda cada
-   * control: la campana como círculo de 42 (`NotificationsBell`) y la píldora
-   * del avatar con el suyo, las dos con el mismo #e0e0e0 y la misma altura. La
-   * fila vuelve a ser un grupo transparente a los tres anchos, solo que a 390
-   * es `justify-between` y desde 768 `justify-end`, como siempre. Sin sesión la
-   * fila es la `auth-row` de AU01 (222x40, pegada a la izquierda), que es hug
-   * y no lleva borde.
-   *
-   * ⚠️ Admin va con el resto AUNQUE «AD02 — Dashboard Admin — Mobile» ponga su
-   * `avatar-pill` en la misma fila que el logo. Ahí el Figma gasta los 358 px
-   * enteros en logo (125) + píldora «Admin» (58) + píldora del avatar (163) y
-   * no le sobra ni un píxel — y nosotros tenemos que meter además la campana y
-   * la hamburguesa, que el archivo no dibuja en ningún frame (R2). Medido a
-   * 390 con la fila compartida: 453 px de contenido para 350 de sitio. Con la
-   * píldora en su propia fila cabe todo y el nombre solo se recorta si es muy
-   * largo (ver `min-w-0 shrink` en el disparador).
-   */
-  const filaAvatar = !!user && !onboarding;
-
   // El sheet no se cierra solo al navegar (Next navega en cliente, el diálogo
   // no se entera). Se nota sobre todo en el switch de panel: cambias de panel y
   // el menú te tapa el resultado.
@@ -333,34 +312,45 @@ export function SiteHeader({
   };
 
   /**
-   * US-1601 · dónde cae el grupo de acciones (CTA de invitado, o campana +
-   * píldora del avatar) en cada uno de los tres anchos del Figma.
+   * US-1601 · el grupo de acciones (CTA de invitado, o campana + píldora del
+   * avatar) es ahora SOLO de escritorio.
    *
-   *   390 → TERCERA fila, a todo el ancho (`auth-row` / `avatar-row`).
-   *   768 → sube a la PRIMERA, a la izquierda del ☰ (`right-group`, gap 16-20).
-   *  1024 → columna derecha de la barra de una sola fila: lo de hoy.
+   * ⚠️ Deroga la maqueta de tres filas que hubo aquí hasta el 11-sep-2026, y
+   * con ella la `auth-row`/`avatar-row` del Figma «Mobile y Tablet» y el
+   * reparto que Verónica afinó el 3-sep (campana a la izquierda, píldora del
+   * avatar a la derecha, cada una con su borde). El cliente pidió hoy que por
+   * debajo de 1024 la cabecera sean CUATRO cosas y nada más —logo, lupa,
+   * carrito y ☰—, así que la fila del buscador, la campana, la píldora del
+   * avatar y los dos CTA se van de la barra: los tres últimos al cajón (que es
+   * donde vive ahora el bloque de identidad) y el buscador detrás de la lupa.
    *
-   * Se reordena con `order`, no duplicando marcado: el grupo es UNO solo, así
-   * que el carrito, la campana y el menú de cuenta no pueden "desaparecer" en
-   * una banda de anchos por olvidarse una copia.
+   * `hidden … lg:flex` y no una condición de JS: el marcado sigue siendo UNO
+   * solo, que es lo que impedía —y sigue impidiendo— que un control
+   * "desaparezca" en una banda de anchos por olvidarse una copia.
+   *
+   * `lg:min-w-max`, igual que en la columna del logo: a partir de 1024 estos
+   * botones no ceden ancho (`buttonVariants` los pinta `shrink-0` y
+   * `whitespace-nowrap`), así que su columna tiene que declarar como suelo el
+   * ancho que de verdad ocupan o se desbordan sobre el buscador.
    */
-  const claseAcciones = cn(
-    "flex items-center gap-2",
-    // `lg:min-w-max`, igual que en la columna del logo: a partir de 1024 estos
-    // botones no ceden ancho (`buttonVariants` los pinta `shrink-0` y
-    // `whitespace-nowrap`), así que su columna tiene que declarar como suelo el
-    // ancho que de verdad ocupan o se desbordan sobre el buscador. Solo en
-    // `lg:`: por debajo, el nombre del avatar SÍ tiene que poder recortarse.
-    "order-4 w-full md:order-2 md:w-auto lg:order-3 lg:min-w-max lg:flex-1 lg:justify-end",
-    // Con sesión, a 390 son DOS controles con borde propio en los extremos
-    // (ver `filaAvatar`): la fila no lleva ni borde ni alto, lo ponen la
-    // campana (42) y la píldora (42). A partir de 768 el grupo se pega a la
-    // derecha, como siempre.
-    filaAvatar && "justify-between md:justify-end md:gap-4 lg:gap-2",
-    // Sin sesión, AU01 pega los dos CTA a la IZQUIERDA de su fila con gap 16;
-    // a 768 son un grupo hug a la derecha con gap 20.
-    !user && "gap-4 md:gap-5 lg:gap-2",
-  );
+  const claseAcciones =
+    "hidden items-center gap-2 lg:order-3 lg:flex lg:min-w-max lg:flex-1 lg:justify-end";
+
+  /**
+   * US-1601 · la lupa de móvil/tablet. Abre el buscador en una fila propia bajo
+   * la barra (ver el final del `Container`), no dentro del cajón: el panel de
+   * sugerencias de `SearchAutocomplete` es un portal `fixed` sobre el `body` y
+   * dentro del Sheet quedaría flotando fuera de él.
+   */
+  const [searchOpen, setSearchOpen] = useState(false);
+  const lupaRef = useRef<HTMLButtonElement>(null);
+  // Al cerrar con Escape el foco está DENTRO del buscador que se desmonta; sin
+  // devolverlo a la lupa se perdería al `body` y quien navega con teclado
+  // tendría que recorrer la página entera otra vez.
+  const cerrarBuscador = () => {
+    setSearchOpen(false);
+    lupaRef.current?.focus();
+  };
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/60">
@@ -468,13 +458,15 @@ export function SiteHeader({
                  su mínimo vuelve a ser su contenido, así que cuando no cabe
                  todo es el buscador —y no la navegación— quien cede sitio.
 
-            Por debajo de 1024 el buscador es una fila entera (`w-full`), que
-            es lo que piden AU01/AL02 en los dos anchos: 358x44 a 390 y 704x47
-            a 768.
+            ⚠️ Y esto es YA SOLO ESCRITORIO (11-sep-2026). Por debajo de 1024
+            era una fila entera —358x44 a 390 y 704x47 a 768, que es lo que
+            piden AU01/AL02—, y el cliente la ha cambiado por la lupa: misma
+            caja, pero solo cuando se pide. La otra instancia está al final del
+            `Container`, y son dos a propósito: `autoFocusOnMount` solo actúa al
+            MONTAR, así que reaprovechar ésta no enfocaría nada.
           */
           <SearchAutocomplete
-            className="order-3 w-full min-w-0 md:order-4 lg:order-2 lg:w-auto lg:max-w-[558px] lg:grow-[3] lg:basis-0"
-            inputClassName="md:max-lg:h-[47px]"
+            className="hidden min-w-0 lg:order-2 lg:block lg:w-auto lg:max-w-[558px] lg:grow-[3] lg:basis-0"
           />
         ) : null}
 
@@ -499,25 +491,25 @@ export function SiteHeader({
                   anónimo puede apuntar mentorías y revisarlas antes de
                   registrarse. En admin no se pinta: ese panel no compra nada.
 
-                  Por debajo de 768 esta copia se apaga y manda la de al lado
-                  del ☰ (ver más abajo): el contador tiene que estar SIEMPRE en
-                  la primera fila, y a 390 esta fila es la tercera. */}
+                  Por debajo de 1024 esta copia se apaga y manda la de al lado
+                  del ☰ (ver más abajo): el contador es una de las cuatro cosas
+                  que el cliente deja en la barra de móvil/tablet, y este grupo
+                  ya no se pinta ahí. ⚠️ Las dos visibilidades son EXCLUYENTES
+                  (`hidden lg:inline-flex` aquí y `lg:hidden` allí): si se tocan
+                  por separado, el carrito sale duplicado o no sale. */}
               {admin ? null : (
-                <span className="hidden md:inline-flex">
+                <span className="hidden lg:inline-flex">
                   <CartBadge initial={cartCount} />
                 </span>
               )}
 
               {/* US-1203 · avisos in-app, solo con sesión (son los tuyos).
-                  ⚠️ Hasta ahora vivía dentro de un `hidden … md:flex` y no tenía
-                  copia en el cajón, así que POR DEBAJO DE 768 UN USUARIO CON
-                  SESIÓN NO TENÍA NINGÚN ACCESO A SUS AVISOS (verificado a 390
-                  con 3 sin leer: el contenedor tenía `display:none`). No es un
-                  hueco del Figma —la campana no sale en ninguno de sus 115
-                  frames—, es un fallo del código; se arregla aquí metiéndola en
-                  el grupo único de acciones, que sí se pinta a los tres anchos.
-                  A 390 cae en el hueco que la `avatar-row` del Figma deja a la
-                  izquierda, que es justo para lo que sirve esa fila. */}
+                  ⚠️ Por debajo de 1024 esta campana ya no se pinta (el grupo
+                  entero es `hidden … lg:flex`): su sitio es el bloque de
+                  identidad del cajón, donde hay otra instancia. No volver a
+                  dejarla sin copia — hasta el 8-sep vivía en un `hidden …
+                  md:flex` sin nada en el cajón, y eso dejaba a QUIEN ENTRABA
+                  DESDE EL MÓVIL SIN NINGÚN ACCESO A SUS AVISOS. */}
               {user ? (
                 <NotificationsBell initial={notices} userId={user.id} />
               ) : null}
@@ -531,10 +523,11 @@ export function SiteHeader({
                         // Píldora del Figma: círculo de 30 + nombre + «▾»,
                         // 42 de alto, r999, borde #e0e0e0, pad 6/12 (AL02
                         // `avatar-row` a 390 y a 768, `avatar-pill` de AD02).
-                        // El borde va aquí a TODOS los anchos por debajo de
-                        // 1024: hasta el 8-sep a 390 lo llevaba la fila entera
-                        // y Verónica (3-sep-2026) pidió los dos controles
-                        // separados (ver `filaAvatar`).
+                        // ⚠️ INERTE desde el 11-sep-2026: este bloque solo se
+                        // pinta ≥1024 (ver `claseAcciones`), donde manda el
+                        // `lg:` de abajo. Se conserva porque es la píldora que
+                        // el Figma «Mobile y Tablet» dibuja y el cliente puede
+                        // volver a pedirla; lo que NO puede es volver sola.
                         "h-[42px] w-auto justify-start gap-2 rounded-full border-border p-0 pr-3 pl-1.5",
                         // `shrink` + `min-w-0` (`buttonVariants` pone
                         // `shrink-0`): sin esto el nombre real de la cuenta NO
@@ -641,92 +634,272 @@ export function SiteHeader({
               )}
             </div>
 
-            {/* ── Carrito móvil + hamburguesa ──────────────────────────────
-                EY-177 · por debajo de 768 el carrito NO se esconde en el menú
-                lateral: es el único punto de la cabecera que dice cuántas
-                mentorías llevas apuntadas, y detrás de la hamburguesa no lo
-                diría hasta abrirla. Sigue habiendo DOS `CartBadge` a propósito,
-                con visibilidades excluyentes (`hidden md:inline-flex` arriba y
-                `md:hidden` aquí): a 390 el grupo de acciones es la tercera fila
-                y el contador tiene que verse en la primera.
+            {/* ── Lupa + carrito + hamburguesa (móvil y tablet) ─────────────
+                US-1601 · lo que acompaña al logo por debajo de 1024 desde el
+                11-sep-2026, y no hay un quinto elemento: el cliente pidió una
+                barra de CUATRO cosas.
 
-                La hamburguesa pasa de `md:hidden` a `lg:hidden`: AU01 y AL02
-                tablet la pintan CONVIVIENDO con los CTA y con la píldora del
-                avatar a 768, que es justo donde el repo la escondía. */}
-            <div className="order-2 flex items-center gap-1 md:order-3 lg:hidden">
+                EY-177 · el carrito no se esconde en el cajón: es el único punto
+                de la cabecera que dice cuántas mentorías llevas apuntadas, y
+                detrás de la hamburguesa no lo diría hasta abrirla. Sigue
+                habiendo DOS `CartBadge` a propósito, con visibilidades
+                EXCLUYENTES (`hidden lg:inline-flex` arriba y `lg:hidden` aquí).
+
+                La hamburguesa vive de 0 a 1023 (`lg:hidden`, no `md:hidden`):
+                a 768 el Figma la pinta igual. */}
+            <div className="order-2 flex items-center gap-1 lg:hidden">
+              {/* US-1601 · la lupa. Es un interruptor, no un enlace: de ahí
+                  `aria-expanded`, que es lo que le dice a un lector de pantalla
+                  que hay algo desplegado ahí debajo. */}
+              {conBuscador ? (
+                <Button
+                  ref={lupaRef}
+                  variant="ghost"
+                  size="icon"
+                  /* 40 px y no los 32 de `size="icon"`: por debajo de 1024 esto
+                     se pulsa con el pulgar. 2.5.8 se cumple ya a 24 con
+                     separación —y así estaba—, pero la barra acaba de quedarse
+                     con cuatro elementos y hay sitio de sobra para el objetivo
+                     cómodo. `max-lg:` para no tocar el escritorio publicado. */
+                  className="rounded-full max-lg:size-10"
+                  aria-label="Buscar"
+                  aria-expanded={searchOpen}
+                  onClick={() =>
+                    searchOpen ? cerrarBuscador() : setSearchOpen(true)
+                  }
+                >
+                  <SearchIcon className="size-[18px]" />
+                </Button>
+              ) : null}
+
               {admin ? null : (
-                <span className="md:hidden">
+                <span className="lg:hidden">
                   <CartBadge initial={cartCount} />
                 </span>
               )}
 
               <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label="Abrir menú">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="max-lg:size-10"
+                    aria-label="Abrir menú"
+                  >
                     <MenuIcon />
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="right" className="w-72">
-                  <SheetHeader>
-                    <SheetTitle className="text-brand">Enséñame ya</SheetTitle>
-                  </SheetHeader>
-                  {/* Solo en admin: en el resto de áreas la cabecera ya pinta
-                      su propio buscador a 390 y a 768, y dos cajas de búsqueda a
-                      40 px una de otra sobran. En admin no hay ninguna (R3), y
-                      ésta es la única forma de buscar en el sitio público desde
-                      el panel. */}
-                  {admin ? <SearchBox className="px-4" /> : null}
-                  <nav className="flex flex-col gap-1 px-4">
-                    {/* Sin "Panel" duplicado: abajo ya van el switch y "Mi panel". */}
-                    {navGroups
-                      .flatMap((group) => group.links)
-                      .map((link) => (
+                  {/* Sin logo: es el mismo que está a dos dedos, en la barra.
+                      El título se queda —`sr-only`— porque ES el nombre
+                      accesible del diálogo, y la descripción porque Radix la
+                      reclama por consola cuando falta. */}
+                  <SheetTitle className="sr-only">Menú</SheetTitle>
+                  <SheetDescription className="sr-only">
+                    Tu cuenta y la navegación de Enséñame ya.
+                  </SheetDescription>
+
+                  {/* `pt-14` deja libre la X de cerrar (esquina superior
+                      derecha, 40 px de objetivo táctil). `min-h-0` +
+                      `overflow-y-auto`: con sesión esto mide ~590 px y en una
+                      pantalla de 667 hay que poder llegar a «Cerrar sesión». */}
+                  <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-4 pt-14 pb-6">
+                    {/*
+                      ── 1 · IDENTIDAD ──────────────────────────────────────
+                      ⚠️ Esto DEROGA la regla que estuvo escrita aquí del 9-sep
+                      al 11-sep-2026: «con sesión, aquí no va nada de la
+                      cuenta». Aquella regla era buena MIENTRAS el avatar estuvo
+                      en la barra de móvil: el switch de panel, «Mi panel», «Mi
+                      cuenta» y «Cerrar sesión» salían dos veces en la misma
+                      cabecera y Jose lo llamó redundante mirando las dos
+                      capturas juntas. Hoy el cliente ha reducido esa barra a
+                      cuatro elementos (logo · lupa · carrito · ☰), así que la
+                      cuenta NO TIENE OTRO SITIO: o está aquí o no está. El
+                      reparto que queda:
+
+                        · Por debajo de 1024 el cajón es TODO — quién soy, a
+                          dónde puedo ir y el sitio público.
+                        · El avatar de la barra es lo MÍO, pero ya solo ≥1024.
+                        · La fila de la pantalla son las SECCIONES del panel en
+                          el que estoy (`app-sidebar.tsx`).
+
+                      Y va DESPLEGADO, no dentro de un desplegable: un overlay
+                      anidado en otro overlay (dos `Dialog` de Radix) es mal
+                      patrón y aquí no compra nada — hay sitio de sobra.
+                    */}
+                    {user ? (
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2.5 px-2 pb-1">
+                          <UserAvatar user={user} className="size-9" />
+                          <span className="min-w-0 truncate text-sm font-semibold text-foreground">
+                            {displayName(user)}
+                          </span>
+                        </div>
+
+                        {/* `onNavigate` cierra el cajón: si no, cambias de panel
+                            y el propio cajón te tapa el resultado. */}
+                        {user.panels.length > 1 ? (
+                          <div className="pb-1">
+                            <PanelSwitch
+                              panels={user.panels}
+                              pathname={pathname}
+                              onNavigate={closeMenu}
+                            />
+                          </div>
+                        ) : null}
+
+                        {/* ⚠️ Destinos con guarda: salen RESUELTOS del servidor
+                            (`toHeaderUser`), nunca escritos a mano. Un
+                            `redirect()` de servidor alcanzado por una navegación
+                            de cliente desde fuera de `(app)` deja la pantalla en
+                            blanco — regla de oro 13. */}
                         <Link
-                          key={link.href}
-                          href={link.href}
+                          href={user.homeHref}
                           onClick={closeMenu}
-                          className="rounded-md px-2 py-2 text-sm hover:bg-muted"
+                          className={itemCajon}
                         >
-                          {link.label}
+                          <UserIcon className="size-4 text-muted-foreground" />
+                          Mi panel
                         </Link>
+                        <Link
+                          href={user.accountHref}
+                          onClick={closeMenu}
+                          className={itemCajon}
+                        >
+                          <SettingsIcon className="size-4 text-muted-foreground" />
+                          Mi cuenta
+                        </Link>
+
+                        {/* Los avisos. La campana se fue de la barra de móvil,
+                            así que ésta es la ÚNICA puerta a ellos por debajo de
+                            1024: es el agujero que se tapó el 8-sep y se
+                            reabriría solo con quitar esto.
+
+                            El `onClick` del contenedor cierra el cajón cuando se
+                            pulsa un aviso. Funciona porque el desplegable de la
+                            campana se pinta en un PORTAL, y los eventos de React
+                            suben por el ÁRBOL y no por el DOM: el clic llega
+                            aquí igual. Sin esto el cajón se queda tapando el
+                            destino, que es la trampa de siempre de este Sheet.
+
+                            `variante="fila"` la pinta como una fila de lista más
+                            —icono pelado, «Avisos», contador a la derecha— en vez
+                            del círculo con borde de la barra: aquí sus vecinas
+                            son «Mi cuenta» y «Cerrar sesión», y el círculo la
+                            hacía leer como otra cosa. El rótulo vive DENTRO del
+                            botón, que es lo que hace que el nombre accesible y
+                            el visible sean el mismo. */}
+                        <div
+                          onClick={(e) => {
+                            if ((e.target as Element).closest?.("a")) closeMenu();
+                          }}
+                        >
+                          <NotificationsBell
+                            initial={notices}
+                            userId={user.id}
+                            variante="fila"
+                          />
+                        </div>
+
+                        {/* ⚠️ `SignOutDialog` vive FUERA del Sheet (al final del
+                            header) y así se queda: al confirmar, este cajón se
+                            desmonta y se llevaría el diálogo por delante.
+                            `confirmSignOut` ya cierra menú y cajón antes de
+                            abrirlo. */}
+                        <button
+                          type="button"
+                          onClick={confirmSignOut}
+                          className={itemCajon}
+                        >
+                          <LogOutIcon className="size-4 text-muted-foreground" />
+                          Cerrar sesión
+                        </button>
+                      </div>
+                    ) : (
+                      /* Sin sesión, los dos CTA ocupan el sitio del bloque de
+                         identidad. «Crear cuenta» primario y arriba: es la
+                         acción que el cliente quiere empujar. 44 px de alto,
+                         que aquí no compiten con nada por el espacio. */
+                      <div className="flex flex-col gap-2">
+                        <Button asChild className="h-11 font-semibold">
+                          <Link href="/signup" onClick={closeMenu}>
+                            Crear cuenta
+                          </Link>
+                        </Button>
+                        <Button asChild variant="outline" className="h-11">
+                          <Link href="/login" onClick={closeMenu}>
+                            Iniciar sesión
+                          </Link>
+                        </Button>
+                      </div>
+                    )}
+
+                    {/* Solo en admin: el resto de áreas tienen la lupa en la
+                        barra, y dos cajas de búsqueda a un dedo de distancia
+                        sobran. En admin no hay ninguna (R3), y ésta es la única
+                        forma de buscar en el sitio público desde el panel. */}
+                    {admin ? <SearchBox /> : null}
+
+                    {/* ── 2 · NAVEGACIÓN, CON SUS GRUPOS ────────────────────
+                        Hasta el 11-sep esto era un `flatMap` que aplanaba
+                        «Explorar» y «Nosotros» en una lista de cinco enlaces
+                        sueltos: la jerarquía que el escritorio SÍ enseña (dos
+                        desplegables) se perdía justo donde más falta hace, que
+                        es donde no hay sitio. Misma constante `navGroups`, sin
+                        duplicarla ni reordenarla. */}
+                    <nav
+                      aria-label="Navegación del sitio"
+                      className="flex flex-col gap-4"
+                    >
+                      {navGroups.map((group) => (
+                        <div key={group.label}>
+                          <h3 className="px-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                            {group.label}
+                          </h3>
+                          {group.links.map((link) => (
+                            <Link
+                              key={link.href}
+                              href={link.href}
+                              onClick={closeMenu}
+                              className={itemCajon}
+                            >
+                              {link.label}
+                            </Link>
+                          ))}
+                        </div>
                       ))}
-                  </nav>
-                  {/*
-                    ⚠️ CON SESIÓN, AQUÍ NO VA NADA DE LA CUENTA. Y no es un
-                    olvido: hasta el 9-sep este cajón repetía el switch
-                    Aprender/Enseñar, «Mi panel», «Mi cuenta» y «Cerrar sesión»
-                    —los mismos cuatro que ya están en el menú del avatar, a
-                    dos dedos de distancia en la misma cabecera—. Jose lo
-                    señaló mirando las dos capturas juntas: «que salga en los
-                    dos lados es redundante».
-
-                    El reparto que queda, y la regla para lo que venga:
-
-                      · La hamburguesa es el SITIO — lo que puede ver
-                        cualquiera: explorar, categorías, quiénes somos.
-                      · El avatar es lo MÍO — quién soy, en qué panel estoy,
-                        mi cuenta y salir.
-                      · La fila de la pantalla son las SECCIONES del panel en
-                        el que estoy (`app-sidebar.tsx`).
-
-                    Cada destino vive en UN sitio, y cuál es se deduce de la
-                    pregunta que se está haciendo el usuario. Sin sesión el
-                    avatar no existe, así que los dos CTA de alta sí se quedan
-                    aquí: no duplican nada.
-                  */}
-                  {user ? null : (
-                    <div className="mt-2 flex flex-col gap-2 px-4">
-                      <Button asChild variant="outline">
-                        <Link href="/login">Iniciar sesión</Link>
-                      </Button>
-                      <Button asChild>
-                        <Link href="/signup">Crear cuenta</Link>
-                      </Button>
-                    </div>
-                  )}
+                    </nav>
+                  </div>
                 </SheetContent>
               </Sheet>
             </div>
+
+            {/* ── La fila que abre la lupa ──────────────────────────────────
+                Va DENTRO del `Container` y EN FLUJO (`w-full` + `order-5` en un
+                contenedor `flex-wrap`), así que se pone debajo de la barra y
+                empuja la página en vez de taparla — y el panel de sugerencias,
+                que se mide en vivo contra el `<form>`, cae justo debajo sin
+                tocar nada.
+
+                Fuera del cajón a propósito (decisión de hoy): ese panel es un
+                portal `fixed` sobre el `body` y dentro del Sheet quedaría
+                flotando fuera de él. */}
+            {conBuscador && searchOpen ? (
+              <div
+                className="order-5 w-full lg:hidden"
+                onKeyDown={(e) => {
+                  // Escape cierra la fila entera y devuelve el foco a la lupa.
+                  // `SearchAutocomplete` ya escucha Escape para su desplegable
+                  // de sugerencias, así que los dos se cierran del mismo tecleo.
+                  if (e.key === "Escape") cerrarBuscador();
+                }}
+              >
+                <SearchAutocomplete
+                  autoFocusOnMount
+                  inputClassName="md:max-lg:h-[47px]"
+                />
+              </div>
+            ) : null}
           </>
         )}
       </Container>

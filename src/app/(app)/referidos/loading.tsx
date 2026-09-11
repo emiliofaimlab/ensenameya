@@ -2,7 +2,7 @@ import { PanelShell } from "@/components/layout/panel-shell";
 import { PageLoading } from "@/components/layout/page-loading";
 
 /**
- * La espera de `/referidos`, que no es corta: además de tres consultas a la
+ * La espera de `/referidos`, que no es corta: además de cuatro consultas a la
  * base, la PRIMERA visita da de alta al referidor en Referral Factory, y RF
  * tiene picos de más de 25 s (por eso el cliente corta a los 8). Sin este
  * límite el navegador se queda congelado en la pantalla anterior todo ese rato,

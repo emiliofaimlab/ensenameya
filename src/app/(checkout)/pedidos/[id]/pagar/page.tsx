@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { getUserTimezone, requireUser } from "@/lib/auth/server";
 import { resolveOrder } from "@/lib/orders/queries";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
-import { formatMoney } from "@/lib/catalog/format";
+import { Precio } from "@/components/precio/precio";
 import { formatSessionTime } from "@/lib/booking";
 import { OrderPayment } from "@/components/checkout/order-payment";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
@@ -104,8 +104,15 @@ export default async function PagarPedidoPage({
                   <p className="text-[15px] font-semibold text-balance text-[#19191f]">
                     {l.titulo}
                   </p>
-                  <span className="shrink-0 text-[15px] font-bold text-[#19191f]">
-                    {formatMoney(l.total, l.currency)}
+                  {/* La línea pequeña de debajo del importe está libre —la del
+                      tutor y la duración cuelgan del TÍTULO, en la otra columna—,
+                      así que aquí cabe el bloque de dos líneas. */}
+                  <span className="shrink-0 text-right">
+                    <Precio
+                      amountMinor={l.total}
+                      currency={l.currency}
+                      className="text-[15px] font-bold text-[#19191f]"
+                    />
                   </span>
                 </div>
                 <p className="mt-0.5 text-[13px] text-[#6b6b6b]">
@@ -168,8 +175,13 @@ export default async function PagarPedidoPage({
 
           <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-[#e0e0e0] pt-4">
             <span className="text-base font-semibold text-[#19191f]">Total</span>
-            <span className="text-[26px] leading-none font-bold text-brand">
-              {formatMoney(pedido.total, pedido.currency)}
+            <span className="text-right">
+              <Precio
+                amountMinor={pedido.total}
+                currency={pedido.currency}
+                className="text-[26px] leading-none font-bold text-brand"
+                notaClassName="mt-1"
+              />
             </span>
           </div>
 

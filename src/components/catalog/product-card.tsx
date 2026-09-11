@@ -13,6 +13,7 @@ import {
 
 import { ProductCover } from "@/components/catalog/product-cover";
 import { LEVELS } from "@/components/catalog/product-filters";
+import { Precio } from "@/components/precio/precio";
 import {
   initialsFrom,
   perSessionLabel,
@@ -230,24 +231,26 @@ export function ProductCard({
                 pequeña debajo, para que sea el ancla visual de la tarjeta.
                 RV-08: el monto grande es lo que se COBRA por reservar; la
                 tarifa por hora, cuando la hay, es la línea de abajo. */}
+            {/* La cifra grande va en la moneda de quien mira y el USD baja a la
+                línea pequeña (11-sep-2026). Sin conversión —país dolarizado,
+                Venezuela, sin tasa— `<Precio>` pinta exactamente lo de antes:
+                el USD arriba y la nota debajo.
+
+                RV-09 · la nota del paquete ("4 sesiones · US$ 15,00 c/u") puede
+                no caber en una línea a 276px, así que en ese caso se deja
+                envolver en vez de recortarse: un "4 sesiones · US$ 15…" cortado
+                esconde justo el dato que se añadió. La nota corriente sigue con
+                `truncate`. */}
             <div className="min-w-0">
-              <p
+              <Precio
+                amountMinor={precio.amountMinor}
+                currency={product.currency}
+                nota={porSesion ?? precio.note}
                 className={`font-bold text-[#19191f] ${compact ? "text-base" : "text-[19px]"} leading-tight`}
-              >
-                {precio.amount}
-              </p>
-              {/* RV-09 · la nota del paquete ("4 sesiones · US$ 15,00 c/u")
-                  puede no caber en una línea a 276px, así que en ese caso se
-                  deja envolver en vez de recortarse: un "4 sesiones · US$ 15…"
-                  cortado esconde justo el dato que se añadió. La nota corriente
-                  sigue con `truncate`. */}
-              <p
-                className={`text-[#666666] ${compact ? "text-[11px]" : "text-xs"} ${
+                notaClassName={`text-[#666666] ${compact ? "text-[11px]" : "text-xs"} ${
                   porSesion ? "text-pretty" : "truncate"
                 }`}
-              >
-                {porSesion ?? precio.note}
-              </p>
+              />
             </div>
             {action === "ver" ? (
               <Link

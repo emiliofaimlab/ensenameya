@@ -165,6 +165,13 @@ export async function POST() {
         // Apagada, en español provisional y como campaña de alumnos: los tres
         // valores que el admin va a revisar de todas formas. `visible: false`
         // es lo importante — una campaña nueva de RF no se publica sola.
+        //
+        // ⚠️ LAS CUATRO `reward_*` NO SE MANDAN A PROPÓSITO. `reward_kind` nace
+        // `'ninguna'` por default de columna (`20260912110000`) y eso es
+        // exactamente lo que queremos: una campaña traída de RF no reparte
+        // dinero hasta que un humano diga cuánto, igual que no se publica sola.
+        // Ponerlas aquí sería inventar un premio desde un `POST` que solo vino
+        // a copiar nombres.
         visible: false,
         audience: "alumnos",
         title: c.name,

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Slider } from "radix-ui";
 
-import { formatMoney } from "@/lib/catalog/format";
+import { usePrecio } from "@/components/precio/precio";
 import { STEPS, posToPrice, priceToPos } from "@/lib/catalog/log-scale";
 
 /**
@@ -67,6 +67,17 @@ export function PriceRange({
   ]);
   const precio = (p: number) => posToPrice(p, bounds);
 
+  // 11-sep-2026 · el rango se LEE en la moneda de quien mira, con el USD
+  // debajo. El deslizador sigue operando en dólares por debajo: `pos` → precio
+  // USD es lo que viaja a la URL y lo que filtra el servidor.
+  //
+  // Dos llamadas sueltas y no un bucle: `usePrecio` es un hook y los hooks van
+  // arriba, siempre los mismos y en el mismo orden.
+  const cifras = [
+    usePrecio(precio(pos[0]), "USD"),
+    usePrecio(precio(pos[1]), "USD"),
+  ];
+
   // Nota: la URL manda. Cuando cambia (limpiar filtros, atrás del navegador) el
   // padre remonta este componente con `key`, así que el estado se reinicia solo
   // — sin efecto que sincronice, que es la forma que React recomienda.
@@ -99,7 +110,16 @@ export function PriceRange({
       </div>
 
       <p className="mt-1 text-[13px] text-muted-foreground tabular-nums">
-        {formatMoney(precio(pos[0]), "USD")} – {formatMoney(precio(pos[1]), "USD")}
+        {cifras[0].local ?? cifras[0].usd} –{" "}
+        {cifras[1].local ?? cifras[1].usd}
+        {/* Sin conversión esta segunda línea no existe: la de arriba YA es el
+            dólar. Con ella, el rango en USD va debajo porque es el que se
+            cobra y el que viaja en `?pmin=`/`?pmax=`. */}
+        {cifras[0].local ? (
+          <span className="block text-[11px] leading-tight">
+            {cifras[0].usd} – {cifras[1].usd}
+          </span>
+        ) : null}
       </p>
 
       <Slider.Root
@@ -134,7 +154,13 @@ export function PriceRange({
             aria-label={`Precio ${etiqueta}`}
             // Sin esto un lector de pantalla cantaría la POSICIÓN ("60"), que
             // no significa nada para quien filtra: el valor real es el precio.
-            aria-valuetext={formatMoney(precio(pos[i]), "USD")}
+            // Y canta LAS DOS cifras, como se ven arriba: quien no mira la
+            // pantalla no puede oír una conversión sin su dólar (WCAG 3.3.2).
+            aria-valuetext={
+              cifras[i].local
+                ? `${cifras[i].local} (${cifras[i].usd})`
+                : cifras[i].usd
+            }
             // El punto mide 16 px, por debajo de los 24 que pide WCAG 2.5.8;
             // el `before` agranda el área tocable sin engordar el dibujo:
             // 44 px por debajo de `lg` (el mínimo táctil del proyecto, ahora

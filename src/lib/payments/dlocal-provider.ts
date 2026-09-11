@@ -152,6 +152,17 @@ function descripcionDe(input: ChargeInput): string {
  * el uuid es lo que va entre el primer guion y `-c`. Se saca con una expresión
  * anclada en el uuid y no partiendo por guiones, porque el uuid LLEVA guiones
  * dentro y `split('-')` lo destroza.
+ *
+ * ⚠️ 🎁 `tipo: 'booking'` NO SIGNIFICA «RESERVA»: SIGNIFICA «UNO SUELTO». Un
+ * REGALO viaja por aquí con `booking-<credits.id>` y sale de esta función como
+ * `{tipo:'booking', id:<credits.id>}` — a propósito, porque el prefijo `regalo-`
+ * no se podría leer de vuelta y el cobro llegaría al webhook SIN sujeto (el
+ * regalo cobrado y sin activar, con 200 y sin ruido). La etiqueta miente y no se
+ * puede arreglar aquí: se arregla no creyéndosela. Quien reciba este `ref` tiene
+ * que preguntarle a la base a cuál de las dos tablas pertenece el uuid
+ * —`sujetoDelCobro` en este archivo, `regaloDelCobro()` en
+ * `api/webhooks/dlocalgo`— y nunca dar por hecho que hay una fila de `payments`
+ * detrás.
  */
 const UUID = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 const RE_ORDEN = new RegExp(`^(booking|order)-(${UUID})`);
@@ -199,9 +210,10 @@ function caducidadRelativa(expiresAt: number): { expiration_type: "MINUTES"; exp
 /**
  * DESAJUSTE 4 · DÓNDE SE RECUERDA EL COBRO ABIERTO.
  *
- * En `payments.provider_payment_id` / `orders.provider_payment_id`, que ya
- * existen y que con Stripe sella el webhook. Aquí hay que sellarlo ANTES, al
- * crear, y el motivo es que no hay otra forma de reencontrar el cobro:
+ * En `payments.provider_payment_id`, `orders.provider_payment_id` o
+ * `credits.provider_payment_id`, que ya existen y que con Stripe sella el
+ * webhook. Aquí hay que sellarlo ANTES, al crear, y el motivo es que no hay
+ * otra forma de reencontrar el cobro:
  *
  *   · `GET /v1/payments` NO lista los cobros PENDING (comprobado: seis cobros
  *     creados, `totalElements: 0`);
@@ -211,9 +223,55 @@ function caducidadRelativa(expiresAt: number): { expiration_type: "MINUTES"; exp
  * Así que la memoria es nuestra o no hay memoria. Sin ella, cada recarga del
  * checkout —que desde D-2 (§20.14) monta el cobro al LLEGAR, no al pulsar—
  * abriría un cobro nuevo en dLocal.
+ *
+ * ── 🎁 SON TRES TABLAS Y NO DOS, Y ESO NO SE VE EN EL TIPO ──────────────────
+ *
+ * `CobroRef` tiene dos variantes; la plataforma tiene TRES sujetos de cobro. El
+ * tercero es el REGALO (`20260912110000`), que **no crea reserva ninguna** y
+ * vive entero en `credits`: no tiene fila en `payments`, ni `booking_id`, ni
+ * pedido. Y viaja por el puerto disfrazado de `{tipo:'booking', id:credits.id}`
+ * porque lo único que `refDeOrdenExterna` sabe leer de vuelta del `order_id` es
+ * `^(booking|order)-<uuid>` — la costura está escrita en `api/pagos/checkout`
+ * («🔴 `tipo:"booking"` CON EL ID DE UN CRÉDITO»).
+ *
+ * 🔴 O SEA QUE `tipo: 'booking'` NO DICE EN QUÉ TABLA MIRAR, y darlo por hecho
+ * era el fallo: `payments` filtrado por `booking_id = <credits.id>` devuelve
+ * **cero filas sin quejarse**, así que la versión anterior leía «no hay cobro
+ * previo» para TODO regalo y `sellarRef` actualizaba cero filas creyendo que
+ * sellaba. Medible con dos teclas: recargar `/regalar/<id>/pagar` abría un cobro
+ * NUEVO en dLocal con el anterior vivo y pagable. Con Stripe no se nota porque
+ * allí la memoria es la clave de idempotencia, determinista por sujeto.
  */
-async function refGuardada(ref: CobroRef): Promise<string | null> {
+type SujetoCobro =
+  /** `id` es `orders.id`. Se sella en el pedido y en las `payments` de sus líneas. */
+  | { tabla: "orders"; id: string }
+  /** `id` es `bookings.id`. La memoria vive en `payments.booking_id`, que es UNIQUE. */
+  | { tabla: "payments"; id: string }
+  /** 🎁 `id` es `credits.id`. ⚠️ Aquí NO se escribe con un `update`: ver `sellarRef`. */
+  | { tabla: "credits"; id: string };
+
+/**
+ * De qué sujeto es este cobro **y** cuál es su sello, en el mismo viaje.
+ *
+ * ── POR QUÉ LAS DOS CONSULTAS VAN EN PARALELO Y NO EN CASCADA ───────────────
+ * Un uuid es de `payments` o de `credits`, nunca de las dos. Se podría
+ * preguntar primero por la reserva y caer a `credits` solo cuando no hay fila:
+ * dejaría el camino común en UNA consulta y le cobraría un viaje de más a cada
+ * regalo. Van juntas a propósito, con el criterio de la casa —lo que se mide es
+ * la PROFUNDIDAD de la cascada, no cuántas consultas hay—: así los dos sujetos
+ * cuestan **un salto**, el regalo no paga peaje por ser el raro, y la pregunta
+ * «¿de quién es este uuid?» se contesta con las dos respuestas delante en vez
+ * de deducirla de un silencio. El precio es una consulta indexada de más por
+ * checkout abierto; el fallo que evita es un segundo cargo real.
+ *
+ * El pedido no entra en el reparto: `tipo:'order'` solo lo produce
+ * `api/pagos/checkout` para una fila de `orders` y un regalo nunca viaja así.
+ */
+async function sujetoDelCobro(
+  ref: CobroRef,
+): Promise<{ sujeto: SujetoCobro; guardada: string | null }> {
   const admin = createAdminClient();
+
   if (ref.tipo === "order") {
     const { data, error } = await admin
       .from("orders")
@@ -224,15 +282,102 @@ async function refGuardada(ref: CobroRef): Promise<string | null> {
     // `service_role` puede faltarle un grant y eso muerde en TIEMPO DE
     // EJECUCIÓN. Confundirlo con «no hay cobro previo» abriría un cobro nuevo
     // en cada recarga sin que nadie se entere.
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(`no se pudo leer el pedido ${ref.id}: ${error.message}`);
+    if (!data) throw new Error(sinSujeto(ref.id, "el pedido no existe"));
+    return { sujeto: { tabla: "orders", id: ref.id }, guardada: data.provider_payment_id };
+  }
+
+  const [enPagos, enRegalos] = await Promise.all([
+    admin.from("payments").select("provider_payment_id").eq("booking_id", ref.id).maybeSingle(),
+    // `source = 'gift'` y no un id pelado: `credits` también guarda los créditos
+    // de referido y los de reembolso, y ésos NUNCA son sujeto de cobro. Es el
+    // mismo predicado con el que el webhook los busca.
+    admin
+      .from("credits")
+      .select("provider_payment_id")
+      .eq("id", ref.id)
+      .eq("source", "gift")
+      .maybeSingle(),
+  ]);
+
+  // ⚠️ LOS DOS `error` SE MIRAN, y aquí la regla de oro 10 tiene premio gordo:
+  // leer «no hay referencia guardada» cuando lo que hubo fue un `permission
+  // denied` no deja una pantalla en blanco, **abre un segundo cobro real** con
+  // el primero vivo. Relanzar tumba el checkout, que es el lado del que se
+  // vuelve.
+  if (enPagos.error) {
+    throw new Error(`no se pudo leer el cobro de la reserva ${ref.id}: ${enPagos.error.message}`);
+  }
+  if (enRegalos.error) {
+    throw new Error(`no se pudo leer el cobro del regalo ${ref.id}: ${enRegalos.error.message}`);
+  }
+
+  if (enPagos.data && enRegalos.data) {
+    // No puede pasar —son uuid de dos tablas distintas— y justo por eso
+    // comprobarlo es gratis. Si pasara, elegir uno sería apuntar el cobro de un
+    // sujeto al dinero de otro: no se elige, se para.
+    throw new Error(
+      `${ref.id} existe a la vez como payments.booking_id y como credits.id (regalo): no se ` +
+        `puede decidir de quién es el cobro y no se abre ninguno`,
+    );
+  }
+  if (enPagos.data) {
+    return { sujeto: { tabla: "payments", id: ref.id }, guardada: enPagos.data.provider_payment_id };
+  }
+  if (enRegalos.data) {
+    return {
+      sujeto: { tabla: "credits", id: ref.id },
+      guardada: enRegalos.data.provider_payment_id,
+    };
+  }
+
+  // Ni reserva ni regalo. NO se sigue adelante devolviendo «no hay sello»: eso
+  // abriría un cobro que después `sellarRef` no podría escribir en ningún sitio,
+  // o sea un cobro vivo en dLocal que esta base de datos no conoce y que nadie
+  // puede reencontrar (no se lista, no se busca por `order_id`). Es exactamente
+  // el huérfano que el orden «crear → sellar → devolver» existe para impedir.
+  throw new Error(sinSujeto(ref.id, "no está ni en payments (booking_id) ni en credits (regalo)"));
+}
+
+/** El mismo mensaje para los dos sujetos que no se encuentran, con su porqué. */
+function sinSujeto(id: string, motivo: string): string {
+  return `el sujeto ${id} no se pudo resolver (${motivo}): no habría dónde recordar el cobro, así que no se abre ninguno`;
+}
+
+/**
+ * Relee el sello de un sujeto YA resuelto.
+ *
+ * Lo usa el paso 3 de `charge` —el choque del `5009`—, donde la pregunta no es
+ * de quién es el cobro (eso ya se sabe desde el paso 1) sino si alguien lo ha
+ * sellado entre medias. Un viaje y sin repetir la resolución: el sujeto no
+ * cambia de tabla a mitad de un checkout.
+ */
+async function refGuardada(sujeto: SujetoCobro): Promise<string | null> {
+  const admin = createAdminClient();
+  if (sujeto.tabla === "orders") {
+    const { data, error } = await admin
+      .from("orders")
+      .select("provider_payment_id")
+      .eq("id", sujeto.id)
+      .maybeSingle();
+    if (error) throw new Error(`no se pudo releer el sello del pedido ${sujeto.id}: ${error.message}`);
+    return data?.provider_payment_id ?? null;
+  }
+  if (sujeto.tabla === "credits") {
+    const { data, error } = await admin
+      .from("credits")
+      .select("provider_payment_id")
+      .eq("id", sujeto.id)
+      .maybeSingle();
+    if (error) throw new Error(`no se pudo releer el sello del regalo ${sujeto.id}: ${error.message}`);
     return data?.provider_payment_id ?? null;
   }
   const { data, error } = await admin
     .from("payments")
     .select("provider_payment_id")
-    .eq("booking_id", ref.id)
+    .eq("booking_id", sujeto.id)
     .maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(`no se pudo releer el sello de la reserva ${sujeto.id}: ${error.message}`);
   return data?.provider_payment_id ?? null;
 }
 
@@ -241,14 +386,71 @@ async function refGuardada(ref: CobroRef): Promise<string | null> {
  * Stripe y por la misma razón: `enqueue_refund` (X-01) copia
  * `payments.provider_payment_id` a la cola, y una línea sin sellar se encolaría
  * sin referencia y moriría como «sin provider_payment_id».
+ *
+ * Tres sujetos, tres puertas, y **una de ellas no es un `update`**: el regalo se
+ * sella por RPC porque a `service_role` no se le dio permiso de escritura sobre
+ * `credits`. El detalle, abajo.
  */
-async function sellarRef(ref: CobroRef, providerRef: string): Promise<void> {
+async function sellarRef(sujeto: SujetoCobro, providerRef: string): Promise<void> {
   const admin = createAdminClient();
-  if (ref.tipo === "order") {
+
+  // ── 🎁 EL REGALO NO SE SELLA CON UN `update`, Y NO ES CUESTIÓN DE ESTILO ───
+  //
+  // `service_role` tiene sobre `credits` **solo `select`**. Comprobado contra
+  // dev antes de escribir esta rama (`information_schema.role_table_grants` +
+  // `column_privileges`): `credits` → SELECT y nada más, **ni siquiera un grant
+  // por columnas** como el que sí tienen `payments` (`provider_payment_id`,
+  // `provider_metadata`) y `orders` (`provider_payment_id`, `status`). Es
+  // deliberado (hallazgo S7 de `20260912110000`).
+  //
+  // O sea que un `update` directo aquí no fallaría en el build ni en el
+  // typecheck: sería un `permission denied` EN TIEMPO DE EJECUCIÓN —regla de oro
+  // 9— y justo DESPUÉS de haber creado un cobro real en dLocal, que es el peor
+  // momento posible para descubrirlo.
+  //
+  // La puerta es `marcar_cobro_regalo`: `security definer`, con `execute` para
+  // `service_role`, y con el cerrojo dentro (solo escribe mientras el regalo
+  // siga en 'pending_payment').
+  if (sujeto.tabla === "credits") {
+    const { data: sellada, error } = await admin.rpc("marcar_cobro_regalo", {
+      p_credit_id: sujeto.id,
+      p_provider_payment_id: providerRef,
+      // ⚠️ `null` EXPLÍCITO, no omitido: supabase-js no serializa `undefined` y
+      // un argumento de menos es cómo se llega al `PGRST203` de la regla de oro
+      // 12 el día que esa función gane una sobrecarga (hoy solo tiene una firma,
+      // comprobado en dev).
+      //
+      // Y va vacío a propósito: el rastro del checkout —quién cobró, qué
+      // candidatos fallaron— lo escribe `api/pagos/checkout`, que es el único
+      // que conoce la cadena. El `||` de la RPC es un merge de PRIMER NIVEL, así
+      // que mandar desde aquí un `checkout` a medias le pisaría el suyo entero.
+      p_metadata: null,
+    });
+    if (error) {
+      throw new Error(
+        `no se pudo sellar ${providerRef} en el regalo ${sujeto.id}: ${error.message}`,
+      );
+    }
+    if (sellada !== true) {
+      // La RPC solo escribe sobre un regalo 'pending_payment', así que un
+      // `false` es que dejó de estarlo mientras se abría este cobro: lo pagó
+      // otra pestaña, lo revocó el comprador o lo barrió `caducar_creditos()`.
+      // Acabamos de crear un cargo para algo que ya no espera pago Y que no
+      // podemos sellar — las dos mitades del huérfano a la vez. Se tumba el
+      // checkout, exactamente igual que cuando falla el sello de una reserva.
+      throw new Error(
+        `el regalo ${sujeto.id} ya no estaba pendiente de pago al sellar ${providerRef}: ` +
+          `queda un cobro abierto en dLocal que no le corresponde`,
+      );
+    }
+    return;
+  }
+
+  if (sujeto.tabla === "orders") {
     const { data: lineas, error: eLineas } = await admin
       .from("bookings")
       .select("id")
-      .eq("order_id", ref.id);
+      .eq("order_id", sujeto.id);
     if (eLineas) throw new Error(eLineas.message);
 
     const { error } = await admin
@@ -260,14 +462,15 @@ async function sellarRef(ref: CobroRef, providerRef: string): Promise<void> {
     const { error: eOrden } = await admin
       .from("orders")
       .update({ provider_payment_id: providerRef })
-      .eq("id", ref.id);
+      .eq("id", sujeto.id);
     if (eOrden) throw new Error(eOrden.message);
     return;
   }
+
   const { error } = await admin
     .from("payments")
     .update({ provider_payment_id: providerRef })
-    .eq("booking_id", ref.id);
+    .eq("booking_id", sujeto.id);
   if (error) throw new Error(error.message);
 }
 
@@ -1474,9 +1677,11 @@ export const dlocalProvider: PspProvider = {
    * `idempotencyKey` da el mismo cobro». Stripe lo cumple solo. dLocal no tiene
    * con qué, así que se cumple aquí, en tres pasos:
    *
-   *   1. ¿Hay ya un `DP-…` sellado para este sujeto? Se le pregunta a la API por
-   *      él. Si sigue `PENDING`, se devuelve SU `redirect_url` y no se crea
-   *      nada. Este es el camino normal de una recarga.
+   *   1. ¿Hay ya un `DP-…` sellado para este sujeto? Se resuelve primero DE QUÉ
+   *      sujeto se trata —reserva, pedido o regalo, que son tres tablas y no
+   *      dos: ver `sujetoDelCobro`— y se le pregunta a la API por él. Si sigue
+   *      `PENDING`, se devuelve SU `redirect_url` y no se crea nada. Este es el
+   *      camino normal de una recarga, y el que estaba roto para el regalo.
    *   2. Si no hay, se crea con `order_id` = la clave (determinista por
    *      reserva) y se sella ANTES de devolver nada.
    *   3. Si aun así vuelve `5009 Order id is duplicated` —dos pestañas creando
@@ -1493,8 +1698,14 @@ export const dlocalProvider: PspProvider = {
    * checkout a propósito.
    */
   async charge(input: ChargeInput): Promise<ChargeResult> {
-    // ── 1 · ¿ya hay uno abierto? ─────────────────────────────────────────────
-    const guardada = await refGuardada(input.ref);
+    // ── 1 · ¿de quién es este cobro, y ya hay uno abierto? ───────────────────
+    //
+    // Las dos preguntas en el mismo viaje, y en este orden: sin saber si el
+    // sujeto es una reserva, un pedido o un REGALO no se puede ni leer el sello
+    // ni escribirlo —viven en tres tablas distintas y la del regalo ni siquiera
+    // admite `update`—. `sujeto` se resuelve UNA vez y se reutiliza en el paso 3
+    // y en el sellado: no cambia de tabla a mitad de un checkout.
+    const { sujeto, guardada } = await sujetoDelCobro(input.ref);
     if (guardada) {
       try {
         const previo = await recuperarPago(guardada);
@@ -1567,7 +1778,7 @@ export const dlocalProvider: PspProvider = {
     const falloAlCrear = async (e: unknown): Promise<ChargeResult> => {
       // ── 3 · el choque ──────────────────────────────────────────────────────
       if (e instanceof DlocalGoError && e.esOrderIdDuplicado) {
-        const reintento = await refGuardada(input.ref);
+        const reintento = await refGuardada(sujeto);
         if (reintento) {
           const previo = await recuperarPago(reintento);
           // Mismo cerrojo que arriba, y aquí importa igual: que el `order_id`
@@ -1668,7 +1879,10 @@ export const dlocalProvider: PspProvider = {
     }
 
     // SELLAR ANTES DE DEVOLVER. Si esto lanza, el checkout falla — a propósito.
-    await sellarRef(input.ref, pago.id);
+    // 🎁 Con el sujeto ya resuelto: si es un regalo, esto va por
+    // `marcar_cobro_regalo` y no por un `update` que se comería un
+    // `permission denied`.
+    await sellarRef(sujeto, pago.id);
 
     return await salidaDeCobro(pago);
   },
@@ -1870,6 +2084,13 @@ export async function eventoDePago(paymentId: string): Promise<{
       id,
       rawType: `payment.${pago.status.toLowerCase()}`,
       kind,
+      // ⚠️ 🎁 Y AQUÍ `tipo:'booking'` PUEDE SER UN REGALO. Sale tal cual del
+      // `order_id`, así que hereda la costura de `refDeOrdenExterna`: el uuid es
+      // de `bookings` o de `credits` y esta función no lo sabe ni puede
+      // averiguarlo sin consultar. El Route Handler lo resuelve al revés y mejor
+      // —`credits.provider_payment_id = <DP-…>` primero, el sujeto después—, y
+      // por eso este campo se queda como está: quien lo use sin preguntar es
+      // quien tiene el fallo.
       ref: refDeOrdenExterna(pago.order_id),
       // En dLocal el cargo y el cobro son EL MISMO objeto: no hay un `pi_`
       // aparte de la Session. `DP-…` es lo que se sella y lo que se reembolsa.

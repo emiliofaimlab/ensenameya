@@ -94,6 +94,18 @@ export function explicarEnEspera(e: EnEspera): string[] {
   const fuera: string[] = [];
 
   if (e.saldo_sin_liquidar) {
+    /**
+     * ⚠️ ESTE IMPORTE SE QUEDA EN SU MONEDA, y NO pasa por `<Precio>` ni por
+     * `textosDePrecio()` como el resto de la app desde el 11-sep-2026.
+     *
+     * No es un olvido del barrido: es que aquí el dinero es del TUTOR, y la
+     * moneda de un tutor sale de su país de cobro (`payout_country_rules`, vía
+     * `monedaDeCobroDelTutor`), no de dónde esté mirando ahora mismo. Las dos
+     * preguntas se separaron a propósito en el dictado del 9-sep —el cobro lo
+     * decide el país del alumno, el payout el del tutor— y convertir esto con
+     * la geo del visitante le enseñaría euros a un tutor mexicano de viaje por
+     * España, en la pantalla donde está dando de baja su cuenta.
+     */
     const importe =
       e.saldo_moneda != null
         ? formatMoney(e.saldo_sin_liquidar, e.saldo_moneda)

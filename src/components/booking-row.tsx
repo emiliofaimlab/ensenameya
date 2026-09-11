@@ -35,7 +35,14 @@ export function BookingRow({
   title: string;
   when: string | null;
   status: string;
-  note?: string;
+  /**
+   * Ensanchado de `string` a `ReactNode` (11-sep-2026): aquí es donde va el
+   * importe de la reserva, y desde que el precio se pinta también en la moneda
+   * del visitante eso es un componente, no una cadena. Con `string` la lista de
+   * reservas tenía que precalcular un `Map` de textos con el gemelo de servidor
+   * para lo que el resto de la app resuelve con `<PrecioEnLinea>`.
+   */
+  note?: React.ReactNode;
   action?: React.ReactNode;
   /** tz IANA del usuario: es server component, sin ella saldría la hora del servidor (R24-12). */
   timeZone: string;

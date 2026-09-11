@@ -3,17 +3,23 @@
 // y node no resuelve el alias `@/`. Mismo motivo por el que
 // `email-templates.ts` importa `./catalog/format.ts`.
 import { bookingTotal, SESION_INDIVIDUAL } from "../booking.ts";
+import { formatEnMoneda } from "../dinero.ts";
 import type { Database } from "../database.types.ts";
 
 type PricingModel = Database["public"]["Enums"]["pricing_model"];
 
-/** Monto en unidades menores → texto de moneda. */
+/**
+ * Monto en unidades menores → texto de moneda.
+ *
+ * Delega el exponente en `lib/dinero.ts`. Antes dividía entre 100 SIEMPRE con
+ * un `ponytail:` que decía «revisar si entran monedas de 0 decimales»: entraron
+ * el 11-sep-2026, cuando los precios pasaron a pintarse también en la moneda
+ * del visitante. Cinco mil pesos chilenos son `5000`, y dividirlos enseñaba
+ * «50,00 CLP» — un error de dos órdenes de magnitud en la dirección que nadie
+ * reporta, la de menos.
+ */
 export function formatMoney(amountMinor: number, currency: string): string {
-  // ponytail: asume 2 decimales (USD/EUR/…). Revisar si entran monedas de 0
-  // decimales (JPY, CLP) — ahí el divisor cambia.
-  return new Intl.NumberFormat("es", { style: "currency", currency }).format(
-    amountMinor / 100,
-  );
+  return formatEnMoneda(amountMinor, currency);
 }
 
 /** Etiqueta de precio según el modelo (RN-10). */
@@ -139,6 +145,16 @@ export function compactCount(n: number): string {
 export type PriceDisplay = {
   /** La cifra grande: lo que cuesta reservar UNA vez. */
   amount: string;
+  /**
+   * El MISMO importe que `amount`, en unidades menores y sin formatear.
+   *
+   * Existe desde el 11-sep-2026 porque `<Precio>` necesita convertirlo a la
+   * moneda del visitante, y de una cadena ya formateada no se puede. Se
+   * devuelve aquí, y no se recalcula en la superficie, justamente para que la
+   * cifra convertida y la cifra en dólares no puedan salir de dos cuentas
+   * distintas — que es el fallo RV-08 que este bloque lleva evitando.
+   */
+  amountMinor: number;
   /** La línea pequeña de debajo: de dónde sale esa cifra. */
   note: string;
   /**
@@ -178,23 +194,25 @@ export function priceDisplay(p: {
   switch (p.pricingModel) {
     case "per_hour":
       if (!p.sessionDurationMin) {
-        return { amount: tarifa, note: "por hora", isTotal: false };
+        return { amount: tarifa, amountMinor: p.priceAmount, note: "por hora", isTotal: false };
       }
       // La duración no se repite aquí: la tarjeta y el panel ya la enseñan
       // ("1 × 90 min"), y en un pie de 11px cada palabra cuesta.
       return {
         amount: formatMoney(bookingTotal(p), p.currency),
+        amountMinor: bookingTotal(p),
         note: `${tarifa} / hora`,
         isTotal: true,
       };
     case "per_session":
-      return { amount: tarifa, note: "por sesión", isTotal: true };
+      return { amount: tarifa, amountMinor: p.priceAmount, note: "por sesión", isTotal: true };
     case "per_package": {
       // El precio del paquete YA es el total de la reserva: `create_booking`
       // cobra `price_amount` una vez y agenda las N sesiones.
       const n = p.packageNumSessions ?? 1;
       return {
         amount: tarifa,
+        amountMinor: p.priceAmount,
         note: n > 1 ? `paquete · ${n} sesiones` : "paquete",
         isTotal: true,
       };

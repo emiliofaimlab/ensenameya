@@ -6,7 +6,12 @@ import { getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
 import { aceptaAntesDe, formatSessionTime } from "@/lib/booking";
-import type { TutorBalance } from "@/lib/payouts";
+import {
+  APROXIMADO,
+  enMonedaLocal,
+  monedaDeCobroDelTutor,
+  type TutorBalance,
+} from "@/lib/payouts";
 import { roomOpen } from "@/lib/room-window";
 import { cn } from "@/lib/utils";
 import { studentsOfTutor } from "./students";
@@ -169,6 +174,7 @@ export default async function TutorHomePage() {
     { data: preferencia },
     students,
     tier,
+    monedaDeCobro,
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
@@ -250,9 +256,28 @@ export default async function TutorHomePage() {
     // N-16: el nivel y el reparto. Sin migración: `tutor_tiers_select_own` ya
     // existía; lo que faltaba era enseñárselo al tutor.
     tutorTier(supabase, userId),
+    // 🔑 EN QUÉ MONEDA COBRA DE VERDAD, la misma pregunta que contesta
+    // `/tutor/payouts` y con la MISMA función: esta tarjeta pinta esos dos
+    // importes, y hasta el 11-sep-2026 los daba en dólares mientras la otra
+    // pantalla ya los daba en la moneda del tutor. Va DENTRO de este
+    // `Promise.all` —y no encadenada detrás de nada— porque no depende de
+    // ninguna de las otras: por dentro hace sus propias lecturas en paralelo y
+    // está memoizada con `cache()`, así que la petición la resuelve una vez.
+    monedaDeCobroDelTutor(userId),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
+  /**
+   * §5.2 · El par de monedas de «Tus ingresos», EN EL MISMO ORDEN que
+   * `/tutor/payouts`: arriba y en grande la moneda del tutor, debajo y en
+   * pequeño los dólares de los que sale (petición del cliente, 11-sep-2026).
+   *
+   * `null` —sin credencial de dLocal, país que ya cobra en USD, tutor que cobra
+   * por PayPal— y la cifra vuelve a ser el USD, sin segunda línea: exactamente
+   * lo que se pintaba antes. El porqué de cada caso, en `monedaDeCobroDelTutor`.
+   */
+  const localDisponible = enMonedaLocal(balance.available, monedaDeCobro);
+  const localRetencion = enMonedaLocal(balance.in_retention, monedaDeCobro);
   const firstName = profile?.profiles?.full_name?.split(" ")[0];
   const aviso = APPROVAL_PILL[approvalStatus];
 
@@ -696,9 +721,22 @@ export default async function TutorHomePage() {
               Tus ingresos
             </h2>
             <p className="mt-3 text-xs text-[#6b6b6b]">Disponible para cobrar</p>
-            <p className="mt-1 truncate text-[34px] leading-tight font-bold tracking-tight text-[#19191f] tabular-nums">
-              {moneyLine(balance.available)}
+            {/* ⚠️ EL «≈» Y EL AVISO DE «APROXIMADO» SUBEN CON LA CIFRA, igual
+                que en el tile de `/tutor/payouts`: si la estimación pasa a ser
+                el número principal, lo que dice que es una estimación tiene que
+                viajar con ella; si no, el tutor lee como exacto un importe que
+                nadie le ha prometido. */}
+            <p
+              title={localDisponible ? APROXIMADO : undefined}
+              className="mt-1 truncate text-[34px] leading-tight font-bold tracking-tight text-[#19191f] tabular-nums"
+            >
+              {localDisponible ?? moneyLine(balance.available)}
             </p>
+            {localDisponible ? (
+              <p className="mt-0.5 text-[13px] tabular-nums text-[#6b6b6b]">
+                {moneyLine(balance.available)}
+              </p>
+            ) : null}
             {/* La fecha del lote solo se anuncia cuando hay algo que pagar.
                 Con saldo cero la tarjeta decía «Disponible para cobrar · — ·
                 Se paga el lunes 14 de septiembre», o sea que le iban a pagar un
@@ -713,9 +751,25 @@ export default async function TutorHomePage() {
               </p>
             ) : null}
             <dl className="mt-3.5 flex flex-col gap-2">
+              {/* El mismo par invertido, pero EN UNA LÍNEA: `PanelRow` pone
+                  rótulo y valor a los lados con `items-baseline`, así que una
+                  segunda línea dentro del `<dd>` descuadraría la fila con las
+                  de debajo. Local delante, USD detrás y en gris — el orden es
+                  el de arriba, que es lo que se pedía. */}
               <PanelRow
                 label="En camino (se libera en 7 días)"
-                value={moneyLine(balance.in_retention)}
+                value={
+                  localRetencion ? (
+                    <span title={APROXIMADO} className="tabular-nums">
+                      {localRetencion}{" "}
+                      <span className="font-normal text-[#6b6b6b]">
+                        {moneyLine(balance.in_retention)}
+                      </span>
+                    </span>
+                  ) : (
+                    moneyLine(balance.in_retention)
+                  )
+                }
               />
               {/* TODO · DP-3 — «Ganado este mes» necesita el BRUTO del mes y
                   `tutor_balance` solo devuelve netos por moneda, sin ventana

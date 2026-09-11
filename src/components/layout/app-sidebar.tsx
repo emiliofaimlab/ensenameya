@@ -10,9 +10,11 @@ import {
   FlagIcon,
   BookOpenIcon,
   CalendarPlusIcon,
+  ChevronDownIcon,
   CreditCardIcon,
   FolderTreeIcon,
   GiftIcon,
+  HeartHandshakeIcon,
   HomeIcon,
   LayoutDashboardIcon,
   LogOutIcon,
@@ -41,9 +43,21 @@ export type SidebarItem = {
   /** Prefijo extra que también lo marca activo (detalles que cuelgan de otra ruta). */
   alsoMatch?: string;
   /**
-   * G-01 · Subniveles, **siempre abiertos** (nunca un acordeón: el paquete
-   * aprobado los quiere a la vista en todas las pantallas del panel, para que
-   * el menú diga de un vistazo qué hay dentro de cada sección).
+   * G-01 · Subniveles, **en acordeón**: abierto el grupo que contiene la ruta
+   * activa, cerrados los demás, y cualquiera se pliega o despliega con el
+   * chevron de su fila.
+   *
+   * ⚠️ AQUÍ PONÍA «siempre abiertos (nunca un acordeón)», y no era un descuido:
+   * era la decisión G-01 del paquete aprobado, que los quería a la vista en
+   * todas las pantallas para que el menú dijera de un vistazo qué hay dentro de
+   * cada sección. **El cliente la reabrió el 11-sep-2026** al ver el precio: en
+   * el tutor son seis grupos abiertos a la vez, o sea veinte filas en una
+   * columna de 232 px, y la sección en la que estás deja de destacar entre
+   * ellas.
+   *
+   * Lo que se temía perder al cerrarlos NO incluye el trabajo pendiente: el
+   * contador de la categoría ya es la SUMA de los de sus hijos (G-02), así que
+   * un grupo cerrado sigue diciendo cuánto hay dentro.
    *
    * Cada uno es una de dos cosas, y el código las distingue por el `#`:
    *   · un ANCLA al bloque de la propia pantalla (`/tutor#por-atender`) — no se
@@ -55,7 +69,9 @@ export type SidebarItem = {
    *
    * ⚠️ Solo se pintan de 768 en adelante. Por debajo el menú es una tira de una
    * línea que se desplaza (decisión de Jose del 9-sep): meter ahí un segundo
-   * nivel sería volver a las tres filas que se acaban de quitar.
+   * nivel sería volver a las tres filas que se acaban de quitar. Y por lo mismo
+   * **el acordeón tampoco existe por debajo de 768**: no hay nada que plegar,
+   * así que el chevron ni se pinta.
    */
   children?: { href: string; label: string }[];
   /**
@@ -96,6 +112,15 @@ const STUDENT_ITEMS: Item[] = [
   { href: "/agendar", label: "Agendar", icon: CalendarPlusIcon },
   { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
+  // «Regalar una mentoría»: comprar para OTRA persona, que elige ella el día y
+  // la hora. No duplica «Agendar» —eso es reservar para uno mismo— ni «Invita y
+  // gana», que es el programa de referidos. Icono distinto del regalo a
+  // propósito: `GiftIcon` ya es el de la fila de abajo y dos regalos seguidos en
+  // la misma columna se leen como la misma cosa.
+  //
+  // Pantalla COMPARTIDA, igual que «Invita y gana»: regalar no es una acción de
+  // alumno, así que la entrada va también en `TUTOR_ITEMS`.
+  { href: "/regalar", label: "Regalar", icon: HeartHandshakeIcon },
   // Referidos v2 · «Invita y gana» ya no es un iframe de Referral Factory, es
   // una pantalla nuestra — y la MISMA para alumno y para tutor: dentro se
   // pintan las campañas visibles que le tocan a cada uno, así que el menú no
@@ -203,6 +228,12 @@ export const TUTOR_ITEMS: Item[] = [
       { href: "/account#avisos", label: "Avisos" },
     ],
   },
+  // La misma pantalla que ve el alumno, y por el mismo motivo que «Invita y
+  // gana»: regalar una mentoría no es una acción de alumno. Sin esta entrada,
+  // un tutor que entra a `/regalar` desde su panel se queda con el menú de
+  // tutor **entero apagado** (`matchLength` devuelve -1 en todos), o sea con un
+  // menú que no dice dónde estás, que es lo único que un menú tiene que hacer.
+  { href: "/regalar", label: "Regalar", icon: HeartHandshakeIcon },
   // Referidos v2 · «Invita y gana» ya no es un iframe de Referral Factory, es
   // una pantalla nuestra — y la MISMA para alumno y para tutor: dentro se
   // pintan las campañas visibles que le tocan a cada uno, así que el menú no
@@ -382,6 +413,34 @@ export function AppSidebar({
   const [signOutOpen, setSignOutOpen] = useState(false);
 
   /**
+   * G-01 (reabierta el 11-sep-2026) · QUÉ GRUPOS ESTÁN ABIERTOS.
+   *
+   * Por defecto, el que contiene la ruta activa. Y eso **no es estado**: sale
+   * de `active`, que ya se calcula por `matchLength` y que ya cuenta a los
+   * hijos que son ruta propia. Aquí solo vive lo que el usuario ha plegado o
+   * desplegado A MANO en la pantalla en la que está.
+   *
+   * ⚠️ POR ESO LO GUARDADO LLEVA PEGADA SU RUTA, y no es rebuscado: es lo que
+   * quita el brinco. Vaciar el mapa en un `useEffect` al cambiar de pantalla
+   * pinta primero el estado viejo y lo corrige después —el salto al hidratar
+   * que el cliente lleva un correo pidiendo que se quite—, y hacerlo durante el
+   * render es escribir estado en el render. Comparando la ruta, lo que el
+   * usuario tocó en otra pantalla simplemente deja de aplicar, y el estado
+   * inicial sale del `pathname` EN EL PRIMER RENDER: así el esqueleto
+   * (`tutor/loading.tsx` monta este MISMO menú) y la pantalla de verdad pintan
+   * lo mismo.
+   *
+   * `usePathname()` no incluye `#` ni `?`, así que pulsar un ancla o un filtro
+   * —que es lo que son casi todos los hijos— no cierra lo que acabas de abrir.
+   */
+  const [plegados, setPlegados] = useState<{
+    ruta: string;
+    mapa: Record<string, boolean>;
+  }>({ ruta: pathname, mapa: {} });
+  const aMano: Record<string, boolean> =
+    plegados.ruta === pathname ? plegados.mapa : {};
+
+  /**
    * La fila de móvil trae a la vista la sección en la que estás.
    *
    * Sin esto, el panel de admin —hoy catorce secciones; eran once, y entonces
@@ -487,92 +546,164 @@ export function AppSidebar({
           // —dice dónde estás dentro del menú— y `active` sigue igual. Lo que
           // se corrige es solo lo que se ANUNCIA.
           const hijoActivo = hijos.some((c) => esSubnivelActivo(c.href, pathname));
+          // Abierto el grupo de la ruta activa; lo que el usuario haya tocado
+          // a mano en esta pantalla manda por encima. Ver `plegados`.
+          const abierto = aMano[href] ?? active;
+          const idSub = `sub-${href.replace(/[^a-z0-9]+/gi, "-")}`;
           return (
             <li key={href}>
-              <Link
-                href={href}
-                ref={active ? activo : undefined}
-                aria-current={active && !hijoActivo ? "page" : undefined}
-                aria-label={
-                  pendientes > 0
-                    ? `${label}, ${pendientes} ${
-                        pendientes === 1
-                          ? (item.contadorSufijo?.uno ?? "pendiente")
-                          : (item.contadorSufijo?.varios ?? "pendientes")
-                      }`
-                    : undefined
-                }
-                className={cn(
-                  // CHIP (base, <768). 40 de alto y no los 38 del Figma: es el
-                  // mínimo táctil del proyecto, y en una tira que se desplaza
-                  // con el pulgar se nota. `whitespace-nowrap` porque en una
-                  // fila que no envuelve una etiqueta de dos palabras partida
-                  // en dos líneas descuadra el alto de toda la tira.
-                  "flex min-h-10 items-center gap-2.5 rounded-[14px] border px-3.5 py-2 text-[13px] leading-5 whitespace-nowrap transition-colors",
-                  // COLUMNA (≥768): `nav-item` 148x41 / 172x41 del Figma tablet,
-                  // pad10/12 y r8. `min-h` en vez del `h-[41px]` de antes: la
-                  // altura sale igual (10+20+10 = 40 → 41 por el mínimo) pero
-                  // una etiqueta que no quepa envuelve en vez de desbordar, que
-                  // es justo lo que avisaban los comentarios de arriba y lo que
-                  // el propio Figma hace con "Configuración de perfil" (148x62).
-                  "md:min-h-[41px] md:w-full md:rounded-lg md:border-0 md:px-3 md:py-2.5",
-                  // 13px hasta 1023 y 14 a partir de ahí. El Figma pide 14/21 en
-                  // la columna de tablet, pero con 168 px de columna solo quedan
-                  // 120 para la etiqueta y "Métodos de pago" mide 123 a 14/400
-                  // (medido con `measureText` en Poppins): a 13 mide 115 y entra
-                  // en una línea. El escritorio se restituye con `lg:text-sm`.
-                  "lg:text-sm",
-                  active
-                    ? // El borde va del color del relleno para que activo e
-                      // inactivo midan lo mismo: el activo del Figma no tiene
-                      // trazo y sin esto la fila de chips bailaría 2 px.
-                      "border-brand bg-brand font-semibold text-white"
-                    : "border-[#e0e0e0] bg-card text-[#666666] hover:bg-muted hover:text-foreground",
-                )}
-              >
-                {/* El Figma no pinta iconos en NINGÚN menú de panel, ni en los
-                    chips de 390 ni en la columna de 768; son de la maqueta de
-                    escritorio (EP-22). Se esconden hasta `lg:` porque además son
-                    los 26 px que le faltan a la columna de 168 para que las
-                    etiquetas quepan en una línea. */}
-                <Icon className="size-4 shrink-0 max-lg:hidden" />
-                {label}
-                {/* La cuenta, al final de la fila. `ml-auto` la empuja a la
-                    derecha en la columna (≥768) y no hace nada en el chip,
-                    donde el ancho lo marca el contenido.
+              {/* ⚠️ `md:relative` Y NO `relative` A SECAS. El chevron se ancla
+                  aquí, pero por debajo de 768 no existe (`max-md:hidden`) y un
+                  envoltorio posicionado sí tendría consecuencia: pasaría a ser
+                  el `offsetParent` del enlace, y el `offsetLeft` con el que la
+                  tira centra la sección activa se volvería 0 — o sea que el
+                  menú de móvil dejaría de traerla a la vista. */}
+              <div className="md:relative">
+                <Link
+                  href={href}
+                  ref={active ? activo : undefined}
+                  aria-current={active && !hijoActivo ? "page" : undefined}
+                  aria-label={
+                    pendientes > 0
+                      ? `${label}, ${pendientes} ${
+                          pendientes === 1
+                            ? (item.contadorSufijo?.uno ?? "pendiente")
+                            : (item.contadorSufijo?.varios ?? "pendientes")
+                        }`
+                      : undefined
+                  }
+                  className={cn(
+                    // CHIP (base, <768). 40 de alto y no los 38 del Figma: es el
+                    // mínimo táctil del proyecto, y en una tira que se desplaza
+                    // con el pulgar se nota. `whitespace-nowrap` porque en una
+                    // fila que no envuelve una etiqueta de dos palabras partida
+                    // en dos líneas descuadra el alto de toda la tira.
+                    "flex min-h-10 items-center gap-2.5 rounded-[14px] border px-3.5 py-2 text-[13px] leading-5 whitespace-nowrap transition-colors",
+                    // COLUMNA (≥768): `nav-item` 148x41 / 172x41 del Figma tablet,
+                    // pad10/12 y r8. `min-h` en vez del `h-[41px]` de antes: la
+                    // altura sale igual (10+20+10 = 40 → 41 por el mínimo) pero
+                    // una etiqueta que no quepa envuelve en vez de desbordar, que
+                    // es justo lo que avisaban los comentarios de arriba y lo que
+                    // el propio Figma hace con "Configuración de perfil" (148x62).
+                    "md:min-h-[41px] md:w-full md:rounded-lg md:border-0 md:px-3 md:py-2.5",
+                    // El hueco del chevron, solo donde el chevron se pinta. El
+                    // contador va con `ml-auto`, así que se corre solo con él.
+                    hijos.length ? "md:pr-9" : undefined,
+                    // 13px hasta 1023 y 14 a partir de ahí. El Figma pide 14/21 en
+                    // la columna de tablet, pero con 168 px de columna solo quedan
+                    // 120 para la etiqueta y "Métodos de pago" mide 123 a 14/400
+                    // (medido con `measureText` en Poppins): a 13 mide 115 y entra
+                    // en una línea. El escritorio se restituye con `lg:text-sm`.
+                    "lg:text-sm",
+                    active
+                      ? // El borde va del color del relleno para que activo e
+                        // inactivo midan lo mismo: el activo del Figma no tiene
+                        // trazo y sin esto la fila de chips bailaría 2 px.
+                        "border-brand bg-brand font-semibold text-white"
+                      : "border-[#e0e0e0] bg-card text-[#666666] hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  {/* El Figma no pinta iconos en NINGÚN menú de panel, ni en los
+                      chips de 390 ni en la columna de 768; son de la maqueta de
+                      escritorio (EP-22). Se esconden hasta `lg:` porque además son
+                      los 26 px que le faltan a la columna de 168 para que las
+                      etiquetas quepan en una línea. */}
+                  <Icon className="size-4 shrink-0 max-lg:hidden" />
+                  {label}
+                  {/* La cuenta, al final de la fila. `ml-auto` la empuja a la
+                      derecha en la columna (≥768) y no hace nada en el chip,
+                      donde el ancho lo marca el contenido.
 
-                    ⚠️ `aria-hidden`, porque el número ya va en el `aria-label`
-                    del enlace: leído tal cual, "Tutores 8" suena a que el menú
-                    tiene ocho entradas. Con la etiqueta se anuncia "Tutores, 8
-                    pendientes", que es lo que es.
+                      ⚠️ `aria-hidden`, porque el número ya va en el `aria-label`
+                      del enlace: leído tal cual, "Tutores 8" suena a que el menú
+                      tiene ocho entradas. Con la etiqueta se anuncia "Tutores, 8
+                      pendientes", que es lo que es.
 
-                    `min-w` en vez de ancho fijo: "99+" son tres caracteres y
-                    una píldora cuadrada los cortaría. */}
-                {/* G-02 · círculo de 20 px NARANJA, el mismo de la campana:
-                    es lo que reclama atención.
-                    ⚠️ Y SIGUE NARANJA EN LA FILA ACTIVA. Aquí ponía
-                    `tone={active ? "activo" : "naranja"}` con un comentario que
-                    afirmaba justo lo contrario de lo que hacía el código («no
-                    cambia de color»). El translúcido sobre la fila azul deja el
-                    número en 2,62:1 —peor que el 2,89 del naranja— y lo hace
-                    precisamente en la fila que el tutor está mirando. Las dos
-                    capturas aprobadas que lo enseñan (`dashboard-propuesta.png`
-                    y `reservas-propuesta.png`) lo pintan naranja, y G-02 no
-                    contempla excepción por estado activo: G-03 sí la escribe
-                    para los chips, que es la prueba de que la lista sabe
-                    decirlo cuando la quiere. */}
-                <PanelCounter
-                  value={pendientes}
-                  tone="naranja"
-                  className="ml-auto"
-                />
-              </Link>
+                      `min-w` en vez de ancho fijo: "99+" son tres caracteres y
+                      una píldora cuadrada los cortaría. */}
+                  {/* G-02 · círculo de 20 px NARANJA, el mismo de la campana:
+                      es lo que reclama atención.
+                      ⚠️ Y SIGUE NARANJA EN LA FILA ACTIVA. Aquí ponía
+                      `tone={active ? "activo" : "naranja"}` con un comentario que
+                      afirmaba justo lo contrario de lo que hacía el código («no
+                      cambia de color»). El translúcido sobre la fila azul deja el
+                      número en 2,62:1 —peor que el 2,89 del naranja— y lo hace
+                      precisamente en la fila que el tutor está mirando. Las dos
+                      capturas aprobadas que lo enseñan (`dashboard-propuesta.png`
+                      y `reservas-propuesta.png`) lo pintan naranja, y G-02 no
+                      contempla excepción por estado activo: G-03 sí la escribe
+                      para los chips, que es la prueba de que la lista sabe
+                      decirlo cuando la quiere. */}
+                  <PanelCounter
+                    value={pendientes}
+                    tone="naranja"
+                    className="ml-auto"
+                  />
+                </Link>
 
-              {/* G-01 · Subniveles, siempre abiertos y solo en la columna
-                  (≥768). La línea izquierda de 1 px es lo que los ata
-                  visualmente a su categoría sin necesidad de un acordeón. */}
+                {/* G-01 · EL DISPARADOR DEL ACORDEÓN ES ESTE BOTÓN, NO LA FILA.
+                    La fila sigue siendo un enlace que navega —«Reservas» tiene
+                    que llevar a Reservas—, así que plegar necesita su propio
+                    objetivo; y no puede ir DENTRO del `<a>`, porque un botón
+                    dentro de un enlace no es HTML válido. De ahí el envoltorio
+                    posicionado y este absoluto encima del hueco que le abre el
+                    `md:pr-9`.
+
+                    ⚠️ Y ES UN BOTÓN DE VERDAD, no un `:hover` sobre la fila: por
+                    encima de 768 hay tablets sin ratón, y un submenú al que solo
+                    se llega pasando el puntero no existe para el teclado (2.1.1).
+                    28x41 de área táctil —por encima de los 24x24 de 2.5.8, que es
+                    el mínimo que ya usa el resto del panel— y `aria-expanded` +
+                    `aria-controls` para que un lector de pantalla sepa qué abre y
+                    si está abierto. */}
+                {hijos.length ? (
+                  <button
+                    type="button"
+                    aria-expanded={abierto}
+                    aria-controls={idSub}
+                    aria-label={`${abierto ? "Contraer" : "Desplegar"} ${label}`}
+                    onClick={() =>
+                      setPlegados({
+                        ruta: pathname,
+                        mapa: { ...aMano, [href]: !abierto },
+                      })
+                    }
+                    className={cn(
+                      "absolute inset-y-0 right-1 grid w-7 place-items-center rounded-md transition-colors max-md:hidden",
+                      "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                      active
+                        ? // Sobre la fila azul, blanco: el gris de abajo daría
+                          // 1,6:1 contra el 3:1 que pide 1.4.11 para un icono.
+                          "text-white hover:bg-white/20"
+                        : "text-[#8a8a8a] hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <ChevronDownIcon
+                      className={cn(
+                        "size-4 transition-transform",
+                        !abierto && "-rotate-90",
+                      )}
+                    />
+                  </button>
+                ) : null}
+              </div>
+
+              {/* G-01 · Subniveles, solo en la columna (≥768) y solo si su
+                  grupo está abierto. La línea izquierda de 1 px es lo que los
+                  ata visualmente a su categoría.
+
+                  ⚠️ Cerrado se esconde con `display:none` y no con altura 0 o
+                  `visibility`: lo que sigue alcanzable con el tabulador después
+                  de plegarlo es un submenú que el usuario cree cerrado, y el
+                  `aria-expanded` de arriba estaría mintiendo. */}
               {hijos.length ? (
-                <ul className="mt-1 ml-4 border-l border-[#e0e0e0] max-md:hidden">
+                <ul
+                  id={idSub}
+                  className={cn(
+                    "mt-1 ml-4 border-l border-[#e0e0e0] max-md:hidden",
+                    !abierto && "hidden",
+                  )}
+                >
                   {hijos.map((c) => {
                     // Ver `esSubnivelActivo`: ni anclas ni filtros se marcan.
                     const hijoActivo = esSubnivelActivo(c.href, pathname);

@@ -35,6 +35,18 @@ const TEXT: Record<string, string> = {
   tutor_review_result: "Tu solicitud de tutor tiene respuesta",
   identity_in_review: "Recibimos tus documentos: están en revisión",
   payment_receipt: "Tu pago se registró",
+
+  // ── Recompensas y regalos (NTF-31..37) ───────────────────────────────────
+  // Sin estas siete la campana pinta «Novedad en tu cuenta (NTF-31)» y manda a
+  // `/app` a todo el mundo: ninguno de sus payloads lleva `booking_id` ni
+  // `payment_id`, así que `rutaFor` cae al respaldo. Lo caza `check:email`.
+  reward_earned: "Ganaste una recompensa por invitar",
+  reward_expiring: "Tu recompensa caduca pronto",
+  reward_expired: "Tu recompensa caducó sin usarse",
+  gift_purchased: "Tu regalo ya está activo",
+  gift_received: "Te han regalado una mentoría",
+  gift_expiring: "Un regalo caduca pronto y sigue sin agendar",
+  gift_expired: "Un regalo caducó sin agendarse",
   payment_failed: "Un pago no se pudo cobrar",
   booking_confirmed_student: "Tu reserva quedó confirmada",
   booking_new_tutor: "Tienes una reserva nueva por aceptar",
@@ -110,6 +122,25 @@ const DESTINO: Record<string, string> = {
   // este aviso le llega igual a un tutor. Mismo motivo que `admin_message`.
   account_deletion_requested: "/account",
   account_deletion_done: "/account",
+
+  // ── Recompensas y regalos ────────────────────────────────────────────────
+  // La recompensa se ve donde se gana: «Invita y gana».
+  reward_earned: "/referidos",
+  reward_expiring: "/referidos",
+  reward_expired: "/referidos",
+  // El regalo tiene DOS caras y cada aviso va a la suya: quien lo compró lo
+  // sigue en «Mis regalos»; quien lo recibe lo agenda desde «Mis reservas»,
+  // que además llama a `reclamar_mis_regalos()` al pintarse.
+  gift_purchased: "/regalar/mis-regalos",
+  gift_received: "/reservas",
+  // ⚠️ `gift_expiring` se encola a `coalesce(beneficiary_id, purchased_by)`:
+  // al destinatario si ya lo reclamó, al comprador si no. Con un solo destino
+  // se acierta con quien AÚN PUEDE HACER ALGO —agendarlo—, que es el que lo
+  // tiene. Distinguirlos de verdad pide un `papel` en el payload: migración.
+  gift_expiring: "/reservas",
+  // `gift_expired` no entra aquí a propósito: es el único cuyo destino depende
+  // del payload (la copia del comprador lleva `amount`, la del destinatario
+  // no), y eso lo resuelve `rutaFor`, no este mapa.
 };
 
 /** Cuánto del mensaje del admin cabe en una línea de la campana. */

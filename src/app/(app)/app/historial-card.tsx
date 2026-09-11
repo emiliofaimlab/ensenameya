@@ -10,7 +10,7 @@ import {
 import { ScrollCarousel } from "@/components/ui/scroll-carousel";
 import { Button } from "@/components/ui/button";
 import { BOOKING_STATUS_LABEL, formatSessionTime } from "@/lib/booking";
-import { formatMoney } from "@/lib/catalog/format";
+import { PrecioEnLinea } from "@/components/precio/precio";
 import type { PanelHistorial } from "./historial";
 import type { Database } from "@/lib/database.types";
 
@@ -138,8 +138,15 @@ export function HistorialCard({
                       ? formatSessionTime(r.cuando, timeZone)
                       : "Sin horario"}
                   </p>
+                  {/* En 248 px el bloque de dos líneas pondría el dólar en un
+                      11 px pegado a un 12 px, que se lee como un tropiezo; la
+                      versión de una línea mete el USD entre paréntesis y, si no
+                      cabe, envuelve. Las dos cifras siguen juntas. */}
                   <p className="mt-0.5 font-medium text-[#4d4d4d]">
-                    {formatMoney(r.importe, r.moneda)}
+                    <PrecioEnLinea
+                      amountMinor={r.importe}
+                      currency={r.moneda}
+                    />
                   </p>
                   {r.resenada ? (
                     // Se dice, en vez de una segunda píldora al lado de la del
