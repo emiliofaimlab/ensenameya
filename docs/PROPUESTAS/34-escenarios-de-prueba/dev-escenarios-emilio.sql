@@ -481,39 +481,154 @@ on conflict (booking_id) do nothing;
 
 
 -- ════════════════════════════════════════════════════════════════════════════
--- 5 · PAYOUTS — uno por estado — y cuenta de cobro manual
+-- 5 · PAYOUTS — uno por estado, y que las CIFRAS CUADREN (DP-34.3)
 -- ════════════════════════════════════════════════════════════════════════════
--- Sin `payout_items`: no consumen los pagos de §3, así que el saldo que calcula
--- tutor_balance() sale de las reservas completadas (7 y 9 disponibles, 8 en
--- retención de 7 días) y «Ya cobrado» de los payouts en 'paid'.
--- `scheduled_for` en el futuro para que process_scheduled_payouts (cron cada
--- 10 min, coge scheduled con scheduled_for <= now()) NO intente ejecutarlo.
+-- DP-34.3 resuelta el 11-sep: SÍ, los payouts consumen sus pagos vía
+-- `payout_items`.
+--
+-- ── POR QUÉ IMPORTA ─────────────────────────────────────────────────────────
+-- `tutor_balance()` (SECURITY DEFINER, leída al pintar /tutor/payouts) calcula:
+--   available    = pagos 'paid' de reservas 'completed', retención VENCIDA,
+--                  `and not exists (select 1 from payout_items …)`
+--   in_retention = igual, con la retención aún viva
+--   paid_out     = suma de `payouts.amount` en estado 'paid'
+-- Es decir: `payout_items` es lo ÚNICO que separa «este dinero ya salió» de
+-- «este dinero está disponible». Sin items, un payout es un número suelto que
+-- no descuenta nada, y la pantalla enseña un «Ya cobrado» que no corresponde a
+-- ninguna reserva. Con 6 payouts sueltos por 187,50 y solo 60,00 ganados, quien
+-- mire no puede distinguir un bug de `tutor_balance()` del ruido del seed.
+--
+-- ── CÓMO SE CUADRA ──────────────────────────────────────────────────────────
+-- Con HISTORIAL, que es de donde sale el dinero en la vida real: nueve
+-- mentorías completadas hace 50-90 días (§5a), cada una con su pago, repartidas
+-- entre los seis payouts. El `amount` de cada payout NO se escribe a mano: se
+-- CALCULA de los pagos que consume, así que cuadra por construcción y no se
+-- puede desincronizar al retocar un importe.
+--
+--   ganado histórico (§5a)  180,00  →  repartido en los 6 payouts
+--   ganado en la matriz (§3) 60,00  →  sin consumir: 37,50 disponible
+--                                                   + 22,50 en retención
+--   ────────────────────────────────────────────────────────────────
+--   Ya cobrado 56,25 · en vuelo/retenido/fallido 123,75 · libre 60,00 = 240,00
+--
+-- Las nueve históricas son con los ALUMNOS de `dev-poblar.sql`, no con el
+-- alumno de Emilio: así su panel de alumno se queda con las 19 de la matriz y
+-- no se le mezcla el historial del tutor. Si ese seed no está aplicado, el
+-- `join` no devuelve filas y esta sección simplemente no siembra nada.
+
+
+-- ── 5a · El historial que financia los payouts ──────────────────────────────
+-- Fechas entre -90 y -50 días: lejos de la matriz (que va de -20 d a +12 d) y
+-- separadas entre sí, que `sessions_sin_solape_por_tutor` compara TRAMOS.
+drop table if exists _h;
+create temporary table _h (n int, prod int, importe bigint, dias int, payout int, alumno int);
+insert into _h values
+  (1, 1, 2500, 90, 1, 1),   -- payout 1 · pending
+  (2, 2, 3000, 85, 2, 2),   -- payout 2 · scheduled
+  (3, 1, 2500, 80, 3, 3),   -- payout 3 · processing  ┐
+  (4, 2, 3000, 75, 3, 4),   --                        ┘ dos pagos
+  (5, 1, 2500, 70, 4, 1),   -- payout 4 · paid        ┐
+  (6, 1, 2500, 65, 4, 2),   --                        │ tres pagos
+  (7, 1, 2500, 60, 4, 3),   --                        ┘
+  (8, 1, 2500, 55, 5, 4),   -- payout 5 · failed
+  (9, 2, 3000, 50, 6, 1);   -- payout 6 · on_hold
+
+insert into public.bookings (
+  id, student_id, product_id, tutor_id, status, pricing_model, num_sessions,
+  session_duration_min, currency, subtotal_amount, total_amount, tier_split_pct,
+  payer_country, payee_country, completed_at, created_at, updated_at
+)
+select
+  ('88888888-0014-4000-8000-00000000000' || h.n)::uuid,
+  al.id, pr.id, e.tutor, 'completed', pr.pricing_model, 1, pr.session_duration_min,
+  'USD', h.importe, h.importe, coalesce(ti.split_pct, 75.00),
+  public.pais_de_cobro_por_zona(al.timezone), coalesce(tp.payout_country, 'VE'),
+  now() - make_interval(days => h.dias) + interval '1 hour',
+  now() - make_interval(days => h.dias + 3),
+  now() - make_interval(days => h.dias)
+from _h h
+cross join _ey e
+join public.products pr on pr.id = ('88888888-0001-4000-8000-00000000000' || h.prod)::uuid
+join public.profiles al on al.id = ('44444444-0000-4000-8000-00000000000' || h.alumno)::uuid
+join public.tutor_profiles tp on tp.profile_id = e.tutor
+left join public.tutor_tiers ti on ti.id = tp.tier_id
+on conflict (id) do nothing;
+
+insert into public.payments (
+  booking_id, status, currency, gross_amount, platform_fee_amount, tutor_net_amount,
+  tier_split_pct, payer_country, payee_country, provider, provider_payment_id, paid_at, created_at
+)
+select b.id, 'paid', 'USD', b.total_amount,
+       b.total_amount - round(b.total_amount * b.tier_split_pct / 100)::bigint,
+       round(b.total_amount * b.tier_split_pct / 100)::bigint,
+       b.tier_split_pct, b.payer_country, b.payee_country, 'simulated',
+       'pi_sim_EY34_hist_' || right(b.id::text, 1), b.created_at, b.created_at
+from public.bookings b where b.id::text like '88888888-0014-%'
+on conflict (booking_id) do nothing;
+
+-- Sesiones a las 12:00 de su día. Un día distinto cada una, así que no se pisan.
+insert into public.sessions (id, booking_id, tutor_id, student_id, sequence_no,
+                             start_at, end_at, status, completed_at, created_at)
+select ('88888888-0015-4000-8000-00000000000' || h.n)::uuid, b.id, b.tutor_id, b.student_id, 1,
+       date_trunc('day', now()) - make_interval(days => h.dias) + interval '12 hours',
+       date_trunc('day', now()) - make_interval(days => h.dias) + interval '12 hours'
+         + make_interval(mins => b.session_duration_min),
+       'completed',
+       b.completed_at, b.created_at
+from _h h
+join public.bookings b on b.id = ('88888888-0014-4000-8000-00000000000' || h.n)::uuid
+on conflict (id) do nothing;
+
+
+-- ── 5b · Los seis payouts, con el importe CALCULADO de lo que consumen ──────
+-- Se borran y se reescriben en vez de `on conflict do update`: un UPDATE sobre
+-- `payouts` dispara los `notify_*` (NTF-12/16) y la cola de correos envía de
+-- verdad a un buzón real. Un DELETE no dispara nada.
+-- `scheduled_for` del payout 2 va al FUTURO para que `process_scheduled_payouts`
+-- (cron cada 10 min, coge los vencidos) no intente ejecutarlo.
+delete from public.payout_items where payout_id::text like '88888888-0006-%';
+delete from public.payouts      where id::text like '88888888-0006-%';
+
 insert into public.payouts (
   id, tutor_id, status, currency, amount, provider, funding_provider, payee_country,
   provider_payout_id, retention_until, scheduled_for, paid_at, failed_at, failure_reason,
   created_at, updated_at
 )
-select ('88888888-0006-4000-8000-00000000000' || q.n)::uuid, e.tutor, q.st, 'USD', q.importe,
+select ('88888888-0006-4000-8000-00000000000' || q.n)::uuid, e.tutor, q.st, 'USD',
+       -- El importe SALE de los pagos que consume. Escribirlo a mano es lo que
+       -- permite que un retoque deje la pantalla mintiendo.
+       (select sum(round(h.importe * coalesce(ti.split_pct, 75.00) / 100))::bigint
+          from _h h where h.payout = q.n),
        q.prov, 'simulated', coalesce(tp.payout_country, 'VE'), q.ref,
        now() - interval '7 days', q.prog, q.pagado, q.fallo, q.motivo,
        now() + q.creada, now() + q.creada
 from _ey e
 join public.tutor_profiles tp on tp.profile_id = e.tutor
+left join public.tutor_tiers ti on ti.id = tp.tier_id
 cross join (values
-  (1, 'pending'::public.payout_status,    1875, null,        null,               null::timestamptz,          null::timestamptz,          null::timestamptz,         null,
+  (1, 'pending'::public.payout_status,    null,        null,            null::timestamptz,          null::timestamptz,          null::timestamptz,         null,
       '-1 day'::interval),
-  (2, 'scheduled'::public.payout_status,  2250, null,        null,               now() + interval '7 days',  null,                       null,                      null,
+  (2, 'scheduled'::public.payout_status,  null,        null,            now() + interval '7 days',  null,                       null,                      null,
       '-2 days'::interval),
-  (3, 'processing'::public.payout_status, 4125, 'simulated', 'SIM-EY34-3',       now() - interval '1 hour',  null,                       null,                      null,
+  (3, 'processing'::public.payout_status, 'simulated', 'SIM-EY34-3',    now() - interval '1 hour',  null,                       null,                      null,
       '-1 day'::interval),
-  (4, 'paid'::public.payout_status,       5625, 'paypal',    'PAYOUT-EY34-4',    now() - interval '30 days', now() - interval '30 days', null,                      null,
+  (4, 'paid'::public.payout_status,       'paypal',    'PAYOUT-EY34-4', now() - interval '30 days', now() - interval '30 days', null,                      null,
       '-32 days'::interval),
-  (5, 'failed'::public.payout_status,     1875, 'dlocal',    null,               now() - interval '5 days',  null,                       now() - interval '5 days', 'dLocal: el país no tiene account_types (NTF-16)',
+  (5, 'failed'::public.payout_status,     'dlocal',    null,            now() - interval '5 days',  null,                       now() - interval '5 days', 'dLocal: el país no tiene account_types (NTF-16)',
       '-6 days'::interval),
-  (6, 'on_hold'::public.payout_status,    3000, null,        null,               null,                       null,                       null,                      'Retenido por admin: revisión de identidad',
+  (6, 'on_hold'::public.payout_status,    null,        null,            null,                       null,                       null,                      'Retenido por admin: revisión de identidad',
       '-4 days'::interval)
-) as q(n, st, importe, prov, ref, prog, pagado, fallo, motivo, creada)
-on conflict (id) do nothing;
+) as q(n, st, prov, ref, prog, pagado, fallo, motivo, creada);
+
+-- Y el vínculo, que es lo que hace que `tutor_balance()` descuente.
+insert into public.payout_items (payout_id, payment_id, amount)
+select ('88888888-0006-4000-8000-00000000000' || h.payout)::uuid, p.id, p.tutor_net_amount
+from _h h
+join public.bookings b on b.id = ('88888888-0014-4000-8000-00000000000' || h.n)::uuid
+join public.payments p on p.booking_id = b.id
+on conflict do nothing;
+
+drop table _h;
 
 -- Cuenta de cobro manual (VE): un Zelle registrado; PayPal se conecta desde la
 -- app (conectar_cuenta_paypal), no se siembra. Comprobado en dev: los canales
@@ -582,6 +697,212 @@ from _ey e, (values
 ) as q(n, para, tipo, canal, plantilla, payload, st, enviada)
 on conflict (idempotency_key) do nothing;
 
+
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- 7 · LOS ESTADOS QUE NO CABEN A LA VEZ — tres cuentas más (DP-34.2)
+-- ════════════════════════════════════════════════════════════════════════════
+-- DP-34.2 resuelta el 11-sep: SÍ, cuentas fijas, no rotar la de Emilio.
+--
+-- Una cuenta solo puede estar en UN `approval_status`. El borrador dejaba los
+-- otros tres como `update` comentados, y eso tiene dos problemas: hay que
+-- ejecutar SQL para mirar una pantalla, y cada `update` dispara
+-- `notify_tutor_profile` (AFTER UPDATE) → correo REAL al buzón de Emilio.
+-- Con una cuenta por estado se entra y se mira, sin tocar nada.
+--
+--   emilio+pendiente@faimlab.com   → «En revisión»  · identidad pending
+--   emilio+rechazado@faimlab.com   → «Rechazado»    · identidad rejected
+--   emilio+suspendido@faimlab.com  → «Suspendido»   · identidad approved
+--
+-- ⚠️ El ROL `tutor` solo lo tiene el suspendido, y es a propósito: el rol se
+-- concede al APROBAR (`20260714120000`), así que quien está en revisión o
+-- rechazado NUNCA lo tuvo. /tutor funciona igual para ellos porque `pickHome`
+-- mira `esTutor = roles.includes('tutor') || tiene fila en tutor_profiles`
+-- (`lib/auth/roles.ts`): ser tutor, a efectos de a dónde entras, es haber
+-- empezado. Darles el rol aquí falsearía justo eso.
+--
+-- `identity_verification_status = 'not_submitted'` NO necesita cuenta propia:
+-- es el estado de cualquier tutor recién registrado que aún no subió nada.
+
+insert into auth.users (
+  id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+  raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+  confirmation_token, recovery_token, email_change,
+  email_change_token_new, email_change_token_current, reauthentication_token
+)
+select
+  ('88888888-0000-4000-8000-00000000000' || c.n)::uuid,
+  '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated',
+  c.email,
+  extensions.crypt('Ensename2026!', extensions.gen_salt('bf')),
+  now(),
+  '{"provider":"email","providers":["email"]}'::jsonb,
+  jsonb_build_object('full_name', c.nombre, 'timezone', 'America/Caracas'),
+  now() - interval '20 days', now(), '', '', '', '', '', ''
+from (values
+  (2, 'emilio+pendiente@faimlab.com',  'Emilio Faim (en revisión)'),
+  (3, 'emilio+rechazado@faimlab.com',  'Emilio Faim (rechazado)'),
+  (4, 'emilio+suspendido@faimlab.com', 'Emilio Faim (suspendido)')
+) as c(n, email, nombre)
+where not exists (select 1 from auth.users u where lower(u.email) = lower(c.email));
+
+-- Sin `auth.identities` el usuario existe, la contraseña es correcta y el login
+-- falla igual — en silencio y sin pista.
+insert into auth.identities (id, user_id, provider_id, identity_data, provider,
+                             last_sign_in_at, created_at, updated_at)
+select gen_random_uuid(), u.id, u.id::text,
+       jsonb_build_object('sub', u.id::text, 'email', u.email,
+                          'email_verified', true, 'phone_verified', false),
+       'email', now(), now(), now()
+from auth.users u
+where u.email in ('emilio+pendiente@faimlab.com','emilio+rechazado@faimlab.com','emilio+suspendido@faimlab.com')
+on conflict (provider_id, provider) do nothing;
+
+update public.profiles set timezone = 'America/Caracas', onboarding_complete = true
+ where id::text in ('88888888-0000-4000-8000-000000000002',
+                    '88888888-0000-4000-8000-000000000003',
+                    '88888888-0000-4000-8000-000000000004');
+
+-- Los perfiles, cada uno YA en su estado final: `notify_tutor_profile` es
+-- AFTER UPDATE, así que un INSERT directo no encola ni un correo.
+insert into public.tutor_profiles (
+  profile_id, display_name, headline, bio, teaching_level,
+  approval_status, identity_verification_status, approved_at, approval_notes, tier_id
+)
+select c.id::uuid, c.nombre, c.headline,
+       'Cuenta de pruebas del Doc 34 para ver el panel del tutor en estado ' || c.estado || '.',
+       'intermedio'::public.teaching_level,
+       c.estado::public.tutor_approval_status,
+       c.identidad::public.identity_verification_status,
+       c.aprobado, c.nota,
+       (select id from public.tutor_tiers where is_default)
+from (values
+  ('88888888-0000-4000-8000-000000000002', 'Emilio Faim (en revisión)',
+   'Solicitud enviada, esperando respuesta',
+   'pending',   'pending',  null::timestamptz, null),
+  ('88888888-0000-4000-8000-000000000003', 'Emilio Faim (rechazado)',
+   'Solicitud no aceptada',
+   'rejected',  'rejected', null,
+   'El título académico no se lee y el CV no cubre los dos últimos años. Puedes volver a enviarlo cuando lo tengas.'),
+  ('88888888-0000-4000-8000-000000000004', 'Emilio Faim (suspendido)',
+   'Cuenta suspendida',
+   'suspended', 'approved', now() - interval '40 days',
+   'Suspendida temporalmente mientras revisamos un reporte de un alumno.')
+) as c(id, nombre, headline, estado, identidad, aprobado, nota)
+on conflict (profile_id) do update set
+  approval_status              = excluded.approval_status,
+  identity_verification_status = excluded.identity_verification_status,
+  approval_notes               = excluded.approval_notes;
+
+-- Al suspendido SÍ se le deja el rol: lo tuvo (estuvo aprobado 40 días) y
+-- suspender no lo retira. A los otros dos no, ver la nota de arriba.
+insert into public.user_roles (user_id, role)
+values ('88888888-0000-4000-8000-000000000004', 'tutor'::public.app_role)
+on conflict do nothing;
+
+-- ⚠️ LOS DOCUMENTOS MANDAN SOBRE LA IDENTIDAD, no al revés.
+-- `verification_documents_refresh_identity` es AFTER INSERT/UPDATE/DELETE y
+-- recalcula `tutor_profiles.identity_verification_status` con esta regla
+-- (`20260724130100`):
+--     todos draft        → not_submitted
+--     algún rejected     → rejected          ← gana sobre cualquier otro
+--     los no-draft todos approved → approved
+--     si no              → pending
+-- O sea que el valor que puso el INSERT de arriba es solo el de partida: en
+-- cuanto hay documentos, el agregado lo pisa. Por eso el rechazado NO va en la
+-- cuenta «en revisión» —un solo documento rechazado la volvería `rejected` y
+-- perderíamos ese escenario— sino en la cuenta que YA está rechazada, donde
+-- además explica por qué lo está. Los cuatro `document_status` siguen estando,
+-- repartidos entre dos cuentas y cada una coherente consigo misma.
+-- (`not_submitted` no necesita cuenta: es el estado de quien solo tiene draft,
+-- o de cualquier tutor recién registrado que aún no subió nada.)
+--
+-- Se borran antes de insertar porque el reparto tiene que poder cambiar: con
+-- `on conflict do nothing` una reejecución dejaría el reparto viejo y, con él,
+-- la identidad vieja.
+delete from public.verification_documents
+ where tutor_id::text in ('88888888-0000-4000-8000-000000000002',
+                          '88888888-0000-4000-8000-000000000003',
+                          '88888888-0000-4000-8000-000000000004');
+
+insert into public.verification_documents (
+  id, tutor_id, doc_type, storage_path, status, review_notes, reviewed_at
+)
+select ('88888888-0016-4000-8000-0000000000' || lpad(d.n::text, 2, '0'))::uuid,
+       d.tutor::uuid, d.tipo, d.tutor || '/' || d.tipo,
+       d.st::public.document_status, d.nota,
+       case when d.st in ('approved','rejected') then now() - interval '2 days' end
+from (values
+  -- «En revisión» → 2 approved + 1 pending + 3 draft ⇒ identidad `pending`
+  ( 1, '88888888-0000-4000-8000-000000000002', 'cv',          'approved', null),
+  ( 2, '88888888-0000-4000-8000-000000000002', 'degree',      'approved', null),
+  ( 3, '88888888-0000-4000-8000-000000000002', 'id_document', 'pending',  null),
+  ( 4, '88888888-0000-4000-8000-000000000002', 'certificate', 'draft',    null),
+  ( 5, '88888888-0000-4000-8000-000000000002', 'diploma',     'draft',    null),
+  ( 6, '88888888-0000-4000-8000-000000000002', 'transcript',  'draft',    null),
+  -- «Rechazado» → el rejected vive aquí, y es el motivo del rechazo
+  ( 7, '88888888-0000-4000-8000-000000000003', 'cv',          'approved', null),
+  ( 8, '88888888-0000-4000-8000-000000000003', 'id_document', 'approved', null),
+  ( 9, '88888888-0000-4000-8000-000000000003', 'degree',      'rejected',
+       'La foto está movida y no se lee el número del título. Vuelve a subirla con más luz.'),
+  (10, '88888888-0000-4000-8000-000000000003', 'certificate', 'draft',    null),
+  (11, '88888888-0000-4000-8000-000000000003', 'diploma',     'draft',    null),
+  (12, '88888888-0000-4000-8000-000000000003', 'transcript',  'draft',    null),
+  -- «Suspendido» → los seis aprobados: su problema no es el papeleo
+  (13, '88888888-0000-4000-8000-000000000004', 'cv',          'approved', null),
+  (14, '88888888-0000-4000-8000-000000000004', 'degree',      'approved', null),
+  (15, '88888888-0000-4000-8000-000000000004', 'id_document', 'approved', null),
+  (16, '88888888-0000-4000-8000-000000000004', 'certificate', 'approved', null),
+  (17, '88888888-0000-4000-8000-000000000004', 'diploma',     'approved', null),
+  (18, '88888888-0000-4000-8000-000000000004', 'transcript',  'approved', null)
+) as d(n, tutor, tipo, st, nota);
+
+
+-- ── 7b · Una conversación BLOQUEADA ─────────────────────────────────────────
+-- `conversations.blocked_at` es el último estado del §10 que faltaba. Cuelga de
+-- una reserva con el tutor suspendido, así que de paso se ve qué le pasa a una
+-- reserva cuya contraparte ya no está activa. El hilo lo abre el trigger
+-- `bookings_ensure_conversation` al insertar la reserva; aquí solo se bloquea.
+insert into public.bookings (
+  id, student_id, product_id, tutor_id, status, pricing_model, num_sessions,
+  session_duration_min, currency, subtotal_amount, total_amount, tier_split_pct,
+  payer_country, payee_country, completed_at, created_at, updated_at
+)
+select '88888888-0004-4000-8000-000000000020', e.alumno, pr.id,
+       '88888888-0000-4000-8000-000000000004', 'completed', pr.pricing_model, 1,
+       pr.session_duration_min, 'USD', 2500, 2500, 75.00,
+       public.pais_de_cobro_por_zona(sp.timezone), 'VE',
+       now() - interval '25 days', now() - interval '28 days', now() - interval '25 days'
+from _ey e
+join public.products pr on pr.id = '88888888-0001-4000-8000-000000000001'
+join public.profiles sp on sp.id = e.alumno
+on conflict (id) do nothing;
+
+insert into public.payments (
+  booking_id, status, currency, gross_amount, platform_fee_amount, tutor_net_amount,
+  tier_split_pct, payer_country, payee_country, provider, provider_payment_id, paid_at, created_at
+)
+select b.id, 'paid', 'USD', 2500, 625, 1875, 75.00, b.payer_country, b.payee_country,
+       'simulated', 'pi_sim_EY34_20', b.created_at, b.created_at
+from public.bookings b where b.id = '88888888-0004-4000-8000-000000000020'
+on conflict (booking_id) do nothing;
+
+insert into public.sessions (id, booking_id, tutor_id, student_id, sequence_no,
+                             start_at, end_at, status, completed_at, created_at)
+select '88888888-0005-4000-8000-000000000020', b.id, b.tutor_id, b.student_id, 1,
+       date_trunc('day', now()) - interval '25 days' + interval '16 hours',
+       date_trunc('day', now()) - interval '25 days' + interval '17 hours',
+       'completed', b.completed_at, b.created_at
+from public.bookings b where b.id = '88888888-0004-4000-8000-000000000020'
+on conflict (id) do nothing;
+
+update public.conversations
+   set blocked_at = now() - interval '10 days',
+       blocked_reason = 'Bloqueada tras un reporte del alumno'
+ where tutor_id = '88888888-0000-4000-8000-000000000004'
+   and blocked_at is null;
+
+
 drop table if exists _r;
 drop table if exists _ey;
 
@@ -619,6 +940,7 @@ drop table if exists _ey;
 -- LIMPIAR · borra SOLO lo que sembró este fichero (orden por FK)
 -- ════════════════════════════════════════════════════════════════════════════
 -- delete from public.notifications              where id::text like '88888888-0011-%';
+-- delete from public.payout_items               where payout_id::text like '88888888-0006-%';
 -- delete from public.conversation_reads         where conversation_id in (select id from public.conversations where student_id = (select id from auth.users where email='emilio+alumno@faimlab.com'));
 -- delete from public.messages                   where id::text like '88888888-0013-%';
 -- delete from public.reviews                    where id::text like '88888888-0007-%';
@@ -633,4 +955,13 @@ drop table if exists _ey;
 -- delete from public.product_availability_rules where rule_id::text like '88888888-0002-%';
 -- delete from public.availability_rules         where id::text like '88888888-0002-%';
 -- delete from public.products                   where id::text like '88888888-0001-%';
--- delete from public.verification_documents     where id::text like '88888888-0012-%';
+-- delete from public.verification_documents     where id::text like '88888888-001[26]-%';
+-- -- El historial que financia los payouts (§5a) y la reserva del bloqueo (§7b):
+-- delete from public.sessions                   where id::text like '88888888-0015-%';
+-- delete from public.payments                   where booking_id::text like '88888888-0014-%';
+-- delete from public.bookings                   where id::text like '88888888-0014-%';
+-- -- Y las tres cuentas de estado (§7). Borrar de auth.users arrastra profiles,
+-- -- tutor_profiles y user_roles por ON DELETE CASCADE:
+-- delete from auth.users where email in ('emilio+pendiente@faimlab.com',
+--                                        'emilio+rechazado@faimlab.com',
+--                                        'emilio+suspendido@faimlab.com');
