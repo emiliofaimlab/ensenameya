@@ -64,6 +64,11 @@
   --shadow-catalog: 0 8px 22px -4px rgb(0 0 0 / 0.06); /* tutor-card y product-card de P04/P05 (24 nodos) */
   --shadow-menu: 0 4px 12px rgb(0 0 0 / 0.2); /* desplegables del panel admin (24 nodos, 24 frames) */
   --shadow-auth: 0 16px 40px -8px rgb(0 0 0 / 0.1); /* tarjeta de AU01…AU04 y AD01 (12 nodos) */
+  /* La ÚNICA sombra que no sale del Figma: es el acuse de recibo de que la
+     tarjeta entera es clickeable (pedido el 13-sep). Sin ella el cursor cambia
+     sobre 276px de nada aparente y parece un fallo. No la lleva ningún nodo
+     quieto: solo existe en `hover:`. */
+  --shadow-card-hover: 0 12px 26px -4px rgb(0 0 0 / 0.12);
   /* US-1601 · el cuerpo del diseño es 13/400/lh20 y Tailwind no lo tiene:
      text-xs=12 y text-sm=14, y el repo llevaba redondeando a ojo en las dos
      direcciones (216 `text-xs` contra 189 `text-sm`). 13px es el tamaño más

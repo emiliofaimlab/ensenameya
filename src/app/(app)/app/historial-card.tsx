@@ -102,7 +102,7 @@ export function HistorialCard({
               // Ancho fijo: es lo que crea el recorrido del carrusel.
               className="w-[248px] shrink-0 snap-start"
             >
-              <article className="flex h-full flex-col gap-3 rounded-[12px] border border-[#ebebeb] bg-card p-4">
+              <article className="relative flex h-full flex-col gap-3 rounded-[12px] border border-[#ebebeb] bg-card p-4 transition-colors focus-within:ring-2 focus-within:ring-brand/40 hover:border-[#c9c9c9]">
                 <div className="flex items-start justify-between gap-2">
                   {/* El mismo redondel azul de `BookingRow`: esto sigue siendo
                       una reserva, aunque aquí se pinte como tarjeta. */}
@@ -115,9 +115,13 @@ export function HistorialCard({
                 </div>
 
                 <div className="min-w-0">
+                  {/* Tarjeta clickeable entera (pedido el 13-sep): la estira
+                      el TÍTULO, no el botón de abajo, porque ese botón es
+                      «Dejar reseña» la mitad de las veces y la tarjeta entera
+                      no puede significar eso. Ver `catalog/product-card.tsx`. */}
                   <Link
                     href={`/reservas/${r.id}`}
-                    className="line-clamp-2 text-[13.5px] font-semibold text-[#333333] hover:underline"
+                    className="line-clamp-2 text-[13.5px] font-semibold text-[#333333] before:absolute before:inset-0 hover:underline"
                   >
                     {r.titulo}
                   </Link>
@@ -129,7 +133,8 @@ export function HistorialCard({
                           desde su propio panel. Ver `tutorCards`. */}
                       <Link
                         href={`/tutors/${r.tutor.id}`}
-                        className="font-medium text-brand hover:underline"
+                        /* `relative`: sin él se lo traga la capa del título. */
+                        className="relative font-medium text-brand hover:underline"
                       >
                         {r.tutor.displayName}
                       </Link>
@@ -160,13 +165,16 @@ export function HistorialCard({
                   ) : null}
                 </div>
 
-                <div className="mt-auto">
+                {/* `relative` por lo mismo que el enlace del tutor. */}
+                <div className="relative mt-auto">
                   {puedeResenar ? (
                     <Button
                       asChild
                       className="h-[38px] w-full rounded-[8px] px-4 text-[13px] font-semibold"
                     >
-                      <Link href={`/reservas/${r.id}/resena`}>Dejar reseña</Link>
+                      <Link href={`/reservas/${r.id}/resena`}>
+                        Dejar reseña
+                      </Link>
                     </Button>
                   ) : (
                     <Button

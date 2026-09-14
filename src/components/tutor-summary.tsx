@@ -60,10 +60,12 @@ export function TutorSummary({
           className="size-11 object-cover"
           unoptimized
         />
+      ) : // Sin nombre no hay iniciales que sacar: el guion es más honesto que
+      // una letra inventada.
+      nombre ? (
+        initialsFrom(nombre)
       ) : (
-        // Sin nombre no hay iniciales que sacar: el guion es más honesto que
-        // una letra inventada.
-        (nombre ? initialsFrom(nombre) : "—")
+        "—"
       )}
     </span>
   );
@@ -94,13 +96,26 @@ export function TutorSummary({
   }
 
   return (
-    <section className="rounded-2xl border bg-card p-5">
+    /* Tarjeta entera clickeable (13-sep) — pero SOLO cuando hay `href`: si al
+       tutor le retiraron la aprobación esta ficha no lleva a ningún sitio y
+       estirar un enlace que no existe dejaría una tarjeta con cursor de mano
+       que no hace nada. La capa la pone «Ver perfil»; «Escribirle» lleva
+       `relative` y sigue siendo suyo. Ver `catalog/product-card.tsx`. */
+    <section
+      className={`rounded-2xl border bg-card p-5 ${
+        href
+          ? "relative transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover"
+          : ""
+      }`}
+    >
       <h2 className="text-sm font-semibold text-muted-foreground">Tu tutor</h2>
 
       <div className="mt-3 flex items-start gap-3">
         {retrato}
         <div className="min-w-0">
-          <p className="truncate font-bold">{nombre ?? "Tutor no disponible"}</p>
+          <p className="truncate font-bold">
+            {nombre ?? "Tutor no disponible"}
+          </p>
           {tutor ? (
             <>
               <p className="mt-0.5 flex items-center gap-1 text-[11.5px] text-muted-foreground">
@@ -137,11 +152,17 @@ export function TutorSummary({
       <div className="mt-4 flex flex-wrap gap-2">
         {href ? (
           <Button asChild variant="outline" size="sm">
-            <Link href={href}>Ver perfil</Link>
+            <Link
+              href={href}
+              aria-label={`Ver perfil de ${nombre ?? "tu tutor"}`}
+              className="before:absolute before:inset-0"
+            >
+              Ver perfil
+            </Link>
           </Button>
         ) : null}
         {chatHref ? (
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="relative">
             <Link href={chatHref}>
               <MessageSquareIcon className="size-4" />
               Escribirle

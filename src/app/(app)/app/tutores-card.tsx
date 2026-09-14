@@ -65,7 +65,7 @@ export function TutoresCard({ data }: { data: PanelTutores }) {
             // nombre se recorte en los habituales de dos palabras.
             className="w-[224px] shrink-0 snap-start"
           >
-            <article className="flex h-full flex-col gap-3 rounded-[12px] border border-[#ebebeb] bg-card p-4">
+            <article className="relative flex h-full flex-col gap-3 rounded-[12px] border border-[#ebebeb] bg-card p-4 transition-colors focus-within:ring-2 focus-within:ring-brand/40 hover:border-[#c9c9c9]">
               <TutorSummary tutor={tutor} variant="inline" />
 
               {/* La valoración PÚBLICA del tutor, no la del alumno: son cosas
@@ -86,6 +86,18 @@ export function TutoresCard({ data }: { data: PanelTutores }) {
                   {motivo}
                 </p>
               ) : null}
+
+              {/* Tarjeta clickeable entera (pedido el 13-sep). Aquí es una capa
+                  y no el `before:` del enlace de dentro, como en el resto: el
+                  «Ver perfil» lo pinta `TutorSummary`, que es compartido con el
+                  checkout y el pago —no se le cuelga de fuera una clase que
+                  solo vale aquí—. Va al MISMO sitio que él y DESPUÉS en el DOM,
+                  así que se lo come sin romperlo. */}
+              <Link
+                href={`/tutors/${tutor.id}`}
+                aria-label={`Ver perfil de ${tutor.displayName ?? "este tutor"}`}
+                className="absolute inset-0 rounded-[12px]"
+              />
             </article>
           </li>
         ))}

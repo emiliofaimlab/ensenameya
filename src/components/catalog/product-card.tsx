@@ -118,7 +118,15 @@ export function ProductCard({
     product.tutor?.displayName ?? product.tutor?.headline ?? "Tutor";
 
   return (
-    <article className="flex h-full flex-col overflow-hidden rounded-[16px] border border-[#ebebeb] bg-card shadow-[0_8px_22px_rgb(0_0_0/0.06)]">
+    /* La tarjeta ENTERA es el enlace (pedido el 13-sep): el destino no lo abre
+       un `onClick` sino el `before:absolute before:inset-0` del botón de abajo,
+       que estira su zona de clic hasta este `relative`. Así sigue siendo UN
+       `<a>` de verdad —clic central, «abrir en pestaña nueva», tabulación y
+       lector de pantalla intactos— y no hay que anidar enlaces, que es HTML
+       inválido y se llevaría por delante el del tutor.
+       ponytail: el precio de esto es que no se puede seleccionar el texto de la
+       tarjeta con el ratón. Se asume: el texto está entero en la ficha. */
+    <article className="relative flex h-full flex-col overflow-hidden rounded-[16px] border border-[#ebebeb] bg-card shadow-[0_8px_22px_rgb(0_0_0/0.06)] transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover">
       {/* Miniatura 276×140 (DD-02). MN-09 · sin imagen se pinta el icono de
           categoría, no una banda gris: la caja ocupa lo mismo en los dos casos
           (por eso el alto va en `className`, que `ProductCover` aplica a las dos
@@ -173,7 +181,7 @@ export function ProductCard({
                 de la tarjeta. El subrayado del hover sigue el recorte. */}
             <Link
               href={`/tutors/${product.tutor.id}`}
-              className="min-w-0 truncate text-[13px] font-medium text-[#474747] hover:underline"
+              className="relative z-10 min-w-0 truncate text-[13px] font-medium text-[#474747] hover:underline"
             >
               {tutorName}
             </Link>
@@ -259,7 +267,8 @@ export function ProductCard({
             {action === "ver" ? (
               <Link
                 href={`/products/${product.id}`}
-                className="shrink-0 rounded-[8px] border-[1.5px] border-brand px-4 py-2 text-[13px] font-semibold text-brand transition-colors hover:bg-brand-muted"
+                aria-label={`Ver detalle de ${product.title}`}
+                className="shrink-0 rounded-[8px] border-[1.5px] border-brand px-4 py-2 text-[13px] font-semibold text-brand transition-colors before:absolute before:inset-0 hover:bg-brand-muted"
               >
                 Ver
               </Link>
@@ -267,7 +276,7 @@ export function ProductCard({
               <Link
                 href={`/products/${product.id}`}
                 aria-label={`Ver detalle de ${product.title}`}
-                className={`grid size-10 shrink-0 place-items-center rounded-full text-white transition-colors ${
+                className={`grid size-10 shrink-0 place-items-center rounded-full text-white transition-colors before:absolute before:inset-0 ${
                   accent === "brand"
                     ? "bg-brand hover:bg-brand-foreground"
                     : "bg-primary hover:bg-primary/85"
