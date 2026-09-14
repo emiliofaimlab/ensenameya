@@ -3,7 +3,7 @@ import Link from "next/link";
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { buildSlotPreview, buildUsedBy, horasSemana } from "@/lib/availability";
+import { buildUsedBy, horasSemana } from "@/lib/availability";
 import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import { cn } from "@/lib/utils";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
@@ -90,9 +90,6 @@ export default async function TutorAvailabilityPage() {
     // delete cascade), y si era el único de esa mentoría, la mentoría vuelve
     // a ofrecerse en TODA la disponibilidad del tutor. Borrar un horario
     // puede abrir una oferta en vez de cerrarla, y eso no se adivina.
-    // Y también en qué convierte cada franja: la duración y el paso son lo que
-    // decide si «08:00–17:00» son 9 clases de 60 o 18 de 30. Ver
-    // `buildSlotPreview`.
     supabase
       .from("products")
       .select("id, title, session_duration_min, start_time_increment_min")
@@ -116,19 +113,6 @@ export default async function TutorAvailabilityPage() {
   // rule_id → títulos de las mentorías que la usan. El paso 4 del asistente
   // monta el mismo gestor y necesita el mismo mapa, así que vive en `lib`.
   const usedBy = buildUsedBy(products ?? [], links ?? []);
-
-  // rule_id → «9 clases de 60 min» y si la franja pisa a otra. Desde §3.2 el
-  // chip solo pinta el solape, pero el cálculo entero sigue saliendo de aquí.
-  const slotPreview = buildSlotPreview(
-    rules ?? [],
-    (products ?? []).map((p) => ({
-      id: p.id,
-      title: p.title,
-      durationMin: p.session_duration_min,
-      stepMin: p.start_time_increment_min,
-    })),
-    links ?? [],
-  );
 
   // §3.1 · el resumen de la semana sale del MISMO cálculo que las horas de cada
   // fila (`horasSemana`), y por eso no puede descuadrar con ellas. Sin ninguna
@@ -215,7 +199,6 @@ export default async function TutorAvailabilityPage() {
             userId={userId}
             rules={rules ?? []}
             usedBy={usedBy}
-            slotPreview={slotPreview}
           />
         </PanelCard>
 

@@ -9,7 +9,6 @@ import { createClient } from "@/lib/supabase/client";
 import {
   horasSemana,
   seSolapan,
-  type PreviewDeFranja,
   type Rule,
 } from "@/lib/availability";
 import { Button } from "@/components/ui/button";
@@ -126,16 +125,6 @@ export function AvailabilityManager({
   /** N-04 · rule_id → títulos de las mentorías que usan esa franja. */
   usedBy?: Record<string, string[]>;
   /**
-   * ⚠️ DEROGADA por el paquete de edición, y se conserva solo para no romper a
-   * quien la pasa. El aviso de solape era lo ÚNICO que quedaba de este objeto
-   * —el «→ 9 clases de 60 min» se fue con §3.2— y ahora se calcula aquí con
-   * `seSolapan`, porque venir de servidor era exactamente el problema: el paso
-   * 4 del asistente monta este mismo gestor SIN esta prop (allí no hay
-   * mentorías todavía), así que justo donde el tutor escribe sus franjas por
-   * primera vez no se avisaba de nada.
-   */
-  slotPreview?: Record<string, PreviewDeFranja>;
-  /**
    * §3.2 · título de la tarjeta. Lo pinta ESTE componente y no la página porque
    * el paquete pone «+ Añadir franja» en la misma fila que el título, y el
    * botón abre un formulario cuyo estado vive aquí dentro. Sin título —el paso
@@ -192,19 +181,6 @@ export function AvailabilityManager({
     list.sort((a, b) => a.start_time.localeCompare(b.start_time));
   }
 
-  /**
-   * Qué franjas pisan a otra del mismo día. Mismo criterio que `seSolapan` usa
-   * en servidor para `buildSlotPreview`: solo entre ACTIVAS —una pausada no se
-   * ofrece, así que no pisa nada— e intervalos medio abiertos.
-   */
-  const solapadas = new Set<string>();
-  for (const list of byDay.values()) {
-    const activas = list.filter((r) => r.is_active);
-    for (const a of activas) {
-      if (activas.some((b) => b.id !== a.id && seSolapan(a, b))) solapadas.add(a.id);
-    }
-  }
-
   /** Cierra formulario y panel de copia, y devuelve el formulario a su estado limpio. */
   function cerrarTodo() {
     setAbierto(null);
@@ -238,12 +214,13 @@ export function AvailabilityManager({
   /**
    * Alta y edición en el mismo sitio: lo único que cambia es la escritura final.
    *
-   * ⚠️ El DUPLICADO EXACTO no se inserta y no es un error: se avisa y ya, igual
-   * que hace la copia desde siempre. Es validación de cliente a propósito —no
-   * hay `unique` ni `exclude` en la tabla y no puede haberlos: hay franjas que
-   * se solapan a posta desde antes de esto, y un solape sí sigue estando
-   * permitido. Lo que no aporta nada es la MISMA franja dos veces, que es
-   * justo lo que hace quien no está seguro de si ya pulsó.
+   * ⚠️ El SOLAPE no se inserta: se avisa y ya. Antes solo se bloqueaba el
+   * duplicado exacto y el resto se dejaba pasar con un aviso «se solapa» en el
+   * chip, pero `get_available_slots` une los inicios de las franjas que se
+   * pisan y los huecos repetidos se ofrecen UNA vez: el tutor creía tener el
+   * doble de lo que tenía. Validación de cliente a propósito: en la tabla no
+   * hay `exclude` porque hay tutores con solapes de antes de esto, que se
+   * quedan como están hasta que los editen.
    */
   async function guardarFranja(weekday: number, e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -252,14 +229,14 @@ export function AvailabilityManager({
     }
 
     const dia = WEEKDAYS[weekday].toLowerCase();
-    const repetida = (byDay.get(weekday) ?? []).some(
+    const pisa = (byDay.get(weekday) ?? []).some(
       (r) =>
         r.id !== editando?.id &&
-        hhmm(r.start_time) === desde &&
-        hhmm(r.end_time) === hasta,
+        r.is_active &&
+        seSolapan({ start_time: desde, end_time: hasta }, r),
     );
-    if (repetida) {
-      return toast.info(`El ${dia} ya tiene ese horario.`);
+    if (pisa) {
+      return toast.error(`Ya tienes horas abiertas el ${dia} dentro de ese bloque.`);
     }
 
     setBusy(true);
@@ -333,9 +310,9 @@ export function AvailabilityManager({
   }
 
   /**
-   * Copia el horario de un día a otros. Salta los que ya tengan esa misma
-   * franja: repetir «lunes a viernes» dos veces no debe duplicar nada, y es
-   * justo lo que alguien hace cuando no está seguro de si ya pulsó.
+   * Copia el horario de un día a otros. Salta las franjas que PISEN algo que
+   * el destino ya tiene —no solo las idénticas—, por lo mismo que `guardarFranja`
+   * ya no deja crear un solape.
    */
   async function copiar(desdeDia: number, hacia: number[]) {
     const origen = byDay.get(desdeDia) ?? [];
@@ -345,12 +322,7 @@ export function AvailabilityManager({
     const nuevas = hacia.flatMap((day) => {
       const yaTiene = byDay.get(day) ?? [];
       return origen
-        .filter(
-          (r) =>
-            !yaTiene.some(
-              (e) => e.start_time === r.start_time && e.end_time === r.end_time,
-            ),
-        )
+        .filter((r) => !yaTiene.some((e) => e.is_active && seSolapan(e, r)))
         .map((r) => ({
           tutor_id: userId,
           weekday: day,
@@ -361,7 +333,7 @@ export function AvailabilityManager({
 
     if (nuevas.length === 0) {
       setCopiandoDia(null);
-      return toast.info("Esos días ya tenían este horario.");
+      return toast.info("Esos días ya tienen horas abiertas en ese bloque.");
     }
 
     setBusy(true);
@@ -466,8 +438,8 @@ export function AvailabilityManager({
                 ) : (
                   /* ⚠️ `flex-1` + `basis` y no un simple `flex-wrap`: con los
                      chips como bloque de tamaño natural, un día de dos franjas
-                     con aviso de solape se pasaba del ancho y caía ENTERO a la
-                     línea de abajo, alineado con el nombre del día en vez de
+                     se pasaba del ancho y caía ENTERO a la línea de abajo,
+                     alineado con el nombre del día en vez de
                      con los chips del resto de filas. Con base 220 px el bloque
                      se queda en su columna mientras quepa —y son los chips los
                      que envuelven dentro— y solo baja de línea cuando de verdad
@@ -486,30 +458,6 @@ export function AvailabilityManager({
                           } ${enEdicion ? "ring-2 ring-brand/50" : ""}`}
                         >
                           {hhmm(r.start_time)}–{hhmm(r.end_time)}
-                          {/* ⚠️ EL AVISO DE SOLAPE SE QUEDA (§3.2 lo dice con
-                              esas palabras), aunque el «→ 9 clases» que iba a su
-                              lado se haya ido. No es adorno: cuando dos franjas
-                              del mismo día se pisan, `get_available_slots` une
-                              los inicios y los huecos repetidos se ofrecen UNA
-                              vez, así que el tutor cree tener el doble de lo que
-                              tiene y esta es la única pantalla que se lo dice.
-                              Desde el paquete de edición se calcula AQUÍ, no en
-                              servidor: así el paso 4 del asistente —donde el
-                              tutor escribe sus franjas por primera vez— también
-                              lo avisa. */}
-                          {solapadas.has(r.id) ? (
-                            /* ⚠️ `#8a5f10` y no el `#a67314` del calendario:
-                               sobre el fondo del chip (azul al 10 %, o sea
-                               #e6f2ff) ese ámbar se queda en 3,64:1 y no llega
-                               al 4,5:1 de 1.4.3. En el calendario sí pasa
-                               porque el fondo de ahí es otro. */
-                            <span
-                              className="text-[#8a5f10]"
-                              title="Esta franja se solapa con otra del mismo día. Los horarios repetidos se ofrecen una sola vez."
-                            >
-                              se solapa
-                            </span>
-                          ) : null}
                           {/* ⚠️ Cajas de 24 px para los dos iconos, que es el
                               mínimo de 2.5.8, sin tocar el dibujo ni la altura
                               del chip (28 px). Y `#4d7fb0` en vez de `#7aa8d6`,
