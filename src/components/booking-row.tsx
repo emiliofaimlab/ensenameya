@@ -57,7 +57,14 @@ export function BookingRow({
   formato: FormatoHora;
 }) {
   return (
-    <li className="flex flex-wrap items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+    /* Fila ENTERA clickeable (13-sep). No es una tarjeta, pero el jefe la
+       cuenta como tal y el criterio es el mismo: la estira el TÍTULO con su
+       `before:absolute before:inset-0`, no el `action`, que aquí es un botón
+       distinto en cada estado («Entrar a la sala», «Pagar», «Cancelar»). Ver
+       `catalog/product-card.tsx`.
+       Sin `rounded` ni sombra de hover: esto vive entre divisores, no sobre
+       fondo; el acuse de recibo es el fondo y el subrayado del título. */
+    <li className="relative flex flex-wrap items-center justify-between gap-4 py-4 transition-colors first:pt-0 last:pb-0 hover:bg-[#fafafa]">
       <div className="flex min-w-0 items-start gap-3">
         <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#e0eeff] text-brand">
           <CalendarDaysIcon className="size-[18px]" />
@@ -69,7 +76,10 @@ export function BookingRow({
               {tutorHref ? (
                 <Link
                   href={tutorHref}
-                  className="font-medium text-brand hover:underline"
+                  /* `z-10` y no solo `relative`: este enlace va ANTES que el
+                     título en el DOM, así que sin él la capa del título —que
+                     va después— le gana el pulso de pintado y se lo traga. */
+                  className="relative z-10 font-medium text-brand hover:underline"
                 >
                   {tutor}
                 </Link>
@@ -80,7 +90,7 @@ export function BookingRow({
           ) : null}
           <Link
             href={href}
-            className="text-[13.5px] font-medium text-[#333333] hover:underline"
+            className="text-[13.5px] font-medium text-[#333333] before:absolute before:inset-0 hover:underline"
           >
             {title}
           </Link>
@@ -93,7 +103,8 @@ export function BookingRow({
         </div>
       </div>
       {action || note ? (
-        <div className="flex flex-col items-end gap-1.5">
+        /* `relative` por lo mismo que el enlace del tutor. */
+        <div className="relative flex flex-col items-end gap-1.5">
           {action}
           {note ? <p className="text-xs text-[#6b6b6b]">{note}</p> : null}
         </div>
