@@ -76,7 +76,7 @@ export function FeaturedProducts({
                 <li
                   key={p.id}
                   // El ancho fijo solo vale en la tira; en la rejilla lo pone la columna.
-                  className="flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-card shadow-card max-sm:w-[240px]"
+                  className="relative flex min-w-0 flex-col overflow-hidden rounded-[20px] bg-card shadow-card transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover max-sm:w-[240px]"
                 >
                   {/* Miniatura 276×124 del Figma (DD-02). MN-09 · el hueco sin
                       foto lo rellena `ProductCover`, el MISMO componente que la
@@ -155,12 +155,16 @@ export function FeaturedProducts({
 
                     <Link
                       href={`/products/${p.id}`}
+                      /* Tarjeta clickeable entera: el pseudo-elemento estira
+                         este enlace hasta el `relative` del `<li>`. Ver
+                         `catalog/product-card.tsx`. */
+                      aria-label={`Ver detalle de ${p.title}`}
                       /* `-my-3 py-3`: en la tira móvil este enlace es el ÚNICO
                          control de la tarjeta y medía 19,5 px de alto. Los 24
                          px de padding lo llevan a 43,5 de zona tocable y el
                          margen negativo se los devuelve al hueco de la
                          columna, así que la maqueta no se mueve. */
-                      className="-my-3 inline-block py-3 text-[13px] font-semibold text-brand hover:underline"
+                      className="-my-3 inline-block py-3 text-[13px] font-semibold text-brand before:absolute before:inset-0 hover:underline"
                     >
                       Ver detalle →
                     </Link>

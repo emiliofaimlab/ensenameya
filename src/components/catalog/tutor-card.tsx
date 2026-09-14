@@ -28,7 +28,7 @@ export function TutorCard({
 
   if (layout === "list") {
     return (
-      <article className="flex h-full flex-col gap-3 rounded-[16px] border border-[#ebebeb] bg-card p-4 shadow-[0_8px_20px_rgb(0_0_0/0.06)]">
+      <article className="relative flex h-full flex-col gap-3 rounded-[16px] border border-[#ebebeb] bg-card p-4 shadow-[0_8px_20px_rgb(0_0_0/0.06)] transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover">
         <div className="flex items-center gap-3">
           <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-sm font-semibold">
             {avatar ? (
@@ -93,9 +93,14 @@ export function TutorCard({
           ) : (
             <span />
           )}
+          {/* Estira su zona de clic a toda la tarjeta: ver el comentario de
+              `product-card.tsx`. El `aria-label` es obligatorio aquí — el
+              enlace pasa a nombrar la tarjeta entera y «Ver perfil» a secas,
+              repetido doce veces en una rejilla, no dice de quién. */}
           <Link
             href={`/tutors/${tutor.id}`}
-            className="text-xs font-semibold text-brand hover:underline"
+            aria-label={`Ver perfil de ${name}`}
+            className="text-xs font-semibold text-brand before:absolute before:inset-0 hover:underline"
           >
             Ver perfil
           </Link>
@@ -105,7 +110,7 @@ export function TutorCard({
   }
 
   return (
-    <article className="flex h-full flex-col items-center gap-3.5 rounded-[16px] border border-[#ebebeb] bg-card p-5 text-center shadow-[0_8px_22px_rgb(0_0_0/0.06)]">
+    <article className="relative flex h-full flex-col items-center gap-3.5 rounded-[16px] border border-[#ebebeb] bg-card p-5 text-center shadow-[0_8px_22px_rgb(0_0_0/0.06)] transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover">
       <span className="grid size-[84px] shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-xl font-semibold">
         {avatar ? (
           <Image
@@ -170,7 +175,13 @@ export function TutorCard({
             variant="outline"
             className="h-10 rounded-[8px] border-brand text-brand hover:bg-brand-muted hover:text-brand"
           >
-            <Link href={`/tutors/${tutor.id}`}>Ver perfil</Link>
+            <Link
+              href={`/tutors/${tutor.id}`}
+              aria-label={`Ver perfil de ${name}`}
+              className="before:absolute before:inset-0"
+            >
+              Ver perfil
+            </Link>
           </Button>
         </div>
       </div>

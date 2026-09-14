@@ -57,7 +57,7 @@ export function FeaturedTutors({ tutors }: { tutors: FeaturedTutor[] }) {
                 <li
                   key={t.id}
                   // El ancho fijo solo vale en la tira; en la rejilla lo pone la columna.
-                  className="flex flex-col gap-2 rounded-[20px] bg-card p-5 shadow-card max-sm:w-[220px]"
+                  className="relative flex flex-col gap-2 rounded-[20px] bg-card p-5 shadow-card transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover max-sm:w-[220px]"
                 >
                   {/* Cabecera del Figma: foto a la izquierda, nombre + titular al lado. */}
                   <div className="flex items-start gap-3">
@@ -98,7 +98,14 @@ export function FeaturedTutors({ tutors }: { tutors: FeaturedTutor[] }) {
                     variant="outline"
                     className="mt-auto h-10 w-fit rounded-[10px] border-brand text-brand hover:bg-brand-muted hover:text-brand"
                   >
-                    <Link href={`/tutors/${t.id}`}>Ver perfil</Link>
+                    {/* Tarjeta clickeable entera: ver `catalog/product-card.tsx`. */}
+                    <Link
+                      href={`/tutors/${t.id}`}
+                      aria-label={`Ver perfil de ${name}`}
+                      className="before:absolute before:inset-0"
+                    >
+                      Ver perfil
+                    </Link>
                   </Button>
                 </li>
               );
