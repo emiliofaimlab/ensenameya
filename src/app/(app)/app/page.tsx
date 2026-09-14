@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CompassIcon } from "lucide-react";
 
 import {
@@ -66,7 +67,11 @@ function summary(upcoming: number, awaiting: number): string {
  * encima repetida en la sección de pendientes. Ahora cada fila es una reserva.
  */
 export default async function AppHome() {
-  const { user } = await requireUser();
+  const { user, roles } = await requireUser();
+  // El admin administra el sitio y ya (14-sep): no tiene panel de alumno, así
+  // que si escribe /app a mano vuelve al suyo. Mismo grupo de rutas → este
+  // redirect no puede dejar la pantalla en blanco (regla de oro 13).
+  if (roles.includes("admin")) redirect("/admin");
   // Zona y formato juntos: son las dos mitades de «qué hora es para quien
   // mira», y las dos son lecturas baratas que no deben encadenarse.
   const [tz, formato] = await Promise.all([

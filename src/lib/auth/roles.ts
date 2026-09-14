@@ -44,11 +44,14 @@ export function pickHome(
   },
 ): string {
   const esTutor = roles.includes("tutor") || Boolean(opts?.esTutor);
-  if (opts?.panel === "admin" && roles.includes("admin")) return ROLE_HOME.admin;
+  // El admin manda sobre la cookie (14-sep): ya no tiene panel de alumno ni de
+  // tutor, así que un `ey-panel` viejo no puede mandarlo a una ruta que va a
+  // rebotar — y ese rebote, llegando desde `(public)`, es pantalla en blanco
+  // (regla de oro 13).
+  if (roles.includes("admin")) return ROLE_HOME.admin;
   if (opts?.panel === "tutor" && esTutor) return ROLE_HOME.tutor;
   if (opts?.panel === "alumno") return ROLE_HOME.alumno;
 
-  if (roles.includes("admin")) return ROLE_HOME.admin;
   if (esTutor) return ROLE_HOME.tutor;
   return ROLE_HOME.alumno;
 }
@@ -89,18 +92,19 @@ export function panelValido(valor: string | null | undefined): Panel | null {
  * puerta de entrada a ser tutor, no un privilegio: /tutor ya resuelve la
  * cascada solo (sin perfil → onboarding vía `requireTutorProfile`; pendiente →
  * dashboard con el aviso "en revisión"; aprobado → panel normal).
- * "Administrar" sí exige el rol: no es un flujo al que un usuario se apunta.
+ * ⚠️ Excepto el admin (14-sep): administra el sitio entero y no es ni alumno
+ * ni tutor, así que su switch tiene un solo panel.
  */
 export function panelsFor(roles: AppRole[]): { href: string; label: string }[] {
+  // El admin administra el sitio y ya: no se le ofrece Aprender ni Enseñar
+  // (14-sep). "Admin", no "Administrar": es la misma palabra que la píldora
+  // del header (24-jul).
+  if (roles.includes("admin")) {
+    return [{ href: ROLE_HOME.admin, label: "Admin" }];
+  }
   return [
     { href: ROLE_HOME.alumno, label: "Aprender" },
     { href: ROLE_HOME.tutor, label: "Enseñar" },
-    ...(roles.includes("admin")
-      // "Admin", no "Administrar": con tres paneles el switch se queda sin
-      // ancho en el menú de cuenta, y es la misma palabra que la píldora del
-      // header (24-jul).
-      ? [{ href: ROLE_HOME.admin, label: "Admin" }]
-      : []),
   ];
 }
 
