@@ -51,3 +51,56 @@ jobs:
           # Un 503 es "no hay CRON_SECRET en Vercel" y un 401 es "no coincide":
           # las dos son configuración a medias, y deben verse en rojo.
           [ "$code" = "200" ]
+
+      # La misma pasada, contra la PREVIEW de la rama `dev`, para poder probar
+      # los correos sin desplegar a producción. Va en un paso aparte y no en la
+      # matriz porque las dos mitades no valen lo mismo: si prod no envía es un
+      # incidente, si dev no envía es una molestia. Por eso este NO pone el
+      # workflow en rojo (`continue-on-error`) y el de arriba sí.
+      #
+      # ⚠️ La preview está detrás del SSO de Vercel y responde 302 antes de
+      # tocar nuestro código (docs/ENTORNOS.md §5): sin `VERCEL_PROTECTION_BYPASS`
+      # esto no llega a ninguna parte, y un cron que no llega se parece
+      # muchísimo a un cron que no tenía trabajo. Por eso el 30x se dice con
+      # todas las letras en vez de pasar en silencio.
+      #
+      # ⚠️ Y la cola de dev se ensucia sola: el seed usa direcciones
+      # `@ensenameya.dev`, un dominio SIN MX, así que cada tanda de pruebas
+      # encola avisos que solo pueden rebotar. Comparte cuenta y dominio de
+      # Resend con producción, o sea que los rebotes de dev los paga la
+      # reputación de prod. Antes de sembrar: `docs/QA-LANZAMIENTO.md` §4.6.
+      - name: Vaciar la cola de dev (preview · no bloquea)
+        continue-on-error: true
+        env:
+          DEV_URL: ${{ vars.DEV_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          BYPASS: ${{ secrets.VERCEL_PROTECTION_BYPASS }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${DEV_URL:-}" ]; then
+            echo "Sin la variable DEV_BASE_URL no hay nada que hacer aquí. Saltando."
+            exit 0
+          fi
+
+          if [ -n "${BYPASS:-}" ]; then
+            set -- -H "x-vercel-protection-bypass: $BYPASS"
+          else
+            set --
+          fi
+
+          code=$(curl -sS --max-time 120 -o /tmp/dev.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$@" \
+            "$DEV_URL/api/cron/notifications-send")
+
+          echo "HTTP $code"
+          cat /tmp/dev.json; echo
+
+          case "$code" in
+            200) ;;
+            30*) echo "::warning::$code — Deployment Protection. Falta o caducó el secret VERCEL_PROTECTION_BYPASS." ;;
+            503) echo "::warning::503 — falta CRON_SECRET en el scope Preview de Vercel." ;;
+            401) echo "::warning::401 — el CRON_SECRET de Preview no coincide con el de GitHub." ;;
+            *)   echo "::warning::$code — la pasada de dev no salió bien." ;;
+          esac
