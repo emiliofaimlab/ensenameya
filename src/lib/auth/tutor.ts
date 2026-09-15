@@ -60,12 +60,7 @@ export async function requireTutorProfile(): Promise<{
    *  vuelva a pedir la misma fila — ver la cabecera de `leerPerfilDeTutor`. */
   payoutCountry: string | null;
 }> {
-  const { user, roles } = await requireUser();
-  // El admin administra el sitio y ya (14-sep): no enseña, así que no entra al
-  // panel del tutor ni a su onboarding. Va antes del resto para no pagar
-  // lecturas que no va a usar. `/admin` vive en el mismo grupo de rutas, así
-  // que este redirect no puede dejar la pantalla en blanco (regla de oro 13).
-  if (roles.includes("admin")) redirect("/admin");
+  const { user } = await requireUser();
   // ⚠️ Aquí, y no en `(app)/tutor/layout.tsx`, es donde se ADELANTAN los siete
   // contadores del menú. `TutorShell` los pide desde dentro del árbol que
   // devuelve la PANTALLA, así que sin este empujón son el último peldaño del
