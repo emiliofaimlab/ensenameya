@@ -232,10 +232,39 @@ assert.deepEqual(
   "elegir PayPal tiene que ponerlo el primero, incluso si stripe ya abrió un cobro",
 );
 
-// Sin preferencia, NADA cambia respecto a antes del radio.
+// ══════════════════════════════════════════════════════════════════════════
+// 🔴 PAYPAL SALE CON EL RADIO Y NO COMO RESPALDO (cliente, 15-sep-2026)
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Es la regla más cara de romper de este fichero, porque romperla no falla:
+// cobra. PayPal CAPTURA AL APROBAR (a diferencia de Stripe y dLocal, que
+// pintan un formulario que la persona todavía tiene que rellenar), así que un
+// respaldo silencioso hacia él es dinero real que nadie eligió mover.
+
+// Sin preferencia, PayPal NO aparece — aunque la ruta lo nombre.
 assert.deepEqual(
   cadenaDeCobro({ cobrador: "stripe", snapshot: "dlocal", ruteo: ["dlocal", "stripe", "paypal"] }),
-  ["stripe", "dlocal", "paypal"],
+  ["stripe", "dlocal"],
+  "sin elegirlo, PayPal no puede entrar por la puerta de atrás",
+);
+assert.deepEqual(
+  cadenaDeCobro({ cobrador: null, snapshot: null, ruteo: ["stripe", "paypal"] }),
+  ["stripe"],
+  "y si el único respaldo era PayPal, mejor sin respaldo que cobrando sin permiso",
+);
+
+// 🔑 PERO `cobrador` Y `snapshot` NO SE FILTRAN, y esto es lo contrario de un
+// descuido. Significan «aquí YA hay un cobro de PayPal abierto y pagable».
+// Quitarlos abriría un SEGUNDO cobro con tarjeta al recargar la pantalla.
+assert.deepEqual(
+  cadenaDeCobro({ cobrador: "paypal", snapshot: "stripe", ruteo: ["stripe", "paypal"] }),
+  ["paypal", "stripe"],
+  "un cobro de PayPal ya abierto se reencuentra, no se duplica con otro riel",
+);
+assert.deepEqual(
+  cadenaDeCobro({ cobrador: null, snapshot: "paypal", ruteo: ["stripe", "paypal"] }),
+  ["paypal", "stripe"],
+  "lo mismo con el snapshot: la reserva se termina por donde empezó",
 );
 assert.deepEqual(
   cadenaDeCobro({ preferido: null, cobrador: null, snapshot: "dlocal", ruteo: ["dlocal", "stripe"] }),
@@ -257,4 +286,10 @@ assert.deepEqual(
   ["paypal", "stripe"],
 );
 
-console.log("✅ cadena: el radio manda sobre el orden y el respaldo sigue detrás.");
+// Y el revés: elegir tarjeta no mete a PayPal detrás «por si acaso».
+assert.deepEqual(
+  cadenaDeCobro({ preferido: "dlocal", cobrador: null, snapshot: "stripe", ruteo: ["stripe", "dlocal", "paypal"] }),
+  ["dlocal", "stripe"],
+);
+
+console.log("✅ cadena: el radio manda sobre el orden, y PayPal solo entra si se elige.");

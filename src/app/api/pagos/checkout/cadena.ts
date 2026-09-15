@@ -116,7 +116,39 @@ export type Recorrido<T> =
  * parámetro inventado en el navegador. Lo filtra quien llama —el Route Handler,
  * que es quien tiene la lista— y aquí no se comprueba nada: este fichero ordena,
  * no autoriza.
+ *
+ * ── 🔴 Y HAY RIELES QUE SOLO ENTRAN SI SE ELIGEN ───────────────────────────
+ *
+ * `charge_providers` respondía hasta hoy a DOS preguntas con la misma lista:
+ * «¿a quién se le permite cobrar esto?» (lo que valida `set_charge_provider`) y
+ * «¿en qué orden se intenta si el primero no puede?». Para PayPal esas dos
+ * respuestas tienen que ser distintas, y lo pidió el cliente el 15-sep-2026:
+ * **que salga solo con el radio, no como respaldo.**
+ *
+ * El motivo es que PayPal no se parece a los otros dos en el momento en que
+ * mueve el dinero: **captura al APROBAR** (medido, ver `paypal-provider.ts`).
+ * Un respaldo silencioso hacia PayPal sería un cobro real que nadie pidió por
+ * un riel que el alumno no eligió — y con Stripe o dLocal eso mismo es un
+ * formulario de tarjeta que la persona todavía tiene que rellenar.
+ *
+ * Se resuelve quitándolo del TRAMO DE RESPALDO y solo de ahí. Sigue en
+ * `charge_providers`, así que `set_charge_provider` lo sigue permitiendo y el
+ * radio funciona igual; y sigue entrando por `preferido`, `cobrador` y
+ * `snapshot`, que NO se filtran y no pueden filtrarse:
+ *
+ *   · `preferido` es la elección: es el caso para el que existe todo esto.
+ *   · `cobrador` y `snapshot` son «aquí ya hay un cobro de PayPal abierto».
+ *     Quitarlos abriría un SEGUNDO cobro con tarjeta al recargar la pantalla,
+ *     con el de PayPal vivo y pagable. Justo lo que la cabecera de arriba
+ *     existe para impedir.
+ *
+ * ponytail: una lista de claves en este fichero, no una columna nueva en
+ * `payment_routing_rules`. El techo es que la distinción vive en el código y no
+ * en la configuración; el día que un segundo riel la necesite y alguien quiera
+ * moverla por país, entonces sí es una columna — y entonces habrá dos casos
+ * que mirar para darle forma, que hoy no los hay.
  */
+export const SOLO_POR_ELECCION = new Set(["paypal"]);
 export function cadenaDeCobro(opts: {
   cobrador: string | null;
   snapshot: string | null;
@@ -124,8 +156,12 @@ export function cadenaDeCobro(opts: {
   /** El riel que el alumno eligió a mano, ya validado contra `ruteo`. */
   preferido?: string | null;
 }): string[] {
+  // 🔴 El tramo de respaldo, y SOLO él, pierde a los rieles que no respaldan.
+  // Los tres de delante van enteros: leer el bloque de arriba antes de moverlo.
+  const respaldo = opts.ruteo.filter((c) => !SOLO_POR_ELECCION.has(c));
+
   const cadena: string[] = [];
-  for (const clave of [opts.preferido, opts.cobrador, opts.snapshot, ...opts.ruteo]) {
+  for (const clave of [opts.preferido, opts.cobrador, opts.snapshot, ...respaldo]) {
     if (!clave) continue;
     if (cadena.includes(clave)) continue;
     cadena.push(clave);

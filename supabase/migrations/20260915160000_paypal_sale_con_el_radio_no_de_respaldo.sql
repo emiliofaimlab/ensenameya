@@ -1,0 +1,45 @@
+-- ============================================================================
+-- Enséñame Ya — PayPal sale con el radio, NO como respaldo
+--
+-- Esta migración no cambia ni una fila: cambia lo que la columna DICE, porque
+-- desde hoy ha dejado de ser verdad. El cambio de comportamiento está en
+-- `src/app/api/pagos/checkout/cadena.ts` (`SOLO_POR_ELECCION`), y va ahí y no
+-- aquí a propósito — lo explico abajo.
+--
+-- ── QUÉ PIDIÓ EL CLIENTE (15-sep-2026) ─────────────────────────────────────
+--
+-- Que PayPal aparezca cuando el alumno lo elige en el checkout y **solo
+-- entonces**. Nunca como el candidato al que se cae la cadena cuando el primero
+-- no puede.
+--
+-- ── POR QUÉ NO ES UN CAPRICHO ──────────────────────────────────────────────
+--
+-- 🔴 PAYPAL NO SE PARECE A LOS OTROS DOS EN CUÁNDO MUEVE EL DINERO. Medido el
+-- 15-sep-2026 con un pago real: **captura al APROBAR**, medio segundo después de
+-- que PayPal emita `CHECKOUT.ORDER.APPROVED` y antes de que su webhook nos
+-- llegue. Con Stripe y dLocal, caerse a ellos deja un FORMULARIO delante de una
+-- persona que todavía tiene que decidir; con PayPal, un respaldo silencioso
+-- acaba en dinero real movido por un riel que nadie eligió.
+--
+-- ── POR QUÉ EL CAMBIO NO ESTÁ EN ESTA TABLA ────────────────────────────────
+--
+-- Porque `charge_providers` contesta DOS preguntas y solo una cambia:
+--
+--   «¿a quién se le PERMITE cobrar esto?»  → sigue incluyendo a paypal, y tiene
+--      que seguir incluyéndolo: es lo que valida `set_charge_provider` cuando el
+--      alumno elige, y sacarlo de aquí rompería el radio entero.
+--   «¿en qué orden se INTENTA?»            → aquí ya no entra.
+--
+-- Separarlas en la base pedía una columna nueva (`respaldables`, o una marca por
+-- riel) con su `ruta_de_pago()` reescrita y sus grants, para expresar una
+-- distinción que hoy tiene UN caso. Vive en el código, con su comprobación
+-- ejecutable al lado (`npm run check:cadena`, cinco aserciones nuevas), hasta
+-- que haya un segundo caso que le dé forma.
+--
+-- ⚠️ Lo que NO se puede hacer es quitar 'paypal' de charge_providers creyendo
+-- que eso lo apaga: apagaría el radio y dejaría el respaldo intacto, que es
+-- exactamente al revés de lo que se pidió.
+-- ============================================================================
+
+comment on column public.payment_routing_rules.charge_providers is
+  'Candidatos de COBRO, resueltos con el país del ALUMNO (dictado del 9-sep-2026). Responde a DOS preguntas distintas y desde el 15-sep-2026 NO con la misma respuesta. (1) QUIÉN PUEDE COBRAR: set_charge_provider solo deja mover payments.provider a un miembro de esta lista, y eso incluye a paypal — es lo que sostiene el radio del checkout. (2) EN QUÉ ORDEN SE INTENTA: el [1] es el que create_booking_line congela y el que cobra si nadie elige; el resto es el respaldo de la cadena, PERO el Route Handler saca de ese tramo los rieles de SOLO_POR_ELECCION (hoy: paypal), porque PayPal captura al APROBAR y un respaldo silencioso hacia él mueve dinero real que nadie eligió. Ver src/app/api/pagos/checkout/cadena.ts. ⚠️ Quitar paypal de esta lista NO lo apaga: apaga el radio y deja el respaldo. Tocar esta columna es una migración, nunca un UPDATE (regla de oro 5).';
