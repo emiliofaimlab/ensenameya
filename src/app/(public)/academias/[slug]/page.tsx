@@ -10,8 +10,11 @@ import {
   UsersIcon,
 } from "lucide-react";
 
+import { getFormatoHora, getViewerTimezone } from "@/lib/auth/server";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
+import { BookingPanel } from "@/components/catalog/booking-panel";
+import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { ProductCard } from "@/components/catalog/product-card";
 import { ShareButton } from "@/components/catalog/share-button";
 import { TutorCard } from "@/components/catalog/tutor-card";
@@ -68,11 +71,20 @@ export async function generateMetadata({
  */
 export default async function AcademyPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  /** Los mismos cuatro de la ficha de tutor: mentoría, día, hora y mes. */
+  searchParams: Promise<{ p?: string; d?: string; h?: string; m?: string }>;
 }) {
-  const { slug } = await params;
-  const data = await getAcademyDetail(slug);
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
+  // La zona y el formato de hora van en la misma tanda que la academia: los
+  // pide el panel de reserva y no dependen de ella (RN-02).
+  const [data, timeZone, formato] = await Promise.all([
+    getAcademyDetail(slug),
+    getViewerTimezone(),
+    getFormatoHora(),
+  ]);
   // `notFound()` y no un 403: para un visitante anónimo una academia en
   // borrador no existe, y decirle «existe pero no puedes verla» filtra que
   // estamos preparando una.
@@ -81,6 +93,22 @@ export default async function AcademyPage({
   const { academy, tutors, products, reviews } = data;
   const logo = storageUrl("avatars", academy.logoPath);
   const marca = academy.brandColor ?? "var(--color-brand)";
+
+  /**
+   * Cada control del panel navega a ESTA misma URL con su selección en la
+   * query. `URLSearchParams` y no concatenar a mano: la hora es un ISO con `:`
+   * y, según el huso, un `+` en el offset — crudo en la query ese `+`
+   * significa «espacio» y la hora llegaría rota al otro lado.
+   */
+  const hrefFor = (next: { p?: string; d?: string; h?: string; m?: string }) => {
+    const q = new URLSearchParams();
+    if (next.p) q.set("p", next.p);
+    if (next.d) q.set("d", next.d);
+    if (next.h) q.set("h", next.h);
+    if (next.m) q.set("m", next.m);
+    const s = q.toString();
+    return s ? `/academias/${slug}?${s}#reservar` : `/academias/${slug}#reservar`;
+  };
 
   return (
     <div style={{ "--marca": marca } as React.CSSProperties}>
@@ -178,10 +206,10 @@ export default async function AcademyPage({
 
               <div className="mt-5 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
                 <Link
-                  href="#mentorias"
+                  href="#reservar"
                   className="inline-flex h-10 items-center rounded-[10px] bg-primary px-5 text-[14px] font-semibold text-primary-foreground hover:opacity-95"
                 >
-                  Ver mentorías
+                  Reservar mentoría
                 </Link>
                 <ShareButton
                   label="Compartir academia"
@@ -267,6 +295,61 @@ export default async function AcademyPage({
             </div>
           )}
         </Section>
+
+        {/*
+          El calendario, pedido el 15-sep. Es el MISMO `BookingPanel` de la
+          ficha del tutor y de la de mentoría: elegir mentoría, día y hora, y de
+          ahí al checkout de siempre. No se le enseña un calendario propio a la
+          academia porque la academia no imparte nada — quien tiene agenda es
+          cada tutor, y el panel ya la resuelve por mentoría.
+
+          Va en una sección a lo ancho y no en la columna `sticky` del perfil de
+          tutor: aquí el panel llega después de tutores y mentorías, y estirar
+          una rejilla de dos columnas sobre toda la página costaría más que el
+          hueco que gana. `scroll-mt-44`: la cabecera pública es sticky y mide
+          173 px a 390, así que llegar por el ancla dejaba el título debajo.
+        */}
+        {products.length > 0 ? (
+          <Section
+            id="reservar"
+            className="scroll-mt-44 border-t border-[#ebebeb]"
+          >
+            <h2 className="text-[20px] font-bold text-[#212121]">
+              Reserva tu mentoría
+            </h2>
+            <p className="mt-2 max-w-2xl text-[14.5px] text-[#525252]">
+              Elige la mentoría, el día y la hora. Reservas con el tutor que la
+              imparte, con las mismas condiciones de siempre.
+            </p>
+
+            {/* Misma reparto que la ficha del tutor: el contenido a la
+                izquierda y el panel a la derecha, para que la columna ancha no
+                quede en blanco. En móvil `order` sube el panel por delante de
+                la política: ahí lo que se viene a hacer es reservar. */}
+            <div className="mt-6 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
+              <CancellationPolicy className="max-lg:order-2" />
+              <div className="max-lg:order-1">
+                <BookingPanel
+                  products={products}
+                  selectedId={sp.p}
+                  selectedDay={sp.d}
+                  selectedTime={sp.h}
+                  month={sp.m}
+                  timeZone={timeZone}
+                  formato={formato}
+                  hrefFor={hrefFor}
+                  title={`Reserva con ${academy.name}`}
+                  compact
+                  autoAcceptLine
+                  // El panel ya no es lo último de la página —debajo van las
+                  // reseñas—, así que la barra fija de móvil sobra: se quedaría
+                  // pegada abajo durante toda la sección siguiente.
+                  ctaFijo={false}
+                />
+              </div>
+            </div>
+          </Section>
+        ) : null}
 
         {reviews.length > 0 ? (
           <Section className="border-t border-[#ebebeb]">

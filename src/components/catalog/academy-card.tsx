@@ -1,7 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BuildingIcon, UsersIcon } from "lucide-react";
+import { BuildingIcon } from "lucide-react";
 
+import { Button } from "@/components/ui/button";
 import { PrecioEnLinea } from "@/components/precio/precio";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import type { AcademyCardData } from "@/lib/catalog/queries";
@@ -9,87 +10,93 @@ import type { AcademyCardData } from "@/lib/catalog/queries";
 /**
  * Tarjeta de academia del listado `/academias`.
  *
- * El color de marca de la academia se usa como ACENTO —la cinta superior, el
- * aro del logo y las iniciales— y nunca como fondo de un texto: `brand_color`
- * lo teclea un humano y un amarillo sobre blanco dejaría la tarjeta ilegible.
- * Calcular luminancia para elegir el color del texto sería la otra salida, y
- * con acentos no hace falta escribir ese código.
+ * **Es la misma tarjeta que la de tutor** (`tutor-card.tsx`, variante
+ * `centered`), pedido del 15-sep: misma caja, mismo avatar de 84, mismo
+ * `line-clamp-1` en el nombre, misma línea de reseñas, mismos chips y el mismo
+ * pie con divisor, «Desde …» y botón outline. Lo único que cambia es lo que
+ * dicen: «Academia aliada» en vez de «Tutor verificado», los chips cuentan
+ * tutores y mentorías, y el destino es `/academias/<slug>`.
+ *
+ * No se reutiliza `TutorCard` con un `variant`: son dos tipos de datos
+ * distintos (`AcademyCardData` no tiene `categories` ni `avatarPath`) y
+ * encajarlos obligaría a inventar un tipo común que solo existiría para esto.
+ * Duplicar 60 líneas de marcado es más barato de leer que esa abstracción.
+ *
+ * El color de marca se usa SOLO en las iniciales: `brand_color` lo teclea un
+ * humano y un fondo de ese color con texto encima dejaría la tarjeta ilegible.
  */
 export function AcademyCard({ academy }: { academy: AcademyCardData }) {
   const logo = storageUrl("avatars", academy.logoPath);
-  // `--marca` alimenta la cinta y el aro; sin color propio cae al azul de
-  // Enséñame Ya, que es el mismo que usa el resto del catálogo.
   const marca = academy.brandColor ?? "var(--color-brand)";
 
+  const chips = [
+    academy.tutorCount === 1 ? "1 tutor" : `${academy.tutorCount} tutores`,
+    academy.productCount === 1
+      ? "1 mentoría"
+      : `${academy.productCount} mentorías`,
+  ];
+
   return (
-    <article
-      className="relative flex h-full flex-col overflow-hidden rounded-[16px] border border-[#ebebeb] bg-card shadow-[0_8px_22px_rgb(0_0_0/0.06)] transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover"
-      style={{ "--marca": marca } as React.CSSProperties}
-    >
-      <div aria-hidden className="h-1.5 bg-(--marca)" />
+    <article className="relative flex h-full flex-col items-center gap-3.5 rounded-[16px] border border-[#ebebeb] bg-card p-5 text-center shadow-[0_8px_22px_rgb(0_0_0/0.06)] transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover">
+      <span
+        className="grid size-[84px] shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-xl font-semibold"
+        style={{ color: marca }}
+      >
+        {logo ? (
+          <Image
+            src={logo}
+            alt=""
+            width={84}
+            height={84}
+            className="size-[84px] object-cover"
+            unoptimized
+          />
+        ) : (
+          initialsFrom(academy.name)
+        )}
+      </span>
 
-      <div className="flex flex-1 flex-col gap-3 p-5">
-        <div className="flex items-start gap-3.5">
-          <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-[14px] border-2 border-(--marca) bg-white text-[17px] font-bold text-(--marca)">
-            {logo ? (
-              <Image
-                src={logo}
-                alt=""
-                width={56}
-                height={56}
-                className="size-14 object-cover"
-                unoptimized
-              />
-            ) : (
-              initialsFrom(academy.name)
-            )}
-          </span>
-
-          <div className="min-w-0 flex-1">
-            <h3 className="text-[16px] leading-tight font-bold break-words text-[#212121]">
-              {academy.name}
-            </h3>
-            <p className="mt-1 flex items-center gap-1 text-[11.5px] font-medium text-(--marca)">
-              <BuildingIcon className="size-3" />
-              Academia aliada
-            </p>
-          </div>
-        </div>
-
-        {academy.tagline ? (
-          <p className="line-clamp-2 text-[13.5px] text-[#525252]">
-            {academy.tagline}
-          </p>
-        ) : null}
-
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] font-medium text-[#4d4d4d]">
-          <span className="inline-flex items-center gap-1">
-            <UsersIcon className="size-3.5" />
-            {academy.tutorCount === 1
-              ? "1 tutor"
-              : `${academy.tutorCount} tutores`}
-          </span>
-          <span aria-hidden>·</span>
-          <span>
-            {academy.productCount === 1
-              ? "1 mentoría"
-              : `${academy.productCount} mentorías`}
-          </span>
-          {/* Sin reseñas no se pinta un 0: cinco estrellas vacías dicen «mala»
-              donde lo que hay es «todavía nadie ha valorado». */}
-          {academy.ratingAvg !== null && academy.ratingCount > 0 ? (
-            <>
-              <span aria-hidden>·</span>
-              <span>
-                ★ {academy.ratingAvg.toFixed(1)} ({academy.ratingCount})
-              </span>
-            </>
-          ) : null}
+      <div>
+        {/* Una línea, como la tarjeta de tutor: un nombre de dos líneas baja
+            todo el interior y desalinea la tarjeta de sus vecinas de fila. El
+            `title` guarda el entero. */}
+        <h3
+          title={academy.name}
+          className="line-clamp-1 text-base font-bold"
+        >
+          {academy.name}
+        </h3>
+        <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-[#666666]">
+          <BuildingIcon className="size-3.5" style={{ color: marca }} />
+          Academia aliada
         </p>
+      </div>
 
-        <div className="mt-auto flex items-center justify-between gap-3 pt-1">
+      {/* Mismo renglón que el tutor, con la misma raya cuando no hay nota: un
+          0 pintaría «mala valoración» donde lo que hay es «aún nadie ha
+          valorado». */}
+      <p className="text-[13px] font-medium text-[#666666]">
+        ★ {academy.ratingAvg?.toFixed(1) ?? "—"} ·{" "}
+        {academy.ratingCount === 1
+          ? "1 reseña"
+          : `${academy.ratingCount} reseñas`}
+      </p>
+
+      <div className="flex flex-wrap justify-center gap-2">
+        {chips.map((c) => (
+          <span
+            key={c}
+            className="rounded-[6px] bg-[#f0f0f0] px-2.5 py-1 text-xs font-medium text-[#5c5c5c]"
+          >
+            {c}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-auto w-full border-t border-[#ebebeb] pt-4">
+        <div className="flex items-center justify-between gap-3">
           {academy.priceFromMinor !== null && academy.priceCurrency ? (
-            <span className="text-sm font-bold text-[#212121]">
+            <span className="text-[15px] font-bold text-[#242424]">
               Desde{" "}
               <PrecioEnLinea
                 amountMinor={academy.priceFromMinor}
@@ -99,17 +106,19 @@ export function AcademyCard({ academy }: { academy: AcademyCardData }) {
           ) : (
             <span />
           )}
-          {/* Estira su zona de clic a toda la tarjeta (mismo patrón que
-              `tutor-card.tsx`). El `aria-label` es obligatorio: el enlace pasa
-              a nombrar la tarjeta entera y «Ver academia» repetido en una
-              rejilla no dice cuál. */}
-          <Link
-            href={`/academias/${academy.slug}`}
-            aria-label={`Ver la academia ${academy.name}`}
-            className="text-xs font-semibold text-brand before:absolute before:inset-0 hover:underline"
+          <Button
+            asChild
+            variant="outline"
+            className="h-10 rounded-[8px] border-brand text-brand hover:bg-brand-muted hover:text-brand"
           >
-            Ver academia
-          </Link>
+            <Link
+              href={`/academias/${academy.slug}`}
+              aria-label={`Ver la academia ${academy.name}`}
+              className="before:absolute before:inset-0"
+            >
+              Ver academia
+            </Link>
+          </Button>
         </div>
       </div>
     </article>
