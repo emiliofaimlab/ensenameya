@@ -155,7 +155,7 @@ Está en `.env.local` por un intento que no funcionó; borrarla no rompe nada.
 | :-- | :-- | :-- | :-- |
 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | ✅ sandbox | ✅ sandbox | ✅ **producción (10-sep)** |
 | `PAYPAL_API_URL` | ✅ | ✅ sandbox | ✅ `https://api-m.paypal.com` (10-sep) |
-| `PAYPAL_WEBHOOK_ID` | ✅ sandbox (15-sep) | ⬜ **falta** — `0G116560CE055280W` (§5.1) | ⬜ no existe el webhook live |
+| `PAYPAL_WEBHOOK_ID` | ✅ sandbox (15-sep) | ⬜ **falta** — `0G116560CE055280W` (§5.1) | ⬜ **falta** — `3JR91975G84913305` (§5.1) |
 | `WISE_API_TOKEN` | ❌ desactivada 10-sep — ver abajo | ❌ **y así se queda** | ✅ token `ensenameya-prod` (10-sep) |
 | `WISE_PRIVATE_KEY` · `WISE_API_URL` | ❌ | ❌ | ❌ · opcionales |
 
@@ -746,6 +746,21 @@ evs    CHECKOUT.ORDER.APPROVED · PAYMENT.CAPTURE.COMPLETED
 
 Mismo bypass y misma razón que con Stripe (arriba): sin él, Deployment Protection responde 302 antes
 de que corra una línea nuestra.
+
+Y el de **producción**, creado el 15-sep contra el dominio real (sin bypass: producción no está
+protegida):
+
+```
+id     3JR91975G84913305          ← es el PAYPAL_WEBHOOK_ID del scope Production
+url    https://ensenameya.com/api/webhooks/paypal
+evs    los mismos cuatro
+```
+
+⚠️ **Son dos webhooks distintos con ids distintos, igual que las claves, y cruzarlos es el fallo
+mudo de esto:** producción con el id del sandbox verifica contra el webhook equivocado, PayPal
+responde `FAILURE`, la ruta devuelve 400 y **ningún cobro pasa nunca a `paid`**. Es el mismo modo de
+fallo que ya documenta §7.3 para el `whsec_` de Stripe, y se ve igual de poco: el cobro ocurre, el
+dinero sale del alumno, y la reserva se queda esperando.
 
 🔴 **PAYPAL CAPTURA SOLA AL APROBAR — el dinero se mueve antes de que nos enteremos.** Medido el
 15-sep-2026 con el primer pago real que pasó por aquí (25,00 USD de sandbox, comisión 1,74):
