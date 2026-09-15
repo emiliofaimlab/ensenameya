@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import { ArrowRightIcon } from "lucide-react";
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
+import {
+  BotonPaypal,
+  SelectorDeMetodo,
+  type MetodoElegido,
+} from "@/components/checkout/selector-de-metodo";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
@@ -211,6 +216,7 @@ export function CheckoutForm({
   timeZone,
   formato,
   simulado,
+  paypalDisponible = false,
   aceptaSola,
 }: {
   productId: string;
@@ -285,6 +291,16 @@ export function CheckoutForm({
    *  hay aviso de pruebas ni botón de simular fallo. */
   simulado: boolean;
   /**
+   * 🔑 ¿HAY DOS CAMINOS QUE OFRECER? (petición del cliente, 15-sep-2026).
+   *
+   * Lo resuelve el servidor con `metodosDeCheckout`: la ruta del PAGADOR tiene
+   * que nombrar a PayPal —si no, `set_charge_provider` rechazaría el cambio y el
+   * radio sería una mentira— y el riel tiene que estar encendido en este
+   * entorno. Con `false`, esta pantalla es exactamente la de siempre: ni un
+   * elemento de más.
+   */
+  paypalDisponible?: boolean;
+  /**
    * M-02 · `products.auto_accept_bookings`. Cambia lo que se PROMETE aquí, y
    * por eso llega hasta el formulario: con la aceptación automática puesta la
    * reserva pagada salta a `confirmed` sin pasar por `pending_acceptance`, así
@@ -295,6 +311,13 @@ export function CheckoutForm({
 }) {
   const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
+  /**
+   * 🔑 EL RADIO. 'tarjeta' de por defecto y NO por preferencia nuestra: es que
+   * el cobro con tarjeta ya se abrió solo al llegar (D-2), así que empezar en
+   * otro sitio dejaría ese formulario montado y sin enseñar. Qué significa cada
+   * valor —y por qué 'tarjeta' NO es un riel— está en `selector-de-metodo.tsx`.
+   */
+  const [metodo, setMetodo] = useState<MetodoElegido>("tarjeta");
   /**
    * 💳 Lo último que ha dicho el selector de crédito. `null` = todavía no ha
    * dicho nada, o sea que aún está leyendo; de eso depende que «Continuar al
@@ -371,12 +394,16 @@ export function CheckoutForm({
    * hay ningún crédito que elegir, y al pulsar «Continuar al pago» después de
    * elegirlo.
    */
-  const abrirCobro = useCallback(async (bookingId: string) => {
+  const abrirCobro = useCallback(async (bookingId: string, riel?: "paypal") => {
     setApertura({ fase: "abriendo" });
     const res = await fetch("/api/pagos/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bookingId }),
+      // ⚠️ `metodo` SOLO cuando el alumno eligió un riel concreto. Mandar
+      // 'tarjeta' sería mandar una preferencia que el servidor no entiende —no
+      // es una clave de `charge_providers`— y que por tanto ignoraría: el mismo
+      // efecto con un viaje de ruido. Ver `metodo` arriba.
+      body: JSON.stringify(riel ? { bookingId, metodo: riel } : { bookingId }),
     });
     const salida = (await res.json().catch(() => ({}))) as RespuestaDeCobro;
 
@@ -962,7 +989,24 @@ export function CheckoutForm({
           </div>
         ) : null}
 
-        {apertura.fase === "lista" && apertura.embed ? (
+        {/* ── 🔑 EL RADIO: TARJETA O PAYPAL (petición del cliente, 15-sep-2026) ──
+
+            Solo sale cuando de verdad hay DOS caminos —`paypalDisponible` lo
+            resuelve el servidor— y solo sobre un cobro real: con el proveedor
+            simulado no hay formulario que esconder ni orden que abrir, y un
+            radio ahí sería una elección de mentira.
+
+            ⚠️ AL ELEGIR PAYPAL SE DESMONTA EL FORMULARIO DE TARJETA, y eso no es
+            estética: el cobro con tarjeta YA está abierto (se monta solo al
+            llegar, D-2), así que dejar los dos a la vez es dejar dos botones de
+            pagar sobre la misma reserva. El razonamiento entero —y las tres
+            redes que hacen que el peor caso sea un reembolso automático y no un
+            cobro doble— está en `api/pagos/checkout/cadena.ts`. */}
+        {paypalDisponible && apertura.fase === "lista" && (apertura.embed || apertura.transparente) ? (
+          <SelectorDeMetodo valor={metodo} onChange={setMetodo} />
+        ) : null}
+
+        {apertura.fase === "lista" && apertura.embed && metodo === "tarjeta" ? (
           <div className="mt-3.5">
             {/* La casilla de «guardar esta tarjeta» ya NO está aquí: la pinta
                 Stripe dentro de este formulario (D-3), porque con el formulario
@@ -972,10 +1016,11 @@ export function CheckoutForm({
           </div>
         ) : null}
 
-        {/* ⚠️ Y CON dLOCAL NO HAY CASILLA DE GUARDADO NI LA HABRÁ AQUÍ: su
-            formulario embebido NO TIENE BÓVEDA (dictado §5). Quien pague por
-            dLocal no puede guardar la tarjeta — decisión abierta D-6. */}
-        {apertura.fase === "lista" && apertura.transparente ? (
+        {apertura.fase === "lista" && metodo === "paypal" ? (
+          <BotonPaypal onClick={() => abrirCobro(apertura.bookingId, "paypal")} />
+        ) : null}
+
+        {apertura.fase === "lista" && apertura.transparente && metodo === "tarjeta" ? (
           <div className="mt-3.5">
             <DlocalEmbed
               sujeto={{ tipo: "booking", id: apertura.bookingId }}

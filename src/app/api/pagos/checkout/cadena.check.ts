@@ -216,3 +216,45 @@ const ABRE = (quien: string): Salida<string> => ({ tipo: "abierto", cobro: quien
 }
 
 console.log("cadena.check.ts · ok");
+
+// ══════════════════════════════════════════════════════════════════════════
+// EL RADIO DEL CHECKOUT — lo que el alumno elige manda sobre el orden
+// ══════════════════════════════════════════════════════════════════════════
+
+// 🔑 `preferido` va el PRIMERO. Por delante de `cobrador`, que es la única
+// excepción a la regla de «quien ya abrió un cobro va primero», y está razonada
+// en la cabecera de `cadenaDeCobro`: sin esto el radio no hace nada, porque al
+// llegar a la pantalla el cobro con tarjeta YA se abrió y `cobrador` lo
+// devolvería a la cabeza en el siguiente intento.
+assert.deepEqual(
+  cadenaDeCobro({ preferido: "paypal", cobrador: "stripe", snapshot: "dlocal", ruteo: ["dlocal", "stripe", "paypal"] }),
+  ["paypal", "stripe", "dlocal"],
+  "elegir PayPal tiene que ponerlo el primero, incluso si stripe ya abrió un cobro",
+);
+
+// Sin preferencia, NADA cambia respecto a antes del radio.
+assert.deepEqual(
+  cadenaDeCobro({ cobrador: "stripe", snapshot: "dlocal", ruteo: ["dlocal", "stripe", "paypal"] }),
+  ["stripe", "dlocal", "paypal"],
+);
+assert.deepEqual(
+  cadenaDeCobro({ preferido: null, cobrador: null, snapshot: "dlocal", ruteo: ["dlocal", "stripe"] }),
+  ["dlocal", "stripe"],
+);
+
+// Y el preferido no se duplica: sigue siendo una cadena sin repetidos, porque
+// dos llamadas idénticas al mismo proveedor con la misma clave de idempotencia
+// no aportan nada.
+assert.deepEqual(
+  cadenaDeCobro({ preferido: "dlocal", cobrador: "dlocal", snapshot: "dlocal", ruteo: ["dlocal", "stripe"] }),
+  ["dlocal", "stripe"],
+);
+
+// El respaldo SIGUE EN PIE detrás del preferido: elegir PayPal y que PayPal no
+// pueda no deja al alumno sin comprar.
+assert.deepEqual(
+  cadenaDeCobro({ preferido: "paypal", cobrador: null, snapshot: "stripe", ruteo: ["stripe", "paypal"] }),
+  ["paypal", "stripe"],
+);
+
+console.log("✅ cadena: el radio manda sobre el orden y el respaldo sigue detrás.");

@@ -462,6 +462,19 @@ export async function POST(req: Request) {
     orderId?: string;
     regaloId?: string;
     creditId?: string;
+    /**
+     * 🔑 EL RADIO DEL CHECKOUT: por qué riel quiere pagar el alumno (petición
+     * del cliente, 15-sep-2026). `'paypal'` o `'stripe'`/`'dlocal'`; cualquier
+     * otra cosa se ignora.
+     *
+     * ⚠️ ES UNA PREFERENCIA, NO UNA ORDEN, y la diferencia importa: reordena la
+     * cadena y no la sustituye, así que elegir PayPal y que PayPal no pueda
+     * cobrar no deja al alumno sin comprar — se cae al siguiente candidato,
+     * exactamente igual que antes de que existiera el radio. Es el mismo
+     * criterio que la preferencia de payout del tutor (`metodo-preferido.ts`):
+     * se ordena por lo que se quiere y se filtra por lo que se puede.
+     */
+    metodo?: string;
   };
   const { bookingId, orderId } = cuerpo;
   const regaloId = cuerpo.regaloId ?? cuerpo.creditId;
@@ -883,11 +896,56 @@ export async function POST(req: Request) {
    * filtra por disponibilidad a propósito: quien cobra necesita saber qué se
    * intentó, porque eso es lo que acaba en el 503.
    */
-  const cadena = cadenaDeCobro({
+  const ruteo = await chargeProvidersFor(cobrar.payerCountry);
+
+  /**
+   * 🔑 LA ELECCIÓN DEL ALUMNO, VALIDADA CONTRA SU PROPIA RUTA.
+   *
+   * ⚠️ ESTE FILTRO NO ES DECORATIVO. `metodo` llega del navegador, o sea de
+   * quien quiera mandar un POST, y sin comprobarlo sería «elige tú por dónde te
+   * cobramos». Lo que lo hace inofensivo es que la lista contra la que se
+   * compara es la de `ruta_de_pago(payments.payer_country)` —la misma que valida
+   * `set_charge_provider` dentro de la base, que es la comprobación de verdad—;
+   * esto solo evita meter en la cadena un candidato que la RPC iba a rechazar
+   * después, con el cobro ya abierto.
+   *
+   * Un valor que no esté en la ruta se IGNORA en silencio, no da 400: es una
+   * preferencia, y una preferencia imposible se comporta como no haberla dicho
+   * (mismo criterio que `ordenaPorPreferencia` con un canal inventado).
+   */
+  const sinPreferencia = cadenaDeCobro({
     cobrador: cobrar.cobrador,
     snapshot: cobrar.provider,
-    ruteo: await chargeProvidersFor(cobrar.payerCountry),
+    ruteo,
   });
+
+  /**
+   * 🔴 Y LA SEGUNDA CONDICIÓN ES LA QUE NO SE VE: el radio NO puede sacar a una
+   * reserva del camino SIMULADO.
+   *
+   * Una reserva congelada en 'simulated' se termina en simulado aunque la tabla
+   * ya nombre pasarelas detrás —es la regla del snapshot, la del párrafo de
+   * abajo—. Sin esta comprobación, elegir «PayPal» en una reserva así saltaría
+   * por delante de la cabeza y abriría un cobro REAL sobre una reserva nacida de
+   * mentira, que es exactamente lo que esa regla existe para impedir. Se
+   * pregunta por `opensRemoteCheckout` y no por el literal 'simulated' para que
+   * siga siendo verdad el día que haya otro proveedor local.
+   */
+  const preferido =
+    cuerpo.metodo &&
+    ruteo.includes(cuerpo.metodo) &&
+    adapterFor(sinPreferencia[0] ?? null).opensRemoteCheckout
+      ? cuerpo.metodo
+      : null;
+
+  const cadena = preferido
+    ? cadenaDeCobro({
+        preferido,
+        cobrador: cobrar.cobrador,
+        snapshot: cobrar.provider,
+        ruteo,
+      })
+    : sinPreferencia;
 
   // El ruteo manda, y manda la CABEZA de la cadena — que en el caso normal es el
   // snapshot: `payments.provider` es lo que `create_booking` congeló al

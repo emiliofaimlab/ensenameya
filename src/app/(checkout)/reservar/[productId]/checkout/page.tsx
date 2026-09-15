@@ -9,7 +9,7 @@ import {
 import { getProductDetail } from "@/lib/catalog/queries";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
 import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
-import { chargeProvidersFor, paisDelPagador } from "@/lib/payments";
+import { metodosDeCheckout, paisDelPagador } from "@/lib/payments";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { CheckoutSteps } from "@/components/checkout/checkout-steps";
@@ -99,12 +99,11 @@ export default async function CheckoutPage({
   // pantalla promete lo que va a pasar y aquella lo congela. Ver `paisDelPagador`.
   // Sin sesión da null, que rutea por la fila por defecto y cobra igual.
   const paisPagador = await paisDelPagador(sesion.timezone);
-  // La pantalla tiene que decir la verdad ANTES de que el alumno pulse.
-  // El PRIMER candidato es el que va a cobrar en el caso normal. El respaldo no
-  // se mira aquí a propósito: esta pantalla promete lo que va a pasar, y lo que
-  // va a pasar es que cobra el primero — el segundo solo entra si el primero no
-  // está disponible, y eso no se sabe hasta que se abre el cobro.
-  const simulado = (await chargeProvidersFor(paisPagador))[0] === "simulated";
+  // La pantalla tiene que decir la verdad ANTES de que el alumno pulse: si el
+  // cobro es simulado (aviso de entorno de pruebas) y si se le puede ofrecer
+  // PayPal (el radio que pidió el cliente). Las dos salen de la MISMA lista de
+  // ruteo, en un viaje — ver `metodosDeCheckout`.
+  const { simulado, paypal: paypalDisponible } = await metodosDeCheckout(paisPagador);
 
   // M-02 · ¿esta mentoría acepta sola? Cambia lo que se promete abajo: con la
   // aceptación automática la reserva pagada salta a `confirmed` sin pasar por
@@ -183,6 +182,10 @@ export default async function CheckoutPage({
 
       <CheckoutForm
         simulado={simulado}
+        // El radio tarjeta/PayPal solo existe si de verdad hay dos caminos: la
+        // ruta del pagador nombra a PayPal Y el riel está encendido en este
+        // entorno. Si no, la pantalla es exactamente la de siempre.
+        paypalDisponible={paypalDisponible}
         productId={productId}
         // D-2 · con la reserva creándose al llegar, el formulario tiene que
         // poder buscar la que ya hubiera de ESTE alumno. El id sale de la

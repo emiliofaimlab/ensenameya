@@ -88,14 +88,44 @@ export type Recorrido<T> =
  * ⚠️ NO SE FILTRA POR DISPONIBILIDAD AQUÍ, igual que `chargeProvidersFor` no
  * filtra: quien cobra necesita saber qué se intentó. Un candidato que no puede
  * entra en la cadena, se descarta con su motivo y ese motivo acaba en el 503.
+ *
+ * ── 🔑 Y DELANTE DE TODO ESO, LO QUE EL ALUMNO ELIGIÓ ──────────────────────
+ *
+ * `preferido` es el radio del checkout (tarjeta / PayPal, petición del cliente
+ * del 15-sep-2026) y va el PRIMERO, por delante incluso de `cobrador`. Es la
+ * única cosa que puede saltarse esa regla y conviene entender qué se está
+ * aceptando a cambio:
+ *
+ * `cobrador` va primero para que una recarga no abra un segundo cobro vivo. Con
+ * un radio eso deja de ser evitable POR DEFINICIÓN: al llegar a la pantalla ya
+ * se abrió el cobro con tarjeta —el formulario se monta solo (D-2)—, así que
+ * elegir PayPal después significa, necesariamente, un segundo vehículo de cobro
+ * para la misma reserva. No hay forma de ofrecer la elección sin eso, salvo no
+ * abrir nada hasta que elija, que es volver a la pantalla con botón que D-2
+ * quitó.
+ *
+ * Lo que lo hace aceptable no es este fichero, son las tres redes que ya
+ * existen: la pantalla DESMONTA el formulario de tarjeta al elegir PayPal (no
+ * hay dos botones de pagar a la vez), `confirm_payment` es idempotente por
+ * reserva, y un segundo pago sobre una reserva ya pagada cae en la red de X-02,
+ * que lo devuelve solo. O sea que el peor caso es un reembolso automático, no
+ * un cobro doble que se queda.
+ *
+ * ⚠️ Y SE IGNORA SI NO ESTÁ EN `ruteo`: una preferencia que nombra a un
+ * proveedor que la ruta del pagador no permite no es una elección, es un
+ * parámetro inventado en el navegador. Lo filtra quien llama —el Route Handler,
+ * que es quien tiene la lista— y aquí no se comprueba nada: este fichero ordena,
+ * no autoriza.
  */
 export function cadenaDeCobro(opts: {
   cobrador: string | null;
   snapshot: string | null;
   ruteo: string[];
+  /** El riel que el alumno eligió a mano, ya validado contra `ruteo`. */
+  preferido?: string | null;
 }): string[] {
   const cadena: string[] = [];
-  for (const clave of [opts.cobrador, opts.snapshot, ...opts.ruteo]) {
+  for (const clave of [opts.preferido, opts.cobrador, opts.snapshot, ...opts.ruteo]) {
     if (!clave) continue;
     if (cadena.includes(clave)) continue;
     cadena.push(clave);
