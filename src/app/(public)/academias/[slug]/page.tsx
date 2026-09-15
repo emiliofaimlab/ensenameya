@@ -111,13 +111,47 @@ export default async function AcademyPage({
   };
 
   return (
-    <div style={{ "--marca": marca } as React.CSSProperties}>
-      {/* El hero mantiene el azul de Enséñame Ya y la academia pone su color
-          como ACENTO (aro del logo, cifras, títulos de sección). Al revés
-          —fondo del color que teclee la academia— el texto blanco encima
-          dejaría de ser legible en cuanto alguien eligiera un tono claro. */}
-      <div className="bg-brand bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% text-white">
-        <Container className="py-8 sm:py-12">
+    /*
+      G-05 · HERO, CUERPO Y PANEL SON **UNA SOLA REJILLA**, copiada de la ficha
+      del tutor porque el pedido del 15-sep es justo ese: que el calendario se
+      quede pegado a la derecha igual que allí.
+
+      ⚠️ Que el panel ocupe las DOS filas (`row-start-1 row-end-3`) no es
+      cosmético: es lo único que le da RECORRIDO a su `lg:sticky`. Un elemento
+      pegajoso solo se desplaza dentro de su bloque contenedor, así que si su
+      celda midiera lo mismo que él tendría 0 px por los que deslizarse y no se
+      despegaría nunca — el fallo que `booking-panel.tsx` documenta en su
+      cabecera.
+
+      ⚠️ `row-start-1 row-end-3` y NO `row-span-2 row-start-1`: lo segundo son
+      dos declaraciones, una de ellas la ABREVIADA `grid-row`, y según en qué
+      orden las emita Tailwind la abreviada le pisa el inicio a la otra.
+
+      ⚠️ El azul NO es el fondo del hero: es una capa propia (`col-span-full`,
+      fila 1) que se estira sola a la altura de esa fila. Como fondo del hero
+      terminaría en el borde de la columna izquierda y dejaría el panel
+      recortado sobre blanco. Y tiene que llegar de borde a borde de la
+      VENTANA: de ahí el `calc(50% - 50vw)` a cada lado, que el
+      `overflow-x-clip` de fuera remata —clip y no hidden: `hidden` haría de
+      este div un contenedor de scroll y dejaría al panel sin viewport al que
+      pegarse.
+    */
+    <div className="overflow-x-clip">
+      <Container
+        className="grid grid-cols-[minmax(0,1fr)] gap-y-2 pb-8 sm:pb-16 lg:grid-cols-[minmax(0,1fr)_348px] lg:gap-x-10 lg:gap-y-0"
+        style={{ "--marca": marca } as React.CSSProperties}
+      >
+        {/* La banda azul del hero. La academia pone su color como ACENTO —aro
+            del logo, iniciales— y nunca como fondo de un texto: `brand_color`
+            lo teclea un humano y un tono claro dejaría el blanco ilegible. */}
+        <div
+          aria-hidden
+          className="col-span-full row-start-1 mx-[calc(50%_-_50vw)] bg-brand bg-linear-to-r from-[#0072ff] to-[#49a9ff] to-80% max-lg:bg-none"
+        />
+
+        {/* `relative` para pintar por encima de la banda: los dos ocupan la
+            misma celda. */}
+        <div className="relative col-start-1 row-start-1 py-8 text-white sm:py-12">
           <nav
             aria-label="Miga de pan"
             className="truncate text-[11px] text-white/85 sm:text-[13px]"
@@ -205,9 +239,15 @@ export default async function AcademyPage({
               </div>
 
               <div className="mt-5 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
+                {/* Solo por debajo de lg, y no es un olvido: desde 1024 el
+                    panel está pegado a la derecha y YA se ve desde el primer
+                    píxel, así que este ancla no tenía a dónde llevar y el clic
+                    se sentía roto. En móvil el panel está al final de la
+                    página y sí hace su trabajo. Mismo criterio que la ficha
+                    del tutor, donde este botón tampoco existe en escritorio. */}
                 <Link
                   href="#reservar"
-                  className="inline-flex h-10 items-center rounded-[10px] bg-primary px-5 text-[14px] font-semibold text-primary-foreground hover:opacity-95"
+                  className="inline-flex h-10 items-center rounded-[10px] bg-primary px-5 text-[14px] font-semibold text-primary-foreground hover:opacity-95 lg:hidden"
                 >
                   Reservar mentoría
                 </Link>
@@ -231,11 +271,12 @@ export default async function AcademyPage({
               </div>
             </div>
           </div>
-        </Container>
-      </div>
+        </div>
 
-      <Container>
-        {academy.description ? (
+        {/* El cuerpo: columna izquierda de la fila 2. `min-w-0` para que una
+            rejilla de tarjetas no ensanche la columna y empuje al panel. */}
+        <div className="col-start-1 row-start-2 min-w-0">
+          {academy.description ? (
           <Section className="max-w-3xl">
             <h2 className="text-[20px] font-bold text-[#212121]">
               Sobre {academy.name}
@@ -296,61 +337,6 @@ export default async function AcademyPage({
           )}
         </Section>
 
-        {/*
-          El calendario, pedido el 15-sep. Es el MISMO `BookingPanel` de la
-          ficha del tutor y de la de mentoría: elegir mentoría, día y hora, y de
-          ahí al checkout de siempre. No se le enseña un calendario propio a la
-          academia porque la academia no imparte nada — quien tiene agenda es
-          cada tutor, y el panel ya la resuelve por mentoría.
-
-          Va en una sección a lo ancho y no en la columna `sticky` del perfil de
-          tutor: aquí el panel llega después de tutores y mentorías, y estirar
-          una rejilla de dos columnas sobre toda la página costaría más que el
-          hueco que gana. `scroll-mt-44`: la cabecera pública es sticky y mide
-          173 px a 390, así que llegar por el ancla dejaba el título debajo.
-        */}
-        {products.length > 0 ? (
-          <Section
-            id="reservar"
-            className="scroll-mt-44 border-t border-[#ebebeb]"
-          >
-            <h2 className="text-[20px] font-bold text-[#212121]">
-              Reserva tu mentoría
-            </h2>
-            <p className="mt-2 max-w-2xl text-[14.5px] text-[#525252]">
-              Elige la mentoría, el día y la hora. Reservas con el tutor que la
-              imparte, con las mismas condiciones de siempre.
-            </p>
-
-            {/* Misma reparto que la ficha del tutor: el contenido a la
-                izquierda y el panel a la derecha, para que la columna ancha no
-                quede en blanco. En móvil `order` sube el panel por delante de
-                la política: ahí lo que se viene a hacer es reservar. */}
-            <div className="mt-6 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-              <CancellationPolicy className="max-lg:order-2" />
-              <div className="max-lg:order-1">
-                <BookingPanel
-                  products={products}
-                  selectedId={sp.p}
-                  selectedDay={sp.d}
-                  selectedTime={sp.h}
-                  month={sp.m}
-                  timeZone={timeZone}
-                  formato={formato}
-                  hrefFor={hrefFor}
-                  title={`Reserva con ${academy.name}`}
-                  compact
-                  autoAcceptLine
-                  // El panel ya no es lo último de la página —debajo van las
-                  // reseñas—, así que la barra fija de móvil sobra: se quedaría
-                  // pegada abajo durante toda la sección siguiente.
-                  ctaFijo={false}
-                />
-              </div>
-            </div>
-          </Section>
-        ) : null}
-
         {reviews.length > 0 ? (
           <Section className="border-t border-[#ebebeb]">
             <h2 className="text-[20px] font-bold text-[#212121]">
@@ -375,6 +361,39 @@ export default async function AcademyPage({
             </div>
           </Section>
         ) : null}
+
+          {/* La política vive en el cuerpo, como en la ficha del tutor: es
+              condición de la reserva, no parte del panel. */}
+          <CancellationPolicy className="mb-2" />
+        </div>
+
+        {/*
+          El panel: columna derecha, y ocupa LAS DOS FILAS —ahí está el
+          recorrido de su `sticky` (ver la cabecera de la rejilla)—. Arranca
+          69 px bajo el borde superior, o sea a la altura del nombre.
+
+          `scroll-mt-44` por debajo de lg: la cabecera pública es sticky y mide
+          173 px a 390, así que llegar por el ancla dejaba el título del panel
+          escondido detrás de ella.
+        */}
+        <div
+          id="reservar"
+          className="max-lg:scroll-mt-44 lg:col-start-2 lg:row-start-1 lg:row-end-3 lg:mt-[69px]"
+        >
+          <BookingPanel
+            products={products}
+            selectedId={sp.p}
+            selectedDay={sp.d}
+            selectedTime={sp.h}
+            month={sp.m}
+            timeZone={timeZone}
+            formato={formato}
+            hrefFor={hrefFor}
+            title={`Reserva con ${academy.name}`}
+            compact
+            autoAcceptLine
+          />
+        </div>
       </Container>
     </div>
   );
