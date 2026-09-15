@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
+import {
+  BotonPaypal,
+  SelectorDeMetodo,
+  type MetodoElegido,
+} from "@/components/checkout/selector-de-metodo";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import { ConfirmarConCredito } from "@/components/checkout/confirmar-con-credito";
 import {
@@ -115,11 +120,18 @@ export function OrderPayment({
   orderId,
   total,
   currency,
+  paypalDisponible = false,
 }: {
   orderId: string;
   /** Solo para el botón del camino simulado. El cobro real no lo mira. */
   total: number;
   currency: string;
+  /**
+   * ¿Se le puede ofrecer PayPal? Lo resuelve el servidor (`metodosDeCheckout`)
+   * y llega hecho. Con `false` esta pantalla es exactamente la de siempre.
+   * El porqué de cada condición está en `selector-de-metodo.tsx`.
+   */
+  paypalDisponible?: boolean;
 }) {
   const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
@@ -135,12 +147,18 @@ export function OrderPayment({
   // Qué pedido se abrió ya. Con la clave dentro y no un booleano, StrictMode no
   // abre dos veces y una navegación a OTRO pedido sí vuelve a abrir.
   const abiertoPara = useRef<string | null>(null);
+  /** El radio. Ver `selector-de-metodo.tsx`: 'tarjeta' NO es un riel. */
+  const [metodo, setMetodo] = useState<MetodoElegido>("tarjeta");
 
-  useEffect(() => {
-    if (abiertoPara.current === orderId) return;
-    abiertoPara.current = orderId;
-
-    async function abrir() {
+  /**
+   * ⚠️ ESTO VIVÍA DENTRO DEL `useEffect` Y HA SALIDO A UN CALLBACK, que es todo
+   * el cambio estructural del radio en esta pantalla: hacía falta poder volver a
+   * abrir el cobro —con otro riel— sin que lo dispare un montaje. El efecto de
+   * abajo sigue llamándolo igual y con la misma guarda, así que la apertura al
+   * llegar no cambia en nada.
+   */
+  const abrirCobro = useCallback(
+    async (riel?: "paypal") => {
       setApertura({ fase: "abriendo" });
       // En paralelo con la apertura a propósito: lo que ponen los créditos solo
       // cambia lo que se PINTA, así que no tiene por qué añadir un viaje a la
@@ -152,7 +170,10 @@ export function OrderPayment({
           // ⚠️ `orderId`, no `bookingId`: el Route Handler los trata como
           // excluyentes y de esa distinción depende que el webhook acredite las N
           // líneas y no una.
-          body: JSON.stringify({ orderId }),
+          //
+          // `metodo` SOLO cuando el alumno eligió un riel: 'tarjeta' no es una
+          // clave de `charge_providers` y el servidor la ignoraría igual.
+          body: JSON.stringify(riel ? { orderId, metodo: riel } : { orderId }),
         }),
         creditoDelPedido(orderId),
       ]);
@@ -200,10 +221,15 @@ export function OrderPayment({
         return;
       }
       setApertura({ fase: "error", mensaje: accion.mensaje });
-    }
+    },
+    [orderId],
+  );
 
-    void abrir();
-  }, [orderId]);
+  useEffect(() => {
+    if (abiertoPara.current === orderId) return;
+    abiertoPara.current = orderId;
+    void abrirCobro();
+  }, [orderId, abrirCobro]);
 
   /**
    * Camino simulado (`payment_routing_rules` todavía en 'simulated', que es el
@@ -277,7 +303,18 @@ export function OrderPayment({
         </p>
       ) : null}
 
-      {apertura.fase === "lista" ? (
+      {/* 🔑 EL RADIO, igual que en el checkout de una reserva y por lo mismo:
+          al elegir PayPal se DESMONTA el formulario de tarjeta, porque el cobro
+          con tarjeta ya está abierto y dejar los dos a la vez son dos botones de
+          pagar sobre el mismo pedido. Con un pedido importa aún más: el cargo es
+          UNO para las N mentorías (P-3). El razonamiento entero está en
+          `api/pagos/checkout/cadena.ts`. */}
+      {paypalDisponible &&
+      (apertura.fase === "lista" || apertura.fase === "transparente") ? (
+        <SelectorDeMetodo valor={metodo} onChange={setMetodo} />
+      ) : null}
+
+      {apertura.fase === "lista" && metodo === "tarjeta" ? (
         <div className="mt-3.5">
           {/* La casilla de «guardar esta tarjeta» la pinta Stripe dentro de
               este formulario (D-3), igual que en el checkout de una reserva. */}
@@ -285,11 +322,16 @@ export function OrderPayment({
         </div>
       ) : null}
 
+      {(apertura.fase === "lista" || apertura.fase === "transparente") &&
+      metodo === "paypal" ? (
+        <BotonPaypal onClick={() => void abrirCobro("paypal")} />
+      ) : null}
+
       {/* ⚠️ Y AQUÍ NO HAY CASILLA DE GUARDADO DE NINGUNA CLASE: el formulario
           embebido de dLocal NO TIENE BÓVEDA (dictado §5). Quien pague por dLocal
           no puede guardar su tarjeta — es la decisión abierta D-6, y lo honesto
           es no ofrecer una casilla que no guardaría nada. */}
-      {apertura.fase === "transparente" ? (
+      {apertura.fase === "transparente" && metodo === "tarjeta" ? (
         <div className="mt-3.5">
           <DlocalEmbed
             sujeto={{ tipo: "order", id: orderId }}

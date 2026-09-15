@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
+import {
+  BotonPaypal,
+  SelectorDeMetodo,
+  type MetodoElegido,
+} from "@/components/checkout/selector-de-metodo";
 import { HoldCountdown } from "@/components/checkout/hold-countdown";
 import {
   SelectorDeCredito,
@@ -77,7 +82,18 @@ type Apertura =
  * `20260912110000` §8). Quien no tiene ningún crédito, que son casi todos, no
  * nota nada: el selector no se pinta y el cobro se abre igual que siempre.
  */
-export function ResumePayment({ bookingId }: { bookingId: string }) {
+export function ResumePayment({
+  bookingId,
+  paypalDisponible = false,
+}: {
+  bookingId: string;
+  /**
+   * ¿Se le puede ofrecer PayPal? Lo resuelve el servidor (`metodosDeCheckout`).
+   * Con `false` esta pantalla es exactamente la de siempre. El porqué de cada
+   * condición está en `selector-de-metodo.tsx`.
+   */
+  paypalDisponible?: boolean;
+}) {
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
   /**
    * Lo último que ha dicho el selector. `null` = todavía no ha dicho nada, o
@@ -103,18 +119,22 @@ export function ResumePayment({ bookingId }: { bookingId: string }) {
    * cambia la condición con la que se monta.
    */
   const sinPasarela = useRef(false);
+  /** El radio. Ver `selector-de-metodo.tsx`: 'tarjeta' NO es un riel. */
+  const [metodo, setMetodo] = useState<MetodoElegido>("tarjeta");
 
   /**
    * Abre el cobro y traduce la respuesta. Se llama desde dos sitios —al llegar,
    * cuando no hay nada que elegir, y al pulsar «Continuar al pago»— y por eso
    * está fuera del efecto.
    */
-  const abrirCobro = useCallback(async (id: string) => {
+  const abrirCobro = useCallback(async (id: string, riel?: "paypal") => {
     setApertura({ fase: "abriendo" });
     const res = await fetch("/api/pagos/checkout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bookingId: id }),
+      // `metodo` SOLO cuando el alumno eligió un riel: 'tarjeta' no es una clave
+      // de `charge_providers` y el servidor la ignoraría igual.
+      body: JSON.stringify(riel ? { bookingId: id, metodo: riel } : { bookingId: id }),
     });
     const salida = (await res.json().catch(() => ({}))) as RespuestaDeCobro;
 
@@ -328,13 +348,28 @@ export function ResumePayment({ bookingId }: { bookingId: string }) {
         </p>
       ) : null}
 
-      {apertura.fase === "lista" ? (
+      {/* 🔑 EL RADIO, igual que en el checkout de una reserva nueva y por lo
+          mismo: al elegir PayPal se DESMONTA el formulario de tarjeta, porque el
+          cobro con tarjeta ya está abierto y dejar los dos a la vez son dos
+          botones de pagar sobre la misma reserva. El razonamiento entero está en
+          `api/pagos/checkout/cadena.ts`. */}
+      {paypalDisponible &&
+      (apertura.fase === "lista" || apertura.fase === "transparente") ? (
+        <SelectorDeMetodo valor={metodo} onChange={setMetodo} />
+      ) : null}
+
+      {apertura.fase === "lista" && metodo === "tarjeta" ? (
         <div className="mt-3.5">
           <StripeEmbed {...apertura.embed} />
         </div>
       ) : null}
 
-      {apertura.fase === "transparente" ? (
+      {(apertura.fase === "lista" || apertura.fase === "transparente") &&
+      metodo === "paypal" ? (
+        <BotonPaypal onClick={() => void abrirCobro(bookingId, "paypal")} />
+      ) : null}
+
+      {apertura.fase === "transparente" && metodo === "tarjeta" ? (
         <div className="mt-3.5">
           <DlocalEmbed
             sujeto={{ tipo: "booking", id: bookingId }}

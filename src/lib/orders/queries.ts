@@ -68,6 +68,14 @@ export type PedidoResuelto = {
    * no puede llamar «Total pagado» a `total` sin mirar esto.
    */
   creditoTotal: number;
+  /**
+   * 🔑 Desde qué país paga el alumno, CONGELADO al crear las reservas
+   * (`bookings.payer_country`). Es la clave con la que se resolvió
+   * `charge_providers` y la misma contra la que valida `set_charge_provider`,
+   * así que es la que decide qué métodos de pago puede ofrecer la pantalla.
+   * `null` es un valor legítimo: rutea por la fila de por defecto.
+   */
+  payerCountry: string | null;
   currency: string;
   /** ¿Siguen TODAS las líneas esperando el mismo cobro? (P-1, todo o nada.) */
   cobrable: boolean;
@@ -100,7 +108,7 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
   const { data: lineas } = await supabase
     .from("bookings")
     .select(
-      "id, status, product_id, session_duration_min, products(title, tutor_id, auto_accept_bookings, requirements), sessions(start_at, status), payments(gross_amount, credit_amount, currency)",
+      "id, status, product_id, session_duration_min, payer_country, products(title, tutor_id, auto_accept_bookings, requirements), sessions(start_at, status), payments(gross_amount, credit_amount, currency)",
     )
     .eq("order_id", orderId);
 
@@ -162,6 +170,21 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
     /** Lo que pusieron los créditos en TODO el pedido, sumando sus líneas. */
     creditoTotal: resueltas.reduce((s, l) => s + l.credito, 0),
     currency: order.currency,
+    /**
+     * 🔑 DESDE QUÉ PAÍS PAGA ESTE ALUMNO, CONGELADO al crear la reserva.
+     *
+     * Es la clave con la que se resolvió `charge_providers` y la misma contra la
+     * que valida `set_charge_provider`, así que es la que tiene que mirar la
+     * pantalla para saber qué métodos ofrecer. **No se vuelve a deducir de la
+     * zona horaria**: si el alumno cambió de zona entre reservar y pagar, esa
+     * deducción daría otro país, la pantalla ofrecería un riel que la RPC
+     * rechazaría y el cobro se abriría con `payments.provider` sin mover — o sea
+     * un payout atado a un saldo que no tiene el dinero.
+     *
+     * Las N líneas son del mismo alumno y por tanto del mismo país; se lee la
+     * primera. Viaja en el `select` que ya existía: ni una consulta más.
+     */
+    payerCountry: filas[0]?.payer_country ?? null,
     // P-1 · el pedido se cobra entero o no se cobra. Basta con que una línea
     // haya dejado de esperar el cobro —la venció el cron, la canceló otro
     // camino— para que ya no haya nada que abrir.
