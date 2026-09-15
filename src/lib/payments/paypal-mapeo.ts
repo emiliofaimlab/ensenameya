@@ -2,9 +2,9 @@
  * EL MAPEO PURO DE PAYPAL — separado del adaptador a propósito.
  *
  * No es una capa: es que `paypal-provider.ts` lleva `import "server-only"` y con
- * eso su lógica no se puede correr desde un script de node. Estas tres funciones
- * son las que deciden si un tutor cobró, y merecen una comprobación que se pueda
- * ejecutar. Ver `paypal-mapeo.check.ts`.
+ * eso su lógica no se puede correr desde un script de node. Estas funciones son
+ * las que deciden si un tutor cobró y qué se le cobra a un alumno, y merecen una
+ * comprobación que se pueda ejecutar. Ver `paypal-mapeo.check.ts`.
  */
 import type { PayoutResult } from "./port";
 
@@ -174,4 +174,138 @@ export function receptorDe(b: BeneficiarioPaypal): Receptor | null {
   // Ni una cosa ni la otra: quien llame tiene que devolver `sin-datos`, no
   // inventarse un receptor. Un payout a la nada es dinero perdido de verdad.
   return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// EL COBRO — PayPal deja de ser solo el que paga (15-sep-2026)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// ── LO QUE SE MIDIÓ, porque esto decide la forma del adaptador ─────────────
+// Contra el sandbox, con las claves que ya estaban en `.env.local`:
+//
+//   · `POST /v2/checkout/orders` de 12,00 USD → 200 `PAYER_ACTION_REQUIRED` y
+//     un enlace `www.sandbox.paypal.com/checkoutnow?token=…`.
+//   · La MISMA llamada con el mismo `PayPal-Request-Id` → **el mismo id de
+//     orden**, no una orden nueva.
+//
+// 🔑 Ese segundo punto es el que hace que este cobro se parezca a Stripe y no a
+// dLocal Go. Allí repetir el `order_id` da `5009 Order id is duplicated` —un
+// 400 seco— y por eso su adaptador tiene que EMULAR la idempotencia con memoria
+// en nuestra base (`sujetoDelCobro`, `refGuardada`, `sellarRef`: 250 líneas).
+// Aquí la cabecera es la memoria: recargar el checkout devuelve la misma orden
+// porque `idempotencyKey` es determinista por sujeto. **No se escribe nada de
+// eso**, igual que no se escribió el barrido de huérfanos del payout y por el
+// mismo motivo.
+//
+// ponytail: el techo es que dependemos de `PayPal-Request-Id`. Si un día dejara
+// de deduplicar se notaría enseguida —dos órdenes vivas para una reserva— y
+// entonces tocaría sellar `provider_payment_id` antes de redirigir, como dLocal.
+
+/** Lo que responde `POST /v2/checkout/orders`, en lo que nos importa. */
+export type OrdenPaypal = {
+  id: string;
+  status: string;
+  links?: Array<{ href?: string; rel?: string }>;
+};
+
+/**
+ * Lo que este mapeo necesita de un `ChargeInput`. Se declara aparte en vez de
+ * importar el tipo del puerto porque `port.ts` lleva `import "server-only"` y
+ * este fichero tiene que poder correr bajo `node --experimental-strip-types`.
+ * El compilador ata las dos formas en el adaptador, que sí importa las dos.
+ */
+export type CobroPaypal = {
+  ref: { tipo: "booking" | "order"; id: string };
+  lineas: Array<{ concepto: string; amountMinor: number }>;
+  currency: string;
+  returnUrl: string;
+};
+
+/** PayPal corta `description` y `custom_id` en 127 caracteres. */
+const TOPE = 127;
+
+/**
+ * 🔑 A QUIÉN SE ACREDITA ESTE DINERO CUANDO VUELVA EL WEBHOOK.
+ *
+ * Va con el tipo DENTRO (`booking-…` / `order-…`) y no como un uuid pelado, que
+ * es lo que hace Stripe con las reservas por razones históricas. Un uuid sin
+ * tipo es un `string` con dos significados posibles, y de eso ya avisa `CobroRef`
+ * en el puerto: así es como se confirma una reserva con el id de un pedido.
+ */
+export function refExterna(ref: CobroPaypal["ref"]): string {
+  return `${ref.tipo}-${ref.id}`;
+}
+
+/** El camino de vuelta, para el webhook. `null` si no es nuestro. */
+export function refDeCustomId(custom: string | null | undefined): CobroPaypal["ref"] | null {
+  const m = /^(booking|order)-([0-9a-f-]{36})$/i.exec((custom ?? "").trim());
+  return m ? { tipo: m[1] as "booking" | "order", id: m[2] } : null;
+}
+
+/**
+ * El cuerpo del `POST /v2/checkout/orders`.
+ *
+ * ⚠️ SIN `items` NI `breakdown`, Y ES DELIBERADO. PayPal exige que la suma de
+ * `items[].unit_amount × quantity` cuadre al céntimo con `amount.breakdown.
+ * item_total` y que ese cuadre con `amount.value`, o responde 422 y no cobra
+ * nadie. Es aritmética duplicada para pintar un desglose que el alumno ya tiene
+ * delante en NUESTRA pantalla — la misma que Stripe tampoco le enseña, porque
+ * con `ui_mode:'form'` sus `line_items` no se ven. El desglose que se lee es el
+ * nuestro; aquí solo viaja el total, que es lo único que se cobra.
+ *
+ * `cancel_url` = `return_url` a propósito: cancelar en PayPal devuelve al
+ * checkout, que es donde se puede reintentar. El puerto no lleva un campo para
+ * eso porque los otros dos rieles no tienen a dónde cancelar (el formulario se
+ * monta dentro).
+ */
+export function ordenDeCobro(input: CobroPaypal): Record<string, unknown> {
+  const total = input.lineas.reduce((s, l) => s + l.amountMinor, 0);
+  return {
+    intent: "CAPTURE",
+    purchase_units: [
+      {
+        custom_id: refExterna(input.ref),
+        description: input.lineas.map((l) => l.concepto).join(" · ").slice(0, TOPE),
+        amount: { currency_code: input.currency, value: aDecimal(total) },
+      },
+    ],
+    payment_source: {
+      paypal: {
+        experience_context: {
+          brand_name: "Enséñame Ya",
+          locale: "es-ES",
+          // Sin dirección: no vendemos nada que se envíe, y pedirla sería un
+          // paso más y un dato personal de más.
+          shipping_preference: "NO_SHIPPING",
+          // «Pagar ahora» en vez de «Continuar»: se cobra al aprobar, no hay
+          // una pantalla nuestra después donde confirmar otra vez.
+          user_action: "PAY_NOW",
+          return_url: input.returnUrl,
+          cancel_url: input.returnUrl,
+        },
+      },
+    },
+  };
+}
+
+/**
+ * A dónde se manda al alumno. `null` si esta orden ya no es pagable.
+ *
+ * ⚠️ SE LEE EL ENLACE, NO SE COMPONE LA URL — mismo criterio que
+ * `loteYaExistente`: el `token=` de `checkoutnow` es el id de la orden HOY, y
+ * componerlo a mano nos deja mandando gente a una pantalla que no existe el día
+ * que eso cambie.
+ *
+ * Se aceptan los dos `rel` porque son el mismo enlace con dos nombres: con
+ * `payment_source.paypal` dentro —lo que manda `ordenDeCobro`— PayPal lo llama
+ * `payer-action`, y sin él `approve`. Medido: `payer-action`.
+ *
+ * `null` NO significa «falló». Significa que la orden existe y no admite
+ * aprobación: típicamente porque YA se aprobó o se pagó, que es lo que devuelve
+ * repetir la petición idempotente después de pagar. Quien llame tiene que tratar
+ * eso como «hay un cobro vivo ahí» y NO abrir otro.
+ */
+export function enlaceDePago(orden: OrdenPaypal): string | null {
+  const l = (orden.links ?? []).find((x) => x.rel === "payer-action" || x.rel === "approve");
+  return l?.href ?? null;
 }

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 
 import {
   receptorDe, PaypalError, aDecimal, desenlace, loteDuplicadoSinEnlace, loteYaExistente,
-  type LotePaypal } from "./paypal-mapeo.ts";
+  enlaceDePago, ordenDeCobro, refDeCustomId, refExterna,
+  type CobroPaypal, type LotePaypal } from "./paypal-mapeo.ts";
 
 /**
  * Comprobación del mapeo de PayPal. Sin framework: `npm run check:paypal`.
@@ -126,4 +127,104 @@ assert.deepEqual(receptorDe({ handle: " a@b.com ", verified_account_id: "  " }),
 assert.equal(receptorDe({}), null);
 assert.equal(receptorDe({ handle: null, verified_account_id: null }), null);
 
-console.log("✅ mapeo de PayPal: 'pagado' solo con SUCCESS, y el duplicado se reconoce.");
+// ══════════════════════════════════════════════════════════════════════════
+// EL COBRO
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Lo que vigila esta mitad, y por qué no falla ruidosamente si se rompe:
+//
+//   · el IMPORTE. Es la suma de las líneas y nada más (regla de oro 2). Un
+//     redondeo mal puesto cobra de menos —lo paga la plataforma— o de más, que
+//     es peor y además es reclamable.
+//   · el SUJETO. `custom_id` es lo único que le dirá al webhook a quién
+//     acreditar el dinero. Si la ida y la vuelta dejan de cuadrar, el pago entra
+//     y no se confirma ninguna reserva.
+//   · el ENLACE `null`. Es el caso caro: significa «la orden ya está pagada», y
+//     si se confundiera con «falló», la cadena de respaldo abriría un cobro con
+//     otro riel encima de uno ya cobrado.
+
+const cobro = (lineas: CobroPaypal["lineas"]): CobroPaypal => ({
+  ref: { tipo: "booking", id: "3f8b1c62-1d4e-4a7b-9f01-8c2d5e6a7b90" },
+  lineas,
+  currency: "USD",
+  returnUrl: "https://ensenameya.com/reservar/x/checkout",
+});
+
+const unidad = (o: Record<string, unknown>) =>
+  (o.purchase_units as Array<Record<string, unknown>>)[0];
+
+// ── 1 · el total es la SUMA de las líneas, en unidad mayor ─────────────────
+const tres = ordenDeCobro(cobro([
+  { concepto: "Mentoría de Álgebra", amountMinor: 4500 },
+  { concepto: "Mentoría de Física", amountMinor: 4500 },
+  { concepto: "Mentoría de Química", amountMinor: 3333 },
+]));
+assert.deepEqual(
+  unidad(tres).amount,
+  { currency_code: "USD", value: "123.33" },
+  "el cargo tiene que ser la suma exacta de las líneas",
+);
+
+// Una sola línea produce exactamente lo mismo que antes del pedido.
+assert.deepEqual(
+  unidad(ordenDeCobro(cobro([{ concepto: "Mentoría", amountMinor: 4500 }]))).amount,
+  { currency_code: "USD", value: "45.00" },
+);
+
+// ── 2 · SIN `items` ni `breakdown` ─────────────────────────────────────────
+// No es una omisión: PayPal exige que los tres importes cuadren al céntimo o
+// responde 422 y no cobra nadie. Que alguien los añada "para que se vea el
+// desglose" es cómo vuelve ese 422, y el desglose ya lo pinta nuestra pantalla.
+assert.equal(unidad(tres).items, undefined, "sin items: el 422 de item_total no vale el desglose");
+assert.equal(
+  (unidad(tres).amount as Record<string, unknown>).breakdown,
+  undefined,
+  "sin breakdown por lo mismo",
+);
+
+// ── 3 · el sujeto sobrevive la ida y la vuelta ─────────────────────────────
+for (const tipo of ["booking", "order"] as const) {
+  const ref = { tipo, id: "3f8b1c62-1d4e-4a7b-9f01-8c2d5e6a7b90" };
+  assert.deepEqual(refDeCustomId(refExterna(ref)), ref, `un ${tipo} tiene que volver como ${tipo}`);
+}
+// 🔑 Y un pedido NO puede volver como reserva: es el fallo que `CobroRef` existe
+// para impedir, o sea confirmar una reserva con el id de un pedido.
+assert.notDeepEqual(
+  refDeCustomId("order-3f8b1c62-1d4e-4a7b-9f01-8c2d5e6a7b90")?.tipo,
+  "booking",
+);
+assert.equal(refDeCustomId(unidad(tres).custom_id as string)?.tipo, "booking");
+
+// Lo que no es nuestro no se adopta. Un `custom_id` de otro comercio, o vacío,
+// devuelve null y quien llame ignora el evento en vez de acreditarle a alguien.
+for (const basura of [null, undefined, "", "booking-", "pedido-1", "3f8b1c62"]) {
+  assert.equal(refDeCustomId(basura), null, `"${basura}" no es un sujeto nuestro`);
+}
+
+// ── 4 · la descripción cabe en lo que PayPal acepta ────────────────────────
+const largo = ordenDeCobro(cobro(
+  Array.from({ length: 9 }, (_, i) => ({ concepto: `Mentoría larguísima número ${i}`, amountMinor: 100 })),
+));
+assert.ok(
+  (unidad(largo).description as string).length <= 127,
+  "PayPal corta description en 127: se manda ya cortada o responde 400",
+);
+
+// ── 5 · el enlace, y el `null` que NO es un fallo ──────────────────────────
+const orden = (rel: string) => ({ id: "5LW796310S051353V", status: "PAYER_ACTION_REQUIRED",
+  links: [{ rel: "self", href: "https://api/x" }, { rel, href: "https://www.paypal.com/checkoutnow?token=5LW" }] });
+
+// Los dos nombres del mismo enlace: con `payment_source` es `payer-action`
+// (medido) y sin él `approve`.
+for (const rel of ["payer-action", "approve"]) {
+  assert.equal(enlaceDePago(orden(rel)), "https://www.paypal.com/checkoutnow?token=5LW");
+}
+
+// 🔴 EL CASO CARO. Una orden ya aprobada o ya pagada no trae enlace de pago.
+// Esto NO es "PayPal falló": es "ahí hay un cobro vivo". Quien llame devuelve
+// `en-duda` y la cadena SE PARA — si lo tratara como un rechazo, abriría un
+// segundo cobro con otro riel sobre dinero que ya entró.
+assert.equal(enlaceDePago({ id: "5LW", status: "COMPLETED", links: [{ rel: "self", href: "u" }] }), null);
+assert.equal(enlaceDePago({ id: "5LW", status: "COMPLETED" }), null);
+
+console.log("✅ mapeo de PayPal: 'pagado' solo con SUCCESS, el duplicado se reconoce, y el cobro suma bien.");
