@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   receptorDe, PaypalError, aDecimal, desenlace, loteDuplicadoSinEnlace, loteYaExistente,
-  enlaceDePago, ordenDeCobro, refDeCustomId, refExterna,
+  enlaceDePago, ordenDeCobro, refDeCustomId, refExterna, aMenor, eventoDeWebhook,
   type CobroPaypal, type LotePaypal } from "./paypal-mapeo.ts";
 
 /**
@@ -227,4 +227,93 @@ for (const rel of ["payer-action", "approve"]) {
 assert.equal(enlaceDePago({ id: "5LW", status: "COMPLETED", links: [{ rel: "self", href: "u" }] }), null);
 assert.equal(enlaceDePago({ id: "5LW", status: "COMPLETED" }), null);
 
-console.log("✅ mapeo de PayPal: 'pagado' solo con SUCCESS, el duplicado se reconoce, y el cobro suma bien.");
+// ══════════════════════════════════════════════════════════════════════════
+// EL WEBHOOK
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── 6 · el céntimo que la coma flotante se come ────────────────────────────
+// 🔴 `78.33 * 100` es 7832.999999999999. Truncarlo cobra un céntimo de menos, y
+// ese céntimo NO es cosmético: `confirm_payment` concilia lo cobrado contra lo
+// debido y ABORTA si no cuadra, así que el resultado no es cobrar de menos —
+// es la reserva sin confirmar con el dinero ya cobrado, y PayPal reintentando.
+assert.equal(aMenor("78.33"), 7833, "el redondeo se hace, no se trunca");
+assert.equal(aMenor("45.00"), 4500);
+assert.equal(aMenor("0.01"), 1);
+assert.equal(aMenor("1234.56"), 123456);
+// Lo que no es un número no se convierte en 0: `null` deja la conciliación por
+// argumento inerte y el webhook lo grita, que es lo correcto. Un 0 diría "se
+// cobró cero" y eso sí tumbaría la transacción con un descuadre falso.
+assert.equal(aMenor(undefined), null);
+assert.equal(aMenor(null), null);
+assert.equal(aMenor("cuarenta"), null);
+
+// ── 7 · qué evento acredita, y con qué referencia ──────────────────────────
+const capturaCompletada = eventoDeWebhook({
+  id: "WH-2X1", event_type: "PAYMENT.CAPTURE.COMPLETED",
+  resource: {
+    id: "3C679366HH908993F",          // el id de la CAPTURA
+    status: "COMPLETED",
+    custom_id: "booking-3f8b1c62-1d4e-4a7b-9f01-8c2d5e6a7b90",
+    amount: { currency_code: "USD", value: "78.33" },
+  },
+});
+assert.equal(capturaCompletada.kind, "cobro-confirmado");
+assert.equal(capturaCompletada.amountMinor, 7833);
+assert.equal(capturaCompletada.currency, "USD");
+assert.deepEqual(capturaCompletada.ref, { tipo: "booking", id: "3f8b1c62-1d4e-4a7b-9f01-8c2d5e6a7b90" });
+
+// 🔑 EL CASO QUE ROMPE LOS REEMBOLSOS SIN QUE NADIE LO NOTE. `chargeRef` se
+// sella en `payments.provider_payment_id`, `enqueue_refund` lo copia a la cola y
+// el adaptador llama a `/v2/payments/captures/{id}/refund`. Con el id de la
+// ORDEN ahí, todo reembolso muere con un 404 — y no se descubre hasta que un
+// alumno cancela y reclama.
+assert.equal(capturaCompletada.chargeRef, "3C679366HH908993F", "chargeRef es la CAPTURA");
+
+// ── 8 · aprobar NO es pagar ────────────────────────────────────────────────
+// Con `intent: CAPTURE` el dinero sigue siendo del alumno hasta que capturamos.
+// Si esto volviera 'cobro-confirmado', se daría una clase por pagada con el
+// dinero aún sin mover.
+const aprobada = eventoDeWebhook({
+  id: "WH-9K2", event_type: "CHECKOUT.ORDER.APPROVED",
+  resource: {
+    id: "5LW796310S051353V",          // el id de la ORDEN
+    status: "APPROVED",
+    purchase_units: [{
+      custom_id: "order-3f8b1c62-1d4e-4a7b-9f01-8c2d5e6a7b90",
+      amount: { currency_code: "USD", value: "78.33" },
+    }],
+  },
+});
+assert.equal(aprobada.kind, "cobro-en-curso", "aprobar no acredita: falta capturar");
+assert.equal(aprobada.chargeRef, null, "todavía no existe ninguna captura que sellar");
+assert.equal(aprobada.objectRef, "5LW796310S051353V", "la captura necesita el id de la orden");
+// El `custom_id` vive dentro de la unidad de compra cuando el evento es de la
+// orden, y suelto cuando es de la captura. Es el mismo dato en dos sitios.
+assert.deepEqual(aprobada.ref, { tipo: "order", id: "3f8b1c62-1d4e-4a7b-9f01-8c2d5e6a7b90" });
+
+// ── 9 · lo que NO puede vencer una reserva ─────────────────────────────────
+// 🔴 'cobro-fallido' llama a `confirm_payment(success=false)`, que vence la
+// reserva y libera el hueco. Estos tres eventos NO deben hacerlo: en VOIDED no
+// se cobró nada (y `expire-stale-bookings` ya libera el hold), y en REFUNDED /
+// REVERSED el reembolso ya lo escribió quien lo pidió — una segunda mano
+// tocando esas filas desde fuera es como se descuadra un saldo.
+for (const tipo of ["CHECKOUT.ORDER.VOIDED", "PAYMENT.CAPTURE.REFUNDED", "PAYMENT.CAPTURE.REVERSED",
+                    "BILLING.SUBSCRIPTION.CREATED", ""]) {
+  assert.equal(
+    eventoDeWebhook({ id: "WH-x", event_type: tipo, resource: { id: "X" } }).kind,
+    "otro",
+    `${tipo} no puede tocar una reserva`,
+  );
+}
+
+// Los dos que sí son terminales de verdad.
+for (const tipo of ["PAYMENT.CAPTURE.DENIED", "PAYMENT.CAPTURE.DECLINED"]) {
+  assert.equal(eventoDeWebhook({ id: "WH-x", event_type: tipo, resource: { id: "C1" } }).kind, "cobro-fallido");
+}
+
+// Un evento de otro comercio que comparta la cuenta de sandbox: sin sujeto
+// reconocible, la ruta lo ignora en vez de acreditarle a alguien.
+assert.equal(eventoDeWebhook({ id: "WH-x", event_type: "PAYMENT.CAPTURE.COMPLETED",
+  resource: { id: "C1", custom_id: "pedido-de-otro" } }).ref, null);
+
+console.log("✅ mapeo de PayPal: el payout no miente, el cobro suma bien, y solo la captura acredita.");

@@ -152,7 +152,7 @@ export async function POST(req: Request) {
   // cuatro líneas: es la diferencia entre un webhook firmado y un endpoint
   // público capaz de marcar reservas como pagadas con un POST.
   const crudo = await req.text();
-  const verificacion = stripeProvider.verifyWebhook({
+  const verificacion = await stripeProvider.verifyWebhook({
     rawBody: crudo,
     signature: req.headers.get("stripe-signature"),
   });

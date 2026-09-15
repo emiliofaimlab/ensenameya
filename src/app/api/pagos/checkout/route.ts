@@ -1273,6 +1273,25 @@ export async function POST(req: Request) {
     const falta = psp.missingChargeConfig();
     if (falta) return { tipo: "descartado", motivo: falta };
 
+    // 🎁 PAYPAL NO COBRA REGALOS, Y ES UNA DECISIÓN DE ALCANCE, NO UN FALLO.
+    //
+    // Su webhook (`/api/webhooks/paypal`) atiende reservas y pedidos; el camino
+    // del regalo —`regaloDelCobro`, `marcar_cobro_regalo`,
+    // `confirm_gift_payment`, y el hecho de que NO haya X-02 para un regalo
+    // porque `late_payment_refunds` exige booking u order— son ~150 líneas más
+    // que hoy están escritas dos veces y que no se van a escribir una tercera
+    // para una vía que nadie ha pedido: el radio que pidió el cliente es el del
+    // checkout de reservas.
+    //
+    // 🔴 Y SIN ESTA LÍNEA NO SERÍA TEÓRICO. `charge_providers` lleva a PayPal en
+    // las 21 filas (`20260915120000`), o sea que un fallo de Stripe en la
+    // pantalla de regalo bastaría para abrir un cobro que se paga y que ningún
+    // webhook sabe acreditar: dinero cobrado y regalo sin activar, en silencio.
+    // Cerrarlo aquí es una línea; cubrirlo, ciento cincuenta.
+    if (cobrar.regaloId && quien === "paypal") {
+      return { tipo: "descartado", motivo: "'paypal' no cobra regalos: su webhook solo acredita reservas y pedidos" };
+    }
+
     try {
       let cobro: ChargeResult;
       try {

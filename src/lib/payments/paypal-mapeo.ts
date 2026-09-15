@@ -309,3 +309,113 @@ export function enlaceDePago(orden: OrdenPaypal): string | null {
   const l = (orden.links ?? []).find((x) => x.rel === "payer-action" || x.rel === "approve");
   return l?.href ?? null;
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// EL WEBHOOK — de lo que manda PayPal, a nuestro vocabulario
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Lo que trae un evento de PayPal, en lo que este sistema mira. */
+export type EventoPaypal = {
+  id?: string;
+  event_type?: string;
+  resource?: {
+    id?: string;
+    status?: string;
+    custom_id?: string;
+    amount?: { currency_code?: string; value?: string };
+    purchase_units?: Array<{
+      custom_id?: string;
+      amount?: { currency_code?: string; value?: string };
+    }>;
+  };
+};
+
+/**
+ * El gemelo de `aDecimal`. PayPal manda «78.33» y la base guarda 7833.
+ *
+ * ⚠️ `Math.round` Y NO `parseInt`: `78.33 * 100` es `7832.999999999999` en coma
+ * flotante, y truncarlo cobra un céntimo de menos. Ese céntimo no es cosmético
+ * — `confirm_payment` concilia lo cobrado contra lo debido y ABORTA si no
+ * cuadra, así que un redondeo mal puesto no cobra de menos: deja la reserva sin
+ * confirmar con el dinero ya cobrado.
+ */
+export function aMenor(valor: string | null | undefined): number | null {
+  if (valor == null) return null;
+  const n = Number(valor);
+  return Number.isFinite(n) ? Math.round(n * 100) : null;
+}
+
+/**
+ * LOS CUATRO EVENTOS QUE IMPORTAN, y por qué son esos.
+ *
+ * ── EL CICLO REAL DE UN COBRO POR PAYPAL ───────────────────────────────────
+ *
+ *   1. `CHECKOUT.ORDER.APPROVED` — el alumno aprobó. **Todavía no hay dinero
+ *      nuestro**: con `intent: CAPTURE` PayPal autoriza y espera a que el
+ *      comercio capture. Por eso es 'cobro-en-curso' y NO 'cobro-confirmado':
+ *      acreditar aquí daría una clase por pagada con el dinero aún del alumno.
+ *   2. la ruta captura (`POST /v2/checkout/orders/{id}/capture`).
+ *   3. `PAYMENT.CAPTURE.COMPLETED` — el dinero se movió. Esto sí acredita.
+ *
+ * 🔑 Y POR ESO `chargeRef` ES EL ID DE LA CAPTURA, NO EL DE LA ORDEN. De esa
+ * cadena cuelga el reembolso entero: se sella en `payments.provider_payment_id`,
+ * `enqueue_refund` la copia a la cola y el adaptador llama a
+ * `/v2/payments/captures/{id}/refund`. Con el id de la orden ahí, todo
+ * reembolso moriría con un 404 que nadie mira hasta que un alumno reclama.
+ *
+ * ── LO QUE NO SE TRADUCE, A PROPÓSITO ──────────────────────────────────────
+ *
+ * `CHECKOUT.ORDER.VOIDED` (la orden caducó sin capturar) NO es 'cobro-fallido'.
+ * Un 'cobro-fallido' sobre una reserva llama a `confirm_payment(success=false)`
+ * y la vence; aquí no se cobró nada, así que no hay nada que deshacer y el
+ * `expire-stale-bookings` de siempre libera el hueco. Menos caminos que puedan
+ * vencer una reserva es menos formas de vencerla por error.
+ *
+ * `PAYMENT.CAPTURE.REFUNDED` y `.REVERSED` tampoco: el reembolso ya lo escribió
+ * quien lo pidió (la cola de X-02 o `refunds-process`), y una segunda mano
+ * tocando esas filas desde fuera es como se descuadra un saldo.
+ */
+export function eventoDeWebhook(cuerpo: EventoPaypal): {
+  id: string;
+  rawType: string;
+  kind: "cobro-confirmado" | "cobro-en-curso" | "cobro-fallido" | "otro";
+  ref: CobroPaypal["ref"] | null;
+  chargeRef: string | null;
+  objectRef: string | null;
+  amountMinor: number | null;
+  currency: string | null;
+} {
+  const tipo = cuerpo.event_type ?? "";
+  const r = cuerpo.resource ?? {};
+  // El `custom_id` viaja en la captura cuando la hay, y dentro de la unidad de
+  // compra cuando el evento es de la orden. Es el MISMO dato en dos sitios.
+  const unidad = r.purchase_units?.[0];
+  const importe = r.amount ?? unidad?.amount;
+
+  const comun = {
+    id: cuerpo.id ?? "",
+    rawType: tipo,
+    ref: refDeCustomId(r.custom_id ?? unidad?.custom_id),
+    objectRef: r.id ?? null,
+    amountMinor: aMenor(importe?.value),
+    currency: importe?.currency_code ?? null,
+  };
+
+  switch (tipo) {
+    case "PAYMENT.CAPTURE.COMPLETED":
+      // 🔑 `chargeRef` = el id de la CAPTURA, que aquí es `resource.id`.
+      return { ...comun, kind: "cobro-confirmado", chargeRef: r.id ?? null };
+
+    case "CHECKOUT.ORDER.APPROVED":
+      // Sin `chargeRef`: todavía no existe ninguna captura. `objectRef` lleva el
+      // id de la orden, que es lo que necesita la llamada de captura.
+      return { ...comun, kind: "cobro-en-curso", chargeRef: null };
+
+    case "PAYMENT.CAPTURE.DENIED":
+    case "PAYMENT.CAPTURE.DECLINED":
+      return { ...comun, kind: "cobro-fallido", chargeRef: r.id ?? null };
+
+    default:
+      return { ...comun, kind: "otro", chargeRef: null };
+  }
+}

@@ -128,7 +128,7 @@ export async function POST(req: Request) {
   // sobre la cadena EXACTA, y `JSON.parse` + `stringify` reordena claves y
   // cambia espacios. Lee `WebhookInput` en `port.ts` antes de tocar esto.
   const crudo = await req.text();
-  const verificacion = dlocalProvider.verifyWebhook({
+  const verificacion = await dlocalProvider.verifyWebhook({
     rawBody: crudo,
     // dLocal firma en `Authorization`, no en una cabecera propia. Es raro y es
     // así: `Authorization: V2-HMAC-SHA256, Signature: <hex>`.

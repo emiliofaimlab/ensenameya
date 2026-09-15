@@ -489,7 +489,25 @@ export type WebhookVerificacion =
  * un endpoint público capaz de marcar reservas como pagadas con un POST.
  * Que el tipo sea `string` es la barrera. No se toca. (RN-34)
  */
-export type WebhookInput = { rawBody: string; signature: string | null };
+export type WebhookInput = {
+  rawBody: string;
+  signature: string | null;
+  /**
+   * TODAS las cabeceras de la petición, en minúsculas, para el verificador que
+   * no le basta con una.
+   *
+   * ⚠️ EXISTE POR PAYPAL Y NO ES UN CAJÓN DE SASTRE. Stripe y dLocal Go firman
+   * en UNA cabecera y `signature` les sobra de sitio; PayPal necesita CINCO
+   * (`paypal-transmission-id`, `-time`, `-sig`, `-cert-url`, `paypal-auth-algo`)
+   * porque la verificación no es un HMAC local: es una llamada a su API con las
+   * cinco dentro. Meterlas en `signature` concatenadas sería inventar un formato
+   * que después hay que volver a partir.
+   *
+   * Opcional a propósito: los dos verificadores que ya existen no lo miran, y
+   * obligarlos a recibirlo sería tocar dos rutas de dinero para nada.
+   */
+  headers?: Record<string, string>;
+};
 
 /**
  * ── C2 · PAGARLE AL TUTOR ───────────────────────────────────────────────────
@@ -789,8 +807,17 @@ export interface PspProvider extends PaymentProvider {
    * beneficiario no es un parámetro y `claimedAt` no es decorativo.
    */
   payout(input: PayoutInput): Promise<PayoutResult>;
-  /** El cuerpo crudo entra aquí. Lee arriba `WebhookInput` antes de tocarlo. */
-  verifyWebhook(input: WebhookInput): WebhookVerificacion;
+  /**
+   * El cuerpo crudo entra aquí. Lee arriba `WebhookInput` antes de tocarlo.
+   *
+   * ⚠️ PUEDE SER ASÍNCRONO, y eso NO es una comodidad: con PayPal la
+   * verificación es literalmente una llamada a su API
+   * (`POST /v1/notifications/verify-webhook-signature`), porque la firma va
+   * contra un certificado suyo que habría que descargar y cachear para
+   * comprobarla en casa. Stripe y dLocal siguen devolviendo su valor sin
+   * promesa; quien llama hace `await` y le da igual.
+   */
+  verifyWebhook(input: WebhookInput): WebhookVerificacion | Promise<WebhookVerificacion>;
 }
 
 /** El que no sale de casa: hoy, el simulado. */
