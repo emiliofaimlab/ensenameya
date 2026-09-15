@@ -933,21 +933,31 @@ con `sk_live_` y la firma de test devuelve 400 en la verificación y el pago **n
 `paid`**, que es el único sitio donde un cobro se confirma. El destino de test que sirve a las
 previews **se queda**: es el que las alimenta.
 
-### 7.3.1 PayPal: qué está habilitado en live (comprobado 10-sep)
+### 7.3.1 PayPal: qué está habilitado en live (revisado 15-sep)
 
-En `developer.paypal.com` → app **live** → *Payment capabilities*: **`Payouts` está marcado** ✅,
-que es la única que necesita esta app — el código llama a `/v1/payments/payouts`. No hace falta
-solicitar nada a PayPal.
+**La app live COBRA, y está medido** (15-sep-2026). `POST /v2/checkout/orders` con las credenciales
+de producción devuelve `PAYER_ACTION_REQUIRED` y un enlace de `www.paypal.com/checkoutnow`. No hubo
+que solicitar nada: el checkout estándar va con la cuenta.
 
-⚠️ Están marcadas también **`Subscriptions`** y **`Payment links and buttons`**, y **ninguna se
-usa**: no hay cobros recurrentes ni enlaces de pago. Desmarcarlas sería lo limpio, pero **no
-mientras la app esté en revisión** (hasta 7 días laborables): tocar las capacidades puede reiniciar
-el proceso. Se hace cuando la revisión termine, no antes.
+`Payouts` sigue marcado ✅ y `Payment links and buttons` también — esta última **sí se usa ahora**:
+es la capacidad del checkout estándar. `Subscriptions` sigue sin usarse.
 
-⚠️ **El banner «Contact the merchant to enable PayPal and Venmo» es irrelevante aquí.** Va de
-aceptar PayPal como **método de cobro** en el checkout, y esta app no lo hace: PayPal solo paga.
-Y por cuenta US, cobrar con PayPal vía Stripe tampoco es posible — Stripe solo lo ofrece a
-comercios europeos.
+⚠️ **AQUÍ PONÍA QUE EL BANNER «Contact the merchant to enable PayPal and Venmo» ERA IRRELEVANTE
+"porque esta app no cobra, solo paga"**. La conclusión sigue siendo buena; el motivo, no. Desde el
+15-sep esta app **sí cobra**, y el banner sigue sin afectarnos por otra razón: va del **vault** —la
+casilla equivalente en sandbox dice literal «Save customer PayPal and Venmo payment methods for
+future transactions»—, o sea guardar el PayPal del alumno para futuras compras. Eso no se usa: cada
+cobro redirige. Lo que el banner NO significa es «no puedes aceptar PayPal», y la medición de arriba
+lo demuestra.
+
+⚠️ **Lo que está apagado en live y no lo va a estar:** campos de tarjeta de PayPal (ACDC), Apple Pay,
+Google Pay y Fastlane. Ninguno hace falta —la tarjeta entra por Stripe o dLocal— pero **en SANDBOX
+los cuatro están encendidos**. Construir apoyándose en ellos funciona en dev y se cae en producción,
+en silencio: la trampa de la regla de oro 11 con otro disfraz.
+
+Y por cuenta US, cobrar con PayPal **vía Stripe** sigue sin ser posible — Stripe solo lo ofrece a
+comercios europeos. Lo que hay es nuestro propio adaptador (`lib/payments/paypal-provider.ts`), que
+es otra cosa.
 
 ### 7.4 Orden, y por qué
 
