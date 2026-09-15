@@ -39,6 +39,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      academies: {
+        Row: {
+          brand_color: string | null
+          created_at: string
+          description: string | null
+          id: string
+          logo_path: string | null
+          name: string
+          slug: string
+          status: Database["public"]["Enums"]["academy_status"]
+          tagline: string | null
+          updated_at: string
+          website: string | null
+        }
+        Insert: {
+          brand_color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          logo_path?: string | null
+          name: string
+          slug: string
+          status?: Database["public"]["Enums"]["academy_status"]
+          tagline?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Update: {
+          brand_color?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          logo_path?: string | null
+          name?: string
+          slug?: string
+          status?: Database["public"]["Enums"]["academy_status"]
+          tagline?: string | null
+          updated_at?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       account_deletion_requests: {
         Row: {
           cancelled_at: string | null
@@ -2513,6 +2555,7 @@ export type Database = {
       }
       tutor_profiles: {
         Row: {
+          academy_id: string | null
           approval_notes: string | null
           approval_status: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at: string | null
@@ -2535,6 +2578,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          academy_id?: string | null
           approval_notes?: string | null
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
@@ -2557,6 +2601,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          academy_id?: string | null
           approval_notes?: string | null
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
@@ -2579,6 +2624,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tutor_profiles_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tutor_profiles_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies_public"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tutor_profiles_profile_id_fkey"
             columns: ["profile_id"]
@@ -2751,6 +2810,26 @@ export type Database = {
       }
     }
     Views: {
+      academies_public: {
+        Row: {
+          brand_color: string | null
+          created_at: string | null
+          description: string | null
+          id: string | null
+          logo_path: string | null
+          name: string | null
+          price_currency: string | null
+          price_from: number | null
+          product_count: number | null
+          rating_avg: number | null
+          rating_count: number | null
+          slug: string | null
+          tagline: string | null
+          tutor_count: number | null
+          website: string | null
+        }
+        Relationships: []
+      }
       fondeo_del_ciclo: {
         Row: {
           a_pagar: number | null
@@ -3551,6 +3630,7 @@ export type Database = {
       wise_puede_pagar_a: { Args: { p_tutor: string }; Returns: boolean }
     }
     Enums: {
+      academy_status: "draft" | "active"
       account_deletion_request_status: "pending" | "completed" | "cancelled"
       app_role: "alumno" | "tutor" | "admin"
       availability_exception_type: "block" | "open"
@@ -3727,6 +3807,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      academy_status: ["draft", "active"],
       account_deletion_request_status: ["pending", "completed", "cancelled"],
       app_role: ["alumno", "tutor", "admin"],
       availability_exception_type: ["block", "open"],

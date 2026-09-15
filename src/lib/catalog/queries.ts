@@ -1244,3 +1244,202 @@ export async function listProductSlots(
   });
   return (data ?? []).map((s) => ({ start: s.slot_start, end: s.slot_end }));
 }
+
+// ── Academias (B2B) ─────────────────────────────────────────────────────────
+//
+// Una academia AGRUPA tutores que ya existen: no tiene mentorías propias, no
+// cobra y no recibe payouts. Reservar desde su ficha crea exactamente el mismo
+// `booking` contra el mismo tutor que reservar desde `/tutors`.
+// Ver `docs/B2B-ACADEMIAS.md` y `20260915180000_las_academias_agrupan_tutores`.
+
+export type AcademyCardData = {
+  id: string;
+  slug: string;
+  name: string;
+  tagline: string | null;
+  /** Ruta en el bucket público `avatars`; null = se pintan las iniciales. */
+  logoPath: string | null;
+  /** Hex `#rrggbb` de la academia; null = azul de Enséñame Ya. */
+  brandColor: string | null;
+  tutorCount: number;
+  /** Media PONDERADA por reseñas de sus tutores; null = aún no hay ninguna. */
+  ratingAvg: number | null;
+  ratingCount: number;
+  productCount: number;
+  /** La mentoría activa más barata de sus tutores (unidades menores). */
+  priceFromMinor: number | null;
+  priceCurrency: string | null;
+};
+
+export type AcademyDetail = AcademyCardData & {
+  description: string | null;
+  website: string | null;
+};
+
+/**
+ * Columnas explícitas de `academies_public`. La vista las trae ya agregadas
+ * (recuento de tutores, nota ponderada, precio de entrada) para que la ficha no
+ * dispare tres consultas más por pantalla.
+ */
+const ACADEMY_SELECT =
+  "id, slug, name, tagline, description, logo_path, brand_color, website, tutor_count, rating_avg, rating_count, product_count, price_from, price_currency";
+
+/**
+ * Fila de la vista → tarjeta. Todas las columnas de una vista llegan tipadas
+ * como nullable, así que `id`/`slug`/`name` —que en la tabla son NOT NULL— se
+ * comprueban en `listAcademies` y aquí se dan por buenas.
+ */
+function mapAcademy(r: {
+  id: string;
+  slug: string;
+  name: string;
+  tagline: string | null;
+  description: string | null;
+  logo_path: string | null;
+  brand_color: string | null;
+  website: string | null;
+  tutor_count: number | null;
+  rating_avg: number | null;
+  rating_count: number | null;
+  product_count: number | null;
+  price_from: number | null;
+  price_currency: string | null;
+}): AcademyDetail {
+  return {
+    id: r.id,
+    slug: r.slug,
+    name: r.name,
+    tagline: r.tagline,
+    description: r.description,
+    logoPath: r.logo_path,
+    brandColor: r.brand_color,
+    website: r.website,
+    tutorCount: r.tutor_count ?? 0,
+    ratingAvg: r.rating_avg,
+    ratingCount: r.rating_count ?? 0,
+    productCount: r.product_count ?? 0,
+    priceFromMinor: r.price_from,
+    priceCurrency: r.price_currency,
+  };
+}
+
+/**
+ * Academias del catálogo público. La RLS de `academies` es la que decide qué
+ * se ve: `anon` solo alcanza las `active`, y los borradores quedan para el
+ * admin. Aquí no hay `.eq('status', …)` porque la vista no expone la columna
+ * —enseñar el estado de publicación en una superficie pública no aporta nada.
+ *
+ * Se mira el `error`: esto alimenta una lista, y un `const { data } = …`
+ * convertiría un fallo en «todavía no hay academias», que es la clase de
+ * mentira que nadie reporta (regla de oro 10).
+ */
+export async function listAcademies(): Promise<AcademyCardData[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("academies_public")
+    .select(ACADEMY_SELECT)
+    // Primero las que más tutores reúnen: una academia con un solo tutor aún
+    // no demuestra el modelo, y encabezar con ella lo vende peor.
+    .order("tutor_count", { ascending: false })
+    .order("name", { ascending: true });
+  if (error) console.error("[listAcademies]", error.code, error.message);
+
+  return (data ?? [])
+    .filter((r) => r.id && r.slug && r.name)
+    .map((r) => mapAcademy(r as Parameters<typeof mapAcademy>[0]));
+}
+
+/**
+ * Ficha pública de una academia: la academia, sus tutores, las mentorías de
+ * esos tutores y las reseñas que han dejado sus alumnos.
+ *
+ * Las reseñas son las de SUS TUTORES: una academia no recibe reseñas propias
+ * porque nadie reserva «con la academia» —se reserva con una persona—, y
+ * inventarle una tabla aparte sería pedirle al alumno una segunda valoración
+ * de la misma clase.
+ *
+ * Tres consultas en cascada de profundidad 2 (academia → tutores → mentorías y
+ * reseñas en paralelo). La profundidad es lo que se mide, no el número
+ * (`CLAUDE.md` § Rendimiento).
+ */
+export const getAcademyDetail = cache(async (
+  slug: string,
+): Promise<
+  | {
+      academy: AcademyDetail;
+      tutors: FeaturedTutor[];
+      products: ProductCardData[];
+      reviews: TutorReview[];
+    }
+  | null
+> => {
+  const supabase = await createClient();
+
+  const { data: a } = await supabase
+    .from("academies_public")
+    .select(ACADEMY_SELECT)
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!a?.id || !a.slug || !a.name) return null;
+
+  const academy = mapAcademy(a as Parameters<typeof mapAcademy>[0]);
+
+  const { data: tutorRows, error: tutorError } = await supabase
+    .from("tutor_profiles")
+    .select(
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
+    )
+    .eq("academy_id", academy.id)
+    .eq("approval_status", "approved")
+    .order("rating_avg", { ascending: false, nullsFirst: false });
+  if (tutorError) {
+    console.error("[getAcademyDetail:tutors]", tutorError.code, tutorError.message);
+  }
+
+  const ids = (tutorRows ?? []).map((t) => t.profile_id);
+
+  // Sin tutores no hay mentorías ni reseñas que buscar, y un `.in()` con lista
+  // vacía es una consulta que siempre vuelve vacía: se ahorran dos viajes.
+  if (ids.length === 0) {
+    return { academy, tutors: [], products: [], reviews: [] };
+  }
+
+  const [tutors, prods, revs] = await Promise.all([
+    withProductFacts(tutorRows ?? []),
+    supabase
+      .from("products")
+      .select(`tutor_id, ${TUTOR_PRODUCT_SELECT}`)
+      .in("tutor_id", ids)
+      .eq("status", "active")
+      .order("price_amount", { ascending: true }),
+    supabase
+      .from("reviews")
+      .select(REVIEW_SELECT)
+      .in("tutor_id", ids)
+      .order("created_at", { ascending: false })
+      .limit(50),
+  ]);
+
+  if (prods.error) {
+    console.error("[getAcademyDetail:products]", prods.error.code, prods.error.message);
+  }
+  if (revs.error) {
+    console.error("[getAcademyDetail:reviews]", revs.error.code, revs.error.message);
+  }
+
+  // Cada tarjeta lleva su tutor: en una academia la mentoría y quien la imparte
+  // son datos distintos, y sin el nombre el alumno no sabe con quién reserva.
+  const products = await withTutors(
+    (prods.data ?? []).map((r) => ({
+      ...mapProductCard(r),
+      tutorId: r.tutor_id,
+    })),
+  );
+
+  return {
+    academy,
+    tutors,
+    products,
+    reviews: (revs.data ?? []).map(mapReview),
+  };
+});
