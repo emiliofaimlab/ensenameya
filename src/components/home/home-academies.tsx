@@ -3,7 +3,6 @@ import Link from "next/link";
 
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
-import { ScrollCarousel } from "@/components/ui/scroll-carousel";
 import { AcademyCard } from "@/components/catalog/academy-card";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import type { AcademyCardData } from "@/lib/catalog/queries";
@@ -19,7 +18,7 @@ import type { AcademyCardData } from "@/lib/catalog/queries";
  * piezas la banda llena cualquier ancho razonable, y el día que haya ocho
  * academias de verdad cada una aparece una sola vez.
  */
-const MIN_PIEZAS = 8;
+const MIN_PIEZAS = 6;
 
 /** El logo, o la marca tipográfica: iniciales en el color de la academia. */
 function Logo({ academy, size }: { academy: AcademyCardData; size: number }) {
@@ -57,9 +56,15 @@ function Logo({ academy, size }: { academy: AcademyCardData; size: number }) {
  *     `testimonials.tsx` —pista duplicada y `translateX(-50%)`, sin JS—. Es
  *     decorativa y por eso no lleva enlaces: en una pista duplicada habría dos
  *     destinos idénticos, uno de ellos oculto al lector de pantalla;
- *  2. un CARRUSEL de las tarjetas de academia, que son las mismas de
- *     `/academias` —la que el jefe ya dio por buena— con sus flechas y su
- *     anclaje (`ScrollCarousel`).
+ *  2. las tarjetas de academia debajo, las mismas de `/academias`.
+ *
+ * ⚠️ Las tarjetas NO van en `ScrollCarousel`, y se probó: un carrusel de dos
+ * tarjetas de ancho fijo deja 900 px de vacío a la derecha en un monitor de
+ * 1920 y no tiene nada que desplazar, así que ni siquiera monta sus flechas.
+ * Un `flex-wrap justify-center` con ancho fijo por tarjeta se ve centrado y
+ * deliberado con dos, y envuelve en filas centradas cuando haya veinte —sin
+ * componente de por medio—. El día que no quepan, el sitio para desplazarlas
+ * es `/academias`, que es a donde lleva «Ver todas».
  *
  * ⚠️ Mientras las academias no suban un logo, la banda pinta la MARCA
  * TIPOGRÁFICA: iniciales en su color sobre blanco. No es un hueco a la espera
@@ -110,20 +115,20 @@ export function HomeAcademies({
               que hace que parezca infinita. Las máscaras laterales la funden
               con el fondo en vez de cortarla a cuchillo. */}
           <div
-            className="relative mt-7 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_6%,black_94%,transparent)]"
+            className="relative mt-7 overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]"
             role="group"
             aria-label="Academias aliadas"
           >
-            <ul className="flex w-max animate-marquee items-center gap-10">
+            <ul className="flex w-max animate-marquee items-center gap-4">
               {[...pasada, ...pasada].map((a, i) => (
                 <li
                   key={`${a.id}-${i}`}
                   // La segunda mitad es la copia que cierra el bucle: existe
                   // para el ojo, no para quien escucha la página.
                   aria-hidden={i >= pasada.length}
-                  className="flex shrink-0 items-center gap-3"
+                  className="flex shrink-0 items-center gap-3 rounded-full border border-[#e8e8e8] bg-card py-2.5 pr-6 pl-2.5"
                 >
-                  <Logo academy={a} size={52} />
+                  <Logo academy={a} size={40} />
                   <span
                     className="text-[15px] font-semibold whitespace-nowrap"
                     style={{ color: a.brandColor ?? "var(--color-brand)" }}
@@ -135,21 +140,17 @@ export function HomeAcademies({
             </ul>
           </div>
 
-          {/* ── 2 · el carrusel de tarjetas ───────────────────────────────── */}
-          {/* `py-4 -my-4`: un contenedor con `overflow-x: auto` recorta también
-              en vertical y la sombra de las tarjetas baja 12 px. El padding la
-              deja pasar sin mover nada de sitio. */}
-          <ScrollCarousel
-            label="Academias aliadas"
-            className="mt-8 -my-4 py-4"
-          >
+          {/* ── 2 · las tarjetas ──────────────────────────────────────────── */}
+          {/* Ancho fijo por tarjeta + `justify-center`: con dos quedan
+              centradas bajo la banda y con veinte envuelven solas en filas
+              centradas. A 390 el ancho lo manda `max-w-full`, no los 300. */}
+          <ul className="mt-10 flex flex-wrap justify-center gap-5">
             {academies.map((a) => (
-              // El ancho fijo es lo que hace que haya algo que desplazar.
-              <li key={a.id} className="w-[288px] shrink-0 snap-start">
+              <li key={a.id} className="w-[300px] max-w-full">
                 <AcademyCard academy={a} />
               </li>
             ))}
-          </ScrollCarousel>
+          </ul>
         </Section>
       </Container>
     </div>
