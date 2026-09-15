@@ -747,11 +747,30 @@ evs    CHECKOUT.ORDER.APPROVED · PAYMENT.CAPTURE.COMPLETED
 Mismo bypass y misma razón que con Stripe (arriba): sin él, Deployment Protection responde 302 antes
 de que corra una línea nuestra.
 
-🔑 **SON CUATRO EVENTOS Y HACEN FALTA LOS CUATRO**, porque con PayPal aprobar **no es** pagar: con
-`intent: CAPTURE` el dinero sigue siendo del alumno hasta que el comercio captura. `ORDER.APPROVED`
-es lo que dispara esa captura y `CAPTURE.COMPLETED` lo que acredita. Quitar el primero deja cobros
-aprobados que nadie captura (nadie pierde dinero: la orden caduca); quitar el segundo deja dinero
-cobrado y reservas sin confirmar.
+🔴 **PAYPAL CAPTURA SOLA AL APROBAR — el dinero se mueve antes de que nos enteremos.** Medido el
+15-sep-2026 con el primer pago real que pasó por aquí (25,00 USD de sandbox, comisión 1,74):
+
+```
+12:33:50.521Z  PayPal crea CHECKOUT.ORDER.APPROVED
+12:33:51.000Z  la captura 0SA44544TJ055230K ya está COMPLETED   ← medio segundo
+12:34:00.143Z  PayPal crea PAYMENT.CAPTURE.COMPLETED
+12:34:17.000Z  nuestra base lo registra → reserva confirmed      ← 17 s de entrega
+```
+
+Ese medio segundo no lo gastamos nosotros: verificar la firma es por sí solo un viaje a la API de
+PayPal, capturar es otro, y el evento gemelo del MISMO pago tardó 17 segundos en llegar. **Aquí
+estuvo escrito lo contrario** —que aprobar no era pagar y que por eso había un fallo seguro— y es
+falso: si `CAPTURE.COMPLETED` no llegara, quedaría dinero cobrado y una reserva sin confirmar. Eso
+es lo que cubre X-02, y con PayPal X-02 no es una red de lujo: es la única.
+
+**Los cuatro eventos hacen falta igual.** `CAPTURE.COMPLETED` es el que acredita (y el único que trae
+el id de la captura, sin el cual no hay reembolso posible). `ORDER.APPROVED` se queda como red por si
+PayPal dejara de autocapturar: hoy solo provoca un `422 ORDER_ALREADY_CAPTURED` que la ruta trata
+como `ya-capturada`.
+
+⚠️ Y el reloj de arriba es lo que hay que decirle a quien pruebe: entre aprobar y ver la reserva
+confirmada pasan **decenas de segundos**. La pantalla «Estamos confirmando tu pago» es correcta;
+recargar antes y ver «Pago pendiente» no es un bug.
 
 ⚠️ **EL ID NO ES UN SECRETO PERO SÍ ES EL INTERRUPTOR.** `missingChargeConfig()` de
 `paypal-provider.ts` lo exige para COBRAR, no solo para verificar: sin la variable el checkout

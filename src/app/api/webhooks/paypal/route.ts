@@ -35,13 +35,20 @@ type EstadoReserva = Database["public"]["Enums"]["booking_status"];
  *
  * ── LAS DOS DIFERENCIAS CON SUS HERMANOS ───────────────────────────────────
  *
- * 1. 🔑 **HAY UN PASO DE CAPTURA.** Aprobar no es pagar: con `intent: CAPTURE`
- *    PayPal autoriza y el dinero sigue siendo del alumno hasta que el comercio
- *    captura. Así que este webhook recibe DOS eventos por cobro —
- *    `CHECKOUT.ORDER.APPROVED`, que dispara la captura, y
- *    `PAYMENT.CAPTURE.COMPLETED`, que acredita— y solo el segundo toca la
- *    reserva. El fallo seguro es bueno: si la captura no ocurre, no se cobró
- *    nada y el hold caduca solo.
+ * 1. 🔑 **LLEGAN DOS EVENTOS POR COBRO Y SOLO EL SEGUNDO ACREDITA.**
+ *    `CHECKOUT.ORDER.APPROVED` (el alumno aprobó) y `PAYMENT.CAPTURE.COMPLETED`
+ *    (el dinero se movió). La reserva la toca solo el segundo.
+ *
+ *    ⚠️ AQUÍ PONÍA que eso era un fallo seguro —«si la captura no ocurre, no se
+ *    cobró nada»— y es FALSO: **PayPal captura sola al aprobar** (medido el
+ *    15-sep-2026 con un pago real; la cronología está en `paypal-provider.ts`).
+ *    O sea que cuando llega el primer evento el dinero YA salió del alumno.
+ *
+ *    🔴 Consecuencia, y es la que manda en este archivo: si el segundo evento no
+ *    llegara o no se procesara, habría dinero cobrado y una reserva sin
+ *    confirmar. Por eso X-02 —`reembolsarCobroHuerfano`, más abajo— no es una
+ *    red de lujo con PayPal: es la única. Y por eso un descuadre sale por 500 y
+ *    no por 200.
  *
  * 2. **La firma se verifica CONTRA LA API DE PAYPAL**, no con un HMAC local
  *    (ver `paypalProvider.verifyWebhook`). Consecuencia práctica: verificar
@@ -117,8 +124,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ status: "captura-fallida", error: captura.error }, { status: 500 });
     }
     // La reserva NO se toca aquí: la acredita `PAYMENT.CAPTURE.COMPLETED`, que
-    // PayPal manda a continuación. Si se acreditara ya, una captura que se
-    // quedara a medias dejaría una clase pagada sin dinero detrás.
+    // PayPal manda a continuación. Acreditar ya daría la clase por pagada con un
+    // importe que todavía no sabemos —el de la captura, no el de la orden— y sin
+    // la referencia que hace falta para reembolsar.
+    //
+    // En la práctica `captura.estado` suele ser 'ya-capturada': PayPal capturó
+    // sola antes de que este evento llegara. Ver `capturarOrden`.
     return NextResponse.json({ status: captura.estado, orden: evento.objectRef });
   }
 

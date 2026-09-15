@@ -350,12 +350,14 @@ export function aMenor(valor: string | null | undefined): number | null {
  *
  * ── EL CICLO REAL DE UN COBRO POR PAYPAL ───────────────────────────────────
  *
- *   1. `CHECKOUT.ORDER.APPROVED` — el alumno aprobó. **Todavía no hay dinero
- *      nuestro**: con `intent: CAPTURE` PayPal autoriza y espera a que el
- *      comercio capture. Por eso es 'cobro-en-curso' y NO 'cobro-confirmado':
- *      acreditar aquí daría una clase por pagada con el dinero aún del alumno.
- *   2. la ruta captura (`POST /v2/checkout/orders/{id}/capture`).
- *   3. `PAYMENT.CAPTURE.COMPLETED` — el dinero se movió. Esto sí acredita.
+ *   1. `CHECKOUT.ORDER.APPROVED` — el alumno aprobó. Es 'cobro-en-curso' y NO
+ *      'cobro-confirmado', y eso sigue siendo correcto aunque el dinero ya se
+ *      haya movido (PayPal captura sola al aprobar: ver `paypal-provider.ts`).
+ *      El motivo ya no es «todavía no hay dinero» sino que este evento **no
+ *      trae el id de la captura ni su importe**, y sin los dos no se puede ni
+ *      conciliar lo cobrado ni dejar escrito con qué reembolsar.
+ *   2. la ruta llama a capturar por si acaso (normalmente: `ya-capturada`).
+ *   3. `PAYMENT.CAPTURE.COMPLETED` — trae captura e importe. Esto sí acredita.
  *
  * 🔑 Y POR ESO `chargeRef` ES EL ID DE LA CAPTURA, NO EL DE LA ORDEN. De esa
  * cadena cuelga el reembolso entero: se sella en `payments.provider_payment_id`,

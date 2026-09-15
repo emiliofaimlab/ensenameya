@@ -72,18 +72,36 @@ import type {
  * es que dependemos de que ese 400 traiga el enlace; si un día no lo trae, el
  * adaptador devuelve `en-duda` en vez de adoptar, que es el fallo seguro.
  *
- * ── EL CICLO COMPLETO, QUE AQUÍ TIENE UN PASO DE MÁS ───────────────────────
+ * ── 🔴 QUIÉN CAPTURA, Y POR QUÉ ESTO ESTUVO MAL ESCRITO ────────────────────
  *
- * 🔑 APROBAR NO ES PAGAR. Con `intent: CAPTURE` PayPal autoriza y el dinero
- * sigue siendo del alumno hasta que el comercio captura, así que un cobro pasa
- * por TRES momentos y no dos:
+ * AQUÍ PONÍA que con `intent: CAPTURE` el dinero sigue siendo del alumno hasta
+ * que el comercio captura, y que por eso el orden «aprobar → capturar» era un
+ * FALLO SEGURO: si algo se rompía entre medias, no se había cobrado nada. Es
+ * falso, y lo dice el primer pago real que pasó por aquí.
  *
- *   `charge()` → el alumno aprueba → `CHECKOUT.ORDER.APPROVED`
- *              → `capturarOrden()` → `PAYMENT.CAPTURE.COMPLETED` → acreditado
+ * MEDIDO (sandbox, 15-sep-2026, pago de 25,00 USD que sí movió dinero):
  *
- * Ese orden es el fallo seguro: si algo se rompe entre medias, NO se cobró nada
- * y el hold de la reserva caduca solo. Lo contrario —capturar al abrir— dejaría
- * dinero cobrado esperando a que algo funcione.
+ *   12:33:50.521Z  PayPal crea `CHECKOUT.ORDER.APPROVED`
+ *   12:33:51.000Z  la captura ya está COMPLETED          ← medio segundo
+ *   12:34:00.143Z  PayPal crea `PAYMENT.CAPTURE.COMPLETED`
+ *   12:34:17.000Z  nuestra base lo registra              ← 17 s de entrega
+ *
+ * Ese medio segundo NO lo pudimos gastar nosotros: verificar la firma es por sí
+ * solo un viaje a la API de PayPal, capturar es otro, y el evento gemelo del
+ * MISMO pago tardó 17 segundos en llegar. **PayPal captura sola al aprobar.**
+ * La causa probable es `user_action: PAY_NOW` en el contexto de experiencia,
+ * pero eso no se ha comprobado y da igual para lo que hay que saber:
+ *
+ * 🔑 EL DINERO SE MUEVE CUANDO EL ALUMNO APRUEBA, no cuando nosotros
+ * capturamos. Así que por este lado NO hay fallo seguro: si el webhook de
+ * confirmación no llegara, quedaría dinero cobrado y una reserva sin confirmar.
+ * Eso es exactamente lo que cubre X-02 en `/api/webhooks/paypal` — y por eso
+ * X-02 aquí no es una red de lujo, es la única que hay.
+ *
+ * `capturarOrden()` se queda igualmente, como red para el caso en que PayPal no
+ * capture (otro flujo, otra configuración). Lo normal es que conteste
+ * `ya-capturada` sobre un 422 `ORDER_ALREADY_CAPTURED`, que es lo que pasó en la
+ * medición de arriba.
  *
  * ── LO QUE ESTE PROVEEDOR SIGUE SIN HACER ──────────────────────────────────
  *
@@ -188,24 +206,24 @@ async function paypalFetch(ruta: string, init?: RequestInit): Promise<unknown> {
 }
 
 /**
- * CAPTURAR UNA ORDEN APROBADA — el paso que Stripe y dLocal no tienen.
+ * CAPTURAR UNA ORDEN APROBADA — la RED, no el camino normal.
  *
- * Con `intent: CAPTURE`, aprobar NO mueve dinero: PayPal autoriza y espera a
- * que el comercio capture. Hasta esta llamada el dinero sigue siendo del alumno.
+ * ⚠️ EN NUESTRO FLUJO ESTA LLAMADA NO ES LA QUE COBRA. PayPal captura sola al
+ * aprobar: medido el 15-sep-2026 con un pago real, la captura estaba COMPLETED
+ * medio segundo después de que PayPal creara `CHECKOUT.ORDER.APPROVED`, o sea
+ * antes de que el evento nos llegara siquiera. La cronología y por qué no
+ * pudimos ser nosotros están en la cabecera de este archivo.
  *
- * ✅ Y ESE ORDEN ES EL FALLO SEGURO. Si el alumno cierra la pestaña después de
- * aprobar, o si esta llamada nunca ocurre, **no se ha cobrado nada**: PayPal
- * caduca la orden y el hold de la reserva se libera solo con
- * `expire-stale-bookings`. Lo contrario —capturar al abrir y confirmar
- * después— dejaría dinero cobrado esperando a que algo funcione.
+ * Así que lo normal es que esta función conteste `ya-capturada` sobre un 422
+ * `ORDER_ALREADY_CAPTURED`. **Se queda igualmente**, y no por simetría: si algún
+ * día PayPal deja de autocapturar —otro flujo, otra configuración de la app, el
+ * SDK de JavaScript en vez de su página alojada— esto es lo único que evita que
+ * una orden aprobada se quede sin cobrar. Quince líneas que hoy solo contestan
+ * `ya-capturada` valen menos que una venta perdida sin que nadie se entere.
  *
  * Se llama desde el webhook y no desde la vuelta del navegador, a propósito:
  * `CHECKOUT.ORDER.APPROVED` llega aunque la persona cierre la pestaña, y una
  * segunda vía de captura serían dos caminos compitiendo por el mismo dinero.
- *
- * Devuelve `ya-capturada` sin ser un error: PayPal responde 422
- * `ORDER_ALREADY_CAPTURED` a la segunda entrega del mismo evento, y eso es
- * exactamente lo que queríamos que pasara.
  */
 export async function capturarOrden(
   ordenId: string,
