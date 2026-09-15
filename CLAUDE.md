@@ -284,6 +284,7 @@ El interruptor de cobrar dinero real son las claves de Vercel, no las tablas.
 - **`docs/DICTADO-PAGOS.md`** — 🔴 manda en cobro y payout.
 - **`docs/PAGOS-Y-PAYOUTS.md`** — coste real de cada tramo y quién asume cada comisión.
 - **`docs/ACCESO-ADMIN-DEV.md`** — cómo entrar como admin en dev.
+- **`docs/B2B-ACADEMIAS.md`** — estudio del perfil «academia» (B2B). ⚠️ **Nada construido**: es viabilidad, no ejecución.
 
 ## Contexto profundo (lee el doc relevante, no los diez)
 

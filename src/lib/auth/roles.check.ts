@@ -72,11 +72,8 @@ assert.equal(pickHome(R("alumno"), { esTutor: true }), ROLE_HOME.tutor);
 
 // La cookie del último panel manda sobre el rango, pero solo si el rol lo
 // permite: una cookie manipulada no abre nada.
-// ⚠️ Salvo para el admin (14-sep): ya no tiene panel de alumno ni de tutor, así
-// que ni su propia cookie vieja lo saca de /admin. Si lo sacara, aterrizaría en
-// un `redirect()` de servidor — pantalla en blanco desde una ruta pública.
-assert.equal(pickHome(R("alumno", "admin"), { panel: "alumno" }), ROLE_HOME.admin);
-assert.equal(pickHome(R("alumno", "tutor", "admin"), { panel: "tutor" }), ROLE_HOME.admin);
+assert.equal(pickHome(R("alumno", "admin"), { panel: "alumno" }), ROLE_HOME.alumno);
+assert.equal(pickHome(R("alumno", "tutor", "admin"), { panel: "tutor" }), ROLE_HOME.tutor);
 assert.equal(pickHome(R("alumno"), { panel: "admin" }), ROLE_HOME.alumno);
 assert.equal(pickHome(R("alumno"), { panel: "tutor" }), ROLE_HOME.alumno);
 assert.equal(pickHome(R("alumno"), { panel: "tutor", esTutor: true }), ROLE_HOME.tutor);

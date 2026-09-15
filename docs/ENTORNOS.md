@@ -155,7 +155,7 @@ Está en `.env.local` por un intento que no funcionó; borrarla no rompe nada.
 | :-- | :-- | :-- | :-- |
 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | ✅ sandbox | ✅ sandbox | ✅ **producción (10-sep)** |
 | `PAYPAL_API_URL` | ✅ | ✅ sandbox | ✅ `https://api-m.paypal.com` (10-sep) |
-| `PAYPAL_WEBHOOK_ID` | ✅ sandbox (15-sep) | ⬜ **falta** — `0G116560CE055280W` (§5.1) | ⬜ no existe el webhook live |
+| `PAYPAL_WEBHOOK_ID` | ✅ sandbox (15-sep) | ⬜ **falta** — `0G116560CE055280W` (§5.1) | ⬜ **falta** — `3JR91975G84913305` (§5.1) |
 | `WISE_API_TOKEN` | ❌ desactivada 10-sep — ver abajo | ❌ **y así se queda** | ✅ token `ensenameya-prod` (10-sep) |
 | `WISE_PRIVATE_KEY` · `WISE_API_URL` | ❌ | ❌ | ❌ · opcionales |
 
@@ -747,6 +747,21 @@ evs    CHECKOUT.ORDER.APPROVED · PAYMENT.CAPTURE.COMPLETED
 Mismo bypass y misma razón que con Stripe (arriba): sin él, Deployment Protection responde 302 antes
 de que corra una línea nuestra.
 
+Y el de **producción**, creado el 15-sep contra el dominio real (sin bypass: producción no está
+protegida):
+
+```
+id     3JR91975G84913305          ← es el PAYPAL_WEBHOOK_ID del scope Production
+url    https://ensenameya.com/api/webhooks/paypal
+evs    los mismos cuatro
+```
+
+⚠️ **Son dos webhooks distintos con ids distintos, igual que las claves, y cruzarlos es el fallo
+mudo de esto:** producción con el id del sandbox verifica contra el webhook equivocado, PayPal
+responde `FAILURE`, la ruta devuelve 400 y **ningún cobro pasa nunca a `paid`**. Es el mismo modo de
+fallo que ya documenta §7.3 para el `whsec_` de Stripe, y se ve igual de poco: el cobro ocurre, el
+dinero sale del alumno, y la reserva se queda esperando.
+
 🔴 **PAYPAL CAPTURA SOLA AL APROBAR — el dinero se mueve antes de que nos enteremos.** Medido el
 15-sep-2026 con el primer pago real que pasó por aquí (25,00 USD de sandbox, comisión 1,74):
 
@@ -933,21 +948,31 @@ con `sk_live_` y la firma de test devuelve 400 en la verificación y el pago **n
 `paid`**, que es el único sitio donde un cobro se confirma. El destino de test que sirve a las
 previews **se queda**: es el que las alimenta.
 
-### 7.3.1 PayPal: qué está habilitado en live (comprobado 10-sep)
+### 7.3.1 PayPal: qué está habilitado en live (revisado 15-sep)
 
-En `developer.paypal.com` → app **live** → *Payment capabilities*: **`Payouts` está marcado** ✅,
-que es la única que necesita esta app — el código llama a `/v1/payments/payouts`. No hace falta
-solicitar nada a PayPal.
+**La app live COBRA, y está medido** (15-sep-2026). `POST /v2/checkout/orders` con las credenciales
+de producción devuelve `PAYER_ACTION_REQUIRED` y un enlace de `www.paypal.com/checkoutnow`. No hubo
+que solicitar nada: el checkout estándar va con la cuenta.
 
-⚠️ Están marcadas también **`Subscriptions`** y **`Payment links and buttons`**, y **ninguna se
-usa**: no hay cobros recurrentes ni enlaces de pago. Desmarcarlas sería lo limpio, pero **no
-mientras la app esté en revisión** (hasta 7 días laborables): tocar las capacidades puede reiniciar
-el proceso. Se hace cuando la revisión termine, no antes.
+`Payouts` sigue marcado ✅ y `Payment links and buttons` también — esta última **sí se usa ahora**:
+es la capacidad del checkout estándar. `Subscriptions` sigue sin usarse.
 
-⚠️ **El banner «Contact the merchant to enable PayPal and Venmo» es irrelevante aquí.** Va de
-aceptar PayPal como **método de cobro** en el checkout, y esta app no lo hace: PayPal solo paga.
-Y por cuenta US, cobrar con PayPal vía Stripe tampoco es posible — Stripe solo lo ofrece a
-comercios europeos.
+⚠️ **AQUÍ PONÍA QUE EL BANNER «Contact the merchant to enable PayPal and Venmo» ERA IRRELEVANTE
+"porque esta app no cobra, solo paga"**. La conclusión sigue siendo buena; el motivo, no. Desde el
+15-sep esta app **sí cobra**, y el banner sigue sin afectarnos por otra razón: va del **vault** —la
+casilla equivalente en sandbox dice literal «Save customer PayPal and Venmo payment methods for
+future transactions»—, o sea guardar el PayPal del alumno para futuras compras. Eso no se usa: cada
+cobro redirige. Lo que el banner NO significa es «no puedes aceptar PayPal», y la medición de arriba
+lo demuestra.
+
+⚠️ **Lo que está apagado en live y no lo va a estar:** campos de tarjeta de PayPal (ACDC), Apple Pay,
+Google Pay y Fastlane. Ninguno hace falta —la tarjeta entra por Stripe o dLocal— pero **en SANDBOX
+los cuatro están encendidos**. Construir apoyándose en ellos funciona en dev y se cae en producción,
+en silencio: la trampa de la regla de oro 11 con otro disfraz.
+
+Y por cuenta US, cobrar con PayPal **vía Stripe** sigue sin ser posible — Stripe solo lo ofrece a
+comercios europeos. Lo que hay es nuestro propio adaptador (`lib/payments/paypal-provider.ts`), que
+es otra cosa.
 
 ### 7.4 Orden, y por qué
 

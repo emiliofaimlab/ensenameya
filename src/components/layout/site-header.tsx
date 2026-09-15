@@ -177,6 +177,7 @@ const navGroups = [
       { href: "/tutors", label: "Explorar tutores" },
       { href: "/classes", label: "Explorar mentorías" },
       { href: "/categories", label: "Categorías" },
+      { href: "/academias", label: "Academias" },
     ],
   },
   {

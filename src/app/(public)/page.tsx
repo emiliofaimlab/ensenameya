@@ -10,6 +10,7 @@ import {
 import { HomeHero } from "@/components/home/home-hero";
 import { FeatureSplit } from "@/components/home/feature-split";
 import { FeaturedTutors } from "@/components/home/featured-tutors";
+import { HomeAcademies } from "@/components/home/home-academies";
 import { ThreeSteps } from "@/components/home/three-steps";
 import { FeaturedProducts } from "@/components/home/featured-products";
 import { HomeFaq } from "@/components/home/home-faq";
@@ -22,6 +23,7 @@ import {
   getHomeStats,
   listActiveCategories,
   listActiveProducts,
+  listAcademies,
   listFeaturedTutors,
   listTestimonials,
 } from "@/lib/catalog/queries";
@@ -33,6 +35,7 @@ export default async function HomePage() {
     { products },
     stats,
     testimonials,
+    academies,
     visitante,
   ] = await Promise.all([
     listActiveCategories(),
@@ -40,6 +43,10 @@ export default async function HomePage() {
     listActiveProducts({ page: 1 }),
     getHomeStats(),
     listTestimonials(),
+    // En la MISMA tanda que lo demás: la sección de academias no depende de
+    // nada, así que entra en paralelo y no le añade profundidad a la cascada
+    // (CLAUDE.md § Rendimiento: se mide la profundidad, no el número).
+    listAcademies(),
     getVisitorState(),
   ]);
 
@@ -109,6 +116,15 @@ export default async function HomePage() {
       <ThreeSteps />
       <FeaturedProducts products={products.slice(0, 4)} />
       <HomeStats stats={stats} overlap={products.length > 0} />
+
+      {/* Después de tutores y mentorías, y no antes: el visitante entra a
+          buscar con quién aprender, y las academias son quién los respalda.
+
+          ⚠️ Y DESPUÉS de `HomeStats`, no entre él y `FeaturedProducts`: con
+          `overlap` la caja de cifras sube con margen negativo para montarse
+          sobre la banda anterior, y ahí se comía la fila de tarjetas de
+          academia por abajo. */}
+      <HomeAcademies academies={academies} />
 
       {/* Correo de Verónica (3-sep-2026): «Disminuir tamaño de título para que
           cubra 2 líneas». A 390 con 24 px salían tres («¿Eres un crack / en lo
