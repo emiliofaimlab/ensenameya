@@ -5,24 +5,39 @@ import { marcaDe } from "./port";
 import {
   PaypalError,
   aDecimal,
+  aMenor,
   desenlace,
+  enlaceDePago,
+  eventoDeWebhook,
   loteDuplicadoSinEnlace,
   loteYaExistente,
+  ordenDeCobro,
   receptorDe,
   type BeneficiarioPaypal,
+  type EventoPaypal,
   type LotePaypal,
+  type OrdenPaypal,
 } from "./paypal-mapeo";
 import type {
+  ChargeInput,
   ChargeResult,
   PayoutInput,
   PayoutResult,
   PspProvider,
+  RefundInput,
   RefundResult,
+  WebhookInput,
   WebhookVerificacion,
 } from "./port";
 
 /**
- * PAYPAL — RIEL DE PAYOUT, Y SOLO DE PAYOUT.
+ * PAYPAL — PAGA AL TUTOR Y, DESDE EL 15-SEP-2026, TAMBIÉN COBRA AL ALUMNO.
+ *
+ * ⚠️ AQUÍ PONÍA «RIEL DE PAYOUT, Y SOLO DE PAYOUT», y eso ya es falso. Lo que lo
+ * cambió es una petición del cliente —que el checkout ofrezca un radio entre
+ * tarjeta y PayPal— y una comprobación: la cuenta cobra con las claves que ya
+ * estaban puestas, sin pedirle nada a PayPal. Ver el bloque del cobro en
+ * `paypal-mapeo.ts` para lo que se midió.
  *
  * ── QUÉ SE MIDIÓ ANTES DE ESCRIBIR ESTO (sandbox, 3-sep-2026) ──────────────
  *
@@ -57,14 +72,48 @@ import type {
  * es que dependemos de que ese 400 traiga el enlace; si un día no lo trae, el
  * adaptador devuelve `en-duda` en vez de adoptar, que es el fallo seguro.
  *
- * ── LO QUE ESTE PROVEEDOR NO HACE ──────────────────────────────────────────
+ * ── 🔴 QUIÉN CAPTURA, Y POR QUÉ ESTO ESTUVO MAL ESCRITO ────────────────────
  *
- * No cobra, no reembolsa y no escucha webhooks. `payment_routing_rules` no lo
- * nombra en `charge_providers` de ninguna fila, así que ese camino no se recorre.
- * Los tres métodos contestan que no saben, igual que `stripeProvider.payout()`
- * contesta `sin-ejecutor`: es la forma que ya usa este repositorio para «existe
- * en la interfaz y no en la realidad», y es preferible a una excepción, que
- * convierte un error de ruteo en un 500 sin nombre.
+ * AQUÍ PONÍA que con `intent: CAPTURE` el dinero sigue siendo del alumno hasta
+ * que el comercio captura, y que por eso el orden «aprobar → capturar» era un
+ * FALLO SEGURO: si algo se rompía entre medias, no se había cobrado nada. Es
+ * falso, y lo dice el primer pago real que pasó por aquí.
+ *
+ * MEDIDO (sandbox, 15-sep-2026, pago de 25,00 USD que sí movió dinero):
+ *
+ *   12:33:50.521Z  PayPal crea `CHECKOUT.ORDER.APPROVED`
+ *   12:33:51.000Z  la captura ya está COMPLETED          ← medio segundo
+ *   12:34:00.143Z  PayPal crea `PAYMENT.CAPTURE.COMPLETED`
+ *   12:34:17.000Z  nuestra base lo registra              ← 17 s de entrega
+ *
+ * Ese medio segundo NO lo pudimos gastar nosotros: verificar la firma es por sí
+ * solo un viaje a la API de PayPal, capturar es otro, y el evento gemelo del
+ * MISMO pago tardó 17 segundos en llegar. **PayPal captura sola al aprobar.**
+ * La causa probable es `user_action: PAY_NOW` en el contexto de experiencia,
+ * pero eso no se ha comprobado y da igual para lo que hay que saber:
+ *
+ * 🔑 EL DINERO SE MUEVE CUANDO EL ALUMNO APRUEBA, no cuando nosotros
+ * capturamos. Así que por este lado NO hay fallo seguro: si el webhook de
+ * confirmación no llegara, quedaría dinero cobrado y una reserva sin confirmar.
+ * Eso es exactamente lo que cubre X-02 en `/api/webhooks/paypal` — y por eso
+ * X-02 aquí no es una red de lujo, es la única que hay.
+ *
+ * `capturarOrden()` se queda igualmente, como red para el caso en que PayPal no
+ * capture (otro flujo, otra configuración). Lo normal es que conteste
+ * `ya-capturada` sobre un 422 `ORDER_ALREADY_CAPTURED`, que es lo que pasó en la
+ * medición de arriba.
+ *
+ * ── LO QUE ESTE PROVEEDOR SIGUE SIN HACER ──────────────────────────────────
+ *
+ * 🎁 **No cobra REGALOS.** No es una limitación de PayPal: es que
+ * `/api/webhooks/paypal` atiende reservas y pedidos, y el camino del regalo son
+ * ~150 líneas más que ya están escritas dos veces. Lo cierra
+ * `api/pagos/checkout`, que descarta este riel cuando el sujeto es un regalo —
+ * ahí está el porqué entero.
+ *
+ * Y sigue faltando el interruptor: `missingChargeConfig()` exige
+ * `PAYPAL_WEBHOOK_ID`, o sea que el riel no cobra hasta que la ruta esté
+ * desplegada Y el webhook dado de alta en PayPal. Ver ahí.
  */
 
 const API = process.env.PAYPAL_API_URL ?? "https://api-m.sandbox.paypal.com";
@@ -81,9 +130,34 @@ const API = process.env.PAYPAL_API_URL ?? "https://api-m.sandbox.paypal.com";
  */
 let tokenCache: { valor: string; expiraEn: number } | null = null;
 
+/**
+ * La credencial, que es la MISMA para cobrar y para pagar: una sola app de
+ * PayPal. Por eso `missingChargeConfig` y `missingPayoutConfig` son la misma
+ * función y no dos listas que se desincronizan.
+ */
+function faltaCredencial(): string | null {
+  if (!process.env.PAYPAL_CLIENT_ID) return "falta PAYPAL_CLIENT_ID";
+  if (!process.env.PAYPAL_SECRET) return "falta PAYPAL_SECRET";
+  return null;
+}
+
 /** 401/403 = la credencial, no la orden. Ver `PayoutResult.sin-credencial`. */
 function esCredencialInvalida(e: unknown): boolean {
   return e instanceof PaypalError && (e.status === 401 || e.status === 403);
+}
+
+/**
+ * Ese cargo ya está devuelto. PayPal lo dice con un 422 cuyo `issue` es
+ * `CAPTURE_FULLY_REFUNDED`, no con un 409 ni con un 200.
+ *
+ * ⚠️ Se mira el `issue` y NO el texto del mensaje: el texto es prosa que PayPal
+ * puede reescribir, y confundir «ya estaba devuelto» con «rechazado» deja la
+ * fila de la cola reintentando para siempre un reembolso que ya ocurrió.
+ */
+function yaReembolsado(e: PaypalError): boolean {
+  if (e.status !== 422) return false;
+  const d = (e.cuerpo as { details?: Array<{ issue?: string }> })?.details ?? [];
+  return d.some((x) => x.issue === "CAPTURE_FULLY_REFUNDED");
 }
 
 /** 429 y 5xx = el momento, no la orden. Vuelve a la cola. */
@@ -131,36 +205,327 @@ async function paypalFetch(ruta: string, init?: RequestInit): Promise<unknown> {
   return cuerpo;
 }
 
+/**
+ * CAPTURAR UNA ORDEN APROBADA — la RED, no el camino normal.
+ *
+ * ⚠️ EN NUESTRO FLUJO ESTA LLAMADA NO ES LA QUE COBRA. PayPal captura sola al
+ * aprobar: medido el 15-sep-2026 con un pago real, la captura estaba COMPLETED
+ * medio segundo después de que PayPal creara `CHECKOUT.ORDER.APPROVED`, o sea
+ * antes de que el evento nos llegara siquiera. La cronología y por qué no
+ * pudimos ser nosotros están en la cabecera de este archivo.
+ *
+ * Así que lo normal es que esta función conteste `ya-capturada` sobre un 422
+ * `ORDER_ALREADY_CAPTURED`. **Se queda igualmente**, y no por simetría: si algún
+ * día PayPal deja de autocapturar —otro flujo, otra configuración de la app, el
+ * SDK de JavaScript en vez de su página alojada— esto es lo único que evita que
+ * una orden aprobada se quede sin cobrar. Quince líneas que hoy solo contestan
+ * `ya-capturada` valen menos que una venta perdida sin que nadie se entere.
+ *
+ * Se llama desde el webhook y no desde la vuelta del navegador, a propósito:
+ * `CHECKOUT.ORDER.APPROVED` llega aunque la persona cierre la pestaña, y una
+ * segunda vía de captura serían dos caminos compitiendo por el mismo dinero.
+ */
+export async function capturarOrden(
+  ordenId: string,
+): Promise<{ estado: "capturada" | "ya-capturada" } | { estado: "fallo"; error: string }> {
+  try {
+    await paypalFetch(`/v2/checkout/orders/${ordenId}/capture`, {
+      method: "POST",
+      // La orden ES la clave: capturar dos veces la misma no puede cobrar dos
+      // veces, y PayPal lo garantiza con el 422 de abajo. La cabecera va igual
+      // porque su reintento interno tampoco debe duplicar.
+      headers: { "PayPal-Request-Id": `captura-${ordenId}` },
+      body: "{}",
+    });
+    return { estado: "capturada" };
+  } catch (e) {
+    if (e instanceof PaypalError && yaCapturada(e)) return { estado: "ya-capturada" };
+    return { estado: "fallo", error: e instanceof Error ? e.message : "PayPal no capturó la orden" };
+  }
+}
+
+/** El 422 que dice «esa orden ya está capturada». Mismo criterio que `yaReembolsado`. */
+function yaCapturada(e: PaypalError): boolean {
+  if (e.status !== 422) return false;
+  const d = (e.cuerpo as { details?: Array<{ issue?: string }> })?.details ?? [];
+  return d.some((x) => x.issue === "ORDER_ALREADY_CAPTURED");
+}
+
 export const paypalProvider: PspProvider = {
   key: "paypal",
   opensRemoteCheckout: true,
 
-  // ── Lo que este riel no hace ──────────────────────────────────────────────
-  missingChargeConfig: () =>
-    "PayPal no es pasarela de cobro en este sistema: ninguna fila de payment_routing_rules lo nombra en charge_providers",
-  async charge(): Promise<ChargeResult> {
-    // `creado: 'nada'` es correcto y no es una suposición: no se ha llamado a
-    // nadie. Es lo que autoriza a la cadena de respaldo a probar el siguiente.
-    return {
-      ok: false,
-      error: "PayPal no cobra en este sistema, solo paga al tutor",
-      creado: "nada",
-    };
-  },
-  canRefund: () => false,
-  async refund(): Promise<RefundResult> {
-    throw new Error("PayPal no reembolsa aquí: no cobra, así que no hay nada suyo que devolver");
-  },
-  verifyWebhook(): WebhookVerificacion {
-    return { ok: false, motivo: "sin-firma", error: "PayPal no manda webhooks a este sistema" };
-  },
-
-  // ── Lo que sí hace ────────────────────────────────────────────────────────
-  missingPayoutConfig() {
-    if (!process.env.PAYPAL_CLIENT_ID) return "falta PAYPAL_CLIENT_ID";
-    if (!process.env.PAYPAL_SECRET) return "falta PAYPAL_SECRET";
+  // ── Lo que sí cobra ───────────────────────────────────────────────────────
+  //
+  /**
+   * 🔴 EXIGE `PAYPAL_WEBHOOK_ID` ADEMÁS DE LA CREDENCIAL, Y ESA TERCERA
+   * VARIABLE ES TODO EL FRENO DE MANO DE ESTA FASE.
+   *
+   * Sin ella este método devuelve un motivo, el checkout descarta el candidato
+   * (`route.ts`: «la credencial es el interruptor, candidato a candidato») y
+   * PayPal se comporta exactamente como ayer: no cobra. Con ella, cobra.
+   *
+   * ⚠️ Y LA VARIABLE NO ES UN SECRETO QUE INVENTARSE: es el id que devuelve dar
+   * de alta el webhook en PayPal (`POST /v1/notifications/webhooks` o su panel),
+   * apuntando a `https://<origen>/api/webhooks/paypal` y suscrito a
+   * `CHECKOUT.ORDER.APPROVED`, `PAYMENT.CAPTURE.COMPLETED`,
+   * `PAYMENT.CAPTURE.DENIED` y `PAYMENT.CAPTURE.DECLINED`. Sandbox y producción
+   * son webhooks distintos con ids distintos, como las claves.
+   *
+   * ⚠️ NO ES CELO: `charge_providers` lleva a PayPal desde `20260915120000`, y
+   * esa lista no es solo lo que el alumno puede ELEGIR — es también la CADENA DE
+   * RESPALDO. Sin este freno, un fallo de Stripe bastaría para abrir un cobro
+   * por PayPal en un entorno donde el webhook no esté dado de alta, y ese cobro
+   * se paga sin que nada lo acredite: un alumno con el dinero fuera y sin clase.
+   *
+   * La ruta ya existe (`/api/webhooks/paypal`), así que lo que esta variable
+   * vigila ahora no es «¿está escrito?» sino «¿está dado de alta EN ESTE
+   * ENTORNO?» — que es la pregunta que de verdad importa y la que nadie recuerda
+   * hacerse. Ponerla ES el despliegue, como toda la tabla de integraciones de
+   * CLAUDE.md.
+   */
+  missingChargeConfig() {
+    const falta = faltaCredencial();
+    if (falta) return falta;
+    if (!process.env.PAYPAL_WEBHOOK_ID) {
+      return (
+        "falta PAYPAL_WEBHOOK_ID: sin webhook un cobro por PayPal se paga y no confirma la " +
+        "reserva, así que el riel se queda cerrado a propósito"
+      );
+    }
     return null;
   },
+
+  /**
+   * ABRE EL COBRO Y DEVUELVE A DÓNDE MANDAR AL ALUMNO.
+   *
+   * 🔑 TRES LÍNEAS DE TRABAJO REAL, Y ESO ES TODO EL ADAPTADOR. Comparado con
+   * dLocal Go —250 líneas de `sujetoDelCobro` + `refGuardada` + `sellarRef`—
+   * la diferencia entera es `PayPal-Request-Id`: repetir la llamada con la
+   * misma cabecera devuelve LA MISMA ORDEN (medido, 15-sep-2026), así que la
+   * memoria de «este sujeto ya tiene un cobro abierto» la lleva PayPal y no
+   * nuestra base. Como `idempotencyKey` es determinista por sujeto, recargar el
+   * checkout reencuentra la orden en vez de abrir otra. Es el trato de Stripe.
+   *
+   * ⚠️ NO SE SELLA `provider_payment_id` AQUÍ, Y HAY QUE SABERLO: lo sella el
+   * webhook al confirmar, igual que con Stripe. `enqueue_refund` copia esa
+   * columna a la cola de reembolsos, así que **mientras no exista
+   * `/api/webhooks/paypal` un cobro por aquí no se puede devolver**. Esa ruta es
+   * la pieza siguiente, no una mejora opcional.
+   *
+   * `customerRef` y `notificationUrl` se ignoran a propósito: PayPal no tiene
+   * Customer que reutilizar (el vault de PayPal/Venmo está apagado en la app
+   * live) y su webhook se configura UNA vez en su panel, como el de Stripe.
+   */
+  async charge(input: ChargeInput): Promise<ChargeResult> {
+    try {
+      const orden = (await paypalFetch("/v2/checkout/orders", {
+        method: "POST",
+        // 🔑 La idempotencia entera del cobro está en esta cabecera.
+        headers: { "PayPal-Request-Id": input.idempotencyKey },
+        body: JSON.stringify(ordenDeCobro(input)),
+      })) as OrdenPaypal;
+
+      const url = enlaceDePago(orden);
+      if (url) return { ok: true, modo: "redireccion", redirectUrl: url, providerRef: orden.id };
+
+      // 🔴 La orden EXISTE y no admite aprobación — típicamente porque ya se
+      // aprobó o ya se pagó, que es lo que devuelve repetir la petición
+      // idempotente después de pagar. `en-duda` y no `nada`: hay un cobro vivo
+      // ahí, y dejar que la cadena pruebe otro riel es cómo se le cobra dos
+      // veces a la misma persona.
+      return {
+        ok: false,
+        error: `la orden ${orden.id} de PayPal está en ${orden.status} y no admite aprobación`,
+        creado: "en-duda",
+      };
+    } catch (e) {
+      // Un 4xx de PayPal es un rechazo ANTES de crear nada: la API responde con
+      // el id de la orden o con el error, nunca con las dos cosas. Eso es lo
+      // único que autoriza a la cadena a probar el siguiente candidato.
+      //
+      // Todo lo demás —red, 429, 5xx— puede haber creado la orden sin que nos
+      // enteremos. `en-duda` y se para, que es el criterio del puerto: abrir un
+      // cobro de más le cuesta dinero a un alumno, no abrirlo le cuesta un
+      // reintento. Y el reintento es gratis: la misma cabecera devuelve la orden
+      // que se hubiera creado.
+      const rechazo = e instanceof PaypalError && e.status >= 400 && e.status < 500 && e.status !== 429;
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : "PayPal no pudo abrir el cobro",
+        creado: rechazo ? "nada" : "en-duda",
+      };
+    }
+  },
+
+  // ── Lo que este riel todavía no hace ──────────────────────────────────────
+  /**
+   * ⚠️ NO PREGUNTA POR `PAYPAL_WEBHOOK_ID`, al revés que `missingChargeConfig`,
+   * y esa asimetría es el porqué de que el puerto tenga tres preguntas y no una
+   * (ver `missingPayoutConfig` en `port.ts`). Devolver dinero solo necesita la
+   * credencial; atar la cola de reembolsos a una variable que no usa dejaría
+   * `refunds-process` parado por una clave del cobro. El caso es real: un cobro
+   * que entró por PayPal cuando el webhook estaba puesto hay que poder
+   * devolverlo aunque alguien quite esa variable después.
+   */
+  canRefund: () => faltaCredencial() === null,
+
+  /**
+   * DEVOLVER UN COBRO. `POST /v2/payments/captures/{id}/refund`.
+   *
+   * 🔑 `chargeRef` ES EL ID DE LA CAPTURA y no el de la orden — lo sella así el
+   * webhook a propósito (ver `eventoDeWebhook`). Con el de la orden esto sería
+   * un 404 permanente.
+   *
+   * La idempotencia vuelve a ser `PayPal-Request-Id`, igual que en el cobro: el
+   * job reintenta la misma fila con la misma clave y PayPal devuelve el
+   * reembolso que ya hizo en vez de hacer otro. Es lo que dLocal no tiene y por
+   * lo que su X-02 se protege anotando antes de llamar.
+   */
+  async refund(input: RefundInput): Promise<RefundResult> {
+    // Sin importe, el cargo entero: es lo que PayPal hace con el cuerpo vacío, y
+    // la decisión P-1 de este sistema (un cobro tardío no se retiene ni en
+    // parte). Con importe, su formato decimal.
+    // `currency` es opcional en el puerto y aquí se asume USD si falta, igual
+    // que en dLocal y por lo mismo: es la moneda real del proyecto hoy (y con
+    // `aDecimal` dividiendo siempre por 100, una moneda sin céntimos ya pediría
+    // más que un valor por defecto).
+    const moneda = (input.currency ?? "USD").toUpperCase();
+    const cuerpo =
+      input.amountMinor == null
+        ? {}
+        : { amount: { value: aDecimal(input.amountMinor), currency_code: moneda } };
+
+    try {
+      const hecho = (await paypalFetch(`/v2/payments/captures/${input.chargeRef}/refund`, {
+        method: "POST",
+        headers: { "PayPal-Request-Id": input.idempotencyKey },
+        body: JSON.stringify(cuerpo),
+      })) as { id: string; status?: string; amount?: { value?: string; currency_code?: string } };
+
+      const importe = aMenor(hecho.amount?.value) ?? input.amountMinor ?? 0;
+      const monedaDevuelta = hecho.amount?.currency_code ?? moneda;
+
+      // ⚠️ `COMPLETED` Y NADA MÁS ES DINERO FUERA. `PENDING` es real y pasa
+      // cuando el saldo no cubre el reembolso: PayPal lo acepta y lo deja
+      // colgado. Marcar eso como devuelto manda al alumno a esperar un dinero
+      // que no ha salido — el mismo error que `UNCLAIMED` en el payout, que ya
+      // desarmó un correo una vez.
+      if (hecho.status && hecho.status !== "COMPLETED") {
+        return {
+          estado: "no-completado",
+          refundId: hecho.id,
+          detalle: hecho.status,
+          amountMinor: importe,
+          currency: monedaDevuelta,
+        };
+      }
+      return {
+        estado: "reembolsado",
+        refundId: hecho.id,
+        amountMinor: importe,
+        currency: monedaDevuelta,
+      };
+    } catch (e) {
+      // Ese cargo ya lo devolvió otra mano (el panel de PayPal, otro camino
+      // nuestro). No es un fallo: la cola lo cierra sin mover nada.
+      if (e instanceof PaypalError && yaReembolsado(e)) return { estado: "ya-reembolsado" };
+
+      // 429 y 5xx son el momento; el resto es la petición y repetirla mañana
+      // dará lo mismo. Mismo corte que en `charge`.
+      const transitorio = esTransitorio(e);
+      return {
+        estado: transitorio ? "transitorio" : "rechazado",
+        mensaje: e instanceof Error ? e.message : "PayPal no aceptó el reembolso",
+        causa: e,
+      };
+    }
+  },
+
+  /**
+   * ⚠️ LA VERIFICACIÓN ES UNA LLAMADA A PAYPAL, NO UN HMAC EN CASA — por eso el
+   * puerto admite que este método sea asíncrono.
+   *
+   * PayPal firma con un certificado suyo: comprobarlo localmente obliga a
+   * descargar la cadena de `paypal-cert-url`, validarla y cachearla, o sea a
+   * escribir y mantener criptografía para ahorrarse una llamada. Su endpoint de
+   * verificación hace exactamente eso y lo mantiene él.
+   *
+   * ponytail: el techo es que un webhook cuesta un viaje a la API de PayPal. Si
+   * algún día el volumen lo hiciera doler, la salida es cachear el certificado,
+   * no quitar la comprobación.
+   *
+   * 🔴 `PAYPAL_WEBHOOK_ID` NO ES OPCIONAL Y NO TIENE RESPALDO. Sin él no hay
+   * nada contra lo que verificar, y «lo dejo pasar» convertiría esta ruta en un
+   * endpoint público capaz de marcar reservas como pagadas con un POST (RN-34).
+   * Por eso devuelve `sin-secreto`, que la ruta traduce a 503 y PayPal reintenta.
+   */
+  async verifyWebhook(input: WebhookInput): Promise<WebhookVerificacion> {
+    const webhookId = process.env.PAYPAL_WEBHOOK_ID;
+    if (!webhookId) {
+      return {
+        ok: false,
+        motivo: "sin-secreto",
+        error: "falta PAYPAL_WEBHOOK_ID: no hay contra qué verificar la firma",
+      };
+    }
+
+    const h = input.headers ?? {};
+    const firma = h["paypal-transmission-sig"];
+    if (!firma) {
+      return { ok: false, motivo: "sin-firma", error: "la petición no trae paypal-transmission-sig" };
+    }
+
+    // ⚠️ `webhook_event` VA COMO OBJETO PARSEADO, no como la cadena cruda, y es
+    // lo único de esta llamada que sorprende: PayPal reserializa el cuerpo por
+    // su cuenta para comprobar la firma. El crudo sigue llegando hasta aquí
+    // igualmente porque `WebhookInput` lo exige para todos, y porque parsear es
+    // reversible mientras que recomponer el crudo desde un objeto no lo es.
+    let cuerpo: EventoPaypal;
+    try {
+      cuerpo = JSON.parse(input.rawBody) as EventoPaypal;
+    } catch {
+      return { ok: false, motivo: "firma-invalida", error: "el cuerpo del webhook no es JSON" };
+    }
+
+    let veredicto: { verification_status?: string };
+    try {
+      veredicto = (await paypalFetch("/v1/notifications/verify-webhook-signature", {
+        method: "POST",
+        body: JSON.stringify({
+          auth_algo: h["paypal-auth-algo"],
+          cert_url: h["paypal-cert-url"],
+          transmission_id: h["paypal-transmission-id"],
+          transmission_sig: firma,
+          transmission_time: h["paypal-transmission-time"],
+          webhook_id: webhookId,
+          webhook_event: cuerpo,
+        }),
+      })) as { verification_status?: string };
+    } catch (e) {
+      // 🔴 NO SE DA POR BUENA. Si la API de verificación no contesta, lo honesto
+      // es `sin-secreto` → 503 → PayPal reintenta. Tratar un fallo de red como
+      // «firma válida» es la puerta trasera de la que avisa `WebhookInput`.
+      return {
+        ok: false,
+        motivo: "sin-secreto",
+        error: `PayPal no pudo verificar la firma: ${e instanceof Error ? e.message : "error"}`,
+      };
+    }
+
+    if (veredicto.verification_status !== "SUCCESS") {
+      return {
+        ok: false,
+        motivo: "firma-invalida",
+        error: `PayPal dice ${veredicto.verification_status ?? "(sin veredicto)"}`,
+      };
+    }
+
+    return { ok: true, evento: eventoDeWebhook(cuerpo) };
+  },
+
+  // ── Lo que hace desde el principio ────────────────────────────────────────
+  missingPayoutConfig: () => faltaCredencial(),
 
   async payout(input: PayoutInput): Promise<PayoutResult> {
     const marca = marcaDe(input.payoutId, input.intento);

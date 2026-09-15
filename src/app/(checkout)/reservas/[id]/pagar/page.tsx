@@ -11,6 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Precio } from "@/components/precio/precio";
 import { bookingFormatLabel, formatSessionTime, tutorCards } from "@/lib/booking";
 import { ResumePayment } from "@/components/checkout/resume-payment";
+import { metodosDeCheckout } from "@/lib/payments";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
 import { SessionRef } from "@/components/room/session-ref";
 import { TutorSummary } from "@/components/tutor-summary";
@@ -66,7 +67,7 @@ export default async function PagarReservaPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, num_sessions, session_duration_min, products(title, tutor_id, auto_accept_bookings), sessions(id, start_at, session_ref)",
+      "id, status, total_amount, currency, num_sessions, session_duration_min, payer_country, products(title, tutor_id, auto_accept_bookings), sessions(id, start_at, session_ref)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -78,6 +79,19 @@ export default async function PagarReservaPage({
   // el alumno se quedaría mirando un botón que no puede funcionar: mejor
   // mandarlo al detalle, que sí sabe contarle en qué estado está.
   if (booking.status !== "pending_payment") redirect(`/reservas/${id}`);
+
+  /**
+   * 🔑 ¿Se le puede ofrecer PayPal? Se pregunta con el país CONGELADO en la
+   * reserva, que es la clave con la que se resolvió `charge_providers` y la
+   * misma contra la que valida `set_charge_provider`. **No se deduce otra vez de
+   * la zona horaria**: si el alumno cambió de zona entre reservar y pagar, esa
+   * deducción daría otro país, la pantalla ofrecería un riel que la RPC
+   * rechazaría, y el cobro se abriría dejando `payments.provider` sin mover —
+   * o sea un payout atado a un saldo que no tiene el dinero.
+   *
+   * La columna viaja en el `select` que ya existía: ni una consulta más.
+   */
+  const { paypal } = await metodosDeCheckout(booking.payer_country);
 
   const fichas = await tutorCards(supabase, [booking.products?.tutor_id]);
   const ficha = fichas.get(booking.products?.tutor_id ?? "");
@@ -190,7 +204,7 @@ export default async function PagarReservaPage({
             Los datos de tu tarjeta viajan directamente a nuestro proveedor de
             pagos: nunca pasan por Enséñame Ya.
           </p>
-          <ResumePayment bookingId={booking.id} />
+          <ResumePayment bookingId={booking.id} paypalDisponible={paypal} />
         </PanelCard>
       </div>
     </div>

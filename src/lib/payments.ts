@@ -108,6 +108,39 @@ export async function chargeProvidersFor(
 }
 
 /**
+ * QUÉ LE ENSEÑA EL CHECKOUT AL ALUMNO ANTES DE QUE PULSE — las dos preguntas
+ * que la pantalla tiene que contestar, en un solo viaje.
+ *
+ * Existe porque la pantalla ya resolvía la primera (`[0] === 'simulated'`, para
+ * el aviso de entorno de pruebas) y el radio del cliente (15-sep-2026) añade la
+ * segunda. Dos llamadas a `chargeProvidersFor` para la misma lista serían dos
+ * viajes y dos sitios donde la pantalla puede contradecirse a sí misma.
+ *
+ * ⚠️ `paypal` ES «¿SE PUEDE OFRECER?», NO «¿VA A COBRAR?». Pregunta dos cosas y
+ * las dos hacen falta: que la ruta del PAGADOR lo permita —si no,
+ * `set_charge_provider` rechazaría el cambio y el radio sería una mentira— y que
+ * el riel esté encendido en ESTE entorno (`missingChargeConfig`, que hoy exige
+ * `PAYPAL_WEBHOOK_ID`). Sin la segunda, el radio saldría en un entorno donde el
+ * cobro se paga y no lo acredita nadie.
+ *
+ * ⚠️ Y NO SE PREGUNTA POR LA TARJETA. Que haya un riel de tarjeta se da por
+ * hecho porque toda fila de ruteo empieza por uno; si algún día no lo hubiera,
+ * quien se queda sin comprar no es el radio, es el checkout entero, y eso ya lo
+ * dice el 503 con el motivo de cada candidato.
+ */
+export async function metodosDeCheckout(
+  payerCountry: string | null,
+): Promise<{ simulado: boolean; paypal: boolean }> {
+  const ruteo = await chargeProvidersFor(payerCountry);
+  return {
+    // El PRIMER candidato es el que va a cobrar en el caso normal. El respaldo
+    // no se mira: esta pantalla promete lo que va a pasar.
+    simulado: ruteo[0] === "simulated",
+    paypal: ruteo.includes("paypal") && paypalProvider.missingChargeConfig() === null,
+  };
+}
+
+/**
  * 🔑 DE QUÉ PAÍS PAGA ESTA PERSONA — la misma cuenta que hace la reserva.
  *
  * Existe para que la PANTALLA de checkout y `create_booking_line` no puedan dar

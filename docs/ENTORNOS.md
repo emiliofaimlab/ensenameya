@@ -79,6 +79,7 @@ uno no apaga el sitio, apaga a los países que ese riel atiende.
 | `DLOCALGO_SMARTFIELDS_KEY` | dLocal Go | **Nada. No la lee ninguna línea.** El tokenizador de tarjeta usa una clave **pública de plataforma** de dLocal Go, hardcodeada en su propio SDK y la misma para todos sus comercios (`clavePublicaDeSmartFields()` en `lib/dlocalgo.ts`). El checkout transparente no necesita ninguna variable nueva | Nada |
 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | PayPal | El riel de payout de PayPal | `missingPayoutConfig()` devuelve `falta PAYPAL_CLIENT_ID` / `falta PAYPAL_SECRET`, `puedePagar()` da false y el resolvedor **se salta el riel sin ruido** |
 | `PAYPAL_API_URL` | PayPal | Apuntar a **producción** (`https://api-m.paypal.com`) | `https://api-m.sandbox.paypal.com` |
+| `PAYPAL_WEBHOOK_ID` | PayPal | El webhook firmado (§5.1) — y **el interruptor del COBRO por PayPal** | El checkout descarta el candidato con `falta PAYPAL_WEBHOOK_ID`, el radio tarjeta/PayPal **ni se pinta** y el webhook responde **503**. Falla cerrado a propósito: sin él nadie puede cobrar por un riel que no sabría acreditar |
 | `WISE_API_TOKEN` | Wise | El riel de payout de Wise (`lib/payments/wise-provider.ts`) | `missingPayoutConfig()` devuelve `falta WISE_API_TOKEN` y el riel se salta en silencio: la orden se paga por el siguiente candidato del país, o se queda `scheduled` |
 | `WISE_PRIVATE_KEY` | Wise | **OPCIONAL.** Solo la firma **SCA** de Wise: una clave RSA cuya pública se sube en *Settings → API tokens*. Esta cuenta no está sujeta a SCA, así que `missingPayoutConfig()` no la exige | Nada, mientras Wise no pida SCA. Si lo pidiera, `wiseFetch` lo dice **con el nombre de la variable** en vez de morir con un 403 mudo |
 | `WISE_API_URL` | Wise | Apuntar a otro host de Wise | `https://api.transferwise.com` — el de **producción**, contra el que se midió el riel |
@@ -154,6 +155,7 @@ Está en `.env.local` por un intento que no funcionó; borrarla no rompe nada.
 | :-- | :-- | :-- | :-- |
 | `PAYPAL_CLIENT_ID` · `PAYPAL_SECRET` | ✅ sandbox | ✅ sandbox | ✅ **producción (10-sep)** |
 | `PAYPAL_API_URL` | ✅ | ✅ sandbox | ✅ `https://api-m.paypal.com` (10-sep) |
+| `PAYPAL_WEBHOOK_ID` | ✅ sandbox (15-sep) | ⬜ **falta** — `0G116560CE055280W` (§5.1) | ⬜ no existe el webhook live |
 | `WISE_API_TOKEN` | ❌ desactivada 10-sep — ver abajo | ❌ **y así se queda** | ✅ token `ensenameya-prod` (10-sep) |
 | `WISE_PRIVATE_KEY` · `WISE_API_URL` | ❌ | ❌ | ❌ · opcionales |
 
@@ -727,6 +729,64 @@ stripe login
 stripe listen --forward-to localhost:3000/api/webhooks/stripe
 # imprime un whsec_… → ESE es el que va en .env.local
 ```
+
+### 5.1 · Webhook de PayPal (15-sep-2026)
+
+`POST /api/webhooks/paypal` es el único sitio donde un cobro por PayPal pasa a `paid`. Montaje en
+**sandbox**, hecho el 15-sep-2026 (antes no existía ninguno en esa cuenta: el `GET` de
+`/v1/notifications/webhooks` devolvía cero):
+
+```
+id     0G116560CE055280W          ← es el PAYPAL_WEBHOOK_ID del scope Preview
+url    https://ensenameya-git-dev-ensename-ya.vercel.app/api/webhooks/paypal
+       ?x-vercel-protection-bypass=<token>
+evs    CHECKOUT.ORDER.APPROVED · PAYMENT.CAPTURE.COMPLETED
+       PAYMENT.CAPTURE.DENIED · PAYMENT.CAPTURE.DECLINED
+```
+
+Mismo bypass y misma razón que con Stripe (arriba): sin él, Deployment Protection responde 302 antes
+de que corra una línea nuestra.
+
+🔴 **PAYPAL CAPTURA SOLA AL APROBAR — el dinero se mueve antes de que nos enteremos.** Medido el
+15-sep-2026 con el primer pago real que pasó por aquí (25,00 USD de sandbox, comisión 1,74):
+
+```
+12:33:50.521Z  PayPal crea CHECKOUT.ORDER.APPROVED
+12:33:51.000Z  la captura 0SA44544TJ055230K ya está COMPLETED   ← medio segundo
+12:34:00.143Z  PayPal crea PAYMENT.CAPTURE.COMPLETED
+12:34:17.000Z  nuestra base lo registra → reserva confirmed      ← 17 s de entrega
+```
+
+Ese medio segundo no lo gastamos nosotros: verificar la firma es por sí solo un viaje a la API de
+PayPal, capturar es otro, y el evento gemelo del MISMO pago tardó 17 segundos en llegar. **Aquí
+estuvo escrito lo contrario** —que aprobar no era pagar y que por eso había un fallo seguro— y es
+falso: si `CAPTURE.COMPLETED` no llegara, quedaría dinero cobrado y una reserva sin confirmar. Eso
+es lo que cubre X-02, y con PayPal X-02 no es una red de lujo: es la única.
+
+**Los cuatro eventos hacen falta igual.** `CAPTURE.COMPLETED` es el que acredita (y el único que trae
+el id de la captura, sin el cual no hay reembolso posible). `ORDER.APPROVED` se queda como red por si
+PayPal dejara de autocapturar: hoy solo provoca un `422 ORDER_ALREADY_CAPTURED` que la ruta trata
+como `ya-capturada`.
+
+⚠️ Y el reloj de arriba es lo que hay que decirle a quien pruebe: entre aprobar y ver la reserva
+confirmada pasan **decenas de segundos**. La pantalla «Estamos confirmando tu pago» es correcta;
+recargar antes y ver «Pago pendiente» no es un bug.
+
+⚠️ **EL ID NO ES UN SECRETO PERO SÍ ES EL INTERRUPTOR.** `missingChargeConfig()` de
+`paypal-provider.ts` lo exige para COBRAR, no solo para verificar: sin la variable el checkout
+descarta el candidato, el radio de tarjeta/PayPal ni se pinta y el riel se comporta como si no
+existiera. Es a propósito —`charge_providers` lleva a PayPal en las 21 filas, o sea que también es
+cadena de RESPALDO— y evita que un fallo de Stripe abra un cobro en un entorno donde el webhook no
+esté dado de alta. Medido en el preview antes de poner la variable: **503 «falta
+PAYPAL_WEBHOOK_ID»**, que es PayPal reintentando y nadie cobrando de más.
+
+⚠️ **Sandbox y producción son webhooks DISTINTOS con ids distintos**, igual que las claves. El de
+producción no existe todavía, y hasta que exista `ensenameya.com` no puede cobrar por PayPal.
+
+**Probarlo sin pagar:** `POST /v1/notifications/simulate-event` con el `webhook_id` manda un evento
+FIRMADO de verdad a esa URL. Un `curl` a mano no sirve para probar el camino feliz —la firma no
+valida y la ruta responde 400, que es lo correcto— pero sí es la prueba de que **no se puede
+falsificar**: medido, `400 «PayPal dice FAILURE»` con el id real puesto.
 
 ⚠️ **El `whsec_` de `stripe listen` no es el mismo que el del endpoint del panel.** Son secretos
 distintos, uno por destino. Copiar el de Vercel a `.env.local` (o al revés) hace que la firma no

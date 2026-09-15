@@ -216,3 +216,80 @@ const ABRE = (quien: string): Salida<string> => ({ tipo: "abierto", cobro: quien
 }
 
 console.log("cadena.check.ts · ok");
+
+// ══════════════════════════════════════════════════════════════════════════
+// EL RADIO DEL CHECKOUT — lo que el alumno elige manda sobre el orden
+// ══════════════════════════════════════════════════════════════════════════
+
+// 🔑 `preferido` va el PRIMERO. Por delante de `cobrador`, que es la única
+// excepción a la regla de «quien ya abrió un cobro va primero», y está razonada
+// en la cabecera de `cadenaDeCobro`: sin esto el radio no hace nada, porque al
+// llegar a la pantalla el cobro con tarjeta YA se abrió y `cobrador` lo
+// devolvería a la cabeza en el siguiente intento.
+assert.deepEqual(
+  cadenaDeCobro({ preferido: "paypal", cobrador: "stripe", snapshot: "dlocal", ruteo: ["dlocal", "stripe", "paypal"] }),
+  ["paypal", "stripe", "dlocal"],
+  "elegir PayPal tiene que ponerlo el primero, incluso si stripe ya abrió un cobro",
+);
+
+// ══════════════════════════════════════════════════════════════════════════
+// 🔴 PAYPAL SALE CON EL RADIO Y NO COMO RESPALDO (cliente, 15-sep-2026)
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Es la regla más cara de romper de este fichero, porque romperla no falla:
+// cobra. PayPal CAPTURA AL APROBAR (a diferencia de Stripe y dLocal, que
+// pintan un formulario que la persona todavía tiene que rellenar), así que un
+// respaldo silencioso hacia él es dinero real que nadie eligió mover.
+
+// Sin preferencia, PayPal NO aparece — aunque la ruta lo nombre.
+assert.deepEqual(
+  cadenaDeCobro({ cobrador: "stripe", snapshot: "dlocal", ruteo: ["dlocal", "stripe", "paypal"] }),
+  ["stripe", "dlocal"],
+  "sin elegirlo, PayPal no puede entrar por la puerta de atrás",
+);
+assert.deepEqual(
+  cadenaDeCobro({ cobrador: null, snapshot: null, ruteo: ["stripe", "paypal"] }),
+  ["stripe"],
+  "y si el único respaldo era PayPal, mejor sin respaldo que cobrando sin permiso",
+);
+
+// 🔑 PERO `cobrador` Y `snapshot` NO SE FILTRAN, y esto es lo contrario de un
+// descuido. Significan «aquí YA hay un cobro de PayPal abierto y pagable».
+// Quitarlos abriría un SEGUNDO cobro con tarjeta al recargar la pantalla.
+assert.deepEqual(
+  cadenaDeCobro({ cobrador: "paypal", snapshot: "stripe", ruteo: ["stripe", "paypal"] }),
+  ["paypal", "stripe"],
+  "un cobro de PayPal ya abierto se reencuentra, no se duplica con otro riel",
+);
+assert.deepEqual(
+  cadenaDeCobro({ cobrador: null, snapshot: "paypal", ruteo: ["stripe", "paypal"] }),
+  ["paypal", "stripe"],
+  "lo mismo con el snapshot: la reserva se termina por donde empezó",
+);
+assert.deepEqual(
+  cadenaDeCobro({ preferido: null, cobrador: null, snapshot: "dlocal", ruteo: ["dlocal", "stripe"] }),
+  ["dlocal", "stripe"],
+);
+
+// Y el preferido no se duplica: sigue siendo una cadena sin repetidos, porque
+// dos llamadas idénticas al mismo proveedor con la misma clave de idempotencia
+// no aportan nada.
+assert.deepEqual(
+  cadenaDeCobro({ preferido: "dlocal", cobrador: "dlocal", snapshot: "dlocal", ruteo: ["dlocal", "stripe"] }),
+  ["dlocal", "stripe"],
+);
+
+// El respaldo SIGUE EN PIE detrás del preferido: elegir PayPal y que PayPal no
+// pueda no deja al alumno sin comprar.
+assert.deepEqual(
+  cadenaDeCobro({ preferido: "paypal", cobrador: null, snapshot: "stripe", ruteo: ["stripe", "paypal"] }),
+  ["paypal", "stripe"],
+);
+
+// Y el revés: elegir tarjeta no mete a PayPal detrás «por si acaso».
+assert.deepEqual(
+  cadenaDeCobro({ preferido: "dlocal", cobrador: null, snapshot: "stripe", ruteo: ["stripe", "dlocal", "paypal"] }),
+  ["dlocal", "stripe"],
+);
+
+console.log("✅ cadena: el radio manda sobre el orden, y PayPal solo entra si se elige.");

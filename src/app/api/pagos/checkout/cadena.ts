@@ -88,14 +88,80 @@ export type Recorrido<T> =
  * ⚠️ NO SE FILTRA POR DISPONIBILIDAD AQUÍ, igual que `chargeProvidersFor` no
  * filtra: quien cobra necesita saber qué se intentó. Un candidato que no puede
  * entra en la cadena, se descarta con su motivo y ese motivo acaba en el 503.
+ *
+ * ── 🔑 Y DELANTE DE TODO ESO, LO QUE EL ALUMNO ELIGIÓ ──────────────────────
+ *
+ * `preferido` es el radio del checkout (tarjeta / PayPal, petición del cliente
+ * del 15-sep-2026) y va el PRIMERO, por delante incluso de `cobrador`. Es la
+ * única cosa que puede saltarse esa regla y conviene entender qué se está
+ * aceptando a cambio:
+ *
+ * `cobrador` va primero para que una recarga no abra un segundo cobro vivo. Con
+ * un radio eso deja de ser evitable POR DEFINICIÓN: al llegar a la pantalla ya
+ * se abrió el cobro con tarjeta —el formulario se monta solo (D-2)—, así que
+ * elegir PayPal después significa, necesariamente, un segundo vehículo de cobro
+ * para la misma reserva. No hay forma de ofrecer la elección sin eso, salvo no
+ * abrir nada hasta que elija, que es volver a la pantalla con botón que D-2
+ * quitó.
+ *
+ * Lo que lo hace aceptable no es este fichero, son las tres redes que ya
+ * existen: la pantalla DESMONTA el formulario de tarjeta al elegir PayPal (no
+ * hay dos botones de pagar a la vez), `confirm_payment` es idempotente por
+ * reserva, y un segundo pago sobre una reserva ya pagada cae en la red de X-02,
+ * que lo devuelve solo. O sea que el peor caso es un reembolso automático, no
+ * un cobro doble que se queda.
+ *
+ * ⚠️ Y SE IGNORA SI NO ESTÁ EN `ruteo`: una preferencia que nombra a un
+ * proveedor que la ruta del pagador no permite no es una elección, es un
+ * parámetro inventado en el navegador. Lo filtra quien llama —el Route Handler,
+ * que es quien tiene la lista— y aquí no se comprueba nada: este fichero ordena,
+ * no autoriza.
+ *
+ * ── 🔴 Y HAY RIELES QUE SOLO ENTRAN SI SE ELIGEN ───────────────────────────
+ *
+ * `charge_providers` respondía hasta hoy a DOS preguntas con la misma lista:
+ * «¿a quién se le permite cobrar esto?» (lo que valida `set_charge_provider`) y
+ * «¿en qué orden se intenta si el primero no puede?». Para PayPal esas dos
+ * respuestas tienen que ser distintas, y lo pidió el cliente el 15-sep-2026:
+ * **que salga solo con el radio, no como respaldo.**
+ *
+ * El motivo es que PayPal no se parece a los otros dos en el momento en que
+ * mueve el dinero: **captura al APROBAR** (medido, ver `paypal-provider.ts`).
+ * Un respaldo silencioso hacia PayPal sería un cobro real que nadie pidió por
+ * un riel que el alumno no eligió — y con Stripe o dLocal eso mismo es un
+ * formulario de tarjeta que la persona todavía tiene que rellenar.
+ *
+ * Se resuelve quitándolo del TRAMO DE RESPALDO y solo de ahí. Sigue en
+ * `charge_providers`, así que `set_charge_provider` lo sigue permitiendo y el
+ * radio funciona igual; y sigue entrando por `preferido`, `cobrador` y
+ * `snapshot`, que NO se filtran y no pueden filtrarse:
+ *
+ *   · `preferido` es la elección: es el caso para el que existe todo esto.
+ *   · `cobrador` y `snapshot` son «aquí ya hay un cobro de PayPal abierto».
+ *     Quitarlos abriría un SEGUNDO cobro con tarjeta al recargar la pantalla,
+ *     con el de PayPal vivo y pagable. Justo lo que la cabecera de arriba
+ *     existe para impedir.
+ *
+ * ponytail: una lista de claves en este fichero, no una columna nueva en
+ * `payment_routing_rules`. El techo es que la distinción vive en el código y no
+ * en la configuración; el día que un segundo riel la necesite y alguien quiera
+ * moverla por país, entonces sí es una columna — y entonces habrá dos casos
+ * que mirar para darle forma, que hoy no los hay.
  */
+export const SOLO_POR_ELECCION = new Set(["paypal"]);
 export function cadenaDeCobro(opts: {
   cobrador: string | null;
   snapshot: string | null;
   ruteo: string[];
+  /** El riel que el alumno eligió a mano, ya validado contra `ruteo`. */
+  preferido?: string | null;
 }): string[] {
+  // 🔴 El tramo de respaldo, y SOLO él, pierde a los rieles que no respaldan.
+  // Los tres de delante van enteros: leer el bloque de arriba antes de moverlo.
+  const respaldo = opts.ruteo.filter((c) => !SOLO_POR_ELECCION.has(c));
+
   const cadena: string[] = [];
-  for (const clave of [opts.cobrador, opts.snapshot, ...opts.ruteo]) {
+  for (const clave of [opts.preferido, opts.cobrador, opts.snapshot, ...respaldo]) {
     if (!clave) continue;
     if (cadena.includes(clave)) continue;
     cadena.push(clave);

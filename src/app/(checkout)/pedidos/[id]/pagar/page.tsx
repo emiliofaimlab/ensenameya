@@ -7,6 +7,7 @@ import {
   requireUser,
 } from "@/lib/auth/server";
 import { resolveOrder } from "@/lib/orders/queries";
+import { metodosDeCheckout } from "@/lib/payments";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { Precio } from "@/components/precio/precio";
 import { formatSessionTime } from "@/lib/booking";
@@ -65,6 +66,12 @@ export default async function PagarPedidoPage({
   if (pedido.order.status !== "pending_payment") {
     redirect(`/pedidos/${id}/confirmacion`);
   }
+
+  // ¿Se le puede ofrecer PayPal? Va DESPUÉS del `notFound()` a propósito: sin
+  // pedido no hay país del pagador que preguntar, y resolverlo antes sería un
+  // viaje por cada 404. El `simulado` de aquí no se usa —esta pantalla lo
+  // deduce de su propia `fase`— y por eso solo se saca `paypal`.
+  const { paypal } = await metodosDeCheckout(pedido.payerCountry);
 
   // ⚠️ P-1 · si una línea perdió su hueco, el pedido entero deja de ser
   // cobrable y hay que rehacerlo desde el carrito. Abrir el cobro por las que
@@ -229,6 +236,10 @@ export default async function PagarPedidoPage({
               orderId={pedido.order.id}
               total={pedido.total}
               currency={pedido.currency}
+              // El radio solo si de verdad hay dos caminos. Se pregunta con el
+              // país CONGELADO en las líneas, que es la misma clave con la que
+              // se resolvió el ruteo y la que validará `set_charge_provider`.
+              paypalDisponible={paypal}
             />
           )}
         </PanelCard>
