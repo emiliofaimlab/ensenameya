@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 
@@ -35,7 +34,6 @@ function strength(password: string): { score: number; level: string } {
 }
 
 export function UpdatePasswordForm() {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [password, setPassword] = useState("");
   const { score, level } = strength(password);
@@ -64,8 +62,29 @@ export function UpdatePasswordForm() {
     // Ya hay sesión válida: enruta por rol como el login.
     const { data } = await supabase.from("user_roles").select("role");
     const roles = (data ?? []).map((r) => r.role as AppRole);
-    router.push(pickHome(roles));
-    router.refresh();
+    /*
+     * 🔴 CARGA ENTERA, NO `router.push()` — REGLA DE ORO 13.
+     *
+     * `pickHome` mira los ROLES y no el onboarding, así que puede devolver
+     * `/app` o `/tutor`; las dos cuelgan de `(app)/layout.tsx`, que llama a
+     * `requireUser()`, que hace `redirect()` cuando el asistente está a medias.
+     * Un `redirect()` de servidor alcanzado por una navegación de CLIENTE que
+     * cruza de grupo de rutas —de `(recovery)` a `(app)`— deja el árbol vacío y
+     * el router pidiendo el RSC en bucle: pantalla en blanco.
+     *
+     * ⚠️ Y ESTO ES NUEVO DESDE EL 16-sep-2026, aunque la línea llevara meses
+     * ahí: hasta hoy, quien tenía el asistente a medias NUNCA llegaba a este
+     * formulario —`/auth/callback` lo desviaba antes—, así que el caso no
+     * existía. Al arreglar ese desvío, esta población empieza a pasar por aquí,
+     * que es precisamente la que dispara el `redirect()`.
+     *
+     * Una carga de documento entera lo resuelve por definición: la misma URL
+     * cargada de cero renderiza perfecta. Es la misma salida que ya toma
+     * `auth/callback/callback-status.tsx` y por el mismo motivo. El coste es un
+     * viaje, justo después de guardar una contraseña. Se cae también el
+     * `router.refresh()`, que estaba para que el servidor releyera las cookies.
+     */
+    window.location.assign(pickHome(roles));
   }
 
   return (

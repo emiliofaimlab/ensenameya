@@ -5,10 +5,11 @@ import { GiftIcon } from "lucide-react";
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { getProductDetail } from "@/lib/catalog/queries";
-import { Precio } from "@/components/precio/precio";
+import { Precio, PrecioEnLinea } from "@/components/precio/precio";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
 import { diasParaAgendar } from "@/app/(app)/regalar/gift-policy";
+import { SERVICE_FEE_PCT } from "@/lib/booking";
 import { PagoDelRegalo } from "./pago-del-regalo";
 
 export const metadata = { title: "Confirmar pago · Enséñame Ya" };
@@ -75,7 +76,7 @@ export default async function PagarRegaloPage({
   // mentiroso sobre un regalo que sí es tuyo y que estás a punto de pagar.
   const { data: regalo, error } = await supabase
     .from("mis_regalos_comprados")
-    .select("id, status, amount, currency, product_id, beneficiary_email, gift_message")
+    .select("id, status, amount, service_fee_amount, currency, product_id, beneficiary_email, gift_message")
     .eq("id", creditId)
     .maybeSingle();
 
@@ -158,6 +159,39 @@ export default async function PagarRegaloPage({
             </blockquote>
           ) : null}
 
+          {/* 💰 EL CARGO POR SERVICIO del regalo (punto 7 · 16-sep-2026).
+
+              `credits.amount` YA LO LLEVA DENTRO —lo mete el trigger
+              `credits_cargo_por_servicio` al comprar (`20260916130000`)—, así
+              que esto DESGLOSA, no suma: el subtotal se calcula restando,
+              porque la cifra que manda es el total, que es la que se cobra.
+
+              Y conviene que se vea aquí: quien regala paga el 5 %, y a quien lo
+              recibe no se le vuelve a cobrar al agendar (la base del cargo allí
+              será 0). Sin esta línea, el comprador vería un total más alto que
+              el precio de la mentoría y no sabría por qué. */}
+          {(regalo.service_fee_amount ?? 0) > 0 ? (
+            <div className="mt-4 flex flex-col gap-2 border-t border-[#e0e0e0] pt-4 text-sm">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                <span className="text-[#6b6b6b]">Subtotal</span>
+                <PrecioEnLinea
+                  amountMinor={(regalo.amount ?? 0) - (regalo.service_fee_amount ?? 0)}
+                  currency={regalo.currency ?? "USD"}
+                  className="text-[#333333]"
+                />
+              </div>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                <span className="text-[#6b6b6b]">
+                  Cargo por servicio ({SERVICE_FEE_PCT} %)
+                </span>
+                <PrecioEnLinea
+                  amountMinor={regalo.service_fee_amount ?? 0}
+                  currency={regalo.currency ?? "USD"}
+                  className="text-[#333333]"
+                />
+              </div>
+            </div>
+          ) : null}
           <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-[#e0e0e0] pt-4">
             <span className="text-base font-semibold text-[#19191f]">Total</span>
             <span className="text-right">

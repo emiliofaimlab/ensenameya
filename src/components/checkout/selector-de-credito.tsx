@@ -107,6 +107,18 @@ type Fila = {
    * aplica un crédito sola no puede depender de un dato que a veces no llega.
    */
   source: string;
+  /**
+   * `'mentoria'` = vale por ESA mentoría entera; `'saldo'` = vale como dinero
+   * contra cualquiera, pagando la diferencia.
+   *
+   * ⚠️ HACE FALTA PARA NO AUTO-APLICAR UN BONO. Desde `20260916100000`, cuando
+   * un tutor se da de baja, los regalos vivos sobre sus mentorías se convierten
+   * en bono: siguen siendo `source = 'gift'` pero pasan a `kind = 'saldo'`. Un
+   * regalo se aplica solo porque no hay nada que decidir —es esa mentoría o
+   * nada—; un bono SÍ es una decisión (quizá lo quiere guardar para una clase
+   * más cara), y gastárselo sin preguntar es decidir por el alumno.
+   */
+  kind: string;
   /** Unidades mínimas que cubriría. Solo se enseña si `usable`. */
   cubre: number;
   usable: boolean;
@@ -214,6 +226,7 @@ async function leerTodo(bookingId: string): Promise<Lectura> {
     creditId: c.credit_id,
     etiqueta: c.etiqueta,
     source: c.source,
+    kind: c.kind,
     cubre: c.cubre,
     usable: c.usable,
     motivo: c.motivo ?? null,
@@ -293,7 +306,13 @@ function regaloQueSeAplicaSolo(
   l: Lectura,
 ): { base: LecturaConCreditos; regalo: Fila } | null {
   if (l.tipo !== "hay" || l.aplicado) return null;
-  const regalo = l.filas.find((f) => f.usable && f.source === "gift");
+  // ⚠️ `kind !== "saldo"` NO ES UN DETALLE: un regalo convertido en bono
+  // (`20260916100000`, el tutor cerró su cuenta) sigue siendo `source = 'gift'`.
+  // Sin este filtro se le gastaría solo, en la primera reserva que abriera, un
+  // saldo que quizá quería guardar para otra cosa.
+  const regalo = l.filas.find(
+    (f) => f.usable && f.source === "gift" && f.kind !== "saldo",
+  );
   return regalo ? { base: l, regalo } : null;
 }
 
@@ -360,33 +379,28 @@ async function aplicarSolo(
     };
   }
 
-  const cubre = numeroDe(data, "credit_amount");
-  const aPagar = numeroDe(data, "a_pagar");
-
-  if (cubre === null || aPagar === null) {
-    // La RPC hizo su trabajo aunque no entendamos su respuesta: se relee la base
-    // en vez de inventar un importe. Sin aviso, porque no hay nada que contar:
-    // el crédito quedó aplicado y la relectura lo va a enseñar.
-    console.error(
-      "[selector-de-credito] aplicar_credito devolvió algo inesperado:",
-      data,
-    );
-    return { lectura: await leerTodo(bookingId), aviso: null };
-  }
-
-  return {
-    lectura: {
-      ...base,
-      aplicado: {
-        creditId: regalo.creditId,
-        etiqueta: regalo.etiqueta,
-        esRegalo: true,
-        cubre,
-        aPagar,
-      },
-    },
-    aviso: null,
-  };
+  // 🔴 NO SE USA EL `a_pagar` QUE DEVUELVE LA RPC, y esto es deliberado desde
+  // el cargo por servicio (`20260916120000`).
+  //
+  // `aplicar_credito` compone su respuesta con `v_p.gross_amount - v_cubre`
+  // (`20260912110000`, dentro de su `jsonb_build_object`), y `v_p` es la fila
+  // que leyó con `for update` AL EMPEZAR, o sea ANTES de su propio `update`.
+  // Hasta ahora daba igual: `gross_amount` no cambiaba y la resta salía bien.
+  // Desde que el trigger `payments_cargo_por_servicio` mete el cargo dentro de
+  // `gross_amount`, esa cifra se queda corta exactamente en el importe del
+  // cargo — y es la que pinta la línea «A pagar» del pedido multi-línea.
+  //
+  // Releer es la respuesta barata y correcta: `leerTodo` saca `gross_amount` y
+  // `credit_amount` de la fila YA escrita, con el cargo dentro, que es lo que
+  // `/api/pagos/checkout` va a cobrar de verdad. Cuesta un viaje más en el
+  // momento de aplicar un crédito y quita una copia de la aritmética del dinero
+  // del navegador, que es lo que pide la regla de oro 2.
+  //
+  // La alternativa —arreglar el `return` de la RPC— obliga a `create or replace`
+  // sobre una función de ~200 líneas para cambiar UNA, con el riesgo de revertir
+  // en silencio cualquier arreglo posterior de su cuerpo. No compensa.
+  void data;
+  return { lectura: await leerTodo(bookingId), aviso: null };
 }
 
 /**
@@ -494,12 +508,10 @@ function enCristiano(mensaje: string): string {
   return "No pudimos aplicar tu crédito. Recarga la página e inténtalo de nuevo.";
 }
 
-/** Lee un número de la respuesta `jsonb` de la RPC sin fiarse de su forma. */
-function numeroDe(json: unknown, clave: string): number | null {
-  if (typeof json !== "object" || json === null) return null;
-  const v = (json as Record<string, unknown>)[clave];
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
+// `numeroDe()` vivía aquí y leía `credit_amount` / `a_pagar` de la respuesta de
+// la RPC. Se fue con ellos: desde el cargo por servicio las dos ramas releen la
+// fila de `payments` en vez de fiarse de lo que devuelve `aplicar_credito`, que
+// compone su `a_pagar` con el `gross_amount` de antes de su propio `update`.
 
 export function SelectorDeCredito({
   bookingId,
@@ -661,47 +673,17 @@ export function SelectorDeCredito({
       return;
     }
 
-    const cubre = numeroDe(data, "credit_amount");
-    const aPagar = numeroDe(data, "a_pagar");
-
-    if (cubre === null || aPagar === null) {
-      // La RPC hizo su trabajo aunque no entendamos su respuesta. Se relee la
-      // base en vez de inventar un importe.
-      console.error(
-        "[selector-de-credito] aplicar_credito devolvió algo inesperado:",
-        data,
-      );
-      asentar(bookingId, await leerTodo(bookingId));
-      terminar();
-      return;
-    }
-
-    // No hace falta releer: los dos números salen de la RPC que acaba de
-    // escribirlos, que es justo lo que manda la regla (el importe se enseña tal
-    // como lo devuelve el servidor, nunca restándolo aquí).
-    setLectura((prev) =>
-      prev && prev.de === bookingId && prev.l.tipo === "hay"
-        ? {
-            de: prev.de,
-            l: {
-              ...prev.l,
-              aplicado: {
-                creditId: fila.creditId,
-                etiqueta: fila.etiqueta,
-                esRegalo: fila.source === "gift",
-                cubre,
-                aPagar,
-              },
-            },
-          }
-        : prev,
-    );
-    onCambioRef.current({
-      tipo: "aplicado",
-      creditId: fila.creditId,
-      cubre,
-      aPagar,
-    });
+    // 🔴 SE RELEE, Y ANTES NO SE RELEÍA. Mismo motivo que en la rama del regalo
+    // de más arriba: el `a_pagar` de `aplicar_credito` se calcula con el
+    // `gross_amount` de ANTES de su propio `update`, y desde el cargo por
+    // servicio (`20260916120000`) ese valor se queda corto justo en el importe
+    // del cargo. La fila ya escrita es la única que dice lo que se va a cobrar.
+    //
+    // Y avisar al padre ya no se hace aquí: `asentar` pinta la lectura Y manda
+    // el aviso, así que llamar a `onCambio` a mano después era mandarlo dos
+    // veces con los mismos números.
+    void data;
+    asentar(bookingId, await leerTodo(bookingId));
     terminar();
   }
 

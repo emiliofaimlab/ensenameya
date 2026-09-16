@@ -82,10 +82,20 @@ on conflict do nothing;
 -- ════════════════════════════════════════════════════════════════════════════
 -- 2 · PERFIL DE TUTOR — aprobado de una vez
 -- ════════════════════════════════════════════════════════════════════════════
--- Entra ya en 'approved' en el INSERT y no con un UPDATE posterior:
--- `notify_tutor_profile` es AFTER UPDATE, así que insertándolo aprobado no se
--- encola ni un correo. (En una REejecución el `do update` sí lo encolará: la
--- cola solo sale si alguien corre /api/cron/notifications-send.)
+-- Entra ya en 'approved' en el INSERT y no con un UPDATE posterior, porque
+-- `notify_tutor_profile` —el que avisa del resultado del KYC— es AFTER UPDATE.
+--
+-- 🔴 PERO YA NO ES VERDAD QUE «INSERTÁNDOLO APROBADO NO SE ENCOLA NI UN CORREO»,
+--    y este fichero lo afirmaba. Desde `20260911200000_la_plataforma_da_la_
+--    bienvenida.sql:217-219` hay un SEGUNDO trigger, AFTER **INSERT**, sobre
+--    `tutor_profiles`, que encola NTF-25 («bienvenida tutor»). Este seed se
+--    escribió a las 19:17 y esa migración es de las 20:00 del MISMO día.
+--
+--    Y ya no se queda en la cola: desde el 14-sep el reloj de
+--    `notifications-cron.yml` también vacía la de dev, así que el alta de un
+--    tutor de prueba MANDA CORREO DE VERDAD a la dirección que lleve la fila
+--    —con el dominio verificado en Resend desde el 10-sep—. Cuenta con ello
+--    antes de sembrar con una dirección real.
 insert into public.tutor_profiles (
   profile_id, display_name, headline, bio, teaching_level,
   approval_status, identity_verification_status, approved_at, tier_id, faqs

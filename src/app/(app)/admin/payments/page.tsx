@@ -131,8 +131,15 @@ export default async function AdminPaymentsPage({
         <Stat label="Pagos" value={String(totals.count)} />
         {single ? (
           <>
+            {/* ⚠️ «Bruto» es lo que pagó el ALUMNO y desde el 16-sep-2026
+                lleva dentro el cargo por servicio, así que Bruto − Comisión ya
+                NO es el neto de los tutores (`20260916120000`). La cifra del
+                cargo se enseña en la tarjeta de al lado en cuanto hay alguna. */}
             <Stat label="Bruto" value={formatMoney(totals.gross, single)} />
-            <Stat label="Comisión" value={formatMoney(totals.fee, single)} />
+            <Stat
+              label="Comisión del tutor"
+              value={formatMoney(totals.fee, single)}
+            />
             <Stat
               label={totals.refunded > 0 ? "Reembolsado" : "Neto tutores"}
               value={
@@ -141,6 +148,12 @@ export default async function AdminPaymentsPage({
                   : formatMoney(totals.net, single)
               }
             />
+            {totals.serviceFee > 0 ? (
+              <Stat
+                label="Cargo por servicio"
+                value={formatMoney(totals.serviceFee, single)}
+              />
+            ) : null}
           </>
         ) : (
           <PanelCard className="p-5 sm:col-span-3">

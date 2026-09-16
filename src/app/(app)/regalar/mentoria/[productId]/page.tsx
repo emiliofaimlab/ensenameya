@@ -6,8 +6,9 @@ import { requireUser } from "@/lib/auth/server";
 import { panelMenu } from "@/lib/auth/panel-items";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { priceDisplay, sessionsLabel } from "@/lib/catalog/format";
+import { serviceFee, SERVICE_FEE_PCT } from "@/lib/booking";
 import { ProductCover } from "@/components/catalog/product-cover";
-import { Precio } from "@/components/precio/precio";
+import { Precio, PrecioEnLinea } from "@/components/precio/precio";
 import {
   PanelCard,
   PanelCardTitle,
@@ -140,11 +141,43 @@ export default async function ConfirmarRegaloPage({
             ) : null}
           </ul>
 
+          {/* 💰 EL CARGO POR SERVICIO, desglosado ANTES de crear la fila del
+              dinero (punto 7 · 16-sep-2026).
+
+              Aquí no existe todavía ningún `credits`, así que la cifra se
+              calcula con `serviceFee()` de `lib/booking.ts` — la copia que solo
+              PINTA. Quien manda es el trigger `credits_cargo_por_servicio`
+              (`20260916130000`), que lo mete dentro de `credits.amount` cuando
+              `comprar_regalo` inserta la fila, con la misma aritmética.
+
+              Tiene que estar aquí y no solo en la pantalla de pago: esta es la
+              última antes de comprometerse, y saltar de un total a otro entre
+              dos pantallas es exactamente lo que hace desconfiar de un cobro. */}
+          <div className="mt-4 flex flex-col gap-2 border-t border-[#e0e0e0] pt-4 text-sm">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+              <span className="text-[#6b6b6b]">Subtotal</span>
+              <PrecioEnLinea
+                amountMinor={precio.amountMinor}
+                currency={product.currency}
+                className="text-[#333333]"
+              />
+            </div>
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+              <span className="text-[#6b6b6b]">
+                Cargo por servicio ({SERVICE_FEE_PCT} %)
+              </span>
+              <PrecioEnLinea
+                amountMinor={serviceFee(precio.amountMinor)}
+                currency={product.currency}
+                className="text-[#333333]"
+              />
+            </div>
+          </div>
           <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-[#e0e0e0] pt-4">
             <span className="text-base font-semibold text-[#19191f]">Total</span>
             <span className="text-right">
               <Precio
-                amountMinor={precio.amountMinor}
+                amountMinor={precio.amountMinor + serviceFee(precio.amountMinor)}
                 currency={product.currency}
                 nota={precio.note}
                 className="text-[26px] leading-none font-bold text-brand"

@@ -24,6 +24,7 @@ import { tutorResponseTime } from "@/components/chat/conversations";
 import { responseTimeLabel } from "@/components/chat/types";
 import { Container } from "@/components/layout/container";
 import { BookingPanel } from "@/components/catalog/booking-panel";
+import { hrefRegalar } from "@/components/catalog/regalo-links";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { ProductCard } from "@/components/catalog/product-card";
 import { ProductCover } from "@/components/catalog/product-cover";
@@ -169,14 +170,15 @@ export default async function ProductPage({
    * botón escribe o abre el alta (§3.4). Va por `getSessionContext()`, que es
    * `getClaims()` + `cache()`, no `auth.getUser()`.
    */
-  const [product, resenas, timeZone, formato, { user }] = await Promise.all([
-    getProductDetail(id),
-    listProductReviews(id),
-    getViewerTimezone(),
-    // 12 h / 24 h: en la MISMA tanda que la zona, por lo mismo que ella.
-    getFormatoHora(),
-    getSessionContext(),
-  ]);
+  const [product, resenas, timeZone, formato, { user, onboardingComplete }] =
+    await Promise.all([
+      getProductDetail(id),
+      listProductReviews(id),
+      getViewerTimezone(),
+      // 12 h / 24 h: en la MISMA tanda que la zona, por lo mismo que ella.
+      getFormatoHora(),
+      getSessionContext(),
+    ]);
   if (!product) notFound();
 
   /**
@@ -908,6 +910,22 @@ export default async function ProductPage({
                 }
                 note="Pago protegido · Cancela con 24 h y recibe el 100 %"
                 hrefFor={hrefFor}
+                /*
+                  Punto 9 (16-sep) · «Regalar esta mentoría». El destino se resuelve AQUÍ, en
+                  servidor y con la sesión delante (regla de oro 13): el panel
+                  recibe una URL que ya no rebota, nunca `/regalar/...` a pelo.
+
+                  No se pinta en la propia mentoría: `comprar_regalo` rechaza
+                  regalarse lo de uno mismo, y llevar al tutor hasta el
+                  formulario para decírselo allí es el callejón que `esMiMentoria`
+                  ya evita en el botón de preguntar.
+                */
+                regaloHrefFor={
+                  esMiMentoria
+                    ? undefined
+                    : (productId) =>
+                        hrefRegalar(productId, { user, onboardingComplete })
+                }
                 // §5.13 · plegada: la tarjeta de tres reglas se comía ella sola
                 // el hueco que el panel compacto necesita para el CTA, y esto
                 // tiene que leerse antes de pagar, no tres pantallas más abajo.

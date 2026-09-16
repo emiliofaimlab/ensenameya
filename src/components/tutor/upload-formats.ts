@@ -1,5 +1,5 @@
 /**
- * MN-11a · Formatos y topes de subida del CLIENTE, en UN sitio: los seis
+ * MN-11a · Formatos y topes de subida del CLIENTE, en UN sitio: los siete
  * buckets que toca el navegador declaran aquí qué aceptan, cuánto pesa como
  * máximo y con qué frase se le cuenta al usuario.
  *
@@ -54,6 +54,7 @@
  *   `chat-attachments` 25 MB · `20260722180000` → `20260820170000` (MN-11b)
  *   `kyc-documents`    10 MB · `20260706150000`
  *   `support-attachments` 25 MB · `20260828161500` (DL-01, adjuntos de contacto)
+ *   `payout-proofs`    10 MB · `20260916110000` (punto 3, comprobantes de pago)
  */
 
 const MB = 1024 * 1024;
@@ -145,6 +146,29 @@ export const SUPPORT_SHOT_HINT =
 export const KYC_MAX_BYTES = 10 * MB;
 export const KYC_TYPES = [...IMAGE_TYPES, PDF];
 export const KYC_HINT = `PNG, JPG, WebP o PDF · máx. ${maxLabel(KYC_MAX_BYTES)}`;
+
+/* ── Comprobantes de pago manual → bucket privado `payout-proofs` (punto 3) ── */
+/**
+ * La captura del Zelle o el PDF del banco que el admin adjunta al cerrar un
+ * payout a mano en `/admin/payouts`. Es el ÚNICO de los siete que sube un
+ * admin y no el dueño del dato, y el único cuyo fichero acaba viéndolo otra
+ * persona (el tutor, en sus Movimientos).
+ *
+ * Mismos formatos y mismo tope que el KYC, y no por comodidad: es el mismo
+ * material —una foto hecha con el móvil o un PDF descargado del banco— subido
+ * por la misma gente. Lo declara `20260916110000`, y ahí es donde se toca.
+ */
+export const PAYOUT_PROOF_MAX_BYTES = 10 * MB;
+export const PAYOUT_PROOF_TYPES = [...IMAGE_TYPES, PDF];
+export const PAYOUT_PROOF_HINT =
+  `PNG, JPG, WebP o PDF · máx. ${maxLabel(PAYOUT_PROOF_MAX_BYTES)} por archivo`;
+/**
+ * Cuántos caben por pago. Tres es «la captura, el PDF del banco y el
+ * justificante del lote», que es el caso más gordo que describe operaciones;
+ * el tope está en el CLIENTE a propósito, porque la lista es un array y lo que
+ * hay que evitar es que alguien suba veinte por error, no defenderse de nadie.
+ */
+export const PAYOUT_PROOF_MAX_FILES = 3;
 
 /**
  * Motivo por el que un archivo NO vale, o `null` si vale. Se comprueba al

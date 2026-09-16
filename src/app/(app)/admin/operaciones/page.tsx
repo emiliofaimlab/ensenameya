@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PanelCard } from "@/components/layout/panel-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
 import { ExpireForm } from "./expire-form";
+import { EnviarCorreos } from "./enviar-correos";
 
 export const metadata = { title: "Operaciones · Enséñame Ya" };
 
@@ -28,6 +29,13 @@ export const metadata = { title: "Operaciones · Enséñame Ya" };
  * un botón destructivo con una pantalla de consulta es cómo se pulsa sin
  * querer. Desde allí se llega por enlace, y desde aquí se vuelve con el
  * resultado en la mano.
+ *
+ * LA SEGUNDA ACCIÓN, «enviar los correos pendientes ahora», vive aquí por lo
+ * mismo: es la otra cosa del panel que tiene efecto fuera de la plataforma —sale
+ * correo a bandejas reales— y no tiene deshacer. Su porqué está en
+ * `src/app/api/admin/notificaciones/enviar/route.ts`, en una frase: el único
+ * disparador de la cola es el reloj de GitHub, que pide cada cinco minutos y
+ * entrega cada 2-6 horas.
  */
 export default async function AdminOperacionesPage() {
   await requireRole("admin");
@@ -36,21 +44,37 @@ export default async function AdminOperacionesPage() {
   // Cuántas hay en cada estado AHORA, sin filtrar por plazo: el contexto de
   // "sobre qué universo actúa esto". El recorte por antigüedad lo hace la
   // vista previa del formulario, que es la que sí aplica los cutoffs.
-  const [{ count: sinPagar }, { count: sinAceptar }] = await Promise.all([
-    supabase
-      .from("bookings")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending_payment"),
-    supabase
-      .from("bookings")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending_acceptance"),
-  ]);
+  const [{ count: sinPagar }, { count: sinAceptar }, colaCorreo] =
+    await Promise.all([
+      supabase
+        .from("bookings")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending_payment"),
+      supabase
+        .from("bookings")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending_acceptance"),
+      // Los mismos dos filtros que aplica `pending_email_notifications`
+      // (`20260911170000`): si aquí pusiera otra cosa, el número de la pantalla
+      // y el que el job va a mirar no serían el mismo número. Se lee con la
+      // sesión del admin y su política `notifications_select_admin`.
+      supabase
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending")
+        .eq("channel", "email"),
+    ]);
+
+  // Regla de oro 10: un `const { count }` a secas convertiría un fallo de
+  // permisos en «la cola está vacía», que es la mentira más creíble que hay en
+  // esta pantalla — justo la que haría no pulsar el botón. `null` = no se pudo
+  // contar, y así se dice.
+  const correosPendientes = colaCorreo.error ? null : (colaCorreo.count ?? 0);
 
   return (
     <AdminShell
       title="Operaciones"
-      description="Vencer reservas caducadas a mano (RV-20). Es la única acción destructiva del panel."
+      description="Las dos acciones del panel que no tienen deshacer: vencer reservas caducadas a mano (RV-20) y vaciar la cola de correo sin esperar al reloj."
     >
       <PanelCard className="flex flex-col gap-3">
         <h2 className="text-base font-semibold text-[#19191f]">
@@ -105,6 +129,38 @@ export default async function AdminOperacionesPage() {
         plazos cortos existen para verificar el camino completo —cancelación,
         aviso y reembolso— sin tener que dejar pasar un día.
       </p>
+
+      <PanelCard className="flex flex-col gap-3">
+        <h2 className="text-base font-semibold text-[#19191f]">
+          Cola de correo
+        </h2>
+        <p className="text-[13px] text-[#404040]">
+          Llama a{" "}
+          <code className="font-mono text-xs">
+            /api/cron/notifications-send
+          </code>
+          , el mismo job que vacía la cola: coge las notificaciones de correo en{" "}
+          <code className="font-mono text-xs">pending</code>, las manda por
+          Resend y marca cada una según cómo haya ido.
+        </p>
+        <p className="text-[13px] text-[#404040]">
+          Existe porque su <strong>único</strong> disparador es un workflow de
+          GitHub Actions que <em>pide</em> una pasada cada cinco minutos y, medido
+          sobre corridas reales, <strong>entrega una cada 2-6 horas</strong>. Eso
+          convierte «reservo y compruebo el correo» en una espera de más de una
+          hora, sin forma de distinguir «no ha salido» de «todavía no ha salido».
+        </p>
+        <p className="text-[13px] text-[#6b6b6b]">
+          Lo que este botón <strong>no</strong> hace: acelerar el reloj. Los
+          recordatorios con hora dentro («tu clase empieza en unos minutos») los
+          encola <code className="font-mono text-xs">pg_cron</code> y los caduca{" "}
+          <code className="font-mono text-xs">caducar_notificaciones()</code> si
+          llegan tarde; una pasada a mano los saca si todavía están a tiempo, no
+          los resucita.
+        </p>
+      </PanelCard>
+
+      <EnviarCorreos pendientes={correosPendientes} />
     </AdminShell>
   );
 }

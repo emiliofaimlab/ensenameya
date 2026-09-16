@@ -369,6 +369,46 @@ function referenciaManual(fila: FilaPayout): string | null {
   return typeof ref === "string" && ref.trim() !== "" ? ref : null;
 }
 
+/**
+ * PUNTO 3 · EL PAPEL DEL PAGO, que hasta el 16-sep no existía.
+ *
+ * `adjuntar_comprobante_payout` (`20260916110000`) va añadiendo objetos a
+ * `provider_metadata -> 'manual' -> 'comprobantes'`. Se lee con la misma
+ * desconfianza que `referenciaManual`: es un `jsonb` sin esquema, así que cada
+ * escalón se comprueba y lo que no encaje se ignora en vez de reventar la
+ * pantalla entera de payouts por un objeto raro.
+ */
+type Comprobante = { path: string; nombre: string };
+
+function comprobantesDe(fila: FilaPayout): Comprobante[] {
+  const meta = fila.provider_metadata;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return [];
+  const manual = (meta as Record<string, unknown>).manual;
+  if (!manual || typeof manual !== "object" || Array.isArray(manual)) return [];
+  const lista = (manual as Record<string, unknown>).comprobantes;
+  if (!Array.isArray(lista)) return [];
+
+  const out: Comprobante[] = [];
+  for (const c of lista) {
+    if (!c || typeof c !== "object" || Array.isArray(c)) continue;
+    const path = (c as Record<string, unknown>).path;
+    if (typeof path !== "string" || path.trim() === "") continue;
+    const nombre = (c as Record<string, unknown>).nombre;
+    out.push({
+      path,
+      nombre:
+        typeof nombre === "string" && nombre.trim() !== "" ? nombre : "comprobante",
+    });
+  }
+  return out;
+}
+
+/**
+ * Cuánto vive el enlace al comprobante. El mismo que el de los documentos de
+ * KYC (`admin/tutores/[id]`): se abre en el momento o no se abre.
+ */
+const TTL_COMPROBANTE = 300; // 5 min
+
 /** Estados desde los que el admin puede cerrar el ciclo a mano (`mark_paid`). */
 const PAGABLES_A_MANO: PayoutStatus[] = ["scheduled", "failed", "on_hold"];
 
@@ -666,6 +706,42 @@ export default async function AdminPayoutsPage({
     }
   }
 
+  // ── 5c · Los comprobantes, firmados EN LOTE ───────────────────────────────
+  //
+  // 🔴 REGLA DE ORO 3: la URL firmada se emite AQUÍ, en servidor, y viaja ya
+  // resuelta a la fila. Y sobre todo **no se guarda en `provider_metadata`**:
+  // el tutor tiene `grant select` sobre la fila entera de `payouts`
+  // (`20260716140000:84`), así que cualquier cosa que se escriba ahí es
+  // pública para él — una URL firmada guardada sería un enlace permanente a un
+  // bucket privado, en una columna que se lee sin RLS que lo tape. En la fila
+  // se guarda la RUTA; el enlace se firma cada vez y caduca en 5 minutos.
+  //
+  // Una sola llamada para todas las rutas visibles (mismo patrón que
+  // `admin/tutores/[id]`), no una por fichero: son N viajes a la API de
+  // Storage en la pantalla más lenta del admin.
+  //
+  // Va por el cliente del USUARIO y no por el de servicio: la política
+  // `payout_proofs_select_admin` da el `select` a `authenticated` con
+  // `has_role('admin')`, que es exactamente quien está mirando esto.
+  const rutasDeComprobante = visibles.flatMap(({ fila }) =>
+    comprobantesDe(fila).map((c) => c.path),
+  );
+  const urlDeComprobante = new Map<string, string>();
+  let errorComprobantes: string | null = null;
+  if (rutasDeComprobante.length > 0) {
+    const { data: firmadas, error: errFirmas } = await supabase.storage
+      .from("payout-proofs")
+      .createSignedUrls(rutasDeComprobante, TTL_COMPROBANTE);
+    // Regla de oro 10: sin mirar el `error`, una política que falte se vería
+    // igual que «este pago no tiene comprobante».
+    if (errFirmas) errorComprobantes = errFirmas.message;
+    else {
+      for (const f of firmadas ?? []) {
+        if (f.path && f.signedUrl) urlDeComprobante.set(f.path, f.signedUrl);
+      }
+    }
+  }
+
   const fecha = (iso: string) =>
     new Date(iso).toLocaleString("es", {
       day: "numeric",
@@ -835,7 +911,7 @@ export default async function AdminPayoutsPage({
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-[11.5px] text-[#6b6b6b]">Riel</p>
+                      <p className="text-xs text-[#6b6b6b]">Riel</p>
                       <div className="mt-1 flex items-center gap-2">
                         <StatusPill tone={riel.manual ? "amber" : "gray"}>
                           {riel.etiqueta}
@@ -844,7 +920,7 @@ export default async function AdminPayoutsPage({
                     </div>
 
                     <div className="min-w-0">
-                      <p className="text-[11.5px] text-[#6b6b6b]">
+                      <p className="text-xs text-[#6b6b6b]">
                         {p.paid_at
                           ? "Pagado"
                           : p.failed_at
@@ -861,7 +937,10 @@ export default async function AdminPayoutsPage({
                     </div>
 
                     <div>
-                      <p className="text-xs text-[#6b6b6b]">Estado (M7)</p>
+                      {/* «Estado (M7)» decía la versión anterior. M7 es el
+                          nombre de la máquina de estados en los documentos
+                          internos y no significa nada para quien paga. */}
+                      <p className="text-xs text-[#6b6b6b]">Estado</p>
                       <StatusPill
                         tone={PAYOUT_PILL[p.status] ?? "neutral"}
                         className="mt-1"
@@ -871,19 +950,27 @@ export default async function AdminPayoutsPage({
                     </div>
                   </div>
 
-                  {/* Segunda línea: el detalle con el que se concilia. */}
-                  <p className="text-xs text-[#6b6b6b]">
-                    Espera {esperaDesde(p.scheduled_for ?? p.created_at)}
-                    {p.provider_payout_id
-                      ? ` · id del proveedor ${p.provider_payout_id}`
-                      : referenciaManual(p)
-                        ? ` · referencia ${referenciaManual(p)}`
-                        : ""}
-                    {p.status === "processing" && !p.provider_payout_id
-                      ? ` · 🔴 sin identificar — busca ${marcaDe(p)} en el panel del proveedor`
-                      : ""}
-                    {p.failure_reason ? ` · ${p.failure_reason}` : ""}
-                  </p>
+                  {/* ── Con qué se concilia esta orden ───────────────────────
+                      Era UN párrafo gris con cuatro datos distintos pegados con
+                      « · » y sin una sola etiqueta: la referencia, el id del
+                      proveedor y el motivo del fallo se leían igual, y para
+                      saber cuál era cuál había que conocer el formato de cada
+                      uno. Es la mitad del «esta pantalla está difícil de
+                      entender» del punto 3. Ahora cada dato dice cómo se llama,
+                      y el que no exista simplemente no aparece. */}
+                  <Conciliacion
+                    espera={esperaDesde(p.scheduled_for ?? p.created_at)}
+                    referencia={referenciaManual(p)}
+                    comprobantes={comprobantesDe(p)}
+                    urlDe={(ruta) => urlDeComprobante.get(ruta) ?? null}
+                    comprobantesRotos={errorComprobantes !== null}
+                    proveedorId={p.provider_payout_id}
+                    sinIdentificar={
+                      p.status === "processing" && !p.provider_payout_id
+                    }
+                    marca={marcaDe(p)}
+                    motivo={p.failure_reason}
+                  />
 
                   {/* A dónde pagar. Solo para lo que hay que pagar a mano, y
                       cada familia con su destino: las dos conviven en la misma
@@ -1009,7 +1096,7 @@ function Destinos({
   }
   return (
     <div className="flex flex-col gap-1 rounded-[10px] bg-[#f7f7f9] px-3 py-2">
-      <p className="text-[11.5px] text-[#6b6b6b]">
+      <p className="text-xs text-[#6b6b6b]">
         {destinos.some((d) => d.channel === preferido)
           ? "Pagar a — el tutor prefiere la marcada"
           : "Pagar a"}
@@ -1040,7 +1127,7 @@ function Destinos({
           dice, porque si no el admin pagaría al primero de la lista sin saber
           que el tutor pidió otra cosa. */}
       {preferido && !destinos.some((d) => d.channel === preferido) ? (
-        <p className="mt-1 text-[11.5px] text-[#8a5a12]">
+        <p className="mt-1 text-xs text-[#8a5a12]">
           El tutor eligió cobrar por otra vía y todavía no ha registrado sus
           datos. Págale por una de las de arriba.
         </p>
@@ -1127,7 +1214,7 @@ function DestinoBanco({
 
   return (
     <div className="flex flex-col gap-1.5 rounded-[10px] bg-[#f7f7f9] px-3 py-2">
-      <p className="text-[11.5px] text-[#6b6b6b]">Transferir a</p>
+      <p className="text-xs text-[#6b6b6b]">Transferir a</p>
       <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[7.5rem_1fr]">
         <Campo k="Titular">
           {b.beneficiary_first_name} {b.beneficiary_last_name}
@@ -1188,12 +1275,124 @@ function DestinoBanco({
   );
 }
 
+/**
+ * CON QUÉ SE CONCILIA ESTA ORDEN — los cuatro datos que antes iban pegados en
+ * un párrafo gris, cada uno con su etiqueta.
+ *
+ * ⚠️ La referencia NO está en `provider_payout_id` aunque las dos cosas se
+ * parezcan y aunque la intuición la busque ahí: `mark_paid` deja esa columna a
+ * null y guarda la referencia en `provider_metadata->'manual'` (ver
+ * `referenciaManual`). Son dos filas distintas de este `<dl>` a propósito —
+ * llamarlas igual es lo que hacía ilegible el párrafo de antes.
+ */
+function Conciliacion({
+  espera,
+  referencia,
+  comprobantes,
+  urlDe,
+  comprobantesRotos,
+  proveedorId,
+  sinIdentificar,
+  marca,
+  motivo,
+}: {
+  espera: string;
+  referencia: string | null;
+  comprobantes: Comprobante[];
+  /** La URL firmada ya emitida en servidor, o `null` si esa ruta no se firmó. */
+  urlDe: (ruta: string) => string | null;
+  /** ¿falló la firma en lote? Cambia por qué no hay enlace. */
+  comprobantesRotos: boolean;
+  proveedorId: string | null;
+  sinIdentificar: boolean;
+  marca: string;
+  motivo: string | null;
+}) {
+  return (
+    <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[8.5rem_1fr]">
+      <Campo k="Espera">{espera}</Campo>
+
+      {referencia ? (
+        <Campo k="Referencia">
+          <span className="font-mono select-all">{referencia}</span>
+        </Campo>
+      ) : null}
+
+      {/* El papel. Solo se pregunta por él donde puede haberlo: un pago con
+          referencia manual es, por definición, uno que cerró una persona. */}
+      {referencia || comprobantes.length > 0 ? (
+        <Campo k="Comprobante">
+          {comprobantes.length === 0 ? (
+            <span className="text-[#6b6b6b]">
+              ninguno — este pago solo tiene la referencia
+            </span>
+          ) : (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {comprobantes.map((c) => {
+                const url = urlDe(c.path);
+                return url ? (
+                  <a
+                    key={c.path}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-[#0068d0] underline underline-offset-2"
+                  >
+                    {c.nombre}
+                  </a>
+                ) : (
+                  // Regla de oro 10: un enlace que falta se DICE. Sin esto, un
+                  // fichero que la firma no pudo resolver se vería igual que un
+                  // pago sin comprobante.
+                  <span key={c.path} className="text-[#8a5a12]">
+                    {c.nombre} ·{" "}
+                    {comprobantesRotos
+                      ? "no se pudo firmar el enlace"
+                      : "el fichero ya no está en Storage"}
+                  </span>
+                );
+              })}
+            </span>
+          )}
+        </Campo>
+      ) : null}
+
+      {proveedorId ? (
+        <Campo k="Id del proveedor">
+          <span className="font-mono select-all">{proveedorId}</span>
+        </Campo>
+      ) : null}
+
+      {/* Un 🔴 dentro del texto no es un estado: un lector de pantalla lo lee
+          «círculo rojo grande» y quien filtra visualmente no lo distingue de un
+          adorno. La píldora dice la palabra. */}
+      {sinIdentificar ? (
+        <Campo k="Identificación">
+          <span className="flex flex-wrap items-center gap-2">
+            <StatusPill tone="red">sin identificar</StatusPill>
+            <span className="text-[#8f2b2b]">
+              busca <code className="font-mono select-all">{marca}</code> en el
+              panel del proveedor
+            </span>
+          </span>
+        </Campo>
+      ) : null}
+
+      {motivo ? (
+        <Campo k="Motivo del fallo">
+          <span className="text-[#8f2b2b]">{motivo}</span>
+        </Campo>
+      ) : null}
+    </dl>
+  );
+}
+
 /** Una línea de la ficha: etiqueta y valor. Fragmento, para que manden las
     columnas del `<dl>` de arriba y no una caja intermedia. */
 function Campo({ k, children }: { k: string; children: React.ReactNode }) {
   return (
     <>
-      <dt className="text-[11.5px] text-[#6b6b6b] sm:pt-[3px]">{k}</dt>
+      <dt className="text-xs text-[#6b6b6b] sm:pt-[3px]">{k}</dt>
       <dd className="text-[13px] text-[#333333]">{children}</dd>
     </>
   );

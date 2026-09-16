@@ -184,6 +184,33 @@ export function bookingTotal(p: {
 }
 
 /**
+ * El CARGO POR SERVICIO que paga el alumno (punto 7, decidido el 16-sep-2026).
+ *
+ * 🔴 ESTO ES SOLO PARA PINTAR. Quien manda es
+ * `public.cargo_por_servicio(bigint, numeric)` en
+ * `20260916120000_el_alumno_paga_el_servicio.sql`, que es quien decide lo que
+ * de verdad se cobra: el trigger de `payments` lo mete dentro de `gross_amount`
+ * y `confirm_payment` ABORTA si la pasarela cobró otra cosa. Esta copia existe
+ * por lo mismo que `bookingTotal` de aquí arriba: el resumen del checkout tiene
+ * que enseñar la cifra ANTES de que exista la reserva, y por tanto antes de que
+ * exista ninguna fila de `payments` a la que preguntársela.
+ *
+ * ⚠️ SI DIVERGEN, MANDA EL SQL, y el alumno vería una cifra y pagaría otra.
+ * Por eso las dos constantes tienen que decir lo mismo y por eso el 5 está
+ * escrito aquí con su referencia al fichero que manda: cambiar una sin la otra
+ * es el fallo que nadie ve hasta que un alumno lo reporta.
+ *
+ * ⚠️ LA BASE ES LO QUE SE COBRA DE VERDAD, no el precio: `precio − crédito`.
+ * Una mentoría cubierta al 100 % por un regalo no lleva cargo — es la decisión
+ * 2 del cliente y es lo mismo que hace el trigger.
+ */
+export const SERVICE_FEE_PCT = 5;
+
+export function serviceFee(baseMinor: number): number {
+  return Math.max(0, Math.round((Math.max(0, baseMinor) * SERVICE_FEE_PCT) / 100));
+}
+
+/**
  * Lo que el alumno puede saber de su tutor desde sus propias pantallas.
  *
  * V-6 · Es lo mismo que devolvía `tutorNames` con cuatro columnas más. El

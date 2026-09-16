@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { PlusIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -127,15 +128,37 @@ export function TierManager({ tiers }: { tiers: TierRow[] }) {
         </Button>
       </div>
 
-      {/* Filas del Figma (226:59): nombre + comisión, split 20/700, tutores. */}
+      {/* Filas del Figma (226:59): nombre + comisión, split 20/700, tutores.
+          Sin cabecera y sin `<table>` a propósito: el cliente se queda con el
+          formato del Figma.
+
+          ⚠️ REJILLA con plantilla explícita, no `flex flex-wrap`. Cada `<li>`
+          es su PROPIA caja, así que con flex el hueco se repartía fila a fila
+          según lo que midiera su contenido —la píldora «Por defecto» solo
+          existe en una fila y el contador de tutores mide distinto con 1 dígito
+          que con 3—, y «Split tutor», «Tutores» y «Editar» caían en una x
+          distinta en cada fila; de 768 a 1023, además, la última columna se
+          largaba a un segundo renglón. Que sean rejillas independientes obliga
+          a que las pistas 2, 3 y 4 NO dependan del contenido: las dos del medio
+          van fijas —88 y 64 px, lo que miden «Split tutor» y «Tutores» a 12 px,
+          que es más ancho que sus cifras— y la cuarta lleva la píldora con su
+          hueco reservado (abajo), así que también mide igual en todas.
+          El primer bloque es `minmax(0,1fr)`, que absorbe el resto y deja
+          truncar: sin el `min-w-0` del `minmax` la columna se negaría a
+          encoger y sacaría barra horizontal, como en `panel-shell.tsx:122`. */}
       <div className="rounded-[16px] border border-[#e0e0e0] bg-card px-5 py-2">
         <ul className="divide-y divide-[#e0e0e0]">
           {tiers.map((t) => (
             <li
               key={t.id}
-              className="flex flex-wrap items-center justify-between gap-3 py-4"
+              className="grid grid-cols-2 items-center gap-x-4 gap-y-3 py-4 sm:grid-cols-[minmax(0,1fr)_88px_64px_auto]"
             >
-              <div className="min-w-0 sm:w-64">
+              {/* Nombre y acciones ocupan la fila entera por debajo de 640: ahí
+                  la rejilla es 2×3 (nombre / split · tutores / botones) y el
+                  nombre no compite con nada. Ya no lleva `sm:w-64`: esos 256 px
+                  fijos dejaban ~450 px en blanco a la derecha mientras la
+                  descripción se truncaba. */}
+              <div className="col-span-2 min-w-0 sm:col-span-1">
                 <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                   {t.name}
                 </p>
@@ -152,12 +175,24 @@ export function TierManager({ tiers }: { tiers: TierRow[] }) {
                 <p className="text-xs text-[#6b6b6b]">Tutores</p>
                 <p className="text-xl font-bold text-[#19191f]">{t.tutorCount}</p>
               </div>
-              <div className="flex items-center gap-2.5">
-                {t.isDefault ? (
-                  <span className="inline-flex h-7 items-center rounded-full bg-[#dbedff] px-2.5 text-xs font-semibold text-brand">
-                    Por defecto
-                  </span>
-                ) : null}
+              <div className="col-span-2 flex items-center justify-end gap-2.5 sm:col-span-1">
+                {/* La píldora existe en UNA sola fila —`tutor_tiers_one_default_idx`
+                    garantiza que solo hay un tier por defecto—. Si ocupara sitio
+                    solo ahí, «Editar» bailaría de fila a fila y la cuarta pista
+                    mediría distinto en cada rejilla. Se pinta SIEMPRE y se tapa
+                    con `invisible`, que conserva la caja: el hueco mide
+                    exactamente lo que mide la píldora, sin ancho a ojo que se
+                    quede corto si mañana cambia el texto. Y `visibility:hidden`
+                    la saca del lector de pantalla, así que no se anuncia un
+                    «Por defecto» que no lo es. */}
+                <span
+                  className={cn(
+                    "inline-flex h-7 items-center rounded-full bg-[#dbedff] px-2.5 text-xs font-semibold text-brand",
+                    !t.isDefault && "invisible",
+                  )}
+                >
+                  Por defecto
+                </span>
                 <Button
                   variant="outline"
                   disabled={busy}

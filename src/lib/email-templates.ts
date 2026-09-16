@@ -1879,6 +1879,75 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
   },
 
   /**
+   * NTF-39 · EL REGALO YA ESTÁ EN TU CUENTA — el correo del RECLAMO.
+   *
+   * ─── POR QUÉ EXISTE, QUE ES TODA LA HISTORIA ────────────────────────────
+   *
+   * Hasta el 16-sep-2026 este momento reusaba NTF-35, y el comentario de
+   * `reclamar_regalos_por_correo` lo defendía con «misma clave que
+   * `confirm_gift_payment`: no duplica». Era verdad, pero por un motivo que
+   * dejó de valer ese mismo día: a quien NO tenía cuenta no le llegaba NADA al
+   * comprarse el regalo —`enqueue_notification` con `recipient_id` null se va
+   * sin hacer nada—, así que el único correo de su vida era este, al
+   * registrarse, y el texto de NTF-35 encajaba de milagro.
+   *
+   * El 16-sep se arregló ese agujero: ahora el webhook manda NTF-35 DIRECTO por
+   * Resend a la bandeja sin cuenta (`src/lib/regalo-aviso.ts`). Ese envío no
+   * pasa por `notifications` y por tanto no comparte la clave `GIFT:recv:<id>`,
+   * así que el reclamo volvía a mandar el MISMO correo. Dos veces «Te han
+   * regalado una mentoría», y la segunda con un párrafo que pedía crear una
+   * cuenta a alguien que la acababa de crear.
+   *
+   * ⚠️ Y ESA MENTIRA YA ESTABA AHÍ ANTES DEL DUPLICADO. NTF-35 dice «crea tu
+   * cuenta con esta misma dirección», que es su instrucción más importante —
+   * `reclamar_regalos_por_correo` ata por `lower(btrim(email))`— y es justo lo
+   * que sobra cuando se manda DESPUÉS del alta. Separarlos arregla las dos
+   * cosas con la misma plantilla.
+   *
+   * ─── QUIÉN LA MANDA ────────────────────────────────────────────────────
+   *
+   * Solo `reclamar_regalos_por_correo`, con `GIFT:claim:<id>` (clave propia y
+   * no la de NTF-35: dos plantillas distintas no comparten idempotencia, que es
+   * exactamente cómo se vuelve a liar esto dentro de seis meses). Corre en el
+   * trigger de la confirmación del correo y en `reclamar_mis_regalos()`, que la
+   * llama `/reservas` al pintarse — o sea que cuando este correo sale, la
+   * persona TIENE cuenta, TIENE el correo confirmado y el regalo YA está atado
+   * a ella. Nada de «crea tu cuenta»: aquí solo queda elegir el día.
+   *
+   * ⚠️ Sigue sin poder decir DE QUIÉN viene, por lo mismo que NTF-35: el único
+   * rastro del que regala es la dedicatoria, y ahí es donde la gente firma.
+   */
+  gift_claimed: (x) => {
+    const producto = x.p?.product_id;
+    const idProducto = typeof producto === "string" && producto ? producto : null;
+    // Texto libre de un desconocido: `cita` lo escapa. No se toca aquí.
+    const dedicatoria = x.p?.gift_message;
+    return {
+      asunto: "Tu regalo ya está en tu cuenta",
+      familia: "ok",
+      epigrafe: "Un regalo para ti",
+      titulo: "Tu regalo ya está en tu cuenta",
+      preheader: "Solo queda elegir el día y la hora. Ya está pagado.",
+      motivo: "Recibes este correo porque acabas de reclamar un regalo en Enséñame Ya.",
+      cuerpo: [
+        parrafo(
+          "Listo: la mentoría que te regalaron ya está <strong>atada a tu cuenta</strong>. Está pagada entera, así que solo queda elegir el día y la hora que te vengan bien — no tienes que pagar nada.",
+        ),
+        cita(typeof dedicatoria === "string" ? dedicatoria : null, "Quien te lo regala"),
+        caja(
+          "La tienes en <strong>«Mis reservas»</strong> como un regalo pendiente de agendar. Desde ahí eliges horario, y el día de la clase entras a la videollamada por el mismo sitio.",
+          "ok",
+        ),
+        boton("Elegir día y hora", `${x.base}/reservas`),
+        idProducto
+          ? enlaceSecundario("Ver la mentoría que te regalaron", `${x.base}/products/${idProducto}`)
+          : null,
+        nota("El regalo tiene fecha de caducidad: agéndalo con tiempo. Te avisamos antes de que venza."),
+      ],
+    };
+  },
+
+  /**
    * NTF-36 · el regalo caduca, a 7 días y a 1 día.
    *
    * ⚠️ ESTE CORREO NO SABE A QUIÉN LE HABLA, y el texto está escrito con eso
@@ -2001,6 +2070,82 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           idProducto ? "Ver la mentoría" : "Buscar una mentoría",
           idProducto ? `${x.base}/products/${idProducto}` : `${x.base}/search`,
         ),
+      ],
+    };
+  },
+
+  /**
+   * NTF-38 · el tutor cerró su cuenta y el regalo NO muere con él: pasa de
+   * `kind='mentoria'` a `kind='saldo'` y vale contra cualquier otra mentoría
+   * (`20260916100000`). Payload: `{credit_id, product_id, restante, currency,
+   * expires_at}`.
+   *
+   * ⚠️ ESTE CORREO TAMPOCO SABE A QUIÉN LE HABLA, igual que NTF-36 y por el
+   * mismo motivo estructural: el trigger lo encola a
+   * `coalesce(beneficiary_id, purchased_by)` —al destinatario si ya reclamó el
+   * regalo, y a quien lo pagó mientras siga sin reclamarlo— con el mismo
+   * payload en los dos casos. De ahí que el cuerpo diga las dos cosas y cada
+   * uno lea la suya.
+   *
+   * ⚠️ `product_id` VIENE EN EL PAYLOAD Y NO SE USA, a propósito y por partida
+   * doble: `anonymize_account` archiva las mentorías ANTES de insertar en
+   * `account_deletions`, así que `/products/{id}` ya da 404; y el título no
+   * llega por ningún lado, porque `pending_email_notifications` resuelve la
+   * clase colgando de `booking_id` y un crédito no tiene reserva. Nombrar la
+   * mentoría vieja sería además nombrar justo donde ya NO se gasta — la misma
+   * decisión que toma la etiqueta «Bono de tu regalo» de `creditos_disponibles`.
+   *
+   * 🔴 Y NO ES UNA MALA NOTICIA: el dinero sigue dentro y con plazo de sobra.
+   * Lo único que el correo sí tiene que decir es que ahora se paga la
+   * diferencia si la mentoría nueva cuesta más —un bono se DESCUENTA, no
+   * cubre—, porque callarlo es que la cuenta no cuadre en el checkout.
+   */
+  gift_converted: (x) => {
+    // Lo que queda por gastar, no lo que costó el regalo: el trigger encola
+    // `amount - consumed_amount`. Aquí el importe SÍ va al destinatario —ya es
+    // saldo suyo— al revés que en NTF-37.
+    const importe = dinero(x.p?.restante, x.p?.currency);
+    // El día de la caducidad YA con la gracia de 30 días aplicada (sale del
+    // `returning` del trigger), leído en el huso de quien lee (RN-35). Puede no
+    // haber ninguna: un crédito sin `expires_at` se queda sin ella.
+    const fecha = dia(x.p?.expires_at, x.tz);
+    return {
+      asunto: con("Tu regalo ahora vale con cualquier tutor", importe),
+      familia: "ok",
+      epigrafe: "El regalo sigue en pie",
+      titulo: "El regalo sigue siendo tuyo",
+      preheader: fecha
+        ? `El tutor cerró su cuenta; el regalo sigue pagado y se puede usar hasta el ${fecha}.`
+        : "El tutor cerró su cuenta, pero el regalo sigue pagado y se puede usar.",
+      motivo: "Recibes este correo porque hay un regalo de Enséñame Ya cuyo tutor cerró su cuenta.",
+      cuerpo: [
+        parrafo(
+          "El tutor de la mentoría regalada ha cerrado su cuenta, así que esa mentoría en concreto ya no se puede agendar. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo para reservar con cualquier otro tutor.",
+        ),
+        importeGrande("Saldo disponible", importe, {
+          sub: fecha ? `Se puede usar hasta el ${fecha}` : null,
+          color: VERDE,
+        }),
+        caja(
+          "Se descuenta al reservar: si la mentoría nueva cuesta más, <strong>solo se paga la diferencia</strong>; si cuesta menos, lo que sobre se queda para la siguiente.",
+          "ok",
+        ),
+        caja(
+          "<strong>Si el regalo es para ti:</strong> elige la mentoría que quieras y el saldo se aplica al pagar.<br>" +
+            "<strong>Si lo regalaste tú:</strong> no tienes que hacer nada ni pagar nada de nuevo — avísale a quien lo recibe de que puede usarlo con otro tutor. Si todavía no tiene cuenta, le basta con registrarse con el correo al que se lo mandaste.",
+          "cuenta",
+        ),
+        boton("Elegir otra mentoría", `${x.base}/agendar`),
+        enlaceSecundario("Lo regalé yo: ver mis regalos", `${x.base}/regalar/mis-regalos`),
+        // ⚠️ «Se amplió» a secas sería falso cuando al regalo le quedaba más de
+        // un mes: la gracia es `greatest(expires_at, now() + 30 días)`, que
+        // NUNCA acorta pero tampoco suma siempre. Lo que sí es cierto en los
+        // dos casos —y es lo que tranquiliza— es el mínimo.
+        fecha
+          ? nota(
+              "El plazo no se acorta por este cambio, y si quedaba poco se amplió: desde el cambio hay al menos 30 días para elegir la mentoría nueva.",
+            )
+          : null,
       ],
     };
   },

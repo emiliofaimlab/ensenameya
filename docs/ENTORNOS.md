@@ -629,7 +629,7 @@ clave y un pipeline de despliegue que no existe. Van como Route Handlers y reuti
 | Job | Ruta | Reloj | Cadencia pedida |
 | :-- | :-- | :-- | :-- |
 | Purga de grabaciones (RN-42) | `/api/cron/recordings-purge` | **Vercel Cron** (`vercel.json`) | `0 4 * * *` |
-| Envío de la cola de correo (US-1201) | `/api/cron/notifications-send` | **GitHub Actions** (`notifications-cron.yml`) | `*/5 * * * *` |
+| Envío de la cola de correo (US-1201) | `/api/cron/notifications-send` | **GitHub Actions** (`notifications-cron.yml`) + **botón manual** en `/admin/operaciones` | `*/5 * * * *` pedido · **2-6 h reales** |
 | Cola de reembolsos (X-01) | `/api/cron/refunds-process` | **GitHub Actions** (`refunds-cron.yml`) | `7,22,37,52 * * * *` |
 | **Ejecución de payouts** | `/api/cron/payouts-process` | **GitHub Actions** (`payouts-cron.yml`) | `13 * * * *` |
 | Resumen de incidencias | `/api/cron/alertas-resumen` | **GitHub Actions** (`alertas-cron.yml`) | `41 * * * *` |

@@ -28,6 +28,14 @@ export type LineaResuelta = {
   total: number;
   /** Lo que de esta línea financió un crédito (0 si ninguno). */
   credito: number;
+  /**
+   * El cargo por servicio que lleva ESTA línea, y que YA ESTÁ SUMADO DENTRO de
+   * `total` — igual que dentro de `payments.gross_amount`, de donde sale
+   * (`20260916120000`). Se trae aparte solo para poder DESGLOSARLO en el
+   * resumen: `total − cargoServicio` es el precio del tutor. 0 en todo lo
+   * anterior al 16-sep-2026, y por eso la línea del desglose se esconde sola.
+   */
+  cargoServicio: number;
   currency: string;
   /**
    * M-02 · `products.auto_accept_bookings` de ESTA línea. Va por línea porque
@@ -69,6 +77,12 @@ export type PedidoResuelto = {
    */
   creditoTotal: number;
   /**
+   * El cargo por servicio de TODO el pedido, ya sumado dentro de `total`. Es lo
+   * que el resumen enseña como línea propia para que `total` no parezca el
+   * precio de los tutores, que es lo que era hasta el 16-sep-2026.
+   */
+  cargoServicioTotal: number;
+  /**
    * 🔑 Desde qué país paga el alumno, CONGELADO al crear las reservas
    * (`bookings.payer_country`). Es la clave con la que se resolvió
    * `charge_providers` y la misma contra la que valida `set_charge_provider`,
@@ -108,7 +122,7 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
   const { data: lineas } = await supabase
     .from("bookings")
     .select(
-      "id, status, product_id, session_duration_min, payer_country, products(title, tutor_id, auto_accept_bookings, requirements), sessions(start_at, status), payments(gross_amount, credit_amount, currency)",
+      "id, status, product_id, session_duration_min, payer_country, products(title, tutor_id, auto_accept_bookings, requirements), sessions(start_at, status), payments(gross_amount, credit_amount, service_fee_amount, currency)",
     )
     .eq("order_id", orderId);
 
@@ -148,6 +162,7 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
       // lo necesita para no decir «Total pagado» sobre dinero que no salió
       // de nadie — el mismo arreglo que en la confirmación de reserva.
       credito: pago?.credit_amount ?? 0,
+      cargoServicio: pago?.service_fee_amount ?? 0,
       currency: pago?.currency ?? order.currency,
       // Sin producto legible se asume que NO acepta sola. Es el mismo respaldo
       // explícito que usa `confirm_payment` en SQL: sin dato, la reserva espera
@@ -169,6 +184,8 @@ export async function resolveOrder(orderId: string): Promise<PedidoResuelto | nu
     total: resueltas.reduce((s, l) => s + l.total, 0),
     /** Lo que pusieron los créditos en TODO el pedido, sumando sus líneas. */
     creditoTotal: resueltas.reduce((s, l) => s + l.credito, 0),
+    /** El cargo por servicio de todo el pedido, ya dentro de `total`. */
+    cargoServicioTotal: resueltas.reduce((s, l) => s + l.cargoServicio, 0),
     currency: order.currency,
     /**
      * 🔑 DESDE QUÉ PAÍS PAGA ESTE ALUMNO, CONGELADO al crear la reserva.

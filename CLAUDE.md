@@ -30,7 +30,7 @@ npm run dev        # → http://localhost:3000 (contra dev cloud)
 | `npm run db:push` | Aplica migraciones al proyecto **dev** enlazado |
 | `npm run db:types` | Regenera `src/lib/database.types.ts` (aborta sin tocar el fichero si falla) |
 | `npm run lint` · `npm run typecheck` | Lint y typecheck |
-| `npm run check:*` | **Trece comprobaciones ejecutables** sin red ni credenciales: `email`, `correos`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel`, `rutas`, `enlaces` |
+| `npm run check:*` | **Dieciséis comprobaciones ejecutables** sin red ni credenciales: `email`, `correos`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel`, `rutas`, `enlaces`, `dinero`, `horario`, `cargo`. Manda `package.json`, no este renglón: ya se quedó corto una vez |
 
 Enlace del CLI a dev: `npx supabase link --project-ref lbtpnszjjsxbeileqsja`.
 Tras tocar el esquema: `npm run db:push` **y** `npm run db:types`. A prod llega por **CI**
@@ -40,7 +40,13 @@ al mergear a `main`.
 
 1. **RLS default-deny.** Toda tabla nueva nace con `enable row level security` + políticas
    explícitas. Sin política = nadie ve nada, a propósito. Olvidarla "falla abierto" (RISK-13).
-2. **El dinero es server-side.** Escritura en `payments`/`payouts` solo con `service_role`
+2. **El dinero es server-side.** ⚠️ Y desde el 16-sep **`gross_amount` lleva dentro el cargo
+   por servicio del 5 % que paga el ALUMNO**: el invariante ya no es `gross = platform_fee +
+   tutor_net`, sino `gross = platform_fee + tutor_net + service_fee`. Lo mantiene un trigger
+   (`20260916120000`) justamente para que `confirm_payment`, `marcar_cobro_abierto`,
+   `enqueue_refund` y el checkout sigan hablando de `gross_amount − credit_amount` sin cambiar.
+   Cobrar el 5 % «por fuera» hace ABORTAR el webhook con el dinero ya cobrado.
+   Escritura en `payments`/`payouts` solo con `service_role`
    desde Route Handlers. `confirm_payment` es **solo del webhook**; a `authenticated` le queda
    `confirm_simulated_payment`, que exige ser dueño **y** `provider = 'simulated'`. El importe
    sale de `payments.gross_amount`, jamás del navegador. (S-15 / RN-26)
@@ -166,7 +172,7 @@ Todos exigen `CRON_SECRET` y fallan cerrado (503) sin ella.
 | Endpoint | Reloj | Cadencia pedida |
 | :-- | :-- | :-- |
 | `/api/cron/recordings-purge` | **Vercel Cron** (`vercel.json`) | `0 4 * * *` |
-| `/api/cron/notifications-send` | GitHub Actions | `*/5 * * * *` |
+| `/api/cron/notifications-send` | GitHub Actions | `*/5 * * * *` — ⚠️ la cadencia real son **2-6 h** (medido). Por eso también se dispara **a mano** desde `/admin/operaciones` → «Enviar los correos pendientes ahora» (`/api/admin/notificaciones/enviar`) |
 | `/api/cron/refunds-process` | GitHub Actions | `7,22,37,52 * * * *` |
 | `/api/cron/payouts-process` | GitHub Actions | `13 * * * *` — **esto es dinero** |
 | `/api/cron/alertas-resumen` | GitHub Actions | `41 * * * *` |
@@ -176,6 +182,13 @@ Todos exigen `CRON_SECRET` y fallan cerrado (503) sin ella.
 ⚠️ **La cadencia de GitHub es una ficción.** Medido sobre corridas reales: entrega **una cada
 2-6 horas**, no cada 5 minutos. Sigue siendo mejor que el único cron diario que permite Vercel
 Hobby —que es el motivo de que estén ahí—, pero no se puede planificar con "5 minutos".
+Medido otra vez el 16-sep contra la cola de dev: **78-134 minutos** entre encolar y entregar.
+Cuando eso estorbe para probar, la palanca es el botón de `/admin/operaciones`, no esperar.
+
+⚠️ **El paso de dev de `notifications-cron.yml` ya NO lleva `continue-on-error`** (16-sep). Un
+fallo al vaciar la cola de dev **pone el job en rojo**, aunque producción haya enviado bien: el
+paso de prod corre antes, así que el aspa avisa sin tocar producción. Antes salía verde y nadie
+se enteraba de que dev llevaba días sin vaciarse.
 
 **Y en la propia BD hay TRECE jobs de `pg_cron`** que `grep` en el repo sí encuentra, pero solo
 si lo buscas: `close-expired-sessions`, `expire-stale-bookings`, `process-notifications`,

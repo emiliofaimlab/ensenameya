@@ -431,16 +431,34 @@ export const STYLE = `<style>
 </style>`;
 
 /**
- * La dirección fiscal del pie. Se repite en los 36 correos porque la CAN-SPAM la
- * exige en todo correo comercial, y porque un correo sin remitente físico puntúa
- * peor en los filtros.
+ * El identificador del prestador en el pie. Se repite en los 41 correos porque
+ * un correo sin nada que identifique a quien lo manda puntúa peor en los
+ * filtros.
+ *
+ * ⚠️ AQUÍ ESTABA EL DOMICILIO COMPLETO Y LO QUITÓ EL CLIENTE (16-sep-2026), a
+ * sabiendas: le molesta publicar la calle. La CAN-SPAM exige domicilio físico en
+ * el correo COMERCIAL —el transaccional está exento— y esta sociedad es una LLC
+ * de Florida, así que los siete marcados `baja: true` (las dos bienvenidas,
+ * `booking_reminder_24h`, `materials_ready`, las dos de reseña y `new_message`)
+ * son los discutibles. Se avisó una vez; la decisión es suya y de su abogado, y
+ * los legales los redacta él. No volver a cambiarlo sin que lo pida.
+ *
+ * Consecuencia que sí es nuestra: con la dirección fuera, el único punto de
+ * contacto que queda en TODO el correo saliente es `SOPORTE` —que es además el
+ * `mailto:` de la cabecera `List-Unsubscribe` (ver `email.ts`)—, y por el §39
+ * del contrato ese buzón tiene que estar atendido.
  *
  * ⚠️ No sale de `lib/company.ts` a propósito: ese módulo importa cosas que este
  * fichero —que se corre con node a pelo en `npm run check:email`— no puede
- * arrastrar. Si algún día divergen, manda `company.ts`.
+ * arrastrar. Y `company.ts` CONSERVA el domicilio, que lo interpola el §39 de
+ * los Términos: no lo borres de allí.
+ *
+ * ⚠️ Los tres correos de Auth (confirmar cuenta, reset, cambio de correo) NO
+ * salen de aquí: los sirve GoTrue desde el HTML pegado en el Dashboard. Cambiar
+ * esta línea no los toca. Hay que correr `npm run build:correos-auth` y volver a
+ * pegar los tres ficheros de `supabase/templates/` en dev Y en prod.
  */
-const DIRECCION =
-  "Ensename Ya, LLC · 815 Bayside Lane, Weston, Florida 33326, Estados Unidos";
+const DIRECCION = "Ensename Ya, LLC";
 
 const SOPORTE = "info@ensenameya.com";
 

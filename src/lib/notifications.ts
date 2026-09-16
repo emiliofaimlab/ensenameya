@@ -45,8 +45,17 @@ const TEXT: Record<string, string> = {
   reward_expired: "Tu recompensa caducó sin usarse",
   gift_purchased: "Tu regalo ya está activo",
   gift_received: "Te han regalado una mentoría",
+  // NTF-39 · el reclamo. Es OTRO momento que NTF-35 y por eso es otra frase:
+  // cuando esto sale, la persona ya tiene cuenta y el regalo ya es suyo, así
+  // que lo único que queda por hacer —y lo que la campana tiene que decir— es
+  // elegir el día.
+  gift_claimed: "Tu regalo ya está en tu cuenta",
   gift_expiring: "Un regalo caduca pronto y sigue sin agendar",
   gift_expired: "Un regalo caducó sin agendarse",
+  // NTF-38 · el tutor cerró su cuenta y el regalo pasó a ser saldo. La frase
+  // dice lo que GANA, no lo que se cayó: el aviso de que el tutor se fue sin
+  // decir que el dinero sigue ahí es una alarma sin salida.
+  gift_converted: "Tu regalo ahora vale con cualquier tutor",
   payment_failed: "Un pago no se pudo cobrar",
   booking_confirmed_student: "Tu reserva quedó confirmada",
   booking_new_tutor: "Tienes una reserva nueva por aceptar",
@@ -133,11 +142,21 @@ const DESTINO: Record<string, string> = {
   // que además llama a `reclamar_mis_regalos()` al pintarse.
   gift_purchased: "/regalar/mis-regalos",
   gift_received: "/reservas",
+  // Mismo destino que NTF-35 y por el mismo motivo: «Mis reservas» es donde
+  // se agenda un regalo. Aquí además es el destino EXACTO —ya hay cuenta, así
+  // que no hay rebote por la guarda que valga.
+  gift_claimed: "/reservas",
   // ⚠️ `gift_expiring` se encola a `coalesce(beneficiary_id, purchased_by)`:
   // al destinatario si ya lo reclamó, al comprador si no. Con un solo destino
   // se acierta con quien AÚN PUEDE HACER ALGO —agendarlo—, que es el que lo
   // tiene. Distinguirlos de verdad pide un `papel` en el payload: migración.
   gift_expiring: "/reservas",
+  // ⚠️ `gift_converted` (NTF-38) se encola al mismo `coalesce(beneficiary_id,
+  // purchased_by)` y arrastra la misma imposibilidad: un solo destino para dos
+  // papeles. Va con quien puede GASTAR el bono —el destinatario—, que además es
+  // el único de los dos que lo tiene cuando ya lo reclamó. El correo sí lleva
+  // su enlace a «Mis regalos» para el otro caso, que aquí no cabe.
+  gift_converted: "/reservas",
   // `gift_expired` no entra aquí a propósito: es el único cuyo destino depende
   // del payload (la copia del comprador lleva `amount`, la del destinatario
   // no), y eso lo resuelve `rutaFor`, no este mapa.

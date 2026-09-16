@@ -409,9 +409,23 @@ existe**: ni el esquema ni el checkout tienen código de promoción ni columna d
 
 ### Recomendación
 
+🔴 **La primera fila de esta tabla está DEROGADA desde el 16-sep-2026.** El cliente decidió lo
+contrario: existe un **cargo por servicio del 5 % al alumno**, visible y desglosado en el
+checkout, en la reserva suelta, en el pedido multi-línea y al comprar un regalo. Está
+construido en `20260916120000_el_alumno_paga_el_servicio.sql` y
+`20260916130000_el_regalo_tambien_paga_el_servicio.sql`, y la decisión completa —las seis
+respuestas— vive en la cabecera de la primera.
+
+La recomendación se deja escrita **tal cual, y no se borra**, porque es la que había y porque
+la decisión se tiene que poder revisar con su contexto. Pero no describe lo que hace la
+plataforma: si alguien lee este renglón y «corrige» el código, rompe un cobro en producción.
+
+⚠️ Y una consecuencia que **no es nuestra**: un cargo nuevo al alumno hay que reflejarlo en
+`/terms`, y **los legales los redacta el cliente** — nosotros solo avisamos.
+
 | Concepto | Recomendación | Por qué |
 | :-- | :-- | :-- |
-| **Cobro** | Lo asume Enséñame Ya | Cargarlo al alumno es un recargo visible en el checkout que reduce conversión |
+| ~~**Cobro**~~ | ~~Lo asume Enséñame Ya~~ · **derogado 16-sep-2026: lo paga el alumno, 5 %** | Cargarlo al alumno es un recargo visible en el checkout que reduce conversión |
 | **Payout** | Lo asume Enséñame Ya | $1–$4/mes no compensa ni la conversación ni el desarrollo. En VE el tutor ya come el descuento invisible del P2P |
 | **Spread dLocal** | Lo asume el tutor | Decisión del cliente del 2-sep-2026, así implementado. La recomendación técnica era la contraria —que lo asumiéramos nosotros, por coherencia con los otros dos— y se deja escrita para que la decisión se pueda revisar con su contexto |
 

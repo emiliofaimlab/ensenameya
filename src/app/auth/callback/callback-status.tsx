@@ -26,6 +26,7 @@ export function CallbackStatus({
   providerError,
   providerErrorDescription,
   next,
+  esRecuperacion,
   intent,
   referralCode,
   termsVersion,
@@ -38,6 +39,14 @@ export function CallbackStatus({
   providerError: string | null;
   providerErrorDescription: string | null;
   next: string | null;
+  /**
+   * `?flujo=recovery` — esto viene de «olvidé mi contraseña», no de un alta.
+   *
+   * Lo marca `(recovery)/reset/reset-form.tsx` y sirve para UNA cosa: saltarse
+   * el reparto de recién llegados de abajo, que no pinta nada aquí y que se
+   * comía el `next`.
+   */
+  esRecuperacion: boolean;
   intent: "alumno" | "tutor" | null;
   referralCode: string | null;
   /**
@@ -360,7 +369,28 @@ export function CallbackStatus({
         const conNext = (base: string) =>
           target ? `${base}?next=${encodeURIComponent(target)}` : base;
 
-        if (aspiranteATutor) {
+        /*
+         * 🔑 UNA RECUPERACIÓN NO ES UN RECIÉN LLEGADO, y va la primera.
+         *
+         * Todo el bloque de abajo existe para repartir a quien acaba de darse
+         * de alta. Una recuperación de contraseña entra por esta misma ruta y
+         * no tiene nada que repartir: la persona ya tiene cuenta, ya tiene sus
+         * roles y viene a UNA cosa, que es el formulario de contraseña nueva.
+         *
+         * Sin esto, `aspiranteATutor` —que mira `intended_role` del metadata y
+         * por tanto se dispara aunque no venga `intent`— mandaba al asistente
+         * de tutor y descartaba el `next`. Efecto medido en producción el
+         * 16-sep-2026: quien se hubiera registrado para enseñar NO PODÍA
+         * cambiar su contraseña. Entraba con sesión, veía el asistente, y la
+         * contraseña vieja seguía siendo la buena.
+         *
+         * `safeNext` con `/reset/update` de respaldo: si alguien llegara con
+         * `flujo=recovery` y un `next` hostil o vacío, el destino sigue siendo
+         * el que tiene sentido para este flujo, no `/app`.
+         */
+        if (esRecuperacion) {
+          target = safeNext(next, "/reset/update");
+        } else if (aspiranteATutor) {
           // `?start=1` solo cuando la intención viene del metadata y no de esta
           // pantalla: quien acaba de pulsar «Quiero enseñar» merece ver primero
           // la bienvenida, igual que hace `requireUser()` al rebotar.
@@ -417,6 +447,7 @@ export function CallbackStatus({
     });
   }, [
     code,
+    esRecuperacion,
     providerError,
     providerErrorDescription,
     next,

@@ -26,7 +26,22 @@ export function ResetForm() {
 
     const supabase = createClient();
     await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/reset/update`,
+      // 🔑 `flujo=recovery` NO ES DECORATIVO, y es todo el arreglo del 16-sep-2026.
+      //
+      // `/auth/callback` lo comparten tres caminos (Google, confirmar cuenta y
+      // esto), y su reparto de recién llegados tiene una regla —«si es
+      // aspirante a tutor, al asistente de tutor»— que GANA sobre el `?next=`
+      // (`callback-status.tsx`). Escrita para las altas, donde es lo correcto.
+      //
+      // Una recuperación no lleva `intent`, así que esa regla la decidía
+      // `user_metadata.intended_role`: cualquiera que se hubiera registrado
+      // para enseñar aterrizaba en `/tutor/onboarding?start=1` con el `next`
+      // tirado — sesión iniciada, contraseña vieja intacta y sin forma de
+      // llegar al formulario. Reproducido en producción el 16-sep-2026.
+      //
+      // Con esta marca el callback sabe que esto NO es un recién llegado al que
+      // haya que repartir, y obedece el destino sin opinar.
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset/update&flujo=recovery`,
     });
 
     // Respuesta genérica: nunca revelar si el correo existe (S-40, igual que login).

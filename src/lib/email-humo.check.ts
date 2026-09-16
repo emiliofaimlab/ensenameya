@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 
-import { renderEmail, type Contexto } from "./email-templates.ts";
+import { renderEmail, PLANTILLAS_IDS, type Contexto } from "./email-templates.ts";
 
 /**
  * Doc 33 · prueba de HUMO de todas las plantillas. No es el contrato —ese es
@@ -178,51 +178,41 @@ const PAYLOADS: Record<string, Record<string, unknown>> = {
   // La copia de QUIEN LO COMPRÓ: la del destinatario va sin importe, y esa
   // diferencia es lo que la plantilla mira para saber a quién le habla.
   gift_expired: { credit_id: "cr-4d20", product_id: "p-4417", amount: 2400, currency: "USD" },
+  // NTF-39 · el RECLAMO (`20260916170000`). Mismo payload que NTF-35 —lo encola
+  // el mismo bucle con los mismos tres campos— y a propósito: lo que cambia
+  // entre los dos correos es el MOMENTO, no los datos.
+  gift_claimed: {
+    credit_id: "cr-7b02",
+    product_id: "p-4417",
+    gift_message: "Para que por fin te pongas con el inglés. ¡Va por ti! <3",
+  },
+  // NTF-38 · el regalo que sobrevive al tutor (`20260916100000`). El payload es
+  // literalmente el `jsonb_build_object` del trigger: `restante` (no `amount`,
+  // que un bono se parte) y `expires_at`, que ya trae los 30 días de gracia.
+  gift_converted: {
+    credit_id: "cr-9f31",
+    product_id: "p-4417",
+    restante: 2400,
+    currency: "USD",
+    expires_at: "2026-10-16T12:00:00Z",
+  },
 };
 
-const IDS = [
-  "auth_confirm_signup",
-  "auth_reset_password",
-  "auth_change_email",
-  "welcome_student",
-  "welcome_tutor",
-  "guest_account_created",
-  "order_receipt",
-  "payment_receipt",
-  "payment_failed",
-  "refund_processed",
-  "booking_pending_student",
-  "booking_new_tutor",
-  "booking_expiring_tutor",
-  "booking_confirmed_student",
-  "booking_reminder_24h",
-  "session_starting",
-  "cancellation",
-  "materials_ready",
-  "recording_ready",
-  "review_request",
-  "review_received_tutor",
-  "identity_in_review",
-  "tutor_review_result",
-  "payout_paid",
-  "payout_issue",
-  "payout_unclaimed",
-  "payout_account_changed",
-  "account_deletion_requested",
-  "account_deletion_done",
-  "new_message",
-  "admin_message",
-  "contact_ack",
-  "contact_internal",
-  "admin_alert",
-  "reward_earned",
-  "reward_expiring",
-  "reward_expired",
-  "gift_purchased",
-  "gift_received",
-  "gift_expiring",
-  "gift_expired",
-];
+/**
+ * ⚠️ SALE DE `PLANTILLAS_IDS`, YA NO SE ESCRIBE A MANO.
+ *
+ * Esta lista eran 41 nombres tecleados, y por eso el 16-sep-2026
+ * `npm run check:correos` salió VERDE con una plantilla nueva
+ * (`gift_converted`) que no había pasado por aquí: una comprobación que se
+ * queda callada sobre lo que no conoce es peor que no tenerla, porque se lee
+ * como «las 42 están bien».
+ *
+ * Es el mismo descuido que `email-templates.check.ts` ya corrigió en su lado y
+ * deja escrito con todas las letras. Ahora la galería y el humo recorren SIEMPRE
+ * todas las plantillas que existan: añadir una la mete aquí sola, y si le falta
+ * el payload esto se pone rojo, que es exactamente lo que queremos.
+ */
+const IDS = PLANTILLAS_IDS;
 
 const SALIDA = process.env.SALIDA_CORREOS;
 if (SALIDA) mkdirSync(SALIDA, { recursive: true });
