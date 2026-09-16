@@ -1748,6 +1748,57 @@ que haberlo.
 
 ---
 
+## 16 de septiembre — los once puntos del cliente
+
+Una lista de once puntos, resuelta con tres lotes de agentes. **Tres de los once ya estaban
+hechos** y el hallazgo de la investigación previa vale tanto como el código:
+
+| # | Qué pedía | Cómo acabó |
+| :-- | :-- | :-- |
+| 8 | Optimizar «la tier page» | **Ya optimizada.** `/admin/tiers` tiene `loading.tsx`, va por `requireRole()`, cascada de profundidad 2 y pide 5 columnas para 3 filas. No se tocó nada |
+| 10 | Ver moneda local y $ | **Ya construido.** `<Precio>` en ~25 pantallas, tasas leídas de dLocal (sin tabla propia: se respeta «sin tasa, USD y punto»), con `npm run check:dinero` |
+| 5 | Que los correos salgan de `ensenameya.com` | **Cero código.** Los 41 nuestros ya salen de ahí; los 3 de Auth tienen su HTML en `supabase/templates/` desde antes. Falta **pegarlos en el Dashboard y poner el SMTP de Resend**, en dev y en prod |
+| 1 | Correos al momento en dev | Medido: **78-134 min** de latencia real; GitHub entrega cada 2-6 h. Botón «Enviar los correos pendientes ahora» en `/admin/operaciones` + fuera el `continue-on-error` que dejaba el workflow en verde |
+| 2 | ¿Sale el correo del regalo? | Era un **bug**: el destinatario **sin cuenta** no recibía nada. `src/lib/regalo-aviso.ts` + los dos webhooks |
+| 3 | Comprobantes en el pago manual | Bucket `payout-proofs`, RPC nueva `adjuntar_comprobante_payout` (función nueva, **no** un argumento más de `manage_payout` — regla 12), el tutor los ve en Movimientos, y barrido de huérfanos enganchado a `recordings-purge` |
+| 4 | La tabla de tiers se rompe | Era un `flex`: pasa a rejilla con plantilla, y la píldora «Por defecto» reserva su hueco |
+| 6 | Fuera la dirección del pie | Ahora dice solo «Ensename Ya, LLC». ⚠️ Decisión del cliente con la CAN-SPAM avisada |
+| 7 | Cargo por servicio del 5 % | Ver abajo |
+| 9 | Regalo en el checkout + baja del tutor | Botón «Regalar esta mentoría» en las tres fichas públicas, y el regalo **sobrevive al tutor**: se convierte en bono usable con cualquiera |
+| 11 | Cuentas de Néstor e Isabella | `supabase/seed/dev-nestor-isabel.sql`, una cuenta cada uno con los **tres roles** |
+
+### El cargo por servicio (punto 7) — por qué es un trigger y no seis funciones
+
+«Lo que hay que cobrar» está escrito como `gross_amount − credit_amount` en **seis funciones de
+dinero** más el Route Handler del checkout. Cobrar el 5 % por fuera hace **abortar
+`confirm_payment` con el dinero ya cobrado**, y reescribir las seis a `create or replace` obliga a
+volcar sus cuerpos enteros con el riesgo de revertir en silencio un arreglo posterior.
+
+Así que el cargo vive **dentro de `gross_amount`**, mantenido por un trigger
+(`20260916120000`): las seis funciones y el checkout siguen siendo correctos sin tocar una línea.
+El invariante cambia a `gross = platform_fee + tutor_net + service_fee`, y `service_fee_pct` se
+congela en el INSERT, que es lo que hace que **no sea retroactivo sin fecha de corte**.
+
+Verificado contra dev, en transacciones revertidas: precio 2000 → cobra 2100; con 1000 de crédito
+→ cobra 1050 (cargo 50); **cubierto entero por un regalo → cobra 0 y cargo 0**. El regalo lleva su
+propio cargo al comprarse (`20260916130000`) y al canjearlo la base es 0, así que **no se cobra dos
+veces**. Las 34 filas sembradas cumplen el invariante.
+
+### Lo que quedó fuera, dicho a propósito
+
+- **Las pantallas con sesión no están verificadas a ojo**: build, typecheck, lint y las 16
+  comprobaciones están en verde, y la regla 13 se midió en la ficha pública (1126 caracteres, 4
+  peticiones), pero `/admin/tiers`, `/admin/payouts`, `/admin/operaciones` y el checkout necesitan
+  una pasada con sesión.
+- ~~**`reclamar_regalos_por_correo` manda NTF-35 dos veces**~~ · ✅ **arreglado el mismo día**
+  (`20260916170000_el_reclamo_tiene_su_propio_correo.sql`). El reclamo tiene ahora su propia
+  plantilla, **NTF-39 `gift_claimed`** («tu regalo ya está en tu cuenta»), con clave propia
+  `GIFT:claim:<id>`. Arregla dos cosas de una: el duplicado que introdujo el punto 2, y una
+  mentira que ya estaba antes —el correo del reclamo pedía «crea tu cuenta con esta misma
+  dirección» a alguien que la acababa de crear—. Verificado contra dev en una transacción
+  revertida: sin cuenta → 0 avisos en cola al cobrarse (lo manda el webhook) y `gift_claimed` ×1
+  al registrarse; con cuenta → `gift_received` ×1 y el reclamo no toca nada.
+
 ## Decisiones y deudas heredadas — rescate de los docs 19, 20 y 22
 
 Los docs numerados 19, 20, 21 y 22 se borraron. Esto es lo que de ellos **no vive en ningún otro

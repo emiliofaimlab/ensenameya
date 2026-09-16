@@ -772,6 +772,7 @@ export type Database = {
           purchased_by: string | null
           referral_campaign_id: number | null
           referred_profile_id: string | null
+          service_fee_amount: number
           source: string
           status: string
           updated_at: string
@@ -800,6 +801,7 @@ export type Database = {
           purchased_by?: string | null
           referral_campaign_id?: number | null
           referred_profile_id?: string | null
+          service_fee_amount?: number
           source: string
           status?: string
           updated_at?: string
@@ -828,6 +830,7 @@ export type Database = {
           purchased_by?: string | null
           referral_campaign_id?: number | null
           referred_profile_id?: string | null
+          service_fee_amount?: number
           source?: string
           status?: string
           updated_at?: string
@@ -1223,6 +1226,8 @@ export type Database = {
           provider_metadata: Json | null
           provider_payment_id: string | null
           refunded_amount: number
+          service_fee_amount: number
+          service_fee_pct: number
           settlement_currency: string | null
           status: Database["public"]["Enums"]["payment_status"]
           tier_split_pct: number
@@ -1251,6 +1256,8 @@ export type Database = {
           provider_metadata?: Json | null
           provider_payment_id?: string | null
           refunded_amount?: number
+          service_fee_amount?: number
+          service_fee_pct?: number
           settlement_currency?: string | null
           status?: Database["public"]["Enums"]["payment_status"]
           tier_split_pct: number
@@ -1279,6 +1286,8 @@ export type Database = {
           provider_metadata?: Json | null
           provider_payment_id?: string | null
           refunded_amount?: number
+          service_fee_amount?: number
+          service_fee_pct?: number
           settlement_currency?: string | null
           status?: Database["public"]["Enums"]["payment_status"]
           tier_split_pct?: number
@@ -2926,6 +2935,7 @@ export type Database = {
           id: string | null
           issued_at: string | null
           product_id: string | null
+          service_fee_amount: number | null
           status: string | null
         }
         Insert: {
@@ -2940,6 +2950,7 @@ export type Database = {
           id?: string | null
           issued_at?: string | null
           product_id?: string | null
+          service_fee_amount?: number | null
           status?: string | null
         }
         Update: {
@@ -2954,6 +2965,7 @@ export type Database = {
           id?: string | null
           issued_at?: string | null
           product_id?: string | null
+          service_fee_amount?: number | null
           status?: string | null
         }
         Relationships: [
@@ -3002,6 +3014,10 @@ export type Database = {
           ficheros_recolectados: number
           user_id: string
         }[]
+      }
+      adjuntar_comprobante_payout: {
+        Args: { p_nombre: string; p_path: string; p_payout_id: string }
+        Returns: undefined
       }
       admin_bookings_by_category: {
         Args: { p_from?: string; p_to?: string }
@@ -3084,6 +3100,10 @@ export type Database = {
       cancel_booking: {
         Args: { p_booking_id: string; p_reason?: string }
         Returns: Json
+      }
+      cargo_por_servicio: {
+        Args: { p_base: number; p_pct: number }
+        Returns: number
       }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
@@ -3195,6 +3215,7 @@ export type Database = {
         Args: { p_referido: string }
         Returns: string
       }
+      encolar_comprobantes_huerfanos: { Args: never; Returns: number }
       enqueue_notification: {
         Args: {
           p_channel: string
