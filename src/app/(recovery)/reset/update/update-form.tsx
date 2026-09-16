@@ -6,7 +6,7 @@ import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
-import { pickHome, type AppRole } from "@/lib/auth/roles";
+import { pickHome, destinoDeAsistente, type AppRole } from "@/lib/auth/roles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,7 +51,7 @@ export function UpdatePasswordForm() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password });
+    const { data: actualizado, error } = await supabase.auth.updateUser({ password });
     if (error) {
       toast.error("El enlace expiró o no es válido. Solicita uno nuevo.");
       setLoading(false);
@@ -59,32 +59,55 @@ export function UpdatePasswordForm() {
     }
 
     toast.success("Contraseña actualizada.");
-    // Ya hay sesión válida: enruta por rol como el login.
-    const { data } = await supabase.from("user_roles").select("role");
-    const roles = (data ?? []).map((r) => r.role as AppRole);
+
     /*
+     * EL DESTINO SE RESUELVE AQUÍ, NO SE DELEGA EN UN `redirect()`.
+     *
      * 🔴 CARGA ENTERA, NO `router.push()` — REGLA DE ORO 13.
      *
-     * `pickHome` mira los ROLES y no el onboarding, así que puede devolver
-     * `/app` o `/tutor`; las dos cuelgan de `(app)/layout.tsx`, que llama a
-     * `requireUser()`, que hace `redirect()` cuando el asistente está a medias.
      * Un `redirect()` de servidor alcanzado por una navegación de CLIENTE que
      * cruza de grupo de rutas —de `(recovery)` a `(app)`— deja el árbol vacío y
-     * el router pidiendo el RSC en bucle: pantalla en blanco.
+     * el router pidiendo el RSC en bucle: pantalla en blanco. Aquí se evita por
+     * las dos vías, que es lo mismo que hace `auth/callback/callback-status`:
+     * se apunta a una ruta que RENDERIZA, y se llega a ella con una carga de
+     * documento entera.
      *
-     * ⚠️ Y ESTO ES NUEVO DESDE EL 16-sep-2026, aunque la línea llevara meses
-     * ahí: hasta hoy, quien tenía el asistente a medias NUNCA llegaba a este
-     * formulario —`/auth/callback` lo desviaba antes—, así que el caso no
-     * existía. Al arreglar ese desvío, esta población empieza a pasar por aquí,
-     * que es precisamente la que dispara el `redirect()`.
+     * ⚠️ ESTE CASO ES NUEVO DESDE EL 16-sep-2026, aunque la navegación llevara
+     * meses aquí: hasta hoy, quien tenía el asistente a medias NUNCA llegaba a
+     * este formulario —`/auth/callback` lo desviaba antes—, así que nadie
+     * disparaba el `redirect()`. Al arreglar ese desvío, esta población empieza
+     * a pasar por aquí, que es justo la que lo dispara.
      *
-     * Una carga de documento entera lo resuelve por definición: la misma URL
-     * cargada de cero renderiza perfecta. Es la misma salida que ya toma
-     * `auth/callback/callback-status.tsx` y por el mismo motivo. El coste es un
-     * viaje, justo después de guardar una contraseña. Se cae también el
-     * `router.refresh()`, que estaba para que el servidor releyera las cookies.
+     * ⚠️ Y `pickHome` SOLO MIRA LOS ROLES. Para una cuenta con el onboarding a
+     * medias devuelve `/app`, que existe y renderiza… después de que
+     * `requireUser()` la mande al asistente. O sea un viaje de más: medido el
+     * 16-sep con una cuenta `intended_role='tutor'`, guardar la contraseña
+     * aterrizaba en `/tutor/onboarding?start=1` pasando antes por `/app`.
+     * `destinoDeAsistente` es el MISMO helper que usa `requireUser()` en
+     * servidor para decidirlo, así que preguntárselo antes da el destino final
+     * de una: una sola carga y cero redirects.
      */
-    window.location.assign(pickHome(roles));
+    // ⚠️ El usuario sale de lo que ACABA de devolver `updateUser`, no de un
+    // `auth.getUser()` aparte: ese es un viaje de 250-400 ms a la API de Auth
+    // (CLAUDE.md · Rendimiento) para preguntar algo que ya tenemos en la mano.
+    //
+    // Y el perfil se lee SIN `.eq(id)` porque `profiles` es own-only por RLS:
+    // esta consulta solo puede devolver la fila propia.
+    const [{ data: roleRows }, { data: perfil }] = await Promise.all([
+      supabase.from("user_roles").select("role"),
+      supabase.from("profiles").select("onboarding_complete").maybeSingle(),
+    ]);
+    const roles = (roleRows ?? []).map((r) => r.role as AppRole);
+
+    // ⚠️ Regla de oro 10: si la lectura del perfil falla, `perfil` es null y el
+    // `?? true` asume «onboarding hecho». Es el respaldo correcto — manda al
+    // panel, y desde ahí `requireUser()` rescata con su redirect. O sea que
+    // falla hacia el camino que ya funcionaba, no hacia uno nuevo.
+    const asistente = destinoDeAsistente(
+      perfil?.onboarding_complete ?? true,
+      actualizado?.user?.user_metadata?.intended_role,
+    );
+    window.location.assign(asistente ?? pickHome(roles));
   }
 
   return (
