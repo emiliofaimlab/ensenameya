@@ -17,6 +17,8 @@ export default async function AuthCallbackPage({
   searchParams: Promise<{
     code?: string;
     next?: string;
+    /** `recovery` = viene de /reset, no es un alta: ver reset-form.tsx. */
+    flujo?: string;
     intent?: string;
     ref?: string;
     terms?: string;
@@ -29,7 +31,7 @@ export default async function AuthCallbackPage({
     error_description?: string;
   }>;
 }) {
-  const { code, next, intent, ref, terms, terms_locale, error, error_description } =
+  const { code, next, flujo, intent, ref, terms, terms_locale, error, error_description } =
     await searchParams;
 
   return (
@@ -39,6 +41,7 @@ export default async function AuthCallbackPage({
         providerError={error?.trim() || null}
         providerErrorDescription={error_description?.trim() || null}
         next={next ?? null}
+        esRecuperacion={flujo === "recovery"}
         intent={intent === "alumno" || intent === "tutor" ? intent : null}
         referralCode={ref?.trim() || null}
         // Solo llega desde `/signup`: al iniciar sesión no se pide aceptar de
