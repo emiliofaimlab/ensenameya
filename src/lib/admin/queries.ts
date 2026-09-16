@@ -63,6 +63,13 @@ export type PaymentListRow = {
   grossAmount: number;
   platformFeeAmount: number;
   tutorNetAmount: number;
+  /**
+   * El cargo por servicio que pagó el ALUMNO, ya sumado DENTRO de `grossAmount`
+   * (`20260916120000`). ⚠️ Desde el 16-sep-2026 el invariante es
+   * `gross = platformFee + tutorNet + serviceFee`: Bruto, Comisión y Neto YA NO
+   * SUMAN sin esta cuarta cifra. 0 en todo lo anterior.
+   */
+  serviceFeeAmount: number;
   refundedAmount: number;
   provider: string | null;
   payeeCountry: string | null;
@@ -75,13 +82,15 @@ export type PaymentTotals = {
   gross: number;
   fee: number;
   net: number;
+  /** Cargo por servicio cobrado al alumno, ya dentro de `gross`. */
+  serviceFee: number;
   refunded: number;
   currencies: string[];
 };
 
 /** `select` compartido por lista y totales: una sola forma que mantener. */
 const PAYMENT_COLS =
-  "id, booking_id, status, currency, gross_amount, platform_fee_amount, tutor_net_amount, refunded_amount, provider, payee_country, created_at, bookings(products(title))";
+  "id, booking_id, status, currency, gross_amount, platform_fee_amount, tutor_net_amount, service_fee_amount, refunded_amount, provider, payee_country, created_at, bookings(products(title))";
 
 type PaymentRow = {
   id: string;
@@ -91,6 +100,7 @@ type PaymentRow = {
   gross_amount: number;
   platform_fee_amount: number;
   tutor_net_amount: number;
+  service_fee_amount: number;
   refunded_amount: number;
   provider: string | null;
   payee_country: string | null;
@@ -107,6 +117,7 @@ function toPaymentRow(p: PaymentRow): PaymentListRow {
     grossAmount: p.gross_amount,
     platformFeeAmount: p.platform_fee_amount,
     tutorNetAmount: p.tutor_net_amount,
+    serviceFeeAmount: p.service_fee_amount,
     refundedAmount: p.refunded_amount,
     provider: p.provider,
     payeeCountry: p.payee_country,
@@ -177,7 +188,7 @@ export async function listPayments(f: PaymentFilters): Promise<{
   // — PostgREST no sabe sumar sin vista o función.
   let totalsQ = supabase
     .from("payments")
-    .select("currency, gross_amount, platform_fee_amount, tutor_net_amount, refunded_amount");
+    .select("currency, gross_amount, platform_fee_amount, tutor_net_amount, service_fee_amount, refunded_amount");
   if (status) totalsQ = totalsQ.eq("status", status);
   if (f.provider) totalsQ = totalsQ.eq("provider", f.provider);
   if (f.country) totalsQ = totalsQ.eq("payee_country", f.country);
@@ -192,6 +203,7 @@ export async function listPayments(f: PaymentFilters): Promise<{
     gross: all.reduce((s, r) => s + r.gross_amount, 0),
     fee: all.reduce((s, r) => s + r.platform_fee_amount, 0),
     net: all.reduce((s, r) => s + r.tutor_net_amount, 0),
+    serviceFee: all.reduce((s, r) => s + r.service_fee_amount, 0),
     refunded: all.reduce((s, r) => s + r.refunded_amount, 0),
     // Sumar monedas distintas daría un número sin sentido: se avisa en la UI.
     currencies: [...new Set(all.map((r) => r.currency))],
@@ -216,6 +228,10 @@ export type PaymentDetail = {
     grossAmount: number;
     platformFeeAmount: number;
     tutorNetAmount: number;
+    /** Cargo por servicio del alumno, ya dentro de `grossAmount`. */
+    serviceFeeAmount: number;
+    /** El % con el que nació esta fila. 0 = anterior al cargo por servicio. */
+    serviceFeePct: number;
     tierSplitPct: number;
     refundedAmount: number;
     provider: string | null;
@@ -236,7 +252,7 @@ export async function getPaymentDetail(id: string): Promise<PaymentDetail | null
   const { data: p } = await supabase
     .from("payments")
     .select(
-      "id, booking_id, status, currency, gross_amount, platform_fee_amount, tutor_net_amount, tier_split_pct, refunded_amount, provider, provider_payment_id, payer_country, payee_country, created_at, paid_at, failed_at, updated_at, bookings(products(title))",
+      "id, booking_id, status, currency, gross_amount, platform_fee_amount, tutor_net_amount, service_fee_amount, service_fee_pct, tier_split_pct, refunded_amount, provider, provider_payment_id, payer_country, payee_country, created_at, paid_at, failed_at, updated_at, bookings(products(title))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -260,6 +276,8 @@ export async function getPaymentDetail(id: string): Promise<PaymentDetail | null
       grossAmount: p.gross_amount,
       platformFeeAmount: p.platform_fee_amount,
       tutorNetAmount: p.tutor_net_amount,
+      serviceFeeAmount: p.service_fee_amount,
+      serviceFeePct: Number(p.service_fee_pct),
       tierSplitPct: Number(p.tier_split_pct),
       refundedAmount: p.refunded_amount,
       provider: p.provider,

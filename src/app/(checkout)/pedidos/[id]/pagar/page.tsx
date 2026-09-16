@@ -9,8 +9,8 @@ import {
 import { resolveOrder } from "@/lib/orders/queries";
 import { metodosDeCheckout } from "@/lib/payments";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
-import { Precio } from "@/components/precio/precio";
-import { formatSessionTime } from "@/lib/booking";
+import { Precio, PrecioEnLinea } from "@/components/precio/precio";
+import { formatSessionTime, SERVICE_FEE_PCT } from "@/lib/booking";
 import { OrderPayment } from "@/components/checkout/order-payment";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
 import { CheckoutSteps } from "@/components/checkout/checkout-steps";
@@ -188,6 +188,40 @@ export default async function PagarPedidoPage({
             ))}
           </ul>
 
+          {/* 💰 EL CARGO POR SERVICIO del pedido entero (punto 7 · 16-sep-2026).
+
+              `pedido.total` YA LO LLEVA DENTRO —sale de sumar
+              `payments.gross_amount`, y ahí es donde el trigger
+              `payments_cargo_por_servicio` lo mete—, así que esta línea no suma
+              nada: DESGLOSA. Sin ella, «Total» parecería la suma de los precios
+              de los tutores y no lo es.
+
+              Por eso el subtotal se calcula restando y no sumando: la cifra que
+              manda es el total, que es el que se cobra. Y se esconde entero
+              cuando el cargo es 0 (pedidos anteriores al 16-sep, o cubiertos por
+              crédito), porque un desglose de una sola línea no desglosa nada. */}
+          {pedido.cargoServicioTotal > 0 ? (
+            <div className="mt-4 flex flex-col gap-2 border-t border-[#e0e0e0] pt-4 text-sm">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                <span className="text-[#6b6b6b]">Subtotal</span>
+                <PrecioEnLinea
+                  amountMinor={pedido.total - pedido.cargoServicioTotal}
+                  currency={pedido.currency}
+                  className="text-[#333333]"
+                />
+              </div>
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4">
+                <span className="text-[#6b6b6b]">
+                  Cargo por servicio ({SERVICE_FEE_PCT} %)
+                </span>
+                <PrecioEnLinea
+                  amountMinor={pedido.cargoServicioTotal}
+                  currency={pedido.currency}
+                  className="text-[#333333]"
+                />
+              </div>
+            </div>
+          ) : null}
           <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t border-[#e0e0e0] pt-4">
             <span className="text-base font-semibold text-[#19191f]">Total</span>
             <span className="text-right">

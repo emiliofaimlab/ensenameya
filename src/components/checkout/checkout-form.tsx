@@ -40,7 +40,12 @@ import {
   mensajeDeApertura,
 } from "@/lib/checkout/hold";
 import { Precio, PrecioEnLinea, usePrecio } from "@/components/precio/precio";
-import { formatSessionTime, type TutorCardData } from "@/lib/booking";
+import {
+  formatSessionTime,
+  serviceFee,
+  SERVICE_FEE_PCT,
+  type TutorCardData,
+} from "@/lib/booking";
 import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import { TutorSummary } from "@/components/tutor-summary";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
@@ -332,7 +337,17 @@ export function CheckoutForm({
    * cuando ya no es lo que se va a cobrar (regla de oro 2).
    */
   const creditoAplicado = credito?.tipo === "aplicado" ? credito.cubre : 0;
-  const aPagar = Math.max(0, total - creditoAplicado);
+  /**
+   * 💰 EL CARGO POR SERVICIO va SOBRE LO QUE SE COBRA DE VERDAD, no sobre el
+   * precio: si un regalo cubre la mentoría entera, la base es 0 y no hay cargo
+   * (decisión 2 del cliente, 16-sep-2026). Es la misma aritmética que el
+   * trigger `payments_cargo_por_servicio` aplica en la base, y la de allí es la
+   * que manda: aquí solo se pinta, porque esta pantalla existe antes de que
+   * haya ninguna fila de `payments` a la que preguntarle.
+   */
+  const baseDelCargo = Math.max(0, total - creditoAplicado);
+  const cargoServicio = serviceFee(baseDelCargo);
+  const aPagar = baseDelCargo + cargoServicio;
   // El botón repite la cifra GRANDE del total que tiene justo encima —o sea la
   // local si la hay—, no el dólar: si dijeran números distintos, el que se lee
   // al pulsar es el del botón. El dólar no se pierde, está en la línea pequeña
@@ -777,9 +792,32 @@ export function CheckoutForm({
               </span>
             </div>
           ) : null}
+          {/* 💰 EL CARGO POR SERVICIO (punto 7 · 16-sep-2026).
+
+              Va DESPUÉS del crédito y no antes, porque ese es el orden en que
+              se calcula: la base del 5 % es lo que queda por cobrar. Puesto
+              arriba, el resumen daría a entender que el cargo se aplica al
+              precio y luego el crédito lo tapa, que es justo lo contrario de lo
+              que hace la base.
+
+              Se esconde cuando es 0 —reserva cubierta entera por un regalo, o
+              reserva anterior al cargo— en vez de pintar «0,00 US$»: una línea
+              a cero solo invita a preguntar por qué está ahí. */}
+          {cargoServicio > 0 ? (
+            <div className="mt-2 flex flex-wrap items-baseline justify-between gap-x-4 text-sm">
+              <span className="text-[#6b6b6b]">
+                Cargo por servicio ({SERVICE_FEE_PCT} %)
+              </span>
+              <PrecioEnLinea
+                amountMinor={cargoServicio}
+                currency={currency}
+                className="text-[#333333]"
+              />
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
             <span className="text-base font-semibold text-[#19191f]">
-              {creditoAplicado > 0 ? "A pagar" : "Total"}
+              {creditoAplicado > 0 || cargoServicio > 0 ? "A pagar" : "Total"}
             </span>
             <span className="text-right">
               <Precio

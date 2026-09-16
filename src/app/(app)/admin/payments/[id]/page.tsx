@@ -88,18 +88,33 @@ export default async function AdminPaymentPage({
             <hr className="my-4 border-[#e0e0e0]" />
 
             <div className="flex flex-wrap gap-x-8 gap-y-4">
+              {/* ⚠️ DESDE EL 16-sep-2026 ESTAS CIFRAS YA NO SUMAN DE A TRES.
+                  El invariante pasó de `bruto = comisión + neto` a
+                  `bruto = comisión + neto + cargo por servicio`
+                  (`20260916120000_el_alumno_paga_el_servicio.sql`). El bruto es
+                  lo que pagó el ALUMNO; la comisión sigue hablando solo de lo
+                  que se le descuenta al TUTOR, que no ha cambiado. Sin la cuarta
+                  cifra debajo, esta pantalla parecería descuadrada. */}
               <Field
                 label="Monto bruto"
                 value={formatMoney(p.grossAmount, p.currency)}
               />
               <Field
-                label={`Comisión (${(100 - p.tierSplitPct).toFixed(0)}%)`}
+                label={`Comisión del tutor (${(100 - p.tierSplitPct).toFixed(0)}%)`}
                 value={formatMoney(p.platformFeeAmount, p.currency)}
               />
               <Field
                 label="Neto al tutor"
                 value={formatMoney(p.tutorNetAmount, p.currency)}
               />
+              {/* Se esconde en los pagos anteriores al cargo: ahí vale 0 y una
+                  fila a cero solo invita a preguntar por qué está. */}
+              {p.serviceFeeAmount > 0 ? (
+                <Field
+                  label={`Cargo por servicio del alumno (${p.serviceFeePct.toFixed(0)}%)`}
+                  value={formatMoney(p.serviceFeeAmount, p.currency)}
+                />
+              ) : null}
               <Field label="tier_split_pct" value={`${p.tierSplitPct}%`} />
               <Field label="Proveedor" value={p.provider ?? "—"} />
               <Field label="Referencia" value={p.providerPaymentId ?? "—"} />
