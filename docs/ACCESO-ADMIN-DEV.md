@@ -17,8 +17,12 @@
 
 ## 1. Cómo se entra hoy
 
-- **La cuenta es `admin.us1101@ensenameya.dev`**, y es la **única** con rol `admin`: una sola fila
-  `role = 'admin'` en `user_roles` sobre 45 cuentas de dev.
+- **La cuenta de siempre es `admin.us1101@ensenameya.dev`.** ⚠️ **Ya no es la única con rol
+  `admin`** — ese renglón caducó: a `jose@faimlab.com` se le dio el rol el 15-sep, y el 16-sep
+  `supabase/seed/dev-nestor-isabel.sql` siembra `nestor@ensenameya.com` e
+  `isabel@ensenameya.com` con los TRES roles (alumno + tutor + admin), que es como las pidió el
+  cliente para probar la plataforma entera desde una sola cuenta. Antes de afirmar cuántos
+  admins hay, cuéntalos: `select count(*) from user_roles where role = 'admin'`.
 - **La contraseña se pide a quien administra.** Sigue **pendiente de rotar**: hoy es la misma que
   siembra `supabase/seed/dev-poblar.sql`, y ese archivo está en el repositorio público → §4.
 - **Al entrar aterriza en `/admin`**: con rol `admin` manda `ROLE_HOME.admin` (`src/lib/auth/roles.ts`),
@@ -127,8 +131,11 @@ Supabase — o sea, solo quien ya tiene acceso al proyecto.
 
 ## 6. Producción
 
-En prod **todavía no hay admin sembrado** — es un punto abierto del checklist
-(`QA-LANZAMIENTO.md` §4.1). Cuando se siembre:
+**Sembrado el 15-sep-2026:** `jose@faimlab.com`, la cuenta que ya existía en prod (alta 11-sep,
+correo real, Google). No se creó cuenta nueva ni contraseña nueva: se le añadió la fila `admin` en
+`user_roles`, que convive con su `alumno`. Se quita con un `delete` de esa fila.
+
+Si algún día se quiere un admin **dedicado**, ahí sí aplica lo de siempre:
 
 - [ ] Contraseña **propia**, generada en el momento, **distinta de la de dev** y de la del seed.
 - [ ] Guardada en el gestor antes de crearla, no después.
