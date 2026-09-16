@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { avisarRegaloSinCuenta } from "@/lib/regalo-aviso";
 import { dlocalProvider, eventoDePago } from "@/lib/payments/dlocal-provider";
 import { DlocalGoError } from "@/lib/dlocalgo";
 import type { OrderStatus } from "@/lib/orders/tipos";
@@ -357,6 +358,19 @@ export async function POST(req: Request) {
           "devolver el cargo a mano desde el panel de dLocal: late_payment_refunds no admite un regalo",
       });
       return NextResponse.json({ status: "regalo-huerfano", sujeto, estado });
+    }
+
+    /**
+     * 🎁 EL AVISO A QUIEN LO RECIBE CUANDO TODAVÍA NO TIENE CUENTA — gemelo del
+     * de Stripe, y el razonamiento largo está allí. En corto: la RPC no puede
+     * mandarlo (`enqueue_notification` con `recipient_id` null no encola nada y
+     * no lo dice), y la condición es el estado **ANTERIOR** y no el que devolvió
+     * la RPC, que responde `'active'` también en cada reentrega. Aquí eso pesa
+     * más que en Stripe: dLocal reintenta **cada 10 minutos durante 30 días**,
+     * así que colgarlo de `estado === 'active'` serían miles de correos.
+     */
+    if (estado === "active" && regalo.status === "pending_payment") {
+      await avisarRegaloSinCuenta(admin, regalo.id);
     }
 
     return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto });

@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  GiftIcon,
   ZapIcon,
 } from "lucide-react";
 
@@ -188,6 +189,7 @@ export async function BookingPanel({
   autoAcceptLine = false,
   ctaFijo = true,
   footer,
+  regaloHrefFor,
   timeZone,
   formato,
 }: {
@@ -247,6 +249,21 @@ export async function BookingPanel({
   autoAcceptLine?: boolean;
   /** Contenido extra bajo el botón (P08: política de cancelación). */
   footer?: ReactNode;
+  /**
+   * Punto 9 (16-sep) · «Regalar esta mentoría», el segundo camino de compra.
+   *
+   * Es una FUNCIÓN y no un `href`: la mentoría a regalar es la que el visitante
+   * acaba de elegir en este panel (`chosen`), y quien llama no la sabe. Lo que
+   * sí sabe quien llama —y este componente no— es si hay sesión, así que el
+   * destino lo resuelve ÉL, en servidor, con `hrefRegalar()`. Sin la prop no se
+   * pinta nada: el panel no inventa el enlace.
+   *
+   * ⚠️ REGLA DE ORO 13. `/regalar/...` vive en `(app)` y empieza por
+   * `requireUser()`; escribir aquí ese `href` a mano es exactamente el enlace
+   * que deja la pantalla en blanco al pulsarlo sin sesión. Ver el porqué largo
+   * en `regalo-links.ts`.
+   */
+  regaloHrefFor?: (productId: string) => string;
 }) {
   if (products.length === 0) {
     return (
@@ -352,6 +369,25 @@ export async function BookingPanel({
     : chosen?.pricingModel === "per_package"
       ? "Total del paquete"
       : "Total de la sesión";
+
+  /**
+   * Punto 9 (16-sep) · a dónde lleva «Regalar esta mentoría», o `null` si no se pinta.
+   *
+   * Hacen falta las tres cosas: que quien llama nos haya dado el resolutor,
+   * que haya mentoría elegida (un regalo es de UNA mentoría concreta) y —lo
+   * menos obvio— que su precio sea un TOTAL CERRADO.
+   *
+   * ⚠️ `precio.isTotal` es falso en un solo caso: mentoría `per_hour` SIN
+   * `session_duration_min`. Ahí `comprar_regalo` no puede calcular el importe y
+   * `/regalar/mentoria/<id>` lo dice con un cartel, sin formulario. Es un
+   * callejón corto pero real, y desde aquí sería peor que desde `/regalar`:
+   * quien no tiene cuenta pasaría antes por el alta entera para leerlo. Sin
+   * total cerrado se reserva por horas, no se regala.
+   */
+  const regaloHref =
+    regaloHrefFor && chosen && precio?.isTotal
+      ? regaloHrefFor(chosen.id)
+      : null;
 
   /** Horarios de la clase elegida ESE día. */
   const times = chosen
@@ -1137,6 +1173,40 @@ export async function BookingPanel({
             servidor para que no aparezca a destiempo. */}
         <GoToCart initial={enCarrito} className="mt-2" />
       </div>
+
+      {/*
+        Punto 9 (16-sep) · «REGALAR ESTA MENTORÍA» — EL SEGUNDO CAMINO DE COMPRA.
+
+        El encargo del cliente, literal: que el regalo se ofrezca «donde se
+        decide comprar». Hasta hoy a `/regalar` solo se llegaba por el menú
+        lateral del panel, o sea solo con sesión y solo si ya sabías que
+        existía: el visitante que está mirando la mentoría que le quiere
+        regalar a alguien no lo veía por ningún sitio.
+
+        ⚠️ VA FUERA DE LA BARRA DEL CTA, Y NO ES COLOCACIÓN CASUAL. Esa barra es
+        `sticky bottom-0` en móvil y flota sobre el panel; su propio comentario
+        deja escrito que su altura dejó de depender del estado a propósito,
+        porque cada cambio de alto movía el contenido bajo el dedo. Este enlace
+        aparece y desaparece con la mentoría elegida —es estado—, así que
+        dentro de la barra reabriría justo ese fallo. Aquí abajo el panel es
+        flujo normal y crecer no empuja nada.
+
+        Secundario de verdad (`outline`): compite con el CTA en sitio, no en
+        peso. Reservar para uno mismo sigue siendo lo que hace casi todo el
+        mundo.
+      */}
+      {regaloHref ? (
+        <Button
+          asChild
+          variant="outline"
+          className={`mt-3 h-11 w-full text-[14px] ${siCompacto("lg:mt-2.5 lg:h-10")}`}
+        >
+          <Link href={regaloHref}>
+            <GiftIcon aria-hidden />
+            Regalar esta mentoría
+          </Link>
+        </Button>
+      ) : null}
 
       {/*
         G-03 · LO QUE PASA AL PAGAR, DICHO DONDE SE PAGA.

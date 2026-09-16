@@ -41,9 +41,22 @@ import { Button } from "@/components/ui/button";
  */
 export type RegaloRecibido = {
   id: string;
+  /**
+   * `credits.kind`. Un regalo nace `'mentoria'` —atado a UNA mentoría— y solo
+   * pasa a `'saldo'` por `convertir_regalos_en_bono` (`20260916100000`): es un
+   * BONO, su tutor cerró la cuenta. Manda sobre qué tarjeta se pinta.
+   */
+  kind: string;
   status: string;
   /** Unidades mínimas CONGELADAS al comprarlo (regla de oro 2: lo fijó el servidor). */
   amount: number;
+  /**
+   * Lo que queda por gastar (`amount - consumed_amount`, ya calculado por
+   * `mis_creditos`). En una mentoría regalada es el `amount` entero —se gasta
+   * de una vez—; en un BONO no, porque se parte entre varias reservas, y es la
+   * MISMA cifra que el correo NTF-38 le prometió al destinatario.
+   */
+  restante: number;
   currency: string;
   productId: string | null;
   giftMessage: string | null;
@@ -206,6 +219,11 @@ export function RegaloPorAgendar({
   regalo: RegaloRecibido;
   timeZone: string;
 }) {
+  // El bono no es una variante de esta tarjeta: no hay mentoría que nombrar, no
+  // hay precio de hoy contra el que comparar y el botón lleva a otro sitio.
+  if (regalo.kind === "saldo")
+    return <BonoDeRegalo regalo={regalo} timeZone={timeZone} />;
+
   const p = regalo.producto;
   // Se saca a una constante y no se lee `p?.totalHoy` dentro del ternario: con
   // la cadena opcional TypeScript no puede estrechar el `number | null` en la
@@ -402,6 +420,115 @@ export function RegaloPorAgendar({
 }
 
 /**
+ * ── EL BONO: EL REGALO QUE SOBREVIVIÓ A SU TUTOR ───────────────────────────
+ *
+ * `kind = 'saldo'` sobre un `source = 'gift'` lo pone UNA sola cosa:
+ * `convertir_regalos_en_bono` (`20260916100000`), cuando el tutor de la
+ * mentoría regalada cierra su cuenta. Al anonimizarle, `anonymize_account`
+ * archiva sus mentorías; el crédito deja de estar atado a su `product_id`
+ * —`credito_aplicable` ni lo mira con `kind='saldo'`— y pasa a valer contra
+ * CUALQUIER mentoría de la misma moneda, cubriendo `least(restante, gross)`:
+ * si la nueva cuesta más el alumno paga la diferencia, y si cuesta menos el
+ * resto se queda dentro para la siguiente.
+ *
+ * ⚠️ **SIN ESTA TARJETA EL BONO MIENTE.** Su ficha está archivada, así que
+ * `products_select_public` no la devuelve, `producto` llega `null` y el regalo
+ * caía en la rama de «no podemos mostrarte esta mentoría ahora mismo,
+ * escríbenos». Es cierto y es inútil: no hay nada que resolver con soporte, el
+ * dinero está donde estaba y se puede gastar hoy. Es el punto 4 de lo que
+ * `20260916100000` dejó pedido fuera de sí misma.
+ *
+ * ⚠️ **DICE LO MISMO QUE EL CORREO**, que se encoló en la misma transacción
+ * (NTF-38, `gift_converted`): qué pasó, cuánto queda —`restante`, no `amount`,
+ * porque un bono se gasta por partes— y hasta cuándo, con los 30 días de
+ * gracia ya dentro de `expires_at`. El día que las dos superficies no
+ * coincidan, la que manda es la migración.
+ *
+ * ⚠️ **Y NO SE NOMBRA LA MENTORÍA VIEJA**, por lo mismo que
+ * `creditos_disponibles` dejó de llamarlo «Regalo: <título>»: sería nombrar la
+ * única mentoría contra la que ya NO sirve.
+ */
+function BonoDeRegalo({
+  regalo,
+  timeZone,
+}: {
+  regalo: RegaloRecibido;
+  timeZone: string;
+}) {
+  const caducidad = plazo(regalo.expiresAt, timeZone);
+
+  return (
+    <PanelCard className="border-[1.5px] border-brand/40 bg-[#f5faff]">
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#dbedff] text-[#0063c4]">
+          <GiftIcon className="size-[18px]" aria-hidden />
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold tracking-wide text-[#0063c4] uppercase">
+            Tu regalo, ahora como bono
+          </p>
+          <PanelCardTitle className="mt-0.5 text-[17px] leading-snug">
+            Saldo para la mentoría que elijas
+          </PanelCardTitle>
+          {/* El motivo, en una línea y sin culpar a nadie. No se dice el nombre
+              del tutor: su cuenta está anonimizada, que es justo lo que pasó. */}
+          <p className="mt-0.5 text-xs text-[#6b6b6b]">
+            El tutor de la mentoría que te regalaron cerró su cuenta.
+          </p>
+        </div>
+      </div>
+
+      {/* Las dos piezas accionables, como en la tarjeta de arriba: contra qué
+          vale y hasta cuándo. `plazo()` convierte el instante UTC a la zona de
+          quien mira (regla de oro 4), y la fecha que recibe YA trae los 30 días
+          de gracia que sumó la conversión. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <StatusPill tone="green" className="whitespace-nowrap">
+          Vale con cualquier tutor
+        </StatusPill>
+        <StatusPill tone={caducidad.tono} className="whitespace-nowrap">
+          {caducidad.texto}
+        </StatusPill>
+      </div>
+
+      <p className="mt-2 text-[13px] text-[#333333]">
+        Tu regalo sigue pagado: te quedan{" "}
+        <PrecioEnLinea
+          amountMinor={regalo.restante}
+          currency={regalo.currency}
+          className="font-semibold"
+        />{" "}
+        para gastar en la mentoría que quieras. Si cuesta más, pagas solo la
+        diferencia; si cuesta menos, el resto se queda aquí para la siguiente.
+      </p>
+
+      {/* La dedicatoria sobrevive a la conversión igual que el dinero: sigue
+          siendo lo más parecido a un remitente que esta pantalla tiene. */}
+      {regalo.giftMessage ? (
+        <blockquote className="mt-3 border-l-2 border-[#d6d6d6] pl-3 text-[12.5px] leading-relaxed text-[#595959] italic">
+          <p className="line-clamp-4 break-words">{regalo.giftMessage}</p>
+        </blockquote>
+      ) : null}
+
+      {/* A buscar tutor, que es lo único que hay que hacer. El bono NO se elige
+          aquí: se aplica en el checkout de la reserva que haga, donde el
+          selector ya lo etiqueta «Bono de tu regalo» (`creditos_disponibles`,
+          `20260916100000`). `/tutors` es pública y sin guarda, así que se puede
+          escribir a mano; la regla de oro 13 habla del camino contrario. */}
+      <div className="mt-4">
+        <Button
+          asChild
+          className="h-11 w-full rounded-[8px] px-5 text-[14px] font-semibold sm:h-[38px] sm:w-auto sm:text-[13px]"
+        >
+          <Link href="/tutors">Buscar un tutor</Link>
+        </Button>
+      </div>
+    </PanelCard>
+  );
+}
+
+/**
  * El rótulo de un regalo que ya no se puede agendar, su tono y su fecha.
  *
  * ⚠️ La fecha va SIEMPRE con su verbo («Agendado el …», «Caducó el …») y no
@@ -467,8 +594,12 @@ export function RegalosCerrados({
               className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5 py-3 first:pt-0 last:pb-0"
             >
               <div className="min-w-0">
+                {/* Un bono no tiene mentoría que nombrar —su ficha está
+                    archivada y ya no es donde se gasta—, así que se llama como
+                    lo llama el selector del checkout: «Bono de tu regalo». */}
                 <p className="truncate text-[13.5px] font-medium text-[#333333]">
-                  {r.producto?.titulo ?? "Una mentoría"}
+                  {r.producto?.titulo ??
+                    (r.kind === "saldo" ? "Bono de tu regalo" : "Una mentoría")}
                 </p>
                 {/* Sin hora, igual que el chip de plazo de la tarjeta viva y
                     que `/referidos`: en un regalo ninguna de estas dos fechas

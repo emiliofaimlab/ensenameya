@@ -10,11 +10,16 @@ import {
   UsersIcon,
 } from "lucide-react";
 
-import { getFormatoHora, getViewerTimezone } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getSessionContext,
+  getViewerTimezone,
+} from "@/lib/auth/server";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { BookingPanel } from "@/components/catalog/booking-panel";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
+import { hrefRegalar } from "@/components/catalog/regalo-links";
 import { ProductCard } from "@/components/catalog/product-card";
 import { ShareButton } from "@/components/catalog/share-button";
 import { TutorCard } from "@/components/catalog/tutor-card";
@@ -80,11 +85,19 @@ export default async function AcademyPage({
   const [{ slug }, sp] = await Promise.all([params, searchParams]);
   // La zona y el formato de hora van en la misma tanda que la academia: los
   // pide el panel de reserva y no dependen de ella (RN-02).
-  const [data, timeZone, formato] = await Promise.all([
-    getAcademyDetail(slug),
-    getViewerTimezone(),
-    getFormatoHora(),
-  ]);
+  //
+  // La sesión entra en la MISMA tanda, y es nueva en esta página: la necesita
+  // `hrefRegalar` para resolver en servidor a dónde lleva «Regalar esta
+  // mentoría» (regla de oro 13). Va por `getSessionContext()` —`getClaims()` +
+  // `cache()`—, nunca por `auth.getUser()`, y en paralelo porque no depende de
+  // nada: encadenarla le añadiría un peldaño a la cascada de una ficha pública.
+  const [data, timeZone, formato, { user, onboardingComplete }] =
+    await Promise.all([
+      getAcademyDetail(slug),
+      getViewerTimezone(),
+      getFormatoHora(),
+      getSessionContext(),
+    ]);
   // `notFound()` y no un 403: para un visitante anónimo una academia en
   // borrador no existe, y decirle «existe pero no puedes verla» filtra que
   // estamos preparando una.
@@ -392,6 +405,27 @@ export default async function AcademyPage({
             title={`Reserva con ${academy.name}`}
             compact
             autoAcceptLine
+            /*
+              Punto 9 (16-sep) · «Regalar esta mentoría», la TERCERA ficha con
+              panel de reserva y la que se quedó fuera del lote. Misma forma que
+              en `/products/[id]` y `/tutors/[id]`.
+
+              🔴 Regla de oro 13 · `/regalar/mentoria/<id>` vive en `(app)` y
+              empieza por `requireUser()`. Escribir esa ruta a mano en un
+              `<Link>` desde esta pantalla PÚBLICA es exactamente el enlace que
+              deja el árbol vacío y pide el RSC en bucle al pulsarlo sin sesión
+              —y el `check:enlaces` lo caza, incluso dentro de un comentario—.
+              Por eso el destino lo resuelve `hrefRegalar()` aquí, en servidor y
+              con la sesión delante, y el panel recibe una URL que ya no rebota.
+
+              Aquí no hay `esMiFicha`/`esMiMentoria` que valga: las mentorías de
+              una academia son de VARIOS tutores y `regaloHrefFor` devuelve
+              `string`, así que no puede apagarse mentoría a mentoría. Ver
+              `dudas`.
+            */
+            regaloHrefFor={(productId) =>
+              hrefRegalar(productId, { user, onboardingComplete })
+            }
           />
         </div>
       </Container>

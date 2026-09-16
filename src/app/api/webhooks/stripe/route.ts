@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { avisarRegaloSinCuenta } from "@/lib/regalo-aviso";
 import { stripeProvider } from "@/lib/payments/stripe-provider";
 import type { OrderStatus } from "@/lib/orders/tipos";
 import type { Database } from "@/lib/database.types";
@@ -386,6 +387,31 @@ export async function POST(req: Request) {
           "devolver el cargo a mano desde el panel de Stripe: late_payment_refunds no admite un regalo",
       });
       return NextResponse.json({ status: "regalo-huerfano", sujeto, estado });
+    }
+
+    /**
+     * 🎁 Y AVISAR A QUIEN LO RECIBE CUANDO TODAVÍA NO TIENE CUENTA. La RPC no
+     * puede: `enqueue_notification` con `recipient_id` null no encola nada y no
+     * lo dice, así que sin esta línea el caso más normal de un regalo —regalar a
+     * alguien de fuera de la plataforma— no llegaba nunca a su destinatario.
+     *
+     * ⚠️ LA CONDICIÓN ES EL ESTADO **ANTERIOR**, NO EL QUE DEVOLVIÓ LA RPC.
+     * `confirm_gift_payment` es idempotente por estado y responde `'active'`
+     * también en cada reentrega —y Stripe reintenta tres días—, así que colgar
+     * el envío de `estado === 'active'` mandaría el mismo correo una vez por
+     * reintento. Este correo va directo por Resend y no hereda la
+     * `idempotency_key` de la cola. `regalo.status` es la lectura que se hizo
+     * ANTES de confirmar: `pending_payment` + `'active'` = esta entrega es la
+     * que activó el regalo.
+     *
+     * Queda una ventana: dos entregas simultáneas del mismo cobro pueden leer
+     * las dos `pending_payment`. Es la misma carrera que el bloque de
+     * `marcar_cobro_regalo` de arriba ya acepta, y aquí lo peor que pasa es un
+     * correo repetido en vez de ninguno. La alternativa —que la RPC diga si
+     * transicionó— es una migración, y tocarla es regla de oro 12.
+     */
+    if (estado === "active" && regalo.status === "pending_payment") {
+      await avisarRegaloSinCuenta(admin, regalo.id);
     }
 
     return NextResponse.json({ status: "ok", tipo: evento.rawType, sujeto });

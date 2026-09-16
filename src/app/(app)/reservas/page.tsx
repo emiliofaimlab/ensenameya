@@ -63,12 +63,20 @@ const OPEN = new Set<BookingStatus>([
  * lo iba a recibir y desaparecería solo a los 30 días cuando `caducar_creditos`
  * lo pase a `revoked`. Prometer una mentoría que nadie pagó es peor que no
  * decir nada.
+ *
+ * ⚠️ `kind` y `restante` viajan desde `20260916100000`: un regalo cuyo tutor se
+ * dio de baja pasa a `kind = 'saldo'` —es un BONO, ya no está atado a su
+ * `product_id`— y entonces la cifra que importa es lo que queda por gastar
+ * (`restante = amount - consumed_amount`, que la vista ya calcula) y no el
+ * `amount` congelado, porque un bono se gasta POR PARTES. Sin estas dos
+ * columnas la tarjeta cae en la rama de «producto archivado» y manda a
+ * soporte a quien lo que tiene es dinero gastable hoy.
  */
 function leerRegalos(supabase: SupabaseClient<Database>) {
   return supabase
     .from("mis_creditos")
     .select(
-      "id, status, amount, currency, product_id, gift_message, expires_at, consumed_at, created_at",
+      "id, kind, status, amount, restante, currency, product_id, gift_message, expires_at, consumed_at, created_at",
     )
     .eq("source", "gift")
     .neq("status", "pending_payment")
@@ -235,8 +243,14 @@ export default async function ReservasPage() {
       p?.pricing_model === "per_package" ? (p.package_num_sessions ?? 1) : 1;
     return {
       id: r.id as string,
+      // `kind` decide qué tarjeta se pinta: 'saldo' es un BONO (su tutor se dio
+      // de baja, `20260916100000`) y no una mentoría regalada.
+      kind: r.kind ?? "",
       status: r.status ?? "",
       amount: r.amount ?? 0,
+      // La vista lo calcula; el `?? r.amount` es para el crédito recién nacido,
+      // donde `consumed_amount` vale 0 y las dos cifras coinciden igualmente.
+      restante: r.restante ?? r.amount ?? 0,
       currency: r.currency ?? "USD",
       productId: r.product_id,
       giftMessage: r.gift_message,

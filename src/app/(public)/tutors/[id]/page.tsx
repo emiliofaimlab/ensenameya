@@ -23,6 +23,7 @@ import { tutorResponseTime } from "@/components/chat/conversations";
 import { responseTimeLabel } from "@/components/chat/types";
 import { Container } from "@/components/layout/container";
 import { BookingPanel } from "@/components/catalog/booking-panel";
+import { hrefRegalar } from "@/components/catalog/regalo-links";
 import { ProductCard } from "@/components/catalog/product-card";
 import { ShareButton } from "@/components/catalog/share-button";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
@@ -163,16 +164,22 @@ export default async function TutorProfilePage({
   // La zona del visitante también entra aquí: la usan el panel de reserva Y la
   // estadística «tutor desde». Estaba resuelta con un `await` dentro del JSX,
   // que la dejaba en serie detrás de todo lo demás.
-  const [data, reviews, respuestaMin, { user }, timeZone, formato] =
-    await Promise.all([
-      getTutorDetail(id),
-      listTutorReviews(id),
-      tutorResponseTime(id),
-      getSessionContext(),
-      getViewerTimezone(),
-      // 12 h / 24 h: en la MISMA tanda que la zona, por lo mismo que ella.
-      getFormatoHora(),
-    ]);
+  const [
+    data,
+    reviews,
+    respuestaMin,
+    { user, onboardingComplete },
+    timeZone,
+    formato,
+  ] = await Promise.all([
+    getTutorDetail(id),
+    listTutorReviews(id),
+    tutorResponseTime(id),
+    getSessionContext(),
+    getViewerTimezone(),
+    // 12 h / 24 h: en la MISMA tanda que la zona, por lo mismo que ella.
+    getFormatoHora(),
+  ]);
   if (!data) notFound();
   const { tutor, products } = data;
 
@@ -946,6 +953,25 @@ export default async function TutorProfilePage({
               // G-03 · la confirmación es POR MENTORÍA: la línea aparece cuando
               // hay una elegida y dice lo que promete ESA.
               autoAcceptLine
+              /*
+                Punto 9 (16-sep) · «Regalar esta mentoría», junto al de reservar y no solo en
+                el menú lateral del panel. Aquí el enlace vive DENTRO del panel
+                porque hasta que no se elige mentoría no hay nada que regalar —
+                y el panel es quien sabe cuál está elegida—.
+
+                El destino se resuelve en servidor, con la sesión delante (regla
+                de oro 13): `/regalar/...` es `(app)` y enlazarlo a pelo desde
+                esta ficha pública es el enlace que deja la pantalla en blanco.
+
+                En la propia ficha del tutor no se ofrece: todas las mentorías
+                de esta página son suyas y `comprar_regalo` las rechaza todas.
+              */
+              regaloHrefFor={
+                esMiFicha
+                  ? undefined
+                  : (productId) =>
+                      hrefRegalar(productId, { user, onboardingComplete })
+              }
             />
           </div>
         </Container>
