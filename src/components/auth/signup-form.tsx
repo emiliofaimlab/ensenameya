@@ -25,6 +25,7 @@ import {
   AUTH_SUBMIT,
 } from "@/components/auth/field-classes";
 import { FieldError } from "@/components/form/field-error";
+import { guardarSignupPendiente } from "@/components/auth/signup-pendiente";
 import {
   PASSWORD_MIN,
   describedBy,
@@ -208,15 +209,20 @@ export function SignupForm({
     }
 
     // Cloud con confirmación de correo activa: no hay sesión todavía.
-    toast.success("Te enviamos un correo para confirmar tu cuenta.");
-    if (enModal) {
-      // "Regístrate y seguimos": el correo se confirma desde la bandeja, no
-      // desde aquí, así que mandarle a `/login` solo le quitaría la página.
-      setLoading(false);
-      onDone?.();
-      return;
-    }
-    router.push("/login");
+    //
+    // 🔑 A LA PANTALLA DEL CÓDIGO, NO A `/login`. El correo trae un código de 8
+    // dígitos y una pantalla («la que dejaste abierta») que lo canjea con
+    // `verifyOtp`. Es la ÚNICA salida cross-device: el enlace del correo canjea
+    // por PKCE y su `code_verifier` vive en ESTE navegador, así que abrirlo en
+    // el móvil falla siempre. Antes esto mandaba a `/login` y el usuario
+    // quedaba a merced de ese enlace — en prod, sin poder activar la cuenta.
+    //
+    // El correo va por `sessionStorage` (misma pestaña) y no por la URL: es un
+    // dato personal. El `next` viaja con él para no perderlo al confirmar.
+    guardarSignupPendiente({ email, next });
+    toast.success("Te enviamos un código para confirmar tu cuenta.");
+    onDone?.(); // cierra el modal si venía de él, antes de navegar
+    router.push("/signup/confirmar");
   }
 
   return (
