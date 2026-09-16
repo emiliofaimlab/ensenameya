@@ -57,6 +57,41 @@ const PAYOUT_PILL: Record<string, PillTone> = {
 const UPCOMING = new Set(["scheduled", "processing", "pending"]);
 
 /**
+ * PUNTO 3 · EL COMPROBANTE DE UN PAGO HECHO A MANO, visto desde el tutor.
+ *
+ * Lo anota `adjuntar_comprobante_payout` (`20260916110000`) en
+ * `provider_metadata -> 'manual' -> 'comprobantes'`, y aquí se lee con
+ * desconfianza porque es `jsonb` sin esquema: lo que no encaje se ignora, que
+ * es mejor que tirar la pantalla de pagos del tutor por un objeto raro.
+ *
+ * ⚠️ Gemelo de `comprobantesDe()` en `src/app/(app)/admin/payouts/page.tsx`.
+ * Se repite en vez de compartirse porque las dos son pantallas y no hay módulo
+ * común para esto todavía; si aparece un tercer sitio, toca bajarlo a
+ * `src/lib/payouts.ts`.
+ */
+function comprobantesDeMiPago(meta: unknown): { path: string; nombre: string }[] {
+  if (!meta || typeof meta !== "object" || Array.isArray(meta)) return [];
+  const manual = (meta as Record<string, unknown>).manual;
+  if (!manual || typeof manual !== "object" || Array.isArray(manual)) return [];
+  const lista = (manual as Record<string, unknown>).comprobantes;
+  if (!Array.isArray(lista)) return [];
+
+  const out: { path: string; nombre: string }[] = [];
+  for (const c of lista) {
+    if (!c || typeof c !== "object" || Array.isArray(c)) continue;
+    const path = (c as Record<string, unknown>).path;
+    if (typeof path !== "string" || path.trim() === "") continue;
+    const nombre = (c as Record<string, unknown>).nombre;
+    out.push({
+      path,
+      nombre:
+        typeof nombre === "string" && nombre.trim() !== "" ? nombre : "comprobante",
+    });
+  }
+  return out;
+}
+
+/**
  * `payouts.provider` → cómo se llama esa vía para el tutor.
  *
  * 🔑 LOS TRES RIELES DE BANCO DICEN LO MISMO, y no es una omisión: dLocal, Wise
@@ -293,8 +328,14 @@ export default async function TutorPayoutsPage() {
       // `provider` es la columna que faltaba para poder decir POR DÓNDE salió
       // cada liquidación. Tiene grant para `authenticated`; no pedirla era lo
       // que dejaba la tabla del Figma a medias.
+      //
+      // PUNTO 3 (16-sep) · `provider_metadata` trae el COMPROBANTE del pago
+      // manual: el cliente decidió que el tutor también lo vea, que es la
+      // respuesta a «¿me pagaste?» sin escribirle a nadie. Dentro solo se mira
+      // `manual.comprobantes` (ver `comprobantesDeMiPago`), y lo que viaja es
+      // la RUTA — el enlace se firma abajo, en servidor y con caducidad.
       .select(
-        "id, status, currency, amount, scheduled_for, paid_at, created_at, provider",
+        "id, status, currency, amount, scheduled_for, paid_at, created_at, provider, provider_metadata",
       )
       .order("created_at", { ascending: false }),
     tutorTier(supabase, userId),
@@ -689,6 +730,32 @@ export default async function TutorPayoutsPage() {
     ...(payouts ?? []).filter((p) => UPCOMING.has(p.status)),
     ...(payouts ?? []).filter((p) => !UPCOMING.has(p.status)),
   ];
+
+  /**
+   * PUNTO 3 · El enlace al comprobante, firmado EN LOTE y en servidor.
+   *
+   * 🔴 Regla de oro 3: `payout-proofs` es un bucket PRIVADO y lo que hay
+   * guardado en la fila es la RUTA, nunca una URL. El enlace se emite aquí,
+   * caduca en cinco minutos y lo que llega al navegador ya viene resuelto.
+   * Quien lo consigue es el dueño del payout: lo impone
+   * `payout_proofs_select_tutor` (`20260916110000`), que comprueba que la
+   * carpeta del objeto —`<payout_id>/…`— es de una orden suya.
+   *
+   * Una sola llamada para todas las rutas: son pocas y la alternativa es una
+   * ida y vuelta por fichero en una pantalla que ya hace doce consultas.
+   */
+  const rutasDeComprobante = movimientos.flatMap((p) =>
+    comprobantesDeMiPago(p.provider_metadata).map((c) => c.path),
+  );
+  const urlDeComprobante = new Map<string, string>();
+  if (rutasDeComprobante.length > 0) {
+    const { data: firmadas } = await supabase.storage
+      .from("payout-proofs")
+      .createSignedUrls(rutasDeComprobante, 300);
+    for (const f of firmadas ?? []) {
+      if (f.path && f.signedUrl) urlDeComprobante.set(f.path, f.signedUrl);
+    }
+  }
 
   /**
    * §5.5 · Las reservas de cada liquidación, agrupadas por payout.
@@ -1161,6 +1228,36 @@ export default async function TutorPayoutsPage() {
                         {destino ? (
                           <span className="tabular-nums"> · {destino}</span>
                         ) : null}
+                        {/* PUNTO 3 · El papel del pago, cuando lo hay. Solo
+                            aparece en las liquidaciones que cerró una persona
+                            —las automáticas no dejan comprobante nuestro— y es
+                            la respuesta a «¿me pagaste?» sin tener que
+                            escribirle a nadie. */}
+                        {comprobantesDeMiPago(p.provider_metadata).map((c) => {
+                          const url = urlDeComprobante.get(c.path);
+                          return (
+                            <span key={c.path} className="mt-1 block">
+                              {url ? (
+                                <a
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-medium text-[#0068d0] underline underline-offset-2"
+                                >
+                                  Ver comprobante
+                                </a>
+                              ) : (
+                                // El enlace caduca y puede fallar al firmarse.
+                                // Decirlo es mejor que esconder el comprobante:
+                                // el tutor sabría que existe por el correo.
+                                <span className="text-[#6b6b6b]">
+                                  Comprobante no disponible ahora mismo — recarga
+                                  la página.
+                                </span>
+                              )}
+                            </span>
+                          );
+                        })}
                       </td>
                       <td className="border-b border-[#efefef] py-3.5 pr-3 align-top text-[13px]">
                         {/* ⚠️ CERO NO ES «CERO RESERVAS». Si la lectura de

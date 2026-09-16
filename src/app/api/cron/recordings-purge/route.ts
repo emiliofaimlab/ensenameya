@@ -68,7 +68,13 @@ export async function GET(req: Request) {
    * `CRON_SECRET` — un sitio más donde quedarse a medias. Los dos trabajos son
    * lo mismo: borrar ficheros que cumplieron su retención.
    */
-  const barrido = await barrerFicheros(createAdminClient());
+  const admin = createAdminClient();
+
+  // ⚠️ PRIMERO SE APUNTA Y DESPUÉS SE VACÍA, en este orden y en la misma
+  // pasada: lo que `encolar_comprobantes_huerfanos` deja en la cola se lo lleva
+  // el `barrerFicheros` de la línea siguiente, no el cron de mañana.
+  const huerfanos = await encolarComprobantesHuerfanos(admin);
+  const barrido = { ...huerfanos, ...(await barrerFicheros(admin)) };
 
   // Sin credenciales de Daily no hay nada que borrar en ninguna parte. No se
   // marca nada como purgado: sería mentir en la columna que sirve de prueba.
@@ -76,12 +82,11 @@ export async function GET(req: Request) {
     return NextResponse.json({ status: "sin-daily", purgadas: 0, ...barrido });
   }
 
-  const supabase = createAdminClient();
   const corte = new Date(Date.now() - RECORDING_DAYS * 86_400_000).toISOString();
 
   // service_role a propósito: la RLS de `sessions` solo deja ver las tuyas, y
   // este trabajo es justamente recorrer las de todo el mundo.
-  const { data: vencidas, error } = await supabase
+  const { data: vencidas, error } = await admin
     .from("sessions")
     .select("id, daily_room_name")
     .lt("end_at", corte)
@@ -111,7 +116,7 @@ export async function GET(req: Request) {
     // Se marcan también las que no tenían ninguna grabación: la clase no se
     // grabó, no hay nada que borrar, y no hay razón para volver a mirarla cada
     // día durante el resto de la vida del proyecto.
-    const { error: marcaErr } = await supabase
+    const { error: marcaErr } = await admin
       .from("sessions")
       .update({ recordings_purged_at: new Date().toISOString() })
       .eq("id", s.id);
@@ -228,4 +233,50 @@ async function barrerFicheros(
   }
 
   return { ficherosBorrados: borrados, ficherosPendientes: pendientes };
+}
+
+/**
+ * Apunta en la cola los comprobantes de pago manual que nadie reclama
+ * (`20260916140000`).
+ *
+ * POR QUÉ HAY HUÉRFANOS: el picker de `/admin/payouts` sube el fichero ANTES de
+ * marcar el pago —un MIME que el bucket rechaza es mejor descubrirlo antes de
+ * avisar al tutor de que ya cobró—, así que quien adjunta y cierra la pestaña,
+ * o cuyo `mark_paid` falla, deja el objeto en `payout-proofs` para siempre, a
+ * 10 MB la pieza. Es el mismo basurero que ya barre la purga de contacto.
+ *
+ * POR QUÉ ES UNA RPC Y NO UNA CONSULTA DE AQUÍ: el listado vive en
+ * `storage.objects`, que PostgREST no expone; y el borrado, en la cola, porque
+ * Supabase prohíbe `delete from storage.objects` desde SQL (42501).
+ */
+async function encolarComprobantesHuerfanos(
+  admin: ReturnType<typeof createAdminClient>,
+): Promise<{ comprobantesEncolados: number; comprobantesError?: string }> {
+  // ⚠️ Puerta estrecha, igual que `src/app/(app)/admin/payouts/rpc.ts`:
+  // `database.types.ts` se regenera con `npm run db:types` DESPUÉS de aplicar
+  // la migración y no se toca a mano (regla de oro 6), así que hasta entonces
+  // el nombre no está en la unión de funciones conocidas y `admin.rpc(...)` es
+  // un error de TIPOS sobre una llamada que en ejecución es la correcta.
+  // Regenerados los tipos, esto se puede volver un `admin.rpc(…)` normal.
+  const { data, error } = await (
+    admin as unknown as {
+      rpc: (
+        fn: string,
+      ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+    }
+  ).rpc("encolar_comprobantes_huerfanos");
+
+  // ⚠️ SE MIRA EL ERROR. Un `permission denied` (regla de oro 9: al job le
+  // faltaría el `execute`) o una función que todavía no existe en este ambiente
+  // dejarían el bucket creciendo en silencio y con el cron en verde — el fallo
+  // mudo de la regla de oro 11. Se anota en el log y viaja en la respuesta.
+  if (error) {
+    console.error(
+      "[purga-storage] no se pudieron encolar los comprobantes huérfanos:",
+      error.message,
+    );
+    return { comprobantesEncolados: 0, comprobantesError: error.message };
+  }
+
+  return { comprobantesEncolados: typeof data === "number" ? data : 0 };
 }
