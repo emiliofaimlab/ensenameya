@@ -2,6 +2,7 @@ import { Container } from "@/components/layout/container";
 import { SearchAutocomplete } from "@/components/layout/search-autocomplete";
 import { TRUST_POINTS } from "@/components/home/trust";
 import { RotatingWord, RotatingWordGhost } from "@/components/home/rotating-word";
+import { HeroVideo } from "@/components/home/hero-video";
 import { CategoryIconChips } from "@/components/catalog/category-icon-chips";
 import type { CategoryTag } from "@/lib/catalog/queries";
 
@@ -43,22 +44,7 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
   return (
     <section className="relative">
       <div className="relative isolate overflow-hidden">
-        {/* Fondo en video (reunión 7-ago). `poster` es el JPG que había antes:
-            pinta en el primer frame y se queda como fondo si el navegador se
-            niega a autoreproducir (iOS con ahorro de batería, "reducir datos").
-            `muted` + `playsInline` son obligatorios para que autoPlay funcione. */}
-        <video
-          className="absolute inset-0 -z-10 size-full object-cover"
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="metadata"
-          poster="/img/hero-home.jpg"
-          aria-hidden
-        >
-          <source src="/video/hero-home.mp4" type="video/mp4" />
-        </video>
+        <HeroVideo />
         {/* Velo negro al 60%, como en el Figma: el texto va en blanco encima. */}
         <div className="absolute inset-0 -z-10 bg-black/60" />
 
