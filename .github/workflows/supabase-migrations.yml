@@ -19,7 +19,7 @@ jobs:
     # main → production; dev → development. Cada Environment trae su SUPABASE_DB_URL.
     environment: ${{ github.ref_name == 'main' && 'production' || 'development' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Versión FIJA, no `latest`: resolver "latest" consulta la API de GitHub
       # sin autenticar y un día cualquiera devuelve "rate limit exceeded" — nos
