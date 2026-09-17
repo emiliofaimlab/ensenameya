@@ -207,14 +207,21 @@ export default async function AdminAlumnosPage({
                 key={f.studentId}
                 className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4"
               >
-                <div className="min-w-0 sm:w-56">
+                {/* El alta va AQUÍ y no en su propia columna, y no es estética:
+                    con seis columnas la fila mide ~900 px y envuelve justo en
+                    1280 —medido—, dejando «Alta» colgando debajo de «Tomadas»
+                    como si fuera otra cosa. Juntas se leen mejor de todos
+                    modos: las dos son fechas y la pregunta que responden es la
+                    misma, «¿cuánto lleva y cuándo fue la última vez?». */}
+                <div className="min-w-0 sm:w-64">
                   <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                     {f.nombre}
                   </p>
                   <p className="truncate text-xs text-[#6b6b6b]">
+                    Alta {fecha(f.alta)} ·{" "}
                     {f.ultimaClase
-                      ? `Última mentoría ${esperaDesde(f.ultimaClase)}`
-                      : "Sin mentorías en el período"}
+                      ? `última ${esperaDesde(f.ultimaClase)}`
+                      : "sin mentorías"}
                   </p>
                 </div>
 
@@ -238,18 +245,11 @@ export default async function AdminAlumnosPage({
                   </p>
                 </div>
 
-                <div className="w-28">
-                  <p className="text-[11.5px] text-[#6b6b6b]">Alta</p>
-                  <p className="text-[13px] font-medium text-[#404040]">
-                    {fecha(f.alta)}
-                  </p>
-                </div>
-
-                <div className="ml-auto flex items-center gap-3">
-                  {f.suspendido ? (
-                    <StatusPill tone="red">Suspendido</StatusPill>
-                  ) : null}
-                </div>
+                {f.suspendido ? (
+                  <StatusPill tone="red" className="ml-auto">
+                    Suspendido
+                  </StatusPill>
+                ) : null}
               </li>
             ))}
           </ul>
