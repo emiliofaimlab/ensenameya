@@ -3559,12 +3559,14 @@ export type Database = {
         Returns: {
           alta: string
           alumno_nombre: string
+          correo: string
           gastado: Json
           no_shows: number
           primera_clase: string
           reservas: number
           student_id: string
           suspendido: boolean
+          telefono: string
           tomadas: number
           tutores_distintos: number
           ultima_clase: string

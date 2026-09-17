@@ -543,6 +543,15 @@ export async function tutorTeachingRecord(f: {
 export type StudentLearningRow = {
   studentId: string;
   nombre: string;
+  correo: string | null;
+  /**
+   * ⚠️ Su AUSENCIA significa algo. El paso 3 de `/onboarding` exige el teléfono
+   * para marcar `onboarding_complete`, así que un alumno sin él no terminó el
+   * registro por la puerta normal — o entró por `/api/checkout/invitado`, que
+   * da el onboarding por hecho para no romper el pago. La pantalla distingue
+   * los dos casos en vez de pintar un guion.
+   */
+  telefono: string | null;
   alta: string;
   suspendido: boolean;
   /** Reservas que llegaron a pagarse (mismo criterio que `pair_booking_stats`). */
@@ -568,9 +577,11 @@ export type StudentLearningRow = {
  */
 type StudentRpcRow = Omit<
   Database["public"]["Functions"]["student_learning_record"]["Returns"][number],
-  "alumno_nombre" | "primera_clase" | "ultima_clase"
+  "alumno_nombre" | "correo" | "telefono" | "primera_clase" | "ultima_clase"
 > & {
   alumno_nombre: string | null;
+  correo: string | null;
+  telefono: string | null;
   primera_clase: string | null;
   ultima_clase: string | null;
 };
@@ -600,6 +611,8 @@ export async function studentLearningRecord(f: {
   return ((data ?? []) as StudentRpcRow[]).map((r) => ({
     studentId: r.student_id,
     nombre: r.alumno_nombre ?? "Alumno sin nombre",
+    correo: r.correo,
+    telefono: r.telefono,
     alta: r.alta,
     suspendido: r.suspendido,
     reservas: r.reservas,

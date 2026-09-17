@@ -44,18 +44,15 @@ function desdeHace(days: number): string {
  *  · **Ficha por alumno.** Esto es una lista, no un CRM. La acción que hoy se
  *    puede tomar sobre un alumno —suspenderlo, escribirle— vive en
  *    `/admin/reportes`, que es donde hay un motivo para tomarla.
- *  · **El correo.** No es una omisión de diseño: `profiles` NO tiene columna
- *    `email` y `auth.users` no lo lee ningún rol de la API. Enseñarlo obliga a
- *    bajar al `service_role` y a la Auth Admin API desde la pantalla, y hoy
- *    NINGUNA pantalla del panel enseña el correo de nadie. Si el cliente lo
- *    pide, es su propia decisión y su propio carril.
  *  · **Búsqueda por nombre y paginación.** No existe búsqueda libre en todo el
  *    panel, y con 19 alumnos en dev y 3 cuentas en producción una lista entera
  *    se lee de un vistazo. Cuando estorbe: `ilike` sobre `profiles.full_name`
  *    por RLS y el `Pager` de `/admin/bookings`, que ya están escritos.
  *
- * ⚠️ INTERNA, igual que su gemela: cuánto estudia alguien, con quién y cuánto se
- * ha gastado no se publica en ninguna superficie pública.
+ * ⚠️ INTERNA, igual que su gemela, y desde el 17-sep con DATO PERSONAL dentro:
+ * es la ÚNICA superficie del panel que enseña correos y teléfonos. Cuánto
+ * estudia alguien, con quién, cuánto se gasta y cómo se le localiza no se
+ * publica en ninguna superficie pública, y la barrera está dentro de la RPC.
  */
 export default async function AdminAlumnosPage({
   searchParams,
@@ -121,7 +118,7 @@ export default async function AdminAlumnosPage({
   return (
     <AdminShell
       title="Alumnos"
-      description="Quién estudia en la plataforma, cuánto y con cuántos tutores. Uso interno: no se publica en ningún perfil."
+      description="Quién estudia en la plataforma, cómo localizarlo y cuánto lleva estudiado. Uso interno: nada de esto se publica en ningún perfil."
     >
       {/* Período. Sin chip activo = histórico completo. */}
       <div className="flex flex-wrap items-center gap-2">
@@ -169,7 +166,7 @@ export default async function AdminAlumnosPage({
           <p className="text-[13px] text-[#2a5b8a]">
             Todas las cifras están acotadas a los últimos {preset.days} días,
             incluidos <strong>reservas</strong>, <strong>gastado</strong> y{" "}
-            <strong>última mentoría</strong>. El alta de la cuenta no: esa es
+            <strong>última mentoría</strong>. La fecha de registro no: esa es
             siempre la real. Para el historial completo, «Todo el histórico».
           </p>
         </PanelCard>
@@ -207,18 +204,35 @@ export default async function AdminAlumnosPage({
                 key={f.studentId}
                 className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4"
               >
-                {/* El alta va AQUÍ y no en su propia columna, y no es estética:
-                    con seis columnas la fila mide ~900 px y envuelve justo en
-                    1280 —medido—, dejando «Alta» colgando debajo de «Tomadas»
-                    como si fuera otra cosa. Juntas se leen mejor de todos
-                    modos: las dos son fechas y la pregunta que responden es la
-                    misma, «¿cuánto lleva y cuándo fue la última vez?». */}
-                <div className="min-w-0 sm:w-64">
+                {/* Identidad y contacto en un solo bloque, y las fechas debajo
+                    en vez de en su propia columna: con una columna más la fila
+                    envuelve en 1280 —medido, ya pasó una vez—. El correo es
+                    seleccionable con el ratón, que es para lo que se enseña. */}
+                <div className="min-w-0 sm:w-72">
                   <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                     {f.nombre}
                   </p>
+                  <p className="truncate text-xs text-[#404040]">
+                    {f.correo ?? "Sin correo"}
+                    {f.telefono ? (
+                      <span className="text-[#6b6b6b]"> · {f.telefono}</span>
+                    ) : (
+                      // No es lo mismo «no tiene» que «no se lo pedimos». El
+                      // registro normal EXIGE el teléfono en su último paso; si
+                      // falta es que la cuenta nació en el checkout de invitado,
+                      // que se salta el asistente para no romper el pago. Un
+                      // guion escondería la única explicación que hay.
+                      <span
+                        className="text-[#b0b0b0]"
+                        title="El registro normal pide el teléfono en el último paso. Sin él, la cuenta se creó al pagar como invitado, que se salta ese paso."
+                      >
+                        {" "}
+                        · sin teléfono
+                      </span>
+                    )}
+                  </p>
                   <p className="truncate text-xs text-[#6b6b6b]">
-                    Alta {fecha(f.alta)} ·{" "}
+                    Registro {fecha(f.alta)} ·{" "}
                     {f.ultimaClase
                       ? `última ${esperaDesde(f.ultimaClase)}`
                       : "sin mentorías"}
@@ -270,6 +284,14 @@ export default async function AdminAlumnosPage({
             </Link>
             . Las dos listas son complementarias — cada cuenta sale en una y solo
             en una.
+          </li>
+          <li>
+            <strong>«Sin teléfono» no es un dato que falte.</strong> El registro
+            normal lo pide en su último paso y no deja terminar sin él. Quien
+            aparece sin teléfono creó la cuenta <strong>al pagar como
+            invitado</strong>, que se salta el asistente a propósito para no
+            romper el cobro. El correo, en cambio, lo tienen todos: sin él no
+            hay cuenta.
           </li>
           <li>
             <strong>Tomadas</strong> son sesiones que terminaron en{" "}
