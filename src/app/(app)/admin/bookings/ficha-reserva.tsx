@@ -30,12 +30,22 @@ const TONO_SESION: Record<string, PillTone> = {
  * La ficha de una reserva, en un diálogo.
  *
  * ⚠️ ENSEÑA LO MISMO QUE `/admin/bookings/[id]` (SCR-AD10) porque sale de la
- * MISMA función, `getBookingDetail`. Y esa duplicación es CONSCIENTE: aquella
- * pantalla es de solo lectura —su propio comentario explica que no pinta el
- * botón de cancelar porque no hay RPC para que el admin cancele—, así que este
- * modal la hace redundante para quien llega desde la lista. No se ha borrado
- * porque su URL es enlazable y se llega a ella desde el dashboard; el día que
- * se retire, el enlace de abajo es lo único que hay que quitar.
+ * MISMA función, `getBookingDetail`. La duplicación se MIDIÓ y se decidió
+ * dejarla el 17-sep-2026, con estos datos encima de la mesa:
+ *
+ * Aquella ruta NO está huérfana. La enlazan SEIS sitios —`/admin` (reservas
+ * recientes), `/admin/payments/[id]`, `/admin/reembolsos`,
+ * `/admin/reportes/[id]`, `/admin/alertas` y el modal de pagos de aquí al
+ * lado—, así que borrarla no quita 222 líneas: rompe cinco accesos de
+ * pantallas que no tienen otro camino al detalle de una reserva. En tres de
+ * ellas (alertas, reembolsos, reportes) la fila es de OTRA cosa y el modal no
+ * encaja: el enlace desaparecería sin sustituto.
+ *
+ * O sea: este modal es el ATAJO desde la lista, y aquella ruta es el DESTINO
+ * de todo lo demás. Si algún día molesta de verdad, la salida buena no es
+ * borrarla sino vaciarla —que pinte este mismo cuerpo con los datos ya
+ * cargados en servidor, ~25 líneas— y entonces sí habría un solo sitio donde
+ * se define cómo se ve una reserva. No se hizo hoy porque nada está roto.
  */
 export function FichaReserva({ id, ref_ }: { id: string; ref_: string }) {
   const fecha = (iso: string | null, conHora = false) =>
