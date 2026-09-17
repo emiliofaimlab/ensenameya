@@ -3639,18 +3639,54 @@ export type Database = {
         }[]
       }
       tutor_teaching_record: {
-        Args: { p_from?: string; p_to?: string }
+        Args: { p_from?: string; p_to?: string; p_tutor_id?: string }
         Returns: {
+          academia: string
+          alta: string
+          alumnos: Json
           alumnos_distintos: number
           aprobado: boolean
+          aprobado_el: string
+          baja: Json
+          canceladas: number
+          categorias: Json
           correo: string
+          cuenta_configurada: boolean
+          cuenta_pais: string
+          cuenta_ultimos4: string
+          documentos: Json
+          estado_aprobacion: string
+          franjas_disponibles: number
+          generado: Json
+          identidad: string
           impartidas: number
+          mentorias_detalle: Json
+          mentorias_publicadas: number
+          metodo_de_cobro: string
+          moneda: string
+          nivel: string
           no_shows: number
+          nombre_publico: string
+          nota_media: number
+          notas_aprobacion: string
+          payouts: Json
+          precio_desde: number
+          precio_hasta: number
           primera_clase: string
+          proxima_clase: string
+          redes: Json
+          resenas: number
+          suspendido: boolean
+          suspension: Json
           telefono: string
+          terminos: Json
+          tier: string
+          tier_split_pct: number
+          titular: string
           tutor_id: string
           tutor_nombre: string
           ultima_clase: string
+          zona_horaria: string
         }[]
       }
       unread_conversation_counts: {

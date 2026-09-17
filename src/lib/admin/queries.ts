@@ -442,77 +442,96 @@ export async function getBookingDetail(id: string): Promise<BookingDetail | null
   };
 }
 
+/** `Json` → array tipado. La función SQL garantiza el array; el tipo no. */
+function lista<T>(v: unknown): T[] {
+  return Array.isArray(v) ? (v as T[]) : [];
+}
+
 /* ==========================================================================
- * MN-14a · Registro de clases impartidas (`tutor_teaching_record`)
+ * La ficha del tutor (`tutor_teaching_record`)
  *
- * Sale de la minuta del 17-ago: la campaña de tutores «considerando el registro
- * de las últimas clases impartidas». El motor de promociones está bloqueado por
- * P-9 (quién absorbe el descuento); esto es la parte que se sostiene sola —
- * quién está activo, cuánto ha dado y desde cuándo.
+ * Nació como el registro de docencia de MN-14a (la minuta del 17-ago: «quién
+ * está dando clase de verdad») y el cliente la convirtió en un expediente el
+ * mismo día que el de alumnos, para que las dos pantallas fueran iguales.
  *
- * MÉTRICA INTERNA. No hay superficie pública que la enseñe y no debe haberla
- * sin decisión de producto: ver la cabecera de `20260820160000`. La barrera de
- * verdad está DENTRO de la función (`has_role('admin')`), no en este fichero.
- *
- * A diferencia del resto de este módulo —que lee tablas por RLS— aquí se llama
- * a una RPC: son agregados sobre todas las sesiones de la plataforma, y traerse
- * `sessions` entera al servidor de Next para contarla en JS sería el error que
- * `20260715190000` ya razonó para `admin_stats`.
+ * ⚠️ Lo que NO trae, y es la decisión importante de `20260917180000`:
+ *   · **Datos bancarios.** De `tutor_payout_accounts` salen tres cosas: que hay
+ *     cuenta, el país y los últimos cuatro. Ni número de cuenta, ni documento
+ *     de identidad, ni fecha de nacimiento — esto se descarga en CSV.
+ *   · **Documentos KYC.** Solo el recuento por estado. Los enlaces al bucket se
+ *     firman a 5 minutos por S-19 y se revisan en `/admin/tutores/[id]`, que es
+ *     SCR-AD05 y tiene las acciones. Esta ficha es para SABER; aquella, para
+ *     HACER.
  * ========================================================================== */
 
 export type TutorTeachingRow = {
   tutorId: string;
   nombre: string;
+  nombrePublico: string | null;
   correo: string | null;
   /**
-   * ⚠️ No significa lo mismo que en `StudentLearningRow`. Allí su ausencia
-   * delata una cuenta nacida en el checkout de invitado; aquí no hay tal vía:
-   * `/tutor/onboarding` también lo exige, así que a un tutor aprobado no
-   * debería faltarle. Si falta, es una cuenta sembrada o anterior a RN-44.
+   * ⚠️ No significa lo mismo que en `StudentLearningRow`: allí su ausencia
+   * delata una cuenta nacida en el checkout de invitado y aquí no hay tal vía,
+   * porque `/tutor/onboarding` también lo exige.
    */
   telefono: string | null;
+  zonaHoraria: string | null;
+  alta: string;
+  titular: string | null;
+  nivel: string | null;
+  categorias: string[];
+  redes: { platform: string; url: string }[];
+  academia: string | null;
   aprobado: boolean;
+  estadoAprobacion: string;
+  aprobadoEl: string | null;
+  notasAprobacion: string | null;
+  identidad: string;
+  suspendido: boolean;
+  suspension: { desde: string; motivo: string | null } | null;
+  baja: { estado: string; solicitada: string; completada: string | null } | null;
+  /** Recuento de los 6 documentos de C-14, nunca los ficheros. */
+  documentos: { estado: string; n: number }[];
+  mentoriasPublicadas: number;
+  mentoriasDetalle: { estado: string; n: number }[];
+  precioDesde: number | null;
+  precioHasta: number | null;
+  moneda: string | null;
+  franjasDisponibles: number;
   /** ⚠️ `impartidas` y `noShows` NO se suman: DP-08 sigue abierta. */
   impartidas: number;
   noShows: number;
+  canceladas: number;
   alumnosDistintos: number;
+  /** Con qué alumnos repite. */
+  alumnos: { nombre: string; mentorias: number }[];
   primeraClase: string | null;
   ultimaClase: string | null;
+  /** ⚠️ NO se acota al período: «qué tiene por delante» es de hoy. */
+  proximaClase: string | null;
+  notaMedia: number | null;
+  resenas: number;
+  tier: string | null;
+  tierSplitPct: number | null;
+  /**
+   * ⚠️ `bruto` = `neto_tutor` + `comision` + el cargo por servicio del alumno,
+   * que no viaja en esta lista. En los pagos anteriores al 16-sep ese cargo es
+   * 0 y las tres cifras suman exacto; en los posteriores, no.
+   */
+  generado: { currency: string; bruto: number; neto_tutor: number; comision: number }[];
+  payouts: { estado: string; n: number; importe: number; currency: string }[];
+  metodoDeCobro: string | null;
+  cuentaConfigurada: boolean;
+  cuentaPais: string | null;
+  cuentaUltimos4: string | null;
+  terminos: { version: string; aceptados: string } | null;
 };
 
 /**
- * ⚠️ El generador de tipos de Supabase declara `primera_clase`, `ultima_clase`,
- * `tutor_nombre`, `correo` y `telefono` como `string` a secas, y todas **son
- * nulables**: un
- * `min()`/`max()` sobre cero filas devuelve NULL —el caso de todo tutor sin
- * clases en la ventana, o sea la mitad de las filas— y el nombre sale de un
- * `coalesce(full_name, display_name)` que puede quedarse sin ninguno de los
- * dos. El generador no puede saberlo: para él es el tipo de la columna del
- * `returns table`, y ahí no hay `not null` que declarar. Se corrige aquí, en la
- * frontera, para que ninguna pantalla se coma un `new Date(undefined)`. No
- * editar `database.types.ts` a mano (regla de oro 6).
- */
-type RpcRow = Omit<
-  Database["public"]["Functions"]["tutor_teaching_record"]["Returns"][number],
-  "primera_clase" | "ultima_clase" | "tutor_nombre" | "correo" | "telefono"
-> & {
-  primera_clase: string | null;
-  ultima_clase: string | null;
-  tutor_nombre: string | null;
-  correo: string | null;
-  telefono: string | null;
-};
-
-/**
- * Registro de docencia de TODOS los tutores, ya ordenado por actividad.
+ * Ficha de TODOS los tutores, ya ordenada por actividad.
  *
- * ⚠️ La ventana se aplica a la fila entera: con `from`/`to`, `ultimaClase` es la
- * última clase **dentro** de la ventana, no la última en absoluto. Es lo que se
- * quiere para segmentar («quién está activo ahora»), pero hay que decirlo en la
- * pantalla o el número engaña. Sin ventana, es el histórico completo.
- *
- * Las fechas se validan con el mismo `asDay` que el resto del panel: lo que
- * llegue roto por la query string se ignora en vez de tumbar la consulta.
+ * ⚠️ La ventana recorta la docencia y el dinero generado, pero NO el alta, los
+ * payouts, la próxima clase ni nada del perfil: esos son estados de hoy.
  */
 export async function tutorTeachingRecord(f: {
   from?: string;
@@ -524,23 +543,58 @@ export async function tutorTeachingRecord(f: {
     p_to: asDay(f.to),
   });
 
-  // Regla de oro 10, que a esta función le faltaba: `const { data } = …`
-  // convertía un fallo de la RPC en una lista vacía, y «ningún tutor ha dado
-  // clase» es una mentira perfectamente creíble en esa pantalla.
+  // Regla de oro 10: `const { data } = …` convertía un fallo de la RPC en una
+  // lista vacía, y «ningún tutor ha dado clase» es una mentira creíble.
   if (error)
-    throw new Error(`No se pudo leer el registro de docencia: ${error.message}`);
+    throw new Error(`No se pudo leer la ficha de los tutores: ${error.message}`);
 
-  return ((data ?? []) as RpcRow[]).map((r) => ({
-    tutorId: r.tutor_id,
-    nombre: r.tutor_nombre ?? "Tutor sin nombre",
-    correo: r.correo,
-    telefono: r.telefono,
-    aprobado: r.aprobado,
-    impartidas: r.impartidas,
-    noShows: r.no_shows,
-    alumnosDistintos: r.alumnos_distintos,
-    primeraClase: r.primera_clase,
-    ultimaClase: r.ultima_clase,
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    tutorId: r.tutor_id as string,
+    nombre: (r.tutor_nombre as string | null) ?? "Tutor sin nombre",
+    nombrePublico: r.nombre_publico as string | null,
+    correo: r.correo as string | null,
+    telefono: r.telefono as string | null,
+    zonaHoraria: r.zona_horaria as string | null,
+    alta: r.alta as string,
+    titular: r.titular as string | null,
+    nivel: r.nivel as string | null,
+    categorias: lista<string>(r.categorias),
+    redes: lista<{ platform: string; url: string }>(r.redes),
+    academia: r.academia as string | null,
+    aprobado: r.aprobado as boolean,
+    estadoAprobacion: r.estado_aprobacion as string,
+    aprobadoEl: r.aprobado_el as string | null,
+    notasAprobacion: r.notas_aprobacion as string | null,
+    identidad: r.identidad as string,
+    suspendido: r.suspendido as boolean,
+    suspension: (r.suspension as TutorTeachingRow["suspension"]) ?? null,
+    baja: (r.baja as TutorTeachingRow["baja"]) ?? null,
+    documentos: lista<{ estado: string; n: number }>(r.documentos),
+    mentoriasPublicadas: r.mentorias_publicadas as number,
+    mentoriasDetalle: lista<{ estado: string; n: number }>(r.mentorias_detalle),
+    precioDesde: r.precio_desde as number | null,
+    precioHasta: r.precio_hasta as number | null,
+    moneda: r.moneda as string | null,
+    franjasDisponibles: r.franjas_disponibles as number,
+    impartidas: r.impartidas as number,
+    noShows: r.no_shows as number,
+    canceladas: r.canceladas as number,
+    alumnosDistintos: r.alumnos_distintos as number,
+    alumnos: lista<{ nombre: string; mentorias: number }>(r.alumnos),
+    primeraClase: r.primera_clase as string | null,
+    ultimaClase: r.ultima_clase as string | null,
+    proximaClase: r.proxima_clase as string | null,
+    notaMedia: r.nota_media === null ? null : Number(r.nota_media),
+    resenas: r.resenas as number,
+    tier: r.tier as string | null,
+    tierSplitPct: r.tier_split_pct === null ? null : Number(r.tier_split_pct),
+    generado: lista<TutorTeachingRow["generado"][number]>(r.generado),
+    payouts: lista<TutorTeachingRow["payouts"][number]>(r.payouts),
+    metodoDeCobro: r.metodo_de_cobro as string | null,
+    cuentaConfigurada: r.cuenta_configurada as boolean,
+    cuentaPais: r.cuenta_pais as string | null,
+    cuentaUltimos4: r.cuenta_ultimos4 as string | null,
+    terminos: (r.terminos as TutorTeachingRow["terminos"]) ?? null,
   }));
 }
 
@@ -625,11 +679,6 @@ export type StudentLearningRow = {
  * mano (regla de oro 6).
  */
 type StudentRpcRow = Record<string, unknown>;
-
-/** `Json` → array tipado. La función SQL garantiza el array; el tipo no. */
-function lista<T>(v: unknown): T[] {
-  return Array.isArray(v) ? (v as T[]) : [];
-}
 
 /**
  * La ficha de TODOS los alumnos, ya ordenada por actividad.

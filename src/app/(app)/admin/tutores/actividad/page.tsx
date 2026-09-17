@@ -4,9 +4,9 @@ import { getUserTimezone, requireRole } from "@/lib/auth/server";
 import { tutorTeachingRecord } from "@/lib/admin/queries";
 import { cn } from "@/lib/utils";
 import { PanelCard, StatusPill } from "@/components/layout/panel-shell";
+import { FichaTutor } from "./ficha-tutor";
 import { AdminShell } from "@/components/layout/admin-shell";
 import { Button } from "@/components/ui/button";
-import { esperaDesde } from "../../tiempo";
 
 export const metadata = { title: "Mentorías impartidas · Enséñame Ya" };
 
@@ -79,16 +79,6 @@ export default async function AdminActividadTutoresPage({
     return s ? `/admin/tutores/actividad?${s}` : "/admin/tutores/actividad";
   };
 
-  // Regla de oro 4: la BD guarda UTC, se pinta en la hora del admin.
-  const fecha = (iso: string | null) =>
-    iso
-      ? new Date(iso).toLocaleDateString("es", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          timeZone: tz,
-        })
-      : "—";
 
   return (
     <AdminShell
@@ -181,65 +171,29 @@ export default async function AdminActividadTutoresPage({
             {visibles.map((f) => (
               <li
                 key={f.tutorId}
-                className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4"
+                className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3.5"
               >
-                {/* Contacto bajo el nombre, como en la lista de alumnos: lo
-                    pidió el cliente para los dos lados el mismo día. El correo
-                    es `select-all` porque es el dato que se va a copiar.
-                    ⚠️ A un tutor sin teléfono NO se le aplica la explicación del
-                    lado alumno: no hay ninguna vía que salte ese paso aquí, así
-                    que si falta es una cuenta sembrada o anterior a RN-44. */}
-                <div className="min-w-0 sm:w-64">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                     {f.nombre}
                   </p>
-                  <p className="truncate select-all text-xs text-[#404040]">
+                  {/* `select-all` para copiarlo de un clic: es el dato por el
+                      que el cliente pidió esta columna. */}
+                  <p className="truncate select-all text-xs text-[#6b6b6b]">
                     {f.correo ?? "Sin correo"}
-                    {f.telefono ? (
-                      <span className="text-[#6b6b6b]"> · {f.telefono}</span>
-                    ) : null}
-                  </p>
-                  <p className="truncate text-xs text-[#6b6b6b]">
-                    {f.ultimaClase
-                      ? `Última mentoría ${esperaDesde(f.ultimaClase)}`
-                      : "Sin mentorías en el período"}
                   </p>
                 </div>
 
-                <Dato label="Impartidas" value={String(f.impartidas)} />
-                {/* Deliberadamente en su propia columna y NO sumada a la
-                    anterior: si un no-show cuenta como clase dada es DP-08, sin
-                    responder. Y «no-show» aquí significa que no entró NADIE —la
-                    base de datos no sabe quién faltó (ver `20260716120000`). */}
-                <Dato
-                  label="Nadie entró"
-                  value={String(f.noShows)}
-                  tenue={f.noShows === 0}
-                />
-                <Dato label="Alumnos" value={String(f.alumnosDistintos)} />
+                {f.aprobado ? null : (
+                  <StatusPill tone="amber">Sin aprobar</StatusPill>
+                )}
+                {f.suspendido ? (
+                  <StatusPill tone="red">Suspendido</StatusPill>
+                ) : null}
 
-                <div className="w-32">
-                  <p className="text-[11.5px] text-[#6b6b6b]">Primera · última</p>
-                  <p className="text-[13px] font-medium text-[#404040]">
-                    {fecha(f.primeraClase)}
-                  </p>
-                  <p className="text-[13px] font-medium text-[#404040]">
-                    {fecha(f.ultimaClase)}
-                  </p>
-                </div>
-
-                <div className="ml-auto flex items-center gap-3">
-                  {f.aprobado ? null : (
-                    <StatusPill tone="amber">Sin aprobar</StatusPill>
-                  )}
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
-                  >
-                    <Link href={`/admin/tutores/${f.tutorId}`}>Ver</Link>
-                  </Button>
-                </div>
+                {/* Todo lo demás vive aquí dentro. La fila ya viene con la
+                    ficha completa, así que abrirla no pide nada al servidor. */}
+                <FichaTutor tutor={f} tz={tz} />
               </li>
             ))}
           </ul>
@@ -285,26 +239,3 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Dato({
-  label,
-  value,
-  tenue = false,
-}: {
-  label: string;
-  value: string;
-  tenue?: boolean;
-}) {
-  return (
-    <div className="w-20">
-      <p className="text-[11.5px] text-[#6b6b6b]">{label}</p>
-      <p
-        className={cn(
-          "text-[18px] font-bold tabular-nums",
-          tenue ? "text-[#b0b0b0]" : "text-[#19191f]",
-        )}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
