@@ -6,7 +6,8 @@ import { formatMoney } from "@/lib/catalog/format";
 import { cn } from "@/lib/utils";
 import { PanelCard, StatusPill } from "@/components/layout/panel-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
-import { esperaDesde } from "../tiempo";
+import { Button } from "@/components/ui/button";
+import { FichaAlumno } from "./ficha-alumno";
 
 export const metadata = { title: "Alumnos · Enséñame Ya" };
 
@@ -40,10 +41,17 @@ function desdeHace(days: number): string {
  * parecido de los nombres es exactamente lo que hizo preguntar al cliente dónde
  * estaba «el reporte de estudiantes».
  *
+ * LA LISTA ES DELIBERADAMENTE POBRE: nombre, correo y un botón. La primera
+ * versión traía seis columnas de cifras y el cliente pidió justo lo contrario —
+ * «listar solamente el nombre y correo» y todo lo demás en el detalle—, que
+ * además arregla de paso el problema que tenía: con seis columnas la fila
+ * envolvía a 1280 y había que ir quitando datos para que cupiera. En el modal
+ * no compite nada con nada.
+ *
  * DELIBERADAMENTE FUERA, por si alguien lo busca:
- *  · **Ficha por alumno.** Esto es una lista, no un CRM. La acción que hoy se
- *    puede tomar sobre un alumno —suspenderlo, escribirle— vive en
- *    `/admin/reportes`, que es donde hay un motivo para tomarla.
+ *  · **Acciones sobre el alumno.** La ficha es de solo lectura. Suspender o
+ *    escribir a alguien vive en `/admin/reportes`, que es donde hay un motivo
+ *    para hacerlo y donde queda registrado contra qué reporte se hizo.
  *  · **Búsqueda por nombre y paginación.** No existe búsqueda libre en todo el
  *    panel, y con 19 alumnos en dev y 3 cuentas en producción una lista entera
  *    se lee de un vistazo. Cuando estorbe: `ilike` sobre `profiles.full_name`
@@ -99,26 +107,26 @@ export default async function AdminAlumnosPage({
     return s ? `/admin/alumnos?${s}` : "/admin/alumnos";
   };
 
-  // Regla de oro 4: la BD guarda UTC, se pinta en la hora del admin.
-  const fecha = (iso: string | null) =>
-    iso
-      ? new Date(iso).toLocaleDateString("es", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          timeZone: tz,
-        })
-      : "—";
 
-  const dinero = (g: { currency: string; gastado: number }[]) =>
-    g.length === 0
-      ? "—"
-      : g.map((x) => formatMoney(x.gastado, x.currency)).join(" · ");
 
   return (
     <AdminShell
       title="Alumnos"
-      description="Quién estudia en la plataforma, cómo localizarlo y cuánto lleva estudiado. Uso interno: nada de esto se publica en ningún perfil."
+      description="Quién estudia en la plataforma y cómo localizarlo. El detalle completo de cada quien está detrás de «Ver detalle». Uso interno: nada de esto se publica en ningún perfil."
+      // Un enlace, no un botón: así descarga el navegador y no hay que montar
+      // el fichero en JavaScript. Arrastra el período puesto, para que el CSV
+      // y la pantalla nunca digan cosas distintas.
+      actions={
+        <Button
+          asChild
+          variant="outline"
+          className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+        >
+          <a href={`/api/admin/export?tipo=alumnos${sp.p ? `&p=${sp.p}` : ""}`}>
+            Descargar CSV
+          </a>
+        </Button>
+      }
     >
       {/* Período. Sin chip activo = histórico completo. */}
       <div className="flex flex-wrap items-center gap-2">
@@ -202,77 +210,41 @@ export default async function AdminAlumnosPage({
             {visibles.map((f) => (
               <li
                 key={f.studentId}
-                className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4"
+                className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 py-3.5"
               >
-                {/* Identidad y contacto en un solo bloque, y las fechas debajo
-                    en vez de en su propia columna: con una columna más la fila
-                    envuelve en 1280 —medido, ya pasó una vez—. El correo es
-                    seleccionable con el ratón, que es para lo que se enseña. */}
-                <div className="min-w-0 sm:w-72">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                     {f.nombre}
                   </p>
-                  <p className="truncate text-xs text-[#404040]">
+                  {/* `select-all` para poder copiarlo de un clic: es el dato por
+                      el que se pidió esta columna. */}
+                  <p className="truncate select-all text-xs text-[#6b6b6b]">
                     {f.correo ?? "Sin correo"}
-                    {f.telefono ? (
-                      <span className="text-[#6b6b6b]"> · {f.telefono}</span>
-                    ) : (
-                      // No es lo mismo «no tiene» que «no se lo pedimos». El
-                      // registro normal EXIGE el teléfono en su último paso; si
-                      // falta es que la cuenta nació en el checkout de invitado,
-                      // que se salta el asistente para no romper el pago. Un
-                      // guion escondería la única explicación que hay.
-                      <span
-                        className="text-[#b0b0b0]"
-                        title="El registro normal pide el teléfono en el último paso. Sin él, la cuenta se creó al pagar como invitado, que se salta ese paso."
-                      >
-                        {" "}
-                        · sin teléfono
-                      </span>
-                    )}
-                  </p>
-                  <p className="truncate text-xs text-[#6b6b6b]">
-                    Registro {fecha(f.alta)} ·{" "}
-                    {f.ultimaClase
-                      ? `última ${esperaDesde(f.ultimaClase)}`
-                      : "sin mentorías"}
-                  </p>
-                </div>
-
-                <Dato label="Tomadas" value={String(f.tomadas)} />
-                {/* En su propia columna y NO sumada a la anterior: si un no-show
-                    cuenta como clase es DP-08, sin responder. Y aquí «no-show»
-                    significa que no entró NADIE — la base de datos no sabe quién
-                    faltó (ver `20260716120000`). */}
-                <Dato
-                  label="Nadie entró"
-                  value={String(f.noShows)}
-                  tenue={f.noShows === 0}
-                />
-                <Dato label="Tutores" value={String(f.tutoresDistintos)} />
-                <Dato label="Reservas" value={String(f.reservas)} />
-
-                <div className="w-32">
-                  <p className="text-[11.5px] text-[#6b6b6b]">Gastado</p>
-                  <p className="truncate text-[13px] font-medium tabular-nums text-[#404040]">
-                    {dinero(f.gastado)}
                   </p>
                 </div>
 
                 {f.suspendido ? (
-                  <StatusPill tone="red" className="ml-auto">
-                    Suspendido
-                  </StatusPill>
+                  <StatusPill tone="red">Suspendido</StatusPill>
                 ) : null}
+                {f.baja ? <StatusPill tone="amber">Baja</StatusPill> : null}
+
+                {/* Todo lo demás vive aquí dentro. La fila ya viene con la ficha
+                    completa, así que abrir esto no pide nada al servidor. */}
+                <FichaAlumno alumno={f} tz={tz} />
               </li>
             ))}
           </ul>
         </PanelCard>
       )}
 
+      {/* ⚠️ Este bloque explica lo que hay en LA FICHA y en el CSV, no lo que
+          se ve en la lista: al reducir la lista a nombre y correo se quedó
+          describiendo columnas que ya no existían. Se queda en la pantalla y no
+          dentro del modal porque son definiciones que se consultan una vez y se
+          recuerdan, y repetirlas en cada ficha sería ruido en las diecinueve. */}
       <PanelCard>
         <h2 className="text-base font-semibold text-[#19191f]">
-          Cómo leer estos números
+          Cómo leer la ficha y el CSV
         </h2>
         <ul className="mt-3 flex list-disc flex-col gap-2 pl-5 text-[13px] text-[#6b6b6b]">
           <li>
@@ -289,37 +261,37 @@ export default async function AdminAlumnosPage({
             <strong>«Sin teléfono» no es un dato que falte.</strong> El registro
             normal lo pide en su último paso y no deja terminar sin él. Quien
             aparece sin teléfono creó la cuenta <strong>al pagar como
-            invitado</strong>, que se salta el asistente a propósito para no
-            romper el cobro. El correo, en cambio, lo tienen todos: sin él no
-            hay cuenta.
+            invitado</strong>, que omite el asistente a propósito para no romper
+            el cobro. El correo, en cambio, lo tienen todos: sin él no hay
+            cuenta.
           </li>
           <li>
             <strong>Tomadas</strong> son sesiones que terminaron en{" "}
-            <code className="font-mono text-xs">completed</code>: alguien abrió
-            la sala, o el tutor la cerró a mano.
-          </li>
-          <li>
-            <strong>Nadie entró</strong> son sesiones que vencieron sin que
-            ninguna de las dos partes abriera la sala. La plataforma{" "}
-            <strong>no registra quién faltó</strong>, así que este número no
-            reparte culpas — y por eso va aparte, sin sumarse a las tomadas
-            (decisión pendiente DP-08).
-          </li>
-          <li>
-            <strong>Reservas</strong> son las que llegaron a pagarse. Un alumno
-            con reservas y cero tomadas no es una cuenta muerta: tiene sus
-            mentorías por delante.
+            <code className="font-mono text-xs">completed</code>. Van{" "}
+            <strong>aparte</strong> de «no abrió nadie», que son las que
+            vencieron sin que entrara ninguna de las dos partes: la plataforma no
+            registra quién faltó, así que ese número no reparte culpas y no se
+            suma al otro (decisión pendiente DP-08).
           </li>
           <li>
             <strong>Gastado</strong> es lo que salió del bolsillo de esa persona
-            — el bruto <strong>menos</strong> lo que cubrieran créditos o
-            regalos, e <strong>incluido</strong> el cargo por servicio del 5 %,
-            que también lo paga el alumno. No es el GMV de{" "}
+            — el bruto menos lo que cubrieran créditos o regalos, e incluido el
+            cargo por servicio del 5 %. No es el GMV de{" "}
             <Link href="/admin/stats" className="text-brand hover:underline">
               Estadísticas
             </Link>
-            , que sí cuenta los créditos y no tiene por qué cuadrar con la suma
-            de esta columna. Lo devuelto no se resta aquí.
+            , que sí cuenta los créditos, así que las dos cifras no tienen por
+            qué cuadrar.
+          </li>
+          <li>
+            <strong>El período recorta casi todo</strong>, pero no el registro,
+            ni el crédito sin gastar, ni la próxima mentoría: esos tres son
+            estados de hoy, no del período.
+          </li>
+          <li>
+            <strong>El CSV trae siempre a todos</strong>, incluidos los que nunca
+            han reservado, y con las treinta columnas de la ficha. Lo único que
+            respeta es el período. Se abre en Excel con los acentos puestos.
           </li>
         </ul>
       </PanelCard>
@@ -338,26 +310,3 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Dato({
-  label,
-  value,
-  tenue = false,
-}: {
-  label: string;
-  value: string;
-  tenue?: boolean;
-}) {
-  return (
-    <div className="w-20">
-      <p className="text-[11.5px] text-[#6b6b6b]">{label}</p>
-      <p
-        className={cn(
-          "text-[18px] font-bold tabular-nums",
-          tenue ? "text-[#b0b0b0]" : "text-[#19191f]",
-        )}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}

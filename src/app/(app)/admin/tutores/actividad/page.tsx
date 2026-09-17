@@ -95,7 +95,20 @@ export default async function AdminActividadTutoresPage({
       back={{ href: "/admin/tutores", label: "Volver a tutores" }}
       eyebrow="Tutores / Actividad"
       title="Mentorías impartidas"
-      description="Quién está dando mentorías, a cuánta gente y desde cuándo (MN-14a). Uso interno: no se publica en el perfil del tutor."
+      description="Quién está dando mentorías, a cuánta gente y desde cuándo (MN-14a), con su contacto. Uso interno: no se publica en el perfil del tutor."
+      // Arrastra el período puesto, igual que el de alumnos: el CSV y la
+      // pantalla no pueden decir cosas distintas.
+      actions={
+        <Button
+          asChild
+          variant="outline"
+          className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+        >
+          <a href={`/api/admin/export?tipo=tutores${sp.p ? `&p=${sp.p}` : ""}`}>
+            Descargar CSV
+          </a>
+        </Button>
+      }
     >
       {/* Período. Sin chip activo = histórico completo. */}
       <div className="flex flex-wrap items-center gap-2">
@@ -170,9 +183,21 @@ export default async function AdminActividadTutoresPage({
                 key={f.tutorId}
                 className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 py-4"
               >
-                <div className="min-w-0 sm:w-56">
+                {/* Contacto bajo el nombre, como en la lista de alumnos: lo
+                    pidió el cliente para los dos lados el mismo día. El correo
+                    es `select-all` porque es el dato que se va a copiar.
+                    ⚠️ A un tutor sin teléfono NO se le aplica la explicación del
+                    lado alumno: no hay ninguna vía que salte ese paso aquí, así
+                    que si falta es una cuenta sembrada o anterior a RN-44. */}
+                <div className="min-w-0 sm:w-64">
                   <p className="truncate text-[13.5px] font-semibold text-[#19191f]">
                     {f.nombre}
+                  </p>
+                  <p className="truncate select-all text-xs text-[#404040]">
+                    {f.correo ?? "Sin correo"}
+                    {f.telefono ? (
+                      <span className="text-[#6b6b6b]"> · {f.telefono}</span>
+                    ) : null}
                   </p>
                   <p className="truncate text-xs text-[#6b6b6b]">
                     {f.ultimaClase

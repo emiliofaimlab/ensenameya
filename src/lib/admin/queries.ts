@@ -463,6 +463,14 @@ export async function getBookingDetail(id: string): Promise<BookingDetail | null
 export type TutorTeachingRow = {
   tutorId: string;
   nombre: string;
+  correo: string | null;
+  /**
+   * ⚠️ No significa lo mismo que en `StudentLearningRow`. Allí su ausencia
+   * delata una cuenta nacida en el checkout de invitado; aquí no hay tal vía:
+   * `/tutor/onboarding` también lo exige, así que a un tutor aprobado no
+   * debería faltarle. Si falta, es una cuenta sembrada o anterior a RN-44.
+   */
+  telefono: string | null;
   aprobado: boolean;
   /** ⚠️ `impartidas` y `noShows` NO se suman: DP-08 sigue abierta. */
   impartidas: number;
@@ -473,8 +481,9 @@ export type TutorTeachingRow = {
 };
 
 /**
- * ⚠️ El generador de tipos de Supabase declara `primera_clase`, `ultima_clase` y
- * `tutor_nombre` como `string` a secas, y los tres **son nulables**: un
+ * ⚠️ El generador de tipos de Supabase declara `primera_clase`, `ultima_clase`,
+ * `tutor_nombre`, `correo` y `telefono` como `string` a secas, y todas **son
+ * nulables**: un
  * `min()`/`max()` sobre cero filas devuelve NULL —el caso de todo tutor sin
  * clases en la ventana, o sea la mitad de las filas— y el nombre sale de un
  * `coalesce(full_name, display_name)` que puede quedarse sin ninguno de los
@@ -485,11 +494,13 @@ export type TutorTeachingRow = {
  */
 type RpcRow = Omit<
   Database["public"]["Functions"]["tutor_teaching_record"]["Returns"][number],
-  "primera_clase" | "ultima_clase" | "tutor_nombre"
+  "primera_clase" | "ultima_clase" | "tutor_nombre" | "correo" | "telefono"
 > & {
   primera_clase: string | null;
   ultima_clase: string | null;
   tutor_nombre: string | null;
+  correo: string | null;
+  telefono: string | null;
 };
 
 /**
@@ -508,14 +519,22 @@ export async function tutorTeachingRecord(f: {
   to?: string;
 }): Promise<TutorTeachingRow[]> {
   const supabase = await createClient();
-  const { data } = await supabase.rpc("tutor_teaching_record", {
+  const { data, error } = await supabase.rpc("tutor_teaching_record", {
     p_from: asDay(f.from),
     p_to: asDay(f.to),
   });
 
+  // Regla de oro 10, que a esta función le faltaba: `const { data } = …`
+  // convertía un fallo de la RPC en una lista vacía, y «ningún tutor ha dado
+  // clase» es una mentira perfectamente creíble en esa pantalla.
+  if (error)
+    throw new Error(`No se pudo leer el registro de docencia: ${error.message}`);
+
   return ((data ?? []) as RpcRow[]).map((r) => ({
     tutorId: r.tutor_id,
     nombre: r.tutor_nombre ?? "Tutor sin nombre",
+    correo: r.correo,
+    telefono: r.telefono,
     aprobado: r.aprobado,
     impartidas: r.impartidas,
     noShows: r.no_shows,
@@ -526,72 +545,98 @@ export async function tutorTeachingRecord(f: {
 }
 
 /* ==========================================================================
- * Registro de aprendizaje por alumno (`student_learning_record`)
+ * La ficha del alumno (`student_learning_record`)
  *
- * El espejo de lo de arriba por el otro extremo de la sesión, y por el mismo
- * motivo por el que existe aquella: el panel no tenía forma de responder «¿quién
- * está estudiando aquí?». Lo pidió el cliente el 17-sep — «no veo el reporte de
- * estudiantes» —, y tenía razón: el nombre del alumno solo salía reserva a
- * reserva en `/admin/bookings`, sin una sola agregación.
+ * Empezó siendo el espejo de `tutor_teaching_record` y el cliente la convirtió
+ * en otra cosa el mismo día: la lista se queda en nombre y correo, y el detalle
+ * se abre aparte con «toda la información del estudiante». Así que esto ya no
+ * es una fila de métricas, es un expediente.
  *
- * Mismas dos advertencias que su gemela: es una RPC y no lecturas por RLS
- * porque agregar `sessions` y `payments` enteras en JS sería el error que
- * `20260715190000` ya razonó; y es MÉTRICA INTERNA — la barrera de verdad está
- * DENTRO de la función (`has_role('admin')`), no en este fichero.
+ * ⚠️ Se trae la ficha ENTERA de TODOS los alumnos en cada carga de la lista, y
+ * es deliberado: así el modal se abre sin pedir nada y el CSV sale de lo mismo
+ * que la pantalla, sin un segundo sitio donde se defina qué es «toda la
+ * información». El techo está medido y escrito en `20260917170000`: ~1,5 KB por
+ * alumno, o sea 30 KB con los 19 de dev y 1,5 MB con mil. Ese día se parte en
+ * dos usando `p_resumen`/`p_student_id`, que ya están en la firma.
+ *
+ * Lo que NO trae, porque no se puede y está razonado en sus migraciones: el
+ * chat (`conversations`/`messages` no tienen política de admin) y la navegación
+ * (`tutor_views` tampoco). Por eso «tutores» aquí son clases dadas, no fichas
+ * vistas.
  * ========================================================================== */
+
+/** `[{currency, gastado, devuelto}]` — nunca una sola cifra: RN-13. */
+export type DineroPorMoneda = {
+  currency: string;
+  gastado: number;
+  devuelto: number;
+};
 
 export type StudentLearningRow = {
   studentId: string;
   nombre: string;
   correo: string | null;
   /**
-   * ⚠️ Su AUSENCIA significa algo. El paso 3 de `/onboarding` exige el teléfono
-   * para marcar `onboarding_complete`, así que un alumno sin él no terminó el
+   * ⚠️ Su AUSENCIA significa algo. El paso 3 de `/onboarding` lo exige para
+   * marcar `onboarding_complete`, así que un alumno sin teléfono no terminó el
    * registro por la puerta normal — o entró por `/api/checkout/invitado`, que
-   * da el onboarding por hecho para no romper el pago. La pantalla distingue
-   * los dos casos en vez de pintar un guion.
+   * da el onboarding por hecho para no romper el cobro.
    */
   telefono: string | null;
+  zonaHoraria: string | null;
   alta: string;
+  objetivo: string | null;
+  onboardingCompleto: boolean;
+  intereses: string[];
   suspendido: boolean;
-  /** Reservas que llegaron a pagarse (mismo criterio que `pair_booking_stats`). */
+  suspension: { desde: string; motivo: string | null } | null;
+  baja: { estado: string; solicitada: string; completada: string | null } | null;
+  /** Las que llegaron a pagarse (criterio de `pair_booking_stats`). */
   reservas: number;
-  /** ⚠️ `tomadas` y `noShows` NO se suman: DP-08, igual que en el lado tutor. */
+  reservasDetalle: { estado: string; n: number }[];
+  /** ⚠️ `tomadas` y `noShows` NO se suman: DP-08 sigue abierta. */
   tomadas: number;
   noShows: number;
+  canceladas: number;
   tutoresDistintos: number;
-  /** Por moneda. `gastado` es de su bolsillo (bruto − crédito), no el GMV. */
-  gastado: { currency: string; gastado: number; devuelto: number }[];
+  /** Con quién ha dado más clases — «favoritos» por lo que hizo, no por lo que miró. */
+  tutores: { nombre: string; mentorias: number }[];
   primeraClase: string | null;
   ultimaClase: string | null;
+  /** ⚠️ NO se acota al período: «qué tiene por delante» es de hoy. */
+  proximaClase: string | null;
+  /** `gastado` es de su bolsillo (bruto − crédito), no el GMV. */
+  gastado: DineroPorMoneda[];
+  pagos: number;
+  mediosDePago: string[];
+  creditoDisponible: { currency: string; saldo: number }[];
+  resenas: number;
+  notaMedia: number | null;
+  codigoReferido: string | null;
+  vinoReferido: boolean;
+  terminos: { version: string; aceptados: string } | null;
 };
 
 /**
- * ⚠️ El mismo agujero del generador que en `tutor_teaching_record`, y por la
- * misma razón: `alumno_nombre`, `primera_clase` y `ultima_clase` salen como
- * `string` a secas y los tres son NULABLES —`min()`/`max()` sobre cero filas dan
- * NULL, y `profiles.full_name` es nulable de verdad (hay perfiles sin nombre en
- * dev)—. Se corrige aquí, en la frontera. `gastado` llega como `Json` y la
- * función SQL garantiza que es un array (`coalesce(…, '[]'::jsonb)`), pero el
- * tipo generado no lo sabe.
+ * ⚠️ El agujero de siempre del generador de tipos, ahora en nueve columnas: un
+ * `min()`/`max()` sobre cero filas devuelve NULL, `profiles.full_name` es
+ * nulable de verdad y los `jsonb` llegan como `Json`, que no dice nada de su
+ * forma. Se corrige aquí, en la frontera, y `database.types.ts` no se edita a
+ * mano (regla de oro 6).
  */
-type StudentRpcRow = Omit<
-  Database["public"]["Functions"]["student_learning_record"]["Returns"][number],
-  "alumno_nombre" | "correo" | "telefono" | "primera_clase" | "ultima_clase"
-> & {
-  alumno_nombre: string | null;
-  correo: string | null;
-  telefono: string | null;
-  primera_clase: string | null;
-  ultima_clase: string | null;
-};
+type StudentRpcRow = Record<string, unknown>;
+
+/** `Json` → array tipado. La función SQL garantiza el array; el tipo no. */
+function lista<T>(v: unknown): T[] {
+  return Array.isArray(v) ? (v as T[]) : [];
+}
 
 /**
- * Registro de aprendizaje de TODOS los alumnos, ya ordenado por actividad.
+ * La ficha de TODOS los alumnos, ya ordenada por actividad.
  *
- * ⚠️ La ventana recorta la fila entera, igual que en el lado tutor: con
- * `from`/`to`, `ultimaClase` es la última clase **dentro** de la ventana. La
- * pantalla lo dice en voz alta o el número engaña.
+ * ⚠️ La ventana recorta casi toda la fila: con `from`/`to`, «gastado» es lo
+ * gastado DENTRO de la ventana. Se salvan a propósito el alta, el saldo de
+ * crédito y la próxima clase, que son estados de hoy y no del período.
  */
 export async function studentLearningRecord(f: {
   from?: string;
@@ -606,21 +651,39 @@ export async function studentLearningRecord(f: {
   // Regla de oro 10: `const { data } = …` convertiría un fallo de la RPC en una
   // lista vacía, y «este sitio no tiene alumnos» es una mentira muy creíble.
   if (error)
-    throw new Error(`No se pudo leer el registro de alumnos: ${error.message}`);
+    throw new Error(`No se pudo leer la ficha de los alumnos: ${error.message}`);
 
   return ((data ?? []) as StudentRpcRow[]).map((r) => ({
-    studentId: r.student_id,
-    nombre: r.alumno_nombre ?? "Alumno sin nombre",
-    correo: r.correo,
-    telefono: r.telefono,
-    alta: r.alta,
-    suspendido: r.suspendido,
-    reservas: r.reservas,
-    tomadas: r.tomadas,
-    noShows: r.no_shows,
-    tutoresDistintos: r.tutores_distintos,
-    gastado: (r.gastado ?? []) as StudentLearningRow["gastado"],
-    primeraClase: r.primera_clase,
-    ultimaClase: r.ultima_clase,
+    studentId: r.student_id as string,
+    nombre: (r.alumno_nombre as string | null) ?? "Alumno sin nombre",
+    correo: r.correo as string | null,
+    telefono: r.telefono as string | null,
+    zonaHoraria: r.zona_horaria as string | null,
+    alta: r.alta as string,
+    objetivo: r.objetivo as string | null,
+    onboardingCompleto: r.onboarding_completo as boolean,
+    intereses: lista<string>(r.intereses),
+    suspendido: r.suspendido as boolean,
+    suspension: (r.suspension as StudentLearningRow["suspension"]) ?? null,
+    baja: (r.baja as StudentLearningRow["baja"]) ?? null,
+    reservas: r.reservas as number,
+    reservasDetalle: lista<{ estado: string; n: number }>(r.reservas_detalle),
+    tomadas: r.tomadas as number,
+    noShows: r.no_shows as number,
+    canceladas: r.canceladas as number,
+    tutoresDistintos: r.tutores_distintos as number,
+    tutores: lista<{ nombre: string; mentorias: number }>(r.tutores),
+    primeraClase: r.primera_clase as string | null,
+    ultimaClase: r.ultima_clase as string | null,
+    proximaClase: r.proxima_clase as string | null,
+    gastado: lista<DineroPorMoneda>(r.gastado),
+    pagos: r.pagos as number,
+    mediosDePago: lista<string>(r.medios_de_pago),
+    creditoDisponible: lista<{ currency: string; saldo: number }>(r.credito_disponible),
+    resenas: r.resenas as number,
+    notaMedia: r.nota_media === null ? null : Number(r.nota_media),
+    codigoReferido: r.codigo_referido as string | null,
+    vinoReferido: r.vino_referido as boolean,
+    terminos: (r.terminos as StudentLearningRow["terminos"]) ?? null,
   }));
 }

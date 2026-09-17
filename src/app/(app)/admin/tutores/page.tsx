@@ -105,14 +105,28 @@ export default async function AdminTutoresPage({
       // pero se entra desde aquí porque es de quien habla. No hay entrada en el
       // menú lateral: `ADMIN_ITEMS` vive en `app-sidebar.tsx`, que no es de esta
       // ficha. Si esta pantalla se usa, merece su propio ítem.
+      // El CSV se sirve también desde aquí, y no solo desde «Mentorías
+      // impartidas», porque «la lista de tutores» se busca en ESTA pantalla —
+      // es el mismo error de nombre que llevó al cliente a buscar el reporte de
+      // alumnos en «Reportes». El fichero sale de `tutor_teaching_record`, que
+      // trae a TODOS los tutores con su contacto, no solo a los del chip activo.
       actions={
-        <Button
-          asChild
-          variant="outline"
-          className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
-        >
-          <Link href="/admin/tutores/actividad">Mentorías impartidas</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            asChild
+            variant="outline"
+            className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+          >
+            <Link href="/admin/tutores/actividad">Mentorías impartidas</Link>
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+          >
+            <a href="/api/admin/export?tipo=tutores">Descargar CSV</a>
+          </Button>
+        </div>
       }
     >
       <div className="flex flex-wrap gap-2">

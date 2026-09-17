@@ -3555,21 +3555,39 @@ export type Database = {
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       student_learning_record: {
-        Args: { p_from?: string; p_to?: string }
+        Args: { p_from?: string; p_student_id?: string; p_to?: string }
         Returns: {
           alta: string
           alumno_nombre: string
+          baja: Json
+          canceladas: number
+          codigo_referido: string
           correo: string
+          credito_disponible: Json
           gastado: Json
+          intereses: Json
+          medios_de_pago: Json
           no_shows: number
+          nota_media: number
+          objetivo: string
+          onboarding_completo: boolean
+          pagos: number
           primera_clase: string
+          proxima_clase: string
+          resenas: number
           reservas: number
+          reservas_detalle: Json
           student_id: string
           suspendido: boolean
+          suspension: Json
           telefono: string
+          terminos: Json
           tomadas: number
+          tutores: Json
           tutores_distintos: number
           ultima_clase: string
+          vino_referido: boolean
+          zona_horaria: string
         }[]
       }
       student_tutor_affinity: {
@@ -3625,9 +3643,11 @@ export type Database = {
         Returns: {
           alumnos_distintos: number
           aprobado: boolean
+          correo: string
           impartidas: number
           no_shows: number
           primera_clase: string
+          telefono: string
           tutor_id: string
           tutor_nombre: string
           ultima_clase: string
