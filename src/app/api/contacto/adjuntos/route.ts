@@ -145,7 +145,7 @@ export async function POST(req: Request) {
   if (errorLista) {
     console.error("[contacto/adjuntos] no se pudo listar", errorLista.message);
     return NextResponse.json(
-      { error: "No hemos podido preparar la subida. Inténtalo en un momento." },
+      { error: "No pudimos preparar la subida. Inténtalo en un momento." },
       { status: 500 },
     );
   }
@@ -166,7 +166,7 @@ export async function POST(req: Request) {
   if (error || !data) {
     console.error("[contacto/adjuntos] no se pudo firmar", error?.message);
     return NextResponse.json(
-      { error: "No hemos podido preparar la subida. Inténtalo en un momento." },
+      { error: "No pudimos preparar la subida. Inténtalo en un momento." },
       { status: 500 },
     );
   }

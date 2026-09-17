@@ -52,7 +52,7 @@ export type ContactKindSpec = {
 export const CONTACT_KIND_SPECS: Record<ContactKind, ContactKindSpec> = {
   mensaje: {
     label: "Mensaje",
-    help: "Cuéntanos qué ha pasado y te respondemos por correo.",
+    help: "Cuéntanos qué pasó y te respondemos por correo.",
     types: null,
     hint: null,
   },
@@ -64,7 +64,7 @@ export const CONTACT_KIND_SPECS: Record<ContactKind, ContactKindSpec> = {
   },
   capturas: {
     label: "Capturas de pantalla",
-    help: "Para enseñarnos el error tal y como te aparece a ti.",
+    help: "Para enseñarnos el error tal como te aparece a ti.",
     types: SUPPORT_SHOT_TYPES,
     hint: SUPPORT_SHOT_HINT,
   },

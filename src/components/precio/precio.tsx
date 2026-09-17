@@ -59,7 +59,7 @@ export function usePrecio(
   return dosCifras(amountMinor, currency, useMonedaVisitante());
 }
 
-const AVISO = "Importe orientativo: el cobro se realiza en dólares (USD).";
+const AVISO = "Monto orientativo: el cobro se realiza en dólares (USD).";
 
 /**
  * La CIFRA GRANDE, sola: en moneda local si la hay, y si no el USD de siempre.

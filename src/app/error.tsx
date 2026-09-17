@@ -77,7 +77,7 @@ export default function AppError({
           Algo se rompió por nuestra parte
         </h1>
         <p className="mt-3 text-[14px] text-muted-foreground lg:text-[15px]">
-          No es culpa tuya y no hemos perdido nada de lo que tengas guardado.
+          No es culpa tuya y no perdimos nada de lo que tengas guardado.
           Puedes reintentar; si vuelve a pasar, escríbenos y lo miramos.
         </p>
 

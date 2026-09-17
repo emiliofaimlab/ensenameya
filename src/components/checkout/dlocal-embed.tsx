@@ -106,7 +106,7 @@ const ETIQUETAS: Record<string, { label: string; ayuda?: string; autoComplete?: 
     // BR y CL ADMITE puntos y guiones (`^\d{3}.?\d{3}.?\d{3}-?\d{2}…` en BR,
     // `^\d{1,2}.?\d{3}.?\d{3}-?(\d|k|K)$` en CL). Una ayuda que contradice a la
     // validación es peor que no tener ayuda.
-    ayuda: "Tal y como figura en tu documento de identidad.",
+    ayuda: "Tal como figura en tu documento de identidad.",
   },
   clientDocumentType: { label: "Tipo de documento" },
 };

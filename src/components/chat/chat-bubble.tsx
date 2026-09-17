@@ -427,7 +427,7 @@ export function ChatBubble({
         // la bandeja, que es de donde sí puede abrirla si está.
         setAbierta(null);
         toast.error(
-          "No hemos podido abrir esa conversación. Búscala en tu lista de mensajes.",
+          "No pudimos abrir esa conversación. Búscala en tu lista de mensajes.",
         );
       }
       // Lo último, y en el mismo turno que los `setState` de arriba para que

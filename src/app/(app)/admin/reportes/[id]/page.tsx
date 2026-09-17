@@ -237,7 +237,7 @@ export default async function AdminReporteDetallePage({
         <p className="mt-1 text-xs text-[#6b6b6b]">
           Últimos {mensajes.length}{" "}
           {mensajes.length === 1 ? "mensaje" : "mensajes"} del hilo, en orden.
-          Los adjuntos se nombran pero no se abren: el fichero vive en Storage
+          Los adjuntos se nombran pero no se abren: el archivo vive en Storage
           con su propia RLS.
         </p>
 

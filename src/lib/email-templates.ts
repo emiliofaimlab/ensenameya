@@ -314,7 +314,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     motivo: "Recibes este correo porque se pidió restablecer la contraseña de esta cuenta.",
     cuerpo: [
       parrafo(
-        "Pediste cambiar tu contraseña. Pulsa el botón y elige una nueva; el enlace solo sirve una vez y caduca en una hora.",
+        "Pediste cambiar tu contraseña. Presiona el botón y elige una nueva; el enlace solo sirve una vez y caduca en una hora.",
       ),
       boton("Elegir contraseña nueva", "{{ .ConfirmationURL }}"),
       caja(
@@ -349,7 +349,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     baja: true,
     cuerpo: [
       parrafo(
-        "Tu cuenta ya está activa. Enséñame Ya son mentorías <strong>1 a 1 en vivo</strong>: eliges tutor, eliges hora y os veis por videollamada dentro de la plataforma.",
+        "Tu cuenta ya está activa. Enséñame Ya son mentorías <strong>1 a 1 en vivo</strong>: eliges tutor, eliges hora y se ven por videollamada dentro de la plataforma.",
       ),
       pasos([
         [
@@ -357,7 +357,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           "Filtra por categoría, precio y disponibilidad. Cada tutor tiene su ficha con reseñas reales de otros alumnos.",
         ],
         [
-          "Elige un hueco",
+          "Elige un horario",
           "Ves su agenda en tu propia hora local. Reservas y pagas en el mismo paso.",
         ],
         ["Entra a la sala", "El botón se activa unos minutos antes. No instalas nada."],
@@ -462,7 +462,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           : null,
         pendientes > 0
           ? caja(
-              `${pendientes === 1 ? "Una de estas mentorías espera" : `${pendientes} de estas mentorías esperan`} a que el tutor las acepte. Tiene 24 horas para hacerlo; si no responde, se cancela sola y te devolvemos el importe completo.`,
+              `${pendientes === 1 ? "Una de estas mentorías espera" : `${pendientes} de estas mentorías esperan`} a que el tutor las acepte. Tiene 24 horas para hacerlo; si no responde, se cancela sola y te devolvemos el monto completo.`,
               "compra",
             )
           : null,
@@ -528,7 +528,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         "El cobro de tu reserva no salió adelante, así que la reserva se canceló y el horario volvió a quedar libre.",
       ),
       caja(
-        "<strong>No se te ha cobrado nada.</strong> Si ves un cargo retenido en tu banco, es una preautorización y desaparece sola en unos días.",
+        "<strong>No se te cobró nada.</strong> Si ves un cargo retenido en tu banco, es una preautorización y desaparece sola en unos días.",
         "alerta",
       ),
       tarjetaClase({
@@ -540,7 +540,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         acento: ROJO,
         fondo: "#fdeceb",
       }),
-      parrafo("El hueco sigue libre ahora mismo. Puedes volver a reservarlo con otro medio de pago.", {
+      parrafo("El horario sigue libre ahora mismo. Puedes volver a reservarlo con otro medio de pago.", {
         top: 18,
       }),
       boton(
@@ -573,7 +573,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           sub: x.c.metodo ? `Al mismo medio de pago: ${x.c.metodo}` : "Al mismo medio de pago",
         }),
         parrafo(
-          "Lo devolvemos por la misma vía por la que pagaste. Según tu banco puede tardar entre 3 y 10 días hábiles en aparecer en tu extracto.",
+          "Lo devolvemos por la misma vía por la que pagaste. Según tu banco puede tardar entre 3 y 10 días hábiles en aparecer en tu estado de cuenta.",
           { top: 20 },
         ),
         tarjetaClase({
@@ -623,8 +623,8 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         }),
         caja(
           limite
-            ? `Si no responde antes de <strong>${esc(limite)}</strong>, la reserva se cancela sola y te devolvemos el importe completo, sin que tengas que pedirlo.`
-            : "Si no responde dentro del plazo, la reserva se cancela sola y te devolvemos el importe completo, sin que tengas que pedirlo.",
+            ? `Si no responde antes de <strong>${esc(limite)}</strong>, la reserva se cancela sola y te devolvemos el monto completo, sin que tengas que pedirlo.`
+            : "Si no responde dentro del plazo, la reserva se cancela sola y te devolvemos el monto completo, sin que tengas que pedirlo.",
           "clase",
           "Qué pasa si no contesta",
         ),
@@ -659,8 +659,8 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         }),
         caja(
           limite
-            ? `Tienes hasta <strong>${esc(limite)}</strong>. Si se pasa el plazo, la reserva se cancela sola, se le reembolsa al alumno y el hueco vuelve a tu agenda.`
-            : "Tienes 24 horas. Si se pasa el plazo, la reserva se cancela sola, se le reembolsa al alumno y el hueco vuelve a tu agenda.",
+            ? `Tienes hasta <strong>${esc(limite)}</strong>. Si se pasa el plazo, la reserva se cancela sola, se le reembolsa al alumno y el horario vuelve a tu agenda.`
+            : "Tienes 24 horas. Si se pasa el plazo, la reserva se cancela sola, se le reembolsa al alumno y el horario vuelve a tu agenda.",
           "clase",
           "El plazo",
         ),
@@ -692,8 +692,8 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       cuerpo: [
         caja(
           limite
-            ? `Si no respondes antes de <strong>${esc(limite)}</strong>, la reserva se cancela sola, se le devuelve el dinero al alumno y el hueco vuelve a tu agenda.`
-            : "Si no respondes dentro del plazo, la reserva se cancela sola, se le devuelve el dinero al alumno y el hueco vuelve a tu agenda.",
+            ? `Si no respondes antes de <strong>${esc(limite)}</strong>, la reserva se cancela sola, se le devuelve el dinero al alumno y el horario vuelve a tu agenda.`
+            : "Si no respondes dentro del plazo, la reserva se cancela sola, se le devuelve el dinero al alumno y el horario vuelve a tu agenda.",
           "alerta",
           "El plazo está por vencer",
         ),
@@ -707,7 +707,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           fondo: "#fdeceb",
         }),
         parrafo(
-          "Rechazarla también vale: es mejor un no a tiempo que un plazo agotado. Al alumno le devolvemos el importe igual, pero puede buscar otro hueco hoy.",
+          "Rechazarla también está bien: es mejor un no a tiempo que un plazo agotado. Al alumno le devolvemos el monto igual, pero puede buscar otro horario hoy.",
           { top: 18 },
         ),
         boton("Responder ahora", `${x.base}/tutor/reservas/${x.p?.booking_id ?? ""}`),
@@ -744,9 +744,9 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         // El `.ics` va también como ADJUNTO (`sendEmail` lo soporta desde el Doc
         // 33 §5.2). El enlace se queda para el cliente que descarta adjuntos.
         x.c.sesion_id
-          ? enlaceSecundario("Añadir al calendario (.ics)", `${x.base}/api/calendario/sesion/${x.c.sesion_id}`)
+          ? enlaceSecundario("Agregar al calendario (.ics)", `${x.base}/api/calendario/sesion/${x.c.sesion_id}`)
           : null,
-        nota("La clase se graba y tendrás el vídeo durante 30 días. Te avisamos cuando esté listo."),
+        nota("La clase se graba y tendrás el video durante 30 días. Te avisamos cuando esté listo."),
       ],
     };
   },
@@ -810,7 +810,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         fondo: "#e9f7ef",
       }),
       nota(
-        "Funciona desde el navegador, sin instalar nada. La clase se graba: tendrás el vídeo disponible 30 días.",
+        "Funciona desde el navegador, sin instalar nada. La clase se graba: tendrás el video disponible 30 días.",
       ),
     ],
   }),
@@ -855,7 +855,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
             )
           : null,
         boton(
-          "Buscar otro hueco",
+          "Buscar otro horario",
           x.c.tutor_id ? `${x.base}/tutors/${x.c.tutor_id}` : `${x.base}/search`,
         ),
         // El botón lleva a rehacer el plan, que es lo que la persona quiere
@@ -1145,7 +1145,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       motivo: "Recibes este correo porque tienes una liquidación pendiente.",
       cuerpo: [
         caja(
-          "No pudimos completar la transferencia con los datos de cobro que tenemos. <strong>Tu dinero no se ha perdido</strong>: está retenido y sale en cuanto los revises.",
+          "No pudimos completar la transferencia con los datos de cobro que tenemos. <strong>Tu dinero no se perdió</strong>: está retenido y sale en cuanto los revises.",
           "alerta",
           "Qué pasó",
         ),
@@ -1189,8 +1189,8 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         asunto: "Tu liquidación está esperando a que la reclames",
         familia: "alerta",
         epigrafe: "Pago sin reclamar",
-        titulo: "PayPal no ha entregado tu dinero",
-        preheader: `Tu liquidación ${tiempo.toLowerCase()} y no ha llegado a tu cuenta de PayPal.`,
+        titulo: "PayPal no entregó tu dinero",
+        preheader: `Tu liquidación ${tiempo.toLowerCase()} y no llegó a tu cuenta de PayPal.`,
         motivo: "Recibes este correo porque tienes una liquidación en curso.",
         cuerpo: [
           importeGrande("Sin reclamar", importe, { sub: tiempo, color: ROJO }),
@@ -1344,7 +1344,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         "Tu cuenta se cerró y tus datos personales quedaron anonimizados, como pediste. Este es el último correo que recibirás de nosotros.",
       ),
       parrafo(
-        "Se conservan únicamente los registros contables que la ley obliga a guardar: importes y fechas de los pagos, sin tu nombre asociado.",
+        "Se conservan únicamente los registros contables que la ley obliga a guardar: montos y fechas de los pagos, sin tu nombre asociado.",
         { top: 14 },
       ),
       parrafo(
@@ -1468,7 +1468,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
                 .map((a) => `<strong>${esc(a.nombre ?? "archivo")}</strong>${a.tamano ? ` (${esc(a.tamano)})` : ""}`)
                 .join(" · ") +
               ". Están en el bucket privado, no en este correo.<br>"
-            : "") + "Pulsa «Responder» para contestarle directamente.",
+            : "") + "Haz clic en «Responder» para contestarle directamente.",
         ),
         boton("Abrir en el panel", `${x.base}/admin/reportes`),
       ],
@@ -1508,7 +1508,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       cuerpo: [
         total
           ? tablaPedido(ls, total, {
-              etiqueta: "Importe afectado",
+              etiqueta: "Monto afectado",
               nota: rango(al.desde, al.hasta, "UTC", { conHora: true }),
             })
           : parrafo(`Hay ${n} ${n === 1 ? "incidencia" : "incidencias"} sin revisar en el panel.`),
@@ -1786,7 +1786,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           "Tu regalo",
           [
             ["Para", para],
-            ["Importe", importe],
+            ["Monto", importe],
           ],
           NARANJA_FG,
           "#fff3ea",
@@ -1849,7 +1849,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     // línea DESPUÉS de escapar. No se toca aquí.
     const dedicatoria = x.p?.gift_message;
     return {
-      asunto: "Te han regalado una mentoría",
+      asunto: "Te regalaron una mentoría",
       familia: "ok",
       epigrafe: "Un regalo para ti",
       titulo: "Alguien te regaló una mentoría",
@@ -1857,7 +1857,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       motivo: "Recibes este correo porque alguien regaló una mentoría a esta dirección.",
       cuerpo: [
         parrafo(
-          "Alguien ha pagado por ti una mentoría <strong>1 a 1 en vivo</strong> en Enséñame Ya. Está pagada entera: eliges el día y la hora que te vengan bien y no tienes que pagar nada.",
+          "Alguien pagó por ti una mentoría <strong>1 a 1 en vivo</strong> en Enséñame Ya. Está pagada entera: eliges el día y la hora que te vengan bien y no tienes que pagar nada.",
         ),
         cita(typeof dedicatoria === "string" ? dedicatoria : null, "Quien te lo regala"),
         caja(
@@ -2038,11 +2038,11 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           parrafo(
             "La mentoría que regalaste venció sin que se eligiera día ni hora, así que el regalo ya no se puede usar.",
           ),
-          importeGrande("Importe del regalo", dinero(importeCrudo, x.p?.currency), {
+          importeGrande("Monto del regalo", dinero(importeCrudo, x.p?.currency), {
             sub: "Caducó sin agendarse",
           }),
           caja(
-            "El importe <strong>no vuelve solo</strong>. Si crees que hubo un problema —que el aviso no llegó, por ejemplo— escríbenos y lo miramos contigo.",
+            "El monto <strong>no vuelve solo</strong>. Si crees que hubo un problema —que el aviso no llegó, por ejemplo— escríbenos y lo miramos contigo.",
             "cuenta",
           ),
           boton("Ver mis regalos", `${x.base}/regalar/mis-regalos`),
@@ -2120,7 +2120,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       motivo: "Recibes este correo porque hay un regalo de Enséñame Ya cuyo tutor cerró su cuenta.",
       cuerpo: [
         parrafo(
-          "El tutor de la mentoría regalada ha cerrado su cuenta, así que esa mentoría en concreto ya no se puede agendar. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo para reservar con cualquier otro tutor.",
+          "El tutor de la mentoría regalada cerró su cuenta, así que esa mentoría en concreto ya no se puede agendar. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo para reservar con cualquier otro tutor.",
         ),
         importeGrande("Saldo disponible", importe, {
           sub: fecha ? `Se puede usar hasta el ${fecha}` : null,

@@ -352,7 +352,7 @@ export function PayoutManualForm({
         {canalFijo ? null : (
           <label className="block">
             <span className="text-xs text-[#6b6b6b]">
-              {ordenada.length > 0 ? "Añadir o cambiar" : "¿Por dónde cobras?"}
+              {ordenada.length > 0 ? "Agregar o cambiar" : "¿Por dónde cobras?"}
             </span>
             <select
               className={`mt-1 ${CAMPO}`}
@@ -376,7 +376,7 @@ export function PayoutManualForm({
             value={v.titular}
             disabled={busy !== null}
             autoComplete="off"
-            placeholder="Tu nombre, tal y como está en la cuenta"
+            placeholder="Tu nombre, tal como está en la cuenta"
             onChange={(e) => {
               setError(null);
               setV((prev) => ({ ...prev, titular: e.target.value }));

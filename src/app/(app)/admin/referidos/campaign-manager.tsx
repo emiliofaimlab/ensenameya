@@ -297,7 +297,7 @@ export function CampaignManager({
       <div className="rounded-[16px] border border-[#e0e0e0] bg-card px-5 py-2">
         {filas.length === 0 ? (
           <p className="py-6 text-[13px] text-[#6b6b6b]">
-            Todavía no hay campañas. Pulsa «Traer campañas».
+            Todavía no hay campañas. Presiona «Traer campañas».
           </p>
         ) : (
           <ul className="divide-y divide-[#e0e0e0]">
@@ -409,7 +409,7 @@ export function CampaignManager({
                           {d.rewardKind === "ninguna"
                             ? "Se entrega: nada."
                             : previa === null
-                              ? "Se entrega: falta el importe."
+                              ? "Se entrega: falta el monto."
                               : d.rewardKind === "mentoria"
                                 ? `Se entrega: una mentoría de hasta ${previa} · ${d.rewardExpiresDays || "—"} días para agendarla.`
                                 : `Se entrega: ${previa} · a un alumno como saldo, con ${d.rewardExpiresDays || "—"} días; a un tutor, sumado a su próximo cobro y sin caducar.`}
@@ -445,7 +445,7 @@ export function CampaignManager({
                                 htmlFor={`tope-${f.rfCampaignId}`}
                                 className="text-xs text-[#6b6b6b]"
                               >
-                                {d.rewardKind === "mentoria" ? "Tope" : "Importe"}
+                                {d.rewardKind === "mentoria" ? "Tope" : "Monto"}
                               </Label>
                               {/* ⚠️ SE ESCRIBE EN LA MONEDA, no en unidades
                                   mínimas: nadie teclea «4500» queriendo decir
@@ -581,7 +581,7 @@ export function CampaignManager({
                         </p>
                         {suyas === undefined ? (
                           <p className="text-[12.5px] text-[#8a8a8a]">
-                            Pulsa «Traer campañas» para verla.
+                            Presiona «Traer campañas» para verla.
                           </p>
                         ) : suyas.length === 0 ? (
                           <p className="text-[12.5px] text-[#8a8a8a]">

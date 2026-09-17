@@ -52,7 +52,7 @@ export function SupportCard({ className }: { className?: string }) {
     <PanelCard className={className}>
       <PanelCardTitle className="text-xl">¿Algo no funciona?</PanelCardTitle>
       <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
-        Cuéntanos qué pasó y te respondemos en menos de 24 horas laborables.
+        Cuéntanos qué pasó y te respondemos en menos de 24 horas hábiles.
       </p>
       <Button asChild variant="outline" className="mt-4 h-10">
         <Link href="/contacto">Escribir a soporte</Link>

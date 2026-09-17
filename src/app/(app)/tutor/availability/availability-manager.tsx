@@ -258,7 +258,7 @@ export function AvailabilityManager({
     setBusy(false);
     if (error) return toast.error(error.message || "No se pudo guardar el horario.");
     toast.success(
-      editando ? `Franja del ${dia} actualizada.` : `Franja añadida el ${dia}.`,
+      editando ? `Franja del ${dia} actualizada.` : `Franja agregada el ${dia}.`,
     );
     // El formulario se cierra al guardar, así que la próxima vez que se abra
     // tiene que estar limpio y no con lo que se escribió hace dos franjas.
@@ -377,13 +377,13 @@ export function AvailabilityManager({
           onClick={alternarFormulario}
           className="ml-auto rounded-[10px] px-4 text-[13px] aria-expanded:bg-primary/80"
         >
-          + Añadir franja
+          + Agregar franja
         </Button>
       </div>
 
       {rules.length === 0 ? (
         <p className="mb-3 text-[13px] text-[#6b6b6b]">
-          Todavía no tienes horarios. Añade al menos uno para que puedan
+          Todavía no tienes horarios. Agrega al menos uno para que puedan
           reservarte.
         </p>
       ) : null}
@@ -599,7 +599,7 @@ export function AvailabilityManager({
                       size="lg"
                       className="ml-auto rounded-[8px] px-4 text-[13px]"
                     >
-                      {editando ? "Guardar cambios" : "Añadir franja"}
+                      {editando ? "Guardar cambios" : "Agregar franja"}
                     </Button>
                   </div>
                 </form>

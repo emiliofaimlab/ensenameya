@@ -466,7 +466,7 @@ function motivoDeCheckout(e: DlocalCheckoutError): Motivo {
   if (code === 306) {
     return {
       clase: "desconocido",
-      mensaje: "El importe es menor que el mínimo que acepta la pasarela.",
+      mensaje: "El monto es menor que el mínimo que acepta la pasarela.",
       status: 409,
     };
   }
@@ -510,7 +510,7 @@ function motivoDeCheckout(e: DlocalCheckoutError): Motivo {
   if (code === 815 || code === 409) {
     return {
       clase: "tarjeta",
-      mensaje: "El importe supera el límite de tu tarjeta. Prueba con otra.",
+      mensaje: "El monto supera el límite de tu tarjeta. Prueba con otra.",
       status: 402,
     };
   }
@@ -738,7 +738,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         estado: "transitorio",
-        error: "No pudimos contactar con la pasarela. Prueba de nuevo en un momento.",
+        error: "No pudimos comunicarnos con la pasarela. Prueba de nuevo en un momento.",
       },
       { status: 502 },
     );

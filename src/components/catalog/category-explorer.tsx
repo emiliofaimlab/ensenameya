@@ -323,7 +323,7 @@ export async function CategoryExplorer({
                 label: products.total === 1 ? "producto" : "productos",
               },
               ...(ratingAvg
-                ? [{ n: `★ ${ratingAvg}`, label: "valoración media" }]
+                ? [{ n: `★ ${ratingAvg}`, label: "valoración promedio" }]
                 : []),
             ].map(({ n, label }, i) => (
               <div key={label} className="flex items-center gap-5">

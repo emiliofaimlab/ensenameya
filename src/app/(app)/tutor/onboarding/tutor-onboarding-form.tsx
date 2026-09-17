@@ -500,19 +500,19 @@ export function TutorOnboardingForm({
       // que verificar, y eso el tutor tiene que oírlo aquí y no tres semanas
       // después preguntándose por qué su revisión no avanza.
       (docsSubidos ?? Object.keys(docsByType).length) === 0
-        ? "No subiste ningún documento. Sin ellos no podemos verificar tu identidad, y sin verificarla no aprobamos el perfil. Se añaden desde «Verificación»."
+        ? "No subiste ningún documento. Sin ellos no podemos verificar tu identidad, y sin verificarla no aprobamos el perfil. Se agregan desde «Verificación»."
         : null,
       // R29-02 · fuera del asistente este enlace es obligatorio para poder
       // enviar a revisión; aquí no se bloquea —ningún paso del asistente
       // bloquea— pero sí se dice, y allí seguirá esperándole el mismo aviso.
       (enlacesGuardados ?? socials.length) === 0
-        ? "No dejaste ningún enlace de portafolio. Forma parte de lo que revisamos; se añade desde «Verificación»."
+        ? "No dejaste ningún enlace de portafolio. Forma parte de lo que revisamos; se agrega desde «Verificación»."
         : null,
       productCount === 0
         ? "Te falta tu primera mentoría. Puedes crearla cuando quieras desde «Mis mentorías», pero hasta que exista no podemos aprobar tu perfil."
         : null,
       rules.length === 0
-        ? "No has marcado ningún horario. Aunque aprobemos tu perfil, nadie podrá reservarte hasta que añadas al menos una franja en «Disponibilidad»."
+        ? "No has marcado ningún horario. Aunque aprobemos tu perfil, nadie podrá reservarte hasta que agregues al menos una franja en «Disponibilidad»."
         : null,
     ].filter((t) => t !== null);
 
@@ -774,7 +774,7 @@ export function TutorOnboardingForm({
 
         {rules.length === 0 ? (
           <p className="text-[13px] text-[#4d4d4d]">
-            Puedes dejarlo para luego y pulsar «Continuar», pero ten en cuenta
+            Puedes dejarlo para luego y presionar «Continuar», pero ten en cuenta
             que mientras no tengas ninguna franja nadie podrá reservarte, aunque
             aprobemos tu perfil. Se cambia cuando quieras desde
             «Disponibilidad».
@@ -855,7 +855,7 @@ export function TutorOnboardingForm({
                 onClick={() => setAddingProduct(true)}
                 className="h-[45px] w-full rounded-[8px] text-sm"
               >
-                Añadir otra mentoría
+                Agregar otra mentoría
               </Button>
             ) : null}
             {mostrarFormulario ? (

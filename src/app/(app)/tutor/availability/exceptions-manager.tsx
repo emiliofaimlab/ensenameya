@@ -96,7 +96,7 @@ export function ExceptionsManager({
     // «Añadida» y no «agregada»: el botón que abre dice «+ Añadir» y el que
     // envía, «Añadir excepción». Dos palabras para la misma idea en la misma
     // tarjeta es exactamente lo que se arregló en el horario semanal en agosto.
-    toast.success("Excepción añadida.");
+    toast.success("Excepción agregada.");
     setDate("");
     setStart("");
     setEnd("");
@@ -135,7 +135,7 @@ export function ExceptionsManager({
           onClick={() => setAbierto(!abierto)}
           className="ml-auto rounded-[10px] px-3 text-[13px] text-[#595959]"
         >
-          + Añadir
+          + Agregar
         </Button>
       </div>
 
@@ -206,7 +206,7 @@ export function ExceptionsManager({
             <Label htmlFor="exc-reason">Motivo (opcional)</Label>
             <Input id="exc-reason" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder="Ej. Vacaciones" />
           </div>
-          <Button type="submit" disabled={busy} className="sm:col-span-2">Añadir excepción</Button>
+          <Button type="submit" disabled={busy} className="sm:col-span-2">Agregar excepción</Button>
         </form>
       ) : null}
     </div>

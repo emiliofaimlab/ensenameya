@@ -314,7 +314,7 @@ export function validarCuenta(
   }
   const telefono = normalizaTelefono(valores.telefono);
   if (telefono && !TELEFONO_BENEFICIARIO.test(telefono)) {
-    return "El teléfono tiene que empezar por un número o por «+» y medir entre 7 y 20 caracteres. Se admiten espacios, paréntesis y guiones.";
+    return "El teléfono tiene que empezar con un número o con «+» y medir entre 7 y 20 caracteres. Se admiten espacios, paréntesis y guiones.";
   }
 
   return null;

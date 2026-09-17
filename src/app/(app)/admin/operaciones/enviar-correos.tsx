@@ -73,7 +73,7 @@ export function EnviarCorreos({ pendientes }: { pendientes: number | null }) {
       setResultado(r);
       setConfirmando(false);
       if (r.status === "sin-proveedor") {
-        toast.error("No hay RESEND_API_KEY en este entorno: la cola no se ha tocado.");
+        toast.error("No hay RESEND_API_KEY en este entorno: la cola no se tocó.");
       } else {
         toast.success(`${r.enviadas ?? 0} correos enviados.`);
       }
@@ -113,8 +113,8 @@ export function EnviarCorreos({ pendientes }: { pendientes: number | null }) {
         </p>
 
         <p className="text-xs text-[#6b6b6b]">
-          Cada pulsada saca como mucho {LOTE} correos, que es el lote del job. Si
-          quedan más, se vuelve a pulsar. No se marca nada como enviado sin
+          Cada clic saca como mucho {LOTE} correos, que es el lote del job. Si
+          quedan más, se vuelve a presionar. No se marca nada como enviado sin
           enviarlo: lo que el proveedor rechace por un mal minuto se queda
           pendiente para la pasada siguiente.
         </p>
@@ -124,11 +124,11 @@ export function EnviarCorreos({ pendientes }: { pendientes: number | null }) {
         resultado.status === "sin-proveedor" ? (
           <PanelCard className="border-[#e8b4b4] bg-[#fdf0f0]">
             <p className="text-[13px] font-semibold text-[#8f2b2b]">
-              No se ha enviado nada.
+              No se envió nada.
             </p>
             <p className="mt-1.5 text-[13px] text-[#8f2b2b]">
               Este entorno no tiene <code className="font-mono text-xs">RESEND_API_KEY</code>,
-              así que la cola ni se ha tocado: sigue entera y en{" "}
+              así que la cola ni se tocó: sigue entera y en{" "}
               <code className="font-mono text-xs">pending</code>. El día que se
               ponga la clave sale todo lo acumulado en la primera pasada.
             </p>
@@ -147,8 +147,8 @@ export function EnviarCorreos({ pendientes }: { pendientes: number | null }) {
               </li>
               {resultado.pendientesDeReintento ? (
                 <li>
-                  {resultado.pendientesDeReintento} se han quedado pendientes por
-                  un fallo transitorio del proveedor. Vuelve a pulsar dentro de un
+                  {resultado.pendientesDeReintento} quedaron pendientes por
+                  un fallo transitorio del proveedor. Vuelve a intentarlo dentro de un
                   rato; si no bajan, el problema es de Resend y no de la cola.
                 </li>
               ) : null}

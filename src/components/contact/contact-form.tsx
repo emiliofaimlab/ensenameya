@@ -95,13 +95,13 @@ export function ContactForm() {
       const cuerpo = (await res.json().catch(() => ({}))) as { error?: string };
 
       if (!res.ok) {
-        toast.error(cuerpo.error ?? "No hemos podido enviar tu mensaje.");
+        toast.error(cuerpo.error ?? "No pudimos enviar tu mensaje.");
         setEnviando(false);
         return;
       }
       setEnviado(true);
     } catch {
-      toast.error("No hemos podido conectar. Revisa tu conexión.");
+      toast.error("No pudimos conectar. Revisa tu conexión.");
       setEnviando(false);
     }
   }
@@ -116,8 +116,8 @@ export function ContactForm() {
         />
         <h2 className="mt-4 text-[20px] font-semibold">Mensaje recibido</h2>
         <p className="mt-2 text-[15px] text-muted-foreground">
-          Te responderemos al correo que nos has dejado. Solemos contestar en
-          menos de 24 horas en días laborables.
+          Te responderemos al correo que nos dejaste. Solemos contestar en
+          menos de 24 horas en días hábiles.
         </p>
         <Button
           variant="outline"
@@ -227,7 +227,7 @@ export function ContactForm() {
         los ocultos por tipo.
       */}
       <div className="hidden" aria-hidden>
-        <label htmlFor="contacto-website">No rellenes este campo</label>
+        <label htmlFor="contacto-website">No llenes este campo</label>
         <input
           id="contacto-website"
           name="website"

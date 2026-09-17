@@ -78,7 +78,7 @@ const PRIVACY: Doc = {
         "Si te registras como tutor, además: el nombre público que decidas mostrar, tu titular profesional, tu biografía, tus enlaces profesionales y la documentación de verificación (documento de identidad, titulación, certificados, diplomas, expediente académico y currículum).",
         "Del uso de la plataforma: tus reservas, los pagos asociados, los mensajes del chat de cada reserva y las reseñas que escribas. Si eres tutor, también tus liquidaciones.",
         "Si has iniciado sesión, también registramos qué perfiles de tutor y qué mentorías consultas. No guardamos un historial página a página: de cada tutor conservamos únicamente cuántas veces has visto su perfil, cuántas veces alguna de sus mentorías, y las fechas de la primera y la última. Si navegas sin haber iniciado sesión, no se registra nada.",
-        "Si tú y la otra parte aceptáis grabar una clase, la grabación de esa sesión —imagen y voz de ambos— pasa a ser un dato que tratamos. Sin las dos aceptaciones no existe grabación alguna.",
+        "Si tú y la otra parte aceptan grabar una clase, la grabación de esa sesión —imagen y voz de ambos— pasa a ser un dato que tratamos. Sin las dos aceptaciones no existe grabación alguna.",
         "No almacenamos números de tarjeta. El pago se realiza en el entorno del proveedor de pagos; si eliges guardar un medio de pago para futuras compras, de él solo conservamos la marca (Visa, Mastercard…), los últimos cuatro dígitos y una referencia opaca del proveedor.",
       ],
     },

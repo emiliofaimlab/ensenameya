@@ -1108,8 +1108,8 @@ export default async function TutorPayoutsPage() {
 
         {fallaLaCuenta ? (
           <p className="mt-2 max-w-[620px] text-[13px] font-medium text-[#bf3333]">
-            No hemos podido leer tus datos de cobro ahora mismo. Vuelve a cargar
-            la página; si sigue igual, escríbenos antes de volver a rellenarlos
+            No pudimos leer tus datos de cobro ahora mismo. Vuelve a cargar
+            la página; si sigue igual, escríbenos antes de volver a completarlos
             — lo que tengas guardado sigue estando.
           </p>
         ) : !paisDeCobro ? (
@@ -1181,7 +1181,7 @@ export default async function TutorPayoutsPage() {
                     "Vía · destino",
                     "Reservas",
                     "Estado",
-                    "Importe",
+                    "Monto",
                   ].map((h, i) => (
                     <th
                       key={h}

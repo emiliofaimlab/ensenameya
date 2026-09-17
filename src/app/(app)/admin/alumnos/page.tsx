@@ -176,7 +176,7 @@ export default async function AdminAlumnosPage({
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Alumnos dados de alta" value={String(filas.length)} />
+        <Stat label="Alumnos registrados" value={String(filas.length)} />
         <Stat label="Alumnos que han estudiado" value={String(hanEstudiado.length)} />
         <Stat label="Mentorías tomadas" value={String(totalTomadas)} />
         <Stat
@@ -195,7 +195,7 @@ export default async function AdminAlumnosPage({
         <PanelCard>
           <p className="text-[13px] text-[#6b6b6b]">
             {todos
-              ? "Todavía no hay ningún alumno dado de alta."
+              ? "Todavía no hay ningún alumno registrado."
               : "Ningún alumno tuvo actividad en este período. Los que nunca han reservado están detrás del enlace de arriba."}
           </p>
         </PanelCard>

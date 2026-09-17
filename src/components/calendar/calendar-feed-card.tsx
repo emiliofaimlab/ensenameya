@@ -170,7 +170,7 @@ export function CalendarFeedCard({
           {url ? (
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" className="h-10">
-                <a href={webcalUrl(origin, token)}>Añadir a Apple Calendar</a>
+                <a href={webcalUrl(origin, token)}>Agregar a Apple Calendar</a>
               </Button>
               <Button asChild variant="outline" className="h-10">
                 <a
@@ -178,7 +178,7 @@ export function CalendarFeedCard({
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  Añadir a Google Calendar
+                  Agregar a Google Calendar
                 </a>
               </Button>
             </div>
@@ -187,7 +187,7 @@ export function CalendarFeedCard({
           <p className="text-[12px] text-[#6b6b6b]">
             Cualquiera que tenga este enlace puede ver tus horarios de clase y el
             título de tus mentorías, sin necesidad de iniciar sesión. No permite
-            entrar a las salas ni cambiar nada. Si crees que se ha filtrado,
+            entrar a las salas ni cambiar nada. Si crees que se filtró,
             anúlalo: el enlace deja de funcionar al momento y luego puedes
             generar uno nuevo.
           </p>

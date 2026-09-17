@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 
 const rules = [
-  `Cancelas con ${P.cutoffHours} h o más de antelación: reembolso del ${P.refundPct.studentEarly} %.`,
+  `Cancelas con ${P.cutoffHours} h o más de anticipación: reembolso del ${P.refundPct.studentEarly} %.`,
   `Cancelas con menos de ${P.cutoffHours} h: reembolso del ${P.refundPct.studentLate} %.`,
   `Si el tutor cancela: reembolso del ${P.refundPct.tutorCancels} %.`,
 ];

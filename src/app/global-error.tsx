@@ -76,7 +76,7 @@ export default function GlobalError({
               margin: 0,
             }}
           >
-            Enséñame Ya no ha podido cargar
+            Enséñame Ya no pudo cargar
           </h1>
           <p
             style={{
@@ -85,7 +85,7 @@ export default function GlobalError({
               color: "#475467",
             }}
           >
-            Ha fallado algo básico de la página. Vuelve a intentarlo; si sigue
+            Falló algo básico de la página. Vuelve a intentarlo; si sigue
             igual, escríbenos a{" "}
             <a href="mailto:Info@ensenameya.com" style={{ color: "#101828" }}>
               Info@ensenameya.com

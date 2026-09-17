@@ -40,7 +40,7 @@ export function RefundForm({
   async function refund() {
     const minor = Math.round(Number(value) * 100);
     if (!Number.isFinite(minor) || minor <= 0 || minor > remaining) {
-      toast.error(`Importe entre 0,01 y ${formatMoney(remaining, currency)}.`);
+      toast.error(`Monto entre 0,01 y ${formatMoney(remaining, currency)}.`);
       return;
     }
     if (
@@ -80,7 +80,7 @@ export function RefundForm({
       </p>
       <div className="flex items-end gap-2">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="refund-amount">Importe ({currency})</Label>
+          <Label htmlFor="refund-amount">Monto ({currency})</Label>
           <Input
             id="refund-amount"
             type="number"

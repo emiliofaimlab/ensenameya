@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 export function AvisoCopiaCalendario({ className }: { className?: string }) {
   return (
     <p className={cn("text-[12px] text-[#6b6b6b]", className)}>
-      Se añade una copia: si la clase cambia, el evento no se entera.{" "}
+      Se agrega una copia: si la clase cambia, el evento no se entera.{" "}
       <Link href="/account" className="underline underline-offset-2">
         Suscribe tu calendario
       </Link>{" "}
@@ -111,7 +111,7 @@ export function AddToCalendar({
             })}
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Añadir al calendario de Google"
+            aria-label="Agregar al calendario de Google"
           >
             <LogoMarca marca="google" />
           </a>

@@ -116,7 +116,7 @@ export default async function CarritoPage({
         </h1>
         <p className="mt-1 text-[13px] text-[#6b6b6b]">
           {lines.length === 0
-            ? "Todavía no has añadido ninguna mentoría."
+            ? "Todavía no has agregado ninguna mentoría."
             : "Revisa lo que vas a comprar antes de pasar al pago."}
         </p>
 
@@ -134,7 +134,7 @@ export default async function CarritoPage({
                 El carrito está vacío
               </p>
               <p className="mt-1 text-[13px] text-[#6b6b6b]">
-                Elige una mentoría, su día y su hora, y añádela desde la ficha.
+                Elige una mentoría, su día y su hora, y agrégala desde la ficha.
               </p>
             </div>
             <Button asChild className="h-[45px] px-6">
@@ -203,8 +203,8 @@ export default async function CarritoPage({
                   <AlertTriangleIcon className="mt-px size-4 shrink-0" />
                   <span>
                     {conProblema === 1
-                      ? "Una mentoría ha perdido su horario. Cámbiala o quítala para poder pagar."
-                      : `${conProblema} mentorías han perdido su horario. Cámbialas o quítalas para poder pagar.`}
+                      ? "Una mentoría perdió su horario. Cámbiala o quítala para poder pagar."
+                      : `${conProblema} mentorías perdieron su horario. Cámbialas o quítalas para poder pagar.`}
                   </span>
                 </div>
               ) : null}

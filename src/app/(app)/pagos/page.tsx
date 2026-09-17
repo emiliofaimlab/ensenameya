@@ -57,7 +57,7 @@ export default async function PagosPage({
       badges={badges}
       eyebrow="Pagos"
       title="Métodos de pago"
-      description="Añade o quita las tarjetas con las que pagas tus reservas."
+      description="Agrega o quita las tarjetas con las que pagas tus reservas."
     >
       <PanelCard>
         <PanelCardTitle>Tus tarjetas</PanelCardTitle>

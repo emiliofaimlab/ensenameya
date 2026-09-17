@@ -158,7 +158,7 @@ export default async function AdminActividadTutoresPage({
         <PanelCard>
           <p className="text-[13px] text-[#6b6b6b]">
             {todos
-              ? "Todavía no hay ningún tutor dado de alta."
+              ? "Todavía no hay ningún tutor registrado."
               : "Ningún tutor tuvo actividad en este período. Los que nunca han dado una mentoría están detrás del enlace de arriba."}
           </p>
         </PanelCard>

@@ -192,7 +192,7 @@ export function tarjetaClase(opts: {
       ["Con", opts.tutor],
       ["Cuándo", opts.cuando],
       ["Duración", opts.duracion],
-      ["Importe", opts.importe],
+      ["Monto", opts.importe],
     ],
     acento,
     fondo,
@@ -265,7 +265,7 @@ export function estrellas(urlBase: string): string {
     .join("");
 
   return `<tr><td align="center" style="padding:24px 32px 0">
-  <div style="font-family:${FUENTE};font-size:13px;color:${GRIS};padding-bottom:10px">Pulsa una estrella para puntuar</div>
+  <div style="font-family:${FUENTE};font-size:13px;color:${GRIS};padding-bottom:10px">Elige una estrella para puntuar</div>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse"><tr>${celdas}</tr></table>
 </td></tr>`;
 }

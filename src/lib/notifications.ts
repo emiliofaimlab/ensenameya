@@ -44,7 +44,7 @@ const TEXT: Record<string, string> = {
   reward_expiring: "Tu recompensa caduca pronto",
   reward_expired: "Tu recompensa caducó sin usarse",
   gift_purchased: "Tu regalo ya está activo",
-  gift_received: "Te han regalado una mentoría",
+  gift_received: "Te regalaron una mentoría",
   // NTF-39 · el reclamo. Es OTRO momento que NTF-35 y por eso es otra frase:
   // cuando esto sale, la persona ya tiene cuenta y el regalo ya es suyo, así
   // que lo único que queda por hacer —y lo que la campana tiene que decir— es

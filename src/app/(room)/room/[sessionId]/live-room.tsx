@@ -1191,7 +1191,7 @@ export function LiveRoom({
                   variant={muted ? "default" : "outline"}
                   onClick={() => setMuted((m) => !m)}
                 >
-                  {muted ? "Activar micro" : "Silenciar"}
+                  {muted ? "Activar micrófono" : "Silenciar"}
                 </Button>
                 <Button
                   size="sm"

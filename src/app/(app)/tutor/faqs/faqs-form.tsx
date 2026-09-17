@@ -123,7 +123,7 @@ export function TutorFaqsForm({
           onClick={() => setFaqs((p) => [...p, { q: "", a: "" }])}
           className="h-10 rounded-[8px] px-4 text-[13px]"
         >
-          + Añadir pregunta
+          + Agregar pregunta
         </Button>
 
         <Button

@@ -78,7 +78,7 @@ export function PaymentPolicy({
       <div>
         <dt className="font-semibold text-[#4b4b4b]">Si cancelas</dt>
         <dd>
-          Con {P.cutoffHours} h o más de antelación te devolvemos el{" "}
+          Con {P.cutoffHours} h o más de anticipación te devolvemos el{" "}
           {P.refundPct.studentEarly} %; con menos de {P.cutoffHours} h, el{" "}
           {P.refundPct.studentLate} %. Si cancela el tutor, siempre el{" "}
           {P.refundPct.tutorCancels} %.

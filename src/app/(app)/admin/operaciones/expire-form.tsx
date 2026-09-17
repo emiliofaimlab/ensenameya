@@ -276,7 +276,7 @@ export function ExpireForm() {
         <p className="text-[13px] text-[#6b6b6b]">
           {previa === null
             ? "Elige los plazos y consulta la vista previa: hasta verla no se puede ejecutar."
-            : "Los plazos han cambiado. Vuelve a consultar la vista previa antes de ejecutar."}
+            : "Los plazos cambiaron. Vuelve a consultar la vista previa antes de ejecutar."}
         </p>
       )}
 

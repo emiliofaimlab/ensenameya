@@ -152,7 +152,7 @@ export function ReviewForm({
             </>
           ) : (
             <>
-              Añade tu nombre en tu cuenta si quieres firmar la reseña. Mientras
+              Agrega tu nombre en tu cuenta si quieres firmar la reseña. Mientras
               tanto se publica como <em>Alumno</em>.
             </>
           )}

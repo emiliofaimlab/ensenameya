@@ -156,7 +156,7 @@ export function AddToCart({
      * fija, y por eso es el único que mueve su sitio.
      */
     toast.success(
-      yaEstaba ? "Ya la tenías en el carrito" : "Añadida al carrito",
+      yaEstaba ? "Ya la tenías en el carrito" : "Agregada al carrito",
       { position: "top-center" },
     );
 

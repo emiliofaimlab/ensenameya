@@ -301,7 +301,7 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error:
-            "Has enviado varios mensajes seguidos. Espera unos minutos y vuelve a intentarlo.",
+            "Enviaste varios mensajes seguidos. Espera unos minutos y vuelve a intentarlo.",
         },
         { status: 429 },
       );
@@ -334,7 +334,7 @@ export async function POST(req: Request) {
     // Aquí sí conviene 500: no hemos guardado nada y el mensaje se perdería.
     console.error("[contacto] no se pudo guardar", errorInsert);
     return NextResponse.json(
-      { error: "No hemos podido registrar tu mensaje. Inténtalo en un momento." },
+      { error: "No pudimos registrar tu mensaje. Inténtalo en un momento." },
       { status: 500 },
     );
   }

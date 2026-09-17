@@ -993,7 +993,7 @@ export function ProductForm({
           Requerimientos de sesión
         </h2>
         <p className="text-[13px] text-[#6b6b6b]">
-          Lo que tu alumno necesita tener listo ANTES de la clase: un portátil,
+          Lo que tu alumno necesita tener listo ANTES de la clase: una computadora,
           buena conexión, un cuaderno, un ventilador… Se lo enseñamos en la
           ficha —antes de que reserve— y en su reserva. Es opcional: si lo dejas
           vacío no se muestra nada.
@@ -1011,7 +1011,7 @@ export function ProductForm({
                 )
               }
               maxLength={MAX_REQUIREMENT_LEN}
-              placeholder="Ej: un portátil con cámara y micrófono"
+              placeholder="Ej: una computadora con cámara y micrófono"
               aria-label={`Requisito ${i + 1}`}
               className={cn(FIELD, "min-w-0 flex-1")}
             />
@@ -1036,7 +1036,7 @@ export function ProductForm({
           disabled={requirements.length >= MAX_REQUIREMENTS}
           className="h-10 self-start rounded-[8px] px-4 text-[13px]"
         >
-          + Añadir requisito
+          + Agregar requisito
         </Button>
         {requirements.length >= MAX_REQUIREMENTS ? (
           <p className="text-xs text-[#6b6b6b]">
@@ -1104,7 +1104,7 @@ export function ProductForm({
           onClick={() => setFaqs((p) => [...p, { q: "", a: "" }])}
           className="h-10 self-start rounded-[8px] px-4 text-[13px]"
         >
-          + Añadir pregunta
+          + Agregar pregunta
         </Button>
       </PanelCard>
 
@@ -1137,7 +1137,7 @@ export function ProductForm({
           <p className="mt-1 text-[12.5px] text-[#405980]">
             La política es única de plataforma (RN-37): reembolso{" "}
             {P.refundPct.studentEarly} % si se cancela con ≥{P.cutoffHours} h de
-            antelación, {P.refundPct.studentLate} % si es con menos. No se
+            anticipación, {P.refundPct.studentLate} % si es con menos. No se
             configura por mentoría.
           </p>
         </div>

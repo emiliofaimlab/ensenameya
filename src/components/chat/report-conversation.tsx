@@ -112,7 +112,7 @@ export function ReportConversation({
         <DialogHeader>
           <DialogTitle>Reportar esta conversación</DialogTitle>
           <DialogDescription>
-            Cuéntanos qué ha pasado. Lo revisa una persona del equipo; mientras
+            Cuéntanos qué pasó. Lo revisa una persona del equipo; mientras
             tanto la conversación sigue como está.
           </DialogDescription>
         </DialogHeader>

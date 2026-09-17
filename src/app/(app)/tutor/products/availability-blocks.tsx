@@ -138,7 +138,7 @@ export function AvailabilityBlocks({
 
       {scope === "all" ? (
         <p className="text-[12.5px] text-[#6b6b6b]">
-          Esta mentoría se ofrece en cualquiera de tus franjas, y las que añadas
+          Esta mentoría se ofrece en cualquiera de tus franjas, y las que agregues
           más adelante entran solas.
         </p>
       ) : (

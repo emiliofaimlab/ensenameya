@@ -393,7 +393,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error:
-          "Has hecho varios intentos seguidos. Espera unos minutos y vuelve a intentarlo.",
+          "Hiciste varios intentos seguidos. Espera unos minutos y vuelve a intentarlo.",
       },
       { status: 429 },
     );

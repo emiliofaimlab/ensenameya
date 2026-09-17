@@ -783,7 +783,7 @@ export default async function AdminPayoutsPage({
       {faltaServicio || errorRuteo ? (
         <PanelCard className="border-[#f0c987] bg-[#fdf6e7]">
           <p className="text-[13px] font-semibold text-[#8a5a12]">
-            No se ha podido resolver el riel de estas órdenes.
+            No se pudo resolver el riel de estas órdenes.
           </p>
           <p className="mt-1 text-[13px] text-[#8a5a12]">
             {faltaServicio
@@ -1035,7 +1035,7 @@ export default async function AdminPayoutsPage({
       visibles.some(({ riel }) => riel.riel?.clave === "dlocal") ? (
         <p className="text-xs text-[#6b6b6b]">
           En los rieles con conversión —los 7 países de dLocal con moneda local;
-          Ecuador no, cobra en USD— el importe de cada fila es lo que{" "}
+          Ecuador no, cobra en USD— el monto de cada fila es lo que{" "}
           <strong>sale</strong> de Enséñame Ya. Lo que le llega al tutor en su
           moneda lo fija dLocal con su tipo de cambio el día de la transferencia,
           y ese diferencial lo asume él (decisión del 2-sep-2026).
@@ -1082,7 +1082,7 @@ function Destinos({
   if (destinos === null) {
     return (
       <p className="text-xs text-[#8a5a12]">
-        No se han podido consultar los datos de cobro de este tutor.
+        No se pudieron consultar los datos de cobro de este tutor.
       </p>
     );
   }
@@ -1179,7 +1179,7 @@ function DestinoBanco({
   if (destino.estado === "error") {
     return (
       <p className="text-xs text-[#8a5a12]">
-        No se han podido leer las coordenadas bancarias de esta orden.{" "}
+        No se pudieron leer las coordenadas bancarias de esta orden.{" "}
         <span className="font-mono">{destino.mensaje}</span>
       </p>
     );
@@ -1348,7 +1348,7 @@ function Conciliacion({
                     {c.nombre} ·{" "}
                     {comprobantesRotos
                       ? "no se pudo firmar el enlace"
-                      : "el fichero ya no está en Storage"}
+                      : "el archivo ya no está en Storage"}
                   </span>
                 );
               })}

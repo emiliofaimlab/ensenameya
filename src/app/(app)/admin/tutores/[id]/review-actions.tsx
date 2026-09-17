@@ -32,7 +32,7 @@ const DOC_LABELS: Record<string, string> = {
   degree: "Título académico",
   certificate: "Certificado",
   diploma: "Diploma",
-  transcript: "Expediente académico",
+  transcript: "Historial académico",
   cv: "Currículum vitae",
   // 28-ago · el apartado pasó a llamarse «Portafolio» de cara al tutor; este
   // `doc_type` es el heredado de antes de R29-02 (cuando el enlace se guardaba

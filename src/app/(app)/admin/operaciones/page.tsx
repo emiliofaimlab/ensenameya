@@ -139,7 +139,7 @@ export default async function AdminOperacionesPage() {
           <code className="font-mono text-xs">
             /api/cron/notifications-send
           </code>
-          , el mismo job que vacía la cola: coge las notificaciones de correo en{" "}
+          , el mismo job que vacía la cola: toma las notificaciones de correo en{" "}
           <code className="font-mono text-xs">pending</code>, las manda por
           Resend y marca cada una según cómo haya ido.
         </p>

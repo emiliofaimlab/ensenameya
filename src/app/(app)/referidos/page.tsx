@@ -494,7 +494,7 @@ export default async function ReferidosPage() {
                       {sinCredencial
                         ? "El programa de invitaciones todavía no está activo."
                         : rechazadas.has(c.rf_campaign_id)
-                          ? `No hemos podido preparar tu enlace con este correo. Escríbenos a ${COMPANY.email.toLowerCase()} y lo resolvemos.`
+                          ? `No pudimos preparar tu enlace con este correo. Escríbenos a ${COMPANY.email.toLowerCase()} y lo resolvemos.`
                           : "Preparando tu enlace…"}
                       {/* El refresco SOLO cuando el enlace está de verdad en
                           camino. Sin credencial no hay nada que esperar, y con
@@ -913,7 +913,7 @@ function recompensaDe(c: FilaDeCredito, tz: string): Recompensa | null {
           : c.status === "revoked"
             ? { aviso: "Anulada", detalle: "Ya no está disponible." }
             : c.status === "refunded"
-              ? { aviso: "Devuelta", detalle: "Su importe volvió a su origen." }
+              ? { aviso: "Devuelta", detalle: "Su monto volvió a su origen." }
               : { aviso: "No disponible", detalle: "Todavía no se puede usar." };
 
     return {
@@ -996,7 +996,7 @@ function recompensaDe(c: FilaDeCredito, tz: string): Recompensa | null {
       importe: c.amount,
       moneda: c.currency,
       detalle:
-        "Vale por una mentoría de hasta ese importe. Se canjea entera: no se puede aplicar a una más cara, y si eliges una más barata la diferencia no se guarda.",
+        "Vale por una mentoría de hasta ese monto. Se canjea entera: no se puede aplicar a una más cara, y si eliges una más barata la diferencia no se guarda.",
       aviso,
       tono,
       usable: true,
@@ -1017,7 +1017,7 @@ function recompensaDe(c: FilaDeCredito, tz: string): Recompensa | null {
     moneda: c.currency,
     detalle:
       consumido > 0
-        ? `Ya has usado ${formatMoney(consumido, c.currency)} de ${formatMoney(c.amount, c.currency)}. El resto se descuenta al reservar: pagas solo la diferencia.`
+        ? `Ya usaste ${formatMoney(consumido, c.currency)} de ${formatMoney(c.amount, c.currency)}. El resto se descuenta al reservar: pagas solo la diferencia.`
         : "Se descuenta al reservar tu próxima mentoría: pagas solo la diferencia.",
     aviso,
     tono,

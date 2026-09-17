@@ -158,7 +158,7 @@ export function PaymentMethods({
           </p>
           <p className="mx-auto mt-1 max-w-[380px] text-[13px] text-[#6b6b6b]">
             {puedeAnadir
-              ? "Añade una aquí y aparecerá al pagar tus reservas. También puedes guardarla en el momento del pago, marcando «Guardar esta tarjeta». Nunca escribes los datos de tu tarjeta en Enséñame Ya."
+              ? "Agrega una aquí y aparecerá al pagar tus reservas. También puedes guardarla en el momento del pago, marcando «Guardar esta tarjeta». Nunca escribes los datos de tu tarjeta en Enséñame Ya."
               : "Al pagar una reserva puedes marcar «Guardar esta tarjeta» y aparecerá aquí para las siguientes. Nunca escribes los datos de tu tarjeta en Enséñame Ya."}
           </p>
         </div>
@@ -205,10 +205,10 @@ export function PaymentMethods({
             className="h-10 rounded-[8px] px-4 text-[13.5px] font-semibold"
           >
             <PlusIcon className="size-4" />
-            {abriendo ? "Abriendo…" : "Añadir tarjeta"}
+            {abriendo ? "Abriendo…" : "Agregar tarjeta"}
           </Button>
           <p className="mt-2 text-[13px] text-[#6b6b6b]">
-            No se te cobra nada al añadirla: queda guardada para que puedas
+            No se te cobra nada al agregarla: queda guardada para que puedas
             elegirla al pagar tus próximas reservas.
           </p>
         </div>

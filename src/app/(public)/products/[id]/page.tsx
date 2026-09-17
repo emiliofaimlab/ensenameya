@@ -61,7 +61,7 @@ import type { Faq } from "@/lib/tutor-faqs";
 const PRODUCT_FAQ = [
   {
     q: "¿Qué pasa si necesito reprogramar una sesión?",
-    a: "Puedes reagendar con al menos 24 horas de anticipación sin coste. Con menos de 24 horas de aviso se aplica la política de cancelación de la plataforma.",
+    a: "Puedes reagendar con al menos 24 horas de anticipación sin costo. Con menos de 24 horas de aviso se aplica la política de cancelación de la plataforma.",
   },
   {
     q: "¿Necesito conocimientos previos para tomar esta mentoría?",
@@ -537,7 +537,7 @@ export default async function ProductPage({
                         adorno: al lector se le dice «Valoración 4.8». */}
                     {notaMentoria !== null && totalMentoria > 0 ? (
                       <p
-                        title={`Media de ${totalMentoria} ${totalMentoria === 1 ? "reseña" : "reseñas"} de alumnos que terminaron esta mentoría`}
+                        title={`Promedio de ${totalMentoria} ${totalMentoria === 1 ? "reseña" : "reseñas"} de alumnos que terminaron esta mentoría`}
                         className="flex items-center gap-1.5 text-[13px] lg:basis-full lg:text-sm"
                       >
                         {estrellas(notaMentoria, true)}

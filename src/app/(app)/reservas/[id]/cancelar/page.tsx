@@ -166,7 +166,7 @@ export default async function CancelBookingPage({
           </span>
         </div>
         <p className="mt-2 text-xs text-[#6b6b6b]">
-          Estimación según la política. El importe final lo confirma el sistema
+          Estimación según la política. El monto final lo confirma el sistema
           al cancelar.
         </p>
       </section>

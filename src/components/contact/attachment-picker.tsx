@@ -121,7 +121,7 @@ export function AttachmentPicker({
         path = cuerpo.path;
         token = cuerpo.token;
       } catch {
-        toast.error("No hemos podido conectar. Revisa tu conexión.");
+        toast.error("No pudimos conectar. Revisa tu conexión.");
         break;
       }
 

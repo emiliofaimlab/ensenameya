@@ -135,7 +135,7 @@ export function SessionRecording({
         setEstado({
           tipo: "nada",
           texto:
-            "Este entorno no tiene proveedor de vídeo configurado: la sala va simulada y no graba.",
+            "Este entorno no tiene proveedor de video configurado: la sala va simulada y no graba.",
         });
         return;
       }

@@ -7,7 +7,7 @@ import { COMPANY } from "@/lib/company";
 export const metadata = {
   title: "Contacto · Enséñame Ya",
   description:
-    "Escríbenos si tienes dudas sobre una reserva, un pago o quieres enseñar con nosotros. Respondemos en menos de 24 horas laborables.",
+    "Escríbenos si tienes dudas sobre una reserva, un pago o quieres enseñar con nosotros. Respondemos en menos de 24 horas hábiles.",
 };
 
 /**
@@ -44,7 +44,7 @@ export default function ContactoPage() {
           <p className="mt-3 text-[16px] text-muted-foreground">
             ¿Dudas con una reserva, un pago o un reembolso? ¿Quieres enseñar con
             nosotros? Escríbenos y te contestamos en menos de 24 horas en días
-            laborables.
+            hábiles.
           </p>
         </div>
 
@@ -77,7 +77,7 @@ export default function ContactoPage() {
             <div className="rounded-2xl border border-border bg-background p-6">
               <ScaleIcon className="size-5 text-brand" aria-hidden />
               <h2 className="mt-3 text-[16px] font-semibold">
-                Reclamaciones y disputas
+                Reclamos y disputas
               </h2>
               <p className="mt-1 text-[14px] text-muted-foreground">
                 Si una sesión no se impartió o no fue como se describía,

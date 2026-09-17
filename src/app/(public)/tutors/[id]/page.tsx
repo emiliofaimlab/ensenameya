@@ -547,7 +547,7 @@ export default async function TutorProfilePage({
                     «Valoración 4.9» en vez de «estrella negra 4.9». */}
                 {hayValoracion ? (
                   <p
-                    title={`Media de ${totalResenas} reseñas de alumnos que terminaron una mentoría`}
+                    title={`Promedio de ${totalResenas} reseñas de alumnos que terminaron una mentoría`}
                     className="mt-1 flex items-center gap-1.5 text-[13px] max-lg:order-4 max-lg:basis-full max-lg:justify-center lg:mt-1.5 lg:text-sm"
                   >
                     <span aria-hidden className="flex gap-0.5 text-[#ffc531]">

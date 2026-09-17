@@ -100,7 +100,7 @@ function aUnidadesMinimas(
     return {
       ok: false,
       motivo:
-        "El importe tiene que ser un número positivo con dos decimales como mucho (por ejemplo 15 o 15,50).",
+        "El monto tiene que ser un número positivo con dos decimales como mucho (por ejemplo 15 o 15,50).",
     };
   }
 
@@ -112,7 +112,7 @@ function aUnidadesMinimas(
   if (exp === 0 && decimal.replace(/0+$/, "") !== "") {
     return {
       ok: false,
-      motivo: `El ${currency} no tiene decimales: escribe el importe en unidades enteras.`,
+      motivo: `El ${currency} no tiene decimales: escribe el monto en unidades enteras.`,
     };
   }
 
@@ -123,13 +123,13 @@ function aUnidadesMinimas(
 
   // `referral_campaigns_reward_amount_check`: `reward_amount > 0`.
   if (minimas <= 0) {
-    return { ok: false, motivo: "El importe de la recompensa tiene que ser mayor que cero." };
+    return { ok: false, motivo: "El monto de la recompensa tiene que ser mayor que cero." };
   }
   const techo = TOPE_MAX_MAYOR * 10 ** exp;
   if (minimas > techo) {
     return {
       ok: false,
-      motivo: `El importe no puede pasar de ${formatEnMoneda(techo, currency)}.`,
+      motivo: `El monto no puede pasar de ${formatEnMoneda(techo, currency)}.`,
     };
   }
 
@@ -272,7 +272,7 @@ export async function PATCH(
     moneda = cruda;
 
     if (typeof reward_amount_major !== "string" && typeof reward_amount_major !== "number") {
-      return mal("Falta el importe de la recompensa.");
+      return mal("Falta el monto de la recompensa.");
     }
     const conv = aUnidadesMinimas(String(reward_amount_major), moneda);
     if (!conv.ok) return mal(conv.motivo);

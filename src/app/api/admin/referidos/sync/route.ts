@@ -72,7 +72,7 @@ export async function POST() {
     return NextResponse.json(
       {
         error:
-          "REFERRAL_FACTORY_API_KEY no está configurada en este entorno. Ponla en Vercel y vuelve a pulsar.",
+          "REFERRAL_FACTORY_API_KEY no está configurada en este entorno. Ponla en Vercel y vuelve a intentarlo.",
       },
       { status: 503 },
     );

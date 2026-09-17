@@ -94,8 +94,8 @@ export default async function AgendarPage() {
             Todavía no hay nada que agendar
           </PanelCardTitle>
           <p className="mt-2 text-[13px] text-[#6b6b6b]">
-            Aún no hay mentorías publicadas. Vuelve en unos días o echa un
-            vistazo al directorio de tutores.
+            Aún no hay mentorías publicadas. Vuelve en unos días o revisa el
+            directorio de tutores.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Button asChild className="h-10">

@@ -74,7 +74,7 @@ export function WithdrawButton({
   const etiqueta = !hasBalance
     ? "No tienes saldo disponible para retirar"
     : disabled
-      ? "Añade una cuenta de cobro para poder retirar"
+      ? "Agrega una cuenta de cobro para poder retirar"
       : "Retirar ahora";
 
   return (

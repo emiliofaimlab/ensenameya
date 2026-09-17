@@ -102,7 +102,7 @@ export default async function HomePage() {
           {
             icon: CalendarSyncIcon,
             text: "Agenda flexible y a tu medida",
-            desc: "Eliges día y hora entre los huecos reales del tutor, en tu propia zona horaria.",
+            desc: "Eliges día y hora entre los horarios reales del tutor, en tu propia zona horaria.",
           },
         ]}
         cta={{ href: "/tutors", label: "Explorar tutores YA" }}
@@ -150,7 +150,7 @@ export default async function HomePage() {
         cta={{ href: teachHref, label: "Quiero enseñar YA" }}
         image={{
           src: "/img/home-teach.jpg",
-          alt: "Tutor impartiendo una mentoría desde su portátil",
+          alt: "Tutor impartiendo una mentoría desde su computadora",
         }}
       />
 

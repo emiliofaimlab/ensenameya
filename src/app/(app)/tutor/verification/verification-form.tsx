@@ -649,7 +649,7 @@ export function VerificationForm({
     // El primer enlace es obligatorio para ENVIAR a revisión; el borrador puede
     // quedarse a medias (el módulo se completa poco a poco, R24-15).
     if (!draft && cleaned.length === 0) {
-      toast.error("Añade al menos un enlace a tu portafolio.");
+      toast.error("Agrega al menos un enlace a tu portafolio.");
       return false;
     }
 
@@ -852,8 +852,8 @@ export function VerificationForm({
             <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
               {inWizard
                 ? completos === pasos.length
-                  ? "Está todo. Lo enviamos a revisión al pulsar «Finalizar»."
-                  : "Repasa lo que falta y complétalo aquí mismo. Lo que dejes se guarda al pulsar «Finalizar»; nada llega a revisión hasta entonces."
+                  ? "Está todo. Lo enviamos a revisión al presionar «Finalizar»."
+                  : "Repasa lo que falta y complétalo aquí mismo. Lo que dejes se guarda al presionar «Finalizar»; nada llega a revisión hasta entonces."
                 : completos === pasos.length
                   ? // «Envíalo», no «envía tus documentos»: de los cuatro
                     // bloques que acaba de nombrar el subtítulo, solo uno son
@@ -920,7 +920,7 @@ export function VerificationForm({
             <>
               {docsListos === 0
                 ? `Elige el tipo y añádelo · ${KYC_HINT}`
-                : `${docsListos} ${docsListos === 1 ? "documento añadido" : "documentos añadidos"} · ${
+                : `${docsListos} ${docsListos === 1 ? "documento agregado" : "documentos agregados"} · ${
                     faltanRequeridos.length === 0
                       ? "ya está lo que pide la aprobación"
                       : // Se nombra lo que falta en vez de contarlo («faltan 2 de
@@ -945,7 +945,7 @@ export function VerificationForm({
         >
           <p className="text-xs text-[#6b6b6b]">
             Sube lo que tengas a mano y vuelve cuando quieras: no hay una lista
-            que rellenar de golpe.
+            que completar de golpe.
           </p>
           {/* Se DESTACAN, no bloquean: «Continuar» nunca los exige. */}
           <p
@@ -1002,12 +1002,12 @@ export function VerificationForm({
               onClick={() => nuevoRef.current?.click()}
               className="h-[45px] rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
             >
-              Elegir archivo y añadir
+              Elegir archivo y agregar
             </Button>
           </div>
           {disponibles.length === 0 ? (
             <p className="mt-2 text-xs text-[#6b6b6b]">
-              Ya has añadido los {KYC_DOCS.length} tipos de documento que
+              Ya agregaste los {KYC_DOCS.length} tipos de documento que
               aceptamos. Puedes reemplazar cualquiera desde la lista.
             </p>
           ) : null}
@@ -1041,7 +1041,7 @@ export function VerificationForm({
             </div>
           ) : (
             <p className="mt-4 rounded-[12px] border border-dashed border-[#e0e0e0] p-4 text-center text-[13px] text-[#6b6b6b]">
-              Todavía no has añadido ningún documento.
+              Todavía no has agregado ningún documento.
             </p>
           )}
         </ChecklistStep>
@@ -1067,7 +1067,7 @@ export function VerificationForm({
           <p className="text-xs text-[#6b6b6b]">
             Tu web, tu portafolio o tus perfiles públicos: es parte de lo que
             revisamos. El primer enlace es obligatorio para enviar tu perfil a
-            revisión y puedes añadir hasta {MAX_SOCIALS}; si lo tuyo es una web
+            revisión y puedes agregar hasta {MAX_SOCIALS}; si lo tuyo es una web
             propia, elige «Sitio web / Portafolio» y pega el enlace que quieras.
           </p>
           <div className="mt-4 flex flex-col gap-3">
@@ -1133,7 +1133,7 @@ export function VerificationForm({
                 }
                 className="h-10 w-fit rounded-[8px] px-4 text-[13.5px] text-[#4d4d4d]"
               >
-                Añadir otra
+                Agregar otra
               </Button>
             ) : (
               <p className="text-xs text-[#6b6b6b]">
@@ -1221,8 +1221,8 @@ export function VerificationForm({
         Formatos: {KYC_HINT}. Tus documentos son privados; solo el equipo de
         revisión los ve.{" "}
         {inWizard
-          ? "Elige tus archivos y pulsa «Finalizar»: se guardan y se envían a revisión con el resto de tu expediente."
-          : "Elige tus archivos y guárdalos como borrador para seguir más tarde: nada llega a revisión hasta que pulses «Guardar y enviar a revisión»."}
+          ? "Elige tus archivos y presiona «Finalizar»: se guardan y se envían a revisión con el resto de tu expediente."
+          : "Elige tus archivos y guárdalos como borrador para seguir más tarde: nada llega a revisión hasta que presiones «Guardar y enviar a revisión»."}
       </p>
     </>
   );

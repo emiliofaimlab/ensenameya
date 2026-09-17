@@ -291,7 +291,7 @@ export function PayoutActions({
           setBusy(false);
           setPaso(null);
           fallo(
-            `No se pudo subir «${f.name}»: ${errSubida.message}. No se ha marcado nada como pagado y el tutor no ha recibido ningún aviso.`,
+            `No se pudo subir «${f.name}»: ${errSubida.message}. No se marcó nada como pagado y el tutor no recibió ningún aviso.`,
           );
           return;
         }
@@ -340,7 +340,7 @@ export function PayoutActions({
         // El pago YA está marcado y el aviso YA ha salido: decirlo entero, y no
         // cerrar el formulario ni refrescar, para que este texto se pueda leer.
         fallo(
-          `El pago quedó marcado como pagado y el tutor ya ha recibido el aviso, pero «${c.nombre}» no se pudo adjuntar: ${errAdj.message}. La referencia sí está guardada. Recarga la pantalla para ver la fila al día.`,
+          `El pago quedó marcado como pagado y el tutor ya recibió el aviso, pero «${c.nombre}» no se pudo adjuntar: ${errAdj.message}. La referencia sí está guardada. Recarga la pantalla para ver la fila al día.`,
         );
         return;
       }
@@ -765,7 +765,7 @@ export function DatoCopiable({
       window.setTimeout(() => setCopiado(false), 2000);
     } catch {
       toast.error(
-        `No se pudo copiar ${etiqueta}: este navegador no da acceso al portapapeles. Pulsa sobre el número —se selecciona entero— y cópialo con el teclado.`,
+        `No se pudo copiar ${etiqueta}: este navegador no da acceso al portapapeles. Haz clic sobre el número —se selecciona entero— y cópialo con el teclado.`,
       );
     }
   }

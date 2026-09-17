@@ -127,7 +127,7 @@ export default async function TutorCancelBookingPage({
         </h2>
         <p className="mt-1 text-[13px] text-[#6b6b6b]">
           La política es única de plataforma y distingue quién cancela:
-          si cancela el alumno depende de la antelación ({P.refundPct.studentEarly}{" "}
+          si cancela el alumno depende de la anticipación ({P.refundPct.studentEarly}{" "}
           % con {P.cutoffHours} h o más, {P.refundPct.studentLate} % con menos).
           Cuando cancelas tú se devuelve el {pct} %, canceles cuando canceles.
         </p>
@@ -140,7 +140,7 @@ export default async function TutorCancelBookingPage({
           </span>
         </div>
         <p className="mt-2 text-xs text-[#6b6b6b]">
-          Estimación sobre el total de la reserva; el importe exacto lo calcula
+          Estimación sobre el total de la reserva; el monto exacto lo calcula
           el sistema al cancelar. El reembolso sale hacia el medio de pago con
           el que pagó, y puede tardar unos días en reflejarse en su cuenta.
         </p>
@@ -165,7 +165,7 @@ export default async function TutorCancelBookingPage({
           </li>
           <li>A ti, con la misma copia de cancelación, para que te quede constancia.</li>
           <li>
-            El chat de la reserva se cierra: dejaréis de poder escribiros por
+            El chat de la reserva se cierra: dejarán de poder escribirse por
             aquí.
           </li>
         </ul>

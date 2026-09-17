@@ -525,7 +525,7 @@ export function PayoutAccountForm({
               Los datos que tienes guardados son de{" "}
               {etiquetaPaisGuardado ?? guardado.country} y ahora cobras en{" "}
               {etiquetaPais}. No se borran, pero no sirven para pagarte allí:
-              rellena los de {etiquetaPais}.
+              completa los de {etiquetaPais}.
             </>
           )}
         </p>

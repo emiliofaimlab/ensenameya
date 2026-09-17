@@ -138,7 +138,7 @@ export default async function RegalarPage({
               Icon: CalendarClockIcon,
               titulo: "El horario lo elige quien lo recibe",
               texto:
-                "Tú no reservas ningún hueco. El regalo le aparece en «Mis reservas» y agenda con ese tutor cuando le venga bien.",
+                "Tú no reservas ningún horario. El regalo le aparece en «Mis reservas» y agenda con ese tutor cuando le venga bien.",
             },
             {
               Icon: HourglassIcon,

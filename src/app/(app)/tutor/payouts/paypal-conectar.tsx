@@ -51,7 +51,7 @@ export function PaypalConectar({
       // pestaña nueva dejaría esta mintiendo hasta que se recargue.
       window.location.href = datos.url;
     } catch {
-      toast.error("No se pudo contactar con PayPal");
+      toast.error("No pudimos comunicarnos con PayPal");
     } finally {
       setCargando(false);
     }

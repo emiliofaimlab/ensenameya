@@ -151,7 +151,7 @@ export function MetodosDeCobro({
     if (!uid) {
       setElegida(anterior);
       setGuardando(false);
-      toast.error("Tu sesión ha caducado. Vuelve a entrar para guardar tu elección.");
+      toast.error("Tu sesión caducó. Vuelve a entrar para guardar tu elección.");
       return;
     }
 

@@ -150,7 +150,7 @@ export default async function MisRegalosPage() {
             No pudimos cargar tus regalos
           </PanelCardTitle>
           <p role="alert" className="mt-2 text-[13px] text-[#6b6b6b]">
-            Ha fallado la consulta, así que esta lista está incompleta —no es que
+            Falló la consulta, así que esta lista está incompleta —no es que
             no tengas regalos—. Recarga la página y, si sigue igual, escríbenos a{" "}
             {COMPANY.email}.
           </p>

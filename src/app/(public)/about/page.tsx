@@ -176,7 +176,7 @@ export default async function AboutPage() {
           stats?.ratingAvg
             ? {
                 value: `${stats.ratingAvg} / 5`,
-                label: "valoración media",
+                label: "valoración promedio",
                 icon: StarIcon,
                 position: "top-right",
               }

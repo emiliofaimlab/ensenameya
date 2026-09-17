@@ -488,7 +488,7 @@ function textoDeCaducidad(iso: string | null): string | null {
  */
 function enCristiano(mensaje: string): string {
   if (/cobro abierto/i.test(mensaje)) {
-    return "Tu pago ya se abrió con otro importe. Recarga la página para cambiar tu crédito.";
+    return "Tu pago ya se abrió con otro monto. Recarga la página para cambiar tu crédito.";
   }
   if (/ya tiene un crédito/i.test(mensaje)) {
     return "Esta reserva ya tiene un crédito aplicado. Recarga la página para verlo.";
