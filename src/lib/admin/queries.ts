@@ -524,3 +524,90 @@ export async function tutorTeachingRecord(f: {
     ultimaClase: r.ultima_clase,
   }));
 }
+
+/* ==========================================================================
+ * Registro de aprendizaje por alumno (`student_learning_record`)
+ *
+ * El espejo de lo de arriba por el otro extremo de la sesión, y por el mismo
+ * motivo por el que existe aquella: el panel no tenía forma de responder «¿quién
+ * está estudiando aquí?». Lo pidió el cliente el 17-sep — «no veo el reporte de
+ * estudiantes» —, y tenía razón: el nombre del alumno solo salía reserva a
+ * reserva en `/admin/bookings`, sin una sola agregación.
+ *
+ * Mismas dos advertencias que su gemela: es una RPC y no lecturas por RLS
+ * porque agregar `sessions` y `payments` enteras en JS sería el error que
+ * `20260715190000` ya razonó; y es MÉTRICA INTERNA — la barrera de verdad está
+ * DENTRO de la función (`has_role('admin')`), no en este fichero.
+ * ========================================================================== */
+
+export type StudentLearningRow = {
+  studentId: string;
+  nombre: string;
+  alta: string;
+  suspendido: boolean;
+  /** Reservas que llegaron a pagarse (mismo criterio que `pair_booking_stats`). */
+  reservas: number;
+  /** ⚠️ `tomadas` y `noShows` NO se suman: DP-08, igual que en el lado tutor. */
+  tomadas: number;
+  noShows: number;
+  tutoresDistintos: number;
+  /** Por moneda. `gastado` es de su bolsillo (bruto − crédito), no el GMV. */
+  gastado: { currency: string; gastado: number; devuelto: number }[];
+  primeraClase: string | null;
+  ultimaClase: string | null;
+};
+
+/**
+ * ⚠️ El mismo agujero del generador que en `tutor_teaching_record`, y por la
+ * misma razón: `alumno_nombre`, `primera_clase` y `ultima_clase` salen como
+ * `string` a secas y los tres son NULABLES —`min()`/`max()` sobre cero filas dan
+ * NULL, y `profiles.full_name` es nulable de verdad (hay perfiles sin nombre en
+ * dev)—. Se corrige aquí, en la frontera. `gastado` llega como `Json` y la
+ * función SQL garantiza que es un array (`coalesce(…, '[]'::jsonb)`), pero el
+ * tipo generado no lo sabe.
+ */
+type StudentRpcRow = Omit<
+  Database["public"]["Functions"]["student_learning_record"]["Returns"][number],
+  "alumno_nombre" | "primera_clase" | "ultima_clase"
+> & {
+  alumno_nombre: string | null;
+  primera_clase: string | null;
+  ultima_clase: string | null;
+};
+
+/**
+ * Registro de aprendizaje de TODOS los alumnos, ya ordenado por actividad.
+ *
+ * ⚠️ La ventana recorta la fila entera, igual que en el lado tutor: con
+ * `from`/`to`, `ultimaClase` es la última clase **dentro** de la ventana. La
+ * pantalla lo dice en voz alta o el número engaña.
+ */
+export async function studentLearningRecord(f: {
+  from?: string;
+  to?: string;
+}): Promise<StudentLearningRow[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("student_learning_record", {
+    p_from: asDay(f.from),
+    p_to: asDay(f.to),
+  });
+
+  // Regla de oro 10: `const { data } = …` convertiría un fallo de la RPC en una
+  // lista vacía, y «este sitio no tiene alumnos» es una mentira muy creíble.
+  if (error)
+    throw new Error(`No se pudo leer el registro de alumnos: ${error.message}`);
+
+  return ((data ?? []) as StudentRpcRow[]).map((r) => ({
+    studentId: r.student_id,
+    nombre: r.alumno_nombre ?? "Alumno sin nombre",
+    alta: r.alta,
+    suspendido: r.suspendido,
+    reservas: r.reservas,
+    tomadas: r.tomadas,
+    noShows: r.no_shows,
+    tutoresDistintos: r.tutores_distintos,
+    gastado: (r.gastado ?? []) as StudentLearningRow["gastado"],
+    primeraClase: r.primera_clase,
+    ultimaClase: r.ultima_clase,
+  }));
+}

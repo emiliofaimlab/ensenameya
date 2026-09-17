@@ -14,6 +14,7 @@ import {
   CreditCardIcon,
   FolderTreeIcon,
   GiftIcon,
+  GraduationCapIcon,
   HeartHandshakeIcon,
   HomeIcon,
   LayoutDashboardIcon,
@@ -271,6 +272,13 @@ export const ADMIN_ITEMS: Item[] = [
     label: "Mentorías impartidas",
     icon: ActivityIcon,
   },
+  // El reporte del otro lado del aula, pedido por el cliente el 17-sep: no
+  // había NINGUNA pantalla que contestara «¿quién estudia aquí?». Va aquí, y no
+  // más abajo, porque el menú agrupa primero a las PERSONAS (tutores, quién da
+  // clase, alumnos) y después el dinero y las colas — y porque es donde el
+  // cliente lo fue a buscar y no lo encontró. `UsersIcon` ya es de Tutores; el
+  // birrete distingue los dos lados sin leer la etiqueta.
+  { href: "/admin/alumnos", label: "Alumnos", icon: GraduationCapIcon },
   { href: "/admin/payments", label: "Pagos", icon: ReceiptIcon },
   // X-01 · no está en el Figma. Va pegada a Pagos y no a Payouts porque un
   // reembolso es un COBRO al revés: cada fila cuelga de un `payment`, la

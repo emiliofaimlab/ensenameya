@@ -3554,6 +3554,22 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      student_learning_record: {
+        Args: { p_from?: string; p_to?: string }
+        Returns: {
+          alta: string
+          alumno_nombre: string
+          gastado: Json
+          no_shows: number
+          primera_clase: string
+          reservas: number
+          student_id: string
+          suspendido: boolean
+          tomadas: number
+          tutores_distintos: number
+          ultima_clase: string
+        }[]
+      }
       student_tutor_affinity: {
         Args: { p_limit?: number }
         Returns: {

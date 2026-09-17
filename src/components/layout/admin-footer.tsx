@@ -6,6 +6,10 @@ const COLS: { title: string; links: { href: string; label: string }[] }[] = [
     title: "GESTIÓN",
     links: [
       { href: "/admin/tutores", label: "Tutores" },
+      // Las dos caras del aula, juntas. Sube la columna a cinco enlaces; las
+      // otras dos siguen en cuatro y dos, que es una rejilla que ya era
+      // desigual.
+      { href: "/admin/alumnos", label: "Alumnos" },
       { href: "/admin/payments", label: "Pagos" },
       { href: "/admin/bookings", label: "Reservas" },
       { href: "/admin/payouts", label: "Payouts" },
