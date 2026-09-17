@@ -736,3 +736,161 @@ export async function studentLearningRecord(f: {
     terminos: (r.terminos as StudentLearningRow["terminos"]) ?? null,
   }));
 }
+
+/* ==========================================================================
+ * Reservas y pagos ENTEROS, para el CSV
+ *
+ * `listBookings` y `listPayments` paginan de 20 en 20 porque son pantallas; un
+ * export no puede. Estas dos traen todo lo que encaje con los filtros, en
+ * páginas de 1.000 —el tope que PostgREST devuelve por petición— hasta un techo
+ * duro.
+ *
+ * ⚠️ EL TECHO SE ANUNCIA. Si se alcanza, quien llama lo sabe por `truncado` y
+ * el CSV lo escribe en una última fila. Un export que se corta en silencio es
+ * el que hace cuadrar mal una caja: nadie revisa si venían 20.000 o 19.999.
+ * ========================================================================== */
+
+const CSV_PAGINA = 1000;
+const CSV_TECHO = 20_000;
+
+export type BookingCsvRow = BookingListRow & {
+  bookingRef: string | null;
+  numSessions: number;
+  sessionDurationMin: number;
+  subtotalAmount: number;
+  tierSplitPct: number;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  payerCountry: string | null;
+  payeeCountry: string | null;
+};
+
+export async function allBookingsForCsv(f: {
+  status?: string;
+  from?: string;
+  to?: string;
+}): Promise<{ filas: BookingCsvRow[]; truncado: boolean }> {
+  const supabase = await createClient();
+  const { fromInclusive, toExclusive } = dayRange(f.from, f.to);
+  const status = asBookingStatus(f.status);
+  const filas: BookingCsvRow[] = [];
+
+  for (let desde = 0; desde < CSV_TECHO; desde += CSV_PAGINA) {
+    let q = supabase
+      .from("bookings")
+      .select(
+        "id, booking_ref, status, currency, total_amount, subtotal_amount, num_sessions, session_duration_min, tier_split_pct, created_at, completed_at, cancelled_at, cancel_reason, payer_country, payee_country, products(title), student:profiles!bookings_student_id_fkey(full_name), tutor:profiles!bookings_tutor_id_fkey(full_name)",
+      );
+    if (status) q = q.eq("status", status);
+    if (fromInclusive) q = q.gte("created_at", fromInclusive);
+    if (toExclusive) q = q.lt("created_at", toExclusive);
+
+    const { data, error } = await q
+      .order("created_at", { ascending: false })
+      .range(desde, desde + CSV_PAGINA - 1);
+
+    // Regla de oro 10. Aquí duele el doble: un CSV a medias se abre igual.
+    if (error)
+      throw new Error(`No se pudieron leer las reservas: ${error.message}`);
+
+    const lote = data ?? [];
+    for (const b of lote)
+      filas.push({
+        id: b.id,
+        bookingRef: b.booking_ref,
+        status: b.status,
+        currency: b.currency,
+        totalAmount: b.total_amount,
+        subtotalAmount: b.subtotal_amount,
+        numSessions: b.num_sessions,
+        sessionDurationMin: b.session_duration_min,
+        tierSplitPct: b.tier_split_pct,
+        createdAt: b.created_at,
+        completedAt: b.completed_at,
+        cancelledAt: b.cancelled_at,
+        cancelReason: b.cancel_reason,
+        payerCountry: b.payer_country,
+        payeeCountry: b.payee_country,
+        productTitle: b.products?.title ?? "—",
+        studentName: b.student?.full_name ?? "—",
+        tutorName: b.tutor?.full_name ?? "—",
+      });
+
+    if (lote.length < CSV_PAGINA) return { filas, truncado: false };
+  }
+  return { filas, truncado: true };
+}
+
+export type PaymentCsvRow = PaymentListRow & {
+  serviceFeePct: number;
+  tierSplitPct: number;
+  creditAmount: number;
+  providerPaymentId: string | null;
+  payerCountry: string | null;
+  paidAt: string | null;
+  failedAt: string | null;
+  studentName: string;
+  tutorName: string;
+};
+
+export async function allPaymentsForCsv(
+  f: PaymentFilters,
+): Promise<{ filas: PaymentCsvRow[]; truncado: boolean }> {
+  const supabase = await createClient();
+  const { fromInclusive, toExclusive } = dayRange(f.from, f.to);
+  const status = asPaymentStatus(f.status);
+  const filas: PaymentCsvRow[] = [];
+
+  for (let desde = 0; desde < CSV_TECHO; desde += CSV_PAGINA) {
+    // ⚠️ El embed nombra las dos FKs de `bookings` a `profiles`: sin
+    // `!bookings_student_id_fkey` esto es ambiguo y se cae con PGRST201
+    // (regla de oro 10). Mismo motivo que en `listBookings`.
+    let q = supabase
+      .from("payments")
+      .select(
+        "id, booking_id, status, currency, gross_amount, credit_amount, platform_fee_amount, tutor_net_amount, service_fee_amount, service_fee_pct, tier_split_pct, refunded_amount, provider, provider_payment_id, payer_country, payee_country, created_at, paid_at, failed_at, bookings(products(title), student:profiles!bookings_student_id_fkey(full_name), tutor:profiles!bookings_tutor_id_fkey(full_name))",
+      );
+    if (status) q = q.eq("status", status);
+    if (f.provider) q = q.eq("provider", f.provider);
+    if (fromInclusive) q = q.gte("created_at", fromInclusive);
+    if (toExclusive) q = q.lt("created_at", toExclusive);
+
+    const { data, error } = await q
+      .order("created_at", { ascending: false })
+      .range(desde, desde + CSV_PAGINA - 1);
+
+    if (error)
+      throw new Error(`No se pudieron leer los pagos: ${error.message}`);
+
+    const lote = data ?? [];
+    for (const p of lote)
+      filas.push({
+        id: p.id,
+        bookingId: p.booking_id,
+        status: p.status,
+        currency: p.currency,
+        grossAmount: p.gross_amount,
+        creditAmount: p.credit_amount,
+        platformFeeAmount: p.platform_fee_amount,
+        tutorNetAmount: p.tutor_net_amount,
+        serviceFeeAmount: p.service_fee_amount,
+        serviceFeePct: p.service_fee_pct,
+        tierSplitPct: p.tier_split_pct,
+        refundedAmount: p.refunded_amount,
+        provider: p.provider,
+        providerPaymentId: p.provider_payment_id,
+        payerCountry: p.payer_country,
+        payeeCountry: p.payee_country,
+        createdAt: p.created_at,
+        paidAt: p.paid_at,
+        failedAt: p.failed_at,
+        productTitle: p.bookings?.products?.title ?? "—",
+        studentName: p.bookings?.student?.full_name ?? "—",
+        tutorName: p.bookings?.tutor?.full_name ?? "—",
+      });
+
+    if (lote.length < CSV_PAGINA) return { filas, truncado: false };
+  }
+  return { filas, truncado: true };
+}

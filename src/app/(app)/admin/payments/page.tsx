@@ -10,9 +10,10 @@ import {
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { AdminShell } from "@/components/layout/admin-shell";
-import { Button } from "@/components/ui/button";
 import { Pager } from "@/components/catalog/pager";
 import { PAYMENT_BADGE } from "../badges";
+import { Button } from "@/components/ui/button";
+import { FichaPago } from "./ficha-pago";
 import { AdminFilters } from "./filters";
 
 export const metadata = { title: "Pagos · Enséñame Ya" };
@@ -62,6 +63,14 @@ export default async function AdminPaymentsPage({
     listPaymentProviders(),
   ]);
 
+  /** El CSV con los mismos filtros de la pantalla, menos la página. */
+  const hrefCsv = (() => {
+    const q = new URLSearchParams({ tipo: "pagos" });
+    for (const [k, v] of Object.entries(sp))
+      if (v && k !== "page") q.set(k, String(v));
+    return `/api/admin/export?${q.toString()}`;
+  })();
+
   const pageHref = (n: number) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) if (v && k !== "page") p.set(k, v);
@@ -78,6 +87,18 @@ export default async function AdminPaymentsPage({
     <AdminShell
       title="Pagos"
       description="En proceso e histórico (misma vista, AD06/AD07)."
+      // Arrastra los MISMOS filtros que la pantalla, así que el fichero y lo
+      // que se ve no pueden decir cosas distintas. Lo único que no arrastra es
+      // la página: un export paginado no es un export.
+      actions={
+        <Button
+          asChild
+          variant="outline"
+          className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
+        >
+          <a href={hrefCsv}>Descargar CSV</a>
+        </Button>
+      }
     >
       {/* Chips (219:51): "En proceso" filtra pendientes; "Histórico", todo. */}
       <div className="flex flex-wrap gap-2">
@@ -207,13 +228,10 @@ export default async function AdminPaymentsPage({
                     >
                       {b.label}
                     </StatusPill>
-                    <Button
-                      asChild
-                      variant="outline"
-                      className="h-9 rounded-[8px] px-3.5 text-[13px] text-[#595959]"
-                    >
-                      <Link href={`/admin/payments/${p.id}`}>Ver</Link>
-                    </Button>
+                    {/* Abre el detalle SIN navegar. Ojo: aquí el modal NO
+                        sustituye a `/admin/payments/[id]`, que tiene el
+                        reembolso manual y la traza del webhook — enlaza allí. */}
+                    <FichaPago id={p.id} corto={p.id.slice(0, 8)} />
                   </div>
                 </li>
               );

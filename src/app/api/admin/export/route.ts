@@ -1,5 +1,7 @@
 import { getSessionContext } from "@/lib/auth/server";
 import {
+  allBookingsForCsv,
+  allPaymentsForCsv,
   studentLearningRecord,
   tutorTeachingRecord,
 } from "@/lib/admin/queries";
@@ -70,19 +72,48 @@ export async function GET(req: Request) {
   if (noPasa) return noPasa;
 
   const url = new URL(req.url);
-  const tipo = url.searchParams.get("tipo") === "tutores" ? "tutores" : "alumnos";
+  const pedido = url.searchParams.get("tipo") ?? "";
+  const tipo = (["alumnos", "tutores", "reservas", "pagos"] as const).includes(
+    pedido as "alumnos",
+  )
+    ? (pedido as "alumnos" | "tutores" | "reservas" | "pagos")
+    : "alumnos";
   const dias = DIAS[url.searchParams.get("p") ?? ""];
   const from = dias ? desdeHace(dias) : undefined;
+
+  // Reservas y pagos no van por presets sino por los MISMOS filtros que sus
+  // pantallas (`AdminFilters`): estado, proveedor y rango de fechas. Se pasan
+  // tal cual y se validan donde ya se validaban, en `lib/admin/queries.ts`:
+  // lo que no encaje con el enum se ignora en vez de tumbar la consulta.
+  const filtros = {
+    status: url.searchParams.get("status") ?? undefined,
+    provider: url.searchParams.get("provider") ?? undefined,
+    from: url.searchParams.get("from") ?? undefined,
+    to: url.searchParams.get("to") ?? undefined,
+  };
 
   // El nombre del fichero lleva el período dentro: quien acumule tres
   // descargas en la carpeta tiene que poder distinguirlas sin abrirlas. La
   // fecha se saca de `from` cuando lo hay, y del día de hoy cuando no.
   const hoy = new Date().toISOString().slice(0, 10);
-  const sufijo = dias ? `ultimos-${dias}-dias` : "historico";
+  const sufijo =
+    tipo === "reservas" || tipo === "pagos"
+      ? [filtros.status, filtros.provider, filtros.from, filtros.to]
+          .filter(Boolean)
+          .join("-") || "todo"
+      : dias
+        ? `ultimos-${dias}-dias`
+        : "historico";
   const nombre = `ensenameya-${tipo}-${sufijo}-${hoy}.csv`;
 
   const csv =
-    tipo === "tutores" ? await csvTutores(from) : await csvAlumnos(from);
+    tipo === "tutores"
+      ? await csvTutores(from)
+      : tipo === "reservas"
+        ? await csvReservas(filtros)
+        : tipo === "pagos"
+          ? await csvPagos(filtros)
+          : await csvAlumnos(from);
 
   return new Response(csv, {
     headers: {
@@ -262,4 +293,134 @@ async function csvTutores(from?: string): Promise<string> {
       t.terminos ? `${t.terminos.version} (${fechaCsv(t.terminos.aceptados)})` : "",
     ]),
   );
+}
+
+/**
+ * La fila que avisa de que el fichero se cortó. Va al final y no al principio a
+ * propósito: una cabecera con una fila de aviso encima rompe la importación de
+ * Excel, y el que abre el CSV para cuadrar números llega al final igualmente.
+ */
+function avisoDeTope(columnas: number): (string | number)[][] {
+  return [
+    Array.from({ length: columnas }, (_, i) =>
+      i === 0
+        ? "⚠️ CORTADO EN 20000 FILAS — afina los filtros y vuelve a descargar"
+        : "",
+    ),
+  ];
+}
+
+async function csvReservas(f: {
+  status?: string;
+  from?: string;
+  to?: string;
+}): Promise<string> {
+  const { filas, truncado } = await allBookingsForCsv(f);
+  const cabeceras = [
+    "Referencia",
+    "Estado",
+    "Creada",
+    "Mentoría",
+    "Alumno",
+    "Tutor",
+    "Sesiones",
+    "Minutos por sesión",
+    "Subtotal",
+    "Total",
+    "Moneda",
+    "Reparto del tutor (%)",
+    "Completada",
+    "Cancelada",
+    "Motivo de cancelación",
+    "País del pagador",
+    "País del tutor",
+    "Id",
+  ];
+  return aCsv(cabeceras, [
+    ...filas.map((b) => [
+      b.bookingRef,
+      b.status,
+      fechaCsv(b.createdAt),
+      b.productTitle,
+      b.studentName,
+      b.tutorName,
+      b.numSessions,
+      b.sessionDurationMin,
+      importeCsv(b.subtotalAmount),
+      importeCsv(b.totalAmount),
+      b.currency,
+      b.tierSplitPct,
+      fechaCsv(b.completedAt),
+      fechaCsv(b.cancelledAt),
+      b.cancelReason,
+      b.payerCountry,
+      b.payeeCountry,
+      b.id,
+    ]),
+    ...(truncado ? avisoDeTope(cabeceras.length) : []),
+  ]);
+}
+
+async function csvPagos(f: {
+  status?: string;
+  provider?: string;
+  from?: string;
+  to?: string;
+}): Promise<string> {
+  const { filas, truncado } = await allPaymentsForCsv(f);
+  const cabeceras = [
+    "Estado",
+    "Creado",
+    "Pagado",
+    "Fallido",
+    "Mentoría",
+    "Alumno",
+    "Tutor",
+    "Bruto",
+    "Pagado con crédito",
+    "Cargo por servicio",
+    "Cargo (%)",
+    "Comisión",
+    "Neto del tutor",
+    "Devuelto",
+    "Moneda",
+    "Reparto del tier (%)",
+    "Proveedor",
+    "Referencia del proveedor",
+    "País del pagador",
+    "País del tutor",
+    "Id",
+    "Id de la reserva",
+  ];
+  return aCsv(cabeceras, [
+    ...filas.map((p) => [
+      p.status,
+      fechaCsv(p.createdAt),
+      fechaCsv(p.paidAt),
+      fechaCsv(p.failedAt),
+      p.productTitle,
+      p.studentName,
+      p.tutorName,
+      importeCsv(p.grossAmount),
+      importeCsv(p.creditAmount),
+      // ⚠️ Estas dos columnas son la razón de que el CSV de pagos exista con
+      // este detalle: desde el 16-sep el invariante es
+      // `bruto = comisión + neto + cargo`, y quien intente cuadrar una caja con
+      // solo tres de las cuatro cifras no va a llegar nunca.
+      importeCsv(p.serviceFeeAmount),
+      p.serviceFeePct,
+      importeCsv(p.platformFeeAmount),
+      importeCsv(p.tutorNetAmount),
+      importeCsv(p.refundedAmount),
+      p.currency,
+      p.tierSplitPct,
+      p.provider,
+      p.providerPaymentId,
+      p.payerCountry,
+      p.payeeCountry,
+      p.id,
+      p.bookingId,
+    ]),
+    ...(truncado ? avisoDeTope(cabeceras.length) : []),
+  ]);
 }
