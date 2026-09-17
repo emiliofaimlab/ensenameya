@@ -87,7 +87,16 @@ export default async function AdminAlumnosPage({
     (f) => f.tomadas + f.noShows + f.reservas > 0,
   );
   const hanEstudiado = filas.filter((f) => f.tomadas > 0);
-  const visibles = todos ? filas : conActividad;
+
+  // ⚠️ SI NADIE TIENE ACTIVIDAD, SE ENSEÑAN TODOS. Sin esta línea la pantalla
+  // dice «ningún alumno tuvo actividad» teniendo veinte filas a mano y los
+  // esconde detrás de un enlace — que es justo lo que pasó el día que esto se
+  // estrenó en producción, donde todavía nadie ha reservado: el cliente lo leyó
+  // como «no hay alumnos» y dio la pantalla por rota. Una lista vacía es una
+  // mentira creíble (regla de oro 10), y aquí no hacía falta ni una consulta
+  // fallida para contarla.
+  const hayActividad = conActividad.length > 0;
+  const visibles = todos || !hayActividad ? filas : conActividad;
 
   const totalTomadas = filas.reduce((s, f) => s + f.tomadas, 0);
 
@@ -156,14 +165,18 @@ export default async function AdminAlumnosPage({
           Todo el histórico
         </Link>
 
-        <Link
-          href={href({ ver: todos ? undefined : "todos" })}
-          className="ml-auto text-[13px] text-brand hover:underline"
-        >
-          {todos
-            ? "Ocultar a los que no han reservado nunca"
-            : `Ver también los que no han reservado nunca (${filas.length - conActividad.length})`}
-        </Link>
+        {/* El enlace solo tiene sentido si hay algo que esconder: cuando nadie
+            tiene actividad ya están todos a la vista. */}
+        {hayActividad ? (
+          <Link
+            href={href({ ver: todos ? undefined : "todos" })}
+            className="ml-auto text-[13px] text-brand hover:underline"
+          >
+            {todos
+              ? "Ocultar a los que no han reservado nunca"
+              : `Ver también los que no han reservado nunca (${filas.length - conActividad.length})`}
+          </Link>
+        ) : null}
       </div>
 
       {/* ⚠️ Mismo aviso que en el registro de tutores: el período recorta la fila
@@ -196,12 +209,21 @@ export default async function AdminAlumnosPage({
         />
       </div>
 
+      {!hayActividad && filas.length > 0 ? (
+        <PanelCard className="border-[#cfe3f7] bg-[#f2f8ff] py-3">
+          <p className="text-[13px] text-[#2a5b8a]">
+            Están los <strong>{filas.length}</strong> registrados.{" "}
+            {preset
+              ? "Ninguno tuvo actividad en este período, así que no se esconde a nadie."
+              : "Ninguno ha reservado todavía, así que no se esconde a nadie."}
+          </p>
+        </PanelCard>
+      ) : null}
+
       {visibles.length === 0 ? (
         <PanelCard>
           <p className="text-[13px] text-[#6b6b6b]">
-            {todos
-              ? "Todavía no hay ningún alumno registrado."
-              : "Ningún alumno tuvo actividad en este período. Los que nunca han reservado están detrás del enlace de arriba."}
+            Todavía no hay ningún alumno registrado.
           </p>
         </PanelCard>
       ) : (

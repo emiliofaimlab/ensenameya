@@ -65,7 +65,14 @@ export default async function AdminActividadTutoresPage({
   // resolver DP-08 de tapadillo, y en el lado optimista.
   const conActividad = filas.filter((f) => f.impartidas + f.noShows > 0);
   const dieronClase = filas.filter((f) => f.impartidas > 0);
-  const visibles = todos ? filas : conActividad;
+  // ⚠️ SI NADIE TIENE ACTIVIDAD, SE ENSEÑAN TODOS. Misma corrección que en
+  // `/admin/alumnos` y por el mismo susto: en producción, donde todavía no se
+  // ha dado ninguna mentoría, esta pantalla decía «ningún tutor tuvo actividad»
+  // teniendo la lista entera a mano y la escondía detrás de un enlace. Se lee
+  // como «no hay tutores», que es falso. Regla de oro 10: una lista vacía es
+  // una mentira creíble, y aquí ni siquiera hacía falta que fallara nada.
+  const hayActividad = conActividad.length > 0;
+  const visibles = todos || !hayActividad ? filas : conActividad;
 
   const totalImpartidas = filas.reduce((s, f) => s + f.impartidas, 0);
   const totalNoShows = filas.reduce((s, f) => s + f.noShows, 0);
@@ -128,14 +135,17 @@ export default async function AdminActividadTutoresPage({
           Todo el histórico
         </Link>
 
-        <Link
-          href={href({ ver: todos ? undefined : "todos" })}
-          className="ml-auto text-[13px] text-brand hover:underline"
-        >
-          {todos
-            ? "Ocultar a los que no han dado ninguna"
-            : `Ver también los que no han dado ninguna (${filas.length - conActividad.length})`}
-        </Link>
+        {/* Solo si hay algo que esconder: sin actividad ya están todos a la vista. */}
+        {hayActividad ? (
+          <Link
+            href={href({ ver: todos ? undefined : "todos" })}
+            className="ml-auto text-[13px] text-brand hover:underline"
+          >
+            {todos
+              ? "Ocultar a los que no han dado ninguna"
+              : `Ver también los que no han dado ninguna (${filas.length - conActividad.length})`}
+          </Link>
+        ) : null}
       </div>
 
       {/* ⚠️ El período recorta la fila ENTERA, no solo el contador: con un
@@ -157,12 +167,21 @@ export default async function AdminActividadTutoresPage({
         <Stat label="Mentorías que no abrió nadie" value={String(totalNoShows)} />
       </div>
 
+      {!hayActividad && filas.length > 0 ? (
+        <PanelCard className="border-[#cfe3f7] bg-[#f2f8ff] py-3">
+          <p className="text-[13px] text-[#2a5b8a]">
+            Están los <strong>{filas.length}</strong> registrados.{" "}
+            {preset
+              ? "Ninguno dio mentorías en este período, así que no se esconde a nadie."
+              : "Ninguno ha dado una mentoría todavía, así que no se esconde a nadie."}
+          </p>
+        </PanelCard>
+      ) : null}
+
       {visibles.length === 0 ? (
         <PanelCard>
           <p className="text-[13px] text-[#6b6b6b]">
-            {todos
-              ? "Todavía no hay ningún tutor registrado."
-              : "Ningún tutor tuvo actividad en este período. Los que nunca han dado una mentoría están detrás del enlace de arriba."}
+            Todavía no hay ningún tutor registrado.
           </p>
         </PanelCard>
       ) : (
