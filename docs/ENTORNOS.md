@@ -33,7 +33,7 @@ dev / PRs  ───▶  Preview             ───▶  ensenameya-dev   (lbt
 | | dev | prod |
 | :-- | :-- | :-- |
 | Project ref | `lbtpnszjjsxbeileqsja` | `nrzsyysqanbrcgtslfte` |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://lbtpnszjjsxbeileqsja.supabase.co` | `https://nrzsyysqanbrcgtslfte.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://lbtpnszjjsxbeileqsja.supabase.co` | `https://auth.ensenameya.com` ⚠️ **custom domain desde el 18-sep**, ya no el `<ref>.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | publishable dev | publishable prod |
 | `SUPABASE_SERVICE_ROLE_KEY` | secret dev | secret prod |
 
@@ -1006,8 +1006,14 @@ Publicado el 10-sep: `Publishing status: In production`, `User type: External`.
 - **Authorized domains son TRES** y los tres hacen falta: `lbtpnszjjsxbeileqsja.supabase.co` (dev),
   `nrzsyysqanbrcgtslfte.supabase.co` (prod) y `ensenameya.com`. Un solo cliente OAuth sirve a los
   dos entornos, así que borrar el de dev rompe dev.
-- **El redirect URI NO cambia con el dominio**: apunta a
-  `https://<ref>.supabase.co/auth/v1/callback`, o sea a Supabase. En la migración no se toca.
+- ⚠️ **El redirect URI SÍ cambió el 18-sep**, con el custom domain de Supabase. Hoy hay **tres**
+  URIs en el cliente OAuth y las tres hacen falta: la de dev
+  (`https://lbtpnszjjsxbeileqsja.supabase.co/auth/v1/callback`), la vieja de prod
+  (`https://nrzsyysqanbrcgtslfte.supabase.co/auth/v1/callback`, se queda como red de seguridad) y
+  la nueva **`https://auth.ensenameya.com/auth/v1/callback`**, que es la que emite prod.
+  ⚠️ En cuanto se activa el custom domain, **los dos hostnames emiten el redirect nuevo**: la URL
+  vieja también. Por eso el URI de Google se añade ANTES de activar, o el login se cae con
+  `redirect_uri_mismatch` sin haber tocado Vercel.
 
 ✅ **Verificado de punta a punta el 10-sep**: login con Google en `ensenameya.com` → sesión y
 onboarding, con el nombre traído del scope `profile`. Fue el **primer usuario real de producción**.
@@ -1018,9 +1024,12 @@ onboarding, con el nombre traído del scope `profile`. Fue el **primer usuario r
 `/api/tutor/paypal-connect`. Sigue pendiente de comprobar en el primer cobro real; el indicador es
 qué clave de SmartFields carga el formulario (`b458948f-…` = producción).
 
-⚠️ **Cosmético pero es lo primero que ve un alumno:** en la pantalla de Google se lee
-«Continuar a nrzsyysqanbrcgtslfte.supabase.co», no la marca. Arreglarlo pide el **Custom Domain de
-Supabase**, que es add-on de pago y el proyecto está en Free. Es decisión de negocio.
+✅ **Resuelto el 18-sep: la pantalla de Google ya dice «Ir a auth.ensenameya.com».** Lo pidió el
+cliente («que diga eso de supabase le genera desconfianza»). No había forma gratis: el host que
+enseña Google es el del `redirect_uri`, y ese lo construye GoTrue desde su propio hostname. La
+alternativa sin pagar era reescribir el login a Google Identity Services + `signInWithIdToken`
+—medio día y tocar AU04, que lleva `next`, `intent`, `ref` y `terms` en la URL de vuelta—, así que
+se pagó. Runbook completo en §7.7.
 
 ### 7.6 Lo que NO hay que hacer
 
@@ -1030,3 +1039,54 @@ Supabase**, que es add-on de pago y el proyecto está en Free. Es decisión de n
 - **No prefijar `STRIPE_PUBLISHABLE_KEY` con `NEXT_PUBLIC_`.** Se lee en servidor
   (`lib/stripe.ts`) y viaja al navegador por `/api/pagos/metodos`. Exponerla como pública no
   haría daño, pero cambiaría el nombre que el código busca y el formulario dejaría de pintarse.
+
+### 7.7 Custom domain de Supabase — hecho el 18-sep
+
+**Qué resolvió:** la pantalla de Google decía «Ir a nrzsyysqanbrcgtslfte.supabase.co». Hoy dice
+`auth.ensenameya.com`. Es puro branding: el login funcionaba igual antes.
+
+**Lo que cuesta, y por qué son dos facturas.** El plan es de **organización**; el add-on es de
+**proyecto**. Con los dos proyectos en la misma org, subir a Pro arrastraba también el cómputo de
+dev (~$10/mes por proyecto, con $10 de crédito incluido). Por eso hoy:
+
+| | |
+| :-- | :-- |
+| Org `Enséñame Ya` → **Pro**, solo con `ensenameya-prod` | $25/mes |
+| Add-on Custom Domain en prod | $10/mes |
+| Org `ensenameya-dev` → **Free**, solo con `ensenameya-dev` | $0 |
+| **Total** | **$35/mes** |
+
+⚠️ **El orden importó.** La cuenta topa en **2 proyectos free**, así que con prod todavía en Free
+no se podía sacar dev a una org nueva. Se subió a Pro primero y se transfirió dev después; el
+cómputo es prorrateado por horas, así que el solape costó céntimos. **El `project ref` de dev no
+cambia al transferirlo**: ni `.env.local`, ni el `supabase link`, ni las variables de Preview.
+
+**Runbook, en orden (repetirlo tal cual si algún día se hace en dev):**
+
+1. GoDaddy: `CNAME auth → nrzsyysqanbrcgtslfte.supabase.co`, TTL 600. **Antes** de pulsar `Add`
+   en Supabase, o la verificación falla.
+2. Supabase → Settings → General → Custom domains → `auth.ensenameya.com` → `Add`.
+3. GoDaddy: el `TXT` que devuelve, con Name **`_acme-challenge.auth`** (sin el dominio). GoDaddy
+   detecta el nombre completo y ofrece corregirlo: la primera opción es la buena.
+4. **Google Cloud → Credentials → Web client 1 → Authorized redirect URIs**: añadir
+   `https://auth.ensenameya.com/auth/v1/callback` **antes de activar** (ver §7.5).
+5. Supabase → `Verify` → `Activate`.
+6. Vercel → `NEXT_PUBLIC_SUPABASE_URL` (scope Production) → `https://auth.ensenameya.com` →
+   **Redeploy** (es variable de build).
+7. El `CNAME` se queda para siempre. Borrarlo tumba el proyecto.
+
+⚠️ **Dos trampas del panel.** (a) El botón `Verify` puede no hacer nada y dejar el aviso viejo en
+pantalla: la verificación ya había pasado, lo dice `npx supabase domains get --project-ref
+nrzsyysqanbrcgtslfte --experimental`, y basta recargar. Los subcomandos `get` / `reverify` /
+`activate` del CLI son la vía cuando la UI se atasca. (b) Vercel **ya no deja guardar** una
+variable `NEXT_PUBLIC_*` marcada como `Secret`, y un secreto guardado no se puede convertir a
+`Config`: hay que borrar la variable y recrearla como `Config`.
+
+**Lo que trajo de propina, y vale más que el dominio:** prod deja de pausarse por inactividad,
+pasa a tener **backups diarios con 7 días** de retención (antes: `No backups`) y los logs suben de
+1 a 7 días. El día que se investigue un job caído en fin de semana, eso es lo que lo hará posible.
+
+⚠️ **Lo que el custom domain NO arregla:** prod tiene «Confirm email» activado **sin SMTP propio**,
+o sea el SMTP de cortesía de Supabase, que es de unos pocos correos por hora y sin garantía de
+entrega. El SMTP propio es gratis también en Free (Authentication → Emails → SMTP Settings,
+apuntando a Resend, ya verificado). Pendiente, y es bloqueante para lanzar.
