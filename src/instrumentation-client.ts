@@ -1,5 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
 
+// El porqué de este filtro —y su comprobación— viven en `lib/sentry-bot.ts`.
+import { loEjecutaUnBot } from "@/lib/sentry-bot";
+
 /**
  * US-1501 · Sentry en el navegador. Mismo interruptor que el servidor, pero la
  * variable tiene que ser pública para llegar al bundle: sin
@@ -16,6 +19,7 @@ if (dsn) {
     environment: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "development",
     tracesSampleRate: 0,
     sendDefaultPii: false,
+    beforeSend: (evento) => (loEjecutaUnBot(evento) ? null : evento),
   });
 }
 
