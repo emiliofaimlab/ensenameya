@@ -26,6 +26,7 @@ import {
   Undo2Icon,
   UserIcon,
   UsersIcon,
+  ShieldIcon,
   WalletIcon,
   WrenchIcon,
   type LucideIcon,
@@ -324,6 +325,10 @@ export const ADMIN_ITEMS: Item[] = [
   // mismo que «Referidos»: el interruptor llevaba en la base desde el 2-sep y
   // apagarlo exigía entrar a la base porque nadie había puesto la pantalla.
   { href: "/admin/metodos-de-cobro", label: "Métodos de cobro", icon: WalletIcon },
+  // Quién entra al panel. Última de la tira a propósito: es la que menos se
+  // usa y la única que reparte acceso, así que no conviene tenerla a un dedo
+  // de distancia de las de consulta.
+  { href: "/admin/administradores", label: "Administradores", icon: ShieldIcon },
 ];
 
 /**

@@ -3115,6 +3115,10 @@ export type Database = {
         }
         Returns: string
       }
+      conceder_admin: {
+        Args: { p_actor: string; p_email: string }
+        Returns: Json
+      }
       conectar_cuenta_paypal: {
         Args: {
           p_email: string
@@ -3211,6 +3215,7 @@ export type Database = {
       datos_de_cobro_del_tutor: { Args: { p_tutor: string }; Returns: Json }
       delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
       destino_connect: { Args: { p_payout_id: string }; Returns: string }
+      disparar_correos_pendientes: { Args: never; Returns: undefined }
       emitir_credito_de_referido: {
         Args: { p_referido: string }
         Returns: string
@@ -3284,6 +3289,15 @@ export type Database = {
       liberar_credito_de_pago: {
         Args: { p_payment_id: string }
         Returns: number
+      }
+      listar_admins: {
+        Args: never
+        Returns: {
+          desde: string
+          email: string
+          nombre: string
+          user_id: string
+        }[]
       }
       manage_payout: {
         Args: {
@@ -3477,6 +3491,10 @@ export type Database = {
       review_tutor: {
         Args: { p_approve: boolean; p_reason?: string; p_tutor_id: string }
         Returns: string
+      }
+      revocar_admin: {
+        Args: { p_actor: string; p_user: string }
+        Returns: Json
       }
       revoke_calendar_feed_token: { Args: never; Returns: boolean }
       run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
