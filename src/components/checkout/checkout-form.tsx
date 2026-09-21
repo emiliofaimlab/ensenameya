@@ -880,6 +880,13 @@ export function CheckoutForm({
             arranca tras la recarga, ya con el alumno resuelto en servidor. */}
         {!alumnoId ? (
           <DatosInvitado
+            /* 🎁 «…y pagar» no vale para una mentoría que no cuesta nada, y
+               esta es justo la pantalla donde el cliente pedía no hablar de
+               cobros: quien reserva la mentoría gratis de onboarding no va a
+               pagar nada en el paso siguiente ni en ninguno. */
+            etiqueta={
+              aPagar === 0 ? "Crear cuenta y reservar" : "Crear cuenta y pagar"
+            }
             onCuentaLista={() => {
               /*
                * ⚠️ RECARGA ENTERA, y no `setAlumnoId` ni `router.refresh()`.
