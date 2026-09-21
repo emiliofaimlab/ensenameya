@@ -320,6 +320,10 @@ export const ADMIN_ITEMS: Item[] = [
   // /admin/notificaciones, /admin/operaciones y /admin/reembolsos vivieron
   // meses sin entrada en el menú y se llegaba escribiendo la URL.
   { href: "/admin/referidos", label: "Referidos", icon: GiftIcon },
+  // Qué tarjetas de cobro ve el tutor. Con puerta desde el primer día, por lo
+  // mismo que «Referidos»: el interruptor llevaba en la base desde el 2-sep y
+  // apagarlo exigía entrar a la base porque nadie había puesto la pantalla.
+  { href: "/admin/metodos-de-cobro", label: "Métodos de cobro", icon: WalletIcon },
 ];
 
 /**
