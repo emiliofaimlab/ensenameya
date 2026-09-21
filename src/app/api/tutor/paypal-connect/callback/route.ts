@@ -34,9 +34,29 @@ export async function GET(req: Request) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.redirect(`${siteUrl()}/login`);
 
-  if (url.searchParams.get("error")) {
-    // El tutor le dio a «cancelar» en PayPal. No es un fallo.
-    return volver({ paypal: "cancelado" });
+  const fallo = url.searchParams.get("error");
+  if (fallo) {
+    /**
+     * ⚠️ NO TODO LO QUE VUELVE CON `error` ES UN «CANCELÉ». Aquí se contestaba
+     * `cancelado` a cualquier valor, y eso le echaba la culpa al tutor de una
+     * negativa de PayPal.
+     *
+     * `access_denied` sí es él diciendo que no en la pantalla de PayPal. El
+     * resto es PayPal negándose, y el que se ha visto de verdad —21-sep-2026,
+     * un tutor con cuenta de empresa en Perú— es `invalid_scope`: la pantalla
+     * que dice «esta acción no se admite para su país (ámbito no válido)»
+     * porque su país o su tipo de cuenta no admite los permisos que pedimos.
+     * Eso no se arregla reintentando, y llamarlo «cancelado» hace justo lo
+     * contrario de lo que hace falta: invita a repetir el único camino que no
+     * puede funcionar.
+     *
+     * ⚠️ Y ESTO SOLO SE VE CUANDO PAYPAL NOS DEVUELVE AL SITIO. En el caso de
+     * Perú no lo hizo: enseñó su propia pantalla de error y ahí se acabó el
+     * viaje, así que este `else` no llegó a ejecutarse nunca. Por eso la
+     * tarjeta de PayPal avisa ADEMÁS antes de salir (`paypal-conectar.tsx`):
+     * un mensaje a la vuelta no sirve si no hay vuelta.
+     */
+    return volver({ paypal: fallo === "access_denied" ? "cancelado" : "rechazado" });
   }
   if (!code) return volver({ paypal: "sin-codigo" });
 

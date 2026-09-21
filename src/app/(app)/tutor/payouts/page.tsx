@@ -292,7 +292,22 @@ const monograma = (nombre: string) => {
  *     por FORMATO —`iban` cubre 31 de golpe— en vez de país a país, así que un
  *     tutor español, estadounidense o panameño ya ve su formulario.
  */
-export default async function TutorPayoutsPage() {
+export default async function TutorPayoutsPage({
+  searchParams,
+}: {
+  /**
+   * 🔑 LO QUE PAYPAL CONTESTA AL VOLVER, que hasta hoy no lo leía NADIE.
+   *
+   * `/api/tutor/paypal-connect/callback` termina siempre con un redirect a
+   * esta pantalla y un `?paypal=<qué pasó>` —seis valores distintos, de
+   * «conectado» a «state-invalido»—, y esta página no tenía ni el parámetro en
+   * la firma. O sea que la vuelta de PayPal era MUDA en los seis casos: quien
+   * fallaba veía la misma pantalla de antes, con su tarjeta sin conectar y sin
+   * una palabra de por qué. Es el fallo silencioso de la regla de oro 11, en
+   * una pantalla de cobro.
+   */
+  searchParams: Promise<{ paypal?: string }>;
+}) {
   // Mismo guard que el resto del panel: fila en `tutor_profiles`. Con
   // `requireRole("tutor")` un tutor aprobado sin el rol concedido (o uno
   // pendiente, al que el menú ya le ofrece Payouts) rebotaba a /app.
@@ -576,6 +591,9 @@ export default async function TutorPayoutsPage() {
    * `react-phone-number-input` y las descripciones de los canales son filas de
    * `payout_manual_channels`: cero canales y cero países codificados en el TSX.
    */
+  /** ¿Le queda algo si PayPal se niega? Lo usa el aviso de su tarjeta. */
+  const paypalTieneAlternativa = metodos.some((m) => m.clave !== "paypal");
+
   const tarjetas: TarjetaMetodo[] = metodos.map((m): TarjetaMetodo => {
     if (m.clave === "banco") {
       const nombreDelBanco =
@@ -647,7 +665,31 @@ export default async function TutorPayoutsPage() {
       // esta tarjeta — o sea, advertía de un camino que no existe. Lo que sí
       // sigue vivo es la razón de que no exista, y está escrita donde importa:
       // en la cabecera de `paypal-conectar.tsx`.
-      aviso: null,
+      //
+      // 🔑 VUELVE UNO DISTINTO, Y ESTE SÍ DESCRIBE ALGO QUE PASA: que PayPal
+      // se niegue a conectar la cuenta. Le pasó a un tutor con cuenta de
+      // empresa en Perú el 21-sep-2026 («esta acción no se admite para su
+      // país · ámbito no válido»), y no hay nada que podamos hacer desde aquí:
+      // los permisos que PayPal nos exige para PAGARLE no están disponibles
+      // para todas las cuentas ni todos los países.
+      //
+      // ⚠️ Y VA ANTES DE SALIR, NO A LA VUELTA. Esa negativa la pinta PayPal
+      // en SU pantalla y ahí se acaba el viaje: no hay redirect de vuelta, así
+      // que el mensaje de `?paypal=rechazado` —que existe y es el bueno cuando
+      // sí volvemos— nunca llegaría a verse. Un aviso que solo sirve si el
+      // usuario regresa no sirve para el caso que lo motivó.
+      //
+      // Solo cuando NO está conectada: a quien ya cobra por aquí esto no le
+      // dice nada, y una caja permanente que no se puede accionar es ruido.
+      aviso:
+        m.clave === "paypal" && destino === null
+          ? {
+              texto: paypalTieneAlternativa
+                ? "Si PayPal te dice que esto no está disponible en tu país, no insistas: no depende de ti ni de nosotros. Elige otro método de esta lista y te pagamos lo mismo."
+                : "Si PayPal te dice que esto no está disponible en tu país, escríbenos a info@ensenameya.com: buscamos otra vía para pagarte.",
+              tono: "info" as const,
+            }
+          : null,
       subtarea: null,
       // 🔑 PayPal se CONECTA y no se teclea. Los otros canales —Zinli, Binance,
       // Zelle— son al revés: no hay nada que conectar, solo un identificador que
@@ -834,6 +876,54 @@ export default async function TutorPayoutsPage() {
    * esperar—. Una caja roja permanente sin acción es ruido.
    */
   const hayAlgunaLista = tarjetas.some((t) => t.listo);
+
+  /**
+   * 🔑 LA VUELTA DE PAYPAL, DICHA EN VOZ ALTA.
+   *
+   * Seis finales posibles y ninguno se contaba (ver `searchParams` en la firma).
+   * El que motiva esto es `rechazado`: PayPal se niega a conectar la cuenta
+   * —cuenta de empresa en Perú, 21-sep-2026, «ámbito no válido»— y reintentar
+   * no lo arregla, así que lo útil no es un «vuelve a intentarlo» sino decirle
+   * por dónde SÍ se le puede pagar.
+   *
+   * ⚠️ Y ESE «por dónde» NO SE ESCRIBE A MANO. La tarjeta de banco solo existe
+   * donde el ruteo la ofrece; en Venezuela, por ejemplo, las vías son Zinli,
+   * Zelle y Binance. Mandar a «Banco» allí sería mandar a una tarjeta que no
+   * está en la pantalla, así que se nombra lo que esta lista tenga.
+   */
+  const otraVia = tarjetas.find((t) => t.clave !== "paypal");
+  const vueltaDePaypal = ((clave?: string) => {
+    switch (clave) {
+      case "conectado":
+        return { urgente: false, titulo: "Tu cuenta de PayPal quedó conectada.",
+                 detalle: "A partir de ahora te pagamos a esa cuenta." };
+      case "cancelado":
+        return { urgente: false, titulo: "No conectaste tu cuenta de PayPal.",
+                 detalle: "Saliste de PayPal sin autorizar. Puedes intentarlo otra vez cuando quieras." };
+      case "rechazado":
+        return {
+          urgente: true,
+          titulo: "PayPal no dejó conectar tu cuenta.",
+          detalle:
+            "Pasa cuando el país o el tipo de cuenta no admite los permisos que PayPal nos pide para pagarte, y no es algo que se arregle reintentando." +
+            (otraVia
+              ? ` Usa ${otraVia.nombre}: te pagamos lo mismo y llega igual de bien.`
+              : " Escríbenos a info@ensenameya.com y lo resolvemos contigo."),
+        };
+      case "sin-codigo":
+      case "state-invalido":
+      case "no-guardado":
+      case "error":
+        return {
+          urgente: true,
+          titulo: "No pudimos terminar la conexión con PayPal.",
+          detalle:
+            "No se guardó nada, así que puedes volver a intentarlo. Si se repite, escríbenos a info@ensenameya.com.",
+        };
+      default:
+        return null;
+    }
+  })((await searchParams).paypal);
   const avisoDeSaldo =
     hasAvailable && !preferida && tarjetas.length > 0
       ? hayAlgunaLista
@@ -879,6 +969,29 @@ export default async function TutorPayoutsPage() {
       title="Mis pagos"
       description="Lo que ganas se libera 7 días después de cada mentoría y se paga cada lunes. También puedes retirarlo antes."
     >
+      {/* La vuelta de PayPal, arriba del todo: es lo que acaba de pasar, y en
+          el caso malo cambia lo que el tutor tiene que hacer después. */}
+      {vueltaDePaypal ? (
+        <PanelCard
+          className={
+            vueltaDePaypal.urgente
+              ? "border-[1.5px] border-[#f0bfbf] bg-[#fff8f8]"
+              : "border-[1.5px] border-[#bfe3c9] bg-success-muted"
+          }
+        >
+          {/* `role="status"` y no `alert`: esto ya está pintado cuando la
+              pantalla llega, no interrumpe nada. */}
+          <div role="status">
+            <p className="text-[15px] font-bold text-[#19191f]">
+              {vueltaDePaypal.titulo}
+            </p>
+            <p className="mt-1 text-[13px] leading-[1.55] text-[#4d4d4d]">
+              {vueltaDePaypal.detalle}
+            </p>
+          </div>
+        </PanelCard>
+      ) : null}
+
       {/* §5.1 (H-01) · EL DINERO QUE NO SE VA A PAGAR, ANUNCIADO ARRIBA.
 
           Hasta hoy esto era una píldora ámbar en la tercera columna de «Cómo
