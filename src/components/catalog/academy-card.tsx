@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { BuildingIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { PrecioEnLinea } from "@/components/precio/precio";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import type { AcademyCardData } from "@/lib/catalog/queries";
@@ -106,19 +105,17 @@ export function AcademyCard({ academy }: { academy: AcademyCardData }) {
           ) : (
             <span />
           )}
-          <Button
-            asChild
-            variant="outline"
-            className="h-10 rounded-[8px] border-brand text-brand hover:bg-brand-muted hover:text-brand"
+          {/* ⚠️ Enlace PELADO, no `<Button asChild>`: el
+              `active:…translate-y-px` de `buttonVariants` encoge este overlay
+              justo al pulsarlo y la tarjeta deja de navegar. El porqué entero,
+              en `catalog/tutor-card.tsx`. */}
+          <Link
+            href={`/academias/${academy.slug}`}
+            aria-label={`Ver la academia ${academy.name}`}
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-[8px] border border-brand bg-background px-4 text-sm font-medium text-brand transition-colors before:absolute before:inset-0 hover:bg-brand-muted"
           >
-            <Link
-              href={`/academias/${academy.slug}`}
-              aria-label={`Ver la academia ${academy.name}`}
-              className="before:absolute before:inset-0"
-            >
-              Ver academia
-            </Link>
-          </Button>
+            Ver academia
+          </Link>
         </div>
       </div>
     </article>

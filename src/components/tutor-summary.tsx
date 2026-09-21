@@ -151,15 +151,17 @@ export function TutorSummary({
 
       <div className="mt-4 flex flex-wrap gap-2">
         {href ? (
-          <Button asChild variant="outline" size="sm">
-            <Link
-              href={href}
-              aria-label={`Ver perfil de ${nombre ?? "tu tutor"}`}
-              className="before:absolute before:inset-0"
-            >
-              Ver perfil
-            </Link>
-          </Button>
+          /* ⚠️ Enlace PELADO, no `<Button asChild>`: el
+             `active:…translate-y-px` de `buttonVariants` encoge este overlay
+             justo al pulsarlo y la tarjeta deja de navegar. El porqué entero,
+             en `catalog/tutor-card.tsx`. */
+          <Link
+            href={href}
+            aria-label={`Ver perfil de ${nombre ?? "tu tutor"}`}
+            className="inline-flex h-7 shrink-0 items-center justify-center rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground transition-colors before:absolute before:inset-0 hover:bg-muted"
+          >
+            Ver perfil
+          </Link>
         ) : null}
         {chatHref ? (
           <Button asChild variant="outline" size="sm" className="relative">

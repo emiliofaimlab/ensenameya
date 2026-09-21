@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { PrecioEnLinea } from "@/components/precio/precio";
 
-import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
 import { RatingStars } from "@/components/catalog/rating";
@@ -93,20 +92,18 @@ export function FeaturedTutors({ tutors }: { tutors: FeaturedTutor[] }) {
                       />
                     </p>
                   ) : null}
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="mt-auto h-10 w-fit rounded-[10px] border-brand text-brand hover:bg-brand-muted hover:text-brand"
+                  {/* Tarjeta clickeable entera: ver `catalog/product-card.tsx`.
+                      ⚠️ Y enlace PELADO, no `<Button asChild>`: el
+                      `active:…translate-y-px` de `buttonVariants` encoge este
+                      overlay justo al pulsarlo. El porqué entero, en
+                      `catalog/tutor-card.tsx`. */}
+                  <Link
+                    href={`/tutors/${t.id}`}
+                    aria-label={`Ver perfil de ${name}`}
+                    className="mt-auto inline-flex h-10 w-fit shrink-0 items-center justify-center rounded-[10px] border border-brand bg-background px-4 text-sm font-medium text-brand transition-colors before:absolute before:inset-0 hover:bg-brand-muted"
                   >
-                    {/* Tarjeta clickeable entera: ver `catalog/product-card.tsx`. */}
-                    <Link
-                      href={`/tutors/${t.id}`}
-                      aria-label={`Ver perfil de ${name}`}
-                      className="before:absolute before:inset-0"
-                    >
-                      Ver perfil
-                    </Link>
-                  </Button>
+                    Ver perfil
+                  </Link>
                 </li>
               );
             })}

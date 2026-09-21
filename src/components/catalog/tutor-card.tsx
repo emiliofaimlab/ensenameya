@@ -3,7 +3,6 @@ import Link from "next/link";
 import { PrecioEnLinea } from "@/components/precio/precio";
 import { BadgeCheckIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import type { FeaturedTutor } from "@/lib/catalog/queries";
 
@@ -170,19 +169,26 @@ export function TutorCard({
           ) : (
             <span />
           )}
-          <Button
-            asChild
-            variant="outline"
-            className="h-10 rounded-[8px] border-brand text-brand hover:bg-brand-muted hover:text-brand"
+          {/* ⚠️ ENLACE PELADO, NO `<Button asChild>` — y aquí no es estética.
+              `buttonVariants` trae `active:…translate-y-px`: al PULSAR, ese
+              `translate` convierte al `<a>` en bloque contenedor de su propio
+              `::before`, el overlay `inset-0` se encoge al tamaño del botón, el
+              `mouseup` cae en el `<article>` y Chrome resuelve el click en el
+              ancestro común. Resultado: la tarjeta entera parecía un enlace y
+              solo navegaba pulsando las palabras «Ver perfil». Reportado por el
+              cliente y medido en producción el 21-sep-2026.
+
+              La regla que deja esto: cualquier `before:inset-0` que estire un
+              enlace a su tarjeta va sobre un `<Link>` desnudo —como ya hace
+              `product-card.tsx` y la variante `list` de aquí arriba—, nunca
+              sobre algo que se transforme al pulsarse. */}
+          <Link
+            href={`/tutors/${tutor.id}`}
+            aria-label={`Ver perfil de ${name}`}
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-[8px] border border-brand bg-background px-4 text-sm font-medium text-brand transition-colors before:absolute before:inset-0 hover:bg-brand-muted"
           >
-            <Link
-              href={`/tutors/${tutor.id}`}
-              aria-label={`Ver perfil de ${name}`}
-              className="before:absolute before:inset-0"
-            >
-              Ver perfil
-            </Link>
-          </Button>
+            Ver perfil
+          </Link>
         </div>
       </div>
     </article>
