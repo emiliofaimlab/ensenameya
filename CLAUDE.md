@@ -172,14 +172,15 @@ Todos exigen `CRON_SECRET` y fallan cerrado (503) sin ella.
 | Endpoint | Reloj | Cadencia pedida |
 | :-- | :-- | :-- |
 | `/api/cron/recordings-purge` | **Vercel Cron** (`vercel.json`) | `0 4 * * *` |
-| `/api/cron/notifications-send` | GitHub Actions | `*/5 * * * *` — ⚠️ la cadencia real son **2-6 h** (medido). Por eso también se dispara **a mano** desde `/admin/operaciones` → «Enviar los correos pendientes ahora» (`/api/admin/notificaciones/enviar`) |
+| `/api/cron/notifications-send` | **pg_cron** (`enviar-correos-pendientes`) + GitHub Actions | `*/2 * * * *` de verdad, desde el 21-sep: el reloj lo lleva la BD con `pg_net` (`disparar_correos_pendientes()`, secreto en el vault) y Actions se queda de **red de seguridad**. Antes la demora media en prod era de **94 min** y el peor caso de **252**. El botón de `/admin/operaciones` sigue ahí, pero ya no hace falta para no esperar |
 | `/api/cron/refunds-process` | GitHub Actions | `7,22,37,52 * * * *` |
 | `/api/cron/payouts-process` | GitHub Actions | `13 * * * *` — **esto es dinero** |
 | `/api/cron/alertas-resumen` | GitHub Actions | `41 * * * *` |
 | `/api/cron/referrals-sync` | GitHub Actions | `0 * * * *` — ⚠️ sin `REFERRAL_FACTORY_API_KEY` responde `sin-credencial` **con 200** y el workflow sale en **verde sin haber hecho nada** |
 | `/api/cuenta/eliminar/barrido` | GitHub Actions | `37 5 * * *` — ⚠️ **no cuelga de `/api/cron/`**, al revés que sus cinco hermanas |
 
-⚠️ **La cadencia de GitHub es una ficción.** Medido sobre corridas reales: entrega **una cada
+⚠️ **La cadencia de GitHub es una ficción** —y desde el 21-sep el correo ya no depende de ella,
+pero los otros cinco endpoints sí—. Medido sobre corridas reales: entrega **una cada
 2-6 horas**, no cada 5 minutos. Sigue siendo mejor que el único cron diario que permite Vercel
 Hobby —que es el motivo de que estén ahí—, pero no se puede planificar con "5 minutos".
 Medido otra vez el 16-sep contra la cola de dev: **78-134 minutos** entre encolar y entregar.
@@ -190,8 +191,9 @@ fallo al vaciar la cola de dev **pone el job en rojo**, aunque producción haya 
 paso de prod corre antes, así que el aspa avisa sin tocar producción. Antes salía verde y nadie
 se enteraba de que dev llevaba días sin vaciarse.
 
-**Y en la propia BD hay TRECE jobs de `pg_cron`** que `grep` en el repo sí encuentra, pero solo
-si lo buscas: `close-expired-sessions`, `expire-stale-bookings`, `process-notifications`,
+**Y en la propia BD hay CATORCE jobs de `pg_cron`** que `grep` en el repo sí encuentra, pero solo
+si lo buscas: `enviar-correos-pendientes` (el reloj del correo, 21-sep),
+`close-expired-sessions`, `expire-stale-bookings`, `process-notifications`,
 `process-payouts`, `run-payout-batch`, `purge-expired-messages`, `purge-contact-messages`,
 `purge-tutor-views`, `complete-pending-account-deletions`, y los cuatro del Doc 33
 (`20260911210000`): `avisar-reservas-por-expirar`, `avisar-clases-de-manana`,
