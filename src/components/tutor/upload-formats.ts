@@ -47,10 +47,16 @@
  * 24,5 MB sin rechistar, así que hasta 25 MB hay sitio; por encima, mirar el
  * panel ANTES de escribir la migración.
  *
+ * Mirado el 21-sep-2026 por la Management API (`GET /v1/projects/<ref>/
+ * config/storage`): dev y prod tienen los DOS `fileSizeLimit = 52428800`, o sea
+ * **50 MB clavados**. Ese es el techo real de hoy, y `tutor-materials` está
+ * justo en él: por encima de 50 MB no hay nada que pueda pedir una migración, y
+ * en dev tampoco el panel (org del plan Free, donde 50 MB es el máximo).
+ *
  * Espejo de lo que declaran las migraciones, para contrastar sin salir de aquí:
  *   `avatars`           5 MB · `20260722160000`
  *   `product-images`    5 MB · `20260723120000`
- *   `tutor-materials`  10 MB · `20260722160000`
+ *   `tutor-materials`  50 MB · `20260722160000` → `20260921130000`
  *   `chat-attachments` 25 MB · `20260722180000` → `20260820170000` (MN-11b)
  *   `kyc-documents`    10 MB · `20260706150000`
  *   `support-attachments` 25 MB · `20260828161500` (DL-01, adjuntos de contacto)
@@ -105,7 +111,7 @@ export const PRODUCT_IMAGE_HINT =
   `JPG, PNG o WebP · máx. ${maxLabel(PRODUCT_IMAGE_MAX_BYTES)}`;
 
 /* ── Materiales de la mentoría → bucket privado `tutor-materials` ─────────── */
-export const MATERIAL_MAX_BYTES = 10 * MB;
+export const MATERIAL_MAX_BYTES = 50 * MB;
 export const MATERIAL_TYPES = [PDF, ...OFFICE_TYPES];
 export const MATERIAL_HINT =
   `PDF, Word, PowerPoint o Excel · máx. ${maxLabel(MATERIAL_MAX_BYTES)} por archivo`;
