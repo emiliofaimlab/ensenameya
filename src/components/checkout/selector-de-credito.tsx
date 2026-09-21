@@ -206,6 +206,15 @@ async function leerTodo(bookingId: string): Promise<Lectura> {
   // selector que solo puede dar errores.
   if (!pago.data || pago.data.status !== "pending") return { tipo: "vacio" };
 
+  // 🎁 La mentoría es GRATIS: `gross_amount = 0` y no hay nada que financiar.
+  // Se sale aquí y no en el render porque el motivo es el mismo que el de
+  // arriba —un selector que solo puede dar errores—: `aplicar_credito` no
+  // admite un canje sobre un bruto de 0 (`credits.amount` tiene `check (amount
+  // > 0)`), así que cada fila que se pintara sería un botón que solo sabe
+  // fallar. Lo mismo contesta `hayQueElegirCredito`, que es quien decide si
+  // esta pantalla llega siquiera a preguntar.
+  if (pago.data.gross_amount === 0) return { tipo: "vacio" };
+
   // `mis_creditos` es una vista y sus columnas salen nullables; el `if (c.id)`
   // no es paranoia de tipos, es lo que deja el índice limpio.
   const extra = new Map<string, NonNullable<typeof mios.data>[number]>();

@@ -111,7 +111,7 @@ export async function hayQueElegirCredito(
     // autorización es la RLS, no una comprobación nuestra.
     supabase
       .from("payments")
-      .select("credit_id, status")
+      .select("credit_id, status, gross_amount")
       .eq("booking_id", bookingId)
       .maybeSingle(),
     supabase.rpc("creditos_disponibles", { p_booking_id: bookingId }),
@@ -129,6 +129,14 @@ export async function hayQueElegirCredito(
   // Sin fila de cobro, o con el pago fuera de `pending`, las dos RPC se niegan
   // por diseño (cerrojo 1): no hay nada que elegir porque no hay nada que hacer.
   if (!pago.data || pago.data.status !== "pending") return false;
+
+  // 🎁 La mentoría es GRATIS: no hay nada que pagar, así que tampoco hay nada
+  // que financiar. Preguntar por créditos aquí pinta un selector y un
+  // «Continuar al pago» encima de una reserva que vale 0, y el canje que se
+  // ofreciera ahí lo rechazaría `aplicar_credito` (`credits.amount > 0` no cabe
+  // en un bruto de 0). Se responde antes que la trampa del regalo de arriba,
+  // que habla de cobros con importe.
+  if (pago.data.gross_amount === 0) return false;
 
   // Ya hay uno puesto → se pregunta igual: es la única ventana en la que se
   // puede quitar. Y las filas NO usables cuentan a propósito, porque el selector
@@ -200,6 +208,7 @@ export function ConfirmarConCredito({
   destino,
   etiqueta,
   importe,
+  gratis = false,
   className,
 }: {
   sujeto: SujetoDelCredito;
@@ -215,6 +224,15 @@ export function ConfirmarConCredito({
   /** Lo que cubre el crédito. Opcional: `/reservas/[id]/pagar` no maneja
    *  importes y ahí es mejor no pintar una cifra que decir una de más. */
   importe?: { minor: number; currency: string };
+  /**
+   * 🎁 La mentoría no cuesta nada (`gross_amount = 0`), que NO es lo mismo que
+   * «un crédito lo paga entero». Por dentro las dos acaban en el mismo botón
+   * —no hay pasarela que abrir en ninguno de los dos casos—, pero contarlo
+   * igual sería mentir: quien reserva la mentoría gratis de onboarding no tiene
+   * ningún crédito, y leer «tu crédito cubre el total» le hace buscar un premio
+   * que no existe. Lo decide quien llama, que es quien tiene el importe.
+   */
+  gratis?: boolean;
   className?: string;
 }) {
   const router = useRouter();
@@ -281,26 +299,36 @@ export function ConfirmarConCredito({
     >
       <p className="flex items-center gap-2 text-[15px] font-semibold text-success">
         <SparklesIcon className="size-4 shrink-0" aria-hidden />
-        Tu crédito cubre el total
+        {gratis ? "Esta mentoría es gratis" : "Tu crédito cubre el total"}
       </p>
 
       {/* El crédito NO es un descuento: cambia quién paga, no cuánto vale la
           mentoría. Por eso se dice «lo pone tu crédito» y no «te descontamos»:
-          el tutor cobra lo mismo, y quien lo financia es la plataforma. */}
+          el tutor cobra lo mismo, y quien lo financia es la plataforma.
+
+          🎁 Y con la mentoría gratis no se nombra ningún crédito ni ningún
+          importe: no hay ninguno de los dos. Tampoco se pide tarjeta en ningún
+          paso — el cobro no se abre, así que no hay nada que teclear. */}
       <p className="mt-2 text-[13px] text-[#4b4b4b]">
-        No queda nada que pagar
-        {importe ? (
-          <>
-            {": los "}
-            <PrecioEnLinea
-              amountMinor={importe.minor}
-              currency={importe.currency}
-              className="font-semibold text-[#19191f]"
-            />
-            {" los pone tu crédito"}
-          </>
+        {gratis ? (
+          "No hay nada que pagar y no te pedimos ningún dato de tarjeta"
         ) : (
-          ": lo pone tu crédito"
+          <>
+            No queda nada que pagar
+            {importe ? (
+              <>
+                {": los "}
+                <PrecioEnLinea
+                  amountMinor={importe.minor}
+                  currency={importe.currency}
+                  className="font-semibold text-[#19191f]"
+                />
+                {" los pone tu crédito"}
+              </>
+            ) : (
+              ": lo pone tu crédito"
+            )}
+          </>
         )}
         . Confirma y tu horario queda reservado.
       </p>

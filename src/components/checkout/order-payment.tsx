@@ -352,6 +352,8 @@ export function OrderPayment({
           destino={`/pedidos/${orderId}/confirmacion`}
           etiqueta="Confirmar pedido"
           importe={{ minor: apertura.creditoTotal, currency }}
+          /* 🎁 Ninguna línea costaba nada: el pedido entero es gratis. */
+          gratis={apertura.creditoTotal === 0}
           className="mt-3.5"
         />
       ) : null}

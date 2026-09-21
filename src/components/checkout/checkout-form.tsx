@@ -927,8 +927,19 @@ export function CheckoutForm({
             contrario de un descuido: con el cobro ya abierto, sus botones de
             aplicar y quitar solo saben chocar contra el cerrojo. Lo que queda en
             su lugar es la línea «Tu crédito» del resumen de la izquierda, que
-            informa sin prometer que se pueda cambiar. */}
-        {apertura.fase === "eligiendo" || apertura.fase === "credito" ? (
+            informa sin prometer que se pueda cambiar.
+
+            🎁 ⚠️ Y TAMPOCO EN LA MENTORÍA GRATIS, que es lo que tenía al alumno
+            dando vueltas. Con `gross_amount = 0` el selector no pinta nada
+            (`leerTodo` → `vacio`), pero SÍ avisa: `alCambiarElCredito` recibe un
+            cambio que no es «aplicado y cubre el total», y su última línea
+            devuelve la pantalla de "credito" a "eligiendo". O sea que el botón
+            de confirmar aparecía y se iba solo, y lo que quedaba era «Continuar
+            al pago» otra vez — el ping-pong que el cliente reportó como «no me
+            deja reservar». Sin crédito de por medio no hay nada que elegir, así
+            que no se monta. */}
+        {apertura.fase === "eligiendo" ||
+        (apertura.fase === "credito" && apertura.creditoTotal > 0) ? (
           <SelectorDeCredito
             bookingId={apertura.bookingId}
             onCambio={alCambiarElCredito}
@@ -1082,6 +1093,9 @@ export function CheckoutForm({
             destino={`/reservas/${apertura.bookingId}/confirmacion`}
             etiqueta="Confirmar reserva"
             importe={{ minor: apertura.creditoTotal, currency }}
+            /* 🎁 Sin crédito de por medio y sin nada que pagar: la mentoría
+               vale 0. El bloque lo cuenta con otras palabras — ver `gratis`. */
+            gratis={apertura.creditoTotal === 0}
             className="mt-3.5"
           />
         ) : null}

@@ -246,7 +246,12 @@ export function ResumePayment({
   const eligiendoTodavia =
     apertura.fase === "abriendo" ||
     apertura.fase === "eligiendo" ||
-    apertura.fase === "credito";
+    // 🎁 ⚠️ Con la mentoría GRATIS no se monta: no hay crédito que financie
+    // nada (`creditoTotal` es 0 porque el precio era 0). El selector no pinta
+    // nada ahí, pero avisa igual, y ese aviso devuelve la pantalla de "credito"
+    // a "eligiendo" —el ping-pong que dejaba al alumno sin botón de confirmar—.
+    // Ver el mismo bloque en `checkout-form.tsx`.
+    (apertura.fase === "credito" && apertura.creditoTotal > 0);
 
   const creditoAplicado = credito?.tipo === "aplicado" ? credito.cubre : 0;
 
@@ -330,6 +335,9 @@ export function ResumePayment({
           sujeto={{ tipo: "booking", id: bookingId }}
           destino={`/reservas/${bookingId}/confirmacion`}
           etiqueta="Confirmar reserva"
+          /* 🎁 Aquí no hay importe que pintar (ver arriba), pero sí se sabe
+             que no lo financia ningún crédito: la mentoría vale 0. */
+          gratis={apertura.creditoTotal === 0}
           className="mt-3.5"
         />
       ) : null}
