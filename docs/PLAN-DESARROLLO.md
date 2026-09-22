@@ -1799,6 +1799,102 @@ veces**. Las 34 filas sembradas cumplen el invariante.
   revertida: sin cuenta → 0 avisos en cola al cobrarse (lo manda el webhook) y `gift_claimed` ×1
   al registrarse; con cuenta → `gift_received` ×1 y el reclamo no toca nada.
 
+## 22 de septiembre — la analítica, y el sitio se abre a Google
+
+Lo pidió **Emilio el 21-sep** («las conexiones de Google Analytics, Google Search Console y
+PostHog, para que el cliente tenga mejor acceso a analítica») y lo aprobó entero el 22, incluida
+la apertura de la indexación. Las cuentas las creó Jose con el correo propietario del cliente,
+`ensenameya@gmail.com`, así que son del cliente y nosotros entramos como administradores: los
+datos históricos no se quedan atados a la agencia.
+
+**Lo que se enchufó, y por dónde.**
+
+| | Dónde vive | Cómo se apaga |
+| :-- | :-- | :-- |
+| **GA4** `G-XPT6YLQEW2` | `components/analitica/google-analytics.tsx` | `NEXT_PUBLIC_GA_ID` |
+| **PostHog** `phc_pLv69…` | `instrumentation-client.ts` + `PostHogIdentidad` | `NEXT_PUBLIC_POSTHOG_KEY` |
+| **Search Console** | `metadata.verification` del layout raíz | `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` |
+
+GA4 va por `next/script` y no por `@next/third-parties`: ocho líneas y una dependencia menos.
+PostHog arranca **donde ya arrancaba Sentry**, porque los dos son lo mismo —código que corre una
+vez al abrir el navegador— y Next ya tiene un fichero para eso. Lleva
+`capture_pageview: "history_change"`, que es lo que hace que cuente las navegaciones del App
+Router: sin eso registraría solo la primera carga y **todo embudo de más de un paso saldría vacío
+sin un solo error de por medio**. Y `person_profiles: "identified_only"`, así que las personas las
+crea `PostHogIdentidad` al entrar a `(app)` con el id de Supabase y los roles, **nunca el correo**.
+
+⚠️ **`NEXT_PUBLIC_GA_ID` va SOLO en el entorno Production de Vercel.** En "All Environments" los
+previews y `npm run dev` entran en los informes del cliente y GA4 no sabe separarlos después.
+PostHog sí puede ir en los tres porque cada evento lleva la propiedad `entorno`.
+
+### La indexación: lo que llevaba cerrado desde siempre
+
+`robots.ts` servía `Disallow: /` a propósito desde el principio —indexar un marketplace con cero
+tutores deja el primer resultado de marca como una página sin oferta—. Esa condición se cumplió:
+tres tutores publicados y movimiento real. Se abre, **solo en producción** (`VERCEL_ENV`), porque
+los previews sirven el mismo HTML y abiertos competirían con el dominio bueno. Entra
+`src/app/sitemap.ts`: rutas fijas más tutores, mentorías, categorías y academias leídos de la base
+con **los mismos filtros que el catálogo** —anunciar una ficha que devuelve 404 es la forma más
+barata de llenar Search Console de errores—. En producción: **31 URL**.
+
+⚠️ **La trampa que casi desindexa el catálogo.** El match de `robots.txt` es por **prefijo de
+cadena, no por segmento**: un `Disallow: /tutor` para el panel del tutor se lleva por delante
+`/tutors/<id>` —hoy `/tutores/<slug>`—, o sea justo lo que queremos que Google vea, y nada se pone
+rojo. Por eso el panel se declara en dos patrones, `/tutor$` y `/tutor/`. Y por eso existe
+**`npm run check:seo`**: cruza `RUTAS_PRIVADAS` contra las carpetas reales de `src/app/`, así que
+una pantalla nueva con guarda que nadie añada a la lista también lo pone en rojo. Verificado por
+mutación: al escribir `/tutor` a secas, el check falla con el catálogo entre las víctimas.
+
+### El texto legal decía lo contrario de lo que el sitio hacía
+
+La política de cookies afirmaba, con todas las letras, «no usamos cookies de publicidad ni de
+seguimiento de terceros». Con GA4 y PostHog dentro **eso no es un texto viejo: es uno falso**, y el
+fallo es de los mudos —ni build en rojo ni 500, solo una página que miente hasta que alguien la
+lee—. Se declaró lo que hay: privacidad §3 suma los dos encargados junto a Sentry, y cookies
+estrena inventario de analítica con `_ga`, `_ga_…` y `ph_…_posthog`.
+
+`npm run check:terms` ganó **su segunda mitad**: cruza cada integración de analítica que el código
+carga de verdad contra los legales —nombre del tercero y nombre de su cookie— y tumba esa frase
+concreta. Verificado por mutación.
+
+### 🔴 El session replay, y lo que ningún check puede ver
+
+Verificando producción en el navegador apareció `us.i.posthog.com/s/`: **PostHog estaba grabando
+la sesión**. No lo enciende nuestro código — viene activado por defecto en los proyectos nuevos y
+se gobierna desde el **panel de PostHog**, o sea **configuración remota**. Consecuencia dura:
+**no hay grep, check ni typecheck que pueda detectarlo**, y se descubrió mirando peticiones de red.
+
+Se avisó de lo que implica en esta plataforma —el chat alumno↔tutor es texto del DOM, así que el
+replay **sí** lo captura, al contrario que los `input`, que PostHog enmascara solos— y **Jose
+decidió dejarlo encendido** (22-sep). Con esa decisión tomada, la única salida correcta es que el
+texto legal lo diga, y lo dice: la política de cookies declara la grabación, qué queda enmascarado
+y qué no, incluidas las conversaciones.
+
+⚠️ **Queda una asimetría que hay que tener presente:** ese interruptor vive fuera del repositorio.
+Si alguien lo apaga —o lo vuelve a encender— desde el panel, el texto legal y la realidad dejan de
+coincidir **y ningún check de este repo se entera**. Es el mismo patrón de la regla de oro 11,
+pero con la configuración en casa de un tercero.
+
+### Dos cosas que costaron tiempo y conviene no repetir
+
+- ⚠️ **Una VPN puede bloquear `analytics.google.com` por DNS.** `ERR_NAME_NOT_RESOLVED` mientras
+  `developers.google.com` cargaba bien: el resolver de la VPN (`10.2.0.1`) no contestaba a ese
+  nombre concreto, y `8.8.8.8` y `1.1.1.1` sí. No es un error de configuración: es el filtro de
+  rastreadores que traen casi todas. **Con la VPN encendida no se puede verificar que GA funcione.**
+- ⚠️ **Buscar `phc_` en los chunks que referencia el HTML da un falso negativo.** Se dio PostHog por
+  no desplegado cuando estaba funcionando. Lo que no engaña es
+  `performance.getEntriesByType('resource')` en el navegador, contra producción.
+
+### Lo que se dejó fuera, y cuándo tocaría
+
+- **Proxy inverso para PostHog** (`/ingest`): los bloqueadores de anuncios tumban PostHog para una
+  parte del tráfico. Con este volumen no cambia ninguna decisión. **El disparador no es una fecha:
+  es comparar los números de GA4 y PostHog** — si PostHog reporta bastante menos, es esto, y son
+  tres líneas de `rewrites`.
+- **Banner de consentimiento**: para LatAm se sostiene sin él; para tráfico europeo no. **GA4 va a
+  decir en dos semanas qué porcentaje del tráfico es europeo**, y con ese dato se decide. No hace
+  falta resolverlo a ciegas.
+
 ## Decisiones y deudas heredadas — rescate de los docs 19, 20 y 22
 
 Los docs numerados 19, 20, 21 y 22 se borraron. Esto es lo que de ellos **no vive en ningún otro

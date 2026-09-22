@@ -384,6 +384,22 @@ entró en el barrido.
       (`supabase/seed/dev-poblar.sql`). Procedimiento, rotación y custodia en
       **`docs/ACCESO-ADMIN-DEV.md`** — el acceso de admin ya no vive en el documento de pruebas.
 - [ ] **Categorías reales** cargadas (las 10 del seed son de dev).
+- [x] **Indexación abierta y analítica midiendo — 22-sep.** Verificado contra `ensenameya.com`, no
+      contra `next dev`:
+      · `curl https://ensenameya.com/robots.txt` → `Allow: /` + 22 `Disallow:` + la línea `Sitemap:`;
+      · `curl https://ensenameya.com/sitemap.xml` → **31 URL** absolutas del dominio, con las fichas
+        en `/tutores/<slug>`;
+      · el HTML de la home trae `googletagmanager.com/gtag/js?id=G-XPT6YLQEW2` y la etiqueta
+        `google-site-verification`;
+      · PostHog confirmado en el navegador con `performance.getEntriesByType('resource')` —
+        ⚠️ **grepear `phc_` en los chunks del HTML da FALSO NEGATIVO**, ya pasó.
+      ⚠️ **Con una VPN encendida esta verificación no vale**: muchas filtran `analytics.google.com`
+      por DNS y parece que nada funciona.
+- [ ] **Search Console: pulsar "Verificar" y enviar el sitemap.** La propiedad es de tipo *prefijo
+      de URL* (la de *dominio* exigiría un TXT en una zona que no se toca). El sitemap se envía a
+      mano una vez, en Search Console › Sitemaps › `sitemap.xml`.
+- [ ] **GA4: retención de datos a 14 meses.** Viene en 2 por defecto y **no es recuperable hacia
+      atrás**: pasado un trimestre, no hay con qué comparar.
 - [x] **Páginas legales publicadas** (DD-06 → DL-05). Desde el **17-ago** `/terms` sirve los
       **Términos del cliente** (39 secciones, versión **inglesa, que es la que gobierna** por su §38)
       y `/terms/es` la española; `/privacy` y `/cookies` siguen siendo texto nuestro, porque el

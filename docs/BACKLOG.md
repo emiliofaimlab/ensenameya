@@ -27,10 +27,15 @@
   migraciones** desplegadas.
 - ✅ **El sitio está abierto desde el 10-sep.** `ensenameya.com` sirve la app entera; `www` y
   `ensenameya.vercel.app` son 308 hacia él. La migración de dominio ya no es un pendiente. Lo que
-  sigue cerrado a propósito es **la indexación**: `robots.ts` mantiene `Disallow: /` hasta que haya
-  tutores publicados, porque que el sitio funcione y que Google lo indexe son decisiones distintas.
-  Producción tiene **un usuario**, y es una cáscara anonimizada de un alta de prueba dada de baja el
-  mismo día.
+  sigue cerrado a propósito era **la indexación** — y dejó de estarlo.
+- ✅ **La indexación se abrió el 22-sep.** Era la última pieza del bloqueo de pre-lanzamiento, y
+  esperaba una condición —tutores publicados— que ya se cumplió. `robots.txt` sirve `Allow: /` con
+  las rutas de sesión fuera, y entra `sitemap.xml` (**31 URL en producción**, fichas incluidas).
+  ⚠️ **Solo en producción**: los previews siguen en `Disallow: /`, o competirían con el dominio
+  bueno en el índice. Con ella entraron **Google Analytics 4, PostHog y Search Console**, que es lo
+  que pidió Emilio el 21-sep.
+- ⚠️ **Producción ya no es una cáscara.** La línea que decía «un usuario, anonimizado» caducó: hay
+  tutores publicados con su ficha en `/tutores/<slug>`, movimiento real, y analítica midiéndolo.
 - **El dictado de pagos del 9-sep-2026 reestructuró cobro y payout, y ya está desplegado** (11
   migraciones `20260910*`). Lo que fija:
   1. la pasarela de **cobro** la decide el país del **alumno** —`ruta_de_pago(payer_country).charge_providers`—

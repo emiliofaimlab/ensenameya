@@ -101,7 +101,7 @@ const PRIVACY: Doc = {
         "El proveedor de pagos, que trata los datos necesarios para cobrar y para liquidar a los tutores.",
         "Sentry, para registrar errores técnicos de la aplicación y poder corregirlos. Está configurado expresamente para no enviar datos personales: recoge el fallo, no quién lo sufrió.",
         "Google Analytics, para contar de forma agregada cuánta gente visita el sitio y qué secciones mira. No recibe tu nombre ni tu correo.",
-        "PostHog, para medir cómo se usa la plataforma y saber en qué pasos se atasca la gente. Si has iniciado sesión recibe tu identificador interno de usuario y tus roles —alumno, tutor—, nunca tu nombre ni tu correo.",
+        "PostHog, para medir cómo se usa la plataforma y saber en qué pasos se atasca la gente. Si has iniciado sesión recibe tu identificador interno de usuario y tus roles —alumno, tutor—, nunca tu nombre ni tu correo. PostHog también graba la sesión: una reproducción de lo que ocurre en tu pantalla mientras navegas. Lo detalla la política de cookies.",
         "Referral Factory, solo si participas en el programa de invitaciones. El programa entero (códigos, recompensas, seguimiento) vive en su plataforma; nosotros únicamente guardamos el código con el que llegaste para atribuir la invitación. Si no usas un enlace de invitación, no interviene.",
         "Ninguno de ellos usa tus datos para fines propios: los tratan por encargo nuestro y solo para prestar el servicio que les corresponde.",
       ],
@@ -144,7 +144,7 @@ const PRIVACY: Doc = {
 const COOKIES: Doc = {
   title: "Política de cookies",
   intro:
-    "Qué cookies usamos y para qué. La mayoría son necesarias para que la plataforma funcione; además usamos dos servicios de medición, Google Analytics y PostHog, para saber qué partes del sitio se usan. No usamos cookies de publicidad ni cedemos lo que medimos a anunciantes. Sí registramos, en nuestro propio servidor y solo si has iniciado sesión, qué tutores consultas — lo explica la política de privacidad.",
+    "Qué cookies usamos y para qué. La mayoría son necesarias para que la plataforma funcione; además usamos dos servicios de medición, Google Analytics y PostHog, para saber qué partes del sitio se usan, y PostHog graba además una reproducción de tu sesión. No usamos cookies de publicidad ni cedemos lo que medimos a anunciantes. Sí registramos, en nuestro propio servidor y solo si has iniciado sesión, qué tutores consultas — lo explica la política de privacidad.",
   secciones: [
     {
       titulo: "Cookies de sesión",
@@ -165,7 +165,8 @@ const COOKIES: Doc = {
       parrafos: [
         "«_ga» y las que empiezan por «_ga_» son de Google Analytics. Cuentan visitas y páginas vistas de forma agregada: cuánta gente entra, desde qué país y qué secciones mira. No llevan tu nombre ni tu correo. Duran hasta dos años.",
         "«ph_…_posthog» es de PostHog. Mide cómo se usa la plataforma —qué pasos completas y en cuáles te quedas— para poder mejorarla. Si has iniciado sesión, esa medición queda asociada a tu identificador interno de usuario; nunca a tu nombre ni a tu correo. Dura un año.",
-        "Ninguna de las dos se usa para publicidad. Puedes bloquearlas desde tu navegador o con cualquier extensión de bloqueo: la plataforma sigue funcionando igual, solo dejamos de saber qué se usa.",
+        "Esa misma cookie sostiene la grabación de sesión. PostHog guarda una reproducción de lo que ocurre en tu pantalla mientras usas la plataforma: por dónde navegas, dónde haces clic y cómo te desplazas. Los campos de formulario se enmascaran automáticamente, de modo que ni contraseñas ni datos de pago quedan registrados. Lo que la pantalla muestra sí forma parte de la grabación, incluidas las conversaciones del chat. Se usa únicamente para entender y corregir problemas de uso, nunca para vigilar a nadie ni con fines comerciales.",
+        "Ninguna de las dos se usa para publicidad. Puedes bloquearlas desde tu navegador o con cualquier extensión de bloqueo: la plataforma sigue funcionando igual, solo dejamos de saber qué se usa, y la grabación tampoco llega a hacerse.",
       ],
     },
     {

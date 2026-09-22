@@ -377,6 +377,30 @@ send({ to, templateKey, vars, locale })   // locale: 'es' por defecto (S-38)
 - `SUPUESTO S-47`: métricas operativas mínimas (tasa de fallo de cobro, payouts en `failed`,
   latencia de webhook) en el panel admin. Sigue sin construirse.
 
+**Analítica de producto y de búsqueda (22-sep-2026).** Tres integraciones más, las tres con el
+mismo interruptor de siempre —sin variable no se carga ni una etiqueta— y las tres **de la cuenta
+del cliente**, no de la agencia:
+
+- **Google Analytics 4** (`components/analitica/google-analytics.tsx`) por `gtag.js` con
+  `next/script`, sin dependencia nueva. Las navegaciones internas del App Router **las cuenta GA,
+  no el código**, vía "Enhanced measurement › page changes based on browser history events".
+  ⚠️ Si alguien apaga eso en la consola de GA, los embudos se quedan en una página y **no hay nada
+  en el repositorio que lo delate**. Variable **solo en Production**.
+- **PostHog** (`instrumentation-client.ts`, junto a Sentry) con `capture_pageview: "history_change"`
+  y `person_profiles: "identified_only"`. La identidad la pone `PostHogIdentidad` en el layout de
+  `(app)`: id de Supabase y roles, **nunca el correo**. Cada evento lleva la propiedad `entorno`,
+  que es lo que permite que la misma clave sirva a los tres ambientes.
+  🔴 **El session replay está ENCENDIDO** (decisión del 22-sep) y se gobierna desde el **panel de
+  PostHog**, no desde el código: es configuración remota, así que **ningún check de este repo puede
+  verla**. Los `input` se enmascaran solos; el chat, que es texto del DOM, **no**. La política de
+  cookies lo declara — y si ese interruptor se toca fuera, el texto legal deja de ser cierto sin
+  que nada se ponga rojo.
+- **Google Search Console**, verificado por **etiqueta HTML** (`metadata.verification`) y no por
+  TXT en el DNS: esa zona lleva el Microsoft 365 del cliente detrás de Proofpoint y el correo no se
+  toca. Con él entran `app/robots.ts` —abierto **solo en producción**, `VERCEL_ENV`— y
+  `app/sitemap.ts`. Qué queda fuera del rastreo lo dice `lib/seo.ts`, y lo vigila
+  `npm run check:seo`.
+
 ---
 
 ## 6.14 Seguridad

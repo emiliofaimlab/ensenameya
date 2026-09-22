@@ -53,6 +53,10 @@ apaga sola en vez de romper.
 | `RESEND_API_KEY` | Envío real de correo (US-1201) y del formulario de contacto (DL-01) | La cola se queda en `pending` (no `failed`) y el mensaje de contacto se guarda en `contact_messages` pero no sale |
 | `EMAIL_FROM` | Remitente propio | ✅ `Enséñame Ya <hola@ensenameya.com>` desde el 10-sep. El defecto del código sigue siendo `onboarding@resend.dev`, que funciona sin dominio verificado |
 | `NEXT_PUBLIC_SITE_URL` | Base absoluta de las URL de retorno del cobro | Se deduce por entorno: producción → `VERCEL_PROJECT_PRODUCTION_URL`, preview → `VERCEL_BRANCH_URL` (alias fijo de rama). En local, `http://localhost:3000` |
+| `NEXT_PUBLIC_GA_ID` | Google Analytics 4 (22-sep). Hoy `G-XPT6YLQEW2` | No se pinta ni una etiqueta. ⚠️ **Va SOLO en Production**: en "All Environments" los previews y `npm run dev` entran en los informes del cliente y GA4 no sabe separarlos después |
+| `NEXT_PUBLIC_POSTHOG_KEY` | PostHog (22-sep). Hoy `phc_pLv69…` | El módulo **ni se bundlea**: el `if (key)` desaparece por dead-code elimination y se lleva el `import` por delante. ⚠️ Esta **sí** va en los tres: cada evento lleva la propiedad `entorno` y se filtra allí |
+| `NEXT_PUBLIC_POSTHOG_HOST` | Solo si el proyecto de PostHog fuera **región EU** | `https://us.i.posthog.com`. ⚠️ La clave **no funciona cruzada** entre regiones |
+| `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | La etiqueta que verifica Search Console | No se emite la etiqueta y la propiedad no se puede verificar. ⚠️ Se usa etiqueta HTML y **no** un TXT en el DNS: esa zona lleva el M365 del cliente tras Proofpoint (§ del dominio) |
 
 🗑️ **Las cuatro `NEXT_PUBLIC_REFERRAL_URL` / `_URL_TUTOR` / `_EMBED_URL` / `_EMBED_URL_TUTOR` salieron
 de esta tabla el 11-sep**, y no por limpieza cosmética: «Invita y gana» dejó de ser un iframe de
@@ -202,6 +206,9 @@ explícitamente el de tipo `BUSINESS`, cayendo al primero solo si no hay ninguno
 | `RESEND_API_KEY` | ❌ | ✅ | ✅ | — |
 | `EMAIL_FROM` | ❌ | ✅ | ✅ `Enséñame Ya <hola@ensenameya.com>` (10-sep) | — |
 | `SENTRY_DSN` · `NEXT_PUBLIC_SENTRY_DSN` | ❌ | ✅ | ✅ | — |
+| `NEXT_PUBLIC_GA_ID` | ❌ | ❌ **a propósito** | ✅ (22-sep) | — |
+| `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | ❌ | ❌ | ✅ (22-sep) | — |
+| `NEXT_PUBLIC_POSTHOG_KEY` | ❌ | ✅ | ✅ (22-sep) | — |
 | `APP_BASE_URL` | — | — | — | ✅ **`https://ensenameya.com`** (10-sep) |
 | `VERCEL_PROTECTION_BYPASS` | — | — | — | opcional · solo si apunta a una preview |
 
