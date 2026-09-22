@@ -45,7 +45,7 @@ import { COMPANY } from "@/lib/company";
 const CONTACTO = COMPANY.email;
 
 /** Fecha de la última revisión de estos textos. */
-const ACTUALIZADO = "6 de agosto de 2026";
+const ACTUALIZADO = "22 de septiembre de 2026";
 
 type Seccion = { titulo: string; parrafos: string[] };
 type Doc = { title: string; intro: string; secciones: Seccion[] };
@@ -100,6 +100,8 @@ const PRIVACY: Doc = {
         "Vercel, como proveedor de alojamiento de la aplicación.",
         "El proveedor de pagos, que trata los datos necesarios para cobrar y para liquidar a los tutores.",
         "Sentry, para registrar errores técnicos de la aplicación y poder corregirlos. Está configurado expresamente para no enviar datos personales: recoge el fallo, no quién lo sufrió.",
+        "Google Analytics, para contar de forma agregada cuánta gente visita el sitio y qué secciones mira. No recibe tu nombre ni tu correo.",
+        "PostHog, para medir cómo se usa la plataforma y saber en qué pasos se atasca la gente. Si has iniciado sesión recibe tu identificador interno de usuario y tus roles —alumno, tutor—, nunca tu nombre ni tu correo.",
         "Referral Factory, solo si participas en el programa de invitaciones. El programa entero (códigos, recompensas, seguimiento) vive en su plataforma; nosotros únicamente guardamos el código con el que llegaste para atribuir la invitación. Si no usas un enlace de invitación, no interviene.",
         "Ninguno de ellos usa tus datos para fines propios: los tratan por encargo nuestro y solo para prestar el servicio que les corresponde.",
       ],
@@ -142,7 +144,7 @@ const PRIVACY: Doc = {
 const COOKIES: Doc = {
   title: "Política de cookies",
   intro:
-    "Qué cookies usamos y para qué. Todas son necesarias para que la plataforma funcione: no usamos cookies de publicidad ni de seguimiento de terceros. Sí registramos, en nuestro propio servidor y solo si has iniciado sesión, qué tutores consultas — lo explica la política de privacidad.",
+    "Qué cookies usamos y para qué. La mayoría son necesarias para que la plataforma funcione; además usamos dos servicios de medición, Google Analytics y PostHog, para saber qué partes del sitio se usan. No usamos cookies de publicidad ni cedemos lo que medimos a anunciantes. Sí registramos, en nuestro propio servidor y solo si has iniciado sesión, qué tutores consultas — lo explica la política de privacidad.",
   secciones: [
     {
       titulo: "Cookies de sesión",
@@ -159,9 +161,17 @@ const COOKIES: Doc = {
       ],
     },
     {
+      titulo: "Cookies de analítica",
+      parrafos: [
+        "«_ga» y las que empiezan por «_ga_» son de Google Analytics. Cuentan visitas y páginas vistas de forma agregada: cuánta gente entra, desde qué país y qué secciones mira. No llevan tu nombre ni tu correo. Duran hasta dos años.",
+        "«ph_…_posthog» es de PostHog. Mide cómo se usa la plataforma —qué pasos completas y en cuáles te quedas— para poder mejorarla. Si has iniciado sesión, esa medición queda asociada a tu identificador interno de usuario; nunca a tu nombre ni a tu correo. Dura un año.",
+        "Ninguna de las dos se usa para publicidad. Puedes bloquearlas desde tu navegador o con cualquier extensión de bloqueo: la plataforma sigue funcionando igual, solo dejamos de saber qué se usa.",
+      ],
+    },
+    {
       titulo: "Cómo desactivarlas",
       parrafos: [
-        "Puedes borrar o bloquear las cookies desde la configuración de tu navegador. Ten en cuenta que si bloqueas las de sesión no podrás iniciar sesión ni usar la parte privada de la plataforma.",
+        "Puedes borrar o bloquear las cookies desde la configuración de tu navegador. Ten en cuenta que si bloqueas las de sesión no podrás iniciar sesión ni usar la parte privada de la plataforma; las de analítica, en cambio, se pueden bloquear sin perder nada.",
         `Si tienes dudas sobre este apartado, escríbenos a ${CONTACTO}.`,
       ],
     },
