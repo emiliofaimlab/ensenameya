@@ -1,32 +1,32 @@
 import type { MetadataRoute } from "next";
 
+import { siteUrl } from "@/lib/site-url";
+import { RUTAS_PRIVADAS } from "@/lib/seo";
+
 /**
- * ⚠️ BLOQUEO DE PRE-LANZAMIENTO — se quita el día del corte, en el mismo commit
- * que los `redirects` de `vercel.json`. Los dos son la misma decisión.
+ * 22-sep-2026 · SE ABRE LA INDEXACIÓN. El bloqueo total existía porque lo que
+ * Google habría encontrado era un marketplace con cero tutores; con tutores
+ * publicados y movimiento real, seguir cerrado ya solo cuesta tráfico.
  *
- * ⚠️ Y ESTO YA NO ES LO ÚNICO QUE QUEDA DEL BLOQUEO: la redirección de
- * pre-lanzamiento se quitó el 10-sep y el sitio abre en su home. Este fichero
- * sobrevive **a propósito**, porque son dos cosas distintas: que el sitio
- * funcione y que Google lo indexe. Se abre cuando haya tutores publicados.
+ * ⚠️ Pero solo en PRODUCCIÓN. Los previews (`ensenameya-git-dev-….vercel.app`)
+ * sirven exactamente el mismo HTML que producción: abiertos, Google los ve como
+ * contenido duplicado del dominio bueno y reparte la autoridad entre los dos.
+ * `VERCEL_ENV` se evalúa al construir, y Vercel construye cada entorno con la
+ * suya, así que esta rama SÍ distingue —al revés que una variable que hubiera
+ * que acordarse de poner (§1.3 de `docs/ENTORNOS.md`)—. En local no está
+ * definida y cae al lado cerrado, que es lo correcto.
  *
- * Por qué existe: hasta ahora la app vivía en `ensenameya.vercel.app`, sin
- * enlaces entrantes y sin nadie que la buscara. En cuanto `ensenameya.com`
- * apunte aquí hereda la autoridad de la landing de GoDaddy, y lo que Google
- * encontraría es un marketplace con **cero tutores** y un checkout en
- * `sk_test_`. Ese es el estado que no se puede indexar: no el dominio.
- *
- * Por qué NO va detrás de una variable de entorno: Vercel inyecta las env vars
- * al **construir**, así que cambiarla exige un Redeploy igual que cambiar este
- * fichero. La variable no ahorra el despliegue — solo añade una forma más de
- * equivocarse (§1.3 de `docs/ENTORNOS.md`: "Vercel no aplica una variable nueva
- * a un despliegue que ya existe").
- *
- * El día del lanzamiento esto pasa a ser un `allow` con su `sitemap`. Hoy no
- * hay `sitemap.ts` y no hace falta: sin nada que indexar, no hay nada que
- * anunciar.
+ * Qué se deja fuera y por qué vive en `lib/seo.ts`: ahí está el detalle, y el
+ * `npm run check:seo` que impide que un `Disallow` se coma el catálogo.
  */
 export default function robots(): MetadataRoute.Robots {
+  if (process.env.VERCEL_ENV !== "production") {
+    return { rules: { userAgent: "*", disallow: "/" } };
+  }
+
+  const base = siteUrl();
   return {
-    rules: { userAgent: "*", disallow: "/" },
+    rules: { userAgent: "*", allow: "/", disallow: [...RUTAS_PRIVADAS] },
+    sitemap: `${base}/sitemap.xml`,
   };
 }

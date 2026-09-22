@@ -33,6 +33,7 @@
     "check:csv": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/admin/csv.check.ts",
     "check:bots": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/sentry-bot.check.ts",
     "check:dinero": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/dinero.check.ts",
+    "check:seo": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/seo.check.ts",
     "check:horario": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/availability.check.ts"
   },
   "dependencies": {
@@ -47,6 +48,7 @@
     "lucide-react": "^1.17.0",
     "next": "16.2.7",
     "next-themes": "^0.4.6",
+    "posthog-js": "^1.434.7",
     "qrcode": "^1.5.4",
     "radix-ui": "^1.5.0",
     "react": "19.2.4",

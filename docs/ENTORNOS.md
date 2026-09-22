@@ -482,11 +482,14 @@ alumno y el payout el del tutor**. El avance de la implementación está en
 - [x] **Redirección de pre-lanzamiento QUITADA — 10-sep.** `ensenameya.com` sirve la home normal y
   el sitio funciona entero. Lo pidió el cliente al aprobar los correos. `vercel.json` se queda solo
   con su `crons`.
-- [ ] ⚠️ **`robots.ts` sigue con `Disallow: /`, y es una decisión aparte.** «Que el sitio funcione»
-  y «que Google lo indexe» no son lo mismo: hoy el catálogo tiene **cero tutores** y el checkout
-  corre con claves live sobre una cuenta de Stripe **sin activar**. Indexar eso deja a Google con un
-  marketplace vacío en el índice, y el primer resultado de marca sería una página sin oferta. Se
-  abre cuando haya tutores publicados, no cuando el sitio deje de redirigir.
+- [x] **`robots.ts` ABIERTO — 22-sep.** Era una decisión aparte de la redirección, y su condición
+  («que haya tutores publicados») se cumplió: hay tres en producción y movimiento real. Lo que se
+  abre es **solo producción**: `VERCEL_ENV !== "production"` sigue devolviendo `Disallow: /`, porque
+  los previews sirven el mismo HTML y abiertos serían contenido duplicado del dominio bueno. Las
+  rutas con guarda quedan fuera por `RUTAS_PRIVADAS` de `src/lib/seo.ts`, y `npm run check:seo`
+  cruza esa lista contra las carpetas reales de `src/app/`: una pantalla nueva con sesión que nadie
+  añada a la lista pone el check en rojo. Con ella entra `src/app/sitemap.ts` (fijas + tutores,
+  mentorías, categorías y academias, leídos de la base con los mismos filtros que el catálogo).
 - [x] ~~Quitar el bloqueo de pre-lanzamiento~~ (histórico, ver arriba): Mientras el sitio no esté vivo, `ensenameya.com`
   redirige `/` → `/contacto` (`redirects` de `vercel.json`, con `has: host` para que **no afecte a
   las previews**) y `src/app/robots.ts` sirve un `disallow: /`. Son **la misma decisión** y se
@@ -864,8 +867,8 @@ sí, y lo mandan como cabecera `x-vercel-protection-bypass` para que no acabe es
 - [ ] Mínimo de contraseña a 8 en el panel de Auth, dev y prod (§3B).
 - [x] **Migración de dominio — 10-sep.** `ensenameya.com` sirve la app; `www` y `vercel.app` son
       308 hacia él. El correo del cliente (M365 tras Proofpoint) intacto.
-- [ ] ⚠️ **Abrir `robots.ts`.** Sigue en `Disallow: /` a propósito: indexar es una decisión aparte
-      y espera a que haya tutores publicados.
+- [x] **`robots.ts` abierto — 22-sep.** Con tres tutores publicados se cumplió la condición que lo
+      mantenía cerrado. Solo producción; los previews siguen en `Disallow: /`. Entra `sitemap.xml`.
 
 **Migraciones.** Hoy son **178** en `supabase/migrations/`, la fuente de verdad del esquema, y prod
 las tiene todas (medido el 10-sep: 178 aplicadas, última `20260910230000`). Las
@@ -982,10 +985,10 @@ es otra cosa.
    pasar una tarjeta real por poco importe y reembolsarla. El reembolso ya es código (RN-37,
    `lib/policy.ts`), así que la misma prueba cubre los dos caminos.
 4. Borrar el endpoint de webhook de test.
-5. ✅ **Los `redirects` de `vercel.json` ya se quitaron el 10-sep**, así que el sitio abre en su home
-   y funciona entero en `ensenameya.com`. Lo que queda de ese bloqueo es **solo `src/app/robots.ts`**,
-   y es una decisión aparte: que el sitio funcione y que Google lo indexe no son lo mismo. Con el
-   catálogo a cero tutores, indexar deja el primer resultado de marca como una página sin oferta.
+5. ✅ **Los `redirects` de `vercel.json` se quitaron el 10-sep** y **`robots.ts` se abrió el
+   22-sep**, cuando se cumplió lo que lo mantenía cerrado: tutores publicados. Del bloqueo de
+   pre-lanzamiento ya no queda nada en producción. En preview sí: ahí `robots.txt` sigue cerrado a
+   propósito, para que los despliegues de rama no compitan con el dominio en el índice.
 
 ### 7.5 Google OAuth — estaba roto, y no por el dominio
 

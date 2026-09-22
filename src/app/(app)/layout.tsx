@@ -5,6 +5,7 @@ import { listConversations } from "@/components/chat/conversations";
 import { SiteHeader } from "@/components/layout/site-header";
 import { AppChrome } from "@/components/layout/app-chrome";
 import { ChatLauncher } from "@/components/chat/chat-launcher";
+import { PostHogIdentidad } from "@/components/analitica/posthog-identidad";
 
 export default async function AppLayout({
   children,
@@ -57,6 +58,10 @@ export default async function AppLayout({
       <main className="flex flex-1 flex-col">{children}</main>
       {/* Bandeja de chat flotante (R24-21). */}
       <AppChrome chat={<ChatLauncher />} />
+      {/* Le pone nombre en PostHog a la sesión que ya se estaba grabando.
+          Aquí y no en el layout raíz porque este es el único con sesión
+          garantizada: `requireUser()` ya ha redirigido a quien no la tenga. */}
+      <PostHogIdentidad uid={user.id} roles={roles} />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { RedAntiBlanco } from "@/components/layout/red-anti-blanco";
 import { ProveedorDeMoneda } from "@/components/precio/precio";
 import { monedaDelVisitante } from "@/lib/fx";
 import { siteUrl } from "@/lib/site-url";
+import { GoogleAnalytics } from "@/components/analitica/google-analytics";
 
 // Única familia del diseño: Poppins en los 4 pesos que usan las 3.691 capas de texto del Figma.
 const poppins = Poppins({
@@ -30,6 +31,14 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: "Enséñame Ya",
   description: "Marketplace de mentorías 1:1 en vivo entre alumnos y tutores.",
+  // Search Console, método "etiqueta HTML". Se hace así y no por registro TXT
+  // en el DNS a propósito: `ensenameya.com` lleva Microsoft 365 detrás de
+  // Proofpoint y el correo no se toca (§ Legales de `CLAUDE.md`) — un TXT mal
+  // puesto en esa zona es un buzón caído, y aquí el riesgo es cero.
+  // Sin `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` no se emite la etiqueta.
+  verification: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
+    ? { google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION }
+    : undefined,
 };
 
 export default async function RootLayout({
@@ -77,6 +86,10 @@ export default async function RootLayout({
           <DropdownDismiss />
           <Toaster />
         </ThemeProvider>
+        {/* GA4. Va al final del `body` y con `afterInteractive`: la analítica
+            nunca retrasa la primera pintura. PostHog no aparece aquí porque
+            arranca desde `src/instrumentation-client.ts`. */}
+        <GoogleAnalytics />
       </body>
     </html>
   );
