@@ -469,7 +469,24 @@ export function ChatThread({
             }
           },
         )
-        .subscribe();
+        // ⚠️ Realtime NO reenvía lo que se insertó con el socket caído (móvil
+        // en segundo plano, cambio de red, token renovado): al reconectar el
+        // canal vuelve a `SUBSCRIBED` y lo perdido no llega nunca. Pasó en prod
+        // el 21-sep: dos PDF guardados a las 21:03 que el otro vio a la mañana.
+        // Así que en cada (re)conexión se relee el hilo; el primer `SUBSCRIBED`
+        // cuesta una consulta de más y tapa también la ventana del montaje.
+        .subscribe((status) => {
+          if (status !== "SUBSCRIBED" || cancelled) return;
+          void supabase
+            .from("messages")
+            .select(MESSAGE_COLUMNS)
+            .eq("conversation_id", conversationId)
+            .order("created_at")
+            .then(({ data }) => {
+              if (cancelled || !data) return;
+              setMessages(data.map((m) => toChatMessage(m as MessageRow)));
+            });
+        });
     })();
 
     return () => {
