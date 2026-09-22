@@ -33,7 +33,13 @@ import {
   ReviewsSummary,
   TutorReviews,
 } from "@/components/catalog/tutor-reviews";
-import { getTutorDetail, listTutorReviews } from "@/lib/catalog/queries";
+import {
+  getTutorDetail,
+  listTutorReviews,
+  tutorIdFrom,
+  tutorPath,
+} from "@/lib/catalog/queries";
+import { UrlCanonica } from "@/components/catalog/url-canonica";
 import type { CategoryTag, ProductCardData } from "@/lib/catalog/queries";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import { PrecioEnLinea } from "@/components/precio/precio";
@@ -110,8 +116,8 @@ export async function generateMetadata({
   // ⚠️ El tipo de vuelta se anota a propósito. Sin él, `type: "profile"` se
   // infiere como `string` y deja de encajar en la unión de `openGraph.type`,
   // que es un fallo que solo aparece en el `typecheck`, no aquí.
-  const { id } = await params;
-  const data = await getTutorDetail(id);
+  const id = await tutorIdFrom((await params).id);
+  const data = id ? await getTutorDetail(id) : null;
   const t = data?.tutor;
   if (!t) return { title: "Tutor" };
 
@@ -122,7 +128,7 @@ export async function generateMetadata({
   // a una frase de plataforma en vez de inventarle una descripción.
   const description =
     t.headline ?? `Reserva mentorías 1:1 en vivo con ${name} en Enséñame Ya.`;
-  const url = `/tutors/${id}`;
+  const url = tutorPath(t);
 
   return {
     title: `${name} · Enséñame Ya`,
@@ -150,7 +156,10 @@ export default async function TutorProfilePage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ p?: string; d?: string; h?: string; m?: string }>;
 }) {
-  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  const [{ id: param }, sp] = await Promise.all([params, searchParams]);
+  // `[id]` es el slug o el uuid (ver `tutorIdFrom`).
+  const id = await tutorIdFrom(param);
+  if (!id) notFound();
   // M-12 · el tiempo de respuesta se pide en paralelo con lo demás: alimenta el
   // mismo bloque del hero y no depende de nada. `tutorResponseTime` devuelve
   // `null` mucho más a menudo de lo que parece (tutor nuevo, o que no
@@ -315,7 +324,7 @@ export default async function TutorProfilePage({
    *
    * Sin `url`: aquí haría falta una URL ABSOLUTA y la base del sitio todavía no
    * existe en el proyecto (§5.6 / `metadataBase`). Un JSON-LD sin `url` es
-   * válido; uno con `url: "/tutors/…"` es basura que el validador rechaza.
+   * válido; uno con `url: "/tutores/…"` es basura que el validador rechaza.
    */
   const jsonLd = {
     "@context": "https://schema.org",
@@ -365,7 +374,7 @@ export default async function TutorProfilePage({
     if (next.h) q.set("h", next.h);
     if (next.m) q.set("m", next.m);
     const s = q.toString();
-    return s ? `/tutors/${id}?${s}#reservar` : `/tutors/${id}#reservar`;
+    return s ? `${tutorPath(tutor)}?${s}#reservar` : `${tutorPath(tutor)}#reservar`;
   };
 
   return (
@@ -375,6 +384,9 @@ export default async function TutorProfilePage({
           Pasársela desde aquí obligaría a que la ficha de la mentoría —que hoy
           no consulta la sesión— añadiera un viaje a Auth solo para esto. */}
       <RegistrarVisita tutorId={tutor.id} origen="tutor" />
+      {tutor.slug && param !== tutor.slug && (
+        <UrlCanonica path={tutorPath(tutor)} />
+      )}
 
       <script
         type="application/ld+json"
@@ -447,7 +459,7 @@ export default async function TutorProfilePage({
               </Link>
               {" / "}
               <Link
-                href="/tutors"
+                href="/tutores"
                 className="inline-block py-3 -my-3 hover:underline"
               >
                 Tutores

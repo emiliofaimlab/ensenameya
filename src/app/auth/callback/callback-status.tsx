@@ -256,11 +256,11 @@ export function CallbackStatus({
        * venía vacío — o sea, casi nunca: el MODAL, que es la puerta principal
        * de alta, rellena `next` SIEMPRE con la ruta actual
        * (`signup-dialog.tsx`). Verificado en vivo el 11-sep-2026:
-       * `/signup?next=/tutors` + «Quiero enseñar» + Google aterrizaba en
-       * `/tutors`, una lista pública, sin que nada llevara al recién llegado
+       * `/signup?next=/tutores` + «Quiero enseñar» + Google aterrizaba en
+       * `/tutores`, una lista pública, sin que nada llevara al recién llegado
        * hacia ser tutor. El selector no decidía nada por este camino.
        *
-       * Peor aún: `/tutors` es PÚBLICA, así que `requireUser()` —que sí sabe
+       * Peor aún: `/tutores` es PÚBLICA, así que `requireUser()` —que sí sabe
        * rescatar a un aspirante a tutor— no llegaba a correr nunca.
        *
        * El `next` no se tira, se traslada: `/onboarding` sabe volver a él al

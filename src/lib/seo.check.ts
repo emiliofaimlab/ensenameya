@@ -3,7 +3,7 @@
  * se deje abierto lo que pide sesión. Sin red y sin arrancar Next.
  *
  * Los dos fallos que persigue no dan error en ningún sitio:
- *   · un `Disallow: /tutor` que se come `/tutors/<id>` — el catálogo entero
+ *   · un `Disallow: /tutor` que se come `/tutores/<id>` — el catálogo entero
  *     fuera de Google, y el build en verde;
  *   · una carpeta nueva bajo `(app)`/`(auth)`/`(checkout)` que nadie añade a
  *     `RUTAS_PRIVADAS` — Googlebot rastreando pantallas que redirigen al login.
@@ -26,7 +26,7 @@ const GRUPOS_CON_GUARDA = [
 
 /** Rutas de ejemplo con parámetro: lo que `sitemap.ts` emite de verdad. */
 const DINAMICAS_PUBLICAS = [
-  "/tutors/8f1c2d3e-0000-4000-8000-000000000001",
+  "/tutores/8f1c2d3e-0000-4000-8000-000000000001",
   "/products/8f1c2d3e-0000-4000-8000-000000000002",
   "/categories/matematicas",
   "/academias/academia-ejemplo",
@@ -51,9 +51,9 @@ const casos: [string, () => void][] = [
     () => {
       assert.ok(estaBloqueada("/tutor"), "/tutor debería estar bloqueada");
       assert.ok(estaBloqueada("/tutor/perfil"), "/tutor/perfil debería estarlo");
-      assert.ok(!estaBloqueada("/tutors"), "/tutors NO debe bloquearse");
+      assert.ok(!estaBloqueada("/tutores"), "/tutores NO debe bloquearse");
       assert.ok(
-        !estaBloqueada("/tutors/abc"),
+        !estaBloqueada("/tutores/abc"),
         "la ficha pública del tutor NO debe bloquearse",
       );
     },

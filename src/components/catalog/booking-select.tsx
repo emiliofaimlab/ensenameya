@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
  * B3.4 · Una opción del selector, **ya resuelta por el servidor**.
  *
  * ⚠️ `href` viene calculado desde arriba a propósito: quien sabe montar la URL
- * es el `hrefFor` de cada página (`/tutors/[id]` y `/products/[id]`), y ese
+ * es el `hrefFor` de cada página (`/tutores/[id]` y `/products/[id]`), y ese
  * `hrefFor` es una closure de un Server Component — **no se puede pasar como
  * prop a un componente de cliente**, no es serializable. Así que lo que cruza
  * la frontera son cadenas: valor, etiqueta y destino. Este componente no

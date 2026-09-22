@@ -24,7 +24,7 @@ export const metadata = { title: "Agendar · Enséñame Ya" };
  * «Agendar» del menú del alumno, para quien YA tiene sesión.
  *
  * ⚠️ **POR QUÉ EXISTE ESTA RUTA.** Hasta hoy la entrada «Agendar» del menú
- * lateral apuntaba a `/tutors`, que es el buscador **público**: el alumno salía
+ * lateral apuntaba a `/tutores`, que es el buscador **público**: el alumno salía
  * de su panel —otra cabecera, otro ancho, sin menú— y aterrizaba en la misma
  * pantalla que ve cualquiera sin cuenta. El cliente lo señaló con esas
  * palabras: «como estudiante cuando le das a agendar te manda a la página de
@@ -40,7 +40,7 @@ export const metadata = { title: "Agendar · Enséñame Ya" };
  * que ya hacía `/reservas` con `categoriesWithOffer`. Duplicarlas aquí sería
  * garantizar que dentro de un mes las dos pantallas dijeran cosas distintas.
  *
- * `/tutors` no desaparece: sigue siendo la puerta pública y sigue siendo el
+ * `/tutores` no desaparece: sigue siendo la puerta pública y sigue siendo el
  * destino del «Ver todos» de la tarjeta de tutores, que es donde un buscador
  * completo sí tiene sentido.
  */
@@ -99,7 +99,7 @@ export default async function AgendarPage() {
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Button asChild className="h-10">
-              <Link href="/tutors">Explorar tutores</Link>
+              <Link href="/tutores">Explorar tutores</Link>
             </Button>
             <Button asChild variant="outline" className="h-10">
               <Link href="/classes">Ver mentorías</Link>

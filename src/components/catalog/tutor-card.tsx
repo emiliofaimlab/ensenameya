@@ -97,7 +97,7 @@ export function TutorCard({
               enlace pasa a nombrar la tarjeta entera y «Ver perfil» a secas,
               repetido doce veces en una rejilla, no dice de quién. */}
           <Link
-            href={`/tutors/${tutor.id}`}
+            href={`/tutores/${tutor.id}`}
             aria-label={`Ver perfil de ${name}`}
             className="text-xs font-semibold text-brand before:absolute before:inset-0 hover:underline"
           >
@@ -183,7 +183,7 @@ export function TutorCard({
               `product-card.tsx` y la variante `list` de aquí arriba—, nunca
               sobre algo que se transforme al pulsarse. */}
           <Link
-            href={`/tutors/${tutor.id}`}
+            href={`/tutores/${tutor.id}`}
             aria-label={`Ver perfil de ${name}`}
             className="inline-flex h-10 shrink-0 items-center justify-center rounded-[8px] border border-brand bg-background px-4 text-sm font-medium text-brand transition-colors before:absolute before:inset-0 hover:bg-brand-muted"
           >

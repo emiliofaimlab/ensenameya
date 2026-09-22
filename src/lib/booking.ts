@@ -240,7 +240,7 @@ export type TutorCardData = {
  *
  * ⚠️ **Y ESE `approved` ES LA TRAMPA DE ESTA FICHA.** Si a un tutor le retiran
  * la aprobación, su fila deja de existir PARA EL ALUMNO: aquí no llega, y
- * `/tutors/<id>` le devolvería un 404 desde su propio panel — por una reserva
+ * `/tutores/<id>` le devolvería un 404 desde su propio panel — por una reserva
  * que sí pagó. Por eso esto devuelve un `Map` con huecos en vez de rellenar con
  * un nombre inventado: quien pinte tiene que poder distinguir «este tutor» de
  * «este tutor ya no está», y enseñar la ficha SIN enlace en el segundo caso.

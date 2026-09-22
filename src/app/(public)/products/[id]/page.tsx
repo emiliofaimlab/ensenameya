@@ -1052,7 +1052,7 @@ export default async function ProductPage({
                     {/* El de «Ver perfil» sí es UN solo nodo: aquí lo que cambia
                         es el tamaño y si se ve el texto, y eso son clases. */}
                     <Link
-                      href={`/tutors/${product.tutor.id}`}
+                      href={`/tutores/${product.tutor.id}`}
                       title="Ver perfil"
                       aria-label="Ver perfil"
                       className="inline-flex h-[46px] min-w-0 flex-1 items-center justify-center gap-2 rounded-lg border-[1.5px] border-[#d6d6d6] text-[13.5px] font-semibold text-[#404040] transition-colors hover:bg-muted lg:size-10 lg:h-10 lg:flex-none lg:gap-0 lg:border"
@@ -1104,7 +1104,7 @@ export default async function ProductPage({
                   {product.tutor.ratingCount > 0 ? (
                     <p className="mt-4">
                       <Link
-                        href={`/tutors/${product.tutor.id}`}
+                        href={`/tutores/${product.tutor.id}`}
                         className="text-[13px] font-semibold text-[#0b4f96] hover:underline"
                       >
                         Ver las {product.tutor.ratingCount} reseñas de{" "}

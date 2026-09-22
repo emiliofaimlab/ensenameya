@@ -856,7 +856,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           : null,
         boton(
           "Buscar otro horario",
-          x.c.tutor_id ? `${x.base}/tutors/${x.c.tutor_id}` : `${x.base}/search`,
+          x.c.tutor_id ? `${x.base}/tutores/${x.c.tutor_id}` : `${x.base}/search`,
         ),
         // El botón lleva a rehacer el plan, que es lo que la persona quiere
         // hacer ahora; pero el detalle de lo que se canceló —y el reembolso—
@@ -992,7 +992,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         ),
         boton(
           "Ver mi ficha pública",
-          x.c.tutor_id ? `${x.base}/tutors/${x.c.tutor_id}` : `${x.base}/tutor`,
+          x.c.tutor_id ? `${x.base}/tutores/${x.c.tutor_id}` : `${x.base}/tutor`,
         ),
       ],
     };

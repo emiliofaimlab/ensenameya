@@ -47,6 +47,8 @@ export type TutorCardData = {
    * en los dos casos la estadística no se pinta, que es lo mismo que hacer.
    */
   approvedAt: string | null;
+  /** `/tutores/<slug>`; solo lo baja `getTutorDetail`. Ver `tutorPath`. */
+  slug?: string | null;
 };
 
 export type ProductTutor = {
@@ -479,6 +481,29 @@ const TUTOR_PRODUCT_SELECT =
  * `getSessionContext()` en `lib/auth/server.ts`, y por el mismo motivo: se
  * memoriza por PETICIÓN, no entre peticiones, así que no cachea datos de nadie.
  */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * `/tutores/[id]` acepta el slug («nestor-valderrama») y el uuid de siempre,
+ * que es lo que siguen enlazando los correos ya enviados y media app. Un uuid
+ * no cuesta consulta; un slug, una — y va antes del `Promise.all` de la ficha.
+ */
+export const tutorIdFrom = cache(async (param: string): Promise<string | null> => {
+  if (UUID.test(param)) return param;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("tutor_profiles")
+    .select("profile_id")
+    .eq("slug", param)
+    .maybeSingle();
+  return data?.profile_id ?? null;
+});
+
+/** La URL buena de la ficha: con slug si lo tiene. */
+export function tutorPath(t: { id: string; slug?: string | null }): string {
+  return `/tutores/${t.slug ?? t.id}`;
+}
+
 export const getTutorDetail = cache(async (
   id: string,
 ): Promise<{ tutor: TutorCardData; products: ProductCardData[] } | null> => {
@@ -487,7 +512,7 @@ export const getTutorDetail = cache(async (
   const { data: t } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, teaching_level, approved_at",
+      "profile_id, slug, display_name, avatar_path, headline, bio, rating_avg, rating_count, teaching_level, approved_at",
     )
     .eq("profile_id", id)
     .eq("approval_status", "approved")
@@ -514,6 +539,7 @@ export const getTutorDetail = cache(async (
       ratingAvg: t.rating_avg,
       ratingCount: t.rating_count,
       approvedAt: t.approved_at,
+      slug: t.slug,
     },
     products,
   };
@@ -1249,7 +1275,7 @@ export async function listProductSlots(
 //
 // Una academia AGRUPA tutores que ya existen: no tiene mentorías propias, no
 // cobra y no recibe payouts. Reservar desde su ficha crea exactamente el mismo
-// `booking` contra el mismo tutor que reservar desde `/tutors`.
+// `booking` contra el mismo tutor que reservar desde `/tutores`.
 // Ver `docs/B2B-ACADEMIAS.md` y `20260915180000_las_academias_agrupan_tutores`.
 
 export type AcademyCardData = {

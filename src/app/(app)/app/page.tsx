@@ -150,7 +150,7 @@ export default async function AppHome() {
    * del propio alumno. Ver `tutorCards`.
    */
   const perfilDelTutor = (id: string | null | undefined) =>
-    id && fichas.get(id)?.displayName ? `/tutors/${id}` : undefined;
+    id && fichas.get(id)?.displayName ? `/tutores/${id}` : undefined;
 
   const upcomingCount = open.filter((b) => ROOM_READY.has(b.status)).length;
   const awaitingCount = open.length - upcomingCount;
@@ -188,7 +188,7 @@ export default async function AppHome() {
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <Button asChild className="h-10">
-              <Link href="/tutors">Explorar tutores</Link>
+              <Link href="/tutores">Explorar tutores</Link>
             </Button>
             <Button asChild variant="outline" className="h-10">
               <Link href="/classes">Ver mentorías</Link>
@@ -351,7 +351,7 @@ export default async function AppHome() {
           Explora tutores y resultados por lo que quieres lograr.
         </p>
         <Button asChild className="mt-4 h-10">
-          <Link href="/tutors">Explorar tutores</Link>
+          <Link href="/tutores">Explorar tutores</Link>
         </Button>
       </PanelCard>
 

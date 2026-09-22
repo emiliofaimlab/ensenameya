@@ -28,7 +28,7 @@ export function FeaturedTutors({ tutors }: { tutors: FeaturedTutor[] }) {
               Tutores destacados
             </h2>
             <Link
-              href="/tutors"
+              href="/tutores"
               className="-my-3 shrink-0 py-3 text-[13px] font-medium whitespace-nowrap text-brand hover:underline sm:text-sm"
             >
               Ver todos →
@@ -98,7 +98,7 @@ export function FeaturedTutors({ tutors }: { tutors: FeaturedTutor[] }) {
                       overlay justo al pulsarlo. El porqué entero, en
                       `catalog/tutor-card.tsx`. */}
                   <Link
-                    href={`/tutors/${t.id}`}
+                    href={`/tutores/${t.id}`}
                     aria-label={`Ver perfil de ${name}`}
                     className="mt-auto inline-flex h-10 w-fit shrink-0 items-center justify-center rounded-[10px] border border-brand bg-background px-4 text-sm font-medium text-brand transition-colors before:absolute before:inset-0 hover:bg-brand-muted"
                   >

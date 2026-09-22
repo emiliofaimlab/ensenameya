@@ -235,7 +235,7 @@ export default async function ReservasPage() {
    * del propio alumno. Ver `tutorCards`.
    */
   const perfilDelTutor = (id: string | null | undefined) =>
-    id && names.has(id) ? `/tutors/${id}` : undefined;
+    id && names.has(id) ? `/tutores/${id}` : undefined;
 
   const regalos: RegaloRecibido[] = filasDeRegalo.map((r) => {
     const p = r.product_id ? productos.get(r.product_id) : undefined;
@@ -397,7 +397,7 @@ export default async function ReservasPage() {
       {vacio ? (
         // RV-11 · el mismo estado vacío del catálogo, no otro inventado aquí:
         // frase + salida + categorías reales. Antes era un párrafo y un botón a
-        // /tutors, o sea "busca tú" — que en una lista vacía es justo el hueco
+        // /tutores, o sea "busca tú" — que en una lista vacía es justo el hueco
         // que hay que evitar.
         <PanelCard>
           <PanelCardTitle className="text-[22px]">

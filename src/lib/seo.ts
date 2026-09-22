@@ -14,7 +14,7 @@
  * (parámetros infinitos → crawl budget tirado).
  *
  * ⚠️ El match de robots.txt es por PREFIJO DE CADENA, no por segmento de ruta.
- * `Disallow: /tutor` bloquea también `/tutors/<id>`, o sea justo el catálogo
+ * `Disallow: /tutor` bloquea también `/tutores/<id>`, o sea justo el catálogo
  * que queremos indexar. Por eso el panel del tutor se declara en dos patrones
  * —`/tutor$` (la página índice) y `/tutor/` (lo que cuelga)— y no como `/tutor`
  * a secas. El check de abajo es lo que impide que vuelva a pasar.
@@ -50,7 +50,7 @@ export const RUTAS_PRIVADAS = [
  */
 export const RUTAS_FIJAS = [
   "/",
-  "/tutors",
+  "/tutores",
   "/classes",
   "/categories",
   "/academias",

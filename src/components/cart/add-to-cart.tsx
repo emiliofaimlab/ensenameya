@@ -110,7 +110,7 @@ export function AddToCart({
    * Sigue declarado solo para que `reservar/[productId]/slot-picker.tsx` —que lo
    * pasa y que está siendo rediseñado en paralelo— compile mientras tanto.
    * Ignorarlo en vez de tratarlo como `limpiarHref` es deliberado: allí vale
-   * `/tutors/<id>`, y navegar solo a la ficha del tutor tras añadir un paquete
+   * `/tutores/<id>`, y navegar solo a la ficha del tutor tras añadir un paquete
    * se llevaría por delante el «Continuar al pago» que la tarjeta tiene al lado.
    * Cuando esa pantalla pase al modelo nuevo, se quita de los dos sitios.
    */

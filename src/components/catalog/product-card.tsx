@@ -180,7 +180,7 @@ export function ProductCard({
                 recortaba nada y un nombre largo empujaba a la estrella fuera
                 de la tarjeta. El subrayado del hover sigue el recorte. */}
             <Link
-              href={`/tutors/${product.tutor.id}`}
+              href={`/tutores/${product.tutor.id}`}
               className="relative z-10 min-w-0 truncate text-[13px] font-medium text-[#474747] hover:underline"
             >
               {tutorName}

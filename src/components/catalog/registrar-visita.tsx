@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/client";
  * EY-186 (capa 2) · «TUTORES VISTOS»: la única señal de las tres que pidió el
  * responsable que no existía en ninguna parte del proyecto.
  *
- * Se monta en la ficha del tutor (`/tutors/[id]`, `origen="tutor"`) y en la de
+ * Se monta en la ficha del tutor (`/tutores/[id]`, `origen="tutor"`) y en la de
  * la mentoría (`/products/[id]`, `origen="clase"` — es la mitad «visitas a
  * clases», la que no deja rastro en `bookings` porque no hubo compra). No pinta
  * nada.

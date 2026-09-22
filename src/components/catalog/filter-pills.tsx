@@ -99,7 +99,7 @@ export function FilterPills({
         className="scroll-strip -mx-5 -my-1 gap-2 px-5 py-1 scroll-px-5 sm:-mx-6 sm:px-6 sm:scroll-px-6 md:-mx-8 md:px-8 md:scroll-px-8"
       >
         {/* ⚠️ «Limpiar» va PRIMERO, no al final. Medido a 390 con los cinco
-            filtros de /tutors: al final empieza en x≈795, o sea 400 px fuera
+            filtros de /tutores: al final empieza en x≈795, o sea 400 px fuera
             de la pantalla — quien acaba de marcar dos filtros ve dos píldoras
             azules y ninguna forma de deshacerlas sin arrastrar la tira a
             ciegas. Delante se ve siempre y es donde Shein pone el estado de

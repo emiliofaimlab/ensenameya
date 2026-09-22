@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
  * `targetId` (correo de Verónica, 3-sep-2026: «al oprimir te lleva al inicio de
  * toda la página»): si llega, cada enlace acaba en `#targetId` y Next desplaza
  * a esa sección al cambiar de página en vez de al principio. Medido en dev
- * (8-sep): `router.push("/tutors?page=2#resultados")` deja `scrollY` en 483,5 =
+ * (8-sep): `router.push("/tutores?page=2#resultados")` deja `scrollY` en 483,5 =
  * el `top` de la sección (659) menos su `scroll-margin-top` (176) — o sea que el
  * App Router respeta el hash Y el margen sin ayuda, y no hace falta ningún
  * `PagerLink` cliente con `scrollIntoView`.

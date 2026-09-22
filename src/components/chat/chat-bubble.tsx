@@ -557,7 +557,7 @@ export function ChatBubble({
                   counterpartRole={abierta.counterpartRole}
                   reservarHref={
                     abierta.counterpartRole === "tutor"
-                      ? `/tutors/${abierta.counterpartId}`
+                      ? `/tutores/${abierta.counterpartId}`
                       : undefined
                   }
                   blocked={abierta.blocked}

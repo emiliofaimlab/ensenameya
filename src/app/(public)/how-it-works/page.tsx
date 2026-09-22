@@ -140,7 +140,7 @@ export default function HowItWorksPage() {
                 asChild
                 className="h-[54px] rounded-[9px] px-7 text-[17px]"
               >
-                <Link href="/tutors">Aprende YA</Link>
+                <Link href="/tutores">Aprende YA</Link>
               </Button>
               <Button
                 asChild

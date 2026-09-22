@@ -3,6 +3,7 @@ import type { MetadataRoute } from "next";
 import { createClient } from "@/lib/supabase/server";
 import { siteUrl } from "@/lib/site-url";
 import { RUTAS_FIJAS } from "@/lib/seo";
+import { tutorPath } from "@/lib/catalog/queries";
 
 /**
  * Lo que se le ofrece a Google. Las fijas salen de `lib/seo.ts`; las de ficha
@@ -25,8 +26,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   const [tutores, productos, categorias, academias] = await Promise.all([
     supabase
-      .from("tutors_public")
-      .select("profile_id")
+      // La tabla y no `tutors_public`: el slug no está en la vista, y anon
+      // tiene `select` de tabla sobre `tutor_profiles`.
+      .from("tutor_profiles")
+      .select("profile_id, slug")
       .eq("approval_status", "approved"),
     supabase.from("products").select("id, updated_at").eq("status", "active"),
     supabase.from("categories").select("slug").eq("is_active", true),
@@ -34,7 +37,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   ]);
 
   for (const [nombre, r] of [
-    ["tutors_public", tutores],
+    ["tutor_profiles", tutores],
     ["products", productos],
     ["categories", categorias],
     ["academies_public", academias],
@@ -51,8 +54,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   return [
     ...RUTAS_FIJAS.map((r) => url(r)),
     ...(tutores.data ?? [])
-      .filter((t) => t.profile_id)
-      .map((t) => url(`/tutors/${t.profile_id}`)),
+      .map((t) => url(tutorPath({ id: t.profile_id, slug: t.slug }))),
     ...(productos.data ?? []).map((p) =>
       url(`/products/${p.id}`, p.updated_at ? new Date(p.updated_at) : ahora),
     ),

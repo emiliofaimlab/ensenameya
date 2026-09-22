@@ -129,10 +129,10 @@ export function HistorialCard({
                     <p className="mt-0.5 truncate text-xs text-[#6b6b6b]">
                       con{" "}
                       {/* V-6 · solo se enlaza si su ficha es legible: a un tutor
-                          desaprobado, `/tutors/<id>` le daría un 404 al alumno
+                          desaprobado, `/tutores/<id>` le daría un 404 al alumno
                           desde su propio panel. Ver `tutorCards`. */}
                       <Link
-                        href={`/tutors/${r.tutor.id}`}
+                        href={`/tutores/${r.tutor.id}`}
                         /* `relative`: sin él se lo traga la capa del título. */
                         className="relative font-medium text-brand hover:underline"
                       >

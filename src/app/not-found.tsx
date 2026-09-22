@@ -9,7 +9,7 @@ import { Container } from "@/components/layout/container";
  *
  * ⚠️ **Por qué se crea ahora:** hasta hoy este archivo NO EXISTÍA, ni aquí ni
  * anidado en ningún segmento, y en el repo hay **22 llamadas vivas a
- * `notFound()`** —desde `/tutors/[id]` y `/products/[id]` hasta media docena de
+ * `notFound()`** —desde `/tutores/[id]` y `/products/[id]` hasta media docena de
  * pantallas de `/admin`—. Todas caían en el 404 por defecto de Next: fondo
  * blanco, sin cabecera, sin pie, sin marca y **en inglés** («This page could
  * not be found»). O sea que una de las salidas más frecuentes de la app era la
@@ -19,7 +19,7 @@ import { Container } from "@/components/layout/container";
  *
  * El frame trae cabecera y pie completos, y la primera versión de esta pantalla
  * los montaba ella misma. **Sale doble.** Medido en el navegador a 390 sobre
- * `/tutors/<uuid-que-no-existe>`: `document.querySelectorAll('header').length`
+ * `/tutores/<uuid-que-no-existe>`: `document.querySelectorAll('header').length`
  * daba **2** y `footer` otros **2**, con los dos logos apilados uno encima del
  * otro.
  *
@@ -99,7 +99,7 @@ export default function NotFound() {
             asChild
             className="h-[45px] w-full px-6 md:w-auto"
           >
-            <Link href="/tutors">Explorar tutores</Link>
+            <Link href="/tutores">Explorar tutores</Link>
           </Button>
         </div>
       </Container>

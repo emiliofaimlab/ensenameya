@@ -26,7 +26,7 @@ type GroupKey = "tutors" | "products" | "categories";
 
 /** El orden de grupos empieza por la sección en la que estás (acuerdo 24-jul). */
 function groupOrder(pathname: string): GroupKey[] {
-  if (pathname.startsWith("/tutors")) return ["tutors", "products", "categories"];
+  if (pathname.startsWith("/tutores")) return ["tutors", "products", "categories"];
   if (pathname.startsWith("/classes") || pathname.startsWith("/products"))
     return ["products", "tutors", "categories"];
   if (pathname.startsWith("/categories")) return ["categories", "tutors", "products"];
@@ -177,7 +177,7 @@ export function SearchAutocomplete({
     tutors: {
       label: "Tutores",
       icon: GraduationCapIcon,
-      items: sug.tutors.map((t) => ({ href: `/tutors/${t.id}`, primary: t.name, secondary: t.headline })),
+      items: sug.tutors.map((t) => ({ href: `/tutores/${t.id}`, primary: t.name, secondary: t.headline })),
     },
     products: {
       label: "Mentorías",

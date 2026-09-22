@@ -960,7 +960,7 @@ function recompensaDe(c: FilaDeCredito, tz: string): Recompensa | null {
   }
 
   // A partir de aquí es dinero que se gasta EN EL CHECKOUT, así que el empujón
-  // es hacia reservar. `/agendar` y no `/tutors`: es la ruta del panel, con
+  // es hacia reservar. `/agendar` y no `/tutores`: es la ruta del panel, con
   // sesión, y vale igual para un tutor que además tiene una mentoría gratis (su
   // única guarda es `requireUser`). El canje en sí ocurre en el checkout, antes
   // del formulario de pago; desde aquí no se canjea nada.

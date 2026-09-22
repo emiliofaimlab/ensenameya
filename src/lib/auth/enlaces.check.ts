@@ -57,7 +57,7 @@ const SUPERFICIES = [
 const PERMITIDOS: { fichero: string; ruta: string; motivo: string }[] = [];
 
 const raiz = process.cwd();
-// `/tutor` sí, `/tutors` no: el plural es la lista PÚBLICA de tutores.
+// `/tutor` sí, `/tutores` no: el plural es la lista PÚBLICA de tutores.
 const RE = new RegExp(
   `(?:href|action)\\s*=\\s*["'\`](/(?:${GUARDADAS.join("|")}))(?![A-Za-z0-9-])`,
   "g",

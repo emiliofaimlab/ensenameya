@@ -45,7 +45,7 @@ export function TutoresCard({ data }: { data: PanelTutores }) {
           </p>
         </div>
         <Link
-          href="/tutors"
+          href="/tutores"
           className="flex shrink-0 items-center gap-1 text-[13px] font-semibold text-brand hover:underline"
         >
           Ver todos
@@ -94,7 +94,7 @@ export function TutoresCard({ data }: { data: PanelTutores }) {
                   solo vale aquí—. Va al MISMO sitio que él y DESPUÉS en el DOM,
                   así que se lo come sin romperlo. */}
               <Link
-                href={`/tutors/${tutor.id}`}
+                href={`/tutores/${tutor.id}`}
                 aria-label={`Ver perfil de ${tutor.displayName ?? "este tutor"}`}
                 className="absolute inset-0 rounded-[12px]"
               />

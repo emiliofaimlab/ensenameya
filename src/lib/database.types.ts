@@ -2580,6 +2580,7 @@ export type Database = {
           rating_avg: number | null
           rating_count: number
           search_text: string | null
+          slug: string | null
           socials: Json
           stripe_connect_account_id: string | null
           teaching_level: Database["public"]["Enums"]["teaching_level"] | null
@@ -2603,6 +2604,7 @@ export type Database = {
           rating_avg?: number | null
           rating_count?: number
           search_text?: string | null
+          slug?: string | null
           socials?: Json
           stripe_connect_account_id?: string | null
           teaching_level?: Database["public"]["Enums"]["teaching_level"] | null
@@ -2626,6 +2628,7 @@ export type Database = {
           rating_avg?: number | null
           rating_count?: number
           search_text?: string | null
+          slug?: string | null
           socials?: Json
           stripe_connect_account_id?: string | null
           teaching_level?: Database["public"]["Enums"]["teaching_level"] | null
@@ -3572,6 +3575,7 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      slugificar: { Args: { p: string }; Returns: string }
       student_learning_record: {
         Args: { p_from?: string; p_student_id?: string; p_to?: string }
         Returns: {

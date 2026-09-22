@@ -504,7 +504,7 @@ export function AccountForm({
                     variant="outline"
                     className="h-[45px] rounded-[8px] px-5"
                   >
-                    <Link href={`/tutors/${userId}`}>Ver mi perfil de tutor</Link>
+                    <Link href={`/tutores/${userId}`}>Ver mi perfil de tutor</Link>
                   </Button>
                   <Button
                     asChild

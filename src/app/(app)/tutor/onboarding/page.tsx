@@ -148,7 +148,7 @@ export default async function TutorOnboardingPage({
                 <Link href="/tutor/products">Mis productos</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link href={`/tutors/${user.id}`}>Ver mi perfil público</Link>
+                <Link href={`/tutores/${user.id}`}>Ver mi perfil público</Link>
               </Button>
             </CardContent>
           </Card>

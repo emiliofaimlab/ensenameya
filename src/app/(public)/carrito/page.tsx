@@ -496,7 +496,7 @@ function GrupoDeTutor({
           <p className="min-w-0 text-[13px] text-[#6b6b6b]">
             con{" "}
             <Link
-              href={`/tutors/${grupo.tutorId}`}
+              href={`/tutores/${grupo.tutorId}`}
               className="font-semibold text-[#19191f] hover:underline"
             >
               {grupo.nombre ?? "tu tutor"}

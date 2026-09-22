@@ -16,10 +16,10 @@ export const metadata = {
 /**
  * P-ACA-01 · listado de academias aliadas.
  *
- * ponytail: sin filtros, sin buscador y sin paginación. `/tutors` los tiene
+ * ponytail: sin filtros, sin buscador y sin paginación. `/tutores` los tiene
  * porque ordena decenas de perfiles; aquí hay dos academias y un panel de
  * filtros sobre dos tarjetas es mueble, no herramienta. Cuando el listado no
- * quepa en una pantalla se copia el de `/tutors`, que ya resuelve todo eso.
+ * quepa en una pantalla se copia el de `/tutores`, que ya resuelve todo eso.
  */
 export default async function AcademiasPage() {
   const academies = await listAcademies();

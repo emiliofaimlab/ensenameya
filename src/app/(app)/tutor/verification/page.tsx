@@ -117,7 +117,7 @@ export default async function VerificationPage() {
 
   // §6.3 · El botón de la cabecera lleva a la ficha pública… que solo EXISTE
   // con el perfil aprobado: `getTutorDetail` filtra por `approval_status =
-  // 'approved'` y `/tutors/<id>` hace `notFound()` con cualquier otro. Y quien
+  // 'approved'` y `/tutores/<id>` hace `notFound()` con cualquier otro. Y quien
   // más vive en esta pantalla es justamente el tutor sin aprobar, así que el
   // enlace se pinta sólo cuando lleva a algún sitio; sin aprobación queda el
   // mismo botón, inactivo, con el porqué escrito debajo A LA VISTA (el hueco de
@@ -149,7 +149,7 @@ export default async function VerificationPage() {
                 ve la flecha lo oye, porque el aviso va en el NOMBRE del enlace
                 y no en un `title` (que un lector de pantalla puede no leer). */}
             <Link
-              href={`/tutors/${user.id}`}
+              href={`/tutores/${user.id}`}
               target="_blank"
               rel="noopener noreferrer"
             >

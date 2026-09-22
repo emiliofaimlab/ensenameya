@@ -24,7 +24,7 @@ import type { TutorCardData } from "@/lib/booking";
  * ⚠️ **`tutor` PUEDE SER `undefined`, Y ESE ES EL CASO QUE HAY QUE MIRAR.**
  * `tutor_profiles` solo es legible con `approval_status = 'approved'`: si a un
  * tutor le retiran la aprobación, el alumno deja de poder leer su fila. Sin
- * tratarlo, esta ficha enlazaría a `/tutors/<id>` y su propio panel le daría un
+ * tratarlo, esta ficha enlazaría a `/tutores/<id>` y su propio panel le daría un
  * **404 por una mentoría que pagó**. Con `undefined` se pinta la ficha sin
  * enlace, se dice lo que pasa, y —esto es lo importante— **el chat se queda**:
  * la conversación va por reserva y participante, no por la aprobación del tutor,
@@ -47,7 +47,7 @@ export function TutorSummary({
 }) {
   const nombre = tutor?.displayName ?? tutor?.headline ?? null;
   const avatar = storageUrl("avatars", tutor?.avatarPath);
-  const href = tutor ? (perfilHref ?? `/tutors/${tutor.id}`) : null;
+  const href = tutor ? (perfilHref ?? `/tutores/${tutor.id}`) : null;
 
   const retrato = (
     <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-sm font-semibold">

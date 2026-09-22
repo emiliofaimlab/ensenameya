@@ -514,14 +514,14 @@ function BonoDeRegalo({
       {/* A buscar tutor, que es lo único que hay que hacer. El bono NO se elige
           aquí: se aplica en el checkout de la reserva que haga, donde el
           selector ya lo etiqueta «Bono de tu regalo» (`creditos_disponibles`,
-          `20260916100000`). `/tutors` es pública y sin guarda, así que se puede
+          `20260916100000`). `/tutores` es pública y sin guarda, así que se puede
           escribir a mano; la regla de oro 13 habla del camino contrario. */}
       <div className="mt-4">
         <Button
           asChild
           className="h-11 w-full rounded-[8px] px-5 text-[14px] font-semibold sm:h-[38px] sm:w-auto sm:text-[13px]"
         >
-          <Link href="/tutors">Buscar un tutor</Link>
+          <Link href="/tutores">Buscar un tutor</Link>
         </Button>
       </div>
     </PanelCard>

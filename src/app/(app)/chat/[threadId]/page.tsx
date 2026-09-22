@@ -166,7 +166,7 @@ export default async function ChatPage({
           // que reservar.
           reservarHref={
             conversation.counterpartRole === "tutor"
-              ? `/tutors/${conversation.counterpartId}`
+              ? `/tutores/${conversation.counterpartId}`
               : undefined
           }
           blocked={conversation.blocked}

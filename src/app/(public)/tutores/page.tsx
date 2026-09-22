@@ -120,7 +120,7 @@ export default async function TutorsPage({
     if (next.sort) p.set("sort", next.sort);
     if (next.page && next.page > 1) p.set("page", String(next.page));
     const q = p.toString();
-    return q ? `/tutors?${q}` : "/tutors";
+    return q ? `/tutores?${q}` : "/tutores";
   };
 
   const current = { cat, rating: minRating, avail: availability, pmin, pmax, lang: language, sort };
@@ -210,7 +210,7 @@ export default async function TutorsPage({
       // Lista de UNA elección, como los radios: la opción marcada NO se
       // desmarca al tocarla —para eso está «Cualquiera»—. Con el toggle del
       // panel lateral, «✓ 4.5 o más» y «Cualquiera» apuntaban las dos a
-      // `/tutors`, y `FilterPills` (que usa el href como `key` de cada fila)
+      // `/tutores`, y `FilterPills` (que usa el href como `key` de cada fila)
       // avisaba por consola de dos hijos con la misma clave (revisión 8-sep).
       // Así ningún href se repite, sea cual sea el estado.
       options: [4.5, 4, 0].map((r) => ({

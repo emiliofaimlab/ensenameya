@@ -130,7 +130,7 @@ export default async function AboutPage() {
             desc: "Tú decides cuándo y con quién conectarte con total libertad y flexibilidad.",
           },
         ]}
-        cta={{ href: "/tutors", label: "Explorar mentorías", variant: "outline" }}
+        cta={{ href: "/tutores", label: "Explorar mentorías", variant: "outline" }}
         image={{
           src: "/img/about-mission.jpg",
           alt: "Alumna tomando una mentoría en vivo",

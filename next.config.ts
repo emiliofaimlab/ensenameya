@@ -21,6 +21,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // `/tutors` pasó a `/tutores` el 22-sep. Los enlaces de dentro ya apuntan al
+  // nuevo; esto es para los ya compartidos y los que Google tiene indexados.
+  async redirects() {
+    return [
+      { source: "/tutors", destination: "/tutores", permanent: true },
+      { source: "/tutors/:id", destination: "/tutores/:id", permanent: true },
+    ];
+  },
 };
 
 /**

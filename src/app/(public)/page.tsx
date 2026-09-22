@@ -105,7 +105,7 @@ export default async function HomePage() {
             desc: "Eliges día y hora entre los horarios reales del tutor, en tu propia zona horaria.",
           },
         ]}
-        cta={{ href: "/tutors", label: "Explorar tutores YA" }}
+        cta={{ href: "/tutores", label: "Explorar tutores YA" }}
         image={{
           src: "/img/home-live.jpg",
           alt: "Alumna en una mentoría 1 a 1 por videollamada",
