@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { ReferralCard } from "@/components/referral/referral-card";
 import { CalendarFeedCard } from "@/components/calendar/calendar-feed-card";
+import { GoogleCalendarCard } from "@/components/calendar/google-calendar-card";
+import { googleCalendarConfigurado } from "@/lib/google-calendar";
 import { rpcNueva } from "@/app/api/cuenta/eliminar/rpc";
 import { AccountForm } from "./account-form";
 import type { EstadoBaja } from "./baja";
@@ -17,7 +19,11 @@ export const metadata = { title: "Mi cuenta · Enséñame Ya" };
  * sigue al panel del rol (alumno por defecto). Todo pasa por RLS.
  * Los métodos de pago viven en su propio módulo `/pagos` (R24-20).
  */
-export default async function AccountPage() {
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ google?: string }>;
+}) {
   const { user, roles } = await requireUser();
 
   const supabase = await createClient();
@@ -37,6 +43,8 @@ export default async function AccountPage() {
     { data: estadoBaja },
     { items, badges },
     formato,
+    { data: google },
+    { google: avisoGoogle },
   ] = await Promise.all([
     Promise.all([
     supabase
@@ -72,6 +80,14 @@ export default async function AccountPage() {
     // El reloj de «tu zona horaria» lo escribe la preferencia 12 h/24 h. Aquí
     // dentro para no encadenar una lectura de cookie detrás de cuatro consultas.
     getFormatoHora(),
+    // Google Calendar por API: solo SI está conectada y con qué correo. El
+    // token no tiene grant para `authenticated` (`20260925180000`).
+    supabase
+      .from("google_calendar_connections")
+      .select("google_email")
+      .eq("user_id", user.id)
+      .maybeSingle(),
+    searchParams,
   ]);
 
   const avatarUrl = storageUrl("avatars", profile?.avatar_path);
@@ -112,9 +128,20 @@ export default async function AccountPage() {
         /* EY-188 (B5.5) · la misma tarjeta para alumno y tutor: el feed
            devuelve las sesiones en las que participas, sin mirar el rol. */
         calendario={
-          <CalendarFeedCard
-            tokenInicial={typeof feedToken === "string" ? feedToken : null}
-          />
+          <>
+            {/* Sin credencial de Google no se ofrece conectar: la credencial
+                es el interruptor, como en el resto de integraciones. */}
+            {googleCalendarConfigurado() ? (
+              <GoogleCalendarCard
+                conectado={google !== null}
+                email={google?.google_email ?? null}
+                aviso={avisoGoogle === "ok" || avisoGoogle === "error" ? avisoGoogle : null}
+              />
+            ) : null}
+            <CalendarFeedCard
+              tokenInicial={typeof feedToken === "string" ? feedToken : null}
+            />
+          </>
         }
         /* G03 · el otro punto de integración de referidos (Doc 4 §4.x).
            ⚠️ SIN PROPS desde el 11-sep: ya no hay una campaña por rol que

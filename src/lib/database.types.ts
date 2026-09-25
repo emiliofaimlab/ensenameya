@@ -873,6 +873,38 @@ export type Database = {
           },
         ]
       }
+      google_calendar_connections: {
+        Row: {
+          created_at: string
+          google_email: string | null
+          refresh_token: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          google_email?: string | null
+          refresh_token: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          google_email?: string | null
+          refresh_token?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "google_calendar_connections_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       late_payment_refunds: {
         Row: {
           amount: number
@@ -3316,6 +3348,21 @@ export type Database = {
         }[]
       }
       gift_expiry_days: { Args: never; Returns: number }
+      google_calendar_eventos: {
+        Args: { p_sesiones: string[]; p_user?: string }
+        Returns: {
+          booking_id: string
+          con: string
+          end_at: string
+          estado: string
+          refresh_token: string
+          session_id: string
+          soy_tutor: boolean
+          start_at: string
+          titulo: string
+          user_id: string
+        }[]
+      }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
