@@ -36,6 +36,19 @@ export function webcalUrl(origin: string, token: string): string {
 }
 
 /**
+ * Atajo de Outlook para «suscribirse a un calendario desde la web» (25-sep:
+ * en «Mi cuenta» Outlook no tenía botón, solo copiar y pegar).
+ *
+ * ⚠️ Mismo aviso que `googleAddUrl`: URL de un tercero, sin verificar desde el
+ * repo. ponytail: solo outlook.live.com (cuentas personales); una de trabajo de
+ * Microsoft 365 necesitaría la misma ruta en outlook.office.com.
+ */
+export function outlookSuscribirUrl(origin: string, token: string): string {
+  const p = new URLSearchParams({ url: feedUrl(origin, token), name: "Enséñame Ya" });
+  return `https://outlook.live.com/calendar/0/addfromweb?${p}`;
+}
+
+/**
  * Atajo de Google Calendar para «añadir calendario desde URL».
  *
  * ⚠️ NO SE HA PODIDO VERIFICAR desde el repo: es una URL de un tercero y su

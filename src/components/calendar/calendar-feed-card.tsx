@@ -5,7 +5,12 @@ import { CalendarSyncIcon, CheckIcon, CopyIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
-import { feedUrl, googleAddUrl, webcalUrl } from "@/lib/calendar/feed";
+import {
+  feedUrl,
+  googleAddUrl,
+  outlookSuscribirUrl,
+  webcalUrl,
+} from "@/lib/calendar/feed";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -169,6 +174,15 @@ export function CalendarFeedCard({
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" className="h-10">
                 <a href={webcalUrl(origin, token)}>Agregar a Apple Calendar</a>
+              </Button>
+              <Button asChild variant="outline" className="h-10">
+                <a
+                  href={outlookSuscribirUrl(origin, token)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Agregar a Outlook
+                </a>
               </Button>
               {embebida ? null : (
                 <Button asChild variant="outline" className="h-10">
