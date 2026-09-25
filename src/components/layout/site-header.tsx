@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -350,6 +350,28 @@ export function SiteHeader({
    */
   const [searchOpen, setSearchOpen] = useState(false);
   const lupaRef = useRef<HTMLButtonElement>(null);
+
+  /**
+   * La altura real de la cabecera, en `--alto-cabecera`, para lo que se pega
+   * debajo (la franja de precio de la ficha). Antes era un `top-44` a mano,
+   * medido cuando el buscador de móvil era una fila fija: al plegarse en la
+   * lupa la cabecera bajó a ~70 px y la franja se quedó flotando a media
+   * pantalla con el texto asomando por encima. Medida, no copiada: cambia con
+   * la sesión, con el buscador abierto y con el ancho.
+   */
+  const cabeceraRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = cabeceraRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() =>
+      document.documentElement.style.setProperty(
+        "--alto-cabecera",
+        `${el.offsetHeight}px`,
+      ),
+    );
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // Al cerrar con Escape el foco está DENTRO del buscador que se desmonta; sin
   // devolverlo a la lupa se perdería al `body` y quien navega con teclado
   // tendría que recorrer la página entera otra vez.
@@ -359,7 +381,9 @@ export function SiteHeader({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/60">
+    <header
+      ref={cabeceraRef}
+      className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-backdrop-filter:bg-background/60">
       {/*
         La cabecera es UNA sola fila que ENVUELVE, no tres maquetados distintos:
         `flex-wrap` + `order` bastan para las tres formas del Figma (3 filas a

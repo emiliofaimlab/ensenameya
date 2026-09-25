@@ -202,7 +202,15 @@ export function SiteFooter() {
               `sr-only` de al lado dice la palabra. */}
           <p className="sm:text-center">
             made with <span aria-hidden>❤️</span>
-            <span className="sr-only">love</span> by faimlab
+            <span className="sr-only">love</span> by{" "}
+            <a
+              href="https://faimlab.com"
+              target="_blank"
+              rel="noopener"
+              className="font-medium text-foreground transition-colors hover:text-brand"
+            >
+              faimlab
+            </a>
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-4 sm:justify-end">

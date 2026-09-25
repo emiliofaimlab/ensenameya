@@ -135,6 +135,22 @@ export function NotificationsBell({
   }
 
   /**
+   * Abrir un aviso lo da por leído. No se espera: el clic navega igual. ⚠️ El
+   * `.then()` no es adorno: el builder de PostgREST es perezoso y sin él la
+   * petición no sale nunca.
+   */
+  function markRead(id: string) {
+    setNotices((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    createClient()
+      .from("notifications")
+      .update({ read_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("recipient_id", userId)
+      .is("read_at", null)
+      .then(() => {});
+  }
+
+  /**
    * NTF-21 · Un aviso de mensaje nuevo tiene que abrir el hilo EN LA BURBUJA,
    * no llevarse al usuario a otra pantalla. Pero la campana no está siempre
    * donde está la burbuja, así que hace falta un criterio.
@@ -361,9 +377,10 @@ export function NotificationsBell({
                   <Link
                     href={n.href}
                     className="block hover:underline"
-                    onClick={
-                      alHilo ? (e) => abrirHiloEnBurbuja(e, n.href) : undefined
-                    }
+                    onClick={(e) => {
+                      if (!n.read) markRead(n.id);
+                      if (alHilo) abrirHiloEnBurbuja(e, n.href);
+                    }}
                   >
                     {inner}
                   </Link>

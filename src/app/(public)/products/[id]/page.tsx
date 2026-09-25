@@ -633,17 +633,15 @@ export default async function ProductPage({
                   segunda línea y a la derecha aparecen los dos botones que en
                   escritorio no hacen falta —el panel ya está a la vista—.
 
-                  ⚠️ `top-44` y no `top-0` como la referencia: la referencia es
-                  una maqueta suelta y esta página vive bajo la cabecera del
-                  sitio, que es `sticky top-0` y mide 173 px a 390 y 147 a 768
-                  (medidas del propio `site-header.tsx`). Con `top-0` la franja
-                  se quedaría fija DEBAJO de la cabecera, o sea invisible. Los
-                  dos tramos van con variantes DISJUNTAS (`max-md` y
-                  `md:max-lg`) y no con `max-lg` + `md:max-lg`, que se solapan y
-                  dejan el desempate en manos del orden del CSS.
+                  ⚠️ `--alto-cabecera` y no `top-0` como la referencia: esta
+                  página vive bajo la cabecera del sitio, que es `sticky top-0`,
+                  y con `top-0` la franja quedaría DEBAJO de ella, invisible. La
+                  mide `site-header.tsx`; un número a mano (`top-44`) se quedó
+                  mintiendo cuando el buscador móvil pasó a la lupa y la
+                  cabecera bajó de 173 a ~70 px.
                 */}
                 <div
-                  className={`${sangrado} flex items-center justify-between gap-3 pt-2.5 pb-3 text-white max-md:top-44 max-lg:sticky max-lg:z-20 max-lg:bg-brand max-lg:shadow-[0_8px_20px_rgb(0_40_90/0.18)] md:max-lg:top-[150px] lg:mt-4 lg:justify-start lg:pt-0 lg:pb-0`}
+                  className={`${sangrado} flex items-center justify-between gap-3 pt-2.5 pb-3 text-white max-lg:sticky max-lg:top-[var(--alto-cabecera,11rem)] max-lg:z-20 max-lg:bg-brand max-lg:shadow-[0_8px_20px_rgb(0_40_90/0.18)] lg:mt-4 lg:justify-start lg:pt-0 lg:pb-0`}
                 >
                   <div className="min-w-0 text-start lg:flex lg:items-baseline lg:gap-2.5">
                     <p className="text-[22px] leading-tight font-bold lg:text-[26px]">

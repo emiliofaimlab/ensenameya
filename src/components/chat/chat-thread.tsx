@@ -40,6 +40,32 @@ import { markConversationRead, useOpenThread } from "./unread";
 
 export type { ChatMessage } from "@/lib/chat/messages";
 
+/**
+ * Las URL del mensaje, pulsables. Solo `http(s)://` y `www.`: nada de
+ * `javascript:` ni esquemas raros, que el texto lo escribe la otra parte. La
+ * puntuación final («mira esto: https://x.com.») se queda fuera del enlace.
+ */
+function conEnlaces(texto: string) {
+  return texto.split(/((?:https?:\/\/|www\.)\S+)/gi).map((trozo, i) => {
+    if (i % 2 === 0) return trozo; // split con grupo: impares = coincidencias
+    const url = trozo.replace(/[.,;:!?)\]]+$/, "");
+    const resto = trozo.slice(url.length);
+    return (
+      <span key={i}>
+        <a
+          href={url.startsWith("www.") ? `https://${url}` : url}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className="underline underline-offset-2"
+        >
+          {url}
+        </a>
+        {resto}
+      </span>
+    );
+  });
+}
+
 /** Adjunto: el bucket es privado, así que la URL se firma al hacer clic. */
 function AttachmentLink({ a, mine }: { a: Attachment; mine: boolean }) {
   const [busy, setBusy] = useState(false);
@@ -706,7 +732,7 @@ export function ChatThread({
                   )}
                 >
                   {m.attachment ? <AttachmentLink a={m.attachment} mine={mine} /> : null}
-                  {m.body ? <span>{m.body}</span> : null}
+                  {m.body ? <span>{conEnlaces(m.body)}</span> : null}
                 </div>
                 <time className="mt-0.5 text-[11px] text-muted-foreground" dateTime={m.createdAt}>
                   {new Date(m.createdAt).toLocaleTimeString("es", {
