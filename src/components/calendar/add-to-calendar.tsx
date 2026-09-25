@@ -1,6 +1,10 @@
 import Link from "next/link";
 
-import { googleTemplateUrl, sesionIcsPath } from "@/lib/calendar/feed";
+import {
+  googleTemplateUrl,
+  outlookComposeUrl,
+  sesionIcsPath,
+} from "@/lib/calendar/feed";
 import { LOGOS_CALENDARIO } from "@/components/calendar/logos";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -53,23 +57,23 @@ function LogoMarca({ marca }: { marca: keyof typeof LOGOS_CALENDARIO }) {
 }
 
 /**
- * «Añadir al calendario» — una clase, dos caminos.
+ * «Añadir al calendario» — una clase, tres botones, uno por calendario.
  *
- * ⚠️ DOS ENLACES Y NO UNO, y no es indecisión:
- * · Google Calendar de escritorio **no consume un .ics descargado** — obliga a
- *   Configuración → Importar. Para él, una plantilla `render?action=TEMPLATE`.
+ * ⚠️ TRES ENLACES Y NO UNO, y no es indecisión:
+ * · Google y Outlook **no abren un .ics**: Chrome lo descarga siempre y el
+ *   alumno se queda con un archivo en Descargas (video del 25-sep). Para ellos,
+ *   su pantalla web de «evento nuevo» ya rellena.
  * · Apple e iOS solo pasan el archivo a Calendario si llega servido con
- *   `Content-Type: text/calendar`; un blob montado en el navegador acaba en
- *   Archivos. Para ellos, el endpoint.
+ *   `Content-Type: text/calendar` e `inline`; un blob montado en el navegador
+ *   acaba en Archivos. Para ellos, el endpoint.
  *
- * Por eso el .ics lleva los DOS logos dentro de UN SOLO control: los destinos
- * siguen siendo dos, no tres, y Apple y Outlook comparten el mismo fichero.
  * El logo NO es el nombre accesible —un `<span>` con máscara no dice nada a un
  * lector de pantalla—: quien nombra cada control es su `aria-label`.
  *
  * Presentacional a secas: solo arma cadenas de URL. NO puede importar
  * `lib/calendar/ics.ts`, que es `server-only`; `utc()` vive en `ics-format.ts`,
- * que no lo es, y por eso `googleTemplateUrl` sí se puede llamar desde aquí.
+ * que no lo es, y por eso `googleTemplateUrl` y `outlookComposeUrl` sí se
+ * pueden llamar desde aquí.
  */
 export function AddToCalendar({
   sessionId,
@@ -116,14 +120,27 @@ export function AddToCalendar({
             <LogoMarca marca="google" />
           </a>
         </Button>
-        <Button asChild variant="outline" className="h-10 gap-2.5 px-3.5">
+        <Button asChild variant="outline" className="h-10 px-3.5">
           <a
-            href={sesionIcsPath(sessionId)}
-            download
-            aria-label="Descargar .ics para Apple u Outlook"
+            href={outlookComposeUrl({
+              titulo,
+              inicio,
+              fin,
+              detalle: "Mentoría reservada en Enséñame Ya.",
+            })}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Agregar al calendario de Outlook"
           >
-            <LogoMarca marca="apple" />
             <LogoMarca marca="outlook" />
+          </a>
+        </Button>
+        {/* Sin `download`: con él, Safari de iPhone guarda el archivo en
+            Descargas y no pasa nada visible. Sin él (y con `inline` en la
+            respuesta) abre la hoja de «Agregar a Calendario». */}
+        <Button asChild variant="outline" className="h-10 px-3.5">
+          <a href={sesionIcsPath(sessionId)} aria-label="Agregar al calendario de Apple">
+            <LogoMarca marca="apple" />
           </a>
         </Button>
       </div>

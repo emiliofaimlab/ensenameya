@@ -68,7 +68,7 @@ export function sesionIcsPath(sessionId: string): string {
  *
  * ⚠️ Mismo aviso que `googleAddUrl`: es una URL de un tercero y su forma la
  * decide Google. Si deja de funcionar, se quita el enlace y el .ics sigue
- * cubriendo Apple y Outlook.
+ * cubriendo Apple.
  *
  * `dates` pide exactamente `YYYYMMDDTHHMMSSZ/YYYYMMDDTHHMMSSZ`, que es `utc()`
  * dos veces: cero código de fechas nuevo (regla de oro 4).
@@ -91,4 +91,39 @@ export function googleTemplateUrl({
   });
   if (detalle) p.set("details", detalle);
   return `https://calendar.google.com/calendar/render?${p}`;
+}
+
+/**
+ * Lo mismo para Outlook: su pantalla de «evento nuevo» con los datos rellenos.
+ *
+ * Existe porque Outlook compartía el .ics con Apple, y Chrome **descarga todo
+ * .ics** —solo Safari se lo pasa a Calendario—: el alumno pulsaba y le caía
+ * `clase-XXXX (2).ics` en Descargas (video de Verónica, 25-sep).
+ *
+ * ponytail: solo outlook.live.com (cuentas personales, que es lo que tienen los
+ * alumnos). Una cuenta de trabajo de Microsoft 365 necesita `outlook.office.com`
+ * con la misma ruta; si lo piden, es un segundo enlace, no otra función.
+ * ⚠️ Como el de Google, es una URL de un tercero y su forma la decide Microsoft.
+ */
+export function outlookComposeUrl({
+  titulo,
+  inicio,
+  fin,
+  detalle,
+}: {
+  titulo: string;
+  inicio: string;
+  fin: string;
+  detalle?: string;
+}): string {
+  const p = new URLSearchParams({
+    rru: "addevent",
+    subject: titulo,
+    // Outlook quiere ISO extendido (`2026-09-25T18:00:00.000Z`), no el
+    // compacto de `utc()`. Sigue siendo UTC con Z (regla de oro 4).
+    startdt: new Date(inicio).toISOString(),
+    enddt: new Date(fin).toISOString(),
+  });
+  if (detalle) p.set("body", detalle);
+  return `https://outlook.live.com/calendar/0/action/compose?${p}`;
 }

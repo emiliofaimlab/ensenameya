@@ -106,9 +106,10 @@ export async function GET(
   return new Response(ics, {
     headers: {
       "content-type": "text/calendar; charset=utf-8",
-      // `attachment`, al revés que el feed: allí una descarga suelta es el
-      // fallo, aquí es el objetivo.
-      "content-disposition": `attachment; filename="clase-${nombre}.ics"`,
+      // `inline` y no `attachment`: con `attachment` Safari de iPhone lo
+      // guarda en Descargas y el alumno no ve nada (25-sep). Chrome lo
+      // descarga igual, por eso Google y Outlook tienen su propio enlace.
+      "content-disposition": `inline; filename="clase-${nombre}.ics"`,
       "cache-control": "no-store, private",
     },
   });
