@@ -33,7 +33,7 @@ import { cn } from "@/lib/utils";
  *
  * ── TAMAÑO Y COLOR LOS PONE QUIEN LLAMA ─────────────────────────────────────
  * El mismo botón sale a 46 px con borde blanco sobre el hero azul, a 30 px al
- * final de los chips de la mentoría y a 22 px en círculo junto al nombre en
+ * final de los chips de la mentoría y a 32 px en círculo junto al título en
  * móvil. Aquí vive solo la FORMA (G-09: caja cuadrada, radio 8, foco visible,
  * etiqueta accesible); el resto entra por `className` y `cn` lo compone, así que
  * `size-*`, `rounded-*`, colores e incluso el tamaño del icono

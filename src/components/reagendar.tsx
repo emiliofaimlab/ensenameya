@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { RotateCwIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
@@ -35,6 +37,7 @@ export function Reagendar({
   pendiente,
   tz,
   formato,
+  cancelarHref,
 }: {
   sessionId: string;
   productId: string;
@@ -44,6 +47,12 @@ export function Reagendar({
   pendiente: ReagendaPendiente | null;
   tz: string;
   formato: FormatoHora;
+  /**
+   * Reunión del 25-sep · la X roja al lado del reagendar. SOLO en reservas de
+   * una sesión: cancelar es de la reserva entera, y en un paquete una X en cada
+   * fila se leería como «cancela esta clase» y tiraría las ocho.
+   */
+  cancelarHref?: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -121,7 +130,7 @@ export function Reagendar({
     );
   }
 
-  if (!puedeProponer && !pendiente) return null;
+  if (!puedeProponer && !pendiente && !cancelarHref) return null;
 
   return (
     <div className="basis-full text-[13px]">
@@ -133,15 +142,34 @@ export function Reagendar({
         </p>
       ) : null}
 
-      {!puedeProponer ? null : huecos === null ? (
-        <Button
-          variant="outline"
-          className="mt-2 h-9 rounded-[8px] px-4 text-[13px]"
-          disabled={busy}
-          onClick={abrir}
-        >
-          {pendiente ? "Proponer otra hora" : "Reagendar"}
-        </Button>
+      {huecos === null ? (
+        // Dos íconos juntos (reunión del 25-sep, móvil): el nombre lo dicen
+        // `aria-label` y `title`, como en `ShareButton`.
+        <div className="mt-2 flex gap-2">
+          {puedeProponer ? (
+            <Button
+              variant="outline"
+              className="size-10 rounded-[8px] p-0"
+              disabled={busy}
+              onClick={abrir}
+              aria-label={pendiente ? "Proponer otra hora" : "Reagendar"}
+              title={pendiente ? "Proponer otra hora" : "Reagendar"}
+            >
+              <RotateCwIcon aria-hidden />
+            </Button>
+          ) : null}
+          {cancelarHref ? (
+            <Button
+              asChild
+              variant="outline"
+              className="size-10 rounded-[8px] p-0 text-[#e5484d] hover:text-[#e5484d]"
+            >
+              <Link href={cancelarHref} aria-label="Cancelar reserva" title="Cancelar reserva">
+                <XIcon aria-hidden />
+              </Link>
+            </Button>
+          ) : null}
+        </div>
       ) : huecos.length === 0 ? (
         <p className="mt-2 text-[#6b6b6b]">
           No hay horarios libres en los próximos {DIAS} días. Escríbanse por el chat.

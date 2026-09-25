@@ -317,6 +317,13 @@ export default async function BookingDetailPage({
                         pendiente={reagendaPendiente(s.session_reschedules)}
                         tz={tz}
                         formato={formato}
+                        cancelarHref={
+                          sessions.length === 1 &&
+                          s.status === "scheduled" &&
+                          CANCELLABLE.has(booking.status)
+                            ? `/reservas/${booking.id}/cancelar`
+                            : null
+                        }
                       />
                     </li>
                   ))}

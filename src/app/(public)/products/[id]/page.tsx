@@ -515,18 +515,29 @@ export default async function ProductPage({
                     priority
                   />
 
-                  <h1 className="mt-3.5 text-[22px] font-bold text-balance lg:max-w-[760px] lg:text-[30px] lg:leading-[1.2]">
-                    {product.title}
-                  </h1>
+                  {/* Reunión del 25-sep · en móvil el compartir va PEGADO AL
+                      TÍTULO y más grande (32 px): junto a las estrellas, a 22 px,
+                      no se encontraba. Desde lg sigue al final de los chips, así
+                      que aquí hay dos instancias, cada una oculta en su tramo. */}
+                  <div className="mt-3.5 flex items-start justify-center gap-2.5 lg:block">
+                    <h1 className="text-[22px] font-bold text-balance lg:max-w-[760px] lg:text-[30px] lg:leading-[1.2]">
+                      {product.title}
+                    </h1>
+                    <ShareButton
+                      label="Compartir mentoría"
+                      title={product.title}
+                      text={product.outcome ?? undefined}
+                      className="mt-0.5 size-8 rounded-full border border-white/70 text-white [&_svg]:size-4 lg:hidden"
+                    />
+                  </div>
 
                   {/*
                     Valoración, compartir, promesa y chips en UN solo flex que
-                    envuelve, y no en cuatro bloques apilados. Es lo que permite
-                    que el botón de compartir esté al lado de las estrellas en
-                    móvil (G-07) y al final de la fila de chips en escritorio
-                    **sin duplicarlo**: `lg:order-last` lo manda al final del
-                    contenedor y la promesa, que ocupa línea entera, empuja los
-                    chips a una línea nueva que el botón cierra.
+                    envuelve, y no en cuatro bloques apilados. En escritorio el
+                    botón de compartir cierra la fila de chips: `lg:order-last`
+                    lo manda al final del contenedor y la promesa, que ocupa
+                    línea entera, empuja los chips a una línea nueva. En móvil
+                    este no se pinta: el suyo va junto al título, arriba.
                   */}
                   <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-2.5 max-lg:justify-center lg:mt-1.5">
                     {/* G-01 · la valoración es una LÍNEA DE TEXTO, nunca un chip.
@@ -556,7 +567,7 @@ export default async function ProductPage({
                       label="Compartir mentoría"
                       title={product.title}
                       text={product.outcome ?? undefined}
-                      className="size-[22px] rounded-full border border-white/70 text-white [&_svg]:size-3 lg:order-last lg:size-[30px] lg:rounded-lg lg:border-[#d9d9d9] lg:bg-card lg:text-[#4d4d4d] lg:[&_svg]:size-[13px]"
+                      className="max-lg:hidden lg:order-last lg:size-[30px] lg:rounded-lg lg:border lg:border-[#d9d9d9] lg:bg-card lg:text-[#4d4d4d] lg:[&_svg]:size-[13px]"
                     />
 
                     {/*
