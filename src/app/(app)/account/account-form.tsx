@@ -350,10 +350,9 @@ export function AccountForm({
      * bastaba que una tarjeta cambiara de alto para que «Avisos» saltara a la
      * izquierda. Por eso la derecha es una PILA explícita, no una celda más.
      *
-     * Lo que sí sigue siendo variable —«Tu perfil de tutor», «Invita y gana»
-     * (que renderiza `null` para el tutor) y «Sincroniza tu calendario»— baja a
-     * su propia rejilla, donde puede repartirse solo sin tocar lo que §7 fija.
-     * Ninguna de las tres está en el paquete, así que se conservan tal cual.
+     * Lo que no está en el paquete se conserva tal cual: «Tu perfil de tutor» e
+     * «Invita y gana» cierran la pila IZQUIERDA —rellenan lo que la derecha
+     * tiene de más alto— y el calendario va debajo, a ancho completo.
      *
      * `items-start`: sin él cada tarjeta se estira hasta la altura de su fila y
      * las cortas salen con medio palmo de vacío DENTRO.
@@ -552,6 +551,13 @@ export function AccountForm({
               </>
             )}
           </PanelCard>
+
+          {/* «Invita y gana» — no está en el paquete, así que se conserva. Va
+              al FINAL DE ESTA PILA y no en una fila propia (Verónica, 25-sep):
+              la derecha lleva «Contraseña» + «Avisos», que es más alta, y en
+              fila aparte dejaba el hueco de esa diferencia bajo la ficha de
+              tutor. Aquí lo rellena. */}
+          {referidos}
         </div>
 
         {/* §7.2 · La columna derecha es una PILA, no dos celdas sueltas: el
@@ -649,22 +655,6 @@ export function AccountForm({
             </ul>
           </PanelCard>
         </div>
-      </div>
-
-      {/* «Invita y gana» — no está en el paquete, así que se conserva. Va en
-          media fila y no a ancho completo: es una tarjeta de cuatro líneas y
-          estirada a 944 px se queda vacía por dentro.
-          `empty:hidden` se queda, pero ya no protege de nada: desde Referidos
-          v2 (11-sep-2026) `ReferralCard` devuelve SIEMPRE una tarjeta — la
-          pantalla `/referidos` existe para todo el mundo y las campañas se
-          deciden en `/admin/referidos`, no por variable de entorno. Lo que
-          decía este comentario —que el tutor no tenía campaña porque faltaba
-          `NEXT_PUBLIC_REFERRAL_URL_TUTOR`— es falso por partida triple: la
-          variable ya no existe, la campaña de tutores es la 50784 y está en el
-          seed, y la tarjeta no puede renderizar `null`. Se deja el `empty:hidden`
-          porque cuesta cero y cubre a quien vacíe esta rejilla mañana. */}
-      <div className="grid items-start gap-5 empty:hidden md:grid-cols-2 [&>*]:min-w-0">
-        {referidos}
       </div>
 
       {/* EY-188, a ancho completo: entrega una URL larga que hay que poder leer
