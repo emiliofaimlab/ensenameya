@@ -12,6 +12,7 @@ import {
   webcalUrl,
 } from "@/lib/calendar/feed";
 import { Button } from "@/components/ui/button";
+import { LogoMarca } from "@/components/calendar/add-to-calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PanelCard, PanelCardTitle } from "@/components/layout/panel-shell";
@@ -171,30 +172,44 @@ export function CalendarFeedCard({
               deciden ellos: si algún día dejan de abrir el diálogo, sigue
               estando el camino de copiar y pegar, que no depende de nadie. */}
           {url ? (
+            /* Mismos tres botones de logo que la ficha de la reserva
+               (`AddToCalendar`), en el mismo orden, para que se lean igual.
+               Embebida no lleva el de Google: esa opción ya está arriba y va
+               al instante. El nombre accesible lo da `aria-label`. */
             <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline" className="h-10">
-                <a href={webcalUrl(origin, token)}>Agregar a Apple Calendar</a>
-              </Button>
-              <Button asChild variant="outline" className="h-10">
-                <a
-                  href={outlookSuscribirUrl(origin, token)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Agregar a Outlook
-                </a>
-              </Button>
               {embebida ? null : (
-                <Button asChild variant="outline" className="h-10">
+                <Button asChild variant="outline" className="h-10 px-3.5">
                   <a
                     href={googleAddUrl(origin, token)}
                     target="_blank"
                     rel="noopener noreferrer"
+                    aria-label="Suscribir Google Calendar"
+                    title="Google Calendar"
                   >
-                    Agregar a Google Calendar
+                    <LogoMarca marca="google" />
                   </a>
                 </Button>
               )}
+              <Button asChild variant="outline" className="h-10 px-3.5">
+                <a
+                  href={outlookSuscribirUrl(origin, token)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Suscribir Outlook"
+                  title="Outlook"
+                >
+                  <LogoMarca marca="outlook" />
+                </a>
+              </Button>
+              <Button asChild variant="outline" className="h-10 px-3.5">
+                <a
+                  href={webcalUrl(origin, token)}
+                  aria-label="Suscribir Apple Calendar"
+                  title="Apple Calendar"
+                >
+                  <LogoMarca marca="apple" />
+                </a>
+              </Button>
             </div>
           ) : null}
 

@@ -34,8 +34,9 @@ export function AvisoCopiaCalendario({ className }: { className?: string }) {
   );
 }
 
-/** Una silueta de simple-icons pintada en el color oficial de su marca. */
-function LogoMarca({ marca }: { marca: keyof typeof LOGOS_CALENDARIO }) {
+/** Una silueta de simple-icons pintada en el color oficial de su marca.
+ *  También la usan los atajos de la suscripción en «Mi cuenta». */
+export function LogoMarca({ marca }: { marca: keyof typeof LOGOS_CALENDARIO }) {
   const { src, color } = LOGOS_CALENDARIO[marca];
   return (
     <span
