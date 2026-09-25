@@ -12,11 +12,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * La credencial es el interruptor: sin `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
  * la tarjeta no ofrece conectar y el sync responde `sin-credencial`.
  *
- * ⚠️ `calendar.events` es un permiso SENSIBLE para Google: hasta que la app
+ * ⚠️ `calendar.events.owned` es un permiso SENSIBLE para Google: hasta que la app
  * pase su verificación, la pantalla de permiso dice «app no verificada» y solo
  * entran 100 usuarios. Eso se arregla en la consola de Google, no aquí.
  */
-const SCOPES = "openid email https://www.googleapis.com/auth/calendar.events";
+// `events.owned` y no `events`: solo los calendarios que el usuario POSEE, que
+// es donde escribimos (`primary`). Menos que justificar en la verificación.
+const SCOPES = "openid email https://www.googleapis.com/auth/calendar.events.owned";
 const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
 export function googleCalendarConfigurado(): boolean {
