@@ -321,3 +321,27 @@ export function aceptaAntesDe(
   // «21 h 40 m», que es como lo escribe el paquete aprobado.
   return { label: `${h} h ${String(m).padStart(2, "0")} m`, urgent: ms < 12 * 3_600_000 };
 }
+
+/**
+ * §14 · ¿Se puede PROPONER otra hora? Sesión agendada, reserva viva y 24 h o
+ * más por delante. Es solo qué botón enseñar: la regla de verdad la aplica
+ * `proponer_reagenda` (`20260925120000`).
+ */
+export function puedeReagendar(
+  bookingStatus: string,
+  s: { status: string; start_at: string },
+  ahora = Date.now(),
+): boolean {
+  return (
+    (bookingStatus === "confirmed" || bookingStatus === "in_progress") &&
+    s.status === "scheduled" &&
+    new Date(s.start_at).getTime() - ahora >= 24 * 3_600_000
+  );
+}
+
+/** La propuesta de cambio de hora que sigue abierta, si la hay (una como mucho). */
+export function reagendaPendiente<T extends { status: string }>(
+  propuestas: T[] | null | undefined,
+): T | null {
+  return propuestas?.find((r) => r.status === "pending") ?? null;
+}

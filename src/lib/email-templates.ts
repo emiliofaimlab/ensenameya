@@ -787,6 +787,70 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     };
   },
 
+  // ── §14 · Reagendar (`20260925120000`) ─────────────────────────────────
+  //
+  // Las horas salen del PAYLOAD (`antes`, `propuesta`) y no de `x.c.inicio`:
+  // el contexto trae la PRIMERA sesión de la reserva, y en un paquete la que se
+  // mueve puede ser la cuarta. `para` dice a quién se le habla, y con eso quién
+  // es «la otra parte» en la tarjeta.
+  reschedule_requested: (x) => {
+    const nueva = cuando(x.p?.propuesta, x.tz);
+    const otro = x.p?.para === "tutor" ? x.c.alumno : x.c.tutor;
+    return {
+      asunto: "Te proponen otra hora para tu mentoría",
+      familia: "clase",
+      epigrafe: "Cambio de hora",
+      titulo: otro ? `${primerNombre(otro)} propone otra hora` : "Te proponen otra hora",
+      preheader: nueva ? `Nueva hora propuesta: ${nueva}. Acepta o recházala.` : "Acepta o rechaza la nueva hora.",
+      motivo: "Recibes este correo porque tienes una mentoría agendada.",
+      cuerpo: [
+        parrafo(
+          `La mentoría estaba para el <strong>${esc(cuando(x.p?.antes, x.tz) ?? "horario acordado")}</strong> y te proponen moverla al <strong>${esc(nueva ?? "nuevo horario")}</strong>. Si no la aceptas, la clase se queda como estaba.`,
+        ),
+        boton("Responder a la propuesta", x.url),
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: otro,
+          cuando: nueva,
+          duracion: duracion(x.c.duracion_min),
+        }),
+      ],
+    };
+  },
+
+  reschedule_accepted: (x) => {
+    const nueva = cuando(x.p?.propuesta, x.tz);
+    return {
+      asunto: nueva ? `Tu mentoría se movió al ${nueva}` : "Tu mentoría cambió de hora",
+      familia: "ok",
+      epigrafe: "Cambio de hora",
+      titulo: "Aceptaron la nueva hora",
+      preheader: nueva ? `La clase queda para el ${nueva}.` : "La clase quedó en la nueva hora.",
+      motivo: "Recibes este correo porque propusiste otra hora para tu mentoría.",
+      cuerpo: [
+        parrafo(
+          `Listo: la mentoría queda para el <strong>${esc(nueva ?? "nuevo horario")}</strong>. Tu calendario sincronizado se actualizará en la próxima lectura.`,
+        ),
+        boton("Ver la reserva", x.url),
+      ],
+    };
+  },
+
+  reschedule_rejected: (x) => ({
+    asunto: "No aceptaron la nueva hora que propusiste",
+    familia: "alerta",
+    epigrafe: "Cambio de hora",
+    titulo: "La mentoría sigue en su hora",
+    preheader: "La propuesta de cambio no se aceptó; la clase no se movió.",
+    motivo: "Recibes este correo porque propusiste otra hora para tu mentoría.",
+    cuerpo: [
+      parrafo(
+        `No se aceptó moverla al ${esc(cuando(x.p?.propuesta, x.tz) ?? "horario propuesto")}. La mentoría sigue el <strong>${esc(cuando(x.p?.antes, x.tz) ?? "horario acordado")}</strong>. Puedes proponer otra hora o escribir por el chat.`,
+      ),
+      boton("Ver la reserva", x.url),
+    ],
+  }),
+
   session_starting: (x) => ({
     asunto: "Tu clase empieza en unos minutos",
     familia: "ok",

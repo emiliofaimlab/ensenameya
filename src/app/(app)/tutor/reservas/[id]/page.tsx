@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { getFormatoHora, getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { formatMoney } from "@/lib/catalog/format";
-import { bookingFormatLabel, formatSessionTime, BOOKING_STATUS_LABEL, SESSION_STATUS_LABEL } from "@/lib/booking";
+import { bookingFormatLabel, formatSessionTime, BOOKING_STATUS_LABEL, SESSION_STATUS_LABEL, puedeReagendar, reagendaPendiente } from "@/lib/booking";
 import { TUTOR_ITEMS } from "@/components/layout/app-sidebar";
 import {
   PanelCard,
@@ -16,6 +16,7 @@ import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { RecordingLink } from "@/components/room/recording-link";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
+import { Reagendar } from "@/components/reagendar";
 import { CompleteSessionButton } from "../booking-actions";
 import { studentName, studentOfTutor } from "../../students";
 import { StudentAvatar } from "../../student-avatar";
@@ -93,7 +94,7 @@ export default async function TutorBookingDetailPage({
       // de la sala de Daily.
       // MN-05 · la ventana de acceso viaja con la sesión (`20260820190000`): es
       // lo que decide si el botón de sala sirve, y no se recalcula aquí.
-      "id, status, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at)",
+      "id, status, product_id, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status))",
     )
     .eq("id", id)
     .eq("tutor_id", user.id)
@@ -256,6 +257,15 @@ export default async function TutorBookingDetailPage({
                           />
                         ) : null}
                       </div>
+                      <Reagendar
+                        sessionId={s.id}
+                        productId={booking.product_id}
+                        soy="tutor"
+                        puedeProponer={puedeReagendar(booking.status, s)}
+                        pendiente={reagendaPendiente(s.session_reschedules)}
+                        tz={tz}
+                        formato={formato}
+                      />
                     </li>
                   ))}
                 </ul>

@@ -104,6 +104,10 @@ const TEXT: Record<string, string> = {
   account_deletion_done: "Tu cuenta se cerró",
   admin_alert: "Hay incidencias esperando revisión",
   contact_ack: "Recibimos tu mensaje",
+  // §14 · reagendar (`20260925120000`).
+  reschedule_requested: "Te propusieron otra hora para una mentoría",
+  reschedule_accepted: "Aceptaron la nueva hora de tu mentoría",
+  reschedule_rejected: "No aceptaron la nueva hora que propusiste",
 };
 
 /**
@@ -193,6 +197,13 @@ export function rutaFor(
   // payload primero es exactamente lo que mandaba al tutor a SCR-AL03.
   const fijo = DESTINO[template];
   if (fijo) return fijo;
+
+  // §14 · reagendar le habla a cualquiera de los dos: `para` en el payload
+  // dice cuál, que es justo lo que le falta a `booking_reminder_24h` (abajo).
+  if (template.startsWith("reschedule_")) {
+    const base = payload?.para === "tutor" ? "/tutor/reservas" : "/reservas";
+    return typeof bookingId === "string" ? `${base}/${bookingId}` : base;
+  }
 
   // NTF-07 y NTF-17 · la reserva vista DESDE EL TUTOR, que es otra pantalla y
   // otras acciones (aceptar / rechazar, no pagar / cancelar / reseñar).

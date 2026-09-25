@@ -2106,6 +2106,50 @@ export type Database = {
           },
         ]
       }
+      session_reschedules: {
+        Row: {
+          created_at: string
+          id: string
+          new_start_at: string
+          old_start_at: string
+          proposed_by: string
+          responded_at: string | null
+          session_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          new_start_at: string
+          old_start_at: string
+          proposed_by: string
+          responded_at?: string | null
+          session_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          new_start_at?: string
+          old_start_at?: string
+          proposed_by?: string
+          responded_at?: string | null
+          session_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_reschedules_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sessions: {
         Row: {
           access_closes_at: string | null
@@ -3419,6 +3463,10 @@ export type Database = {
         Returns: Json
       }
       process_scheduled_payouts: { Args: never; Returns: Json }
+      proponer_reagenda: {
+        Args: { p_new_start: string; p_session_id: string }
+        Returns: string
+      }
       purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
       purge_tutor_views: { Args: never; Returns: Json }
@@ -3482,6 +3530,10 @@ export type Database = {
       respond_booking: {
         Args: { p_accept: boolean; p_booking_id: string }
         Returns: string
+      }
+      responder_reagenda: {
+        Args: { p_acepta: boolean; p_id: string }
+        Returns: undefined
       }
       revertir_regalo: {
         Args: { p_credit_id: string; p_motivo?: string }

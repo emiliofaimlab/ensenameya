@@ -57,7 +57,7 @@ export const FAQ_COMO_FUNCIONA = [
   },
   {
     q: "¿Puedo reprogramar o cambiar mi mentoría si me surge un imprevisto?",
-    a: "Por supuesto. Si avisas con 24 horas o más de anticipación, recuperas el 100% de tu inversión. Si es una modificación realizada con menos de 24 horas de aviso, la plataforma te reembolsa el 50% de la sesión.",
+    a: "Sí. Con 24 horas o más de anticipación puedes proponer otra hora desde tu reserva, sin costo: el tutor la acepta o la rechaza. Si prefieres cancelar, con 24 horas o más de aviso recuperas el 100%; con menos, la plataforma te reembolsa el 50% de la sesión.",
   },
   {
     q: "¿Cómo y cuándo cobran los tutores?",

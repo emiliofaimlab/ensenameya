@@ -14,6 +14,8 @@ import {
   formatSessionTime,
   tutorCards,
   bookingFormatLabel,
+  puedeReagendar,
+  reagendaPendiente,
 } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { parseRequirements } from "@/lib/product-requirements";
@@ -33,6 +35,7 @@ import { TutorSummary } from "@/components/tutor-summary";
 import { RecordingLink } from "@/components/room/recording-link";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
+import { Reagendar } from "@/components/reagendar";
 import type { Database } from "@/lib/database.types";
 import { roomOpen } from "@/lib/room-window";
 
@@ -97,7 +100,7 @@ export default async function BookingDetailPage({
       // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
       // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
       // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
-      "id, status, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at), payments(status, gross_amount, currency, paid_at, refunded_amount)",
+      "id, status, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -306,6 +309,15 @@ export default async function BookingDetailPage({
                           />
                         ) : null}
                       </div>
+                      <Reagendar
+                        sessionId={s.id}
+                        productId={booking.product_id}
+                        soy="student"
+                        puedeProponer={puedeReagendar(booking.status, s)}
+                        pendiente={reagendaPendiente(s.session_reschedules)}
+                        tz={tz}
+                        formato={formato}
+                      />
                     </li>
                   ))}
                 </ul>
