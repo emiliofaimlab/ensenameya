@@ -50,8 +50,16 @@ const leerOriginEnServidor = () => "";
  */
 export function CalendarFeedCard({
   tokenInicial,
+  embebida = false,
 }: {
   tokenInicial: string | null;
+  /**
+   * Dentro de la tarjeta de Google Calendar (`GoogleCalendarCard`), como la
+   * alternativa plegada para Apple y Outlook: sin marco ni título propios, sin
+   * el atajo de Google —que arriba ya tiene su conexión al instante— y con el
+   * botón en contorno para que el único naranja sea el de conectar Google.
+   */
+  embebida?: boolean;
 }) {
   const [token, setToken] = useState(tokenInicial);
   const [ocupado, setOcupado] = useState(false);
@@ -109,25 +117,15 @@ export function CalendarFeedCard({
 
   const url = origin && token ? feedUrl(origin, token) : "";
 
-  return (
-    <PanelCard>
-      <span className="grid size-10 place-items-center rounded-full bg-primary/10 text-primary">
-        <CalendarSyncIcon className="size-5" />
-      </span>
-      <PanelCardTitle className="mt-4 text-xl">
-        Sincroniza tu calendario
-      </PanelCardTitle>
-      <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
-        {/* «mentorías», no «clases»: es el vocabulario del producto desde el
-            acuerdo del 17-ago (R4 del Doc 24). Esta tarjeta cae justo debajo
-            de la de tutor en la captura 28 de Verónica. */}
-        Suscribe Apple Calendar o Google Calendar a tus mentorías. No es una
-        descarga: tu calendario vuelve a consultar el enlace cada cierto tiempo,
-        así que las mentorías nuevas y las cancelaciones aparecen solas.
-      </p>
-
+  const cuerpo = (
+    <>
       {token === null ? (
-        <Button className="mt-4 h-10" onClick={activar} disabled={ocupado}>
+        <Button
+          variant={embebida ? "outline" : "default"}
+          className="mt-4 h-10"
+          onClick={activar}
+          disabled={ocupado}
+        >
           {ocupado ? "Activando…" : "Activar sincronización"}
         </Button>
       ) : (
@@ -172,15 +170,17 @@ export function CalendarFeedCard({
               <Button asChild variant="outline" className="h-10">
                 <a href={webcalUrl(origin, token)}>Agregar a Apple Calendar</a>
               </Button>
-              <Button asChild variant="outline" className="h-10">
-                <a
-                  href={googleAddUrl(origin, token)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Agregar a Google Calendar
-                </a>
-              </Button>
+              {embebida ? null : (
+                <Button asChild variant="outline" className="h-10">
+                  <a
+                    href={googleAddUrl(origin, token)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Agregar a Google Calendar
+                  </a>
+                </Button>
+              )}
             </div>
           ) : null}
 
@@ -205,6 +205,39 @@ export function CalendarFeedCard({
           </div>
         </div>
       )}
+    </>
+  );
+
+  if (embebida) {
+    return (
+      <>
+        <p className="text-[12.5px] text-[#6b6b6b]">
+          Copia el enlace en Apple Calendar, Outlook o cualquier calendario que
+          acepte suscripciones. Tu calendario lo vuelve a consultar cada varias
+          horas, así que los cambios pueden tardar en aparecer.
+        </p>
+        {cuerpo}
+      </>
+    );
+  }
+
+  return (
+    <PanelCard>
+      <span className="grid size-10 place-items-center rounded-full bg-primary/10 text-primary">
+        <CalendarSyncIcon className="size-5" />
+      </span>
+      <PanelCardTitle className="mt-4 text-xl">
+        Sincroniza tu calendario
+      </PanelCardTitle>
+      <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
+        {/* «mentorías», no «clases»: es el vocabulario del producto desde el
+            acuerdo del 17-ago (R4 del Doc 24). Esta tarjeta cae justo debajo
+            de la de tutor en la captura 28 de Verónica. */}
+        Suscribe Apple Calendar o Google Calendar a tus mentorías. No es una
+        descarga: tu calendario vuelve a consultar el enlace cada cierto tiempo,
+        así que las mentorías nuevas y las cancelaciones aparecen solas.
+      </p>
+      {cuerpo}
     </PanelCard>
   );
 }

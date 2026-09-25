@@ -128,20 +128,25 @@ export default async function AccountPage({
         /* EY-188 (B5.5) · la misma tarjeta para alumno y tutor: el feed
            devuelve las sesiones en las que participas, sin mirar el rol. */
         calendario={
-          <>
-            {/* Sin credencial de Google no se ofrece conectar: la credencial
-                es el interruptor, como en el resto de integraciones. */}
-            {googleCalendarConfigurado() ? (
-              <GoogleCalendarCard
-                conectado={google !== null}
-                email={google?.google_email ?? null}
-                aviso={avisoGoogle === "ok" || avisoGoogle === "error" ? avisoGoogle : null}
+          /* Con credencial de Google, UNA tarjeta con los dos caminos; sin
+             ella, el feed solo como siempre. La credencial es el interruptor. */
+          googleCalendarConfigurado() ? (
+            <GoogleCalendarCard
+              conectado={google !== null}
+              email={google?.google_email ?? null}
+              aviso={avisoGoogle === "ok" || avisoGoogle === "error" ? avisoGoogle : null}
+              feedActivo={typeof feedToken === "string"}
+            >
+              <CalendarFeedCard
+                embebida
+                tokenInicial={typeof feedToken === "string" ? feedToken : null}
               />
-            ) : null}
+            </GoogleCalendarCard>
+          ) : (
             <CalendarFeedCard
               tokenInicial={typeof feedToken === "string" ? feedToken : null}
             />
-          </>
+          )
         }
         /* G03 · el otro punto de integración de referidos (Doc 4 §4.x).
            ⚠️ SIN PROPS desde el 11-sep: ya no hay una campaña por rol que
