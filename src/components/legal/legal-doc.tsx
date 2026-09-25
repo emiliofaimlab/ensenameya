@@ -45,7 +45,7 @@ import { COMPANY } from "@/lib/company";
 const CONTACTO = COMPANY.email;
 
 /** Fecha de la última revisión de estos textos. */
-const ACTUALIZADO = "22 de septiembre de 2026";
+const ACTUALIZADO = "25 de septiembre de 2026";
 
 type Seccion = { titulo: string; parrafos: string[] };
 type Doc = { title: string; intro: string; secciones: Seccion[] };
@@ -79,6 +79,7 @@ const PRIVACY: Doc = {
         "Del uso de la plataforma: tus reservas, los pagos asociados, los mensajes del chat de cada reserva y las reseñas que escribas. Si eres tutor, también tus liquidaciones.",
         "Si has iniciado sesión, también registramos qué perfiles de tutor y qué mentorías consultas. No guardamos un historial página a página: de cada tutor conservamos únicamente cuántas veces has visto su perfil, cuántas veces alguna de sus mentorías, y las fechas de la primera y la última. Si navegas sin haber iniciado sesión, no se registra nada.",
         "Si tú y la otra parte aceptan grabar una clase, la grabación de esa sesión —imagen y voz de ambos— pasa a ser un dato que tratamos. Sin las dos aceptaciones no existe grabación alguna.",
+        "Si conectas tu Google Calendar desde «Mi cuenta», también el correo de esa cuenta de Google y el permiso que nos das para escribir en tu calendario. Lo explica en detalle el apartado 8.",
         "No almacenamos números de tarjeta. El pago se realiza en el entorno del proveedor de pagos; si eliges guardar un medio de pago para futuras compras, de él solo conservamos la marca (Visa, Mastercard…), los últimos cuatro dígitos y una referencia opaca del proveedor.",
       ],
     },
@@ -102,6 +103,7 @@ const PRIVACY: Doc = {
         "Sentry, para registrar errores técnicos de la aplicación y poder corregirlos. Está configurado expresamente para no enviar datos personales: recoge el fallo, no quién lo sufrió.",
         "Google Analytics, para contar de forma agregada cuánta gente visita el sitio y qué secciones mira. No recibe tu nombre ni tu correo.",
         "PostHog, para medir cómo se usa la plataforma y saber en qué pasos se atasca la gente. Si has iniciado sesión recibe tu identificador interno de usuario y tus roles —alumno, tutor—, nunca tu nombre ni tu correo. PostHog también graba la sesión: una reproducción de lo que ocurre en tu pantalla mientras navegas. Lo detalla la política de cookies.",
+        "Google, solo si conectas tu Google Calendar: recibe los datos de los eventos de tus mentorías que creamos en tu calendario (apartado 8).",
         "Referral Factory, solo si participas en el programa de invitaciones. El programa entero (códigos, recompensas, seguimiento) vive en su plataforma; nosotros únicamente guardamos el código con el que llegaste para atribuir la invitación. Si no usas un enlace de invitación, no interviene.",
         "Ninguno de ellos usa tus datos para fines propios: los tratan por encargo nuestro y solo para prestar el servicio que les corresponde.",
       ],
@@ -136,6 +138,23 @@ const PRIVACY: Doc = {
       parrafos: [
         "El acceso a los datos está restringido en la propia base de datos por usuario y por rol: cada persona solo alcanza lo suyo, y el sistema deniega por defecto lo que no se ha permitido explícitamente. Los documentos de verificación y los adjuntos del chat se guardan en almacenamiento privado, accesible solo mediante enlaces firmados y temporales.",
         "Los movimientos de dinero se ejecutan exclusivamente en el servidor: ninguna aplicación cliente puede escribir sobre pagos ni sobre liquidaciones.",
+      ],
+    },
+    /*
+     * ⚠️ Este apartado es REQUISITO de la verificación de Google para el permiso
+     * `calendar.events.owned` (25-sep): la política pública tiene que decir qué
+     * hacemos con los datos de Google e incluir la declaración de «Uso
+     * Limitado» casi literal. Quitarlo o suavizarlo puede costar la aprobación.
+     * Describe `lib/google-calendar.ts`; si el código cambia, esto también.
+     */
+    {
+      titulo: "8. Google Calendar",
+      parrafos: [
+        "Conectar tu Google Calendar es opcional y lo haces tú desde «Mi cuenta». Al hacerlo, Google te pide autorizar a Enséñame Ya a ver, crear, modificar y eliminar eventos en los calendarios de tu propiedad. Recibimos también el correo de esa cuenta de Google, solo para mostrarte con cuál estás conectado.",
+        "Usamos ese permiso para una sola cosa: crear en tu calendario principal un evento por cada sesión de tus mentorías, con su título, su fecha y hora y el enlace a la sala, y actualizarlo o eliminarlo si la sesión cambia de hora o se cancela. No leemos, no listamos y no modificamos ningún otro evento de tu calendario.",
+        "No cedemos los datos que obtenemos de Google a terceros, no los usamos con fines publicitarios y no los usamos para entrenar modelos de inteligencia artificial. El permiso se guarda cifrado en nuestro servidor y solo lo usa la aplicación para mantener esos eventos al día.",
+        "Puedes desconectarlo cuando quieras desde «Mi cuenta», lo que revoca nuestro acceso de inmediato, o desde la configuración de tu cuenta de Google. Si das de baja tu cuenta de Enséñame Ya, borramos el permiso guardado en ese mismo momento. Los eventos que ya estén en tu calendario siguen ahí y puedes borrarlos cuando quieras.",
+        "El uso y la transferencia a cualquier otra aplicación de la información recibida de las API de Google por parte de Enséñame Ya se ajustan a la Política de Datos de Usuario de los Servicios de API de Google (https://developers.google.com/terms/api-services-user-data-policy), incluidos los requisitos de Uso Limitado.",
       ],
     },
   ],
