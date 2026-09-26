@@ -26,7 +26,16 @@ export default function robots(): MetadataRoute.Robots {
 
   const base = siteUrl();
   return {
-    rules: { userAgent: "*", allow: "/", disallow: [...RUTAS_PRIVADAS] },
+    // `/*?` · 25-sep-2026: los filtros del catálogo (`?lang=…&level=…&sort=…`)
+    // se encadenan y cada combinación enlaza a más: decenas de miles de URLs
+    // por categoría, todas dinámicas. Un crawler se metió ahí a ~10 pet/s
+    // desde el 23-sep y agotó en dos días la CPU del plan Hobby → sitio
+    // pausado. Nada con `?` va al sitemap, así que no se pierde nada indexable.
+    rules: {
+      userAgent: "*",
+      allow: "/",
+      disallow: [...RUTAS_PRIVADAS, "/*?"],
+    },
     sitemap: `${base}/sitemap.xml`,
   };
 }
