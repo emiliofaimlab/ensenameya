@@ -31,6 +31,17 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: "Enséñame Ya",
   description: "Marketplace de mentorías 1:1 en vivo entre alumnos y tutores.",
+  // Vista previa al compartir (WhatsApp, Slack, LinkedIn…). La hereda toda
+  // página que no declare su propio `openGraph`; las fichas de tutor, mentoría
+  // y academia lo declaran y la reemplazan entera.
+  openGraph: {
+    type: "website",
+    siteName: "Enséñame Ya",
+    locale: "es_LA",
+    title: "Enséñame Ya",
+    description: "Marketplace de mentorías 1:1 en vivo entre alumnos y tutores.",
+    images: [{ url: "/img/hero-home-v2.jpg", width: 1280, height: 720 }],
+  },
   // Search Console, método "etiqueta HTML". Se hace así y no por registro TXT
   // en el DNS a propósito: `ensenameya.com` lleva Microsoft 365 detrás de
   // Proofpoint y el correo no se toca (§ Legales de `CLAUDE.md`) — un TXT mal
