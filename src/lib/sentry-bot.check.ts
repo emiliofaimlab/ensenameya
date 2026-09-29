@@ -51,6 +51,31 @@ const casos: [string, () => void][] = [
     () => assert.equal(loEjecutaUnBot(deUnaPersona), false),
   ],
   [
+    "el script que inyecta Instagram (`app://nombre`) se descarta",
+    () =>
+      assert.equal(
+        loEjecutaUnBot({
+          exception: {
+            values: [{ stacktrace: { frames: [{ filename: "app://navigation_performance_logger_android" }] } }],
+          },
+        }),
+        true,
+      ),
+  ],
+  [
+    "el escáner de Outlook (CefSharp) se descarta; otro rechazo sin traza, no",
+    () => {
+      const v = (value: string) => ({ exception: { values: [{ value }] } });
+      assert.equal(
+        loEjecutaUnBot(
+          v("Non-Error promise rejection captured with value: Object Not Found Matching Id:1, MethodName:update, ParamCount:4"),
+        ),
+        true,
+      );
+      assert.equal(loEjecutaUnBot(v("Non-Error promise rejection captured with value: undefined")), false);
+    },
+  ],
+  [
     "un evento sin traza no se descarta: en la duda, se cuenta",
     () => {
       assert.equal(loEjecutaUnBot({}), false);

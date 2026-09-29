@@ -341,6 +341,7 @@ export default async function TutorBookingDetailPage({
           {chatOpen ? (
             <ChatThread
               formato={formato}
+              timeZone={tz}
               bookingId={booking.id}
               currentUserId={user.id}
               firstSessionAt={sessions[0]?.start_at ?? null}

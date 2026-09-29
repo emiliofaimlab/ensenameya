@@ -186,6 +186,7 @@ export function ChatThread({
   visible = true,
   onIncoming,
   formato = FORMATO_POR_DEFECTO,
+  timeZone,
 }: {
   /** El hilo. Lo pasan las pantallas nuevas (bandeja, `/chat/[id]`). */
   conversationId?: string;
@@ -215,6 +216,13 @@ export function ChatThread({
    * que se olvide no compila, y esto es una marca de tiempo, no una promesa.
    */
   formato?: FormatoHora;
+  /**
+   * Zona del usuario, resuelta en SERVIDOR como `formato`. Sin ella el servidor
+   * (UTC en Vercel) y el navegador pintan horas distintas: React #418 al
+   * hidratar, y la hora UTC en pantalla hasta el siguiente render. Falta solo
+   * en la burbuja, que monta el hilo en cliente y no hidrata.
+   */
+  timeZone?: string;
   /** ¿El par ya compró? Decide los adjuntos y el aviso de los topes. */
   hasBooking?: boolean;
   /**
@@ -738,6 +746,7 @@ export function ChatThread({
                   {new Date(m.createdAt).toLocaleTimeString("es", {
                     hour: "2-digit",
                     minute: "2-digit",
+                    timeZone,
                     ...opcionesDeHora(formato),
                   })}
                 </time>

@@ -52,6 +52,13 @@ if (posthogKey) {
     capture_pageview: "history_change",
     capture_pageleave: true,
     person_profiles: "identified_only",
+    // El mismo filtro que Sentry: PostHog también recoge excepciones, y sin
+    // esto el ruido de bots era 18 de las 22 de la semana del 24-sep.
+    before_send: (evento) =>
+      evento?.event === "$exception" &&
+      loEjecutaUnBot({ exception: { values: evento.properties?.$exception_list } })
+        ? null
+        : evento,
   });
   posthog.register({
     entorno: process.env.NEXT_PUBLIC_VERCEL_ENV ?? "development",

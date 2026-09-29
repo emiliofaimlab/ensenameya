@@ -24,13 +24,34 @@
 export type EventoConTraza = {
   exception?: {
     values?: Array<{
+      value?: string;
       stacktrace?: { frames?: Array<{ filename?: string }> };
     }>;
   };
 };
 
+/*
+ * Los otros dos casos, del 24/25-sep-2026 (18 de las 22 excepciones de esa
+ * semana en PostHog):
+ *
+ * - `app://navigation_performance_logger_android`: el script que el navegador
+ *   de Instagram inyecta en la página («Java object is gone»). Ojo: Sentry
+ *   reescribe NUESTROS marcos como `app:///_next/…` —tres barras—; lo inyectado
+ *   lleva dos y un nombre. Sigue siendo mirar el origen.
+ * - «Object Not Found Matching Id:1, MethodName:update, ParamCount:4»: el
+ *   puente de CefSharp, o sea el escáner de enlaces de Outlook (Chrome 140 en
+ *   Windows 7). Aquí no hay traza, así que se mira el mensaje — y se puede,
+ *   porque ninguna línea nuestra rechaza con ese texto.
+ */
+const INYECTADO_POR_WEBVIEW = /^app:\/\/[^/]/;
+const PUENTE_CEFSHARP = /Object Not Found Matching Id:\d+, MethodName:\w+, ParamCount:\d+/;
+
 export function loEjecutaUnBot(evento: EventoConTraza): boolean {
-  return (evento.exception?.values ?? []).some((v) =>
-    (v.stacktrace?.frames ?? []).some((f) => f.filename?.startsWith("ext:")),
+  return (evento.exception?.values ?? []).some(
+    (v) =>
+      PUENTE_CEFSHARP.test(v.value ?? "") ||
+      (v.stacktrace?.frames ?? []).some(
+        (f) => f.filename?.startsWith("ext:") || INYECTADO_POR_WEBVIEW.test(f.filename ?? ""),
+      ),
   );
 }

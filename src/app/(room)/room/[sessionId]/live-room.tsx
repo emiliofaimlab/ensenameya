@@ -1275,6 +1275,7 @@ export function LiveRoom({
             >
               <ChatThread
                 formato={formato}
+                timeZone={timeZone}
                 fill
                 // El aviso de retención ocupa media columna en un panel de
                 // 360px y ya se lee entero en la ficha de la reserva.
