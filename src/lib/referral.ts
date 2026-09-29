@@ -1,3 +1,7 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "@/lib/database.types";
+
 /**
  * US-1302 · El código de referido que viaja en `?ref=` (S-18, RN-21).
  *
@@ -22,3 +26,27 @@
  * el proxy, un Route Handler y `signup-form.tsx`, que es de cliente.
  */
 export const REFERRAL_COOKIE = "ey-ref";
+
+/**
+ * El código con el que ESTE usuario invita a otros alumnos, para el enlace de
+ * «Compartir mi reserva» (25-sep). `null` si nunca abrió «Invita y gana», que es
+ * donde se le da de alta en RF.
+ *
+ * ponytail: sin código el enlace sale sin `?ref=` en vez de darlo de alta aquí;
+ * esa alta pasa por RF, que tiene picos de más de 25 s, y el botón de compartir
+ * no puede esperarlos. Si falta a menudo, darlo de alta en segundo plano.
+ */
+export async function codigoParaCompartir(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("referral_memberships")
+    .select("code, referral_campaigns(audience, visible)")
+    .eq("profile_id", userId);
+  const filas = data ?? [];
+  const deAlumnos = filas.find(
+    (f) => f.referral_campaigns?.audience === "alumnos" && f.referral_campaigns.visible,
+  );
+  return (deAlumnos ?? filas[0])?.code ?? null;
+}

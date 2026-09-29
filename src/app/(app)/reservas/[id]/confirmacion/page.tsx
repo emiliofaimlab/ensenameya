@@ -9,12 +9,14 @@ import {
 } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { Precio } from "@/components/precio/precio";
-import { formatSessionTime, tutorNames } from "@/lib/booking";
+import { formatSessionTime, RESERVA_COMPARTIBLE, tutorNames } from "@/lib/booking";
 import { opcionesDeHora } from "@/lib/hora";
 import { parseRequirements } from "@/lib/product-requirements";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
 import { EsperaConfirmacion } from "@/components/checkout/espera-confirmacion";
+import { CompartirReserva } from "@/components/compartir-reserva";
+import { codigoParaCompartir } from "@/lib/referral";
 
 export const metadata = { title: "Reserva confirmada · Enséñame Ya" };
 
@@ -49,7 +51,7 @@ export default async function ConfirmationPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireUser();
+  const { user } = await requireUser();
   // Zona y formato juntos: las dos mitades de «qué hora es para quien mira»,
   // y las dos lecturas baratas — en paralelo, nunca encadenadas.
   const [tz, formato] = await Promise.all([
@@ -68,7 +70,7 @@ export default async function ConfirmationPage({
       // 45,00 US$» a quien canjeó una mentoría gratis y NO pagó nada. Visto en
       // la preview el 12-sep. El importe es el de la reserva; lo que cambia es
       // quién lo puso.
-      "id, status, total_amount, currency, products(title, tutor_id, requirements), sessions(start_at, end_at, session_ref), payments(credit_amount)",
+      "id, status, product_id, total_amount, currency, products(title, tutor_id, requirements), sessions(start_at, end_at, session_ref), payments(credit_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -97,7 +99,11 @@ export default async function ConfirmationPage({
   // aviso llega más lejos; el detalle de la reserva lo repite para quien vuelva.
   const requisitos = parseRequirements(booking.products?.requirements);
 
-  const names = await tutorNames(supabase, [booking.products?.tutor_id]);
+  // El código de invitación va junto a los nombres: no dependen uno de otro.
+  const [names, codigoRef] = await Promise.all([
+    tutorNames(supabase, [booking.products?.tutor_id]),
+    codigoParaCompartir(supabase, user.id),
+  ]);
   const tutor = names.get(booking.products?.tutor_id ?? "");
   const sessions = [...(booking.sessions ?? [])].sort((a, b) =>
     a.start_at.localeCompare(b.start_at),
@@ -323,6 +329,16 @@ export default async function ConfirmationPage({
           <Button asChild className="h-[49px] rounded-[10px] px-6 font-semibold">
             <Link href={`/reservas/${booking.id}`}>Ver detalle de la reserva</Link>
           </Button>
+          {/* Reunión del 25-sep: presumir la reserva, con el enlace de invitación.
+              Ni con el pago en el aire ni cancelada: `RESERVA_COMPARTIBLE`. */}
+          {RESERVA_COMPARTIBLE.has(booking.status) ? (
+            <CompartirReserva
+              productId={booking.product_id}
+              titulo={booking.products?.title ?? "Mentoría"}
+              tutor={tutor ?? "mi tutor"}
+              codigoRef={codigoRef}
+            />
+          ) : null}
           <Button
             asChild
             variant="outline"

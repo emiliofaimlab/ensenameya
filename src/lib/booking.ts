@@ -323,6 +323,17 @@ export function aceptaAntesDe(
 }
 
 /**
+ * Estados en los que una reserva se puede presumir con «Compartir mi reserva»:
+ * viva o ya dada. Ni sin pagar ni cancelada. La usan la confirmación y la ficha.
+ */
+export const RESERVA_COMPARTIBLE: ReadonlySet<string> = new Set([
+  "pending_acceptance",
+  "confirmed",
+  "in_progress",
+  "completed",
+]);
+
+/**
  * §14 · ¿Se puede PROPONER otra hora? Sesión agendada, reserva viva y 24 h o
  * más por delante. Es solo qué botón enseñar: la regla de verdad la aplica
  * `proponer_reagenda` (`20260925120000`).

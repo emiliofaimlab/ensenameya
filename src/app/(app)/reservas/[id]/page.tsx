@@ -15,6 +15,7 @@ import {
   tutorCards,
   bookingFormatLabel,
   puedeReagendar,
+  RESERVA_COMPARTIBLE,
   reagendaPendiente,
 } from "@/lib/booking";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
@@ -36,6 +37,8 @@ import { RecordingLink } from "@/components/room/recording-link";
 import { SessionRef } from "@/components/room/session-ref";
 import { Button } from "@/components/ui/button";
 import { Reagendar } from "@/components/reagendar";
+import { CompartirReserva } from "@/components/compartir-reserva";
+import { codigoParaCompartir } from "@/lib/referral";
 import type { Database } from "@/lib/database.types";
 import { roomOpen } from "@/lib/room-window";
 
@@ -163,7 +166,10 @@ export default async function BookingDetailPage({
   // pantalla de la queja («tras reservar no hay forma de llegar al tutor»).
   // `fichas` puede venir vacío si le retiraron la aprobación — `TutorSummary`
   // sabe qué hacer con eso y no enlaza a un 404.
-  const fichas = await tutorCards(supabase, [booking.products?.tutor_id]);
+  const [fichas, codigoRef] = await Promise.all([
+    tutorCards(supabase, [booking.products?.tutor_id]),
+    codigoParaCompartir(supabase, user.id),
+  ]);
   const ficha = fichas.get(booking.products?.tutor_id ?? "");
   const tutor = ficha?.displayName ?? undefined;
 
@@ -234,6 +240,17 @@ export default async function BookingDetailPage({
             {done > 0 ? ` · ${done} completada${done === 1 ? "" : "s"}` : ""}
           </p>
         </div>
+        {/* La confirmación se ve UNA vez; quien vuelve después a presumir la
+            reserva la encuentra aquí. Solo con la reserva viva. */}
+        {RESERVA_COMPARTIBLE.has(booking.status) ? (
+          <CompartirReserva
+            productId={booking.product_id}
+            titulo={booking.products?.title ?? "Mentoría"}
+            tutor={tutor ?? "mi tutor"}
+            codigoRef={codigoRef}
+            className="mt-1 h-10 self-start px-4 text-[13.5px]"
+          />
+        ) : null}
       </div>
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
