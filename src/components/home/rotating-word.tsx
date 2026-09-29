@@ -62,8 +62,10 @@ export function RotatingWord() {
   const [i, setI] = useState(0);
   const [len, setLen] = useState(WORDS[0].length);
   const [erasing, setErasing] = useState(false);
+  const traducida = usePaginaTraducida();
 
   useEffect(() => {
+    if (traducida) return;
     // Sin JS o con "reducir movimiento" se queda "talento" fijo, que es lo que
     // pinta el servidor. Se consulta aquí y no en un estado aparte: matchMedia
     // no existe en el servidor y guardarlo obligaba a un setState en efecto.
@@ -86,7 +88,19 @@ export function RotatingWord() {
     }, delay);
 
     return () => clearTimeout(t);
-  }, [i, len, erasing]);
+  }, [i, len, erasing, traducida]);
+
+  // Con la página traducida, la máquina de escribir deja basura: el traductor
+  // traduce cada trozo que React escribe y los viejos no se borran nunca
+  // («perfectpand»). Se para y se pinta la palabra ENTERA en un nodo nuevo
+  // (`key`), que el traductor traduce una sola vez.
+  if (traducida) {
+    return (
+      <em className="text-primary" key="traducida">
+        {WORDS[0]}
+      </em>
+    );
+  }
 
   return (
     <em className="text-primary">
@@ -98,6 +112,23 @@ export function RotatingWord() {
       </span>
     </em>
   );
+}
+
+/**
+ * Chrome marca `<html>` con `translated-ltr`/`translated-rtl` mientras traduce
+ * (y lo quita al volver al original), así que basta con mirar esa clase.
+ */
+function usePaginaTraducida() {
+  const [traducida, setTraducida] = useState(false);
+  useEffect(() => {
+    const html = document.documentElement;
+    const mirar = () => setTraducida(/\btranslated-(ltr|rtl)\b/.test(html.className));
+    mirar();
+    const obs = new MutationObserver(mirar);
+    obs.observe(html, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+  return traducida;
 }
 
 /**
