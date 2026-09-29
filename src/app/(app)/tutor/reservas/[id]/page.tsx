@@ -282,7 +282,11 @@ export default async function TutorBookingDetailPage({
             {/* N-34 · cancelar es una pantalla, no un `window.confirm()`: hay
                 importe, política y motivo que enseñar antes de tirar la clase.
                 El alumno ya la tenía (SCR-AL07); esta es la del tutor. */}
-            {CANCELLABLE.has(booking.status) ? (
+            {/* Con una sola sesión, «Cancelar reserva» ya sale en su fila
+                (el `cancelarHref` de <Reagendar>): repetirlo aquí lo dejaba
+                huérfano debajo de otra raya. */}
+            {CANCELLABLE.has(booking.status) &&
+            !(sessions.length === 1 && sessions[0].status === "scheduled") ? (
               <>
                 <hr className="my-4 border-[#e0e0e0]" />
                 <Button

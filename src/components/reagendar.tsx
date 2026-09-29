@@ -143,29 +143,28 @@ export function Reagendar({
       ) : null}
 
       {huecos === null ? (
-        // Dos íconos juntos (reunión del 25-sep, móvil): el nombre lo dicen
-        // `aria-label` y `title`, como en `ShareButton`.
-        <div className="mt-2 flex gap-2">
+        // Reunión del 25-sep: ícono + texto. Solo ícono no se entendía (29-sep).
+        <div className="mt-2 flex flex-wrap gap-2">
           {puedeProponer ? (
             <Button
               variant="outline"
-              className="size-10 rounded-[8px] p-0"
+              className="h-10 rounded-[8px] px-3.5 text-[13px]"
               disabled={busy}
               onClick={abrir}
-              aria-label={pendiente ? "Proponer otra hora" : "Reagendar"}
-              title={pendiente ? "Proponer otra hora" : "Reagendar"}
             >
               <RotateCwIcon aria-hidden />
+              {pendiente ? "Proponer otra hora" : "Reagendar"}
             </Button>
           ) : null}
           {cancelarHref ? (
             <Button
               asChild
               variant="outline"
-              className="size-10 rounded-[8px] p-0 text-[#e5484d] hover:text-[#e5484d]"
+              className="h-10 rounded-[8px] px-3.5 text-[13px] text-[#e5484d] hover:text-[#e5484d]"
             >
-              <Link href={cancelarHref} aria-label="Cancelar reserva" title="Cancelar reserva">
+              <Link href={cancelarHref}>
                 <XIcon aria-hidden />
+                Cancelar reserva
               </Link>
             </Button>
           ) : null}
