@@ -58,4 +58,34 @@ if (posthogKey) {
   });
 }
 
+/**
+ * El traductor de Chrome (y Edge, y las extensiones de traducción) reescribe el
+ * DOM a mano: cambia cada nodo de texto por un `<font>` con la traducción. React
+ * no se entera, y en el siguiente render intenta quitar o insertar junto a un
+ * nodo que ya no es hijo de su padre → `NotFoundError` en `removeChild` /
+ * `insertBefore` → salta `error.tsx` («Algo se rompió de nuestro lado»).
+ * facebook/react#11538, abierto desde 2017.
+ *
+ * No se prohíbe traducir (`translate="no"`): hay visitantes que no leen español.
+ * Se hace lo que propone el propio hilo: si el nodo ya no es hijo, se ignora la
+ * operación en vez de lanzar. ponytail: el texto traducido puede quedarse
+ * desfasado hasta la siguiente navegación; es lo que hace cualquier sitio React.
+ */
+if (typeof Node === "function" && Node.prototype) {
+  const removeChild = Node.prototype.removeChild;
+  Node.prototype.removeChild = function <T extends Node>(this: Node, hijo: T): T {
+    if (hijo.parentNode !== this) return hijo;
+    return removeChild.call(this, hijo) as T;
+  };
+  const insertBefore = Node.prototype.insertBefore;
+  Node.prototype.insertBefore = function <T extends Node>(
+    this: Node,
+    nuevo: T,
+    referencia: Node | null,
+  ): T {
+    if (referencia && referencia.parentNode !== this) return nuevo;
+    return insertBefore.call(this, nuevo, referencia) as T;
+  };
+}
+
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
