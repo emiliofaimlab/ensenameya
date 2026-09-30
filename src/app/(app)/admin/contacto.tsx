@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, MessageCircleIcon } from "lucide-react";
 
 /**
  * Correo o teléfono del panel: se pulsa (abre `mailto:`/`tel:`) y se copia.
+ * El teléfono lleva además WhatsApp (`wa.me` quiere solo dígitos, sin el `+`).
  * Lo comparten las fichas de tutor y alumno y la revisión del tutor.
  */
 export function Contacto({
@@ -15,8 +16,8 @@ export function Contacto({
   valor: string;
 }) {
   const [copiado, setCopiado] = useState(false);
-  const href =
-    tipo === "correo" ? `mailto:${valor}` : `tel:${valor.replace(/[^\d+]/g, "")}`;
+  const digitos = valor.replace(/\D/g, "");
+  const href = tipo === "correo" ? `mailto:${valor}` : `tel:+${digitos}`;
 
   async function copiar() {
     try {
@@ -46,6 +47,18 @@ export function Contacto({
       >
         {copiado ? <CheckIcon className="size-3.5 text-green-600" /> : <CopyIcon className="size-3.5" />}
       </button>
+      {tipo === "telefono" ? (
+        <a
+          href={`https://wa.me/${digitos}`}
+          target="_blank"
+          rel="noreferrer noopener"
+          aria-label="Abrir en WhatsApp"
+          title="WhatsApp"
+          className="shrink-0 rounded p-1 text-[#6b6b6b] hover:bg-[#f2f2f2] hover:text-green-600"
+        >
+          <MessageCircleIcon className="size-3.5" />
+        </a>
+      ) : null}
     </span>
   );
 }
