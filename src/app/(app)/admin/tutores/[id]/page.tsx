@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { parseSocials, socialLabel } from "@/lib/socials";
 import {
   PanelCard,
@@ -10,6 +11,7 @@ import {
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { ADMIN_ITEMS } from "@/components/layout/app-sidebar";
+import { Contacto } from "../../contacto";
 import { DocumentReview, TierPicker, TutorReview, type ReviewDoc } from "./review-actions";
 import type { Database } from "@/lib/database.types";
 
@@ -47,6 +49,12 @@ export default async function AdminTutorPage({
 }) {
   await requireRole("admin");
   const { id } = await params;
+
+  // El correo vive en `auth.users`, que la API no expone: se pide aparte y en
+  // paralelo, sin esperar a la ficha. Si falla, la revisión sigue sin él.
+  const correoP = Promise.resolve()
+    .then(() => createAdminClient().auth.admin.getUserById(id))
+    .then(({ data }) => data.user?.email ?? null, () => null);
 
   const supabase = await createClient();
   // El `!tutor_profiles_profile_id_fkey` no es adorno: ver la nota de la lista
@@ -101,6 +109,7 @@ export default async function AdminTutorPage({
     isExternal: d.link_url !== null,
   }));
 
+  const correo = await correoP;
   const pill = APPROVAL_PILL[tutor.approval_status];
   // R29-02: la lista viene como `[{platform, url}]`; `parseSocials` sigue
   // entendiendo los perfiles viejos con forma `{instagram, linkedin}`.
@@ -153,12 +162,20 @@ export default async function AdminTutorPage({
                   </p>
                 </div>
               ) : null}
+              {correo ? (
+                <div className="min-w-0">
+                  <p className="text-xs text-[#6b6b6b]">Correo</p>
+                  <div className="mt-0.5">
+                    <Contacto tipo="correo" valor={correo} />
+                  </div>
+                </div>
+              ) : null}
               {tutor.profiles?.phone ? (
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-[#6b6b6b]">Teléfono</p>
-                  <p className="mt-0.5 text-[13px] font-medium text-[#404040]">
-                    {tutor.profiles.phone}
-                  </p>
+                  <div className="mt-0.5">
+                    <Contacto tipo="telefono" valor={tutor.profiles.phone} />
+                  </div>
                 </div>
               ) : null}
               {socialLinks.length ? (

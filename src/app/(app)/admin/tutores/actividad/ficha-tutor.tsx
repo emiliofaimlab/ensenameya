@@ -6,6 +6,7 @@ import Link from "next/link";
 import type { TutorTeachingRow } from "@/lib/admin/queries";
 import { formatMoney } from "@/lib/catalog/format";
 import { Button } from "@/components/ui/button";
+import { Contacto } from "../../contacto";
 import {
   Dialog,
   DialogContent,
@@ -102,11 +103,15 @@ export function FichaTutor({
 
           <div className="flex flex-col gap-5">
             <Bloque titulo="Contacto">
-              <Dato etiqueta="Correo" valor={t.correo ?? "Sin correo"} copiable />
+              <Dato
+                etiqueta="Correo"
+                valor={t.correo ?? "Sin correo"}
+                copiable={t.correo ? "correo" : undefined}
+              />
               <Dato
                 etiqueta="Teléfono"
                 valor={t.telefono ?? "Sin teléfono"}
-                copiable={!!t.telefono}
+                copiable={t.telefono ? "telefono" : undefined}
               />
               <Dato etiqueta="Zona horaria" valor={t.zonaHoraria ?? "—"} />
               <Dato etiqueta="Registro" valor={fecha(t.alta)} />
@@ -360,26 +365,23 @@ function Dato({
   etiqueta,
   valor,
   nota,
-  copiable = false,
+  copiable,
 }: {
   etiqueta: string;
   valor: string;
   nota?: string;
-  copiable?: boolean;
+  copiable?: "correo" | "telefono";
 }) {
   return (
     <div className="min-w-0">
       <p className="text-[11.5px] text-[#6b6b6b]">{etiqueta}</p>
-      <p
-        className={
-          copiable
-            ? "truncate select-all text-[13px] font-medium text-[#19191f]"
-            : "truncate text-[13px] font-medium text-[#404040]"
-        }
-        title={valor}
-      >
-        {valor}
-      </p>
+      {copiable ? (
+        <Contacto tipo={copiable} valor={valor} />
+      ) : (
+        <p className="truncate text-[13px] font-medium text-[#404040]" title={valor}>
+          {valor}
+        </p>
+      )}
       {nota ? <p className="mt-0.5 text-[11px] text-[#8a8a8a]">{nota}</p> : null}
     </div>
   );
