@@ -26,6 +26,13 @@ export function createClient(opciones?: { detectSessionInUrl?: boolean }) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     // `undefined` cae al default de la librería (`?? isBrowser()`), así que los
     // otros 29 llamadores no se enteran de que este parámetro existe.
-    { auth: { detectSessionInUrl: opciones?.detectSessionInUrl } },
+    {
+      auth: { detectSessionInUrl: opciones?.detectSessionInUrl },
+      // El latido de Realtime viene a 25 s, y un socket muerto en silencio solo
+      // se nota cuando falla el SIGUIENTE: 25-50 s sin enterarse (medido: 47 s
+      // en el chat de la sala, 2-oct). A 10 s, 10-20 s. Es un cliente único
+      // en el navegador, así que vale para todos los canales.
+      realtime: { heartbeatIntervalMs: 10_000 },
+    },
   );
 }

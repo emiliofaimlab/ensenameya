@@ -171,6 +171,12 @@ function AttachmentLink({ a, mine }: { a: Attachment; mine: boolean }) {
  * `send_conversation_message`, y el `toast` con su mensaje sigue ahí para
  * cuando la cuenta de aquí se quede corta.
  */
+/**
+ * Cada cuánto se pregunta por mensajes nuevos aunque el socket diga estar vivo.
+ * Es el peor caso de retraso con el socket muerto en silencio (antes, ~50 s).
+ */
+const SONDEO_MS = 4000;
+
 export function ChatThread({
   conversationId: conversationIdProp,
   bookingId,
@@ -400,10 +406,14 @@ export function ChatThread({
   // escribir en un ref durante el render está prohibido.
   const visibleRef = useRef(visible);
   const onIncomingRef = useRef(onIncoming);
+  // Lo que ya hay pintado, para que el canal sepa desde dónde preguntar sin
+  // tener `messages` en sus dependencias (lo rehará en cada mensaje).
+  const messagesRef = useRef(messages);
   useEffect(() => {
     visibleRef.current = visible;
     onIncomingRef.current = onIncoming;
-  }, [visible, onIncoming]);
+    messagesRef.current = messages;
+  }, [visible, onIncoming, messages]);
 
   // ── Resolver la conversación desde la reserva (pantallas viejas) ───────────
   useEffect(() => {
@@ -451,17 +461,91 @@ export function ChatThread({
     };
   }, [conversationIdProp, conversationId]);
 
-  // ── Realtime ───────────────────────────────────────────────────────────────
+  // ── Realtime + red de seguridad ────────────────────────────────────────────
   // Cada INSERT en messages de ESTA conversación. Para tablas con RLS hay que
   // autenticar el websocket con el JWT del usuario (`setAuth`) o los cambios no
   // llegan; la RLS de SELECT limita a sus conversaciones y el filtro la
   // estrecha a esta.
+  //
+  // ⚠️ Y NO BASTA CON EL SOCKET (Néstor, 2-oct: «delay HEAVY» en el chat de la
+  // sala). Medido en dev: con el socket vivo un mensaje llega en ~0,34 s; con
+  // el socket muerto EN SILENCIO —cambio de Wi-Fi, VPN, portátil suspendido,
+  // móvil en segundo plano— tardó 49 s, lo que tarda realtime-js en notar que
+  // el latido no vuelve. Mientras tanto no llega nada. Así que además se
+  // pregunta cada `SONDEO_MS` por lo nuevo (una consulta por índice que casi
+  // siempre vuelve vacía), y en el acto al volver la red o la pestaña.
+  // Broadcast no lo arregla: va por el MISMO socket y muere con él.
   useEffect(() => {
     if (!conversationId) return;
 
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
     let cancelled = false;
+    let enVuelo = false;
+
+    // Lo que ya se procesó, para que un mensaje que llega por DOS vías (socket
+    // y sondeo) no encienda dos veces la insignia de la sala.
+    const vistos = new Set(messagesRef.current.map((m) => m.id));
+    // Desde dónde preguntar. Solo avanza con filas leídas por REST: el eco
+    // optimista del emisor lleva la hora del NAVEGADOR, y un reloj adelantado
+    // haría que el sondeo se saltara mensajes.
+    let desde = messagesRef.current.reduce(
+      (max, m) => Math.max(max, Date.parse(m.createdAt) || 0),
+      0,
+    );
+
+    function recibir(rows: MessageRow[]) {
+      const nuevos = rows.filter((m) => !vistos.has(m.id));
+      if (cancelled || nuevos.length === 0) return;
+      for (const m of nuevos) vistos.add(m.id);
+      // Append con dedup (y no `append`): el efecto no debe depender de una
+      // función que se recrea en cada render.
+      setMessages((prev) => {
+        const ids = new Set(prev.map((x) => x.id));
+        const faltan = nuevos.filter((m) => !ids.has(m.id));
+        return faltan.length ? [...prev, ...faltan.map(toChatMessage)] : prev;
+      });
+      // N-23 · lo que llega con el hilo DELANTE se lee al llegar. Sin esto la
+      // marca se quedaría en el momento de abrir y esos mensajes volverían a
+      // contarse como pendientes en la siguiente visita.
+      //
+      // V-2 · y lo que llega con el hilo escondido, no. Ahí se avisa al padre
+      // para que encienda su insignia: es la sala con el panel plegado, donde
+      // el hilo sigue montado precisamente para no perder estos mensajes.
+      if (nuevos.some((m) => m.sender_id !== currentUserId)) {
+        if (visibleRef.current) void markConversationRead(conversationId!);
+        else onIncomingRef.current?.();
+      }
+    }
+
+    // `gte` y no `gt`: `desde` va truncado al milisegundo y Postgres guarda
+    // microsegundos. Lo repetido lo absorbe `vistos`.
+    async function sondear() {
+      if (cancelled || enVuelo) return;
+      enVuelo = true;
+      let q = supabase
+        .from("messages")
+        .select(MESSAGE_COLUMNS)
+        .eq("conversation_id", conversationId!)
+        .order("created_at");
+      if (desde) q = q.gte("created_at", new Date(desde).toISOString());
+      const { data } = await q;
+      enVuelo = false;
+      if (cancelled || !data) return;
+      const rows = data as MessageRow[];
+      for (const m of rows) desde = Math.max(desde, Date.parse(m.created_at) || 0);
+      recibir(rows);
+    }
+
+    const intervalo = setInterval(() => {
+      // Con la pestaña oculta no se gasta: al volver, `visibilitychange`.
+      if (!document.hidden) void sondear();
+    }, SONDEO_MS);
+    const alVolver = () => {
+      if (!document.hidden) void sondear();
+    };
+    window.addEventListener("online", alVolver);
+    document.addEventListener("visibilitychange", alVolver);
 
     void (async () => {
       const {
@@ -480,51 +564,22 @@ export function ChatThread({
             table: "messages",
             filter: `conversation_id=eq.${conversationId}`,
           },
-          (payload) => {
-            const m = payload.new as MessageRow;
-            // setMessages directo (y no `append`): el efecto no debe depender
-            // de una función que se recrea en cada render.
-            setMessages((prev) =>
-              prev.some((x) => x.id === m.id)
-                ? prev
-                : [...prev, toChatMessage(m)],
-            );
-            // N-23 · lo que llega con el hilo DELANTE se lee al llegar. Sin
-            // esto la marca se quedaría en el momento de abrir y esos mensajes
-            // volverían a contarse como pendientes en la siguiente visita.
-            //
-            // V-2 · y lo que llega con el hilo escondido, no. Ahí se avisa al
-            // padre para que encienda su insignia: es la sala con el panel
-            // plegado, donde el hilo sigue montado precisamente para no perder
-            // estos mensajes.
-            if (m.sender_id !== currentUserId) {
-              if (visibleRef.current) void markConversationRead(conversationId);
-              else onIncomingRef.current?.();
-            }
-          },
+          (payload) => recibir([payload.new as MessageRow]),
         )
-        // ⚠️ Realtime NO reenvía lo que se insertó con el socket caído (móvil
-        // en segundo plano, cambio de red, token renovado): al reconectar el
-        // canal vuelve a `SUBSCRIBED` y lo perdido no llega nunca. Pasó en prod
-        // el 21-sep: dos PDF guardados a las 21:03 que el otro vio a la mañana.
-        // Así que en cada (re)conexión se relee el hilo; el primer `SUBSCRIBED`
-        // cuesta una consulta de más y tapa también la ventana del montaje.
+        // ⚠️ Realtime NO reenvía lo que se insertó con el socket caído: al
+        // reconectar el canal vuelve a `SUBSCRIBED` y lo perdido no llega
+        // nunca (prod, 21-sep: dos PDF que el otro vio a la mañana). Por eso
+        // en cada (re)conexión se pregunta en el acto, sin esperar al sondeo.
         .subscribe((status) => {
-          if (status !== "SUBSCRIBED" || cancelled) return;
-          void supabase
-            .from("messages")
-            .select(MESSAGE_COLUMNS)
-            .eq("conversation_id", conversationId)
-            .order("created_at")
-            .then(({ data }) => {
-              if (cancelled || !data) return;
-              setMessages(data.map((m) => toChatMessage(m as MessageRow)));
-            });
+          if (status === "SUBSCRIBED") void sondear();
         });
     })();
 
     return () => {
       cancelled = true;
+      clearInterval(intervalo);
+      window.removeEventListener("online", alVolver);
+      document.removeEventListener("visibilitychange", alVolver);
       if (channel) supabase.removeChannel(channel);
     };
     // `currentUserId` no cambia en la vida del componente (viene del servidor):
