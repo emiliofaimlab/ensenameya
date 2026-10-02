@@ -406,7 +406,7 @@ export default async function ReservasPage() {
           <EmptyResults
             className="mt-3"
             message="Cuando reserves una mentoría, aquí verás su estado, su horario y su total."
-            action={{ href: "/classes", label: "Ver las mentorías disponibles" }}
+            action={{ href: "/mentorias", label: "Ver las mentorías disponibles" }}
             categories={conOferta}
           />
         </PanelCard>

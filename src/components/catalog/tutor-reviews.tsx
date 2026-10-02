@@ -151,7 +151,7 @@ function ReviewItem({
           y esto es texto, no un botón (WCAG AA pide 4.5:1). */}
       {withContext && r.productTitle && r.productId ? (
         <Link
-          href={`/products/${r.productId}`}
+          href={`/mentorias/${r.productId}`}
           className="-mt-1 text-xs font-medium text-[#0b4f96] hover:underline"
         >
           {r.productTitle}

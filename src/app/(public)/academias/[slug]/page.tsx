@@ -67,7 +67,7 @@ export async function generateMetadata({
  * reserva aquí crea el mismo `booking` contra el mismo tutor que si hubiera
  * entrado por `/tutores` (`docs/B2B-ACADEMIAS.md`).
  *
- * ⚠️ Las mentorías enlazan a `/products/<id>`, la ficha PÚBLICA, y no a
+ * ⚠️ Las mentorías enlazan a `/mentorias/<id>`, la ficha PÚBLICA, y no a
  * `/reservar/<id>`: esa vive en `(app)`, detrás de una guarda, y enlazarla a
  * mano desde `(public)` es justo lo que deja la pantalla en blanco con el
  * router pidiendo el RSC en bucle (regla de oro 13, mordió dos veces el
@@ -408,7 +408,7 @@ export default async function AcademyPage({
             /*
               Punto 9 (16-sep) · «Regalar esta mentoría», la TERCERA ficha con
               panel de reserva y la que se quedó fuera del lote. Misma forma que
-              en `/products/[id]` y `/tutores/[id]`.
+              en `/mentorias/[id]` y `/tutores/[id]`.
 
               🔴 Regla de oro 13 · `/regalar/mentoria/<id>` vive en `(app)` y
               empieza por `requireUser()`. Escribir esa ruta a mano en un

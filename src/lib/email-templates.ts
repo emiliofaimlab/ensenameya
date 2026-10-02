@@ -1594,7 +1594,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
   // `payload->>'booking_id'` (`20260911170000`, el lateral de la reserva), y un
   // crédito NO TIENE RESERVA todavía — ese es justo el punto del regalo: se
   // agenda después. Lo que el payload trae es `product_id`, que sirve de ENLACE
-  // (`/products/<id>` es público) pero NO de texto: un uuid no se le enseña a
+  // (`/mentorias/<id>` es público) pero NO de texto: un uuid no se le enseña a
   // nadie. Así que estos correos dicen «una mentoría» en genérico, que es lo
   // único cierto. El día que ese lateral aprenda a resolver un `product_id`
   // suelto, aquí ya hay `ficha`/`tarjetaClase` esperando.
@@ -2153,7 +2153,7 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
    *
    * ⚠️ `product_id` VIENE EN EL PAYLOAD Y NO SE USA, a propósito y por partida
    * doble: `anonymize_account` archiva las mentorías ANTES de insertar en
-   * `account_deletions`, así que `/products/{id}` ya da 404; y el título no
+   * `account_deletions`, así que `/mentorias/{id}` ya da 404; y el título no
    * llega por ningún lado, porque `pending_email_notifications` resuelve la
    * clase colgando de `booking_id` y un crédito no tiene reserva. Nombrar la
    * mentoría vieja sería además nombrar justo donde ya NO se gasta — la misma

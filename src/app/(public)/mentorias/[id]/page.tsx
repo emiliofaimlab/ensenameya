@@ -29,6 +29,7 @@ import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { ProductCard } from "@/components/catalog/product-card";
 import { ProductCover } from "@/components/catalog/product-cover";
 import { RegistrarVisita } from "@/components/catalog/registrar-visita";
+import { UrlCanonica } from "@/components/catalog/url-canonica";
 import { ShareButton } from "@/components/catalog/share-button";
 import { LEVELS, LANGUAGES } from "@/components/catalog/product-filters";
 import {
@@ -37,6 +38,8 @@ import {
 } from "@/components/catalog/tutor-reviews";
 import {
   getProductDetail,
+  productIdFrom,
+  productPath,
   listProductReviews,
   listTutorProducts,
   listTutorReviews,
@@ -120,8 +123,8 @@ export async function generateMetadata({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-  const product = await getProductDetail(id);
+  const id = await productIdFrom((await params).id);
+  const product = id ? await getProductDetail(id) : null;
   if (!product) return { title: "Mentoría" };
 
   const portada = storageUrl("product-images", product.imagePath);
@@ -131,7 +134,7 @@ export async function generateMetadata({
   const description =
     product.outcome ??
     `Mentoría 1:1 en vivo con ${product.tutor.displayName ?? "tu tutor"} en Enséñame Ya.`;
-  const url = `/products/${id}`;
+  const url = productPath(product);
 
   return {
     title: `${product.title} · Enséñame Ya`,
@@ -157,7 +160,10 @@ export default async function ProductPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ d?: string; h?: string; m?: string }>;
 }) {
-  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  const [{ id: param }, sp] = await Promise.all([params, searchParams]);
+  // `[id]` es el slug o el uuid (ver `productIdFrom`).
+  const id = await productIdFrom(param);
+  if (!id) notFound();
 
   /**
    * §5.8 · UNA sola tanda para todo lo que depende solo del id. Hasta hoy eran
@@ -266,7 +272,7 @@ export default async function ProductPage({
    *
    * Sin `url`: haría falta absoluta y la base del sitio vive en `metadataBase`,
    * que no se puede leer desde aquí. Un JSON-LD sin `url` es válido; uno con
-   * `url: "/products/…"` es basura que el validador rechaza.
+   * `url: "/mentorias/…"` es basura que el validador rechaza.
    */
   const jsonLd = {
     "@context": "https://schema.org",
@@ -330,7 +336,9 @@ export default async function ProductPage({
     if (next.h) q.set("h", next.h);
     if (next.m) q.set("m", next.m);
     const s = q.toString();
-    return s ? `/products/${id}?${s}#reservar` : `/products/${id}#reservar`;
+    return s
+      ? `${productPath(product)}?${s}#reservar`
+      : `${productPath(product)}#reservar`;
   };
 
   /**
@@ -373,6 +381,9 @@ export default async function ProductPage({
           en su perfil. No pinta nada y la sesión la comprueba él con
           `getSession()` (lectura local), así que no le pasamos la de arriba. */}
       <RegistrarVisita tutorId={product.tutor.id} origen="clase" />
+      {product.slug && param !== product.slug && (
+        <UrlCanonica path={productPath(product)} />
+      )}
 
       <script
         type="application/ld+json"
@@ -464,14 +475,14 @@ export default async function ProductPage({
                       Inicio
                     </Link>
                     <span className="shrink-0">/</span>
-                    <Link href="/classes" className="shrink-0 hover:underline">
+                    <Link href="/mentorias" className="shrink-0 hover:underline">
                       Mentorías
                     </Link>
                     {categoria ? (
                       <>
                         <span className="shrink-0">/</span>
                         <Link
-                          href={`/categories/${categoria.slug}`}
+                          href={`/categorias/${categoria.slug}`}
                           className="shrink-0 hover:underline"
                         >
                           {categoria.name}

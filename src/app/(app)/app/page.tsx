@@ -191,7 +191,7 @@ export default async function AppHome() {
               <Link href="/tutores">Explorar tutores</Link>
             </Button>
             <Button asChild variant="outline" className="h-10">
-              <Link href="/classes">Ver mentorías</Link>
+              <Link href="/mentorias">Ver mentorías</Link>
             </Button>
           </div>
         </PanelCard>
@@ -208,7 +208,7 @@ export default async function AppHome() {
               <p className="mt-4 text-[13px] text-[#6b6b6b]">
                 No tienes mentorías agendadas.{" "}
                 <Link
-                  href="/classes"
+                  href="/mentorias"
                   className="font-medium text-brand hover:underline"
                 >
                   Reserva la siguiente

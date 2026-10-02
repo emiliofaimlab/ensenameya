@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/client";
  * responsable que no existía en ninguna parte del proyecto.
  *
  * Se monta en la ficha del tutor (`/tutores/[id]`, `origen="tutor"`) y en la de
- * la mentoría (`/products/[id]`, `origen="clase"` — es la mitad «visitas a
+ * la mentoría (`/mentorias/[id]`, `origen="clase"` — es la mitad «visitas a
  * clases», la que no deja rastro en `bookings` porque no hubo compra). No pinta
  * nada.
  *

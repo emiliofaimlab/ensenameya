@@ -167,7 +167,7 @@ export default async function AboutPage() {
             desc: "Gestión de cobros y payouts con total claridad, transparencia y seguridad.",
           },
         ]}
-        cta={{ href: "/how-it-works", label: "Conoce cómo funciona" }}
+        cta={{ href: "/como-funciona", label: "Conoce cómo funciona" }}
         image={{
           src: "/img/about-outcome.jpg",
           alt: "Tutor explicando durante una sesión 1 a 1",

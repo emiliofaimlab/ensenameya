@@ -44,7 +44,7 @@ export const metadata = { title: "Regalar una mentoría · Enséñame Ya" };
  *      sorpresas caras si se cuentan después de cobrar, y la tercera es la
  *      única que trae fecha (`gift_expiry_days()`, ver `./gift-policy.ts`).
  *   2. **Elegir la mentoría.** Aquí no hay buscador nuevo: son las MISMAS
- *      consultas que pintan `/classes` (`listActiveProducts`) y el typeahead
+ *      consultas que pintan `/mentorias` (`listActiveProducts`) y el typeahead
  *      público (`searchProducts`), con las MISMAS tarjetas (`ProductCard`).
  *      Quién es visible —producto `active` y tutor `approved`— lo deciden las
  *      políticas RLS de `products`, no un `.eq()` copiado en esta carpeta; es
@@ -56,7 +56,7 @@ export const metadata = { title: "Regalar una mentoría · Enséñame Ya" };
  *      dinero.
  *
  * ⚠️ LA TARJETA SIGUE LLEVANDO A LA FICHA, Y ESO ES DELIBERADO. `ProductCard`
- * enlaza a `/products/<id>` por dentro y no se toca: antes de regalarle algo a
+ * enlaza a `/mentorias/<id>` por dentro y no se toca: antes de regalarle algo a
  * alguien conviene poder leer qué es, y la ficha pública es donde está el
  * temario, el tutor y las reseñas. El botón de «Regalar» va DEBAJO de la
  * tarjeta, como hermano y no como envoltorio — un `<Link>` alrededor de un
@@ -84,7 +84,7 @@ export default async function RegalarPage({
     diasParaAgendar(),
     listActiveCategories(),
     // Buscando manda `searchProducts` (una sola página, como el buscador
-    // público); sin término, el catálogo paginado de `/classes`.
+    // público); sin término, el catálogo paginado de `/mentorias`.
     termino
       ? searchProducts(termino, cat).then((products) => ({
           products,
@@ -239,7 +239,7 @@ export default async function RegalarPage({
                 : "No hay mentorías publicadas con esos filtros."
             }
             categories={categorias}
-            // Se queda en ESTA pantalla ya filtrada: salir a `/categories` para
+            // Se queda en ESTA pantalla ya filtrada: salir a `/categorias` para
             // volver a entrar es la peor salida, y además perdería el hilo del
             // regalo (RV-11, ver la cabecera de `EmptyResults`).
             hrefFor={(slug) => hrefCon({ cat: slug })}

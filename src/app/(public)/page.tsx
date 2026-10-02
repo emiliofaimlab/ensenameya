@@ -72,7 +72,7 @@ export default async function HomePage() {
       {/* B1.9 · Los tres puntos de esta sección pasan a ser CAJAS.
           Petición del cliente («cajas en la 2.ª sección»). El componente ya
           sabía pintarlas —es la variante con `desc`— pero solo la usaba P02
-          (`/about`); aquí eran filas de una línea. La diferencia es que una
+          (`/nosotros`); aquí eran filas de una línea. La diferencia es que una
           fila nombra la ventaja y una caja la explica, y esta es la sección
           donde se decide si la plataforma se entiende.
 

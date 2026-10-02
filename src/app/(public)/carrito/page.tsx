@@ -138,7 +138,7 @@ export default async function CarritoPage({
               </p>
             </div>
             <Button asChild className="h-[45px] px-6">
-              <Link href="/classes">Ver mentorías</Link>
+              <Link href="/mentorias">Ver mentorías</Link>
             </Button>
           </PanelCard>
         ) : (
@@ -696,7 +696,7 @@ function EstadoDeLinea({ l }: { l: CartResolvedLine }) {
           <span>
             Ese horario ya no está libre.{" "}
             <Link
-              href={`/products/${l.line.productId}#reservar`}
+              href={`/mentorias/${l.line.productId}#reservar`}
               className="font-semibold underline"
             >
               Elegir otro
@@ -712,7 +712,7 @@ function EstadoDeLinea({ l }: { l: CartResolvedLine }) {
           <span>
             Esa hora ya pasó.{" "}
             <Link
-              href={`/products/${l.line.productId}#reservar`}
+              href={`/mentorias/${l.line.productId}#reservar`}
               className="font-semibold underline"
             >
               Elegir otra
@@ -732,7 +732,7 @@ function EstadoDeLinea({ l }: { l: CartResolvedLine }) {
           <span>
             Se pisa con otra mentoría de tu carrito del mismo tutor.{" "}
             <Link
-              href={`/products/${l.line.productId}#reservar`}
+              href={`/mentorias/${l.line.productId}#reservar`}
               className="font-semibold underline"
             >
               Elegir otra hora

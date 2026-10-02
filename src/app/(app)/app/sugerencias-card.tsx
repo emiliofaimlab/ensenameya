@@ -46,7 +46,7 @@ export function SugerenciasCard({ data }: { data: PanelSuggestions }) {
           <p className="mt-1 text-[13px] text-[#6b6b6b]">{subtitulo}</p>
         </div>
         <Link
-          href="/classes"
+          href="/mentorias"
           className="flex shrink-0 items-center gap-1 text-[13px] font-semibold text-brand hover:underline"
         >
           Ver todas
@@ -81,7 +81,7 @@ export function SugerenciasCard({ data }: { data: PanelSuggestions }) {
               la señal de que hay más. */}
           <CategoryIconChips
             categories={data.conOferta}
-            hrefFor={(slug) => `/categories/${slug}`}
+            hrefFor={(slug) => `/categorias/${slug}`}
             tone="light"
             layout="strip"
             variant="text"

@@ -266,7 +266,7 @@ export function ProductCard({
             </div>
             {action === "ver" ? (
               <Link
-                href={`/products/${product.id}`}
+                href={`/mentorias/${product.id}`}
                 aria-label={`Ver detalle de ${product.title}`}
                 className="shrink-0 rounded-[8px] border-[1.5px] border-brand px-4 py-2 text-[13px] font-semibold text-brand transition-colors before:absolute before:inset-0 hover:bg-brand-muted"
               >
@@ -274,7 +274,7 @@ export function ProductCard({
               </Link>
             ) : (
               <Link
-                href={`/products/${product.id}`}
+                href={`/mentorias/${product.id}`}
                 aria-label={`Ver detalle de ${product.title}`}
                 className={`grid size-10 shrink-0 place-items-center rounded-full text-white transition-colors before:absolute before:inset-0 ${
                   accent === "brand"

@@ -42,6 +42,13 @@ export function toHeaderUser(
     name: profile.fullName?.trim() || metaName?.trim() || null,
     avatarUrl: storageUrl("avatars", profile.avatarPath),
     homeHref: asistente ?? pickHome(roles),
+    homeHrefs: asistente
+      ? {}
+      : {
+          alumno: pickHome(roles, { panel: "alumno" }),
+          tutor: pickHome(roles, { panel: "tutor" }),
+          admin: pickHome(roles, { panel: "admin" }),
+        },
     // Mientras quede asistente, «Mi cuenta» lleva ahí: `/account` vive bajo
     // `requireUser()` y rebotaría igual, pero por el camino que rompe.
     accountHref: asistente ?? "/account",

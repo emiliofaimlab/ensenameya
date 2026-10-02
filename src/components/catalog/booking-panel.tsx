@@ -534,7 +534,7 @@ export async function BookingPanel({
           sin clase elegida no hay precio en ninguna de las dos posiciones.
           V-5 · el plural «Reserva estas mentorías» va SOLO en la ficha del
           tutor CON VARIAS mentorías: es el único sitio donde hay varias entre
-          las que elegir. En `/products/[id]` llega un único producto, así que
+          las que elegir. En `/mentorias/[id]` llega un único producto, así que
           `single` lo fija y esa rama nunca se pinta. */}
       {/*
         B3.4 · ⚠️ EL ENCABEZADO YA NO DEPENDE DE `chosen`. Petición literal del
@@ -551,7 +551,7 @@ export async function BookingPanel({
         la pantalla**: es una propiedad de cuántos productos recibe el panel, no
         de lo que el visitante haya pulsado. Las tres combinaciones quedan así:
 
-          · `/products/[id]` (P08) → siempre `single` → «Reserva esta mentoría».
+          · `/mentorias/[id]` (P08) → siempre `single` → «Reserva esta mentoría».
             Igual que antes; ahí el título nunca cambió.
           · ficha del tutor con UNA mentoría → `single` la fija → su título,
             estable. Igual que antes.
@@ -585,7 +585,7 @@ export async function BookingPanel({
               no informa de nada y empuja el calendario hacia abajo.
 
               `details` es la señal exacta y no hace falta inventar otra: lo
-              pasa SOLO `/products/[id]` (P08), que es justamente la pantalla
+              pasa SOLO `/mentorias/[id]` (P08), que es justamente la pantalla
               donde el título ya está arriba. En la ficha del TUTOR con una
               sola mentoría no llega, y ahí el título sí hace falta: el H1 es el
               nombre del tutor. */}

@@ -44,7 +44,7 @@ export default async function SearchPage({
     : "todo";
   const sort: Sort = sp.sort === "rating" ? "rating" : "relevancia";
   // Filtro por categoría: llega al entrar a buscar desde una categoría concreta
-  // (`/categories/[slug]`). Acota tutores y mentorías; las categorías que casan
+  // (`/categorias/[slug]`). Acota tutores y mentorías; las categorías que casan
   // por texto dejan de tener sentido cuando ya estás dentro de una.
   const cat = sp.cat?.trim() || undefined;
 
@@ -345,7 +345,7 @@ export default async function SearchPage({
                     {matchedCategories.map((c) => (
                       <Link
                         key={c.slug}
-                        href={`/categories/${c.slug}`}
+                        href={`/categorias/${c.slug}`}
                         className="rounded-full border px-4 py-2 text-sm transition-colors hover:border-brand hover:text-brand"
                       >
                         {c.name}
@@ -379,7 +379,7 @@ export default async function SearchPage({
               return (
                 <li key={c.slug}>
                   <Link
-                    href={`/categories/${c.slug}`}
+                    href={`/categorias/${c.slug}`}
                     className="flex h-full flex-col items-center gap-2 rounded-[16px] bg-card p-5 text-center transition-transform hover:-translate-y-0.5"
                   >
                     <span className="grid size-12 place-items-center rounded-[12px] bg-brand-muted text-brand sm:rounded-full">

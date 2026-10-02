@@ -38,7 +38,12 @@ import { SignOutDialog } from "@/components/layout/sign-out-dialog";
 import type { FormatoHora } from "@/lib/hora";
 import { cn } from "@/lib/utils";
 import { panelDeCookie, ROLE_HOME } from "@/lib/auth/roles";
-import { isAdminRoute, isOnboardingRoute, panelFromPath } from "@/lib/panel";
+import {
+  isAdminRoute,
+  isOnboardingRoute,
+  panelFromPath,
+  type Panel,
+} from "@/lib/panel";
 
 /** Datos mínimos del usuario que necesita el header (sin tocar la sesión). */
 export type HeaderUser = {
@@ -58,6 +63,13 @@ export type HeaderUser = {
   /** Panel del usuario según su rol (lo resuelve `toHeaderUser` con pickHome).
    *  Con el onboarding a medias apunta al ASISTENTE, no al panel. */
   homeHref: string;
+  /**
+   * «Mi panel» por panel: a cuál volver si el último visitado fue éste
+   * (cookie `ey-panel`). Lo resuelve `pickHome` en servidor, así que cada
+   * valor ya pasó la comprobación de permisos — nunca apunta a una guarda que
+   * rebote (regla de oro 13). Vacío con el asistente a medias.
+   */
+  homeHrefs: Partial<Record<Panel, string>>;
   /**
    * A dónde lleva «Mi cuenta».
    *
@@ -83,8 +95,9 @@ export type HeaderUser = {
  * sincronizar con el server. Se reaprovecha el chip del registro ("Quiero
  * aprender / Quiero enseñar"), que es la idea que se propuso en la reunión.
  *
- * ponytail: sin memoria de la última elección — "Panel" sigue llevando al rol
- * más privilegiado. Se añade si molesta en uso real.
+ * «Mi panel» recuerda la última elección desde el 2-oct (Néstor: un admin que
+ * es tutor hacía la demo desde «Enseñar» y «Mi panel» le abría el admin con la
+ * pantalla compartida). Lee la misma cookie que este switch.
  *
  * US-1601 · el Figma «Mobile y Tablet» dibuja el avatar con su «▾» en los 115
  * frames pero NO dibuja ni uno solo del menú abierto, así que este switch no
@@ -175,16 +188,16 @@ const navGroups = [
     label: "Explorar",
     links: [
       { href: "/tutores", label: "Explorar tutores" },
-      { href: "/classes", label: "Explorar mentorías" },
-      { href: "/categories", label: "Categorías" },
+      { href: "/mentorias", label: "Explorar mentorías" },
+      { href: "/categorias", label: "Categorías" },
       { href: "/academias", label: "Academias" },
     ],
   },
   {
     label: "Nosotros",
     links: [
-      { href: "/about", label: "Sobre nosotros" },
-      { href: "/how-it-works", label: "¿Cómo funciona?" },
+      { href: "/nosotros", label: "Sobre nosotros" },
+      { href: "/como-funciona", label: "¿Cómo funciona?" },
     ],
   },
 ];
@@ -268,6 +281,14 @@ export function SiteHeader({
   formato?: FormatoHora;
 }) {
   const pathname = usePathname();
+  const panelCookie = useSyncExternalStore(
+    sinSuscripcion,
+    panelDeCookie,
+    sinCookieEnServidor,
+  );
+  const panelActual = panelFromPath(pathname) ?? panelCookie;
+  const homeHref =
+    (panelActual && user?.homeHrefs[panelActual]) || user?.homeHref || "/app";
   /**
    * Modo onboarding (AL01 180:1282 / TU01): sin "Panel" ni menú de cuenta, con
    * "Guardar y salir" a la derecha. Durante el asistente el resto del área
@@ -622,7 +643,7 @@ export function SiteHeader({
 
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href={user.homeHref}>
+                      <Link href={homeHref}>
                         <UserIcon />
                         Mi panel
                       </Link>
@@ -788,7 +809,7 @@ export function SiteHeader({
                             de cliente desde fuera de `(app)` deja la pantalla en
                             blanco — regla de oro 13. */}
                         <Link
-                          href={user.homeHref}
+                          href={homeHref}
                           onClick={closeMenu}
                           className={itemCajon}
                         >

@@ -53,7 +53,7 @@ export function CategoryIconChips({
   activeSlug,
   hrefFor,
   limit = 8,
-  moreHref = "/categories",
+  moreHref = "/categorias",
   tone = "hero",
   layout = "wrap",
   variant = "icon",

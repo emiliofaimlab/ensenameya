@@ -243,7 +243,7 @@ export default async function ConfirmacionPedidoPage({
             <Link href="/reservas">Ver mis reservas</Link>
           </Button>
           <Button asChild variant="outline" className="h-[45px] px-6">
-            <Link href={tumbado ? "/carrito" : "/classes"}>
+            <Link href={tumbado ? "/carrito" : "/mentorias"}>
               {tumbado ? "Volver al carrito" : "Seguir explorando"}
             </Link>
           </Button>

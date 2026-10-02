@@ -60,8 +60,8 @@ export type CategorySearchParams = {
 };
 
 /**
- * P06 · vista de categorías. Sirve a las **dos** rutas: `/categories` (sin
- * categoría fijada) y `/categories/[slug]` (con una activa). Es el mismo frame
+ * P06 · vista de categorías. Sirve a las **dos** rutas: `/categorias` (sin
+ * categoría fijada) y `/categorias/[slug]` (con una activa). Es el mismo frame
  * del Figma — lo único que cambia es si hay categoría seleccionada, que ahí el
  * chip se despliega y el listado sale filtrado.
  */
@@ -121,7 +121,7 @@ export async function CategoryExplorer({
     listActiveCategories(),
   ]);
 
-  const base = slug ? `/categories/${slug}` : "/categories";
+  const base = slug ? `/categorias/${slug}` : "/categorias";
   const buildHref = (
     next: ProductFilterState & {
       tema?: string;
@@ -151,7 +151,7 @@ export async function CategoryExplorer({
    * cambiar de categoría. `buildHref` no sirve aquí porque va atado a `base`.
    */
   const categoryHref = (s: string) =>
-    sort ? `/categories/${s}?sort=${sort}` : `/categories/${s}`;
+    sort ? `/categorias/${s}?sort=${sort}` : `/categorias/${s}`;
 
   const total = tab === "productos" ? products.total : tutors.total;
   const ratings = tutors.tutors
@@ -294,7 +294,7 @@ export async function CategoryExplorer({
             {" / "}
             {category ? (
               <>
-                <Link href="/categories" className="hover:underline">
+                <Link href="/categorias" className="hover:underline">
                   Categorías
                 </Link>
                 {" / "}

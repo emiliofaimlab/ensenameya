@@ -91,6 +91,8 @@ export type ProductCardData = {
 };
 
 export type ProductDetail = ProductCardData & {
+  /** `/mentorias/<slug>`; ver `productPath`. */
+  slug: string | null;
   description: string | null;
   tutor: ProductTutor & {
     bio: string | null;
@@ -504,6 +506,22 @@ export function tutorPath(t: { id: string; slug?: string | null }): string {
   return `/tutores/${t.slug ?? t.id}`;
 }
 
+/** Lo mismo que `tutorIdFrom`, para `/mentorias/[id]` (2-oct). */
+export const productIdFrom = cache(async (param: string): Promise<string | null> => {
+  if (UUID.test(param)) return param;
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("products")
+    .select("id")
+    .eq("slug", param)
+    .maybeSingle();
+  return data?.id ?? null;
+});
+
+export function productPath(p: { id: string; slug?: string | null }): string {
+  return `/mentorias/${p.slug ?? p.id}`;
+}
+
 export const getTutorDetail = cache(async (
   id: string,
 ): Promise<{ tutor: TutorCardData; products: ProductCardData[] } | null> => {
@@ -696,7 +714,7 @@ export const getProductDetail = cache(async (
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, faqs, requirements, level, language, tutor_id, product_categories(categories(slug, name, icon))",
+      "id, slug, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, faqs, requirements, level, language, tutor_id, product_categories(categories(slug, name, icon))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -730,6 +748,7 @@ export const getProductDetail = cache(async (
 
   return {
     id: p.id,
+    slug: p.slug,
     title: p.title,
     description: p.description,
     outcome: p.outcome,

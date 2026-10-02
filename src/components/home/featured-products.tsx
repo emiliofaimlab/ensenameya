@@ -51,7 +51,7 @@ export function FeaturedProducts({
               Mentorías destacadas listas para reservar
             </h2>
             <Link
-              href="/classes"
+              href="/mentorias"
               className="-my-3 shrink-0 py-3 text-[13px] font-medium whitespace-nowrap text-brand hover:underline sm:text-sm"
             >
               Ver todos →
@@ -154,7 +154,7 @@ export function FeaturedProducts({
                     </div>
 
                     <Link
-                      href={`/products/${p.id}`}
+                      href={`/mentorias/${p.id}`}
                       /* Tarjeta clickeable entera: el pseudo-elemento estira
                          este enlace hasta el `relative` del `<li>`. Ver
                          `catalog/product-card.tsx`. */

@@ -27,6 +27,14 @@ const nextConfig: NextConfig = {
     return [
       { source: "/tutors", destination: "/tutores", permanent: true },
       { source: "/tutors/:id", destination: "/tutores/:id", permanent: true },
+      // Y el resto del catálogo, el 2-oct (Néstor: «que no esté en inglés»).
+      // `/products/<uuid>` sigue sirviendo: la ficha acepta uuid o slug.
+      { source: "/classes", destination: "/mentorias", permanent: true },
+      { source: "/products/:id", destination: "/mentorias/:id", permanent: true },
+      { source: "/categories", destination: "/categorias", permanent: true },
+      { source: "/categories/:slug", destination: "/categorias/:slug", permanent: true },
+      { source: "/about", destination: "/nosotros", permanent: true },
+      { source: "/how-it-works", destination: "/como-funciona", permanent: true },
     ];
   },
 };

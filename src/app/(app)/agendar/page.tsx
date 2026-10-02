@@ -102,7 +102,7 @@ export default async function AgendarPage() {
               <Link href="/tutores">Explorar tutores</Link>
             </Button>
             <Button asChild variant="outline" className="h-10">
-              <Link href="/classes">Ver mentorías</Link>
+              <Link href="/mentorias">Ver mentorías</Link>
             </Button>
           </div>
         </PanelCard>

@@ -468,7 +468,7 @@ export default async function TutorProfilePage({
                 <>
                   {" / "}
                   <Link
-                    href={`/categories/${categoriaPrincipal.cat.slug}`}
+                    href={`/categorias/${categoriaPrincipal.cat.slug}`}
                     className="inline-block py-3 -my-3 hover:underline"
                   >
                     {categoriaPrincipal.cat.name}
@@ -806,7 +806,7 @@ export default async function TutorProfilePage({
                       >
                         <div className="min-w-0">
                           <Link
-                            href={`/categories/${cat.slug}`}
+                            href={`/categorias/${cat.slug}`}
                             className="text-[15px] font-medium text-[#2e2e2e] hover:underline"
                           >
                             {cat.name}

@@ -68,7 +68,7 @@ export function ChangeSlotLink({
    * perdida por el camino. Sin cuenta se vuelve a la ficha pública, que es de
    * donde salió y donde puede elegir otra hora.
    */
-  const destino = studentId ? `/reservar/${productId}` : `/products/${productId}`;
+  const destino = studentId ? `/reservar/${productId}` : `/mentorias/${productId}`;
 
   async function salir(e: React.MouseEvent<HTMLAnchorElement>) {
     // Sigue siendo un enlace de verdad: con ctrl/cmd/mayús o el botón central

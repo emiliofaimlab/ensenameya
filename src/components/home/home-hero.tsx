@@ -164,7 +164,7 @@ export function HomeHero({ categories }: { categories: CategoryTag[] }) {
                desde el borde cuando no (390). */
             className="justify-center-safe"
             categories={categories}
-            hrefFor={(slug) => `/categories/${slug}`}
+            hrefFor={(slug) => `/categorias/${slug}`}
             limit={0}
             layout="strip"
           />

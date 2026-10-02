@@ -101,7 +101,7 @@ export default async function ClassesPage({
     if (next.sort) p.set("sort", next.sort);
     if (next.page && next.page > 1) p.set("page", String(next.page));
     const q = p.toString();
-    return q ? `/classes?${q}` : "/classes";
+    return q ? `/mentorias?${q}` : "/mentorias";
   };
 
   /** ¿hay algo que quitar? El orden no cuenta: es una preferencia de vista, no
@@ -247,7 +247,7 @@ export default async function ClassesPage({
             <span aria-hidden className="hidden h-6 w-px bg-white/35 sm:block" />
 
             <Link
-              href="/categories"
+              href="/categorias"
               className="inline-flex items-center gap-1.5 text-[13px] font-medium text-white underline-offset-4 hover:underline"
             >
               Explorar por categoría

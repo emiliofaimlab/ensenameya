@@ -9,7 +9,7 @@ import { Container } from "@/components/layout/container";
  *
  * ⚠️ **Por qué se crea ahora:** hasta hoy este archivo NO EXISTÍA, ni aquí ni
  * anidado en ningún segmento, y en el repo hay **22 llamadas vivas a
- * `notFound()`** —desde `/tutores/[id]` y `/products/[id]` hasta media docena de
+ * `notFound()`** —desde `/tutores/[id]` y `/mentorias/[id]` hasta media docena de
  * pantallas de `/admin`—. Todas caían en el 404 por defecto de Next: fondo
  * blanco, sin cabecera, sin pie, sin marca y **en inglés** («This page could
  * not be found»). O sea que una de las salidas más frecuentes de la app era la

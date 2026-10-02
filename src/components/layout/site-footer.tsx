@@ -16,16 +16,16 @@ const columns = [
     title: "PRODUCTO",
     links: [
       { href: "/tutores", label: "Explorar tutores" },
-      { href: "/classes", label: "Explorar mentorías" },
-      { href: "/categories", label: "Categorías" },
+      { href: "/mentorias", label: "Explorar mentorías" },
+      { href: "/categorias", label: "Categorías" },
       { href: "/academias", label: "Academias" },
     ],
   },
   {
     title: "EMPRESA",
     links: [
-      { href: "/about", label: "Sobre nosotros" },
-      { href: "/how-it-works", label: "¿Cómo funciona?" },
+      { href: "/nosotros", label: "Sobre nosotros" },
+      { href: "/como-funciona", label: "¿Cómo funciona?" },
       { href: "/contacto", label: "Contacto" },
     ],
   },

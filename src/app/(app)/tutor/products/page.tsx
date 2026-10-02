@@ -409,7 +409,7 @@ export default async function TutorProductsPage() {
                             asChild
                             label={`Ver como alumno: ${p.title}`}
                           >
-                            <Link href={`/products/${p.id}`}>
+                            <Link href={`/mentorias/${p.id}`}>
                               <EyeIcon aria-hidden className="size-4" />
                             </Link>
                           </PanelIconButton>

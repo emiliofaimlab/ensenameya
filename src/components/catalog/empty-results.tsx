@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 export function EmptyResults({
   message,
   categories,
-  hrefFor = (slug) => `/categories/${slug}`,
+  hrefFor = (slug) => `/categorias/${slug}`,
   action,
   layout,
   variant,

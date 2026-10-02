@@ -77,7 +77,7 @@ export default async function CheckoutPage({
   // mandar ahí a un invitado es mandarlo a `/login`, que es la pantalla que esta
   // página existe para que no vea (mismo criterio que `ChangeSlotLink`).
   if (slots.length !== required) {
-    redirect(user ? `/reservar/${productId}` : `/products/${productId}`);
+    redirect(user ? `/reservar/${productId}` : `/mentorias/${productId}`);
   }
 
   // RN-01/RN-02 · la zona del alumno, resuelta en SERVIDOR. El checkout pintaba

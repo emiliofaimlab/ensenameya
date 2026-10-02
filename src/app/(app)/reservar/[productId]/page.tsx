@@ -128,13 +128,13 @@ export default async function ReservarPage({
      * buena sigue siendo el «Volver a la mentoría» de arriba, que es la que
      * lleva al sitio del que se vino.
      *
-     * De paso, esto iguala las dos caras de la misma tarea: `/products/[id]`
+     * De paso, esto iguala las dos caras de la misma tarea: `/mentorias/[id]`
      * resuelve la sesión suelta en una pantalla pública SIN menú, y el paquete
      * la resolvía con uno. Misma tarea, dos marcos.
      */
     <PanelShell
       sidebar={false}
-      back={{ href: `/products/${productId}`, label: "Volver a la mentoría" }}
+      back={{ href: `/mentorias/${productId}`, label: "Volver a la mentoría" }}
     >
       <div className="flex flex-col gap-1.5">
         {tutorName ? (

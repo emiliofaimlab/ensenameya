@@ -27,8 +27,8 @@ const GRUPOS_CON_GUARDA = [
 /** Rutas de ejemplo con parámetro: lo que `sitemap.ts` emite de verdad. */
 const DINAMICAS_PUBLICAS = [
   "/tutores/8f1c2d3e-0000-4000-8000-000000000001",
-  "/products/8f1c2d3e-0000-4000-8000-000000000002",
-  "/categories/matematicas",
+  "/mentorias/8f1c2d3e-0000-4000-8000-000000000002",
+  "/categorias/matematicas",
   "/academias/academia-ejemplo",
 ];
 

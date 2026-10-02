@@ -124,7 +124,7 @@ export function ProductCover({
           resolvería contra un alto que la caja no declara.
         · Pero un % a secas se desmadra al revés: la tarjeta tiene el alto
           clavado (140px) y el ancho elástico, así que en la rejilla de dos
-          columnas de `/classes` a ~424px el icono ocupaba dos tercios del alto.
+          columnas de `/mentorias` a ~424px el icono ocupaba dos tercios del alto.
           De ahí el `min()` con un tope en px sacado del alto declarado: la
           proporción queda en ~45 % del alto en las cuatro superficies.
         · Y el cuadrado lo pone un `span`, no el propio `<svg>`: lucide escribe
