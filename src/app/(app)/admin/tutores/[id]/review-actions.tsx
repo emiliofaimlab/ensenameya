@@ -268,3 +268,86 @@ export function TutorReview({
     </div>
   );
 }
+
+/**
+ * EY-213: el admin corrige la bio de un tutor, publicado o no. Escribe directo
+ * a `tutor_profiles` por la política `tutor_profiles_update_admin`; el grant de
+ * columna es lo que impide tocar aprobación o tier por aquí.
+ */
+export function BioEditor({ tutorId, bio }: { tutorId: string; bio: string | null }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [value, setValue] = useState(bio ?? "");
+
+  async function save() {
+    setBusy(true);
+    const { data, error } = await createClient()
+      .from("tutor_profiles")
+      .update({ bio: value.trim() || null })
+      .eq("profile_id", tutorId)
+      .select("profile_id");
+    setBusy(false);
+
+    // Sin la política, la RLS filtra la fila y el update "funciona" con 0 filas:
+    // se mira `data`, no solo `error`, o el admin vería un éxito que no ocurrió.
+    if (error || !data?.length) {
+      toast.error(error?.message || "No se pudo guardar la bio.");
+      return;
+    }
+    toast.success("Bio actualizada.");
+    setEditing(false);
+    router.refresh();
+  }
+
+  if (!editing) {
+    return (
+      <div className="mb-4">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-xs text-[#6b6b6b]">Bio</p>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-xs font-medium text-brand hover:underline"
+          >
+            Editar
+          </button>
+        </div>
+        <p className="mt-0.5 text-[13px] whitespace-pre-line text-[#4d4d4d]">
+          {bio || "Sin bio."}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-4 flex flex-col gap-2">
+      <label htmlFor="admin-bio" className="text-xs text-[#6b6b6b]">
+        Bio
+      </label>
+      <Textarea
+        id="admin-bio"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        rows={6}
+        disabled={busy}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={busy} onClick={save}>
+          Guardar
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => {
+            setValue(bio ?? "");
+            setEditing(false);
+          }}
+        >
+          Cancelar
+        </Button>
+      </div>
+    </div>
+  );
+}

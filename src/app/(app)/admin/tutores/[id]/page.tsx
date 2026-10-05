@@ -12,7 +12,7 @@ import {
 } from "@/components/layout/panel-shell";
 import { ADMIN_ITEMS } from "@/components/layout/app-sidebar";
 import { Contacto } from "../../contacto";
-import { DocumentReview, TierPicker, TutorReview, type ReviewDoc } from "./review-actions";
+import { BioEditor, DocumentReview, TierPicker, TutorReview, type ReviewDoc } from "./review-actions";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Revisar tutor · Enséñame Ya" };
@@ -144,14 +144,7 @@ export default async function AdminTutorPage({
 
             <hr className="my-4 border-[#e0e0e0]" />
 
-            {tutor.bio ? (
-              <div className="mb-4">
-                <p className="text-xs text-[#6b6b6b]">Bio</p>
-                <p className="mt-0.5 text-[13px] whitespace-pre-line text-[#4d4d4d]">
-                  {tutor.bio}
-                </p>
-              </div>
-            ) : null}
+            <BioEditor tutorId={tutor.profile_id} bio={tutor.bio} />
 
             <div className="flex flex-wrap gap-x-10 gap-y-4">
               {tutor.profiles?.timezone ? (
