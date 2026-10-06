@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import Link from "next/link";
-import { GraduationCapIcon, UsersIcon } from "lucide-react";
+import { GiftIcon, GraduationCapIcon, UsersIcon } from "lucide-react";
 
 import { requireUser, getUserTimezone } from "@/lib/auth/server";
 import { panelMenu } from "@/lib/auth/panel-items";
@@ -55,6 +55,8 @@ type Campaña = {
   audience: string;
   title: string;
   reward_text: string;
+  /** EY-216: lo que lee un tutor. `null` = lee `reward_text`. */
+  reward_text_tutores: string | null;
   visible: boolean;
   /**
    * Qué ofrece de verdad la campaña (`20260912110000`, §2). NO es `reward_text`,
@@ -239,7 +241,7 @@ export default async function ReferidosPage() {
     supabase
       .from("referral_campaigns")
       .select(
-        "rf_campaign_id, audience, title, reward_text, visible, reward_kind",
+        "rf_campaign_id, audience, title, reward_text, reward_text_tutores, visible, reward_kind",
       )
       .order("sort_order"),
     supabase
@@ -291,7 +293,14 @@ export default async function ReferidosPage() {
     console.error("[referidos] créditos", creditosRes.error.code, creditosRes.error.message);
 
   const todas: Campaña[] = campañasRes.data ?? [];
-  const visibles = todas.filter((c) => c.visible);
+  // EY-216 · «Que cada quien vea lo suyo» (Néstor, 6-oct): el tutor ve todas
+  // las campañas; el alumno, solo la de invitar alumnos. Por ROL y no por panel:
+  // un tutor también tiene `alumno`, y la tarjeta no debe cambiar según de qué
+  // panel venga.
+  const esTutor = roles.includes("tutor");
+  const visibles = todas.filter(
+    (c) => c.visible && (esTutor || c.audience === "alumnos"),
+  );
 
   const codigos = new Map<number, string>(
     (membershipsRes.data ?? []).map((m) => [m.rf_campaign_id, m.code] as const),
@@ -482,7 +491,7 @@ export default async function ReferidosPage() {
                           envuelve a dos líneas rompe la lectura (guía «Compact
                           Label Overflow»). */}
                       <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
-                        {c.reward_text}
+                        {(esTutor && c.reward_text_tutores) || c.reward_text}
                       </p>
                     </div>
                   </div>
@@ -516,6 +525,28 @@ export default async function ReferidosPage() {
                 </PanelCard>
               );
             })}
+            {/* EY-217 · No es un referido: es el programa del 90 % y va por
+                honor (Néstor, 6-oct): el tutor abre una hora gratis a la
+                semana y el admin le asigna el tier a mano. Nada lo comprueba.
+                ponytail: texto fijo aquí; si Néstor lo quiere editar, pasa a
+                una tabla con su pantalla en el admin. */}
+            {esTutor ? (
+              <PanelCard className="flex flex-col p-4 sm:p-5">
+                <div className="flex items-start gap-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
+                    <GiftIcon className="size-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <PanelCardTitle className="text-[16px]">
+                      Da una clase gratis a la semana
+                    </PanelCardTitle>
+                    <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
+                      Y eleva tu comisión total y de por vida al 90%.
+                    </p>
+                  </div>
+                </div>
+              </PanelCard>
+            ) : null}
           </div>
         )}
       </div>

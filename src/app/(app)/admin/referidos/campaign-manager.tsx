@@ -20,6 +20,8 @@ export type CampaignRow = {
   rfUrl: string;
   title: string;
   rewardText: string;
+  /** EY-216: lo que leen los tutores. Vacío = leen `rewardText`. */
+  rewardTextTutores: string;
   audience: Audiencia;
   visible: boolean;
   sortOrder: number;
@@ -100,6 +102,7 @@ type Reward = {
 type Draft = {
   title: string;
   rewardText: string;
+  rewardTextTutores: string;
   audience: Audiencia;
   visible: boolean;
   /** String y no number: es el valor crudo de un `<input type="number">`, que
@@ -177,6 +180,7 @@ export function CampaignManager({
     drafts[f.rfCampaignId] ?? {
       title: f.title,
       rewardText: f.rewardText,
+      rewardTextTutores: f.rewardTextTutores,
       audience: f.audience,
       visible: f.visible,
       sortOrder: String(f.sortOrder),
@@ -231,6 +235,7 @@ export function CampaignManager({
         body: JSON.stringify({
           title: d.title,
           reward_text: d.rewardText,
+          reward_text_tutores: d.rewardTextTutores,
           visible: d.visible,
           audience: d.audience,
           // Un campo vacío da `NaN`, que `JSON.stringify` convierte en `null`;
@@ -413,6 +418,23 @@ export function CampaignManager({
                               : d.rewardKind === "mentoria"
                                 ? `Se entrega: una mentoría de hasta ${previa} · ${d.rewardExpiresDays || "—"} días para agendarla.`
                                 : `Se entrega: ${previa} · a un alumno como saldo, con ${d.rewardExpiresDays || "—"} días; a un tutor, sumado a su próximo cobro y sin caducar.`}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <Label htmlFor={`recompensa-tutores-${f.rfCampaignId}`} className="text-xs text-[#6b6b6b]">
+                          Recompensa que leen los tutores (opcional)
+                        </Label>
+                        <Input
+                          id={`recompensa-tutores-${f.rfCampaignId}`}
+                          value={d.rewardTextTutores}
+                          placeholder="Vacío: leen la de arriba"
+                          onChange={(e) => cambiar(f, { rewardTextTutores: e.target.value })}
+                        />
+                        <p className="text-[12px] text-[#6b6b6b]">
+                          {d.audience === "alumnos"
+                            ? "Los alumnos leen la de arriba; los tutores, esta."
+                            : "Esta campaña solo la ven los tutores."}
                         </p>
                       </div>
 

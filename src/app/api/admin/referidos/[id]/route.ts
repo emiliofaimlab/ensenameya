@@ -190,6 +190,7 @@ export async function PATCH(
   const {
     title,
     reward_text,
+    reward_text_tutores,
     visible,
     audience,
     sort_order,
@@ -210,6 +211,13 @@ export async function PATCH(
   if (!recompensa) return mal("El texto de la recompensa no puede estar vacío.");
   if (recompensa.length > RECOMPENSA_MAX) {
     return mal(`La recompensa no puede pasar de ${RECOMPENSA_MAX} caracteres.`);
+  }
+
+  // EY-216 · opcional: vacío = los tutores leen `reward_text`.
+  const recompensaTutores =
+    typeof reward_text_tutores === "string" ? reward_text_tutores.trim() : "";
+  if (recompensaTutores.length > RECOMPENSA_MAX) {
+    return mal(`La recompensa de tutores no puede pasar de ${RECOMPENSA_MAX} caracteres.`);
   }
 
   if (typeof visible !== "boolean") return mal("«Visible» tiene que ser un booleano.");
@@ -362,6 +370,7 @@ export async function PATCH(
     .update({
       title: titulo,
       reward_text: recompensa,
+      reward_text_tutores: recompensaTutores || null,
       visible,
       audience,
       sort_order,

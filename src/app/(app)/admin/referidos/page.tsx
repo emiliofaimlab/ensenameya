@@ -132,7 +132,7 @@ export default async function AdminReferidosPage() {
     supabase
       .from("referral_campaigns")
       .select(
-        "rf_campaign_id, rf_name, rf_status, rf_lang, rf_url, title, reward_text, audience, visible, sort_order, synced_at, reward_kind, reward_amount, reward_currency, reward_expires_days",
+        "rf_campaign_id, rf_name, rf_status, rf_lang, rf_url, title, reward_text, reward_text_tutores, audience, visible, sort_order, synced_at, reward_kind, reward_amount, reward_currency, reward_expires_days",
       )
       .order("sort_order"),
     totales(),
@@ -172,6 +172,7 @@ export default async function AdminReferidosPage() {
     rfUrl: c.rf_url,
     title: c.title,
     rewardText: c.reward_text,
+    rewardTextTutores: c.reward_text_tutores ?? "",
     // `audience` es `text` con un `check` en la base, así que el tipo generado
     // es `string`. El check manda; esto solo lo estrecha para el selector.
     audience: c.audience === "tutores" ? "tutores" : "alumnos",

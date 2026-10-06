@@ -1866,6 +1866,7 @@ export type Database = {
           reward_expires_days: number
           reward_kind: string
           reward_text: string
+          reward_text_tutores: string | null
           rf_campaign_id: number
           rf_code: string
           rf_lang: string | null
@@ -1886,6 +1887,7 @@ export type Database = {
           reward_expires_days?: number
           reward_kind?: string
           reward_text: string
+          reward_text_tutores?: string | null
           rf_campaign_id: number
           rf_code: string
           rf_lang?: string | null
@@ -1906,6 +1908,7 @@ export type Database = {
           reward_expires_days?: number
           reward_kind?: string
           reward_text?: string
+          reward_text_tutores?: string | null
           rf_campaign_id?: number
           rf_code?: string
           rf_lang?: string | null
