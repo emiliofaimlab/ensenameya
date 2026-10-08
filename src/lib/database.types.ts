@@ -3289,6 +3289,7 @@ export type Database = {
         Args: { p_group_class: string; p_motivo?: string }
         Returns: number
       }
+      cancelar_grupales_sin_minimo: { Args: never; Returns: number }
       cargo_por_servicio: {
         Args: { p_base: number; p_pct: number }
         Returns: number
