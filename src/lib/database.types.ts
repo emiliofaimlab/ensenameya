@@ -3577,6 +3577,10 @@ export type Database = {
         Returns: boolean
       }
       pais_de_cobro_por_zona: { Args: { p_timezone: string }; Returns: string }
+      parte_del_tutor: {
+        Args: { p_devuelto: number; p_gross: number; p_importe: number }
+        Returns: number
+      }
       payout_account_check: {
         Args: {
           p_account: string
