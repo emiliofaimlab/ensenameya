@@ -67,7 +67,7 @@ al mergear a `main`.
 9. ⚠️ **`service_role` se salta la RLS, pero NO los `grant` de tabla.** Con "auto-expose new
    tables" OFF, un job con `service_role` come `permission denied` **en tiempo de ejecución**
    —no en el build, no en el typecheck— hasta que su migración declare
-   `grant … to service_role`. Mordió tres veces el 6-ago. Hoy lo hacen 61 de las 178
+   `grant … to service_role`. Mordió tres veces el 6-ago. Hoy lo hacen 76 de las 220
    migraciones. Tabla que toque un job = grant explícito, en la misma migración.
 10. ⚠️ **Una tabla puente nueva vuelve AMBIGUOS los embeds de PostgREST** entre las dos tablas
     que une, y la consulta se cae con `PGRST201` — no se degrada. `tutor_views`
@@ -131,7 +131,7 @@ al mergear a `main`.
 - **`provider` es `text`, no un enum**, para no acoplar el esquema a la lista de PSPs.
 - **Baja lógica sobre borrado físico** donde haya rastro financiero o legal.
 - `comment on table` / `comment on column` es como este repo transporta el porqué: lo hacen
-  85 de las 178 migraciones.
+  123 de las 220 migraciones.
 
 ## Pagos — manda el dictado
 
@@ -303,7 +303,13 @@ El interruptor de cobrar dinero real son las claves de Vercel, no las tablas.
 - **`docs/DICTADO-PAGOS.md`** — 🔴 manda en cobro y payout.
 - **`docs/PAGOS-Y-PAYOUTS.md`** — coste real de cada tramo y quién asume cada comisión.
 - **`docs/ACCESO-ADMIN-DEV.md`** — cómo entrar como admin en dev.
-- **`docs/B2B-ACADEMIAS.md`** — estudio del perfil «academia» (B2B). ⚠️ **Nada construido**: es viabilidad, no ejecución.
+- **`docs/PLAN-ACADEMIAS-Y-GRUPALES.md`** — 🟡 **en construcción** (2-oct-2026) en la rama
+  `feat/grupales-academias`, **solo en dev**. Deroga RN-22: las clases grupales entran en alcance y las
+  gobiernan sus reglas **RG-01…RG-21** (§3). Las de academias (RA-xx) siguen en `REQUERIMIENTOS.md`.
+  ⚠️ Esa rama **no se mergea a `dev` ni a `main`** hasta que se apruebe: el CI aplica migraciones a
+  prod desde las dos. Versiones vivas de lo que se reescribe: `docs/INVENTARIO-FASE-C.md`.
+- **`docs/B2B-ACADEMIAS.md`** — estudio del perfil «academia» (B2B). Lo **sustituye** `REQUERIMIENTOS.md`
+  vía el plan de arriba; queda como historia de la vitrina del 15-sep.
 
 ## Contexto profundo (lee el doc relevante, no los diez)
 

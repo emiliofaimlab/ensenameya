@@ -82,7 +82,7 @@ documentar opciones e impacto, y diseñar **sin acoplarse** a lo pendiente (regl
 | RISK-04 | La retención de payout afecta la caja del tutor | Baja | Bajo | **Baja** | **Cerrado por DP-02**: 7 días, y el tutor puede pedir su retiro él mismo (RN-40) sobre saldo con retención vencida. |
 | RISK-05 | Sobrecosto de Daily | Media | Medio | **Media** | El gasto es por **minuto-participante**, no por sala abierta: una sala con `exp` lejano y vacía no cuesta. Falta monitorizar minutos y poner alertas. La **grabación** sí está contratada y consume. |
 | RISK-06 | Coste por cuenta de Stripe escala con los tutores | Baja | Bajo | **Baja** | No hay cuenta conectada por tutor ni onboarding de Connect: la plataforma crea una cuenta de destinatario solo cuando ese riel va a ejecutar. |
-| RISK-07 | Confusión paquetes vs. clases grupales | Baja | Medio | **Baja** | **Cerrado** (D-02): paquete = N sesiones 1:1; grupal fuera (RN-22). |
+| RISK-07 | Confusión paquetes vs. clases grupales | Baja | Medio | **Baja** | **Reabierto el 2-oct-2026**: las grupales entran en alcance (RN-22 derogada). La separación se mantiene en el esquema: paquete = `per_package` con N sesiones 1:1, grupal = `group` con cupos (RG-01). Ver `docs/PLAN-ACADEMIAS-Y-GRUPALES.md`. |
 | RISK-08 | Referidos sin atribución | **Alta** | Medio | **Alta** | 🔴 **La atribución no existe.** La cookie `ey-ref` funciona y espera un `?ref=` que Referral Factory no manda; `profiles.referral_code` se escribe y no lo lee nadie. Antes de las reglas del programa (DP-04) hay que decidir si se construye el mecanismo. |
 | RISK-09 | Herramienta de email sin definir | — | — | **Cerrado del todo (10-sep)** | Resend (DP-05), con el **dominio propio verificado** y `EMAIL_FROM` puesto. Ya no queda nada colgando de la migración de dominio, que también se hizo. |
 | RISK-10 | El KYC manual se vuelve cuello de botella | Media | Medio | **Media** | Seis documentos (C-14) con cola y estados en el panel; diseñado para automatizar luego (RN-05). |
@@ -128,7 +128,7 @@ RISK-12 (la zona horaria decide el cobro), RISK-21 (conciliación) y RISK-23 (jo
 | ID | Tema | Estado |
 | :-- | :-- | :-- |
 | D-01 | Pagos: Stripe único → multi-proveedor | ✅ **Cerrado**: cuatro rieles, ruteo en datos, y quién cobra lo decide el país del alumno. |
-| D-02 | Paquetes vs. clases grupales | ✅ **Confirmado**: paquete = N sesiones 1:1; grupal fuera (RN-22). |
+| D-02 | Paquetes vs. clases grupales | 🟡 **Reabierto (2-oct-2026)**: paquete = N sesiones 1:1, sin cambios; **las grupales entran en alcance** y están en construcción (`docs/PLAN-ACADEMIAS-Y-GRUPALES.md`). |
 | D-03 | Referidos: lógica interna → integración externa | ✅ **Confirmado** en el diseño (RN-21), pero la **atribución no existe** → RISK-08. |
 | D-04 | Comisión única → Tutor Tiers | Enriquecimiento (RN-06/07). |
 | D-05 | Email: SendGrid → herramienta tras interfaz | ✅ **Cerrado**: el puerto se mantuvo y detrás quedó **Resend**. |

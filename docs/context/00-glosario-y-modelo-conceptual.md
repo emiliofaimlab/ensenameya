@@ -44,8 +44,8 @@ Este documento es la **fuente de verdad conceptual** de Enséñame Ya. Define el
 | **Producto** | Oferta vendible del tutor. **La etiqueta en pantalla es "Mentoría"**, en singular y plural, y no "Tutoría" ni "Clase". Pertenece a un tutor y a una o más categorías. Tiene un modelo de precio. |
 | **Modelo de precio** | Forma de cobro de un Producto: por sesión, por hora, o por paquete de N clases. |
 | **Resultado (outcome)** | Logro concreto que persigue un paquete (ej. "aprobar el examen X"). Eje de la propuesta de valor. |
-| **Paquete** | Modelo de precio = **N sesiones 1:1 de un único participante** con el tutor, hacia un resultado. **No** es clase grupal. |
-| **Clase grupal** | Sesión con varios alumnos a la vez. **Fuera de alcance del MVP** (no confundir con paquete). |
+| **Paquete** | Modelo de precio = **N sesiones 1:1 de un único participante** con el tutor, hacia un resultado. **No** es clase grupal (su equivalente grupal es el **ciclo**, RG-16). |
+| **Clase grupal** | Producto con `pricing_model = 'group'`: una o varias **fechas fijas** que publica el tutor, con cupo de 2 a 10 alumnos. Cada cupo es una reserva y un pago propios. **Entra en alcance el 2-oct-2026** y está **en construcción** (no confundir con paquete). Reglas RG-01…RG-21 en `docs/PLAN-ACADEMIAS-Y-GRUPALES.md` §3. |
 | **Disponibilidad** | Bloques horarios que el tutor publica para ser reservado. |
 | **Reserva (booking)** | Compra de un Producto por un alumno. Genera 1..N Sesiones y un Pago. |
 | **Sesión / Clase** | Instancia agendada de una clase 1:1: fecha, hora inicio/fin (mín. 30 min), sala de video, estado. Se guarda en UTC. |
@@ -146,7 +146,7 @@ Este documento es la **fuente de verdad conceptual** de Enséñame Ya. Define el
 | **RN-19** | Roles soportados: Alumno, Tutor, Admin; los permisos se aplican vía **RLS** en Supabase. |
 | **RN-20** | El descubrimiento ocurre por dos vías: **descubrir tutores** y **descubrir productos por categoría**. |
 | **RN-21** | **No se construye lógica interna de referidos.** Se configuran en plataforma externa (Referral Factory) y se **integran a nivel de frontend**; las reglas del programa son externas (`DP-04`). |
-| **RN-22** | Las **clases grupales** (varios alumnos en una sesión) están **fuera de alcance**; un "paquete" es N sesiones 1:1 de un único participante. |
+| **RN-22** | ~~Las clases grupales están fuera de alcance.~~ **Derogada el 2-oct-2026**: las clases grupales entran en alcance (reunión de desarrollo con Emilio) y las gobiernan las **RG-xx** de `docs/PLAN-ACADEMIAS-Y-GRUPALES.md` §3. Lo que sigue vigente: un "paquete" es N sesiones 1:1 de un único participante. |
 
 ---
 
@@ -199,6 +199,7 @@ salvaguarda anti-acoplamiento no solo se mantuvo, se usó. Detalle: `docs/DICTAD
 
 **✅ D-02 — Paquetes (confirmado por el cliente).**
 La propuesta §5 lista "Paquetes, clases grupales" como fuera de alcance. **Aclaración del cliente:** son cosas distintas. Un **paquete** = **varias sesiones de un único participante** con el tutor (hacia un resultado) → **SÍ entra** al MVP como modelo de precio. Una **clase grupal** = varios estudiantes en una misma sesión → **sigue fuera de alcance**. *Impacto:* el modelo de Producto soporta paquetes 1:1; no se construyen sesiones multi-alumno.
+⚠️ **Reabierta el 2-oct-2026:** las clases grupales **entran en alcance** (RN-22 derogada). El paquete 1:1 no cambia. Ver `docs/PLAN-ACADEMIAS-Y-GRUPALES.md`.
 
 **🟡 D-03 — Referidos (confirmado en el diseño, incompleto en el hecho).**
 La propuesta los incluye como integración (Referral Factory + Stripe; secciones 3, 4.4, 6, 11, 15). **Aclaración del cliente:** los referidos se configuran **directamente en una plataforma alterna** (Referral Factory) pero se **integran con el frontend** de la plataforma. Esto **evita construir lógica interna de referidos** y agiliza la configuración. *Impacto:* el desarrollo no implementa modelo de datos ni lógica de referidos; solo el **punto de integración en frontend** (ver Doc 6 / `S-11`). Las reglas del programa son externas (`DP-04`). ⚠️ **Lo que no está resuelto es la atribución**: la plataforma externa no devuelve al referido con un código, así que hoy nada dentro de la app sabe quién trajo a quién. Ver Doc 9, RISK-08.
