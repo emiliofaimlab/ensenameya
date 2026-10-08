@@ -3477,6 +3477,7 @@ export type Database = {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      hilo_grupal_caducado: { Args: { p_product: string }; Returns: boolean }
       home_stats: { Args: never; Returns: Json }
       home_testimonials: {
         Args: { p_limit?: number }
@@ -3631,6 +3632,10 @@ export type Database = {
       publicar_clase_grupal: {
         Args: { p_fechas: string[]; p_product: string }
         Returns: undefined
+      }
+      puede_ver_conversacion: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
       }
       purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
