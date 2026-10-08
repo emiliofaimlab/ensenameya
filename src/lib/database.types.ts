@@ -3615,6 +3615,10 @@ export type Database = {
         Args: { p_new_start: string; p_session_id: string }
         Returns: string
       }
+      publicar_clase_grupal: {
+        Args: { p_fechas: string[]; p_product: string }
+        Returns: undefined
+      }
       purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
       purge_tutor_views: { Args: never; Returns: Json }
