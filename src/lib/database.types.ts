@@ -3490,6 +3490,7 @@ export type Database = {
         }[]
       }
       iso_utc: { Args: { p_momento: string }; Returns: string }
+      join_group_class: { Args: { p_group_class: string }; Returns: Json }
       join_session: { Args: { p_session_id: string }; Returns: Json }
       liberar_credito_de_pago: {
         Args: { p_payment_id: string }
