@@ -62,15 +62,14 @@ función (`products_slug`), y no es ninguna de estas.
 - **Chat:** el frontend **no** embebe `conversations`; todo pasa por `my_conversations()` y
   las otras RPC. Darle a `conversations` una FK más (`group_product_id → products`) no rompe
   ninguna consulta de `src/`.
-- **`profiles ↔ academies`: ⚠️ ya hay una tabla puente.** `tutor_profiles` tiene FK a
-  `profiles` y a `academies`, así que para PostgREST ya une las dos. Crear `academy_members`
-  añade la segunda vía → cualquier embed `profiles ↔ academies` sin FK nombrada cae con
-  `PGRST201`. Hoy `src/` no hace ninguno (el catálogo lee `academies_public`), pero las
-  pantallas de A2/A3 deben nombrar la FK desde el primer día.
-- **Embeds sin nombrar a `profiles`:** solo dos, ambos por FK directa y sin puente posible:
-  `admin/notificaciones/queries.ts:102` y `admin/alertas/page.tsx:84` (payouts). Si
-  `payouts` gana `academy_id`, pasa a ser puente `profiles ↔ academies`: no rompe esos dos,
-  pero suma otra vía al punto anterior.
+- **Qué cuenta como puente para PostgREST:** solo una tabla cuyas FK forman parte de su
+  **clave primaria compuesta** (`tutor_views`, PK `(user_id, tutor_id)`, que fue la del
+  incidente). Las tablas con PK `id` no lo son: `group_classes` y `conversations` pueden
+  ganar FK sin volver ambiguo nada (corregido el 8-oct; la versión anterior de esta nota
+  decía que `tutor_profiles` ya era puente `profiles ↔ academies`, y no lo es).
+- **`academy_members` sí lo será** si nace con PK `(academy_id, profile_id)`: primer camino
+  muchos-a-muchos `profiles ↔ academies`. No hay otro hoy, así que no rompe nada al nacer,
+  pero el segundo que aparezca sí. Las pantallas de A2/A3 nombran la FK desde el primer día.
 - **Consultas a `products`:** 36 `from("products")` en 18 ficheros (el plan dice 35).
   Contando embeds `products(…)`, 72 en 38. La pasada de G2 recorre las 72.
 

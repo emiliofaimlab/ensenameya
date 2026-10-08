@@ -37,6 +37,8 @@ export function priceLabel(p: {
       return `${money} / hora`;
     case "per_package":
       return `${money}${p.packageNumSessions ? ` · ${p.packageNumSessions} sesiones` : ""}`;
+    case "group":
+      return `${money} / cupo`; // RG-02: precio fijo por cupo
   }
 }
 
@@ -53,6 +55,9 @@ export function modelLabel(p: {
       return "Por hora";
     case "per_package":
       return `Paquete · ${p.packageNumSessions ?? 1} sesiones`;
+    case "group":
+      // RG-16: con varias fechas es un ciclo; package_num_sessions = nº de fechas.
+      return (p.packageNumSessions ?? 1) > 1 ? `Grupal · ${p.packageNumSessions} fechas` : "Grupal";
   }
 }
 
@@ -217,6 +222,9 @@ export function priceDisplay(p: {
         isTotal: true,
       };
     }
+    case "group":
+      // RG-02: el cupo es el total del alumno, también en un ciclo (RG-16).
+      return { amount: tarifa, amountMinor: p.priceAmount, note: "por cupo", isTotal: true };
   }
 }
 
@@ -229,6 +237,8 @@ export function priceUnitLabel(p: { pricingModel: PricingModel }): string {
       return "hora";
     case "per_package":
       return "paquete";
+    case "group":
+      return "cupo";
   }
 }
 

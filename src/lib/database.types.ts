@@ -704,9 +704,11 @@ export type Database = {
           blocked_at: string | null
           blocked_reason: string | null
           created_at: string
+          group_product_id: string | null
           id: string
+          kind: string
           last_message_at: string | null
-          student_id: string
+          student_id: string | null
           tutor_id: string
           updated_at: string
         }
@@ -714,9 +716,11 @@ export type Database = {
           blocked_at?: string | null
           blocked_reason?: string | null
           created_at?: string
+          group_product_id?: string | null
           id?: string
+          kind?: string
           last_message_at?: string | null
-          student_id: string
+          student_id?: string | null
           tutor_id: string
           updated_at?: string
         }
@@ -724,13 +728,22 @@ export type Database = {
           blocked_at?: string | null
           blocked_reason?: string | null
           created_at?: string
+          group_product_id?: string | null
           id?: string
+          kind?: string
           last_message_at?: string | null
-          student_id?: string
+          student_id?: string | null
           tutor_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "conversations_group_product_id_fkey"
+            columns: ["group_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "conversations_student_id_fkey"
             columns: ["student_id"]
@@ -900,6 +913,72 @@ export type Database = {
             foreignKeyName: "google_calendar_connections_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_classes: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          daily_room_name: string | null
+          end_at: string
+          id: string
+          product_id: string
+          recordings_purged_at: string | null
+          rescheduled_at: string | null
+          sequence_no: number
+          start_at: string
+          status: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          daily_room_name?: string | null
+          end_at: string
+          id?: string
+          product_id: string
+          recordings_purged_at?: string | null
+          rescheduled_at?: string | null
+          sequence_no?: number
+          start_at: string
+          status?: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          daily_room_name?: string | null
+          end_at?: string
+          id?: string
+          product_id?: string
+          recordings_purged_at?: string | null
+          rescheduled_at?: string | null
+          sequence_no?: number
+          start_at?: string
+          status?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_classes_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_classes_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1724,6 +1803,7 @@ export type Database = {
         Row: {
           auto_accept_bookings: boolean
           cancellation_policy: Json | null
+          capacity: number | null
           created_at: string
           currency: string
           description: string | null
@@ -1732,6 +1812,7 @@ export type Database = {
           image_path: string | null
           language: string | null
           level: Database["public"]["Enums"]["teaching_level"] | null
+          min_seats: number | null
           outcome: string | null
           package_num_sessions: number | null
           price_amount: number
@@ -1750,6 +1831,7 @@ export type Database = {
         Insert: {
           auto_accept_bookings?: boolean
           cancellation_policy?: Json | null
+          capacity?: number | null
           created_at?: string
           currency: string
           description?: string | null
@@ -1758,6 +1840,7 @@ export type Database = {
           image_path?: string | null
           language?: string | null
           level?: Database["public"]["Enums"]["teaching_level"] | null
+          min_seats?: number | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount: number
@@ -1776,6 +1859,7 @@ export type Database = {
         Update: {
           auto_accept_bookings?: boolean
           cancellation_policy?: Json | null
+          capacity?: number | null
           created_at?: string
           currency?: string
           description?: string | null
@@ -1784,6 +1868,7 @@ export type Database = {
           image_path?: string | null
           language?: string | null
           level?: Database["public"]["Enums"]["teaching_level"] | null
+          min_seats?: number | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount?: number
@@ -2196,6 +2281,7 @@ export type Database = {
           daily_room_name: string | null
           daily_room_url: string | null
           end_at: string
+          group_class_id: string | null
           id: string
           recordings_purged_at: string | null
           sequence_no: number | null
@@ -2216,6 +2302,7 @@ export type Database = {
           daily_room_name?: string | null
           daily_room_url?: string | null
           end_at: string
+          group_class_id?: string | null
           id?: string
           recordings_purged_at?: string | null
           sequence_no?: number | null
@@ -2236,6 +2323,7 @@ export type Database = {
           daily_room_name?: string | null
           daily_room_url?: string | null
           end_at?: string
+          group_class_id?: string | null
           id?: string
           recordings_purged_at?: string | null
           sequence_no?: number | null
@@ -2252,6 +2340,13 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_group_class_id_fkey"
+            columns: ["group_class_id"]
+            isOneToOne: false
+            referencedRelation: "group_classes"
             referencedColumns: ["id"]
           },
           {
@@ -2652,6 +2747,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           faqs: Json
+          group_classes_enabled: boolean
           headline: string | null
           identity_verification_status: Database["public"]["Enums"]["identity_verification_status"]
           payout_country: string | null
@@ -2676,6 +2772,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           faqs?: Json
+          group_classes_enabled?: boolean
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
           payout_country?: string | null
@@ -2700,6 +2797,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           faqs?: Json
+          group_classes_enabled?: boolean
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
           payout_country?: string | null
@@ -3885,7 +3983,7 @@ export type Database = {
         | "paid"
         | "failed"
         | "on_hold"
-      pricing_model: "per_session" | "per_hour" | "per_package"
+      pricing_model: "per_session" | "per_hour" | "per_package" | "group"
       product_status: "draft" | "active" | "paused" | "archived"
       refund_request_status: "pending" | "refunded" | "skipped" | "failed"
       session_status:
@@ -4066,7 +4164,7 @@ export const Constants = {
         "failed",
         "on_hold",
       ],
-      pricing_model: ["per_session", "per_hour", "per_package"],
+      pricing_model: ["per_session", "per_hour", "per_package", "group"],
       product_status: ["draft", "active", "paused", "archived"],
       refund_request_status: ["pending", "refunded", "skipped", "failed"],
       session_status: [
