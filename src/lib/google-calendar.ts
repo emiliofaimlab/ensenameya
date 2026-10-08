@@ -109,7 +109,8 @@ const ESTADO = { confirmada: "confirmed", tentativa: "tentative", cancelada: "ca
 
 type Fila = {
   session_id: string;
-  booking_id: string;
+  /** null en el evento del tutor de una clase grupal: es de una FECHA, no de una reserva. */
+  booking_id: string | null;
   user_id: string;
   soy_tutor: boolean;
   refresh_token: string;
@@ -158,7 +159,10 @@ export async function sincronizar(
     const access = accesos.get(f.user_id);
     if (!access) continue;
 
-    const detalle = `${origin}${f.soy_tutor ? "/tutor" : ""}/reservas/${f.booking_id}`;
+    // ponytail: la fecha grupal enlaza al panel del tutor hasta que exista su ficha (G1).
+    const detalle = f.booking_id
+      ? `${origin}${f.soy_tutor ? "/tutor" : ""}/reservas/${f.booking_id}`
+      : `${origin}/tutor`;
     const evento = {
       id: eventId(f.session_id),
       summary: f.con ? `${f.titulo} · con ${f.con}` : f.titulo,
