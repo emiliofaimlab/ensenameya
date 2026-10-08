@@ -27,8 +27,8 @@ función (`products_slug`), y no es ninguna de estas.
 | `responder_reagenda(uuid, boolean)` | `20260925120000:190` | 1 | Grupales + academias |
 | `join_session(uuid)` | `20260828120000:69` | 4 | Grupales (gemela `join_group_class`) |
 | `close_expired_sessions()` | `20260828183000:68` | 3 | Grupales · ⚠️ cron, regla 11 |
-| `build_payout_for_tutor` | `20260912100000:482` | 3 | Academias (grupales lo verifica) |
-| `tutor_balance(integer)` | `20260912100000:1289` | 2 | Academias |
+| `build_payout_for_tutor` | `20260912100000:482` | 3 | Academias + 🔴 **grupales**: hoy solo paga `status = 'paid'`, y un ciclo con una fecha cancelada queda `partially_refunded` → el tutor no cobraría NADA del ciclo. Debe pagar `tutor_net · (N − k) / N` (ver `20261008180000`) |
+| `tutor_balance(integer)` | `20260912100000:1289` | 2 | Academias + grupales (mismo prorrateo que el payout) |
 | `aplicar_credito(uuid, uuid)` | `20260912110000:1591` | 2 | Grupales + academias |
 | `comprar_regalo` | `20260912110000:2138` | 1 | Grupales + academias |
 | `reembolsar_con_credito` | `20260912110000:900` | 1 | Solo se usa (`cancelar_fecha_grupal`): ¿importe parcial? |

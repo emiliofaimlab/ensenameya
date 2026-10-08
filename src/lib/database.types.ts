@@ -3281,6 +3281,14 @@ export type Database = {
         Args: { p_booking_id: string; p_reason?: string }
         Returns: Json
       }
+      cancelar_clase_grupal: {
+        Args: { p_motivo?: string; p_product: string }
+        Returns: number
+      }
+      cancelar_fecha_grupal: {
+        Args: { p_group_class: string; p_motivo?: string }
+        Returns: number
+      }
       cargo_por_servicio: {
         Args: { p_base: number; p_pct: number }
         Returns: number
