@@ -10,9 +10,10 @@
 -- | Cuenta              | Qué es                                                |
 -- | ga.tutor            | Tutor independiente. Aprobado, payout MX, 1 mentoría  |
 -- |                     | 1:1 y agenda L-V. Será el de grupales (RG-18)         |
--- | ga.alumno.ve/mx/es  | Tres alumnos. El PAÍS se elige en el checkout        |
--- |                     | (`payer_country`), no en el perfil: VE → Stripe,      |
--- |                     | MX → dLocal, ES → Stripe (fila por defecto)           |
+-- | ga.alumno.ve/mx/es  | Tres alumnos. Su PAÍS de cobro sale de la ZONA       |
+-- |                     | HORARIA del perfil (`pais_de_cobro_por_zona`, en      |
+-- |                     | create_booking_line), así que la zona NO es decorado: |
+-- |                     | VE → Stripe, MX → dLocal, ES → Stripe (por defecto)   |
 -- | ga.academia.admin   | Futuro administrador de «Academia Piloto»            |
 -- | ga.academia.tutor1/2| Tutores de la academia (`tutor_profiles.academy_id`) |
 -- | ga.lista.1 … 5      | Alumnos que irán en la lista de la academia           |
