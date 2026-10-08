@@ -3631,6 +3631,10 @@ export type Database = {
       purge_expired_messages: { Args: never; Returns: Json }
       purge_tutor_views: { Args: never; Returns: Json }
       quitar_credito: { Args: { p_booking_id: string }; Returns: Json }
+      reagendar_clase_grupal: {
+        Args: { p_group_class: string; p_nuevo_inicio: string }
+        Returns: undefined
+      }
       reclamar_mis_regalos: { Args: never; Returns: number }
       reclamar_regalos_por_correo: { Args: { p_user: string }; Returns: number }
       record_terms_acceptance: {
