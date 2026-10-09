@@ -59,6 +59,8 @@ const TEXT: Record<string, string> = {
   payment_failed: "Un pago no se pudo cobrar",
   booking_confirmed_student: "Tu reserva quedó confirmada",
   booking_new_tutor: "Tienes una reserva nueva por aceptar",
+  group_enrolled_student: "Tu inscripción en la clase grupal quedó confirmada",
+  group_enrolled_tutor: "Alguien se inscribió en tu clase grupal",
   cancellation: "Se canceló una reserva",
   refund_processed: "Se procesó un reembolso",
   review_request: "¿Cómo te fue? Deja tu reseña",
@@ -207,7 +209,11 @@ export function rutaFor(
 
   // NTF-07 y NTF-17 · la reserva vista DESDE EL TUTOR, que es otra pantalla y
   // otras acciones (aceptar / rechazar, no pagar / cancelar / reseñar).
-  if (template === "booking_new_tutor" || template === "booking_expiring_tutor") {
+  if (
+    template === "booking_new_tutor" ||
+    template === "booking_expiring_tutor" ||
+    template === "group_enrolled_tutor"
+  ) {
     return typeof bookingId === "string" ? `/tutor/reservas/${bookingId}` : "/tutor/reservas";
   }
 

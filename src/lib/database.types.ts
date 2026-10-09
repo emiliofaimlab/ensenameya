@@ -2598,6 +2598,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "sessions_group_class_id_fkey"
+            columns: ["group_class_id"]
+            isOneToOne: false
+            referencedRelation: "group_classes_public"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sessions_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -3278,6 +3285,26 @@ export type Database = {
         }
         Relationships: []
       }
+      group_classes_public: {
+        Row: {
+          capacity: number | null
+          cupos_libres: number | null
+          end_at: string | null
+          id: string | null
+          product_id: string | null
+          sequence_no: number | null
+          start_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_classes_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mis_creditos: {
         Row: {
           amount: number | null
@@ -3657,6 +3684,7 @@ export type Database = {
           usable: boolean
         }[]
       }
+      cupos_libres: { Args: { p_product: string }; Returns: number }
       datos_de_cobro_del_tutor: { Args: { p_tutor: string }; Returns: Json }
       delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
       destino_connect: { Args: { p_payout_id: string }; Returns: string }
@@ -3745,6 +3773,14 @@ export type Database = {
           context: string
           id: string
           rating: number
+        }[]
+      }
+      inscritos_de_clase: {
+        Args: { p_product: string }
+        Returns: {
+          avatar_path: string
+          es_tutor: boolean
+          nombre: string
         }[]
       }
       iso_utc: { Args: { p_momento: string }; Returns: string }

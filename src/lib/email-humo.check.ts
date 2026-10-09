@@ -108,6 +108,8 @@ const PAYLOADS: Record<string, Record<string, unknown>> = {
   booking_new_tutor: { booking_id: "b7f3a91c" },
   booking_expiring_tutor: { booking_id: "b7f3a91c" },
   booking_confirmed_student: { booking_id: "b7f3a91c" },
+  group_enrolled_student: { booking_id: "b7f3a91c" },
+  group_enrolled_tutor: { booking_id: "b7f3a91c" },
   booking_reminder_24h: { booking_id: "b7f3a91c", session_id: "s-2231" },
   session_starting: { booking_id: "b7f3a91c", session_id: "s-2231" },
   cancellation: { booking_id: "b7f3a91c" },

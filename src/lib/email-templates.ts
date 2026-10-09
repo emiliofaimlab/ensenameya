@@ -751,6 +751,79 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     };
   },
 
+  /**
+   * NTF-56 · clases grupales (RG-06): el alumno pagó su cupo. Sustituye a
+   * `booking_confirmed_student` en grupales, que dice «el tutor aceptó tu
+   * reserva»: en una grupal no acepta nadie (RG-07). Lleva el aviso de
+   * privacidad de RG-19 porque es el primer sitio donde el alumno lo lee
+   * después de pagar.
+   */
+  group_enrolled_student: (x) => {
+    const d = dia(x.c.inicio, x.tz);
+    return {
+      asunto: x.c.clase ? `Inscripción confirmada: ${x.c.clase}` : "Tu inscripción está confirmada",
+      familia: "ok",
+      epigrafe: "Clase grupal",
+      titulo: "Tienes tu cupo",
+      preheader: d ? `Tu cupo está reservado. La primera fecha es el ${d}.` : "Tu cupo está reservado.",
+      motivo: "Recibes este correo porque te inscribiste en una clase grupal.",
+      cuerpo: [
+        parrafo(
+          "Tu pago está hecho y tu cupo, reservado. Es una clase grupal: compartes la sala con el tutor y con los demás inscritos.",
+        ),
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: x.c.tutor,
+          cuando: cuando(x.c.inicio, x.tz),
+          duracion: duracion(x.c.duracion_min),
+          acento: VERDE,
+          fondo: "#e9f7ef",
+        }),
+        parrafo(
+          "El botón para entrar a la sala se activa <strong>10 minutos antes</strong> de cada fecha. En la página de tu inscripción tienes todas las fechas y el chat del grupo.",
+          { top: 18 },
+        ),
+        boton("Ver mi inscripción", x.url),
+        nota(
+          "Los demás inscritos ven tu nombre y tu foto en la sala y en el chat del grupo. La clase se graba y la grabación la ven todos los inscritos durante 30 días.",
+        ),
+      ],
+    };
+  },
+
+  /**
+   * NTF-51 · clases grupales: un alumno pagó su cupo. Sustituye a
+   * `booking_new_tutor` en grupales, que pide «aceptar o rechazar» con un
+   * plazo de 24 h que en una grupal no existe (RG-07).
+   */
+  group_enrolled_tutor: (x) => {
+    const corto = cuandoCorto(x.c.inicio, x.tz);
+    return {
+      asunto: con("Nuevo inscrito en tu clase grupal", corto),
+      familia: "clase",
+      epigrafe: "Clase grupal",
+      titulo: "Alguien se inscribió en tu clase",
+      preheader: x.c.alumno
+        ? `${primerNombre(x.c.alumno)} se inscribió y ya pagó su cupo.`
+        : "Un alumno se inscribió y ya pagó su cupo.",
+      motivo: "Recibes este correo porque eres tutor en Enséñame Ya.",
+      cuerpo: [
+        parrafo(
+          "Un alumno se inscribió y <strong>ya pagó su cupo</strong>. No tienes que aceptar nada: la clase sigue como la publicaste.",
+        ),
+        persona(x.c.alumno, "Alumno"),
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: "Tú",
+          cuando: cuando(x.c.inicio, x.tz),
+          duracion: duracion(x.c.duracion_min),
+          importe: netoTutor(x),
+        }),
+        boton("Ver la inscripción", `${x.base}/tutor/reservas/${x.p?.booking_id ?? ""}`),
+      ],
+    };
+  },
+
   booking_reminder_24h: (x) => {
     const h = hora(x.c.inicio, x.tz);
     const dias = diasHasta(x.c.inicio, x.tz, x.ahora);
