@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { EyeIcon, PencilIcon, TriangleAlertIcon } from "lucide-react";
+import { EyeIcon, PencilIcon, TriangleAlertIcon, UsersIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
@@ -277,7 +277,10 @@ export default async function TutorProductsPage() {
                 label: p.status,
                 tone: "neutral" as const,
               };
-              const huerfana = sinHorario(p.id);
+              const grupal = p.pricing_model === "group";
+              // G1 · una grupal no usa las franjas semanales: sus horas son
+              // sus fechas. El aviso de «sin franja» no le aplica.
+              const huerfana = !grupal && sinHorario(p.id);
               return (
                 <li key={p.id} data-f={filtrosDe(p.status)}>
                   <PanelCard>
@@ -338,9 +341,11 @@ export default async function TutorProductsPage() {
                             es justo antes de publicar cuando conviene mirarlo. */}
                           <div className="mt-2 flex flex-wrap items-center gap-2">
                             <StatusPill tone="gray">
-                              {p.auto_accept_bookings
-                                ? "Automática"
-                                : "Aceptación manual"}
+                              {grupal
+                                ? "Clase grupal"
+                                : p.auto_accept_bookings
+                                  ? "Automática"
+                                  : "Aceptación manual"}
                             </StatusPill>
                             {/* N-15 · la píldora decide su altura: nada de `h-*`. */}
                             <StatusPill tone={pill.tone}>
@@ -436,6 +441,16 @@ export default async function TutorProductsPage() {
                             </button>
                           </PanelIconButton>
                         )}
+                        {grupal ? (
+                          <PanelIconButton
+                            asChild
+                            label={`Fechas e inscritos: ${p.title}`}
+                          >
+                            <Link href={`/tutor/clases-grupales/${p.id}`}>
+                              <UsersIcon aria-hidden className="size-4" />
+                            </Link>
+                          </PanelIconButton>
+                        ) : null}
                         <PanelIconButton
                           asChild
                           label={`Editar mentoría: ${p.title}`}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EyeIcon, VideoIcon } from "lucide-react";
+import { EyeIcon, UsersIcon, VideoIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
@@ -179,6 +179,7 @@ export default async function TutorHomePage() {
     students,
     tier,
     monedaDeCobro,
+    { data: proximasGrupales },
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
@@ -200,6 +201,10 @@ export default async function TutorHomePage() {
         "id, start_at, end_at, status, booking_id, student_id, access_opens_at, access_closes_at, bookings(products(title))",
       )
       .eq("tutor_id", userId)
+      // G1 · las sesiones de una clase grupal son una por ALUMNO a la misma
+      // hora: aquí saldrían repetidas y se comerían el `limit`. La fecha
+      // grupal llega aparte, una sola vez (`proximasGrupales`).
+      .is("group_class_id", null)
       .in("status", ["scheduled", "in_progress"])
       // Se filtra por el FIN, no por el inicio: una clase que empezó hace un
       // rato sigue en curso, y desaparecer del panel dejaría al tutor creyendo
@@ -268,6 +273,15 @@ export default async function TutorHomePage() {
     // ninguna de las otras: por dentro hace sus propias lecturas en paralelo y
     // está memoizada con `cache()`, así que la petición la resuelve una vez.
     monedaDeCobroDelTutor(userId),
+    // G1 · sus próximas fechas grupales, una fila por fecha, con el cupo y los
+    // libres ya contados por la vista (`group_classes_public`).
+    supabase
+      .from("group_classes_public")
+      .select("id, product_id, start_at, end_at, capacity, cupos_libres, title")
+      .eq("tutor_id", userId)
+      .gte("end_at", new Date().toISOString())
+      .order("start_at")
+      .limit(10),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -285,7 +299,21 @@ export default async function TutorHomePage() {
   const firstName = profile?.profiles?.full_name?.split(" ")[0];
   const aviso = APPROVAL_PILL[approvalStatus];
 
-  const sesiones = nextSessions ?? [];
+  // 1:1 y fechas grupales en UNA lista por hora: la tarjeta es «Próximas
+  // sesiones» y el tutor da las dos.
+  const sesiones = [
+    ...(nextSessions ?? []).map((s) => ({ ...s, grupal: null })),
+    ...(proximasGrupales ?? []).map((g) => ({
+      id: g.id!,
+      start_at: g.start_at!,
+      grupal: {
+        productId: g.product_id!,
+        titulo: g.title ?? "Clase grupal",
+        ocupados: (g.capacity ?? 0) - (g.cupos_libres ?? 0),
+        cupo: g.capacity ?? 0,
+      },
+    })),
+  ].sort((a, b) => a.start_at.localeCompare(b.start_at));
   const porAceptar = pendientes ?? [];
   // El total de la consulta, no el de la página: la lista enseña 5 y el
   // contador del menú cuenta la tabla entera. Si divergieran, el menú diría 7
@@ -628,7 +656,36 @@ export default async function TutorHomePage() {
               </div>
             ) : (
               <ul className="mt-2 divide-y divide-[#e0e0e0]">
-                {sesiones.slice(0, 5).map((s) => (
+                {sesiones.slice(0, 5).map((s) =>
+                  s.grupal ? (
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3 last:pb-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p
+                          title={s.grupal.titulo}
+                          className="truncate text-[13px] font-semibold text-[#19191f]"
+                        >
+                          {s.grupal.titulo}
+                        </p>
+                        <p className="flex items-center gap-1 truncate text-xs text-[#404040]">
+                          <UsersIcon className="size-3.5 shrink-0" aria-hidden />
+                          Clase grupal · {s.grupal.ocupados}/{s.grupal.cupo} inscritos
+                        </p>
+                        <p className="text-[11.5px] text-[#6b6b6b] first-letter:uppercase">
+                          {cuando(s.start_at, tz, formato)}
+                        </p>
+                      </div>
+                      {/* La sala grupal llega en G3 (`join_group_class`); hasta
+                          entonces, la ficha de la clase. */}
+                      <PanelIconButton asChild label="Ver clase">
+                        <Link href={`/tutor/clases-grupales/${s.grupal.productId}`}>
+                          <EyeIcon className="size-4" />
+                        </Link>
+                      </PanelIconButton>
+                    </li>
+                  ) : (
                   <li
                     key={s.id}
                     className="flex flex-wrap items-center justify-between gap-3 py-3 last:pb-0"
@@ -699,7 +756,8 @@ export default async function TutorHomePage() {
                       </PanelIconButton>
                     </div>
                   </li>
-                ))}
+                  ),
+                )}
               </ul>
             )}
           </PanelCard>

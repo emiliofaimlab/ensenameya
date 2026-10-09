@@ -3294,6 +3294,8 @@ export type Database = {
           product_id: string | null
           sequence_no: number | null
           start_at: string | null
+          title: string | null
+          tutor_id: string | null
         }
         Relationships: [
           {
@@ -3301,6 +3303,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_classes_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
+import { getUserTimezone } from "@/lib/auth/server";
 import { parseRequirements } from "@/lib/product-requirements";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { ProductForm } from "../../product-form";
@@ -24,11 +25,13 @@ export default async function EditProductPage({
     { data: materials },
     { data: rules },
     { data: ruleLinks },
+    { count: fechasGrupales },
+    tz,
   ] = await Promise.all([
       supabase
         .from("products")
         .select(
-          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, start_time_increment_min, package_num_sessions, image_path, faqs, requirements, level, language, auto_accept_bookings, product_categories(category_id)",
+          "id, title, description, outcome, pricing_model, price_amount, session_duration_min, start_time_increment_min, package_num_sessions, image_path, faqs, requirements, level, language, auto_accept_bookings, capacity, min_seats, product_categories(category_id)",
         )
         .eq("id", id)
         .eq("tutor_id", userId)
@@ -62,6 +65,12 @@ export default async function EditProductPage({
         .from("product_availability_rules")
         .select("rule_id")
         .eq("product_id", id),
+      // G1 · ¿la grupal ya tiene fechas? Entonces se gestionan en su ficha.
+      supabase
+        .from("group_classes")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", id),
+      getUserTimezone(),
     ]);
 
   if (!product) notFound();
@@ -79,6 +88,8 @@ export default async function EditProductPage({
         availabilityRules={rules ?? []}
         materials={materials ?? []}
         isApproved={approvalStatus === "approved"}
+        groupPublished={(fechasGrupales ?? 0) > 0}
+        timezone={tz}
         product={{
           id: product.id,
           title: product.title,
@@ -89,6 +100,8 @@ export default async function EditProductPage({
           sessionDurationMin: product.session_duration_min,
           startTimeIncrementMin: product.start_time_increment_min,
           packageNumSessions: product.package_num_sessions,
+          capacity: product.capacity,
+          minSeats: product.min_seats,
           level: product.level,
           language: product.language,
           categoryIds: (product.product_categories ?? []).map(

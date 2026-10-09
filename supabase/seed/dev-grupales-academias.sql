@@ -19,10 +19,9 @@
 -- | ga.lista.1 … 5      | Alumnos que irán en la lista de la academia           |
 -- | ga.fuera            | Alumno que NO está en la lista                        |
 --
--- ⚠️ Lo que este fichero todavía NO puede hacer, porque el esquema no existe:
---   - `group_classes_enabled` de ga.tutor → se enciende al llegar la Fase C.
---   - El admin y la lista de la academia (`academy_members`, REQUERIMIENTOS
---     §3.1) → se añaden aquí en la misma migración que cree esas tablas.
+-- Desde la Fase C (`20261008120100`, `20261009170100`) también enciende las
+-- grupales de ga.tutor y monta la Academia Piloto: administrador, comisión del
+-- 80 %, país CO y los cinco alumnos de la lista activos.
 --
 -- Idempotente: UUIDs fijos (espacio `c1…` cuentas, `c2…` mentorías, `c3…`
 -- agenda) y `on conflict`. Una sola transacción (así corre `db query`).
@@ -151,6 +150,23 @@ select ('c3000000-0000-4000-8000-00000000000' || d)::uuid,
        'c1000000-0000-4000-8000-000000000001', d, '09:00', '18:00'
   from generate_series(1, 5) d
 on conflict (id) do nothing;
+
+-- ── 4 · Fase C: grupales y academia ──────────────────────────────────────────
+update public.tutor_profiles set group_classes_enabled = true
+ where profile_id = 'c1000000-0000-4000-8000-000000000001';
+
+update public.academies
+   set owner_id = 'c1000000-0000-4000-8000-000000000010',
+       commission_pct = 80, payout_country = 'CO', status = 'active'
+ where slug = 'academia-piloto';
+
+insert into public.academy_members (academy_id, email, profile_id, role, status, accepted_at)
+select a.id, u.email, u.id, 'student', 'active', now()
+  from public.academies a
+  cross join auth.users u
+ where a.slug = 'academia-piloto'
+   and u.id::text like 'c1000000-0000-4000-8000-00000000002_'
+on conflict (academy_id, email, role) do nothing;
 
 -- ── Comprobación ─────────────────────────────────────────────────────────────
 select u.email,

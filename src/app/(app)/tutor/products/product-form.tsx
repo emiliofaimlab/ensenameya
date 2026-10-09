@@ -8,7 +8,7 @@ import { InfoIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { bookingTotal } from "@/lib/booking";
-import { huecosDeFranja } from "@/lib/availability";
+import { huecosDeFranja, paredAUtc } from "@/lib/availability";
 import { formatMoney, storageUrl } from "@/lib/catalog/format";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import {
@@ -65,6 +65,20 @@ const PRICING: { id: PricingModel; label: string }[] = [
   { id: "per_hour", label: "Por hora" },
   { id: "per_package", label: "Paquete" },
 ];
+
+/** G1 · el tipo «Clase grupal» solo lo ve quien tiene el interruptor (RG-18). */
+const GRUPAL: { id: PricingModel; label: string } = {
+  id: "group",
+  label: "Clase grupal",
+};
+
+/** RG-03 · cupo de una grupal: el `check` de `products.capacity`. */
+const CUPO_MIN = 2;
+const CUPO_MAX = 10;
+/** El tope de `publicar_clase_grupal` (`20261008160000`). */
+const MAX_FECHAS = 20;
+
+type FechaPared = { fecha: string; hora: string };
 
 /**
  * N-07 · topes de los campos de texto. El `maxLength` del input corta sin
@@ -128,6 +142,9 @@ export type ProductFormValues = {
    * de RN-38. Ver `acceptance-mode.tsx`.
    */
   autoAccept: boolean;
+  /** G1 · RG-03/04: cupo máximo y mínimo opcional. Solo en grupales. */
+  capacity: number | null;
+  minSeats: number | null;
   /**
    * N-04 · franjas de disponibilidad a las que pertenece ESTA mentoría.
    * Lista vacía = «toda mi disponibilidad», que es literalmente lo que
@@ -164,6 +181,9 @@ export function ProductForm({
   isApproved = false,
   onCreated,
   submitLabel,
+  groupClassesEnabled = false,
+  groupPublished = false,
+  timezone = "UTC",
 }: {
   userId: string;
   categories: { id: string; name: string }[];
@@ -187,9 +207,18 @@ export function ProductForm({
   onCreated?: (productId: string) => void;
   /** Texto del botón de guardar; por defecto, el del panel. */
   submitLabel?: string;
+  /** G1 · RG-18: el admin le encendió las clases grupales a este tutor. */
+  groupClassesEnabled?: boolean;
+  /** G1 · la grupal ya tiene fechas: se gestionan en su ficha, no aquí. */
+  groupPublished?: boolean;
+  /** Zona del tutor: las fechas de una grupal se teclean en SU hora (RN-01). */
+  timezone?: string;
 }) {
   const router = useRouter();
-  const isEdit = !!product;
+  // G1 · si la publicación de una grupal choca, el producto ya se creó como
+  // borrador: el reintento tiene que EDITARLO, no crear otro.
+  const [creadoId, setCreadoId] = useState<string | null>(null);
+  const isEdit = !!product || !!creadoId;
   const [loading, setLoading] = useState(false);
   const [pricingModel, setPricingModel] = useState<PricingModel>(
     product?.pricingModel ?? "per_session",
@@ -255,6 +284,22 @@ export function ProductForm({
   // atrás una decisión que la migración defiende por escrito. Lo que se hace en
   // vez de cambiarlo es contarlo — ver el aviso de `AcceptanceMode`.
   const [autoAccept, setAutoAccept] = useState(product?.autoAccept ?? true);
+  // G1 · clase grupal.
+  const [cupo, setCupo] = useState(String(product?.capacity ?? 6));
+  const [minimo, setMinimo] = useState(
+    product?.minSeats ? String(product.minSeats) : "",
+  );
+  const [fechas, setFechas] = useState<FechaPared[]>([{ fecha: "", hora: "" }]);
+  const grupal = pricingModel === "group";
+  // Al editar no se cambia entre grupal y no grupal: las fechas y los cupos
+  // vendidos no tienen equivalente 1:1 (y la BD lo prohíbe con fechas).
+  const modelos = product
+    ? product.pricingModel === "group"
+      ? [GRUPAL]
+      : PRICING
+    : groupClassesEnabled
+      ? [...PRICING, GRUPAL]
+      : PRICING;
 
   const coverUrl = storageUrl("product-images", product?.imagePath);
 
@@ -312,6 +357,37 @@ export function ProductForm({
         return toast.error("El intervalo debe estar entre 5 y 240 minutos.");
     }
 
+    // G1 · cupo, mínimo y fechas de la grupal.
+    let capacity: number | null = null;
+    let minSeats: number | null = null;
+    let fechasUtc: string[] = [];
+    if (grupal) {
+      capacity = Number(cupo);
+      if (
+        !Number.isInteger(capacity) ||
+        capacity < CUPO_MIN ||
+        capacity > CUPO_MAX
+      )
+        return toast.error(`El cupo va de ${CUPO_MIN} a ${CUPO_MAX} alumnos.`);
+      if (minimo.trim()) {
+        minSeats = Number(minimo);
+        if (!Number.isInteger(minSeats) || minSeats < 1 || minSeats > capacity)
+          return toast.error("El mínimo tiene que estar entre 1 y el cupo.");
+      }
+      if (!groupPublished) {
+        const llenas = fechas.filter((f) => f.fecha || f.hora);
+        if (llenas.length === 0)
+          return toast.error("Agrega al menos una fecha.");
+        if (llenas.some((f) => !f.fecha || !f.hora))
+          return toast.error("A una fecha le falta el día o la hora.");
+        fechasUtc = llenas.map((f) => paredAUtc(f.fecha, f.hora, timezone));
+        if (fechasUtc.some((iso) => new Date(iso) <= new Date()))
+          return toast.error("Las fechas tienen que ser futuras.");
+        if (new Set(fechasUtc).size !== fechasUtc.length)
+          return toast.error("Hay dos fechas repetidas.");
+      }
+    }
+
     // Paquete ≥ 1 sesión, solo per_package (RN-22).
     let packageNum: number | null = null;
     if (pricingModel === "per_package") {
@@ -327,7 +403,7 @@ export function ProductForm({
     // cual: sin filas, la BD lo lee como «toda mi disponibilidad» y el tutor se
     // quedaría convencido de haber limitado la mentoría a nada. Se le pide que
     // elija, o que diga «toda» a propósito.
-    if (scope === "blocks" && selectedRules.size === 0)
+    if (!grupal && scope === "blocks" && selectedRules.size === 0)
       return toast.error(
         "Marca al menos una franja, o elige «Toda mi disponibilidad».",
       );
@@ -404,8 +480,12 @@ export function ProductForm({
       // escriben por el mismo camino. `null` explícito —y no omitir la clave—
       // para que volver a «cada duración» de verdad limpie la columna en vez de
       // dejar el valor anterior.
-      start_time_increment_min: increment,
-      package_num_sessions: packageNum,
+      start_time_increment_min: grupal ? null : increment,
+      // En una grupal `package_num_sessions` es el número de fechas y lo
+      // escribe `publicar_clase_grupal`: aquí no se toca.
+      ...(grupal ? {} : { package_num_sessions: packageNum }),
+      capacity,
+      min_seats: minSeats,
       // DD-03: opcionales — vacío se guarda como nulo, que es lo que espera el
       // check, y las mentorías viejas siguen válidas sin el dato.
       level: (String(form.get("level") ?? "") || null) as TeachingLevel | null,
@@ -423,7 +503,8 @@ export function ProductForm({
       // escriben por el mismo camino. Va explícito también en el insert —y no
       // se deja al default de la columna— para que lo guardado sea lo que el
       // tutor tenía en pantalla, incluso si algún día cambia ese default.
-      auto_accept_bookings: autoAccept,
+      // RG-07: una grupal se confirma sola siempre (`check` de products).
+      auto_accept_bookings: grupal ? true : autoAccept,
       // `status` NO se toca en el insert: alta → 'draft' (default). Publicar es
       // un UPDATE aparte tras guardar; el guard RN-23 de BD sigue mandando.
     };
@@ -433,7 +514,7 @@ export function ProductForm({
     // separadas y no atómicas: no hay transacción de cliente. Mientras el
     // producto no exista se puede abortar limpio (se retira lo del bucket);
     // en cuanto existe, ya no — de ahí lo de abajo.
-    let productId = product?.id;
+    let productId = product?.id ?? creadoId ?? undefined;
     if (isEdit) {
       const { error } = await supabase
         .from("products")
@@ -482,7 +563,7 @@ export function ProductForm({
 
     // N-04 · las franjas elegidas. En modo «toda mi disponibilidad» no hay nada
     // que insertar: la ausencia de filas ES el dato.
-    if (scope === "blocks" && selectedRules.size > 0) {
+    if (!grupal && scope === "blocks" && selectedRules.size > 0) {
       const { error: rulesErr } = await supabase
         .from("product_availability_rules")
         .insert(
@@ -527,7 +608,50 @@ export function ProductForm({
       }
     }
 
-    if (publishAfter) {
+    // G1 · una grupal se publica CON sus fechas, en una sola llamada que no
+    // crea nada si alguna choca (`publicar_clase_grupal`, RG-05).
+    if (grupal && !groupPublished) {
+      const { error: pubErr } = await supabase.rpc("publicar_clase_grupal", {
+        p_product: productId!,
+        p_fechas: fechasUtc,
+      });
+      if (pubErr) {
+        // El borrador ya existe: el reintento lo edita (ver `creadoId`).
+        setCreadoId(productId!);
+        setLoading(false);
+        const choques =
+          pubErr.code === "23P01" && pubErr.details
+            ? pubErr.details
+                .split(", ")
+                .map((iso) =>
+                  new Date(iso).toLocaleString("es", {
+                    timeZone: timezone,
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  }),
+                )
+                .join(" · ")
+            : null;
+        toast.error(
+          choques
+            ? `Estas fechas chocan con tu agenda: ${choques}. Muévelas y vuelve a publicar.`
+            : `La clase se guardó como borrador, pero no se publicó: ${pubErr.message}`,
+          { duration: 12_000 },
+        );
+        return;
+      }
+      if (aMedias.length > 0)
+        toast.error(
+          `La clase se publicó, pero faltó ${enumerar(aMedias)}. Complétalo desde «Editar».`,
+          { duration: 12_000 },
+        );
+      else toast.success("Clase grupal publicada.");
+      router.push(`/tutor/clases-grupales/${productId}`);
+      router.refresh();
+      return;
+    }
+
+    if (publishAfter && !grupal) {
       const { error: pubErr } = await supabase
         .from("products")
         .update({ status: "active" })
@@ -719,7 +843,7 @@ export function ProductForm({
             role="radiogroup"
             aria-label="Modelo de precio"
           >
-            {PRICING.map((m) => {
+            {modelos.map((m) => {
               const on = pricingModel === m.id;
               return (
                 <button
@@ -745,7 +869,7 @@ export function ProductForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label htmlFor="price" className={LABEL}>
-              Precio
+              {grupal ? "Precio por cupo" : "Precio"}
             </Label>
             <Input
               id="price"
@@ -816,53 +940,55 @@ export function ProductForm({
             la frase de debajo se recalcula en vivo: sin ella, «30» y «60» son
             dos números sin consecuencia visible.
           */}
-          <div className="grid gap-1.5">
-            <Label htmlFor="start_time_increment_min" className={LABEL}>
-              Las clases pueden empezar
-            </Label>
-            <select
-              id="start_time_increment_min"
-              name="start_time_increment_min"
-              value={paso}
-              onChange={(e) => setPaso(e.target.value)}
-              className={`${FIELD} border bg-transparent`}
-            >
-              {/* La opción vacía es `NULL` en la BD y es el comportamiento de
+          {grupal ? null : (
+            <div className="grid gap-1.5">
+              <Label htmlFor="start_time_increment_min" className={LABEL}>
+                Las clases pueden empezar
+              </Label>
+              <select
+                id="start_time_increment_min"
+                name="start_time_increment_min"
+                value={paso}
+                onChange={(e) => setPaso(e.target.value)}
+                className={`${FIELD} border bg-transparent`}
+              >
+                {/* La opción vacía es `NULL` en la BD y es el comportamiento de
                   siempre. Se nombra con la duración a la vista para que no haya
                   que deducir qué significa «cada duración». */}
-              <option value="">
-                Una detrás de otra
-                {Number(duracion) >= 30 ? ` (cada ${duracion} min)` : ""}
-              </option>
-              {INCREMENTOS.map((m) => (
-                <option key={m} value={m}>
-                  Cada {m} min
+                <option value="">
+                  Una detrás de otra
+                  {Number(duracion) >= 30 ? ` (cada ${duracion} min)` : ""}
                 </option>
-              ))}
-            </select>
-            {/* La cuenta, con los números que el tutor tiene delante. Es la
+                {INCREMENTOS.map((m) => (
+                  <option key={m} value={m}>
+                    Cada {m} min
+                  </option>
+                ))}
+              </select>
+              {/* La cuenta, con los números que el tutor tiene delante. Es la
                 misma aritmética que `get_available_slots` y que la
                 previsualización del panel de disponibilidad
                 (`huecosDeFranja`): un hueco solo cuenta si la clase cabe
                 ENTERA en la franja. Se calla con el campo a medio escribir. */}
-            {Number(duracion) >= 30 ? (
-              <p className="text-xs text-[#6b6b6b]">
-                Una franja de 8:00 a 17:00 te daría{" "}
-                <strong className="font-semibold text-[#333333]">
-                  {huecosDeFranja(
-                    { start_time: "08:00", end_time: "17:00" },
-                    Number(duracion),
-                    paso ? Number(paso) : null,
-                  )}{" "}
-                  horarios
-                </strong>{" "}
-                de {duracion} min.
-                {paso && Number(paso) < Number(duracion)
-                  ? " Se solapan entre sí: al reservarse uno, los que lo pisan desaparecen."
-                  : ""}
-              </p>
-            ) : null}
-          </div>
+              {Number(duracion) >= 30 ? (
+                <p className="text-xs text-[#6b6b6b]">
+                  Una franja de 8:00 a 17:00 te daría{" "}
+                  <strong className="font-semibold text-[#333333]">
+                    {huecosDeFranja(
+                      { start_time: "08:00", end_time: "17:00" },
+                      Number(duracion),
+                      paso ? Number(paso) : null,
+                    )}{" "}
+                    horarios
+                  </strong>{" "}
+                  de {duracion} min.
+                  {paso && Number(paso) < Number(duracion)
+                    ? " Se solapan entre sí: al reservarse uno, los que lo pisan desaparecen."
+                    : ""}
+                </p>
+              ) : null}
+            </div>
+          )}
 
           {/* DD-03 — de la mentoría, no del tutor: un tutor avanzado puede
               publicar una clase básica. Alimentan los filtros de P05/P06. */}
@@ -922,6 +1048,140 @@ export function ProductForm({
         </div>
       </PanelCard>
 
+      {grupal ? (
+        <PanelCard
+          id="cupo-y-fechas"
+          className="flex scroll-mt-24 flex-col gap-4"
+        >
+          <h2 className="text-base font-semibold text-[#19191f]">
+            Cupo y fechas
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="capacity" className={LABEL}>
+                Cupo máximo ({CUPO_MIN} a {CUPO_MAX} alumnos)
+              </Label>
+              <Input
+                id="capacity"
+                type="number"
+                min={CUPO_MIN}
+                max={CUPO_MAX}
+                step={1}
+                required
+                value={cupo}
+                onChange={(e) => setCupo(e.target.value)}
+                className={FIELD}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="min_seats" className={LABEL}>
+                Cupo mínimo (opcional)
+              </Label>
+              <Input
+                id="min_seats"
+                type="number"
+                min={1}
+                max={Number(cupo) || CUPO_MAX}
+                step={1}
+                value={minimo}
+                onChange={(e) => setMinimo(e.target.value)}
+                placeholder="Sin mínimo"
+                className={FIELD}
+              />
+              <p className="text-xs text-[#6b6b6b]">
+                Si 24 horas antes de la primera fecha no hay ese número de
+                inscritos, la clase se cancela sola y todos recuperan el 100 %.
+              </p>
+            </div>
+          </div>
+
+          {groupPublished ? (
+            <p className="text-[13px] text-[#6b6b6b]">
+              Las fechas ya están publicadas. Para moverlas o cancelarlas ve a
+              la{" "}
+              <Link
+                href={`/tutor/clases-grupales/${product?.id}`}
+                className="font-medium text-brand underline underline-offset-2"
+              >
+                ficha de la clase
+              </Link>
+              : ahí se avisa a los inscritos.
+            </p>
+          ) : (
+            <fieldset className="grid gap-2">
+              <legend className={LABEL}>
+                Fechas · una para una clase suelta, varias para un ciclo
+              </legend>
+              <p className="text-xs text-[#6b6b6b]">
+                Horas en tu zona: {timezone}. Cada fecha dura {duracion} min y
+                deja de ofrecerse en tu agenda 1:1 en cuanto publiques.
+              </p>
+              {fechas.map((f, i) => (
+                <div key={i} className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="date"
+                    value={f.fecha}
+                    onChange={(e) =>
+                      setFechas((p) =>
+                        p.map((x, j) =>
+                          j === i ? { ...x, fecha: e.target.value } : x,
+                        ),
+                      )
+                    }
+                    aria-label={`Día de la fecha ${i + 1}`}
+                    className={cn(FIELD, "w-auto min-w-0 flex-1")}
+                  />
+                  <Input
+                    type="time"
+                    step={300}
+                    value={f.hora}
+                    onChange={(e) =>
+                      setFechas((p) =>
+                        p.map((x, j) =>
+                          j === i ? { ...x, hora: e.target.value } : x,
+                        ),
+                      )
+                    }
+                    aria-label={`Hora de la fecha ${i + 1}`}
+                    className={cn(FIELD, "w-32")}
+                  />
+                  {fechas.length > 1 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() =>
+                        setFechas((p) => p.filter((_, j) => j !== i))
+                      }
+                      aria-label={`Quitar la fecha ${i + 1}`}
+                      className="h-9 shrink-0 rounded-[8px] px-3 text-[13px] text-[#bf3333]"
+                    >
+                      Quitar
+                    </Button>
+                  ) : null}
+                </div>
+              ))}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  setFechas((p) => [...p, { fecha: "", hora: "" }])
+                }
+                disabled={fechas.length >= MAX_FECHAS}
+                className="h-10 self-start rounded-[8px] px-4 text-[13px]"
+              >
+                + Agregar fecha
+              </Button>
+              {fechas.length > 1 ? (
+                <p className="text-xs text-[#6b6b6b]">
+                  Es un ciclo: el alumno paga las {fechas.length} fechas de una
+                  vez y solo puede darse de baja antes de la primera.
+                </p>
+              ) : null}
+            </fieldset>
+          )}
+        </PanelCard>
+      ) : null}
+
       {/* N-04 · a qué franjas de tu disponibilidad pertenece esta mentoría.
           Va después del formato porque depende de la duración: las franjas se
           trocean en huecos del tamaño de la sesión. */}
@@ -930,29 +1190,31 @@ export function ProductForm({
           enlace funcionaba pero dejaba al tutor arriba del formulario, con el
           bloque que iba a arreglar fuera de pantalla. `scroll-mt-24` lo separa
           de la cabecera fija. */}
-      <PanelCard id="horarios" className="flex scroll-mt-24 flex-col gap-3">
-        <h2 className="text-base font-semibold text-[#19191f]">
-          Horarios de esta mentoría
-        </h2>
-        <p className="text-[13px] text-[#6b6b6b]">
-          Tus horarios se definen una vez en{" "}
-          <Link
-            href="/tutor/availability"
-            className="font-medium text-brand underline underline-offset-2"
-          >
-            Disponibilidad
-          </Link>
-          . Aquí eliges cuáles usa esta mentoría.
-        </p>
-        <AvailabilityBlocks
-          rules={availabilityRules}
-          scope={scope}
-          onScopeChange={setScope}
-          selected={selectedRules}
-          onToggle={toggleRule}
-          disabled={loading}
-        />
-      </PanelCard>
+      {grupal ? null : (
+        <PanelCard id="horarios" className="flex scroll-mt-24 flex-col gap-3">
+          <h2 className="text-base font-semibold text-[#19191f]">
+            Horarios de esta mentoría
+          </h2>
+          <p className="text-[13px] text-[#6b6b6b]">
+            Tus horarios se definen una vez en{" "}
+            <Link
+              href="/tutor/availability"
+              className="font-medium text-brand underline underline-offset-2"
+            >
+              Disponibilidad
+            </Link>
+            . Aquí eliges cuáles usa esta mentoría.
+          </p>
+          <AvailabilityBlocks
+            rules={availabilityRules}
+            scope={scope}
+            onScopeChange={setScope}
+            selected={selectedRules}
+            onToggle={toggleRule}
+            disabled={loading}
+          />
+        </PanelCard>
+      )}
 
       {/* Materiales de clase de ESTA oferta (R24-16): se movieron aquí desde el
           onboarding. N-05 — ya no hace falta guardar y volver a entrar: se
@@ -993,10 +1255,10 @@ export function ProductForm({
           Requerimientos de sesión
         </h2>
         <p className="text-[13px] text-[#6b6b6b]">
-          Lo que tu alumno necesita tener listo ANTES de la clase: una computadora,
-          buena conexión, un cuaderno, un ventilador… Se lo enseñamos en la
-          ficha —antes de que reserve— y en su reserva. Es opcional: si lo dejas
-          vacío no se muestra nada.
+          Lo que tu alumno necesita tener listo ANTES de la clase: una
+          computadora, buena conexión, un cuaderno, un ventilador… Se lo
+          enseñamos en la ficha —antes de que reserve— y en su reserva. Es
+          opcional: si lo dejas vacío no se muestra nada.
         </p>
 
         {requirements.map((r, i) => (
@@ -1112,20 +1374,22 @@ export function ProductForm({
           los botones: las dos tarjetas hablan de lo que pasa DESPUÉS de que el
           alumno pague, y esta es la única de las dos que el tutor decide. En el
           camino a «Publicar», no escondida entre los campos de contenido. */}
-      <PanelCard className="flex flex-col gap-3">
-        <h2 className="text-base font-semibold text-[#19191f]">
-          Cómo se confirman las reservas
-        </h2>
-        <p className="text-[13px] text-[#6b6b6b]">
-          Se decide en cada mentoría: puedes filtrar a mano quién entra en una y
-          dejar que otra se confirme sola.
-        </p>
-        <AcceptanceMode
-          value={autoAccept}
-          onChange={setAutoAccept}
-          disabled={loading}
-        />
-      </PanelCard>
+      {grupal ? null : (
+        <PanelCard className="flex flex-col gap-3">
+          <h2 className="text-base font-semibold text-[#19191f]">
+            Cómo se confirman las reservas
+          </h2>
+          <p className="text-[13px] text-[#6b6b6b]">
+            Se decide en cada mentoría: puedes filtrar a mano quién entra en una
+            y dejar que otra se confirme sola.
+          </p>
+          <AcceptanceMode
+            value={autoAccept}
+            onChange={setAutoAccept}
+            disabled={loading}
+          />
+        </PanelCard>
+      )}
 
       {/* 193:30 — la política es única de plataforma, no se configura aquí. */}
       <div className="flex gap-3 rounded-[16px] border border-[#b2d9ff] bg-[#e5f2ff] p-5">
@@ -1143,29 +1407,45 @@ export function ProductForm({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        {isApproved ? (
+      {grupal && !groupPublished ? (
+        <div className="flex flex-wrap items-center gap-3">
           <Button
             type="submit"
-            disabled={loading}
-            onClick={() => setPublishAfter(true)}
+            disabled={loading || !isApproved}
             className="h-[47px] rounded-[8px] px-6 font-semibold"
           >
-            {loading && publishAfter ? "Publicando…" : "Publicar"}
+            {loading ? "Publicando…" : "Publicar clase"}
           </Button>
-        ) : null}
-        <Button
-          type="submit"
-          variant={isApproved ? "outline" : "default"}
-          disabled={loading}
-          onClick={() => setPublishAfter(false)}
-          className="h-[47px] rounded-[8px] px-6 font-medium"
-        >
-          {loading && !publishAfter
-            ? "Guardando…"
-            : (submitLabel ?? (isEdit ? "Guardar cambios" : "Guardar borrador"))}
-        </Button>
-      </div>
+          <p className="text-xs text-[#6b6b6b]">
+            Se publica con sus fechas en un solo paso.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-3">
+          {isApproved ? (
+            <Button
+              type="submit"
+              disabled={loading}
+              onClick={() => setPublishAfter(true)}
+              className="h-[47px] rounded-[8px] px-6 font-semibold"
+            >
+              {loading && publishAfter ? "Publicando…" : "Publicar"}
+            </Button>
+          ) : null}
+          <Button
+            type="submit"
+            variant={isApproved ? "outline" : "default"}
+            disabled={loading}
+            onClick={() => setPublishAfter(false)}
+            className="h-[47px] rounded-[8px] px-6 font-medium"
+          >
+            {loading && !publishAfter
+              ? "Guardando…"
+              : (submitLabel ??
+                (isEdit ? "Guardar cambios" : "Guardar borrador"))}
+          </Button>
+        </div>
+      )}
     </form>
   );
 }
