@@ -3512,6 +3512,14 @@ export type Database = {
         Args: { p_horas?: number }
         Returns: number
       }
+      build_payout_for_academy: {
+        Args: {
+          p_academy: string
+          p_retention_days: number
+          p_status?: Database["public"]["Enums"]["payout_status"]
+        }
+        Returns: string
+      }
       build_payout_for_tutor: {
         Args: {
           p_retention_days: number
