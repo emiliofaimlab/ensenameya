@@ -226,7 +226,7 @@ export const TUTOR_ITEMS: Item[] = [
     label: "Mi cuenta",
     icon: UserIcon,
     children: [
-      { href: "/tutor/verification", label: "Verificación" },
+      { href: "/tutor/verification", label: "Perfil y verificación" },
       { href: "/account#informacion-personal", label: "Información personal" },
       { href: "/account#contrasena", label: "Contraseña" },
       { href: "/account#avisos", label: "Avisos" },

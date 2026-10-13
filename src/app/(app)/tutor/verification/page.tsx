@@ -7,6 +7,7 @@ import { storageUrl } from "@/lib/catalog/format";
 import { createClient } from "@/lib/supabase/server";
 import { parseSocials } from "@/lib/socials";
 import { TutorProfileBasics } from "@/components/tutor/profile-basics";
+import { TutorProfileFields } from "@/components/tutor/profile-fields";
 import {
   PanelCard,
   PanelCardTitle,
@@ -20,7 +21,7 @@ import { VerificationForm, type DocState } from "./verification-form";
 // §6.3 · El título de la pestaña sigue al de la pantalla. El nombre viejo
 // («…de identidad») además se había quedado corto: aquí se repasan foto,
 // biografía, portafolio y primera mentoría, no solo el DNI.
-export const metadata = { title: "Verificación · Enséñame Ya" };
+export const metadata = { title: "Perfil y verificación · Enséñame Ya" };
 
 /** Estado global de la verificación → píldora del Figma (190:10). */
 const IDENTITY_PILL: Record<string, { label: string; tone: PillTone; note: string }> = {
@@ -66,7 +67,9 @@ export default async function VerificationPage() {
   // decide si la ficha pública EXISTE (ver más abajo), no cómo se pinta nada.
   const { data: tp } = await supabase
     .from("tutor_profiles")
-    .select("identity_verification_status, socials, avatar_path, bio, approval_status")
+    .select(
+      "identity_verification_status, socials, avatar_path, bio, approval_status, headline, display_name, teaching_level",
+    )
     .eq("profile_id", user.id)
     .maybeSingle();
   if (!tp) redirect("/tutor/onboarding");
@@ -74,8 +77,13 @@ export default async function VerificationPage() {
   // N-10 · El checklist deriva su estado de TRES fuentes; dos se leen aquí y
   // la tercera (la foto) ya viene en `tp`. Sin el nº de mentorías esta pantalla
   // seguiría obligando a salir a "Mis mentorías" solo para saber si falta.
-  const [{ data: docs }, { count: productCount }, { data: prof }] =
-    await Promise.all([
+  const [
+    { data: docs },
+    { count: productCount },
+    { data: prof },
+    { data: cats },
+    { data: myCats },
+  ] = await Promise.all([
       // §6.2 · `review_notes` es el MOTIVO que escribió el admin al rechazar
       // (`review_document`, US-1101). Se lee aquí porque hasta ahora no salía
       // en ninguna pantalla del tutor: el rechazo se veía, el porqué no, y
@@ -97,6 +105,9 @@ export default async function VerificationPage() {
         .select("full_name")
         .eq("id", user.id)
         .maybeSingle(),
+      // EY-226 · titular y categorías, editables tras el asistente.
+      supabase.from("categories").select("id, name").order("sort_order"),
+      supabase.from("tutor_categories").select("category_id").eq("tutor_id", user.id),
     ]);
 
   const docsByType: Record<string, DocState> = Object.fromEntries(
@@ -134,7 +145,7 @@ export default async function VerificationPage() {
   return (
     <TutorShell
       userId={user.id}
-      title="Verificación"
+      title="Perfil y verificación"
       description="Lo que ven los alumnos y lo que revisa el equipo antes de aprobarte."
       actions={
         aprobado ? (
@@ -213,12 +224,22 @@ export default async function VerificationPage() {
         hasBio={!!tp.bio?.trim()}
         productCount={productCount ?? 0}
         perfil={
-          <TutorProfileBasics
-            userId={user.id}
-            avatarUrl={storageUrl("avatars", tp.avatar_path)}
-            fullName={prof?.full_name ?? ""}
-            bio={tp.bio ?? ""}
-          />
+          <div className="flex flex-col gap-5">
+            <TutorProfileFields
+              userId={user.id}
+              displayName={tp.display_name ?? prof?.full_name ?? ""}
+              headline={tp.headline ?? ""}
+              level={tp.teaching_level}
+              categories={(cats ?? []).map((c) => ({ id: c.id, label: c.name }))}
+              selectedCategories={(myCats ?? []).map((r) => r.category_id)}
+            />
+            <TutorProfileBasics
+              userId={user.id}
+              avatarUrl={storageUrl("avatars", tp.avatar_path)}
+              fullName={prof?.full_name ?? ""}
+              bio={tp.bio ?? ""}
+            />
+          </div>
         }
       />
     </TutorShell>
