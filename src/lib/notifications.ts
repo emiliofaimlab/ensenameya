@@ -28,7 +28,12 @@ export type AppNotice = {
   href: string;
   createdAt: string;
   read: boolean;
+  /** EY-224 · en qué papel le llega (ver `papelDelAviso`). `null` = de la cuenta. */
+  papel: Papel | null;
 };
+
+/** El papel del destinatario EN ESE AVISO, no su rol de cuenta. */
+export type Papel = "alumno" | "tutor";
 
 /** Plantilla → texto de la campana. Lo que no esté cae al genérico. */
 const TEXT: Record<string, string> = {
@@ -92,7 +97,7 @@ const TEXT: Record<string, string> = {
   booking_pending_student: "Tu reserva espera a que el tutor la acepte",
   booking_expiring_tutor: "Te queda poco para responder a una reserva",
   // NTF-11 le sale igual al alumno y al tutor, así que la frase vale para los
-  // dos: «tu mentoría», sin decir con quién.
+  // dos: «tu mentoría», sin decir con quién. A dónde lleva sí cambia: `para`.
   booking_reminder_24h: "Tu mentoría es mañana",
   session_starting: "Tu mentoría empieza en unos minutos",
   materials_ready: "Tu tutor subió material para tu clase",
@@ -198,10 +203,14 @@ export function rutaFor(
   const fijo = DESTINO[template];
   if (fijo) return fijo;
 
-  // §14 · reagendar le habla a cualquiera de los dos: `para` en el payload
-  // dice cuál, que es justo lo que le falta a `booking_reminder_24h` (abajo).
+  // EY-218 · las plantillas que se encolan a los DOS (reagendar, NTF-08/09/11/
+  // 19) llevan `para` en el payload: dice a cuál se le habla. Las filas viejas,
+  // sin `para`, caen al alumno, que es lo que hacían antes.
+  const alTutor = payload?.para === "tutor";
+
+  // §14 · reagendar le habla a cualquiera de los dos.
   if (template.startsWith("reschedule_")) {
-    const base = payload?.para === "tutor" ? "/tutor/reservas" : "/reservas";
+    const base = alTutor ? "/tutor/reservas" : "/reservas";
     return typeof bookingId === "string" ? `${base}/${bookingId}` : base;
   }
 
@@ -236,14 +245,13 @@ export function rutaFor(
     if (typeof sessionId === "string") return `/room/${sessionId}`;
   }
 
-  // ⚠️ `booking_reminder_24h` (NTF-11) SE QUEDA AQUÍ, y es el único caso que
-  // este mecanismo no resuelve: `avisar_clases_de_manana` encola DOS filas —una
-  // al alumno y otra al tutor— con la MISMA plantilla y el MISMO payload, así
-  // que por plantilla no hay forma de saber a cuál de los dos se le está
-  // hablando. Va a la pantalla del alumno, que es la equivocada la mitad de las
-  // veces. Arreglarlo de verdad pide el papel del destinatario en la fila (o
-  // dos plantillas), y eso es una migración, no un `if` aquí.
-  if (typeof bookingId === "string") return `/reservas/${bookingId}`;
+  // `booking_reminder_24h`, `cancellation`, `recording_ready` (y
+  // `session_starting` sin sesión) se encolan al alumno Y al tutor con la misma
+  // plantilla: desde `20261013120000` (EY-218) el payload trae `para`, y con él
+  // el tutor va a SU detalle de la reserva y no a SCR-AL03.
+  if (typeof bookingId === "string") {
+    return alTutor ? `/tutor/reservas/${bookingId}` : `/reservas/${bookingId}`;
+  }
   if (payload?.payout_id) return "/tutor/payouts";
   // Respaldo. Desde `20260831120000` los avisos de dinero (NTF-04/10/15) traen
   // también `booking_id` —y `payments.booking_id` es `not null`—, así que aquí
@@ -260,8 +268,98 @@ export function rutaFor(
   return "/app";
 }
 
-/** Cuántos avisos enseña la campana. */
+/**
+ * Cuántos avisos enseña la campana.
+ *
+ * ⚠️ EY-224 · «mis avisos» tiene TRES puertas y las tres tienen que decir lo
+ * mismo: `session_bootstrap()` (SQL), `listNotices()` y el `load()` de la
+ * campana. Mismo filtro (`recipient_id` propio y `FILTRO_AVISOS_VISIBLES`),
+ * mismo orden (`created_at desc`) y este mismo límite. Si cambia uno, cambian
+ * los tres — si no, la misma cuenta ve una lista u otra según por dónde entre.
+ */
 export const NOTICES_LIMIT = 8;
+
+/**
+ * Las plantillas que `caducar_notificaciones()` (`20260911210000`) marca
+ * `failed` cuando su correo ya llegaría tarde. Es la MISMA lista que la de esa
+ * función: si allí se añade una, se añade aquí y en `session_bootstrap()`.
+ */
+export const PLANTILLAS_CADUCABLES = ["session_starting", "booking_reminder_24h"] as const;
+
+/**
+ * Qué avisos NO enseña la campana: solo los CADUCADOS —`failed` en una
+ * plantilla caducable—, porque «tu clase empieza en unos minutos» tres horas
+ * después es mentira también en la campana.
+ *
+ * ⚠️ NO todo `failed`. `failed` también es «Resend rechazó el correo», y ese
+ * aviso tiene que seguir en la campana: es justo el canal que NO falló. No hay
+ * una marca más precisa en la fila (no hay columna de motivo), así que la
+ * caducidad se reconoce por plantilla + estado, como en la propia función.
+ */
+export function avisoVisible(row: { status?: string | null; template: string }): boolean {
+  return !(
+    row.status === "failed" &&
+    (PLANTILLAS_CADUCABLES as readonly string[]).includes(row.template)
+  );
+}
+
+/** `avisoVisible` en sintaxis de PostgREST, para `.or(...)`: lo comparten `listNotices` y la campana. */
+export const FILTRO_AVISOS_VISIBLES = `status.neq.failed,template.not.in.(${PLANTILLAS_CADUCABLES.join(",")})`;
+
+/** Plantillas que solo se le mandan a alguien EN SU PAPEL DE TUTOR. */
+const DEL_TUTOR = new Set([
+  "booking_new_tutor",
+  "booking_expiring_tutor",
+  "review_received_tutor",
+  "welcome_tutor",
+  "payout_paid",
+  "payout_issue",
+  "payout_unclaimed",
+  "payout_account_changed",
+  "tutor_review_result",
+  "identity_in_review",
+]);
+
+/** Plantillas que solo se le mandan a alguien EN SU PAPEL DE ALUMNO. */
+const DEL_ALUMNO = new Set([
+  "booking_confirmed_student",
+  "booking_pending_student",
+  "payment_receipt",
+  "payment_failed",
+  "refund_processed",
+  "order_receipt",
+  "review_request",
+  "materials_ready",
+  "welcome_student",
+  "gift_purchased",
+  "gift_received",
+  "gift_claimed",
+  "gift_expiring",
+  "gift_expired",
+  "gift_converted",
+]);
+
+/**
+ * EY-224 · en qué papel le llega este aviso a quien lo recibe: la etiqueta
+ * «Tutor» / «Alumno» de la campana para quien tiene los dos roles (la lista es
+ * ÚNICA y mezclada, decidido con el cliente).
+ *
+ * Primero `payload.para` —las plantillas compartidas (NTF-08/09/11/19 y los
+ * `reschedule_*`) lo llevan desde EY-218—, luego la plantilla. `null` = es de la
+ * CUENTA, no de un papel (chat, mensajes del equipo, baja, recompensas…) o es
+ * una fila vieja de plantilla compartida sin `para`: mejor sin etiqueta que con
+ * una inventada.
+ */
+export function papelDelAviso(
+  template: string,
+  payload: Record<string, unknown> | null,
+): Papel | null {
+  const para = payload?.para;
+  if (para === "tutor" || para === "alumno") return para;
+  if (DEL_TUTOR.has(template)) return "tutor";
+  if (DEL_ALUMNO.has(template)) return "alumno";
+  return null;
+}
 
 /**
  * NTF-22 · La única plantilla cuyo texto NO está en el mapa de arriba: lo
@@ -310,5 +408,6 @@ export function toNotice(row: NotificationRow): AppNotice {
     href: rutaFor(row.template, row.payload),
     createdAt: row.created_at,
     read: row.read_at !== null,
+    papel: papelDelAviso(row.template, row.payload),
   };
 }

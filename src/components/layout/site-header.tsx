@@ -87,6 +87,12 @@ export type HeaderUser = {
    * la cascada (sin perfil → onboarding, pendiente → "en revisión").
    */
   panels: { href: string; label: string }[];
+  /**
+   * EY-224 · tiene los roles `tutor` Y `alumno`. Lo mira la campana para
+   * etiquetar cada aviso con su papel; `panels` no sirve para esto porque
+   * Aprender/Enseñar salen siempre. Opcional: quien no lo pase, sin etiqueta.
+   */
+  dosPapeles?: boolean;
 };
 
 /**
@@ -566,6 +572,7 @@ export function SiteHeader({
                   initial={notices}
                   userId={user.id}
                   formato={formato}
+                  dosPapeles={user.dosPapeles}
                 />
               ) : null}
 
@@ -854,6 +861,7 @@ export function SiteHeader({
                             userId={user.id}
                             formato={formato}
                             variante="fila"
+                            dosPapeles={user.dosPapeles}
                           />
                         </div>
 

@@ -277,6 +277,17 @@ type Ctx = {
 
 const SOPORTE = "mailto:info@ensenameya.com";
 
+/**
+ * EY-218 · ¿este correo va al TUTOR de la clase? Las plantillas que se encolan
+ * a los dos (NTF-08/09/11/19, `reschedule_*`) llevan `para` en el payload desde
+ * `20261013120000`. Sin `para` —filas viejas— se trata como alumno, que es lo
+ * que hacían. Y entonces «la otra parte» de la tarjeta es el ALUMNO: al tutor
+ * no se le dice «tu mentoría con <su propio nombre>».
+ */
+function alTutor(x: Ctx): boolean {
+  return x.p?.para === "tutor";
+}
+
 const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
   // ══ A · Cuenta y acceso ═══════════════════════════════════════════════════
   //
@@ -756,7 +767,9 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     const dias = diasHasta(x.c.inicio, x.tz, x.ahora);
     const cuandoTexto =
       dias === 0 ? "Hoy" : dias === 1 ? "Mañana" : may(dia(x.c.inicio, x.tz)) ?? null;
-    const quien = x.c.tutor ? ` con ${primerNombre(x.c.tutor)}` : "";
+    const tutor = alTutor(x);
+    const otro = tutor ? x.c.alumno : x.c.tutor;
+    const quien = otro ? ` con ${primerNombre(otro)}` : "";
     return {
       asunto:
         cuandoTexto && h
@@ -765,22 +778,32 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       familia: "clase",
       epigrafe: "Recordatorio",
       titulo: dias === 0 ? "Tu mentoría es hoy" : "Tu mentoría es mañana",
-      preheader: h ? `${cuandoTexto ?? "Pronto"} a las ${h} (tu hora). Prepara tus dudas.` : "Prepara tus dudas.",
-      motivo: "Recibes este correo porque tienes una mentoría reservada.",
+      preheader: tutor
+        ? h ? `${cuandoTexto ?? "Pronto"} a las ${h} (tu hora). Revisa el chat por si te dejó dudas.` : "Revisa el chat por si te dejó dudas."
+        : h ? `${cuandoTexto ?? "Pronto"} a las ${h} (tu hora). Prepara tus dudas.` : "Prepara tus dudas.",
+      motivo: tutor
+        ? "Recibes este correo porque eres tutor de esta mentoría."
+        : "Recibes este correo porque tienes una mentoría reservada.",
       baja: true,
       cuerpo: [
-        parrafo("Un recordatorio para que no te pille por sorpresa."),
+        parrafo("Un recordatorio para que no te tome por sorpresa."),
         tarjetaClase({
           titulo: x.c.clase,
-          tutor: x.c.tutor,
+          tutor: otro,
           cuando: cuando(x.c.inicio, x.tz),
           duracion: duracion(x.c.duracion_min),
         }),
-        caja(
-          "Llega con las dudas escritas: una hora rinde mucho más cuando el tutor sabe por dónde empezar. Puedes mandárselas por el chat antes de la clase.",
-          "clase",
-          "Un consejo",
-        ),
+        tutor
+          ? caja(
+              "Mira el chat de la reserva antes de la clase: si el alumno te dejó sus dudas, llegarás sabiendo por dónde empezar.",
+              "clase",
+              "Un consejo",
+            )
+          : caja(
+              "Llega con las dudas escritas: una hora rinde mucho más cuando el tutor sabe por dónde empezar. Puedes mandárselas por el chat antes de la clase.",
+              "clase",
+              "Un consejo",
+            ),
         boton("Ver la reserva", x.url),
         enlaceSecundario("¿No te viene bien? Consulta la política de cancelación", `${x.base}/terms`),
       ],
@@ -851,36 +874,69 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     ],
   }),
 
-  session_starting: (x) => ({
-    asunto: "Tu clase empieza en unos minutos",
-    familia: "ok",
-    epigrafe: "Es la hora",
-    titulo: "La sala ya está abierta",
-    preheader: "Entra a la sala: tu mentoría está por empezar.",
-    motivo: "Recibes este correo porque tu mentoría está por comenzar.",
-    cuerpo: [
-      parrafo(
-        x.c.tutor
-          ? `Tu mentoría con ${esc(primerNombre(x.c.tutor))} empieza en unos minutos. La sala está abierta.`
-          : "Tu mentoría empieza en unos minutos. La sala está abierta.",
-      ),
-      boton("Entrar a la sala", x.c.sesion_id ? `${x.base}/room/${x.c.sesion_id}` : x.url),
-      tarjetaClase({
-        titulo: x.c.clase,
-        tutor: x.c.tutor,
-        cuando: cuando(x.c.inicio, x.tz),
-        duracion: duracion(x.c.duracion_min),
-        acento: VERDE,
-        fondo: "#e9f7ef",
-      }),
-      nota(
-        "Funciona desde el navegador, sin instalar nada. La clase se graba: tendrás el video disponible 30 días.",
-      ),
-    ],
-  }),
+  session_starting: (x) => {
+    const otro = alTutor(x) ? x.c.alumno : x.c.tutor;
+    return {
+      asunto: "Tu clase empieza en unos minutos",
+      familia: "ok",
+      epigrafe: "Es la hora",
+      titulo: "La sala ya está abierta",
+      preheader: "Entra a la sala: tu mentoría está por empezar.",
+      motivo: "Recibes este correo porque tu mentoría está por comenzar.",
+      cuerpo: [
+        parrafo(
+          otro
+            ? `Tu mentoría con ${esc(primerNombre(otro))} empieza en unos minutos. La sala está abierta.`
+            : "Tu mentoría empieza en unos minutos. La sala está abierta.",
+        ),
+        boton("Entrar a la sala", x.c.sesion_id ? `${x.base}/room/${x.c.sesion_id}` : x.url),
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: otro,
+          cuando: cuando(x.c.inicio, x.tz),
+          duracion: duracion(x.c.duracion_min),
+          acento: VERDE,
+          fondo: "#e9f7ef",
+        }),
+        nota(
+          "Funciona desde el navegador, sin instalar nada. La clase se graba: tendrás el video disponible 30 días.",
+        ),
+      ],
+    };
+  },
 
   cancellation: (x) => {
     const d = dia(x.c.inicio, x.tz);
+    // EY-218 · al tutor: ni «te devolvemos» (el reembolso es del alumno), ni
+    // «buscar otro horario» en su propia ficha, ni la pantalla del alumno.
+    if (alTutor(x)) {
+      const porQuien =
+        x.c.cancelado_por === "student"
+          ? x.c.alumno
+            ? `${primerNombre(x.c.alumno)} canceló la mentoría`
+            : "El alumno canceló la mentoría"
+          : "Se canceló la mentoría";
+      return {
+        asunto: d ? `Se canceló tu mentoría del ${d}` : "Se canceló tu mentoría",
+        familia: "alerta",
+        epigrafe: "Cancelación",
+        titulo: porQuien,
+        preheader: "La clase se canceló y el horario volvió a quedar libre en tu agenda.",
+        motivo: "Recibes este correo porque eres tutor de esta mentoría.",
+        cuerpo: [
+          parrafo("La clase se canceló y el horario volvió a quedar libre en tu agenda."),
+          tarjetaClase({
+            titulo: x.c.clase,
+            tutor: x.c.alumno,
+            cuando: cuando(x.c.inicio, x.tz),
+            duracion: duracion(x.c.duracion_min),
+            acento: ROJO,
+            fondo: "#fdeceb",
+          }),
+          boton("Ver el detalle de la reserva", x.url),
+        ],
+      };
+    }
     const quien =
       x.c.cancelado_por === "tutor"
         ? x.c.tutor
@@ -964,18 +1020,21 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     const borra = Number.isNaN(t)
       ? null
       : dia(new Date(t + 30 * 86_400_000).toISOString(), x.tz);
+    const otro = alTutor(x) ? x.c.alumno : x.c.tutor;
     return {
       asunto: "Ya puedes ver la grabación de tu mentoría",
       familia: "clase",
       epigrafe: "Grabación lista",
       titulo: "Tu clase, disponible 30 días",
       preheader: "La grabación está lista. Disponible 30 días desde la clase.",
-      motivo: "Recibes este correo porque asististe a esta mentoría.",
+      motivo: alTutor(x)
+        ? "Recibes este correo porque diste esta mentoría."
+        : "Recibes este correo porque asististe a esta mentoría.",
       cuerpo: [
         parrafo("Ya puedes ver y descargar la grabación desde la página de tu reserva."),
         tarjetaClase({
           titulo: x.c.clase,
-          tutor: x.c.tutor,
+          tutor: otro,
           cuando: cuando(x.c.inicio, x.tz),
           duracion: duracion(x.c.duracion_min),
         }),

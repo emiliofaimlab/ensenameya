@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 
 import {
+  FILTRO_AVISOS_VISIBLES,
   NOTICES_LIMIT,
   toNotice,
   type AppNotice,
@@ -41,6 +42,9 @@ export async function listNotices(userId: string): Promise<AppNotice[]> {
     .from("notifications")
     .select("id, type, template, payload, created_at, read_at")
     .eq("recipient_id", userId)
+    // EY-224 · el mismo filtro que `session_bootstrap()` y que la campana al
+    // abrirse: fuera solo lo CADUCADO (ver `avisoVisible`), no todo `failed`.
+    .or(FILTRO_AVISOS_VISIBLES)
     .order("created_at", { ascending: false })
     .limit(NOTICES_LIMIT);
   return ((data ?? []) as NotificationRow[]).map(toNotice);

@@ -12,6 +12,7 @@ import {
 } from "@/lib/hora";
 import { createClient } from "@/lib/supabase/client";
 import {
+  FILTRO_AVISOS_VISIBLES,
   NOTICES_LIMIT,
   toNotice,
   type AppNotice,
@@ -61,8 +62,16 @@ export function NotificationsBell({
   userId,
   variante = "icono",
   formato = FORMATO_POR_DEFECTO,
+  dosPapeles = false,
 }: {
   initial: AppNotice[];
+  /**
+   * EY-224 · la cuenta es tutor Y alumno. La lista es ÚNICA y mezclada
+   * (decidido con el cliente), así que a quien tiene los dos papeles cada aviso
+   * le dice con una etiqueta si es de su lado de tutor o de alumno. A quien
+   * tiene uno solo, la etiqueta no le dice nada y no se pinta.
+   */
+  dosPapeles?: boolean;
   /**
    * 12 h o 24 h (`ey-h12`) para la fecha de cada aviso. La resuelve el layout
    * en servidor y baja por `SiteHeader`: leer la cookie aquí haría parpadear
@@ -90,6 +99,17 @@ export function NotificationsBell({
 }) {
   const router = useRouter();
   const [notices, setNotices] = useState<AppNotice[]>(initial);
+  // EY-224 · si el servidor vuelve a pintar la cabecera con otra lista (un
+  // `router.refresh()`, o el layout que se re-renderiza al cruzar de grupo de
+  // rutas), manda la nueva. Con `useState(initial)` a secas el estado se
+  // quedaba con la PRIMERA lista que vio y la ignoraba para siempre: la misma
+  // cuenta veía avisos distintos según el panel por el que hubiera entrado.
+  // Es el patrón «ajustar el estado al cambiar una prop» de React, sin efecto.
+  const [initialVisto, setInitialVisto] = useState(initial);
+  if (initial !== initialVisto) {
+    setInitialVisto(initial);
+    setNotices(initial);
+  }
   // Controlado (antes no lo era) para poder cerrarlo A MANO: cuando el aviso
   // abre la burbuja no hay navegación, y sin cerrar esto el desplegable se
   // quedaba abierto tapando el hilo que el usuario acaba de pedir.
@@ -105,10 +125,10 @@ export function NotificationsBell({
       // ⚠️ Sin esto la campana desmiente al correo. `caducar_notificaciones()`
       // (`20260911210000`) marca `failed` los avisos con hora dentro —«tu clase
       // empieza en unos minutos»— que la cola no alcanzó a enviar a tiempo, y
-      // esos NO se mandan. Pero la campana pinta todas las filas sin mirar el
-      // estado, así que el mismo aviso mentiroso seguía apareciendo aquí tres
-      // horas después por la otra puerta.
-      .neq("status", "failed")
+      // esos NO se mandan ni se enseñan. Solo esos: un `failed` porque Resend
+      // rechazó el correo sigue aquí, que es el canal que no falló (EY-224,
+      // ver `avisoVisible`).
+      .or(FILTRO_AVISOS_VISIBLES)
       .order("created_at", { ascending: false })
       .limit(NOTICES_LIMIT);
     setNotices(((data ?? []) as NotificationRow[]).map(toNotice));
@@ -351,6 +371,11 @@ export function NotificationsBell({
                       <span aria-hidden className="mt-1.5 size-1.5 shrink-0" />
                     )}
                     <span className={n.read ? "text-muted-foreground" : ""}>
+                      {dosPapeles && n.papel ? (
+                        <span className="me-1.5 inline-block rounded-sm bg-muted px-1 py-px align-[1px] text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          {n.papel === "tutor" ? "Tutor" : "Alumno"}
+                        </span>
+                      ) : null}
                       {n.text}
                     </span>
                   </span>
