@@ -61,6 +61,7 @@
  *   `kyc-documents`    10 MB · `20260706150000`
  *   `support-attachments` 25 MB · `20260828161500` (DL-01, adjuntos de contacto)
  *   `payout-proofs`    10 MB · `20260916110000` (punto 3, comprobantes de pago)
+ *   `social-resources` 25 MB · `20261013140000` (EY-222, recursos para redes)
  */
 
 const MB = 1024 * 1024;
@@ -175,6 +176,18 @@ export const PAYOUT_PROOF_HINT =
  * hay que evitar es que alguien suba veinte por error, no defenderse de nadie.
  */
 export const PAYOUT_PROOF_MAX_FILES = 3;
+
+/* ── Recursos para redes → bucket privado `social-resources` (EY-222) ─────── */
+/**
+ * Lo que el ADMIN sube en `/admin/recursos` para que los tutores lo descarguen
+ * (posts, stories, banners, guías). Imágenes y PDF: las plantillas editables
+ * (Canva) entran como ENLACE, no como fichero. Lo declara `20261013140000`, y
+ * ahí es donde hay que tocarlo.
+ */
+export const SOCIAL_RESOURCE_MAX_BYTES = 25 * MB;
+export const SOCIAL_RESOURCE_TYPES = [...IMAGE_TYPES, PDF];
+export const SOCIAL_RESOURCE_HINT =
+  `PNG, JPG, WebP o PDF · máx. ${maxLabel(SOCIAL_RESOURCE_MAX_BYTES)}`;
 
 /**
  * Motivo por el que un archivo NO vale, o `null` si vale. Se comprueba al

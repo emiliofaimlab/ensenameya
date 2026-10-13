@@ -8,6 +8,7 @@ import {
   PanelShell,
 } from "@/components/layout/panel-shell";
 import { initialsFrom } from "@/lib/catalog/format";
+import { reservaResenable } from "@/lib/resena";
 import { ReviewForm } from "./review-form";
 
 export const metadata = { title: "Deja tu reseña · Enséñame Ya" };
@@ -31,7 +32,7 @@ export default async function ReviewPage({
     supabase
       .from("bookings")
       .select(
-        "id, status, products(title, tutor_id), sessions(start_at, status), reviews(rating, comment, author_display)",
+        "id, status, products(title, tutor_id), sessions(start_at, end_at, status), reviews(rating, comment, author_display)",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -43,7 +44,12 @@ export default async function ReviewPage({
   ]);
 
   if (!booking) notFound();
-  if (booking.status !== "completed") redirect(`/reservas/${id}`);
+  // EY-220 · `reservaResenable` (espejo de `submit_review`) y no `completed` a
+  // secas: también vale con la última clase en sus 10 min finales o recién
+  // acabada, antes de que el cron cierre la reserva.
+  if (!reservaResenable(booking.status, booking.sessions ?? [])) {
+    redirect(`/reservas/${id}`);
+  }
 
   const names = await tutorNames(supabase, [booking.products?.tutor_id]);
   const tutor = names.get(booking.products?.tutor_id ?? "") ?? "tu tutor";

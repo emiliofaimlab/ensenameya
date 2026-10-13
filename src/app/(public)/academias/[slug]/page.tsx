@@ -27,7 +27,7 @@ import {
   ReviewsSummary,
   TutorReviews,
 } from "@/components/catalog/tutor-reviews";
-import { PrecioEnLinea } from "@/components/precio/precio";
+import { PrecioDesde } from "@/components/precio/precio";
 import { getAcademyDetail } from "@/lib/catalog/queries";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 
@@ -242,8 +242,7 @@ export default async function AcademyPage({
                 ) : null}
                 {academy.priceFromMinor !== null && academy.priceCurrency ? (
                   <span className="inline-flex items-center gap-1.5">
-                    Desde{" "}
-                    <PrecioEnLinea
+                    <PrecioDesde
                       amountMinor={academy.priceFromMinor}
                       currency={academy.priceCurrency}
                     />

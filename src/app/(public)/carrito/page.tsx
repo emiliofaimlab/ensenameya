@@ -612,6 +612,7 @@ function LineaDelCarrito({
                 <span className="text-right">
                   <Precio
                     amountMinor={l.total}
+                    ceroEsGratis
                     currency={p.currency}
                     className="text-[17px] leading-none font-bold text-[#19191f]"
                     notaClassName="mt-0.5"

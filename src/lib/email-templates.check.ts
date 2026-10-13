@@ -3,7 +3,14 @@ import { readdirSync, readFileSync } from "node:fs";
 
 import { BAJA_TIENE_DESTINO } from "./email-sistema.ts";
 import { PLANTILLAS_IDS, renderEmail } from "./email-templates.ts";
-import { rutaFor, toNotice } from "./notifications.ts";
+import {
+  FILTRO_AVISOS_VISIBLES,
+  PLANTILLAS_CADUCABLES,
+  avisoVisible,
+  papelDelAviso,
+  rutaFor,
+  toNotice,
+} from "./notifications.ts";
 
 /**
  * Comprobación mínima del renderizado de los correos. Sin framework: se corre
@@ -385,15 +392,93 @@ assert.equal(rutaFor("session_starting", { booking_id: "bk-7", session_id: "se-3
 assert.equal(rutaFor("session_starting", { booking_id: "bk-7" }), "/reservas/bk-7");
 
 /**
- * ⚠️ NTF-11 ES EL ÚNICO CASO QUE ESTE MECANISMO NO RESUELVE, y esta aserción lo
- * deja escrito en vez de aparentar que está arreglado: `avisar_clases_de_manana`
- * encola DOS filas —una al alumno y otra al tutor— con la MISMA plantilla y el
- * MISMO payload, así que decidir por plantilla es imposible por construcción. Se
- * queda en la pantalla del alumno, que es la equivocada la mitad de las veces.
- * Arreglarlo de verdad pide el papel del destinatario en la fila, o dos
- * plantillas: una migración, no un `if` en `rutaFor`.
+ * EY-218 · NTF-08/09/11/19 se encolan al alumno Y al tutor con la MISMA
+ * plantilla. Desde `20261013120000` el payload lleva `para`, y con él el tutor
+ * va a SU detalle (`/tutor/reservas/{id}`), no a SCR-AL03. Las filas viejas,
+ * sin `para`, siguen yendo al alumno: es lo que hacían.
  */
 assert.equal(rutaFor("booking_reminder_24h", { booking_id: "bk-7", session_id: "se-3" }), "/reservas/bk-7");
+for (const t of ["booking_reminder_24h", "cancellation", "recording_ready"]) {
+  assert.equal(rutaFor(t, { booking_id: "bk-7", para: "alumno" }), "/reservas/bk-7", `${t} al alumno`);
+  assert.equal(rutaFor(t, { booking_id: "bk-7", para: "tutor" }), "/tutor/reservas/bk-7", `${t} al tutor`);
+}
+assert.equal(rutaFor("session_starting", { booking_id: "bk-7", para: "tutor" }), "/tutor/reservas/bk-7");
+assert.equal(rutaFor("session_starting", { booking_id: "bk-7", session_id: "se-3", para: "tutor" }), "/room/se-3");
+
+// Y el CORREO del tutor: su enlace, la otra parte es el ALUMNO, y nada de lo
+// que solo es del alumno (el reembolso, «buscar otro horario» en su ficha).
+const ctxClase = {
+  clase: "Álgebra", tutor: "Camilo Ruiz", alumno: "Lucía Pérez", tutor_id: "tu-1",
+  inicio: "2026-09-15T15:00:00Z", duracion_min: 60, reembolso: 2500, moneda: "USD",
+  cancelado_por: "student", sesion_id: "se-3",
+};
+for (const t of ["booking_reminder_24h", "cancellation", "recording_ready", "session_starting"]) {
+  const r = renderEmail({
+    template: t, payload: { booking_id: "bk-7", session_id: "se-3", para: "tutor" },
+    nombre: "Camilo", baseUrl: BASE, contexto: ctxClase, ahora: AHORA,
+  })!;
+  assert.ok(!r.text.includes(`${BASE}/reservas/bk-7`), `${t}: al tutor se le manda a la pantalla del alumno`);
+  assert.ok(r.text.includes("Lucía"), `${t}: al tutor no se le dice con qué alumno es`);
+  assert.ok(!/con Camilo/.test(r.subject + r.text), `${t}: al tutor se le dice «con» él mismo`);
+}
+const cancelTutor = renderEmail({
+  template: "cancellation", payload: { booking_id: "bk-7", para: "tutor" },
+  nombre: "Camilo", baseUrl: BASE, contexto: ctxClase, ahora: AHORA,
+})!;
+assert.ok(!/devolvemos/i.test(cancelTutor.text), "al tutor se le promete el reembolso del alumno");
+assert.ok(!cancelTutor.text.includes("/tutores/tu-1"), "al tutor se le manda a buscar horario en su propia ficha");
+const cancelAlumno = renderEmail({
+  template: "cancellation", payload: { booking_id: "bk-7", para: "alumno" },
+  nombre: "Lucía", baseUrl: BASE, contexto: ctxClase, ahora: AHORA,
+})!;
+assert.ok(/devolvemos/i.test(cancelAlumno.text), "el alumno dejó de enterarse de su reembolso");
+
+// EY-224 · qué esconde la campana: SOLO lo caducado por
+// `caducar_notificaciones()`. Un `failed` por rechazo de Resend sigue saliendo:
+// el in-app es justo el canal que no falló.
+assert.equal(avisoVisible({ status: "failed", template: "session_starting" }), false);
+assert.equal(avisoVisible({ status: "failed", template: "booking_reminder_24h" }), false);
+assert.equal(avisoVisible({ status: "failed", template: "booking_new_tutor" }), true, "un correo rechazado borra el aviso de la campana");
+assert.equal(avisoVisible({ status: "pending", template: "session_starting" }), true);
+assert.equal(avisoVisible({ status: "sent", template: "booking_reminder_24h" }), true);
+// La lista TS es la misma que la de la función SQL y la de `session_bootstrap`:
+// se lee de las migraciones en vez de copiarse.
+{
+  const sql = readdirSync(MIGRACIONES)
+    .filter((f) => f.endsWith(".sql"))
+    .sort()
+    .map((f) => readFileSync(`${MIGRACIONES}/${f}`, "utf8"));
+  const ultima = (re: RegExp) => sql.filter((t) => re.test(t)).at(-1)!;
+  const caducar = ultima(/function public\.caducar_notificaciones\(\)/);
+  const boot = ultima(/function public\.session_bootstrap\(\)/);
+  for (const t of PLANTILLAS_CADUCABLES) {
+    assert.ok(caducar.includes(`'${t}'`), `caducar_notificaciones ya no caduca ${t}`);
+    assert.ok(boot.includes(`'${t}'`), `session_bootstrap no esconde ${t} caducado`);
+    assert.ok(FILTRO_AVISOS_VISIBLES.includes(t), `el filtro de PostgREST no esconde ${t}`);
+  }
+}
+
+// EY-224 · la etiqueta de papel de la campana.
+assert.equal(papelDelAviso("booking_reminder_24h", { para: "tutor" }), "tutor");
+assert.equal(papelDelAviso("booking_reminder_24h", { para: "alumno" }), "alumno");
+assert.equal(papelDelAviso("booking_reminder_24h", { booking_id: "bk-7" }), null, "fila vieja sin `para`: sin etiqueta inventada");
+assert.equal(papelDelAviso("reschedule_requested", { para: "tutor" }), "tutor");
+assert.equal(papelDelAviso("booking_new_tutor", {}), "tutor");
+assert.equal(papelDelAviso("payout_paid", {}), "tutor");
+assert.equal(papelDelAviso("welcome_tutor", {}), "tutor");
+assert.equal(papelDelAviso("tutor_review_result", {}), "tutor");
+assert.equal(papelDelAviso("payment_receipt", {}), "alumno");
+assert.equal(papelDelAviso("review_request", {}), "alumno");
+assert.equal(papelDelAviso("new_message", { conversation_id: "c-1" }), null);
+assert.equal(papelDelAviso("admin_message", {}), null);
+assert.equal(
+  toNotice({
+    id: "n-8", type: "NTF-11", template: "booking_reminder_24h",
+    payload: { booking_id: "bk-7", para: "tutor" },
+    created_at: "2026-09-11T10:00:00Z", read_at: null,
+  }).papel,
+  "tutor",
+);
 
 // El resto de destinos propios del Doc 33. Todos se deciden ANTES de mirar el
 // payload, que es lo que hace que un `booking_id` dentro no los arrastre a
@@ -791,6 +876,30 @@ assert.ok(!regaloRecibido.html.includes("<3 &"), "la dedicatoria entró en el HT
  * aserciones del propio fichero — que son las ESCRITAS, no las ejecutadas: los
  * bucles de arriba corren cada una 34 veces.
  */
+// Grupales (Jose, 13-oct) · el aviso grupal al tutor va a SU clase grupal, que
+// es por producto; «empieza en 15 min» sigue yendo a la sala, y sin
+// `product_id` (filas viejas) cae a la reserva como antes.
+assert.equal(
+  rutaFor("booking_reminder_24h", { booking_id: "bk-7", group_class_id: "gc-1", product_id: "pr-1", para: "tutor" }),
+  "/tutor/clases-grupales/pr-1",
+);
+assert.equal(rutaFor("booking_reminder_24h", { booking_id: "bk-7", product_id: "pr-1", para: "tutor" }), "/tutor/reservas/bk-7");
+assert.equal(rutaFor("booking_reminder_24h", { booking_id: "bk-7", group_class_id: "gc-1", product_id: "pr-1", para: "alumno" }), "/reservas/bk-7");
+assert.equal(rutaFor("group_enrolled_tutor", { booking_id: "bk-7", product_id: "pr-1" }), "/tutor/clases-grupales/pr-1");
+assert.equal(rutaFor("group_enrolled_tutor", { booking_id: "bk-7" }), "/tutor/reservas/bk-7");
+assert.equal(rutaFor("session_starting", { booking_id: "bk-7", session_id: "se-3", group_class_id: "gc-1", para: "tutor" }), "/room/se-3");
+assert.equal(papelDelAviso("group_enrolled_tutor", null), "tutor");
+assert.equal(papelDelAviso("group_enrolled_student", null), "alumno");
+{
+  const r = renderEmail({
+    template: "booking_reminder_24h",
+    payload: { booking_id: "bk-7", session_id: "se-3", group_class_id: "gc-1", product_id: "pr-1", para: "tutor" },
+    nombre: "Camilo", baseUrl: BASE, contexto: ctxClase, ahora: AHORA,
+  })!;
+  assert.ok(r.text.includes(`${BASE}/tutor/clases-grupales/pr-1`), "recordatorio grupal: al tutor no se le lleva a su clase");
+  assert.ok(!r.text.includes("Lucía"), "recordatorio grupal: se nombra a UN alumno de la clase");
+}
+
 const aserciones = readFileSync(new URL(import.meta.url), "utf8").match(/\bassert\.\w+\(/g)!.length;
 
 console.log(

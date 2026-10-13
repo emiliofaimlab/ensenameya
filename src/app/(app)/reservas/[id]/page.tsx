@@ -41,6 +41,8 @@ import { CompartirReserva } from "@/components/compartir-reserva";
 import { codigoParaCompartir } from "@/lib/referral";
 import type { Database } from "@/lib/database.types";
 import { roomOpen } from "@/lib/room-window";
+import { reservaResenable } from "@/lib/resena";
+import { ResenaAlColgar } from "./resena-al-colgar";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -80,10 +82,12 @@ export const metadata = { title: "Detalle de reserva · Enséñame Ya" };
  */
 export default async function BookingDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ resena?: string | string[] }>;
 }) {
-  const { id } = await params;
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
   const { user } = await requireUser();
   // Zona y formato juntos: las dos mitades de «qué hora es para quien mira»,
   // y las dos lecturas baratas — en paralelo, nunca encadenadas.
@@ -103,7 +107,7 @@ export default async function BookingDetailPage({
       // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
       // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
       // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
-      "id, status, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount)",
+      "id, status, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -173,6 +177,29 @@ export default async function BookingDetailPage({
   const ficha = fichas.get(booking.products?.tutor_id ?? "");
   const tutor = ficha?.displayName ?? undefined;
 
+  // ── EY-220 · el pop-up de reseña al colgar ────────────────────────────────
+  //
+  // La sala (`live-room.tsx`) manda aquí con `?resena=1` al alumno que cuelga
+  // en los últimos 10 min o después del fin. El parámetro solo PIDE el pop-up:
+  // quien decide es esto, en servidor —es el alumno de ESTA reserva (la RLS
+  // también deja leerla al tutor), no la ha reseñado ya, y la reserva es
+  // reseñable (en un paquete, solo tras la última sesión). `reservaResenable`
+  // es el espejo de la guarda de `submit_review`.
+  const resenable = reservaResenable(booking.status, sessions);
+  const yaResenada = Boolean(booking.reviews);
+  const pedirResena =
+    sp.resena === "1" &&
+    booking.student_id === user.id &&
+    !yaResenada &&
+    resenable;
+  // La firma sugerida, como en `/resena`: la enmascara la misma función que la
+  // RPC. Solo se pide si el pop-up va a salir.
+  const { data: firmaSugerida } = pedirResena
+    ? await supabase.rpc("mask_person_name", {
+        p_name: (user.user_metadata?.full_name as string | undefined) ?? "",
+      })
+    : { data: null };
+
   // El hilo solo se carga si el chat aplica: para una reserva cancelada sería
   // una consulta a cambio de nada.
   const { data: msgs } = chatOpen
@@ -201,6 +228,13 @@ export default async function BookingDetailPage({
 
   return (
     <PanelShell back={{ href: "/app", label: "Volver al panel" }}>
+      {pedirResena ? (
+        <ResenaAlColgar
+          bookingId={booking.id}
+          tutor={tutor ?? "tu tutor"}
+          suggestedName={firmaSugerida ?? null}
+        />
+      ) : null}
       <div className="flex flex-col gap-1.5">
         {tutor ? <p className="text-[13px] text-[#6b6b6b]">con {tutor}</p> : null}
         {/* B1.4 · El título, a dos líneas como mucho.
@@ -478,7 +512,10 @@ export default async function BookingDetailPage({
             </PanelCard>
           ) : null}
 
-          {booking.status === "completed" ? (
+          {/* EY-220 · `resenable` y no `completed` a secas: quien pulsa «Más
+              tarde» al colgar tiene que poder volver aquí sin esperar al cron
+              que cierra la reserva (fin + 10 min, cada 5). */}
+          {resenable ? (
             <PanelCard>
               <PanelCardTitle>Tu reseña</PanelCardTitle>
               <p className="mt-3.5 text-sm text-[#6b6b6b]">

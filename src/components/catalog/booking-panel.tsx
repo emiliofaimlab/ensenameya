@@ -14,7 +14,12 @@ import { BookingSelect } from "@/components/catalog/booking-select";
 import { AddToCart } from "@/components/cart/add-to-cart";
 import { GoToCart } from "@/components/cart/go-to-cart";
 import { cartCount } from "@/lib/cart/resolve";
-import { perSessionLabel, priceDisplay } from "@/lib/catalog/format";
+import {
+  esGratis,
+  GRATIS,
+  perSessionLabel,
+  priceDisplay,
+} from "@/lib/catalog/format";
 import { ImporteEnUsd, ImporteLocal } from "@/components/precio/precio";
 import { textosDePrecio } from "@/lib/fx";
 import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
@@ -356,7 +361,9 @@ export async function BookingPanel({
       dayProducts.map(async (p) => {
         const d = priceDisplay(p);
         const { local, usd } = await textosDePrecio(d.amountMinor, p.currency);
-        return [p.id, `${local ?? usd} · ${d.note}`] as const;
+        // EY-219 · una mentoría gratis dice «Gratis» también en el desplegable.
+        const cifra = esGratis(d.amountMinor) ? GRATIS : (local ?? usd);
+        return [p.id, `${cifra} · ${d.note}`] as const;
       }),
     ),
   );
@@ -927,6 +934,7 @@ export async function BookingPanel({
             <span className="text-[15px] text-[#6b6b6b]">{totalLabel}</span>
             <ImporteLocal
               amountMinor={precio.amountMinor}
+              ceroEsGratis
               currency={chosen.currency}
               className="text-[30px] font-bold text-[#19191f]"
             />
@@ -941,6 +949,7 @@ export async function BookingPanel({
           <p className="text-right text-[13px] text-[#6b6b6b]">
             <ImporteEnUsd
               amountMinor={precio.amountMinor}
+              ceroEsGratis
               currency={chosen.currency}
               className="after:content-['_·_']"
             />

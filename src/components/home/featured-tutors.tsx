@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { PrecioEnLinea } from "@/components/precio/precio";
+import { PrecioDesde } from "@/components/precio/precio";
 
 import { Container } from "@/components/layout/container";
 import { Section } from "@/components/layout/section";
@@ -85,8 +85,7 @@ export function FeaturedTutors({ tutors }: { tutors: FeaturedTutor[] }) {
                   <RatingStars avg={t.ratingAvg} count={t.ratingCount} />
                   {t.priceFromMinor !== null && t.currency ? (
                     <p className="text-sm font-semibold">
-                      Desde{" "}
-                      <PrecioEnLinea
+                      <PrecioDesde
                         amountMinor={t.priceFromMinor}
                         currency={t.currency}
                       />

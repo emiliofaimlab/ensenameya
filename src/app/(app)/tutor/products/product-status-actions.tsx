@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { MoreHorizontalIcon } from "lucide-react";
+import { EyeIcon, MoreHorizontalIcon, Share2Icon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
@@ -18,6 +19,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CompartirMentoriaDialog } from "./compartir-mentoria";
 
 type Status = Database["public"]["Enums"]["product_status"];
 
@@ -100,7 +102,7 @@ const COPIABLES =
 
 /**
  * §2.3 · Las acciones de la tarjeta dejan de ser botones de texto y se meten
- * en un «···» de 36 px, el tercero de los tres iconos.
+ * en un «···» de 36 px, el último de los iconos de la fila.
  *
  * ⚠️ El disparador tiene que ser un `<button>` —con un `<a>` el teclado no abre
  * el menú y no hay `aria-expanded`—, así que va `PanelIconButton asChild` sobre
@@ -114,15 +116,23 @@ export function ProductStatusActions({
   title,
   status,
   isApproved,
+  rutaCompartir,
 }: {
   productId: string;
   /** Solo para la etiqueta: con cuatro tarjetas hay cuatro «Más acciones». */
   title: string;
   status: Status;
   isApproved: boolean;
+  /**
+   * EY-225 · `/mentorias/<id>` con el `?ref=` del tutor, resuelto en servidor
+   * (`codigoParaCompartir`). Solo se usa con la mentoría activa.
+   */
+  rutaCompartir: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  // EY-223 · el diálogo de compartir vive FUERA del menú (ver su cabecera).
+  const [compartir, setCompartir] = useState(false);
   const actions = ACTIONS[status];
 
   async function run(a: Action) {
@@ -223,41 +233,101 @@ export function ProductStatusActions({
   }
 
   return (
-    <DropdownMenu>
-      {/* El título va en la etiqueta: los tres iconos se repiten tarjeta a
+    <>
+      <DropdownMenu>
+        {/* El título va en la etiqueta: los iconos se repiten tarjeta a
           tarjeta y es lo único que los distingue (2.4.4). */}
-      <PanelIconButton asChild label={`Más acciones: ${title}`}>
-        <DropdownMenuTrigger disabled={busy} className="disabled:opacity-50">
-          <MoreHorizontalIcon aria-hidden className="size-4" />
-        </DropdownMenuTrigger>
-      </PanelIconButton>
-      {/* ⚠️ `w-56` no es cosmético: `DropdownMenuContent` nace con
+        <PanelIconButton asChild label={`Más acciones: ${title}`}>
+          <DropdownMenuTrigger disabled={busy} className="disabled:opacity-50">
+            <MoreHorizontalIcon aria-hidden className="size-4" />
+          </DropdownMenuTrigger>
+        </PanelIconButton>
+        {/* ⚠️ `w-56` no es cosmético: `DropdownMenuContent` nace con
           `w-(--radix-dropdown-menu-trigger-width)`, o sea que sin esto el menú
           mediría los 36 px del disparador y las etiquetas saldrían partidas. */}
-      <DropdownMenuContent align="end" className="w-56">
-        {actions.map((a) => {
-          const blocked = a.needsApproval && !isApproved;
-          return (
+        <DropdownMenuContent align="end" className="w-56">
+          {/* EY-225 · «Ver como alumno» vivía como un ojo suelto en la fila; ahora
+            abre el menú, con «Compartir» al lado, que es lo que se hace con la
+            ficha pública una vez vista.
+
+            La ficha solo existe para las ACTIVAS (`getProductDetail` filtra por
+            `status = 'active'`, también para su dueño): enlazarla en otro
+            estado sería un 404. Fuera de `active` el ítem se queda, apagado y
+            con la razón escrita.
+
+            ⚠️ `aria-disabled` y NO `disabled`: Radix SALTA los ítems
+            `disabled` al moverse con las flechas, y entonces el lector de
+            pantalla nunca llega a oír por qué está apagado (4.1.2). Es el mismo
+            criterio que tenía el ojo de la fila. `preventDefault` deja el menú
+            abierto y sin hacer nada. */}
+          {status === "active" ? (
+            <>
+              <DropdownMenuItem asChild>
+                {/* `<Link>` y no `<a>`: un `<a href>` a pelo recarga la app
+                  entera. Cruza de `(app)` a `(public)`, pero la ficha no tiene
+                  guarda ni `redirect()` de servidor (regla 13). */}
+                <Link href={`/mentorias/${productId}`}>
+                  <EyeIcon aria-hidden />
+                  Ver como alumno
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={busy}
+                onSelect={() => setCompartir(true)}
+              >
+                <Share2Icon aria-hidden />
+                Compartir mi mentoría
+              </DropdownMenuItem>
+            </>
+          ) : (
             <DropdownMenuItem
-              key={a.label}
-              disabled={busy || blocked}
-              // Archivar y descartar son definitivos: van en rojo para que no
-              // se pulsen por inercia al buscar «Pausar».
-              variant={a.to === "archived" ? "destructive" : "default"}
-              onSelect={() => void run(a)}
+              aria-disabled="true"
+              onSelect={(e) => e.preventDefault()}
+              className="cursor-not-allowed opacity-50 focus:bg-transparent"
             >
-              {a.label}
-              {blocked ? " (requiere perfil aprobado)" : ""}
+              <EyeIcon aria-hidden />
+              <span>
+                Ver como alumno
+                <span className="block text-xs text-muted-foreground">
+                  Disponible cuando la mentoría esté activa
+                </span>
+              </span>
             </DropdownMenuItem>
-          );
-        })}
-        {actions.length ? <DropdownMenuSeparator /> : null}
-        {/* Duplicar existe en los CUATRO estados, archivada incluida: es la
+          )}
+          <DropdownMenuSeparator />
+          {actions.map((a) => {
+            const blocked = a.needsApproval && !isApproved;
+            return (
+              <DropdownMenuItem
+                key={a.label}
+                disabled={busy || blocked}
+                // Archivar y descartar son definitivos: van en rojo para que no
+                // se pulsen por inercia al buscar «Pausar».
+                variant={a.to === "archived" ? "destructive" : "default"}
+                onSelect={() => void run(a)}
+              >
+                {a.label}
+                {blocked ? " (requiere perfil aprobado)" : ""}
+              </DropdownMenuItem>
+            );
+          })}
+          {actions.length ? <DropdownMenuSeparator /> : null}
+          {/* Duplicar existe en los CUATRO estados, archivada incluida: es la
             única salida de un estado terminal (Doc 2 §2.6). */}
-        <DropdownMenuItem disabled={busy} onSelect={() => void duplicar()}>
-          Duplicar
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          <DropdownMenuItem disabled={busy} onSelect={() => void duplicar()}>
+            Duplicar
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {status === "active" ? (
+        <CompartirMentoriaDialog
+          open={compartir}
+          onOpenChange={setCompartir}
+          productId={productId}
+          ruta={rutaCompartir}
+          titulo={title}
+        />
+      ) : null}
+    </>
   );
 }

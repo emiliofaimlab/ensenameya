@@ -22,6 +22,24 @@ export function formatMoney(amountMinor: number, currency: string): string {
   return formatEnMoneda(amountMinor, currency);
 }
 
+/**
+ * EY-219 · una mentoría a precio 0 se ANUNCIA «Gratis», no «$0,00 / sesión» ni
+ * «Desde $0». `price_amount >= 0` es legal (check de `products`) y el cliente
+ * lo decidió así el 13-oct-2026.
+ *
+ * ⚠️ SOLO EN LA VITRINA: tarjetas, ficha, perfil, panel del tutor y el precio
+ * de la oferta en el checkout. Recibos, pagos, payouts, correos de cobro y el
+ * admin financiero siguen diciendo «$0,00»: son documentos de dinero y ahí un
+ * cero es un importe, no un argumento de venta. Por eso `formatMoney` NO cambia
+ * y quien quiera «Gratis» lo pide (aquí, o con `ceroEsGratis` en `<Precio>`).
+ */
+export const GRATIS = "Gratis";
+
+/** ¿Este precio de oferta se anuncia como «Gratis»? */
+export function esGratis(amountMinor: number | null | undefined): boolean {
+  return amountMinor === 0;
+}
+
 /** Etiqueta de precio según el modelo (RN-10). */
 export function priceLabel(p: {
   pricingModel: PricingModel;
@@ -29,6 +47,13 @@ export function priceLabel(p: {
   currency: string;
   packageNumSessions: number | null;
 }): string {
+  if (esGratis(p.priceAmount)) {
+    // «Gratis / sesión» no se dice: lo gratis no tiene unidad. El paquete sí
+    // conserva su recuento, que es lo que lo distingue de una clase suelta.
+    return p.pricingModel === "per_package" && p.packageNumSessions
+      ? `${GRATIS} · ${p.packageNumSessions} sesiones`
+      : GRATIS;
+  }
   const money = formatMoney(p.priceAmount, p.currency);
   switch (p.pricingModel) {
     case "per_session":
@@ -83,6 +108,9 @@ export function perSessionLabel(p: {
   packageNumSessions: number | null;
 }): string | null {
   if (p.pricingModel !== "per_package") return null;
+  // «6 sesiones · $0,00 c/u» no aporta nada: la nota del paquete ya da el
+  // recuento y el precio grande ya dice «Gratis».
+  if (esGratis(p.priceAmount)) return null;
   const n = p.packageNumSessions ?? 0;
   if (n < 2) return null;
   return `${n} sesiones · ${formatMoney(Math.round(p.priceAmount / n), p.currency)} c/u`;
@@ -194,6 +222,25 @@ export function priceDisplay(p: {
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
 }): PriceDisplay {
+  if (esGratis(p.priceAmount)) {
+    // EY-219 · la cifra grande dice «Gratis» y la nota se queda con el modelo
+    // («por sesión», «paquete · 6 sesiones»), nunca con «$0,00 / hora»: la
+    // línea pequeña no puede reintroducir el cero que la grande quitó.
+    const n = p.packageNumSessions ?? 1;
+    return {
+      amount: GRATIS,
+      amountMinor: 0,
+      note:
+        p.pricingModel === "per_package"
+          ? n > 1
+            ? `paquete · ${n} sesiones`
+            : "paquete"
+          : p.pricingModel === "per_hour"
+            ? "por hora"
+            : "por sesión",
+      isTotal: true,
+    };
+  }
   const tarifa = formatMoney(p.priceAmount, p.currency);
 
   switch (p.pricingModel) {
@@ -225,6 +272,11 @@ export function priceDisplay(p: {
     case "group":
       // RG-02: el cupo es el total del alumno, también en un ciclo (RG-16).
       return { amount: tarifa, amountMinor: p.priceAmount, note: "por cupo", isTotal: true };
+    // ponytail: un modelo que este código no conoce (p.ej. uno que llegue a la
+    // BD antes que su código) pinta la tarifa en vez de tumbar el catálogo
+    // entero con un `undefined.amountMinor`.
+    default:
+      return { amount: tarifa, amountMinor: p.priceAmount, note: "", isTotal: true };
   }
 }
 

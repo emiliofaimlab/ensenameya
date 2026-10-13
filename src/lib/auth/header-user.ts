@@ -56,5 +56,8 @@ export function toHeaderUser(
     // componente no se pinta, y sus dos destinos (`/app` y `/tutor`) son
     // exactamente los que el guarda no deja ver todavía.
     panels: asistente ? [] : panelsFor(roles),
+    // EY-224 · la campana etiqueta cada aviso «Tutor»/«Alumno» solo para quien
+    // tiene los dos roles: con uno solo la etiqueta no dice nada.
+    dosPapeles: roles.includes("tutor") && roles.includes("alumno"),
   };
 }

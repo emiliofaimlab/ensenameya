@@ -158,6 +158,7 @@ export default async function ConfirmarRegaloPage({
               <span className="text-[#6b6b6b]">Subtotal</span>
               <PrecioEnLinea
                 amountMinor={precio.amountMinor}
+                ceroEsGratis
                 currency={product.currency}
                 className="text-[#333333]"
               />

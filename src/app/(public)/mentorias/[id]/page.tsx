@@ -127,7 +127,6 @@ export async function generateMetadata({
   const product = id ? await getProductDetail(id) : null;
   if (!product) return { title: "Mentoría" };
 
-  const portada = storageUrl("product-images", product.imagePath);
   // §5.6 · la descripción de Google y de la vista previa de WhatsApp es el
   // `outcome` —la promesa que escribió el tutor—, no el título repetido. Sin
   // `outcome` se cae a una frase de plataforma en vez de inventarle una.
@@ -146,9 +145,16 @@ export async function generateMetadata({
       title: `${product.title} · Enséñame Ya`,
       description,
       url,
-      // Sin foto no se manda imagen: el relleno de `ProductCover` es un SVG en
-      // línea, no un asset con URL que una vista previa pueda cargar.
-      images: portada ? [{ url: portada }] : undefined,
+      // EY-223 · la imagen ya NO va aquí: la pone `opengraph-image.tsx` (la
+      // tarjeta banner con precio y tutor, con o sin portada). La convención de
+      // archivo manda sobre este objeto, y repetirla aquí sería una segunda
+      // fuente que se queda vieja.
+    },
+    // Sin esto X pinta la tarjeta pequeña y recorta el banner a un cuadrado.
+    twitter: {
+      card: "summary_large_image",
+      title: `${product.title} · Enséñame Ya`,
+      description,
     },
   };
 }
@@ -669,6 +675,7 @@ export default async function ProductPage({
                     <p className="text-[22px] leading-tight font-bold lg:text-[26px]">
                       <ImporteLocal
                         amountMinor={precio.amountMinor}
+                        ceroEsGratis
                         currency={product.currency}
                       />
                     </p>
@@ -681,6 +688,7 @@ export default async function ProductPage({
                     <p className="mt-0.5 flex items-center gap-2 text-xs text-white/90 lg:mt-0 lg:gap-3.5 lg:text-sm">
                       <ImporteEnUsd
                         amountMinor={precio.amountMinor}
+                        ceroEsGratis
                         currency={product.currency}
                         className="whitespace-nowrap"
                       />

@@ -140,6 +140,7 @@ export function FeaturedProducts({
                       <span className="min-w-0">
                         <Precio
                           amountMinor={precio.amountMinor}
+                          ceroEsGratis
                           currency={p.currency}
                           nota={precio.note}
                           className="text-lg font-semibold"

@@ -44,6 +44,15 @@ const hayWebShare = () => typeof navigator.share === "function";
 const noEnServidor = () => false;
 
 /**
+ * ¿Este navegador tiene la hoja de compartir del sistema? Exportado para que
+ * otros puntos de compartir (el menú de «Mis mentorías», EY-225) elijan la
+ * misma cara que este botón sin repetir el truco de hidratación.
+ */
+export function useHayWebShare(): boolean {
+  return useSyncExternalStore(nuncaCambia, hayWebShare, noEnServidor);
+}
+
+/**
  * ⚠️ CADA RED SE TRAGA UNA COSA DISTINTA, y por eso esto no es un solo patrón
  * con el nombre cambiado:
  *   · WhatsApp, Telegram y X llevan el MENSAJE entero (con el enlace dentro);
@@ -52,7 +61,10 @@ const noEnServidor = () => false;
  *     usuario en su propio cuadro;
  *   · el correo necesita asunto aparte o llega sin él.
  */
-const REDES: { nombre: string; href: (url: string, mensaje: string) => string }[] = [
+export const REDES_PARA_COMPARTIR: {
+  nombre: string;
+  href: (url: string, mensaje: string) => string;
+}[] = [
   {
     nombre: "WhatsApp",
     href: (_url, mensaje) => `https://wa.me/?text=${encodeURIComponent(mensaje)}`,
@@ -93,7 +105,7 @@ export function ShareButton({
   titulo: string;
   className?: string;
 }) {
-  const webShare = useSyncExternalStore(nuncaCambia, hayWebShare, noEnServidor);
+  const webShare = useHayWebShare();
 
   if (webShare) {
     return (
@@ -122,7 +134,7 @@ export function ShareButton({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        {REDES.map((r) => (
+        {REDES_PARA_COMPARTIR.map((r) => (
           <DropdownMenuItem key={r.nombre} asChild>
             {/* `noreferrer` además de `noopener`: la red no necesita saber
                 desde qué pantalla del panel se abrió. */}

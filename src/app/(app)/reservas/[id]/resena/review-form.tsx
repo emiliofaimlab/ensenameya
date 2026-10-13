@@ -21,6 +21,8 @@ export function ReviewForm({
   bookingId,
   existing,
   suggestedName,
+  alTerminar,
+  textoDescartar = "Ahora no",
 }: {
   bookingId: string;
   existing?: {
@@ -30,6 +32,15 @@ export function ReviewForm({
   } | null;
   /** Cómo se vería su firma ("Marina G."), para que sepa qué está aceptando. */
   suggestedName: string | null;
+  /**
+   * EY-220 · el pop-up de reseña al colgar monta ESTE formulario dentro de un
+   * diálogo en el detalle. Con `alTerminar`, guardar y descartar le devuelven
+   * el control (cerrar el diálogo) en vez de navegar; sin él, la página
+   * `/resena` se comporta como siempre.
+   */
+  alTerminar?: () => void;
+  /** «Ahora no» en la página; «Más tarde» en el pop-up (lo pidió el cliente). */
+  textoDescartar?: string;
 }) {
   const router = useRouter();
   // Las cinco estrellas del correo de reseña (`review_request`) apuntan a
@@ -81,6 +92,11 @@ export function ReviewForm({
       return;
     }
     toast.success(existing ? "Reseña actualizada." : "¡Gracias por tu reseña!");
+    if (alTerminar) {
+      alTerminar();
+      router.refresh();
+      return;
+    }
     router.push(`/reservas/${bookingId}`);
     router.refresh();
   }
@@ -179,9 +195,11 @@ export function ReviewForm({
           variant="outline"
           className="h-[49px] rounded-[10px] px-6"
           disabled={busy}
-          onClick={() => router.push(`/reservas/${bookingId}`)}
+          onClick={() =>
+            alTerminar ? alTerminar() : router.push(`/reservas/${bookingId}`)
+          }
         >
-          Ahora no
+          {textoDescartar}
         </Button>
       </div>
     </>

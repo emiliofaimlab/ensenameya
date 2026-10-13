@@ -14,12 +14,25 @@ import type {
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
 import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
+import { RESENA_MIN_ANTES_DEL_FIN } from "@/lib/resena";
 import { Button } from "@/components/ui/button";
 import { AddToCalendar } from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import { ReportConversation } from "@/components/chat/report-conversation";
 import { RecordingConsent } from "@/components/room/recording-consent";
 import { SessionRef } from "@/components/room/session-ref";
+import { cn } from "@/lib/utils";
+// EY-221 · herramientas de la clase en vivo (ver `components/sala/`).
+import { AvisoMano, BarraHerramientas } from "@/components/sala/barra-herramientas";
+import { canalDaily, canalSimulado, type CanalSala } from "@/components/sala/canal-sala";
+import { ContadorClase } from "@/components/sala/contador-clase";
+import { PanelMateriales } from "@/components/sala/presentacion/panel-materiales";
+import { usePresentacion } from "@/components/sala/presentacion/use-presentacion";
+import { VisorPresentacion } from "@/components/sala/presentacion/visor-presentacion";
+import { useManoLevantada } from "@/components/sala/use-mano-levantada";
+import { usePantallaCompleta } from "@/components/sala/use-pantalla-completa";
+import { useParticipanteRemoto } from "@/components/sala/use-participante-remoto";
+import { useVentanaFlotante, VentanaFlotante } from "@/components/sala/ventana-flotante";
 
 type SessionStatus = Database["public"]["Enums"]["session_status"];
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
@@ -163,10 +176,12 @@ const VARS_CHAT_SALA = {
  * porque el `theme` que le pasamos fija `background`. 36×36 es lo que espera
  * la barra de Prebuilt.
  */
+// Glifo RELLENO, como los nativos de Prebuilt (Personas, Compartir): con trazo
+// fino salía más pequeño y más débil que sus vecinos de barra.
 const ICONO_CHAT = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" fill="none">' +
-    '<path d="M10 10h16a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3h-8.7l-5.3 4v-4H10a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3Z" ' +
-    'stroke="#ffffff" stroke-width="2.2" stroke-linejoin="round"/></svg>',
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="1.5 2.5 21 21">' +
+    '<path fill="#ffffff" d="M5 3.5h14A2.5 2.5 0 0 1 21.5 6v9.5A2.5 2.5 0 0 1 19 18h-8.2l-4.6 3.6c-.5.4-1.2 0-1.2-.6V18H5a2.5 2.5 0 0 1-2.5-2.5V6A2.5 2.5 0 0 1 5 3.5Z"/>' +
+    "</svg>",
 )}`;
 
 /**
@@ -184,11 +199,32 @@ const ICONO_CHAT = `data:image/svg+xml,${encodeURIComponent(
  * (Ya NO depende de `window`: el icono es un `data:` URI de módulo. Antes leía
  * `window.location.origin` y por eso solo podía llamarse desde efectos.)
  */
+/**
+ * EY-221 · El icono de «levantar la mano» de la barra de Daily. Mismo truco que
+ * `ICONO_CHAT` (data: URI, trazo blanco a mano) y por los mismos motivos.
+ */
+// Relleno, como `ICONO_CHAT` (glifo «pan_tool» de Material Icons, Apache-2.0).
+const ICONO_MANO = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+    '<path fill="#ffffff" d="M23 5.5V20c0 2.2-1.8 4-4 4h-7.3c-1.08 0-2.1-.43-2.85-1.19L1 14.83s1.26-1.23 1.3-1.25c.22-.19.49-.29.79-.29.22 0 .42.06.6.16.04.01 4.31 2.46 4.31 2.46V4c0-.83.67-1.5 1.5-1.5S11 3.17 11 4v7h1V1.5c0-.83.67-1.5 1.5-1.5S15 .67 15 1.5V11h1V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11h1V5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5Z"/>' +
+    "</svg>",
+)}`;
+
 function botonesTray(
   abierto: boolean,
   sinLeer: number,
+  manoArriba: boolean,
 ): DailyCustomTrayButtons {
   return {
+    // EY-221 · levantar la mano. `active` es el estado «encendido» de Prebuilt
+    // para un botón que no abre panel (el chat usa `sidebar-open`).
+    mano: {
+      iconPath: ICONO_MANO,
+      iconPathDarkMode: ICONO_MANO,
+      label: manoArriba ? "Bajar mano" : "Mano",
+      tooltip: manoArriba ? "Bajar la mano" : "Levantar la mano",
+      visualState: manoArriba ? "active" : "default",
+    },
     chat: {
       iconPath: ICONO_CHAT,
       // El mismo para los dos modos: nuestro `theme` fija `background` oscuro
@@ -221,11 +257,9 @@ type Joined = {
   simulated: boolean;
 };
 
-/** ms → "12:34" para el cronómetro de la sesión (AL/LV01). */
-function clock(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-}
+// EY-221 · AQUÍ VIVÍA `clock()`, el formato del cronómetro de la cabecera. El
+// cronómetro bajó a ser el contador superpuesto sobre el vídeo y su formato se
+// fue con él: `reloj()` en `components/sala/contador-clase.tsx`.
 
 /**
  * ms → "6 d 04 h" / "2 h 05 min" / "4 min 12 s" para la cuenta regresiva.
@@ -467,8 +501,18 @@ export function LiveRoom({
   const salirDeLaSala = useCallback(() => {
     if (saliendo.current) return;
     saliendo.current = true;
-    router.push(detalleDeLaReserva);
-  }, [router, detalleDeLaReserva]);
+    // EY-220 · el ALUMNO que cuelga en los últimos 10 min de la clase, o ya
+    // pasada la hora de fin, aterriza con `?resena=1` y el detalle le abre el
+    // pop-up de reseña. Aquí solo se PIDE: el detalle decide en servidor si de
+    // verdad toca (última sesión del paquete, sin reseña previa, reseñable).
+    // El tutor no lo ve nunca. Misma navegación de siempre (regla 13).
+    const pedirResena =
+      !isTutor &&
+      Date.now() >= Date.parse(endAt) - RESENA_MIN_ANTES_DEL_FIN * 60_000;
+    router.push(
+      pedirResena ? `${detalleDeLaReserva}?resena=1` : detalleDeLaReserva,
+    );
+  }, [router, detalleDeLaReserva, isTutor, endAt]);
   // Controles locales de la sala simulada (con Daily real los trae el SDK).
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
@@ -556,10 +600,51 @@ export function LiveRoom({
   // botón de la barra. `false` de arranque desde V-2: el panel nace plegado.
   const chatAbiertoRef = useRef(false);
   const sinLeerRef = useRef(0);
+  // EY-221 · lo mismo para la mano: el efecto que crea el iframe no puede
+  // depender de ella (ni de su callback, que cambia cuando nace el canal).
+  const manoArribaRef = useRef(false);
+  const alternarManoRef = useRef<() => void>(() => {});
   // MN-05 · cuándo se pidió entrada. Solo se usa para saber si fue ANTES de que
   // la mentoría empezara; ver el efecto de re-autorización más abajo.
   const joinedAt = useRef<number | null>(null);
   const cicloPedido = useRef(false);
+
+  // ── EY-221 · herramientas de la clase en vivo ─────────────────────────────
+  //
+  // `call` y `canal` son ESTADO (y no solo `callRef`) porque los hooks de
+  // abajo tienen que enterarse de cuándo nacen: se crean dentro del efecto de
+  // Daily, después del `import()` dinámico. En la sala simulada el canal es un
+  // `BroadcastChannel` entre pestañas (ver `canal-sala.ts`) y nace en `join()`.
+  const [call, setCall] = useState<DailyCall | null>(null);
+  const [canal, setCanal] = useState<(CanalSala & { cerrar(): void }) | null>(
+    null,
+  );
+  useEffect(() => () => canal?.cerrar(), [canal]);
+
+  const { remoto, yo } = useParticipanteRemoto(call);
+  const mano = useManoLevantada({
+    canal,
+    nombreOtro: isTutor ? "El alumno" : "El tutor",
+    otroPresente: remoto.presente,
+  });
+  const pres = usePresentacion({ canal, isTutor });
+  // UN `sync-request` por canal, y DESPUÉS de que los dos hooks de arriba
+  // estén escuchando (los efectos corren en orden de declaración): quien ya
+  // estaba en la sala contesta con su mano y su presentación.
+  useEffect(() => {
+    canal?.enviar({ k: "sync-request" });
+  }, [canal]);
+
+  /** El contenedor que va a pantalla completa: vídeo + presentación + chat. */
+  const salaRef = useRef<HTMLDivElement>(null);
+  const pantalla = usePantallaCompleta(salaRef);
+  const flotante = useVentanaFlotante();
+  const [panelMateriales, setPanelMateriales] = useState(false);
+
+  // Espejos para el efecto de Daily (ver `manoArribaRef`).
+  useEffect(() => {
+    alternarManoRef.current = mano.alternar;
+  }, [mano.alternar]);
 
   const opens = new Date(opensAt).getTime();
   const closes = new Date(closesAt).getTime();
@@ -595,6 +680,7 @@ export function LiveRoom({
   useEffect(() => {
     chatAbiertoRef.current = chatAbierto;
     sinLeerRef.current = sinLeer;
+    manoArribaRef.current = mano.mia;
     // ⚠️ `updateCustomTrayButtons()` NO es tolerante: en daily-js 0.91 empieza
     // por un guardia de estado y **lanza** `"only supported after join"` si la
     // llamada aún no está en `joined-meeting`. Y la ventana existe de verdad:
@@ -605,9 +691,9 @@ export function LiveRoom({
     // `joined-meeting` repinta el botón en cuanto se puede.
     const call = callRef.current;
     if (call && call.meetingState() === "joined-meeting") {
-      call.updateCustomTrayButtons(botonesTray(chatAbierto, sinLeer));
+      call.updateCustomTrayButtons(botonesTray(chatAbierto, sinLeer, mano.mia));
     }
-  }, [chatAbierto, sinLeer]);
+  }, [chatAbierto, sinLeer, mano.mia]);
 
 
   // ⚠️ MN-04 · AQUÍ VIVÍA EL "MODO TEATRO", y se retira a propósito.
@@ -693,7 +779,11 @@ export function LiveRoom({
         // MN-04 · nuestro botón de chat, en SU barra. Nace en el estado que
         // tenga el panel ahora mismo: el efecto de arriba puede haber corrido
         // antes de que terminara el `import()` dinámico.
-        customTrayButtons: botonesTray(chatAbiertoRef.current, sinLeerRef.current),
+        customTrayButtons: botonesTray(
+          chatAbiertoRef.current,
+          sinLeerRef.current,
+          manoArribaRef.current,
+        ),
         // El contenedor es `relative` y el iframe se ancla a sus cuatro lados:
         // con `height: 100%` a secas, un contenedor que saca su alto del flex
         // deja el iframe en 0 en algunos navegadores.
@@ -707,6 +797,11 @@ export function LiveRoom({
         },
       });
       callRef.current = call;
+      // EY-221 · el canal de la sala (mano, presentación) y la llamada como
+      // estado, para los hooks. El canal se crea ANTES del `join`: encola lo
+      // que se le pida hasta `joined-meeting`.
+      setCanal(canalDaily(call));
+      setCall(call);
 
       // El «Salir» de la barra de Daily. Antes esto era `setJoined(null)` +
       // `router.refresh()`, o sea quedarse en la sala pintando su pantalla de
@@ -733,6 +828,10 @@ export function LiveRoom({
       // MN-04 · el clic llega desde dentro del iframe. `button_id` es la clave
       // del objeto que se le pasó en `customTrayButtons`.
       call.on("custom-button-click", (e) => {
+        if (e.button_id === "mano") {
+          alternarManoRef.current();
+          return;
+        }
         if (e.button_id !== "chat") return;
         alternarChat();
       });
@@ -742,7 +841,11 @@ export function LiveRoom({
       // botón para que no salga apagado con el chat abierto, o al revés.
       call.on("joined-meeting", () => {
         call.updateCustomTrayButtons(
-          botonesTray(chatAbiertoRef.current, sinLeerRef.current),
+          botonesTray(
+            chatAbiertoRef.current,
+            sinLeerRef.current,
+            manoArribaRef.current,
+          ),
         );
       });
 
@@ -760,6 +863,8 @@ export function LiveRoom({
         void callRef.current.destroy();
         callRef.current = null;
       }
+      setCall(null);
+      setCanal(null);
     };
     // `salirDeLaSala` es estable (`useCallback` sobre el router y una cadena),
     // así que entra en la lista sin recrear la llamada en cada render. Si algún
@@ -872,6 +977,9 @@ export function LiveRoom({
       endsAt: body.endsAt,
       simulated: Boolean(body.simulated),
     });
+    // EY-221 · sin Daily, el canal de la sala va entre pestañas del navegador
+    // (prueba local de la sincronización). Con Daily nace en su efecto.
+    if (body.simulated && !canal) setCanal(canalSimulado(sessionId));
   }
 
   // ⚠️ MN-05 · Vuelve a pedir entrada cuando empieza la MENTORÍA. Aquí hay
@@ -947,11 +1055,38 @@ export function LiveRoom({
 
   // ── Estado en vivo (unido) ────────────────────────────────────────────────
   if (live && joined && now !== null) {
-    const total = new Date(endAt).getTime() - new Date(startAt).getTime();
-    // MN-05 · topado al total. Sin esto, entrar a la sala al día siguiente
-    // pintaba "4320:00 / 60:00" en la cabecera: la sala vive una semana, la
-    // clase sigue durando lo que dura.
-    const elapsed = Math.min(now - new Date(startAt).getTime(), total);
+    // EY-221 · AQUÍ SE CALCULABAN `total` y `elapsed` para el cronómetro de la
+    // cabecera. Se mudaron, con su tope MN-05 incluido (el transcurrido no pasa
+    // del total), a `estadoContador()` de `components/sala/contador-clase.tsx`,
+    // que comparten el contador sobre el vídeo y la ventana flotante.
+    const presentando = pres.estado !== null;
+    // Contador + herramientas. Sin presentación van SOBRE el vídeo; con ella, en
+    // la barra del PDF: en escritorio el vídeo baja a una columna de 320px y ahí
+    // tapaban la tesela del propio usuario.
+    const herramientas = (
+      <>
+        <ContadorClase now={now} startAt={startAt} endAt={endAt} />
+        <BarraHerramientas
+          className="pointer-events-auto ml-auto"
+          isTutor={isTutor}
+          panelMaterialesAbierto={panelMateriales}
+          presentando={presentando}
+          onPresentar={() => setPanelMateriales((v) => !v)}
+          manoArriba={mano.mia}
+          onMano={mano.alternar}
+          flotante={{
+            soportada: flotante.soportada,
+            abierta: flotante.abierta,
+            alternar: () => (flotante.abierta ? flotante.cerrar() : void flotante.abrir()),
+          }}
+          pantalla={{
+            soportada: pantalla.soportada,
+            activa: pantalla.activa,
+            alternar: () => void pantalla.alternar(),
+          }}
+        />
+      </>
+    );
 
     return (
       /*
@@ -1098,22 +1233,10 @@ export function LiveRoom({
               />
             ) : null}
 
-            <div className="text-right">
-              <p
-                className="font-mono text-sm tabular-nums sm:text-base"
-                suppressHydrationWarning
-              >
-                {clock(elapsed)} / {clock(total)}
-              </p>
-              {/* Antes vivía en la barra inferior nuestra, que ya no existe:
-                  abajo manda Daily. Aquí abajo del cronómetro dice lo mismo. */}
-              <p
-                className="text-[11px] text-muted-foreground"
-                suppressHydrationWarning
-              >
-                Termina en {human(new Date(joined.endsAt).getTime() - now)}
-              </p>
-            </div>
+            {/* EY-221 · AQUÍ VIVÍA EL CRONÓMETRO («12:34 / 60:00» + «Termina
+                en…»). Bajó a `ContadorClase`, superpuesto sobre el vídeo: así
+                lo ven los dos sin levantar la vista, sigue visible en pantalla
+                completa (donde esta cabecera no está) y avisa a 5 minutos. */}
 
             {/*
               ⚠️ Doble puerta, y la segunda es de dinero.
@@ -1152,32 +1275,137 @@ export function LiveRoom({
 
         {/* Vídeo + chat. `relative` porque en móvil el panel se SUPERPONE a esta
             zona (ver el `aside`), no se pone al lado: a 375px dos columnas no
-            caben, y partir el alto dejaría el vídeo en un sello. */}
-        <div className="relative flex min-h-0 flex-1">
+            caben, y partir el alto dejaría el vídeo en un sello.
+
+            EY-221 · y es EL contenedor que va a pantalla completa (`salaRef`):
+            vídeo, presentación, contador y chat. Lleva fondo propio porque en
+            pantalla completa no hay nada detrás. */}
+        <div
+          ref={salaRef}
+          className="relative flex min-h-0 flex-1 bg-[color:var(--sala-bg)]"
+        >
           <div className="relative flex min-w-0 flex-1 flex-col bg-[color:var(--sala-video)]">
-            {joined.simulated ? (
-              // Sin credenciales de Daily: la sala, el token y la ventana ya
-              // funcionan; falta solo el transporte de video.
-              <div className="flex min-h-0 flex-1 items-center justify-center text-[color:var(--sala-supportive)]">
-                <div className="flex flex-col items-center gap-2 p-6 text-center">
-                  <p className="text-sm uppercase tracking-wide">Sala simulada</p>
-                  <p className="max-w-sm text-sm">
-                    Falta configurar el proveedor de video. La sala, el token y la
-                    ventana de acceso ya funcionan.
-                  </p>
-                  <p className="mt-2 break-all font-mono text-xs opacity-70">
-                    {joined.roomUrl}
-                  </p>
-                </div>
+            {/*
+              EY-221 · Presentación + vídeo. Presentando, el PDF se queda el
+              sitio grande y el vídeo pasa a una franja (abajo en móvil, a la
+              derecha en escritorio).
+
+              ⚠️ El hueco del vídeo es SIEMPRE el segundo hijo de este div, con
+              o sin visor delante: si cambiara de posición, React lo
+              desmontaría y con él el iframe de Daily — o sea, la llamada.
+              Abrir o cerrar la presentación solo le cambia las clases.
+            */}
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col",
+                presentando && "lg:flex-row",
+              )}
+            >
+              {pres.estado ? (
+                <VisorPresentacion
+                  pres={pres}
+                  sessionId={sessionId}
+                  isTutor={isTutor}
+                  herramientas={herramientas}
+                />
+              ) : null}
+              <div
+                className={cn(
+                  "relative overflow-hidden",
+                  presentando
+                    ? "h-44 shrink-0 border-t border-[color:var(--sala-border)] lg:h-auto lg:w-80 lg:border-t-0 lg:border-l"
+                    : "min-h-0 flex-1",
+                )}
+              >
+                {joined.simulated ? (
+                  // Sin credenciales de Daily: la sala, el token y la ventana ya
+                  // funcionan; falta solo el transporte de video.
+                  <div className="absolute inset-0 flex items-center justify-center text-[color:var(--sala-supportive)]">
+                    <div className="flex flex-col items-center gap-2 p-6 text-center">
+                      <p className="text-sm uppercase tracking-wide">Sala simulada</p>
+                      <p className="max-w-sm text-sm">
+                        Falta configurar el proveedor de video. La sala, el token y la
+                        ventana de acceso ya funcionan.
+                      </p>
+                      <p className="mt-2 break-all font-mono text-xs opacity-70">
+                        {joined.roomUrl}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  // El iframe prefabricado de Daily: sus teselas, su barra de
+                  // controles, su selector de dispositivos, su compartir pantalla y
+                  // su reconexión de red (US-803). Lo nuestro es el marco y el chat
+                  // — el rediseño de MN-04 se hizo SOBRE Prebuilt, no migrando a
+                  // `createCallObject`, que habría obligado a reimplementar todo eso.
+                  // (EY-221: `absolute inset-0` en vez de `flex-1` porque ahora
+                  // vive dentro del hueco del vídeo, que es quien se dimensiona.)
+                  <div ref={frameRef} className="absolute inset-0" />
+                )}
+
+                {/* EY-221 · Contador y herramientas SOBRE el vídeo, solo sin
+                    presentación (con ella van en la barra del PDF). `top-12` y
+                    no `top-3`: la franja de arriba es la barra de Daily, con sus
+                    propios botones en las esquinas. */}
+                {presentando ? null : (
+                  <div className="pointer-events-none absolute inset-x-3 top-12 z-10 flex flex-wrap items-start justify-between gap-2">
+                    {herramientas}
+                  </div>
+                )}
               </div>
-            ) : (
-              // El iframe prefabricado de Daily: sus teselas, su barra de
-              // controles, su selector de dispositivos, su compartir pantalla y
-              // su reconexión de red (US-803). Lo nuestro es el marco y el chat
-              // — el rediseño de MN-04 se hizo SOBRE Prebuilt, no migrando a
-              // `createCallObject`, que habría obligado a reimplementar todo eso.
-              <div ref={frameRef} className="relative min-h-0 flex-1" />
-            )}
+            </div>
+
+            {/* EY-221 · «levantó la mano», bien visible y dentro del contenedor
+                de pantalla completa (el toast, que va al `body`, ahí no se ve). */}
+            {mano.delOtro ? (
+              <AvisoMano
+                // Sin presentación, arriba (debajo del contador). Presentando,
+                // abajo: arriba está la barra del visor con «Dejar de
+                // presentar», y taparla justo cuando el tutor atiende es lo
+                // peor. En móvil queda encima de la franja del vídeo.
+                className={cn(
+                  "absolute left-1/2 z-20 -translate-x-1/2",
+                  presentando ? "bottom-48 lg:bottom-6" : "top-16",
+                )}
+                quien={isTutor ? "El alumno" : "El tutor"}
+                onBajar={mano.bajarLaDelOtro}
+              />
+            ) : null}
+
+            {isTutor && panelMateriales ? (
+              <PanelMateriales
+                sessionId={sessionId}
+                docActual={pres.estado?.docId ?? null}
+                onCerrar={() => setPanelMateriales(false)}
+                onElegir={(m) => {
+                  pres.presentar(m.id, m.nombre);
+                  setPanelMateriales(false);
+                }}
+              />
+            ) : null}
+
+            {flotante.contenedor ? (
+              <VentanaFlotante
+                contenedor={flotante.contenedor}
+                rolOtro={isTutor ? "alumno" : "tutor"}
+                remoto={remoto}
+                yo={yo}
+                now={now}
+                startAt={startAt}
+                endAt={endAt}
+                manoDelOtro={mano.delOtro}
+                miMano={mano.mia}
+                onBajarManoDelOtro={mano.bajarLaDelOtro}
+                onAlternarMiMano={mano.alternar}
+                onAlternarMicro={
+                  call ? () => call.setLocalAudio(!yo.micro) : null
+                }
+                onVolver={() => {
+                  window.focus();
+                  flotante.cerrar();
+                }}
+              />
+            ) : null}
 
             {/* Barra de controles SOLO en simulado: con Daily real esta franja
                 la pinta el iframe (y con ella la reconexión, US-803). Aquí se

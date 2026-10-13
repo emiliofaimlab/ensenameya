@@ -757,8 +757,11 @@ export function CheckoutForm({
 
           <div className="mt-4 flex items-center justify-between border-t border-[#e0e0e0] pt-4 text-sm">
             <span className="text-[#6b6b6b]">Subtotal</span>
+            {/* EY-219 · el subtotal es el precio de la OFERTA y dice «Gratis»;
+                «A pagar» de abajo es el cobro y se queda en cifra. */}
             <PrecioEnLinea
               amountMinor={total}
+              ceroEsGratis
               currency={currency}
               className="text-[#333333]"
             />

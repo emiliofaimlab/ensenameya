@@ -2638,6 +2638,80 @@ export type Database = {
         }
         Relationships: []
       }
+      social_resources: {
+        Row: {
+          audience: Database["public"]["Enums"]["social_resource_audience"]
+          category: string | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          external_url: string | null
+          file_name: string | null
+          file_path: string | null
+          id: string
+          is_published: boolean
+          kind: string
+          mime_type: string | null
+          size_bytes: number | null
+          sort_order: number
+          tier_ids: string[]
+          title: string
+          tutor_ids: string[]
+          updated_at: string
+        }
+        Insert: {
+          audience?: Database["public"]["Enums"]["social_resource_audience"]
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          external_url?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          id?: string
+          is_published?: boolean
+          kind: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          sort_order?: number
+          tier_ids?: string[]
+          title: string
+          tutor_ids?: string[]
+          updated_at?: string
+        }
+        Update: {
+          audience?: Database["public"]["Enums"]["social_resource_audience"]
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          external_url?: string | null
+          file_name?: string | null
+          file_path?: string | null
+          id?: string
+          is_published?: boolean
+          kind?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          sort_order?: number
+          tier_ids?: string[]
+          title?: string
+          tutor_ids?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_resources_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       storage_purge_queue: {
         Row: {
           attempts: number
@@ -4322,6 +4396,7 @@ export type Database = {
         | "completed"
         | "cancelled"
         | "no_show"
+      social_resource_audience: "all" | "approved" | "tiers" | "tutors"
       teaching_level: "basico" | "intermedio" | "avanzado"
       tutor_approval_status: "pending" | "approved" | "rejected" | "suspended"
     }
@@ -4504,6 +4579,7 @@ export const Constants = {
         "cancelled",
         "no_show",
       ],
+      social_resource_audience: ["all", "approved", "tiers", "tutors"],
       teaching_level: ["basico", "intermedio", "avanzado"],
       tutor_approval_status: ["pending", "approved", "rejected", "suspended"],
     },

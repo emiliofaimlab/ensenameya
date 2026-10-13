@@ -15,6 +15,13 @@ import {
   monedaDePais,
   textoOrientativo,
 } from "./dinero.ts";
+import {
+  formatMoney,
+  GRATIS,
+  perSessionLabel,
+  priceDisplay,
+  priceLabel,
+} from "./catalog/format.ts";
 
 const casos: [string, () => void][] = [
   [
@@ -88,6 +95,57 @@ const casos: [string, () => void][] = [
       assert.equal(monedaDePais("VE"), null);
       assert.equal(monedaDePais(null), null);
       assert.equal(monedaDePais(""), null);
+    },
+  ],
+  [
+    "EY-219 · una oferta a 0 se anuncia «Gratis», sin unidad ni cero",
+    () => {
+      const base = { currency: "USD", packageNumSessions: null };
+      assert.equal(GRATIS, "Gratis");
+      assert.equal(priceLabel({ ...base, pricingModel: "per_session", priceAmount: 0 }), "Gratis");
+      assert.equal(priceLabel({ ...base, pricingModel: "per_hour", priceAmount: 0 }), "Gratis");
+      assert.equal(
+        priceLabel({ ...base, pricingModel: "per_package", priceAmount: 0, packageNumSessions: 4 }),
+        "Gratis · 4 sesiones",
+      );
+      // Un precio de verdad no cambia.
+      assert.ok(priceLabel({ ...base, pricingModel: "per_session", priceAmount: 1500 }).endsWith(" / sesión"));
+    },
+  ],
+  [
+    "EY-219 · la cifra grande dice «Gratis» y la nota no reintroduce el cero",
+    () => {
+      const porHora = priceDisplay({
+        pricingModel: "per_hour",
+        priceAmount: 0,
+        currency: "USD",
+        sessionDurationMin: 90,
+        packageNumSessions: null,
+      });
+      assert.equal(porHora.amount, "Gratis");
+      assert.equal(porHora.amountMinor, 0);
+      assert.ok(!/\d/.test(porHora.note), `nota con cifra: «${porHora.note}»`);
+      const paquete = priceDisplay({
+        pricingModel: "per_package",
+        priceAmount: 0,
+        currency: "USD",
+        sessionDurationMin: 60,
+        packageNumSessions: 6,
+      });
+      assert.equal(paquete.amount, "Gratis");
+      assert.equal(paquete.note, "paquete · 6 sesiones");
+      // «6 sesiones · $0,00 c/u» no se pinta.
+      assert.equal(
+        perSessionLabel({ pricingModel: "per_package", priceAmount: 0, currency: "USD", packageNumSessions: 6 }),
+        null,
+      );
+    },
+  ],
+  [
+    "EY-219 · formatMoney NO dice «Gratis»: recibos y payouts siguen en cifra",
+    () => {
+      assert.ok(/0/.test(formatMoney(0, "USD")));
+      assert.notEqual(formatMoney(0, "USD"), "Gratis");
     },
   ],
 ];
