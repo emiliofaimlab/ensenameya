@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from "react";
 
+import { GRATIS, esGratis } from "@/lib/catalog/format";
 import { dosCifras } from "@/lib/dinero";
 import { cn } from "@/lib/utils";
 
@@ -62,6 +63,19 @@ export function usePrecio(
 const AVISO = "Monto orientativo: el cobro se realiza en dólares (USD).";
 
 /**
+ * EY-219 · `ceroEsGratis` es OPT-IN a propósito. Estos componentes pintan
+ * también recibos, cancelaciones y el «pagaste» de una confirmación, donde un
+ * cero es un importe y se queda «$0,00». Solo la vitrina (tarjetas, ficha,
+ * perfil, el precio de la oferta en el checkout) lo enciende. Con él y un
+ * importe 0 se pinta «Gratis» a secas: sin «≈» ni USD debajo, que de cero no
+ * hay conversión que avisar.
+ */
+type CeroEsGratis = {
+  /** Si el importe es 0, «Gratis». Solo en superficies de OFERTA. */
+  ceroEsGratis?: boolean;
+};
+
+/**
  * La CIFRA GRANDE, sola: en moneda local si la hay, y si no el USD de siempre.
  *
  * Existe para las superficies cuya línea pequeña no está libre —la franja
@@ -75,12 +89,16 @@ export function ImporteLocal({
   amountMinor,
   currency,
   className,
+  ceroEsGratis,
 }: {
   amountMinor: number;
   currency: string;
   className?: string;
-}) {
+} & CeroEsGratis) {
   const { local, usd } = usePrecio(amountMinor, currency);
+  if (ceroEsGratis && esGratis(amountMinor)) {
+    return <span className={className}>{GRATIS}</span>;
+  }
   return (
     <span className={className} title={local ? AVISO : undefined}>
       {local ?? usd}
@@ -97,13 +115,14 @@ export function ImporteEnUsd({
   amountMinor,
   currency,
   className,
+  ceroEsGratis,
 }: {
   amountMinor: number;
   currency: string;
   className?: string;
-}) {
+} & CeroEsGratis) {
   const { local, usd } = usePrecio(amountMinor, currency);
-  if (!local) return null;
+  if (!local || (ceroEsGratis && esGratis(amountMinor))) return null;
   return (
     <span className={className} title={AVISO}>
       {usd}
@@ -126,6 +145,7 @@ export function Precio({
   nota,
   className,
   notaClassName,
+  ceroEsGratis,
 }: {
   amountMinor: number;
   currency: string;
@@ -134,10 +154,12 @@ export function Precio({
   /** Clases de la cifra GRANDE. La superficie manda en su tipografía. */
   className?: string;
   notaClassName?: string;
-}) {
-  const { local, usd } = usePrecio(amountMinor, currency);
+} & CeroEsGratis) {
+  const { local: conversion, usd } = usePrecio(amountMinor, currency);
+  const gratis = ceroEsGratis && esGratis(amountMinor);
+  const local = gratis ? null : conversion;
 
-  const grande = local ?? usd;
+  const grande = gratis ? GRATIS : (local ?? usd);
   const pie = local ? [usd, nota].filter(Boolean).join(" · ") : (nota ?? null);
 
   return (
@@ -171,12 +193,16 @@ export function PrecioEnLinea({
   amountMinor,
   currency,
   className,
+  ceroEsGratis,
 }: {
   amountMinor: number;
   currency: string;
   className?: string;
-}) {
+} & CeroEsGratis) {
   const { local, usd } = usePrecio(amountMinor, currency);
+  if (ceroEsGratis && esGratis(amountMinor)) {
+    return <span className={className}>{GRATIS}</span>;
+  }
   if (!local) return <span className={className}>{usd}</span>;
   return (
     <span className={className} title={AVISO}>
@@ -184,6 +210,32 @@ export function PrecioEnLinea({
       <span className="text-muted-foreground text-[0.85em] font-normal whitespace-nowrap">
         ({usd})
       </span>
+    </span>
+  );
+}
+
+/**
+ * «Desde X» del precio de entrada (tarjeta de tutor, de academia, su ficha).
+ *
+ * EY-219 · si la oferta más barata es gratis, dice «Gratis» y se come el
+ * «Desde»: «Desde Gratis» no es español, y un tutor con una mentoría gratis y
+ * otras de pago SÍ tiene «Gratis» como precio de entrada real (decidido con el
+ * cliente). Existe para que las cinco superficies que pintan el «Desde» no
+ * repitan cada una la condición.
+ */
+export function PrecioDesde({
+  amountMinor,
+  currency,
+  className,
+}: {
+  amountMinor: number;
+  currency: string;
+  className?: string;
+}) {
+  if (esGratis(amountMinor)) return <span className={className}>{GRATIS}</span>;
+  return (
+    <span className={className}>
+      Desde <PrecioEnLinea amountMinor={amountMinor} currency={currency} />
     </span>
   );
 }

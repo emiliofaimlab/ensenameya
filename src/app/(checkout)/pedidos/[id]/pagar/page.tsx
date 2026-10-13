@@ -125,6 +125,7 @@ export default async function PagarPedidoPage({
                   <span className="shrink-0 text-right">
                     <Precio
                       amountMinor={l.total}
+                      ceroEsGratis
                       currency={l.currency}
                       className="text-[15px] font-bold text-[#19191f]"
                     />

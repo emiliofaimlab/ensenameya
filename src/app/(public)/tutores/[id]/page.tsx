@@ -41,7 +41,12 @@ import {
 } from "@/lib/catalog/queries";
 import { UrlCanonica } from "@/components/catalog/url-canonica";
 import type { CategoryTag, ProductCardData } from "@/lib/catalog/queries";
-import { initialsFrom, storageUrl } from "@/lib/catalog/format";
+import {
+  esGratis,
+  GRATIS,
+  initialsFrom,
+  storageUrl,
+} from "@/lib/catalog/format";
 import { PrecioEnLinea } from "@/components/precio/precio";
 
 /**
@@ -824,6 +829,9 @@ export default async function TutorProfilePage({
                             {items.length === 1 ? "mentoría" : "mentorías"} ·{" "}
                             {soloPaquete ? (
                               `paquete de ${barato.packageNumSessions} sesiones`
+                            ) : esGratis(barato.priceAmount) ? (
+                              // EY-219 · «desde $0,00» → «Gratis».
+                              GRATIS
                             ) : (
                               <>
                                 desde{" "}

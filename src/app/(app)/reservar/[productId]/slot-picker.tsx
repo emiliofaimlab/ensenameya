@@ -741,6 +741,7 @@ export function SlotPicker({
             <span className="text-right">
               <Precio
                 amountMinor={total}
+                ceroEsGratis
                 currency={currency}
                 className="text-base font-bold text-[#19191f]"
               />
@@ -875,6 +876,7 @@ export function SlotPicker({
                 en el resumen de arriba, en esta misma pantalla. */}
             <ImporteLocal
               amountMinor={total}
+              ceroEsGratis
               currency={currency}
               className="block text-[13px] font-bold text-[#19191f]"
             />

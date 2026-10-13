@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { BuildingIcon } from "lucide-react";
 
-import { PrecioEnLinea } from "@/components/precio/precio";
+import { PrecioDesde } from "@/components/precio/precio";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import type { AcademyCardData } from "@/lib/catalog/queries";
 
@@ -96,8 +96,7 @@ export function AcademyCard({ academy }: { academy: AcademyCardData }) {
         <div className="flex items-center justify-between gap-3">
           {academy.priceFromMinor !== null && academy.priceCurrency ? (
             <span className="text-[15px] font-bold text-[#242424]">
-              Desde{" "}
-              <PrecioEnLinea
+              <PrecioDesde
                 amountMinor={academy.priceFromMinor}
                 currency={academy.priceCurrency}
               />

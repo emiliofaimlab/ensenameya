@@ -256,6 +256,7 @@ export function ProductCard({
             <div className="min-w-0">
               <Precio
                 amountMinor={precio.amountMinor}
+                ceroEsGratis
                 currency={product.currency}
                 nota={porSesion ?? precio.note}
                 className={`font-bold text-[#19191f] ${compact ? "text-base" : "text-[19px]"} leading-tight`}

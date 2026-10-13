@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { PrecioEnLinea } from "@/components/precio/precio";
+import { PrecioDesde } from "@/components/precio/precio";
 import { BadgeCheckIcon } from "lucide-react";
 
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
@@ -83,8 +83,7 @@ export function TutorCard({
         <div className="mt-auto flex items-center justify-between gap-3 pt-1">
           {tutor.priceFromMinor !== null && tutor.currency ? (
             <span className="text-sm font-bold text-[#212121]">
-              Desde{" "}
-              <PrecioEnLinea
+              <PrecioDesde
                 amountMinor={tutor.priceFromMinor}
                 currency={tutor.currency}
               />
@@ -160,8 +159,7 @@ export function TutorCard({
         <div className="flex items-center justify-between gap-3">
           {tutor.priceFromMinor !== null && tutor.currency ? (
             <span className="text-[15px] font-bold text-[#242424]">
-              Desde{" "}
-              <PrecioEnLinea
+              <PrecioDesde
                 amountMinor={tutor.priceFromMinor}
                 currency={tutor.currency}
               />

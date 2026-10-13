@@ -1,9 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
-import { EyeIcon, PencilIcon, TriangleAlertIcon } from "lucide-react";
+import { PencilIcon, TriangleAlertIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
+import { codigoParaCompartir } from "@/lib/referral";
 import { initialsFrom, priceLabel, storageUrl } from "@/lib/catalog/format";
 import {
   PanelCard,
@@ -101,6 +102,7 @@ export default async function TutorProductsPage() {
     { data: products, error },
     { data: rules, error: errorRules },
     { data: links, error: errorLinks },
+    codigoRef,
   ] = await Promise.all([
     supabase
       .from("products")
@@ -120,7 +122,12 @@ export default async function TutorProductsPage() {
     // Sin `.eq()`: la RLS de `product_availability_rules` ya lo acota a los
     // productos del propio tutor (misma llamada que en /tutor/availability).
     supabase.from("product_availability_rules").select("rule_id, product_id"),
+    // EY-225 · el `?ref=` de «Compartir mi mentoría», el mismo que pone
+    // «Compartir mi reserva». En paralelo con lo demás: no añade peldaño.
+    // Sin código (nunca abrió «Invita y gana») el enlace sale sin `ref`.
+    codigoParaCompartir(supabase, userId),
   ]);
+  const refQuery = codigoRef ? `?ref=${encodeURIComponent(codigoRef)}` : "";
 
   // Regla de oro 10 · con `const { data }` a secas un fallo de la consulta se
   // convierte en lista vacía, que aquí sería una mentira creíble: el tutor
@@ -284,7 +291,7 @@ export default async function TutorProductsPage() {
                     {/* N-12 · `flex-1` además de `min-w-0`: sin él el bloque
                       mide lo que mida el título y las acciones se salían de la
                       tarjeta con nombres largos. El mínimo es para el otro
-                      extremo: por debajo de 200+124 px los tres iconos bajan de
+                      extremo: por debajo de 200+80 px los dos iconos bajan de
                       línea en vez de estrujar el texto (el Figma no tiene
                       diseño móvil, decisión 24, así que esto es criterio
                       nuestro). */}
@@ -391,51 +398,23 @@ export default async function TutorProductsPage() {
                         </div>
                       </div>
 
-                      {/* §2.3 · tres botones-icono, sin separador ni botones de
-                        texto. El orden es el del documento: ver · editar · más.
+                      {/* §2.3 · botones-icono, sin separador ni botones de
+                        texto: editar · más.
 
-                        ⚠️ El título va DENTRO de la etiqueta de los tres: con
-                        cuatro mentorías había doce botones que se llamaban
-                        «Ver como alumno», «Editar mentoría» y «Más acciones»,
-                        sin nada que dijera de cuál. Antes no dolía porque eran
-                        botones de texto pegados al título; ahora están al otro
-                        extremo de la fila (2.4.4). */}
+                        EY-225 · eran TRES: el ojo «Ver como alumno» pasó al
+                        menú «···», junto a «Compartir mi mentoría». Y con él se
+                        fue el hueco apagado que se reservaba en las mentorías
+                        no activas para que los iconos no bailaran entre
+                        tarjetas: ahora TODAS las filas llevan los mismos dos,
+                        así que no hay nada que reservar.
+
+                        ⚠️ El título va DENTRO de la etiqueta de cada uno: con
+                        cuatro mentorías había ocho botones que se llamaban
+                        «Editar mentoría» y «Más acciones», sin nada que dijera
+                        de cuál. Antes no dolía porque eran botones de texto
+                        pegados al título; ahora están al otro extremo de la
+                        fila (2.4.4). */}
                       <div className="ml-auto flex shrink-0 items-center gap-2">
-                        {p.status === "active" ? (
-                          /* `asChild` + `<Link>`: un `<a href>` a pelo recarga la
-                           página entera, y es lo que hace el botón de al lado.
-                           Lo advierte el propio `PanelIconButton`. */
-                          <PanelIconButton
-                            asChild
-                            label={`Ver como alumno: ${p.title}`}
-                          >
-                            <Link href={`/mentorias/${p.id}`}>
-                              <EyeIcon aria-hidden className="size-4" />
-                            </Link>
-                          </PanelIconButton>
-                        ) : (
-                          /* La ficha pública solo existe para las activas
-                           (`getProductDetail` filtra por `status = 'active'`,
-                           también para su dueño): un ojo enlazado aquí llevaría
-                           al 404. Se deja el hueco ocupado y apagado para que
-                           los tres iconos no bailen entre tarjetas.
-
-                           ⚠️ Y apagado es un `<button>`, no un `<a>` sin
-                           `href`: a ese no llega el teclado y, al no tener rol,
-                           el lector de pantalla se come el `aria-label` que
-                           explica por qué está así (4.1.2). `aria-disabled` en
-                           vez de `disabled` justo para que siga alcanzándose y
-                           se pueda oír la razón. */
-                          <PanelIconButton
-                            asChild
-                            label={`Ver como alumno: ${p.title} (disponible cuando la mentoría esté activa)`}
-                            className="cursor-not-allowed opacity-45"
-                          >
-                            <button type="button" aria-disabled="true">
-                              <EyeIcon aria-hidden className="size-4" />
-                            </button>
-                          </PanelIconButton>
-                        )}
                         <PanelIconButton
                           asChild
                           label={`Editar mentoría: ${p.title}`}
@@ -449,6 +428,7 @@ export default async function TutorProductsPage() {
                           title={p.title}
                           status={p.status}
                           isApproved={approvalStatus === "approved"}
+                          rutaCompartir={`/mentorias/${p.id}${refQuery}`}
                         />
                       </div>
                     </div>
