@@ -512,6 +512,14 @@ export function AccountForm({
                   >
                     <Link href="/tutor">Ir a mi panel de tutor</Link>
                   </Button>
+                  {/* EY-226 · titular, bio, foto, categorías y redes. */}
+                  <Button
+                    asChild
+                    variant="outline"
+                    className="h-[45px] rounded-[8px] px-5"
+                  >
+                    <Link href="/tutor/verification">Editar mi perfil</Link>
+                  </Button>
                 </div>
               </>
             ) : tutorStatus ? (

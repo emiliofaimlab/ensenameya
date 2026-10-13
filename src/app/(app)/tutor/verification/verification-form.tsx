@@ -887,8 +887,8 @@ export function VerificationForm({
         <ChecklistStep
           n={1}
           icon={UserRoundIcon}
-          title="Tu foto y tu biografía"
-          summary="La cara y el texto de tu tarjeta en el catálogo."
+          title="Tu perfil público"
+          summary="Lo que ven los alumnos en tu ficha y en el catálogo."
           state={perfilState}
           open={abiertos.has(1)}
           onToggle={() => togglePaso(1)}
