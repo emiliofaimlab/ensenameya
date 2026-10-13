@@ -20,6 +20,7 @@ import {
   LayoutDashboardIcon,
   LogOutIcon,
   MailIcon,
+  MegaphoneIcon,
   PercentIcon,
   ReceiptIcon,
   TicketIcon,
@@ -27,6 +28,7 @@ import {
   UserIcon,
   UsersIcon,
   ShieldIcon,
+  ImagesIcon,
   WalletIcon,
   WrenchIcon,
   type LucideIcon,
@@ -230,6 +232,11 @@ export const TUTOR_ITEMS: Item[] = [
       { href: "/account#avisos", label: "Avisos" },
     ],
   },
+  // EY-222 · Material para promocionarse (posts, stories, plantillas de Canva)
+  // que publica el admin. Entrada FIJA aunque al tutor no le toque ningún
+  // recurso: el menú es estático y decidir su forma con una consulta por
+  // pantalla no compensa; `/tutor/recursos` dice en claro que aún no hay nada.
+  { href: "/tutor/recursos", label: "Recursos para redes", icon: MegaphoneIcon },
   // La misma pantalla que ve el alumno, y por el mismo motivo que «Invita y
   // gana»: regalar una mentoría no es una acción de alumno. Sin esta entrada,
   // un tutor que entra a `/regalar` desde su panel se queda con el menú de
@@ -325,6 +332,8 @@ export const ADMIN_ITEMS: Item[] = [
   // mismo que «Referidos»: el interruptor llevaba en la base desde el 2-sep y
   // apagarlo exigía entrar a la base porque nadie había puesto la pantalla.
   { href: "/admin/metodos-de-cobro", label: "Métodos de cobro", icon: WalletIcon },
+  // EY-222 · Lo que el tutor ve en «Recursos para redes» y a quién se le enseña.
+  { href: "/admin/recursos", label: "Recursos para redes", icon: ImagesIcon },
   // Quién entra al panel. Última de la tira a propósito: es la que menos se
   // usa y la única que reparte acceso, así que no conviene tenerla a un dedo
   // de distancia de las de consulta.
