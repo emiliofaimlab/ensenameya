@@ -295,7 +295,13 @@ export default async function ProductPage({
           ? PRODUCT_FAQ.map((f) =>
               f.a.startsWith("Son sesiones 1 a 1")
                 ? { ...f, a: "Es una clase en grupo, en una sala de video integrada en la plataforma, con el tutor y los demás inscritos. Entras desde tu panel a la hora de cada fecha; no necesitas instalar nada." }
-                : f,
+                : f.q.startsWith("¿Qué pasa si necesito reprogramar")
+                  ? {
+                      q: "¿Puedo cambiar la hora de una fecha?",
+                      // RG-11 · en una grupal solo el tutor mueve la hora.
+                      a: "No: en una clase grupal la hora la fija el tutor para todo el grupo. Si la cambia, te avisamos y puedes cancelar tu cupo con el 100 % de reembolso hasta que empiece la clase, aunque falten menos de 24 horas.",
+                    }
+                  : f,
             )
           : PRODUCT_FAQ,
     },
@@ -871,7 +877,14 @@ export default async function ProductPage({
                 <section>
                   <h2 className={h2}>Cómo funciona</h2>
                   <div className="mt-4 flex flex-col gap-2 lg:grid lg:grid-cols-3 lg:gap-3.5">
-                    {[
+                    {(product.pricingModel === "group"
+                      ? // G2 · en una grupal no se elige hora ni confirma nadie (RG-07).
+                        [
+                          { k: "1", titulo: "Te inscribes en sus fechas", zap: false },
+                          { k: "2", titulo: "Tu cupo queda al pagar", zap: true },
+                          { k: "3", titulo: "Entras a la sala con el grupo", zap: false },
+                        ]
+                      : [
                       { k: "1", titulo: "Eliges día y hora", zap: false },
                       product.autoAccept
                         ? {
@@ -885,7 +898,7 @@ export default async function ProductPage({
                             zap: false,
                           },
                       { k: "3", titulo: "Entras desde tu panel", zap: false },
-                    ].map((paso) => (
+                    ]).map((paso) => (
                       <div
                         key={paso.k}
                         className="flex items-center gap-3 rounded-[14px] border border-[#e6e6e6] px-3.5 py-3 lg:gap-3.5 lg:px-4 lg:py-[18px]"

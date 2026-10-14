@@ -463,6 +463,11 @@ export function LiveRoom({
   // Un número y no el objeto `grupal`: entra en las dependencias del efecto
   // del iframe sin recrearlo en cada render (no cambia durante la clase).
   const tesela = grupal ? Math.min(grupal.capacity + 1, 12) : 2;
+  // G3 · en una grupal se vuelve a la clase (tutor) o a la inscripción
+  // (alumno), no a la lista de reservas; ver `grupal.volverHref`.
+  const volver = grupal
+    ? { href: grupal.volverHref, label: isTutor ? "Volver a la clase" : "Volver a mi inscripción" }
+    : { href: isTutor ? "/tutor/reservas" : "/reservas", label: "Volver a mis reservas" };
   const endpointSala = grupal
     ? `/api/room/grupal/${grupal.groupClassId}`
     : `/api/room/${sessionId}`;
@@ -1573,16 +1578,16 @@ export function LiveRoom({
 
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center">
         <div className="flex flex-col items-center gap-1">
-          <p className="text-sm text-muted-foreground">Mentoría</p>
+          <p className="text-sm text-muted-foreground">{grupal ? "Clase grupal" : "Mentoría"}</p>
           <h1 className="text-xl font-semibold">{productTitle}</h1>
           {/* También antes de entrar y después de salir: la consulta a soporte
               suele ser justo cuando la sala NO deja pasar. */}
           <SessionRef nro={sessionRef} />
           <Link
-            href={isTutor ? "/tutor/reservas" : "/reservas"}
+            href={volver.href}
             className="mt-1 text-sm text-muted-foreground underline-offset-2 hover:underline"
           >
-            Volver a mis reservas
+            {volver.label}
           </Link>
         </div>
 
@@ -1623,7 +1628,7 @@ export function LiveRoom({
                   : "Esta reserva no está activa, así que la sala no está disponible."}
             </p>
             <Button asChild variant="outline">
-              <Link href={isTutor ? "/tutor/reservas" : "/reservas"}>Volver a mis reservas</Link>
+              <Link href={volver.href}>{volver.label}</Link>
             </Button>
           </>
         ) : beforeWindow ? (
@@ -1674,7 +1679,7 @@ export function LiveRoom({
               La ventana de acceso de esta sesión ya cerró.
             </p>
             <Button asChild variant="outline">
-              <Link href={isTutor ? "/tutor/reservas" : "/reservas"}>Volver a mis reservas</Link>
+              <Link href={volver.href}>{volver.label}</Link>
             </Button>
           </>
         ) : (

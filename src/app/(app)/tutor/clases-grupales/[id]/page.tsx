@@ -62,7 +62,7 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
       .order("start_at"),
     supabase
       .from("bookings")
-      .select("id, student_id, status, created_at")
+      .select("id, student_id, status, created_at, payments(status)")
       .eq("product_id", id)
       .order("created_at"),
     studentsOfTutor(supabase),
@@ -84,7 +84,13 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
   if (!producto || producto.pricing_model !== "group") notFound();
 
   const fechas = fechasRes.data ?? [];
-  const reservas = reservasRes.data ?? [];
+  // Un pago abandonado (hold caducado o soltado) deja una reserva cancelada sin
+  // cobro: esa persona nunca llegó a inscribirse y no se lista como «baja».
+  const reservas = (reservasRes.data ?? []).filter(
+    (r) =>
+      r.status !== "cancelled" ||
+      ["paid", "refunded", "partially_refunded"].includes(r.payments?.status ?? ""),
+  );
   const vivas = reservas.filter((r) =>
     ["pending_payment", "pending_acceptance", "confirmed", "in_progress"].includes(r.status),
   );
@@ -163,20 +169,25 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
                         {f.rescheduled_at ? <StatusPill tone="amber">Reagendada</StatusPill> : null}
                       </div>
                     </div>
-                    {f.status === "scheduled" && pagadas.length > 0 ? (
-                      // G3 · la sala de ESTA fecha (RG-12). Fuera de su ventana
-                      // la propia sala dice cuándo abre.
-                      <Button asChild size="sm" className="h-9 rounded-[8px] px-3.5 text-[13px]">
-                        <Link href={`/room/grupal/${f.id}`}>Entrar a sala</Link>
-                      </Button>
-                    ) : null}
+                    {/* Los botones van juntos a la derecha: sueltos en el
+                        `justify-between`, «Entrar a sala» caía a mitad de fila
+                        y en un sitio distinto en cada fecha. */}
                     {f.status === "scheduled" ? (
-                      <FechaAcciones
-                        groupClassId={f.id}
-                        reagendable={new Date(f.start_at) >= enUnDia}
-                        timezone={tz}
-                        puedeCancelar={ciclo && pendientes.length > 1}
-                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        {pagadas.length > 0 ? (
+                          // G3 · la sala de ESTA fecha (RG-12). Fuera de su ventana
+                          // la propia sala dice cuándo abre.
+                          <Button asChild size="sm" className="h-9 rounded-[8px] px-3.5 text-[13px]">
+                            <Link href={`/room/grupal/${f.id}`}>Entrar a sala</Link>
+                          </Button>
+                        ) : null}
+                        <FechaAcciones
+                          groupClassId={f.id}
+                          reagendable={new Date(f.start_at) >= enUnDia}
+                          timezone={tz}
+                          puedeCancelar={ciclo && pendientes.length > 1}
+                        />
+                      </div>
                     ) : null}
                   </li>
                 );

@@ -114,7 +114,9 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
       sessionStatus={s.status}
       bookingStatus={s.bookings?.status ?? "cancelled"}
       productTitle={gc.products?.title ?? "Clase grupal"}
-      sessionRef={s.session_ref}
+      // El n.º es de la sesión de un ALUMNO: al tutor, que entra con una
+      // cualquiera de la fecha, no se le enseña.
+      sessionRef={esTutor ? null : s.session_ref}
       isTutor={esTutor}
       currentUserId={user.id}
       firstSessionAt={null}
