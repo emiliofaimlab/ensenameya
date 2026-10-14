@@ -3864,6 +3864,7 @@ export type Database = {
           avatar_path: string
           es_tutor: boolean
           nombre: string
+          user_id: string
         }[]
       }
       iso_utc: { Args: { p_momento: string }; Returns: string }

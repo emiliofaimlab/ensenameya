@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { notFound } from "next/navigation";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
@@ -46,7 +48,7 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
   const [tz, formato] = await Promise.all([getUserTimezone(), getFormatoHora()]);
   const supabase = await createClient();
 
-  const [productoRes, fechasRes, reservasRes, students] = await Promise.all([
+  const [productoRes, fechasRes, reservasRes, students, { data: chat }] = await Promise.all([
     supabase
       .from("products")
       .select("id, title, status, pricing_model, capacity, min_seats, price_amount, currency")
@@ -64,6 +66,13 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
       .eq("product_id", id)
       .order("created_at"),
     studentsOfTutor(supabase),
+    // G3 · el hilo del grupo nace con el primer cupo confirmado.
+    supabase
+      .from("conversations")
+      .select("id")
+      .eq("kind", "group")
+      .eq("group_product_id", id)
+      .maybeSingle(),
   ]);
 
   // Un fallo de lectura no es una clase vacía: que se vea.
@@ -154,6 +163,13 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
                         {f.rescheduled_at ? <StatusPill tone="amber">Reagendada</StatusPill> : null}
                       </div>
                     </div>
+                    {f.status === "scheduled" && pagadas.length > 0 ? (
+                      // G3 · la sala de ESTA fecha (RG-12). Fuera de su ventana
+                      // la propia sala dice cuándo abre.
+                      <Button asChild size="sm" className="h-9 rounded-[8px] px-3.5 text-[13px]">
+                        <Link href={`/room/grupal/${f.id}`}>Entrar a sala</Link>
+                      </Button>
+                    ) : null}
                     {f.status === "scheduled" ? (
                       <FechaAcciones
                         groupClassId={f.id}
@@ -168,6 +184,17 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
             </ul>
           )}
         </PanelCard>
+
+        {chat ? (
+          <PanelCard className="flex items-center justify-between gap-3">
+            <p className="text-[13px] text-[#474747]">
+              Chat del grupo con los inscritos que ya pagaron.
+            </p>
+            <Button asChild variant="outline" size="sm" className="h-9 rounded-[8px] px-3.5 text-[13px]">
+              <Link href={`/chat/${chat.id}`}>Abrir chat</Link>
+            </Button>
+          </PanelCard>
+        ) : null}
 
         <PanelCard className="flex flex-col gap-3">
           <h2 className="text-base font-semibold text-[#19191f]">Inscritos</h2>

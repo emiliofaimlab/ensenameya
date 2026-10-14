@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
   RECORDING_DAYS,
   isDailyConfigured,
@@ -40,12 +41,26 @@ export async function GET(
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, status, end_at, daily_room_name")
+    .select("id, status, end_at, daily_room_name, group_class_id")
     .eq("id", sessionId)
     .maybeSingle();
 
   if (!session) {
     return NextResponse.json({ error: "no encontrada" }, { status: 404 });
+  }
+
+  // G3 · una sesión grupal no tiene sala propia: graba la de su FECHA (RG-12),
+  // y la ven todos los inscritos. El nombre de sala no tiene grant de columna
+  // para el cliente (`20261009210000`), así que se lee con service_role — y
+  // solo después de que la RLS de arriba haya dicho que esta sesión es tuya.
+  if (session.group_class_id) {
+    const { data: g } = await createAdminClient()
+      .from("group_classes")
+      .select("daily_room_name, end_at")
+      .eq("id", session.group_class_id)
+      .maybeSingle();
+    session.daily_room_name = g?.daily_room_name ?? null;
+    if (g?.end_at) session.end_at = g.end_at;
   }
 
   const expiresAt = new Date(

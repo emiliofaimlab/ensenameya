@@ -677,8 +677,8 @@ export default async function TutorHomePage() {
                           {cuando(s.start_at, tz, formato)}
                         </p>
                       </div>
-                      {/* La sala grupal llega en G3 (`join_group_class`); hasta
-                          entonces, la ficha de la clase. */}
+                      {/* La ficha de la clase: ahí está «Entrar a sala» de
+                          cada fecha (G3) y el chat del grupo. */}
                       <PanelIconButton asChild label="Ver clase">
                         <Link href={`/tutor/clases-grupales/${s.grupal.productId}`}>
                           <EyeIcon className="size-4" />

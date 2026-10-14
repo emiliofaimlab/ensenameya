@@ -393,6 +393,7 @@ export function LiveRoom({
   firstSessionAt,
   initialMessages,
   entendido: entendidoInicial,
+  grupal,
 }: {
   /**
    * V-2 · El `SiteHeader` real, ya renderizado por `page.tsx`. Llega como slot
@@ -443,8 +444,28 @@ export function LiveRoom({
    * `RecordingConsent`.
    */
   entendido: boolean;
+  /**
+   * G3 · sala COMPARTIDA de una fecha grupal (RG-12). Cambia el endpoint
+   * (`join_group_class`), la rejilla (cupo + 1), el chat (el del grupo, con el
+   * nombre de cada uno) y a dónde se vuelve. `sessionId` sigue siendo la
+   * sesión del alumno —o una de la fecha, para el tutor—: de ella cuelgan el
+   * «Entiendo» de la grabación y el canal de cierre.
+   */
+  grupal?: {
+    groupClassId: string;
+    capacity: number;
+    chatConversationId: string | null;
+    nombres: Record<string, string>;
+    volverHref: string;
+  };
 }) {
   const router = useRouter();
+  // Un número y no el objeto `grupal`: entra en las dependencias del efecto
+  // del iframe sin recrearlo en cada render (no cambia durante la clase).
+  const tesela = grupal ? Math.min(grupal.capacity + 1, 12) : 2;
+  const endpointSala = grupal
+    ? `/api/room/grupal/${grupal.groupClassId}`
+    : `/api/room/${sessionId}`;
   /**
    * RV-18 · `now` arranca en `null` A PROPÓSITO, y no en `Date.now()`.
    *
@@ -485,9 +506,11 @@ export function LiveRoom({
    * `/reservas/<id>`) y cada uno solo puede leer el suyo: mandar al alumno al
    * del tutor sería un 404 por RLS.
    */
-  const detalleDeLaReserva = isTutor
-    ? `/tutor/reservas/${bookingId}`
-    : `/reservas/${bookingId}`;
+  const detalleDeLaReserva = grupal
+    ? grupal.volverHref
+    : isTutor
+      ? `/tutor/reservas/${bookingId}`
+      : `/reservas/${bookingId}`;
   /**
    * Una sola salida, aunque la empujen tres cosas a la vez.
    *
@@ -624,7 +647,7 @@ export function LiveRoom({
   const { remoto, yo } = useParticipanteRemoto(call);
   const mano = useManoLevantada({
     canal,
-    nombreOtro: isTutor ? "El alumno" : "El tutor",
+    nombreOtro: isTutor ? (grupal ? "Un alumno" : "El alumno") : "El tutor",
     otroPresente: remoto.presente,
   });
   const pres = usePresentacion({ canal, isTutor });
@@ -772,8 +795,10 @@ export function LiveRoom({
         // tira lateral de participantes de Prebuilt solo restaría ancho al
         // vídeo repitiendo lo que ya se ve. Si algún día hay sesiones de grupo,
         // esta línea es la que hay que quitar.
-        showParticipantsBar: false,
-        layoutConfig: { grid: { maxTilesPerPage: 2 } },
+        // G3 · en una grupal la lista de participantes SÍ hace falta: es
+        // donde el tutor (owner) silencia o saca a alguien (RG-12).
+        showParticipantsBar: tesela > 2,
+        layoutConfig: { grid: { maxTilesPerPage: tesela } },
         // MN-04 · el naranja de marca dentro del iframe. Ver `SALA`.
         theme: TEMA_DAILY,
         // MN-04 · nuestro botón de chat, en SU barra. Nace en el estado que
@@ -870,7 +895,7 @@ export function LiveRoom({
     // así que entra en la lista sin recrear la llamada en cada render. Si algún
     // día deja de serlo, este efecto empezaría a destruir y rehacer el iframe:
     // comprobarlo antes de tocarla.
-  }, [live, joined, salirDeLaSala, alternarChat]);
+  }, [live, joined, salirDeLaSala, alternarChat, tesela]);
 
   /**
    * ⚠️ SACAR AL OTRO CUANDO LA SESIÓN SE CIERRA.
@@ -961,7 +986,7 @@ export function LiveRoom({
     setBusy(true);
     // El endpoint autoriza vía `join_session` (ventana, participante, ciclo) y
     // firma el token contra Daily con la API key (server-only).
-    const res = await fetch(`/api/room/${sessionId}`, { method: "POST" });
+    const res = await fetch(endpointSala, { method: "POST" });
     const body = await res.json();
     setBusy(false);
 
@@ -1006,8 +1031,8 @@ export function LiveRoom({
     if (joinedAt.current === null || joinedAt.current >= liveOpens) return;
     if (now < liveOpens || now > liveCloses) return;
     cicloPedido.current = true;
-    void fetch(`/api/room/${sessionId}`, { method: "POST" });
-  }, [joined, now, liveOpens, liveCloses, sessionId]);
+    void fetch(endpointSala, { method: "POST" });
+  }, [joined, now, liveOpens, liveCloses, endpointSala]);
 
   // N-24 · AQUÍ VIVÍA "Subir documentos", y se quita por feedback del cliente:
   // subir un archivo se ofrecía DOS veces en la misma pantalla —este botón de la
@@ -1262,7 +1287,10 @@ export function LiveRoom({
               el reloj del cobro no puede ser un icono de 36px sin etiqueta en
               una barra que aparece y desaparece con el ratón.
             */}
+            {/* G3 · una fecha grupal la cierra el cron, no el tutor: su
+                `complete_session` es por sesión y cerraría solo la de un alumno. */}
             {isTutor &&
+            !grupal &&
             (sessionStatus === "scheduled" || sessionStatus === "in_progress") &&
             now >= liveOpens &&
             now <= liveCloses ? (
@@ -1367,7 +1395,7 @@ export function LiveRoom({
                   "absolute left-1/2 z-20 -translate-x-1/2",
                   presentando ? "bottom-48 lg:bottom-6" : "top-16",
                 )}
-                quien={isTutor ? "El alumno" : "El tutor"}
+                quien={isTutor ? (grupal ? "Un alumno" : "El alumno") : "El tutor"}
                 onBajar={mano.bajarLaDelOtro}
               />
             ) : null}
@@ -1508,7 +1536,11 @@ export function LiveRoom({
                 // El aviso de retención ocupa media columna en un panel de
                 // 360px y ya se lee entero en la ficha de la reserva.
                 sinAvisoDeRetencion
-                bookingId={bookingId}
+                {...(grupal
+                  ? grupal.chatConversationId
+                    ? { conversationId: grupal.chatConversationId, grupal: { nombres: grupal.nombres } }
+                    : {}
+                  : { bookingId })}
                 currentUserId={currentUserId}
                 firstSessionAt={firstSessionAt}
                 initialMessages={initialMessages}
@@ -1633,6 +1665,7 @@ export function LiveRoom({
               userId={currentUserId}
               marcado={entendido}
               onChange={setEntendido}
+              grupal={Boolean(grupal)}
             />
           </>
         ) : afterWindow ? (
@@ -1658,6 +1691,7 @@ export function LiveRoom({
               userId={currentUserId}
               marcado={entendido}
               onChange={setEntendido}
+              grupal={Boolean(grupal)}
             />
             {/* ⚠️ `!entendido` deshabilita: la casilla es obligatoria desde que
                 el aviso dejó de ser un permiso y pasó a ser un «Entiendo» de

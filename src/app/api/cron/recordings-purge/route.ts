@@ -86,22 +86,40 @@ export async function GET(req: Request) {
 
   // service_role a propósito: la RLS de `sessions` solo deja ver las tuyas, y
   // este trabajo es justamente recorrer las de todo el mundo.
-  const { data: vencidas, error } = await admin
-    .from("sessions")
-    .select("id, daily_room_name")
-    .lt("end_at", corte)
-    .not("daily_room_name", "is", null)
-    .is("recordings_purged_at", null)
-    .limit(LOTE);
+  // G3 · las fechas grupales graban en SU sala (`group_classes.daily_room_name`,
+  // RG-12), no en la de cada sesión: van en su propia lista y se marcan en su
+  // propia fila. Mismo corte, mismo lote.
+  const [sesionesRes, grupalesRes] = await Promise.all([
+    admin
+      .from("sessions")
+      .select("id, daily_room_name")
+      .lt("end_at", corte)
+      .not("daily_room_name", "is", null)
+      .is("recordings_purged_at", null)
+      .limit(LOTE),
+    admin
+      .from("group_classes")
+      .select("id, daily_room_name")
+      .lt("end_at", corte)
+      .not("daily_room_name", "is", null)
+      .is("recordings_purged_at", null)
+      .limit(LOTE),
+  ]);
+  const error = sesionesRes.error ?? grupalesRes.error;
 
   if (error) {
     return NextResponse.json({ error: error.message, ...barrido }, { status: 500 });
   }
 
+  const vencidas = [
+    ...(sesionesRes.data ?? []).map((s) => ({ ...s, tabla: "sessions" as const })),
+    ...(grupalesRes.data ?? []).map((g) => ({ ...g, tabla: "group_classes" as const })),
+  ];
+
   let borradas = 0;
   const fallidas: string[] = [];
 
-  for (const s of vencidas ?? []) {
+  for (const s of vencidas) {
     const grabaciones = await listRecordings(s.daily_room_name!);
 
     // Todo o nada por sesión: si una sola no se pudo borrar, la sesión NO se
@@ -117,7 +135,7 @@ export async function GET(req: Request) {
     // grabó, no hay nada que borrar, y no hay razón para volver a mirarla cada
     // día durante el resto de la vida del proyecto.
     const { error: marcaErr } = await admin
-      .from("sessions")
+      .from(s.tabla)
       .update({ recordings_purged_at: new Date().toISOString() })
       .eq("id", s.id);
 
@@ -130,7 +148,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     status: "ok",
-    sesionesRevisadas: vencidas?.length ?? 0,
+    sesionesRevisadas: vencidas.length,
     grabacionesBorradas: borradas,
     sesionesFallidas: fallidas.length,
     // Si viene lleno, hay más esperando: el cron de mañana sigue por ahí.

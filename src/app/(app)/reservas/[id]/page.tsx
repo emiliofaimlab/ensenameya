@@ -202,6 +202,17 @@ export default async function BookingDetailPage({
 
   // El hilo solo se carga si el chat aplica: para una reserva cancelada sería
   // una consulta a cambio de nada.
+  // G3 · el hilo del grupo (RG-13). Solo lo lee quien pagó (`puede_ver_conversacion`).
+  const esGrupal = booking.products?.pricing_model === "group";
+  const { data: chatGrupo } = esGrupal && chatOpen
+    ? await supabase
+        .from("conversations")
+        .select("id")
+        .eq("kind", "group")
+        .eq("group_product_id", booking.product_id)
+        .maybeSingle()
+    : { data: null };
+
   const { data: msgs } = chatOpen
     ? await supabase
         .from("messages")
@@ -545,6 +556,17 @@ export default async function BookingDetailPage({
               está justo aquí abajo, y un botón «Escribirle» que baja tres
               centímetros es ruido. */}
           <TutorSummary tutor={ficha} />
+
+          {chatGrupo ? (
+            <PanelCard className="flex items-center justify-between gap-3">
+              <p className="text-[13px] text-[#474747]">
+                Chat del grupo con el tutor y los demás inscritos.
+              </p>
+              <Button asChild variant="outline" size="sm" className="h-9 shrink-0 rounded-[8px] px-3.5 text-[13px]">
+                <Link href={`/chat/${chatGrupo.id}`}>Abrir chat</Link>
+              </Button>
+            </PanelCard>
+          ) : null}
 
           <PanelCard className="flex flex-col gap-3">
             <PanelCardTitle className="text-base">

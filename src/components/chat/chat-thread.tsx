@@ -193,6 +193,7 @@ export function ChatThread({
   onIncoming,
   formato = FORMATO_POR_DEFECTO,
   timeZone,
+  grupal,
 }: {
   /** El hilo. Lo pasan las pantallas nuevas (bandeja, `/chat/[id]`). */
   conversationId?: string;
@@ -284,6 +285,12 @@ export function ChatThread({
    * nunca, porque entonces el mensaje se está viendo.
    */
   onIncoming?: () => void;
+  /**
+   * G3 · hilo de una clase grupal (RG-13). No es una consulta —no hay topes—,
+   * no admite adjuntos (cuelgan de una reserva) y cada mensaje ajeno lleva el
+   * nombre de quien lo escribió: con diez personas, «el otro» no existe.
+   */
+  grupal?: { nombres: Record<string, string> };
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
@@ -320,7 +327,8 @@ export function ChatThread({
   // «Todavía no ha pagado nadie». Desde MN-06 esto solo puede ser el checkout en
   // curso o un hilo cerrado; la diferencia la marca `soloLectura`, y de ella
   // dependen los textos de abajo.
-  const esConsulta = hasBooking === false || (!bookingId && hasBooking === undefined);
+  const esConsulta =
+    !grupal && (hasBooking === false || (!bookingId && hasBooking === undefined));
   // MN-06 · el hilo está cerrado. `=== false` y no `!canChat`: `undefined` es
   // «no me lo han dicho», y ahí manda el comportamiento de siempre (ver la nota
   // de la prop).
@@ -722,7 +730,9 @@ export function ChatThread({
         <p className="text-[11px] text-muted-foreground">
           {esConsulta
             ? "Si no llegas a reservar, esta conversación se borra a los 30 días del último mensaje."
-            : "Los mensajes se borran a los 30 días de escribirse."}{" "}
+            : grupal
+              ? "Chat del grupo: los inscritos ven tus mensajes. Se borra 30 días después de la última fecha de la clase."
+              : "Los mensajes se borran a los 30 días de escribirse."}{" "}
           <a
             href={`/api/chat/${conversationId}/download`}
             download
@@ -730,7 +740,7 @@ export function ChatThread({
           >
             Descargar la conversación
           </a>
-          {esConsulta ? (
+          {esConsulta || grupal ? (
             "."
           ) : (
             <>
@@ -779,6 +789,11 @@ export function ChatThread({
                 key={m.id}
                 className={cn("flex flex-col", mine ? "items-end" : "items-start")}
               >
+                {grupal && !mine ? (
+                  <span className="mb-0.5 text-[11px] font-semibold text-muted-foreground">
+                    {grupal.nombres[m.senderId] ?? "Participante"}
+                  </span>
+                ) : null}
                 {/* N-22 · `wrap-anywhere` + `min-w-0`: una URL larga es una
                     sola "palabra" y sin esto empujaba la burbuja más allá del
                     80 %, metía barra horizontal en el hilo y estrujaba el resto
@@ -942,7 +957,8 @@ export function ChatThread({
           <span>{avisoTopes}</span>
           {/* ⚠️ Reportar sigue disponible en un hilo cerrado, y es deliberado:
               lo que hay que denunciar ya está escrito. */}
-          <ReportConversation conversationId={conversationId} />
+          {/* report_conversation aún no admite hilos de grupo (`20261009110000`). */}
+          {grupal ? null : <ReportConversation conversationId={conversationId} />}
         </div>
       ) : null}
     </div>

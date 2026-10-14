@@ -118,10 +118,13 @@ export async function ensureRoom(
    *  sigue obligatorio: se cuenta desde que CADA persona entra, así que es el
    *  único que acota una pestaña olvidada. */
   ejectAfterSec: number,
+  /** G3 · RG-12: cupo + tutor en una sala grupal. Sin él, el tope de Daily. */
+  maxParticipants?: number,
 ): Promise<string> {
   const exp = Math.floor(expiresAt.getTime() / 1000);
   const properties = {
     exp,
+    ...(maxParticipants ? { max_participants: maxParticipants } : {}),
     // B-2 · con `exp` de vuelta a `end_at + 10 min`, esto VUELVE a ser un tope
     // real: expulsa a quien siga dentro cuando la sala muere. Con los 7 días de
     // MN-05 no lo era y el único tope efectivo era la línea de abajo, que se

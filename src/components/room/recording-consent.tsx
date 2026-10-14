@@ -40,6 +40,7 @@ export function RecordingConsent({
   userId,
   marcado,
   onChange,
+  grupal,
 }: {
   sessionId: string;
   userId: string;
@@ -47,6 +48,8 @@ export function RecordingConsent({
   marcado: boolean;
   /** Avisa al padre, que es quien habilita el botón de entrar. */
   onChange: (marcado: boolean) => void;
+  /** G3 · en una grupal la grabación la ven todos los inscritos (RG-12). */
+  grupal?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
 
@@ -79,7 +82,9 @@ export function RecordingConsent({
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
         La sesión queda grabada de principio a fin. La grabación está disponible
-        para ti y para la otra persona durante 30 días, y después se borra.
+        {grupal
+          ? "para el tutor y todos los inscritos de la clase durante 30 días, y después se borra."
+          : "para ti y para la otra persona durante 30 días, y después se borra."}
       </p>
       <label className="mt-3 flex items-start gap-2.5 text-sm">
         <input

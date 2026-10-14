@@ -8,6 +8,7 @@ import { toHeaderUser } from "@/lib/auth/header-user";
 import { listNotices } from "@/lib/notifications-server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { LiveRoom } from "./live-room";
+import { SalaGrupal } from "../sala-grupal";
 import { ACCESS_WINDOW_MIN, withMinutes } from "@/lib/room-window";
 
 export const metadata = { title: "Sala en vivo · Enséñame Ya" };
@@ -45,12 +46,15 @@ export default async function RoomPage({
   const { data: s } = await supabase
     .from("sessions")
     .select(
-      "id, status, start_at, end_at, access_opens_at, access_closes_at, tutor_id, student_id, booking_id, session_ref, bookings(status, products(title))",
+      "id, status, start_at, end_at, access_opens_at, access_closes_at, tutor_id, student_id, booking_id, session_ref, group_class_id, bookings(status, products(title))",
     )
     .eq("id", sessionId)
     .maybeSingle();
 
   if (!s) notFound();
+  // G3 · la sesión de un alumno en una grupal no tiene sala propia: entra a la
+  // de su fecha. El enlace «Entrar a sala» de siempre sigue sirviendo.
+  if (s.group_class_id) return <SalaGrupal groupClassId={s.group_class_id} />;
 
   // El panel de chat de LV01 es el hilo de EP-17, no una copia: se precarga el
   // mismo histórico que `/chat/<reserva>` y Realtime sigue desde ahí.

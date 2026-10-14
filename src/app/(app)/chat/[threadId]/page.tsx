@@ -108,6 +108,33 @@ export default async function ChatPage({
     if (id) conversation = await getConversation(id);
   }
 
+  // G3 · un hilo de grupo (RG-13) no está en la bandeja (`my_conversations`
+  // solo trae pares): se lee directo, y la RLS (`puede_ver_conversacion`) ya
+  // deja fuera a quien no pagó o se dio de baja.
+  if (!conversation) {
+    const grupo = await hiloDeGrupo(threadId);
+    if (grupo) {
+      return (
+        <Container>
+          <Section className="flex flex-col gap-6">
+            <PageHeader
+              title={grupo.titulo}
+              description={`Chat del grupo · ${grupo.participantes.join(", ")}`}
+            />
+            <ChatThread
+              formato={formato}
+              timeZone={timeZone}
+              conversationId={grupo.id}
+              currentUserId={user.id}
+              initialMessages={grupo.mensajes}
+              grupal={{ nombres: grupo.nombres }}
+            />
+          </Section>
+        </Container>
+      );
+    }
+  }
+
   if (!conversation) notFound();
 
   const supabase = await createClient();
@@ -178,4 +205,32 @@ export default async function ChatPage({
       </Section>
     </Container>
   );
+}
+
+/** G3 · el hilo de una clase grupal, con quién está dentro. `null` si no es
+ *  un hilo de grupo o si quien mira no es miembro. */
+async function hiloDeGrupo(id: string) {
+  const supabase = await createClient();
+  const { data: c } = await supabase
+    .from("conversations")
+    .select("id, group_product_id, products!conversations_group_product_id_fkey(title)")
+    .eq("id", id)
+    .eq("kind", "group")
+    .maybeSingle();
+  if (!c?.group_product_id) return null;
+  const [{ data: msgs }, { data: inscritos }] = await Promise.all([
+    supabase
+      .from("messages")
+      .select(MESSAGE_COLUMNS)
+      .eq("conversation_id", c.id)
+      .order("created_at"),
+    supabase.rpc("inscritos_de_clase", { p_product: c.group_product_id }),
+  ]);
+  return {
+    id: c.id,
+    titulo: c.products?.title ?? "Clase grupal",
+    mensajes: (msgs ?? []).map(toChatMessage),
+    nombres: Object.fromEntries((inscritos ?? []).map((i) => [i.user_id, i.nombre])),
+    participantes: (inscritos ?? []).map((i) => i.nombre),
+  };
 }
