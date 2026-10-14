@@ -3588,6 +3588,10 @@ export type Database = {
         }[]
       }
       admin_gmv_weekly: { Args: { p_weeks?: number }; Returns: Json }
+      admin_habilitar_grupales: {
+        Args: { p_activo: boolean; p_tutor: string }
+        Returns: boolean
+      }
       admin_report_thread: {
         Args: { p_limit?: number; p_report_id: string }
         Returns: {
@@ -3599,6 +3603,10 @@ export type Database = {
           sender_id: string
           sender_name: string
         }[]
+      }
+      admin_sacar_de_clase_grupal: {
+        Args: { p_booking: string; p_motivo?: string }
+        Returns: Json
       }
       admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       afinidad_peso_reciente: { Args: { p_cuando: string }; Returns: number }

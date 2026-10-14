@@ -318,6 +318,7 @@ async function csvReservas(f: {
   const { filas, truncado } = await allBookingsForCsv(f);
   const cabeceras = [
     "Referencia",
+    "Tipo",
     "Estado",
     "Creada",
     "Mentoría",
@@ -339,6 +340,7 @@ async function csvReservas(f: {
   return aCsv(cabeceras, [
     ...filas.map((b) => [
       b.bookingRef,
+      b.tipo,
       b.status,
       fechaCsv(b.createdAt),
       b.productTitle,
@@ -369,6 +371,7 @@ async function csvPagos(f: {
 }): Promise<string> {
   const { filas, truncado } = await allPaymentsForCsv(f);
   const cabeceras = [
+    "Tipo",
     "Estado",
     "Creado",
     "Pagado",
@@ -394,6 +397,7 @@ async function csvPagos(f: {
   ];
   return aCsv(cabeceras, [
     ...filas.map((p) => [
+      p.tipo,
       p.status,
       fechaCsv(p.createdAt),
       fechaCsv(p.paidAt),

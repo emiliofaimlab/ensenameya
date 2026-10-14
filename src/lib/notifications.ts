@@ -66,6 +66,10 @@ const TEXT: Record<string, string> = {
   booking_new_tutor: "Tienes una reserva nueva por aceptar",
   group_enrolled_student: "Tu inscripción en la clase grupal quedó confirmada",
   group_enrolled_tutor: "Alguien se inscribió en tu clase grupal",
+  group_full_tutor: "Tu clase grupal se llenó",
+  group_min_cancelled: "Una clase grupal se canceló por no llegar al mínimo",
+  group_rescheduled: "Cambió la hora de tu clase grupal",
+  group_cancelled: "Se canceló tu cupo o una fecha de tu clase grupal",
   cancellation: "Se canceló una reserva",
   refund_processed: "Se procesó un reembolso",
   review_request: "¿Cómo te fue? Deja tu reseña",
@@ -217,7 +221,10 @@ export function rutaFor(
   const productId = payload?.product_id;
   if (
     typeof productId === "string" &&
-    ((alTutor && payload?.group_class_id) || template === "group_enrolled_tutor")
+    ((alTutor && payload?.group_class_id) ||
+      template === "group_enrolled_tutor" ||
+      template === "group_full_tutor" ||
+      (alTutor && template === "group_min_cancelled"))
   ) {
     return `/tutor/clases-grupales/${productId}`;
   }
@@ -329,6 +336,7 @@ const DEL_TUTOR = new Set([
   "booking_new_tutor",
   "booking_expiring_tutor",
   "group_enrolled_tutor",
+  "group_full_tutor",
   "review_received_tutor",
   "welcome_tutor",
   "payout_paid",
@@ -344,6 +352,8 @@ const DEL_ALUMNO = new Set([
   "booking_confirmed_student",
   "booking_pending_student",
   "group_enrolled_student",
+  "group_rescheduled",
+  "group_cancelled",
   "payment_receipt",
   "payment_failed",
   "refund_processed",

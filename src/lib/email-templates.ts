@@ -837,6 +837,168 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     };
   },
 
+  /**
+   * NTF-52 · al tutor: el último cupo de su clase grupal se acaba de confirmar.
+   * Uno por clase (clave del producto), aunque después alguien se dé de baja.
+   */
+  group_full_tutor: (x) => ({
+    asunto: x.c.clase ? `Tu clase grupal se llenó: ${x.c.clase}` : "Tu clase grupal se llenó",
+    familia: "ok",
+    epigrafe: "Clase grupal",
+    titulo: "Tu clase está llena",
+    preheader: "Se confirmó el último cupo. La inscripción queda cerrada.",
+    motivo: "Recibes este correo porque eres tutor en Enséñame Ya.",
+    cuerpo: [
+      parrafo(
+        "Se confirmó el <strong>último cupo</strong> de tu clase grupal. Nadie más puede inscribirse; si alguien se da de baja, su cupo vuelve a quedar libre solo.",
+      ),
+      tarjetaClase({
+        titulo: x.c.clase,
+        tutor: "Tú",
+        cuando: cuando(x.c.inicio, x.tz),
+        duracion: duracion(x.c.duracion_min),
+        acento: VERDE,
+        fondo: "#e9f7ef",
+      }),
+      boton("Ver mi clase grupal", x.url),
+    ],
+  }),
+
+  /**
+   * NTF-53 · RG-04: la clase no llegó al cupo mínimo 24 h antes y se canceló
+   * sola. Al alumno, con su reembolso del 100 %; al tutor, una sola vez.
+   */
+  group_min_cancelled: (x) => {
+    const reembolso = dinero(x.c.reembolso, x.c.moneda);
+    const tutor = alTutor(x);
+    return {
+      asunto: x.c.clase ? `Se canceló la clase grupal: ${x.c.clase}` : "Se canceló una clase grupal",
+      familia: "alerta",
+      epigrafe: "Clase grupal",
+      titulo: "La clase no llegó al cupo mínimo",
+      preheader: tutor
+        ? "No se alcanzó el mínimo de inscritos y la clase se canceló sola."
+        : "No se alcanzó el mínimo de inscritos. Te devolvemos el 100 %.",
+      motivo: tutor
+        ? "Recibes este correo porque eres tutor de esta clase."
+        : "Recibes este correo porque estabas inscrito en esta clase.",
+      cuerpo: [
+        parrafo(
+          tutor
+            ? "Faltando 24 horas para la primera fecha no se había llegado al cupo mínimo que pusiste, así que la clase se canceló sola y a cada inscrito se le devuelve el 100 %."
+            : "Faltando 24 horas para la primera fecha no se había llegado al mínimo de inscritos que puso el tutor, así que la clase se canceló.",
+        ),
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: tutor ? "Tú" : x.c.tutor,
+          cuando: cuando(x.c.inicio, x.tz),
+          duracion: duracion(x.c.duracion_min),
+          acento: ROJO,
+          fondo: "#fdeceb",
+        }),
+        !tutor && reembolso
+          ? caja(
+              `Te devolvemos <strong>${esc(reembolso)}</strong> por el mismo medio de pago. No tienes que pedirlo.`,
+              "compra",
+              "Tu reembolso",
+            )
+          : null,
+        tutor
+          ? boton("Ver mi clase grupal", x.url)
+          : boton(
+              "Buscar otra clase",
+              x.c.tutor_id ? `${x.base}/tutores/${x.c.tutor_id}` : `${x.base}/mentorias`,
+            ),
+      ],
+    };
+  },
+
+  /**
+   * NTF-54 · RG-11: el tutor movió la hora de una fecha. La nueva hora viaja en
+   * el payload (`nuevo_inicio`): el contexto de la reserva trae su PRIMERA
+   * fecha, que en un ciclo puede no ser la que cambió.
+   */
+  group_rescheduled: (x) => {
+    const nuevo = typeof x.p?.nuevo_inicio === "string" ? x.p.nuevo_inicio : x.c.inicio;
+    const antes = typeof x.p?.anterior === "string" ? x.p.anterior : undefined;
+    const corto = cuandoCorto(nuevo, x.tz);
+    return {
+      asunto: con("Cambió la hora de tu clase grupal", corto),
+      familia: "clase",
+      epigrafe: "Clase grupal",
+      titulo: "El tutor cambió la hora",
+      preheader: "Si la nueva hora no te sirve, puedes cancelar tu cupo con el 100 % de reembolso.",
+      motivo: "Recibes este correo porque estás inscrito en esta clase.",
+      cuerpo: [
+        parrafo(
+          antes
+            ? `La fecha que era el <strong>${esc(cuando(antes, x.tz) ?? "")}</strong> pasa a la hora de abajo.`
+            : "Una de las fechas de tu clase grupal cambió de hora.",
+        ),
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: x.c.tutor,
+          cuando: cuando(nuevo, x.tz),
+          duracion: duracion(x.c.duracion_min),
+        }),
+        parrafo(
+          "Si la nueva hora no te sirve, puedes <strong>cancelar tu cupo con el 100 % de reembolso</strong> hasta que empiece la clase, aunque falten menos de 24 horas.",
+          { top: 18 },
+        ),
+        boton("Ver mi inscripción", x.url),
+      ],
+    };
+  },
+
+  /**
+   * NTF-55 · se canceló la clase, una fecha del ciclo (`fecha` en el payload)
+   * o el cupo del alumno lo canceló el tutor o el equipo. Siempre con reembolso
+   * (RN-37: si cancela el tutor, 100 %; una fecha de ciclo, su parte).
+   */
+  group_cancelled: (x) => {
+    const fecha = typeof x.p?.fecha === "string" ? x.p.fecha : null;
+    const motivo = typeof x.p?.motivo === "string" && x.p.motivo.trim() ? x.p.motivo.trim() : null;
+    const reembolso = fecha ? null : dinero(x.c.reembolso, x.c.moneda);
+    return {
+      asunto: fecha
+        ? con("Se canceló una fecha de tu clase grupal", cuandoCorto(fecha, x.tz))
+        : x.c.clase
+          ? `Se canceló tu cupo: ${x.c.clase}`
+          : "Se canceló tu cupo en una clase grupal",
+      familia: "alerta",
+      epigrafe: "Clase grupal",
+      titulo: fecha ? "Se canceló una fecha" : "Se canceló tu cupo",
+      preheader: fecha
+        ? "Te devolvemos la parte de esa fecha. El resto del ciclo sigue igual."
+        : "Te devolvemos el 100 % por el mismo medio de pago.",
+      motivo: "Recibes este correo porque estabas inscrito en esta clase.",
+      cuerpo: [
+        parrafo(
+          fecha
+            ? `El tutor canceló la fecha del <strong>${esc(cuando(fecha, x.tz) ?? "")}</strong>. Te devolvemos la parte de esa fecha; las demás fechas del ciclo siguen igual.`
+            : "Tu cupo en esta clase grupal se canceló y no fue por algo que hicieras tú.",
+        ),
+        motivo ? caja(esc(motivo), "clase", "Motivo") : null,
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: x.c.tutor,
+          cuando: cuando(fecha ?? x.c.inicio, x.tz),
+          duracion: duracion(x.c.duracion_min),
+          acento: ROJO,
+          fondo: "#fdeceb",
+        }),
+        reembolso
+          ? caja(
+              `Te devolvemos <strong>${esc(reembolso)}</strong> por el mismo medio de pago. No tienes que pedirlo.`,
+              "compra",
+              "Tu reembolso",
+            )
+          : null,
+        boton("Ver mi inscripción", x.url),
+      ],
+    };
+  },
+
   booking_reminder_24h: (x) => {
     const h = hora(x.c.inicio, x.tz);
     const dias = diasHasta(x.c.inicio, x.tz, x.ahora);

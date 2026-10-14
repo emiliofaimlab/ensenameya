@@ -12,7 +12,15 @@ import {
 } from "@/components/layout/panel-shell";
 import { ADMIN_ITEMS } from "@/components/layout/app-sidebar";
 import { Contacto } from "../../contacto";
-import { BioEditor, DocumentReview, TierPicker, TutorReview, type ReviewDoc } from "./review-actions";
+import {
+  BioEditor,
+  DocumentReview,
+  GrupalesSwitch,
+  TierPicker,
+  TutorReview,
+  type ReviewDoc,
+} from "./review-actions";
+import Link from "next/link";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Revisar tutor · Enséñame Ya" };
@@ -62,7 +70,7 @@ export default async function AdminTutorPage({
   const { data: tutor, error } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, created_at, profiles!tutor_profiles_profile_id_fkey(full_name, timezone, phone)",
+      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, created_at, group_classes_enabled, profiles!tutor_profiles_profile_id_fkey(full_name, timezone, phone)",
     )
     .eq("profile_id", id)
     .maybeSingle();
@@ -73,10 +81,16 @@ export default async function AdminTutorPage({
   if (!tutor) notFound();
 
   // US-1103 / RN-06: el tier decide el split de sus próximas reservas.
-  const { data: tierRows } = await supabase
-    .from("tutor_tiers")
-    .select("id, name, split_pct")
-    .order("split_pct");
+  const [{ data: tierRows }, { data: grupales }] = await Promise.all([
+    supabase.from("tutor_tiers").select("id, name, split_pct").order("split_pct"),
+    // G4 · sus clases grupales, para llegar a la ficha de cada una.
+    supabase
+      .from("products")
+      .select("id, title, status")
+      .eq("tutor_id", id)
+      .eq("pricing_model", "group")
+      .order("created_at", { ascending: false }),
+  ]);
 
   const { data: docRows } = await supabase
     .from("verification_documents")
@@ -261,6 +275,30 @@ export default async function AdminTutorPage({
                 approvalNotes={tutor.approval_notes}
               />
             </div>
+          </PanelCard>
+
+          {/* G4 · RG-18: el interruptor y sus clases grupales. */}
+          <PanelCard className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-[#19191f]">Clases grupales</h2>
+            <GrupalesSwitch
+              tutorId={tutor.profile_id}
+              activo={tutor.group_classes_enabled}
+            />
+            {(grupales ?? []).length > 0 ? (
+              <ul className="flex flex-col gap-1.5 border-t border-[#e0e0e0] pt-3">
+                {(grupales ?? []).map((g) => (
+                  <li key={g.id} className="flex items-center justify-between gap-2 text-[13px]">
+                    <Link
+                      href={`/admin/clases-grupales/${g.id}`}
+                      className="min-w-0 truncate font-medium text-brand-foreground hover:underline"
+                    >
+                      {g.title}
+                    </Link>
+                    <span className="shrink-0 text-xs text-[#6b6b6b]">{g.status}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </PanelCard>
 
           {/* Historial (215:70): derivado de los timestamps reales. */}
