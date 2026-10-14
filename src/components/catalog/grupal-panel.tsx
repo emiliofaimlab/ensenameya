@@ -24,6 +24,7 @@ export function GrupalPanel({
   formato,
   inscribirHref,
   regaloHref,
+  miInscripcionHref,
   footer,
 }: {
   product: ProductDetail;
@@ -33,6 +34,8 @@ export function GrupalPanel({
   inscribirHref: string;
   /** `undefined` = no se ofrece (la mentoría es propia). */
   regaloHref?: string;
+  /** El detalle de SU reserva si quien mira ya tiene cupo en esta clase. */
+  miInscripcionHref?: string;
   footer?: ReactNode;
 }) {
   const g = product.grupal;
@@ -93,7 +96,15 @@ export function GrupalPanel({
         tu foto en la sala y en el chat de la clase.
       </p>
 
-      {motivo ? (
+      {miInscripcionHref ? (
+        // ponytail: `<a>` y no `<Link>`: `/reservas/…` cuelga de `(app)` y su
+        // guarda puede redirigir (onboarding a medias tras un checkout de
+        // invitado); una navegación completa esquiva la pantalla en blanco de
+        // la regla de oro 13 sin resolver aquí el destino.
+        <Button asChild className="mt-4 h-12 w-full text-[15px]">
+          <a href={miInscripcionHref}>Ya estás inscrito · Ver mi inscripción</a>
+        </Button>
+      ) : motivo ? (
         <Button disabled className="mt-4 h-12 w-full text-[15px]">
           {motivo}
         </Button>

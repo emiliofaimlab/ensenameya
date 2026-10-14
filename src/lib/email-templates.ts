@@ -2478,18 +2478,32 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     // `returning` del trigger), leído en el huso de quien lee (RN-35). Puede no
     // haber ninguna: un crédito sin `expires_at` se queda sin ella.
     const fecha = dia(x.p?.expires_at, x.tz);
+    // RG-17 · la misma conversión cuando un regalo de CUPO se queda sin clase:
+    // se llenó antes del canje, o se canceló (`20261014170000`). Sin `causa`,
+    // es el caso de siempre: el tutor cerró su cuenta.
+    const causa = x.p?.causa;
+    const porQue =
+      causa === "clase_llena"
+        ? "La clase grupal que te regalaron se llenó antes de que reservaras tu cupo"
+        : causa === "clase_cancelada"
+          ? "La clase grupal que te regalaron se canceló"
+          : "El tutor cerró su cuenta";
     return {
       asunto: con("Tu regalo ahora vale con cualquier tutor", importe),
       familia: "ok",
       epigrafe: "El regalo sigue en pie",
       titulo: "El regalo sigue siendo tuyo",
       preheader: fecha
-        ? `El tutor cerró su cuenta; el regalo sigue pagado y se puede usar hasta el ${fecha}.`
-        : "El tutor cerró su cuenta, pero el regalo sigue pagado y se puede usar.",
-      motivo: "Recibes este correo porque hay un regalo de Enséñame Ya cuyo tutor cerró su cuenta.",
+        ? `${porQue}; el regalo sigue pagado y se puede usar hasta el ${fecha}.`
+        : `${porQue}, pero el regalo sigue pagado y se puede usar.`,
+      motivo: causa
+        ? "Recibes este correo porque hay un regalo de Enséñame Ya para una clase grupal que ya no se puede reservar."
+        : "Recibes este correo porque hay un regalo de Enséñame Ya cuyo tutor cerró su cuenta.",
       cuerpo: [
         parrafo(
-          "El tutor de la mentoría regalada cerró su cuenta, así que esa mentoría en concreto ya no se puede agendar. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo para reservar con cualquier otro tutor.",
+          causa
+            ? `${porQue}, así que esa clase en concreto ya no se puede reservar. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo para reservar con cualquier tutor.`
+            : "El tutor de la mentoría regalada cerró su cuenta, así que esa mentoría en concreto ya no se puede agendar. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo para reservar con cualquier otro tutor.",
         ),
         importeGrande("Saldo disponible", importe, {
           sub: fecha ? `Se puede usar hasta el ${fecha}` : null,

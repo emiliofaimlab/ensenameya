@@ -25,6 +25,7 @@ import { responseTimeLabel } from "@/components/chat/types";
 import { Container } from "@/components/layout/container";
 import { BookingPanel } from "@/components/catalog/booking-panel";
 import { GrupalPanel } from "@/components/catalog/grupal-panel";
+import { createClient } from "@/lib/supabase/server";
 import { hrefRegalar } from "@/components/catalog/regalo-links";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { ProductCard } from "@/components/catalog/product-card";
@@ -203,12 +204,28 @@ export default async function ProductPage({
    * propias la promesa ya resuelta no viaja a la base.
    */
   const hayResenasPropias = resenas.reviews.length > 0;
-  const [otrasMentorias, respuestaMin, resenasTutor] = await Promise.all([
+  const [otrasMentorias, respuestaMin, resenasTutor, miInscripcion] = await Promise.all([
     listTutorProducts(product.tutor.id, product.id, 2),
     tutorResponseTime(product.tutor.id),
     hayResenasPropias
       ? Promise.resolve<Awaited<ReturnType<typeof listTutorReviews>>>([])
       : listTutorReviews(product.tutor.id),
+    // QA anexo B · quien ya tiene su cupo no debe ver «Inscribirme»: el
+    // checkout le contestaría «ya estás inscrito». Solo en grupales y con
+    // sesión, en la misma tanda (no añade peldaño a la cascada).
+    product.pricingModel === "group" && user
+      ? createClient().then((sb) =>
+          sb
+            .from("bookings")
+            .select("id")
+            .eq("product_id", product.id)
+            .eq("student_id", user.id)
+            .in("status", ["pending_acceptance", "confirmed", "in_progress"])
+            .limit(1)
+            .maybeSingle()
+            .then(({ data }) => data?.id ?? null),
+        )
+      : Promise.resolve(null),
   ]);
 
   const tutorName =
@@ -933,6 +950,7 @@ export default async function ProductPage({
                   timeZone={timeZone}
                   formato={formato}
                   inscribirHref={`/reservar/${product.id}/checkout`}
+                  miInscripcionHref={miInscripcion ? `/reservas/${miInscripcion}` : undefined}
                   regaloHref={
                     esMiMentoria
                       ? undefined

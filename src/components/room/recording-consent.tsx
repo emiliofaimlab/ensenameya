@@ -81,7 +81,7 @@ export function RecordingConsent({
         Esta mentoría se graba
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        La sesión queda grabada de principio a fin. La grabación está disponible
+        La sesión queda grabada de principio a fin. La grabación está disponible{" "}
         {grupal
           ? "para el tutor y todos los inscritos de la clase durante 30 días, y después se borra."
           : "para ti y para la otra persona durante 30 días, y después se borra."}
