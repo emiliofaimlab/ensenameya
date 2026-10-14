@@ -57,7 +57,7 @@ export default async function CancelBookingPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, num_sessions, products(title, tutor_id), sessions(start_at, status)",
+      "id, status, total_amount, currency, num_sessions, products(title, tutor_id), sessions(start_at, status, group_classes!sessions_group_class_id_fkey(rescheduled_at))",
     )
     .eq("id", id)
     .maybeSingle();
@@ -74,7 +74,14 @@ export default async function CancelBookingPage({
     .filter((s) => s.status === "scheduled")
     .sort((a, b) => a.start_at.localeCompare(b.start_at))[0];
   const until = next ? timeUntil(next.start_at) : null;
-  const early = !until || until.ms >= P.cutoffHours * 3_600_000;
+  // RG-11 · si el tutor movió una fecha de esta clase grupal, la baja es al
+  // 100 % aunque falten menos de 24 h. Es la misma condición que aplica
+  // `cancel_booking` (`20261008200000`); aquí solo se pinta.
+  const reagendadaPorElTutor = (booking.sessions ?? []).some(
+    (s) => s.status === "scheduled" && s.group_classes?.rescheduled_at,
+  );
+  const early =
+    reagendadaPorElTutor || !until || until.ms >= P.cutoffHours * 3_600_000;
   const pct = early ? P.refundPct.studentEarly : P.refundPct.studentLate;
   const refund = Math.round((booking.total_amount * pct) / 100);
   const remaining = (booking.sessions ?? []).filter(

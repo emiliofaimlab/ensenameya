@@ -148,7 +148,7 @@ export default async function ReservasPage() {
         // «Entrar a sala» aquí también — hasta hoy solo lo tenía el panel, así
         // que desde la lista había que entrar al detalle para llegar a la clase.
         // Ver `salaDeLaReserva`.
-        "id, status, total_amount, currency, products(title, tutor_id), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
+        "id, status, total_amount, currency, products(title, tutor_id, pricing_model), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
       )
       .eq("student_id", user.id)
       .order("created_at", { ascending: false }),
@@ -327,7 +327,11 @@ export default async function ReservasPage() {
         href={`/reservas/${b.id}`}
         tutor={names.get(b.products?.tutor_id ?? "")}
         tutorHref={perfilDelTutor(b.products?.tutor_id)}
-        title={b.products?.title ?? "Mentoría"}
+        title={
+          b.products?.pricing_model === "group"
+            ? `${b.products.title} · Grupal`
+            : (b.products?.title ?? "Mentoría")
+        }
         when={when(b)}
         timeZone={tz}
         formato={formato}

@@ -282,5 +282,12 @@ export function mensajeDeApertura(error: ErrorDeRpc): string {
   if (esCarreraDeHorario(error)) {
     return "Ese horario acaba de ocuparse. Elige otro y seguimos con el pago.";
   }
+  // G2 · los cuatro rechazos de una grupal (`20261008140000`) se pueden
+  // contar tal cual: dicen qué pasó con la clase, no con nuestra base.
+  const m = (error?.message ?? "").toLowerCase();
+  if (m.includes("ya no tiene cupos")) return "Esta clase ya no tiene cupos.";
+  if (m.includes("ya estás inscrito")) return "Ya estás inscrito en esta clase. La encuentras en Mis reservas.";
+  if (m.includes("inscripción a esta clase ya cerró")) return "La inscripción a esta clase ya cerró.";
+  if (m.includes("fechas de esta clase cambiaron")) return "El tutor cambió las fechas de esta clase. Vuelve a cargarla para ver las nuevas.";
   return "No se pudo reservar el horario. Vuelve a intentarlo en un momento.";
 }

@@ -76,6 +76,7 @@ export const MODELS = [
   { id: "per_package", label: "Paquete" },
   { id: "per_session", label: SESION_INDIVIDUAL },
   { id: "per_hour", label: "Por hora" },
+  { id: "group", label: "Grupal" },
 ];
 
 /** DD-03 · etiquetas del Figma (386:1196). El valor es el de la columna. */

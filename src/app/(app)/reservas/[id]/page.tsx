@@ -107,7 +107,7 @@ export default async function BookingDetailPage({
       // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
       // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
       // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
-      "id, status, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
+      "id, status, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model), sessions(id, start_at, end_at, status, session_ref, group_class_id, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -267,7 +267,11 @@ export default async function BookingDetailPage({
         <div className="flex flex-wrap items-center gap-2.5">
           <StatusPill>{BOOKING_STATUS_LABEL[booking.status]}</StatusPill>
           <p className="text-[13px] text-[#6b6b6b]">
-            {bookingFormatLabel(booking.num_sessions)}
+            {booking.products?.pricing_model === "group"
+              ? booking.num_sessions > 1
+                ? `Clase grupal · ${booking.num_sessions} fechas`
+                : "Clase grupal"
+              : bookingFormatLabel(booking.num_sessions)}
             {booking.session_duration_min
               ? ` · ${booking.session_duration_min} min`
               : ""}
@@ -364,7 +368,9 @@ export default async function BookingDetailPage({
                         sessionId={s.id}
                         productId={booking.product_id}
                         soy="student"
-                        puedeProponer={puedeReagendar(booking.status, s)}
+                        // RG-11 · en una grupal la hora solo la mueve el tutor
+                        // (y `proponer_reagenda` lo rechaza igual).
+                        puedeProponer={!s.group_class_id && puedeReagendar(booking.status, s)}
                         pendiente={reagendaPendiente(s.session_reschedules)}
                         tz={tz}
                         formato={formato}
@@ -592,7 +598,9 @@ export default async function BookingDetailPage({
             className="mt-3.5 h-10 rounded-[8px] px-4 text-[13.5px] text-[#262626]"
           >
             <Link href={`/reservas/${booking.id}/cancelar`}>
-              Cancelar reserva
+              {booking.products?.pricing_model === "group"
+                ? "Cancelar mi cupo"
+                : "Cancelar reserva"}
             </Link>
           </Button>
         ) : null}

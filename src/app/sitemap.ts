@@ -24,16 +24,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();
   const supabase = await createClient();
 
-  const [tutores, productos, categorias, academias] = await Promise.all([
+  const [tutores, productos, categorias, academias, fechasGrupales] = await Promise.all([
     supabase
       // La tabla y no `tutors_public`: el slug no está en la vista, y anon
       // tiene `select` de tabla sobre `tutor_profiles`.
       .from("tutor_profiles")
       .select("profile_id, slug")
       .eq("approval_status", "approved"),
-    supabase.from("products").select("id, slug, updated_at").eq("status", "active"),
+    supabase.from("products").select("id, slug, updated_at, pricing_model").eq("status", "active"),
     supabase.from("categories").select("slug").eq("is_active", true),
     supabase.from("academies_public").select("slug"),
+    supabase.from("group_classes_public").select("product_id, start_at"),
   ]);
 
   for (const [nombre, r] of [
@@ -41,11 +42,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ["products", productos],
     ["categories", categorias],
     ["academies_public", academias],
+    ["group_classes_public", fechasGrupales],
   ] as const) {
     if (r.error) console.error("[sitemap]", nombre, r.error.code, r.error.message);
   }
 
   const ahora = new Date();
+  // G2 · una grupal entra solo mientras se puede inscribir: su primera fecha
+  // aún no empezó (el mismo corte que `create_booking_line`).
+  const primeraFecha = new Map<string, number>();
+  for (const g of fechasGrupales.data ?? []) {
+    if (!g.product_id || !g.start_at) continue;
+    const t = Date.parse(g.start_at);
+    primeraFecha.set(g.product_id, Math.min(primeraFecha.get(g.product_id) ?? t, t));
+  }
+  const grupalAbierta = (id: string) => (primeraFecha.get(id) ?? 0) > ahora.getTime();
   const url = (ruta: string, lastModified: Date = ahora) => ({
     url: `${base}${ruta}`,
     lastModified,
@@ -55,7 +66,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...RUTAS_FIJAS.map((r) => url(r)),
     ...(tutores.data ?? [])
       .map((t) => url(tutorPath({ id: t.profile_id, slug: t.slug }))),
-    ...(productos.data ?? []).map((p) =>
+    ...(productos.data ?? [])
+      .filter((p) => p.pricing_model !== "group" || grupalAbierta(p.id))
+      .map((p) =>
       url(productPath(p), p.updated_at ? new Date(p.updated_at) : ahora),
     ),
     ...(categorias.data ?? [])

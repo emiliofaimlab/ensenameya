@@ -24,6 +24,7 @@ import { tutorResponseTime } from "@/components/chat/conversations";
 import { responseTimeLabel } from "@/components/chat/types";
 import { Container } from "@/components/layout/container";
 import { BookingPanel } from "@/components/catalog/booking-panel";
+import { GrupalPanel } from "@/components/catalog/grupal-panel";
 import { hrefRegalar } from "@/components/catalog/regalo-links";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { ProductCard } from "@/components/catalog/product-card";
@@ -269,7 +270,18 @@ export default async function ProductPage({
    */
   const gruposFaq: { titulo: string; faqs: readonly Faq[] }[] = [
     { titulo: `De ${nombreCorto}, sobre esta mentoría`, faqs: product.faqs },
-    { titulo: "Sobre la plataforma", faqs: PRODUCT_FAQ },
+    {
+      titulo: "Sobre la plataforma",
+      // G2 · la respuesta genérica dice «1 a 1»; en una grupal sería falsa.
+      faqs:
+        product.pricingModel === "group"
+          ? PRODUCT_FAQ.map((f) =>
+              f.a.startsWith("Son sesiones 1 a 1")
+                ? { ...f, a: "Es una clase en grupo, en una sala de video integrada en la plataforma, con el tutor y los demás inscritos. Entras desde tu panel a la hora de cada fecha; no necesitas instalar nada." }
+                : f,
+            )
+          : PRODUCT_FAQ,
+    },
   ].filter((g) => g.faqs.length > 0);
 
   /**
@@ -706,14 +718,14 @@ export default async function ProductPage({
                         </span>
                       ) : null}
                       <span
-                        title="Clase en vivo, 1 a 1"
+                        title={product.grupal ? "Clase en vivo, en grupo" : "Clase en vivo, 1 a 1"}
                         className="inline-flex items-center gap-1.5 whitespace-nowrap"
                       >
                         <VideoIcon
                           className="size-3.5 shrink-0 lg:size-4"
                           aria-hidden
                         />
-                        1 a 1
+                        {product.grupal ? "Grupal" : "1 a 1"}
                       </span>
                     </p>
                   </div>
@@ -915,6 +927,20 @@ export default async function ProductPage({
                   `mb-3.5` es la separación con el panel. */}
               <div aria-hidden className="mb-3.5 aspect-video max-lg:hidden" />
 
+              {product.pricingModel === "group" ? (
+                <GrupalPanel
+                  product={product}
+                  timeZone={timeZone}
+                  formato={formato}
+                  inscribirHref={`/reservar/${product.id}/checkout`}
+                  regaloHref={
+                    esMiMentoria
+                      ? undefined
+                      : hrefRegalar(product.id, { user, onboardingComplete })
+                  }
+                  footer={<CancellationPolicy variant="folded" className="mt-3" />}
+                />
+              ) : (
               <BookingPanel
                 products={[product]}
                 selectedDay={sp.d}
@@ -961,6 +987,7 @@ export default async function ProductPage({
                   <CancellationPolicy variant="folded" className="mt-3" />
                 }
               />
+              )}
             </div>
 
             {/* Fila 3 · lo que se lee DESPUÉS de decidir. En móvil va detrás del

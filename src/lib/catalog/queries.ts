@@ -3,6 +3,8 @@ import "server-only";
 import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
+import { getFormatoHora, getViewerTimezone } from "@/lib/auth/server";
+import { formatSessionTime } from "@/lib/booking";
 import type { Database } from "@/lib/database.types";
 import { parseFaqs, type Faq } from "@/lib/tutor-faqs";
 import { parseRequirements } from "@/lib/product-requirements";
@@ -88,6 +90,24 @@ export type ProductCardData = {
   autoAccept: boolean;
   /** Solo lo rellena el listado de P05; `null` donde no se consultó. */
   tutor?: ProductTutor | null;
+  /** G2 · solo en `pricing_model = 'group'`; lo pone `conGrupales`. */
+  grupal?: GrupalInfo | null;
+};
+
+/**
+ * G2 · lo que el catálogo enseña de una clase grupal, de `group_classes_public`
+ * (solo fechas `scheduled`). `abierta` = la primera fecha no ha empezado: es el
+ * mismo corte con el que `create_booking_line` cierra la inscripción.
+ */
+export type GrupalInfo = {
+  fechas: { startAt: string; endAt: string }[];
+  /** «mar, 21 oct, 18:00» en la zona y el formato de quien mira. */
+  primeraFecha: string | null;
+  cuposLibres: number;
+  capacity: number;
+  abierta: boolean;
+  /** RG-17 · se puede regalar un cupo: quedan cupos y faltan más de 24 h. */
+  regalable: boolean;
 };
 
 export type ProductDetail = ProductCardData & {
@@ -195,6 +215,56 @@ async function withTutors<T extends ProductCardData & { tutorId: string }>(
     ...p,
     tutor: tutors.get(tutorId) ?? null,
   }));
+}
+
+
+/**
+ * G2 · cuelga `grupal` de cada producto grupal (una consulta para toda la
+ * página) y, con `soloAbiertas`, quita las clases cuya inscripción ya cerró:
+ * un listado no debe ofrecer lo que no se puede comprar.
+ *
+ * ponytail: el filtro va DESPUÉS de paginar, así que una página puede salir
+ * con una tarjeta de menos si una grupal cerrada caía en ella. Con pocas
+ * grupales no se nota; si molesta, el corte pasa a la consulta (una columna
+ * `products.inscripcion_cierra_at` mantenida por `publicar_clase_grupal`).
+ */
+export async function conGrupales<T extends ProductCardData>(
+  rows: T[],
+  { soloAbiertas = true }: { soloAbiertas?: boolean } = {},
+): Promise<T[]> {
+  const ids = rows.filter((r) => r.pricingModel === "group").map((r) => r.id);
+  if (ids.length === 0) return rows;
+  const supabase = await createClient();
+  const [{ data }, tz, formato] = await Promise.all([
+    supabase
+      .from("group_classes_public")
+      .select("product_id, start_at, end_at, cupos_libres, capacity")
+      .in("product_id", ids)
+      .order("start_at"),
+    getViewerTimezone(),
+    getFormatoHora(),
+  ]);
+  const ahora = Date.now();
+  const porProducto = new Map<string, GrupalInfo>();
+  for (const g of data ?? []) {
+    if (!g.product_id || !g.start_at || !g.end_at) continue;
+    const info = porProducto.get(g.product_id) ?? {
+      fechas: [],
+      primeraFecha: formatSessionTime(g.start_at, tz, formato),
+      cuposLibres: g.cupos_libres ?? 0,
+      capacity: g.capacity ?? 0,
+      abierta: Date.parse(g.start_at) > ahora,
+      regalable:
+        (g.cupos_libres ?? 0) > 0 && Date.parse(g.start_at) - ahora > 24 * 3_600_000,
+    };
+    info.fechas.push({ startAt: g.start_at, endAt: g.end_at });
+    porProducto.set(g.product_id, info);
+  }
+  return rows
+    .map((r) =>
+      r.pricingModel === "group" ? { ...r, grupal: porProducto.get(r.id) ?? null } : r,
+    )
+    .filter((r) => !soloAbiertas || r.pricingModel !== "group" || r.grupal?.abierta);
 }
 
 /** Categorías activas (para filtros); RLS ya limita a `is_active`. */
@@ -544,7 +614,7 @@ export const getTutorDetail = cache(async (
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
-  const products = (prods ?? []).map(mapProductCard);
+  const products = await conGrupales((prods ?? []).map(mapProductCard));
 
   return {
     tutor: {
@@ -591,7 +661,7 @@ export async function listTutorProducts(
   const { data } = await q
     .order("created_at", { ascending: false })
     .limit(limit);
-  return (data ?? []).map(mapProductCard);
+  return conGrupales((data ?? []).map(mapProductCard));
 }
 
 export type TutorReview = {
@@ -746,7 +816,7 @@ export const getProductDetail = cache(async (
     .maybeSingle();
   if (!tutor) return null;
 
-  return {
+  const detalle: ProductDetail = {
     id: p.id,
     slug: p.slug,
     title: p.title,
@@ -784,6 +854,10 @@ export const getProductDetail = cache(async (
       faqs: [],
     },
   };
+  // La ficha SÍ se pinta con la inscripción cerrada: el enlace puede venir de
+  // un correo o de compartir, y un 404 no explica nada.
+  const [conGrupal] = await conGrupales([detalle], { soloAbiertas: false });
+  return conGrupal;
 });
 
 /** Nombre de una categoría activa (o null si no existe / inactiva por RLS). */
@@ -903,10 +977,12 @@ export async function listActiveProducts(opts: {
   }
 
   return {
-    products: rows.map((r) => ({
-      ...mapProductCard(r),
-      tutor: tutors.get(r.tutor_id) ?? null,
-    })),
+    products: await conGrupales(
+      rows.map((r) => ({
+        ...mapProductCard(r),
+        tutor: tutors.get(r.tutor_id) ?? null,
+      })),
+    ),
     hasMore,
     total: count ?? rows.length,
   };
@@ -1152,7 +1228,7 @@ export async function searchProducts(
   // El corte va DESPUÉS de ordenar: cortando antes, una coincidencia de título
   // que llegó por la rama difusa se perdía sin llegar a subir.
   // La tarjeta de P09 firma con el tutor: hay que traerlo.
-  return withTutors(ordenados.slice(0, PAGE_SIZE));
+  return conGrupales(await withTutors(ordenados.slice(0, PAGE_SIZE)));
 }
 
 /** Cifras de la home (P01). La RPC agrega en vivo; los países se derivan de la

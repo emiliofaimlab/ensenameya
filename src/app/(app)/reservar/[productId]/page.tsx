@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { getFormatoHora, getUserTimezone, requireUser } from "@/lib/auth/server";
@@ -48,6 +49,23 @@ export default async function ReservarPage({
   // getProductDetail solo devuelve productos reservables (active + tutor aprobado).
   const product = await getProductDetail(productId);
   if (!product) notFound();
+
+  // G2 · una grupal no tiene horarios que elegir. Llega aquí el enlace viejo
+  // de «Cambiar horario» o uno guardado: enlace a la ficha, no `redirect()`
+  // (cruzar de grupo con un redirect deja la pantalla en blanco, regla 13).
+  if (product.pricingModel === "group") {
+    return (
+      <div className="mx-auto flex max-w-xl flex-col gap-3 px-4 py-10">
+        <h1 className="text-2xl font-bold text-[#19191f]">{product.title}</h1>
+        <p className="text-sm text-[#474747]">
+          Es una clase grupal con fechas fijas: te inscribes desde su ficha.
+        </p>
+        <Link href={`/mentorias/${productId}`} className="text-sm font-semibold text-brand underline">
+          Ver la clase
+        </Link>
+      </div>
+    );
+  }
 
   const supabase = await createClient();
   const [{ data: slots }, names, tz, formato, enCarrito] = await Promise.all([

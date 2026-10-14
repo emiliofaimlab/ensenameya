@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import {
@@ -67,9 +68,31 @@ export default async function CheckoutPage({
   const product = await getProductDetail(productId);
   if (!product) notFound();
 
-  const slots = (slotsParam ?? "").split(",").filter(Boolean);
-  const required =
-    product.pricingModel === "per_package" ? (product.packageNumSessions ?? 1) : 1;
+  // G2 · en una grupal las fechas no las elige el alumno: salen de la clase
+  // (y `create_booking_line` exige que coincidan). La URL no las trae.
+  const grupal = product.pricingModel === "group" ? product.grupal : null;
+  // Sin `redirect()`: a esta página se llega por navegación de cliente desde
+  // `(public)`, y un redirect ahí deja la pantalla en blanco (regla de oro 13).
+  if (product.pricingModel === "group" && (!grupal?.abierta || grupal.cuposLibres <= 0)) {
+    return (
+      <div className="flex flex-col gap-3">
+        <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">
+          {grupal?.abierta ? "Esta clase ya no tiene cupos" : "La inscripción a esta clase ya cerró"}
+        </h1>
+        <Link href={`/mentorias/${productId}`} className="text-sm text-brand underline">
+          Volver a la clase
+        </Link>
+      </div>
+    );
+  }
+  const slots = grupal
+    ? grupal.fechas.map((f) => f.startAt)
+    : (slotsParam ?? "").split(",").filter(Boolean);
+  const required = grupal
+    ? grupal.fechas.length
+    : product.pricingModel === "per_package"
+      ? (product.packageNumSessions ?? 1)
+      : 1;
   // Selección inválida → de vuelta al picker (evita un checkout inconsistente).
   // ⚠️ Al `/reservar/<id>` PELADO, sin `?slot=`: con la hora en la query esa
   // página rebotaría otra vez aquí (N-33) y serían dos redirecciones en bucle.
@@ -168,7 +191,8 @@ export default async function CheckoutPage({
           // Sin cuenta todavía no hay hold que soltar: aquí es un enlace normal.
           studentId={user?.id ?? null}
           slots={slots}
-          etiqueta="Cambiar horario"
+          etiqueta={grupal ? "Volver a la clase" : "Cambiar horario"}
+          destino={grupal ? `/mentorias/${productId}` : undefined}
           className="mb-4 flex w-fit items-center gap-1.5 text-sm text-[#6b6b6b] transition-colors hover:text-foreground"
         />
         <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">
@@ -210,7 +234,13 @@ export default async function CheckoutPage({
         productTitle={product.title}
         tutorName={tutorName}
         tutor={product.tutor}
-        packageLabel={bookingFormatLabel(required)}
+        packageLabel={
+          grupal
+            ? required > 1
+              ? `Clase grupal · ${required} fechas`
+              : "Clase grupal"
+            : bookingFormatLabel(required)
+        }
         // Las dos etiquetas ya existían en el catálogo y se reutilizan tal cual:
         // "4 × 60 min" y "4 sesiones · US$ 24,00 c/u". Escribir
         // aquí otra versión de lo mismo es como acaban divergiendo la ficha y el

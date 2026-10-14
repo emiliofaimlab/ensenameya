@@ -958,7 +958,9 @@ export default async function TutorProfilePage({
             className="max-lg:order-4 max-lg:scroll-mt-44 lg:col-start-2 lg:row-start-1 lg:row-end-3 lg:mt-[69px]"
           >
             <BookingPanel
-              products={products}
+              // G2 · las grupales no tienen horarios que elegir: salen en la
+              // lista de mentorías con su tarjeta y se inscriben en su ficha.
+              products={products.filter((p) => p.pricingModel !== "group")}
               selectedId={sp.p}
               selectedDay={sp.d}
               selectedTime={sp.h}
