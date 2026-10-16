@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
+import { BADGES, BADGE_KEYS, type BadgeKey } from "@/components/catalog/tutor-badges";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -188,6 +189,66 @@ export function TierPicker({
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+/**
+ * EY-231 — insignias públicas del tutor; puede tener varias. Van por RPC
+ * (`set_tutor_badges`) por lo mismo que el tier: la columna está fuera de los
+ * column-grants del tutor y no puede ponérselas él.
+ */
+export function BadgesPicker({
+  tutorId,
+  badges,
+}: {
+  tutorId: string;
+  badges: string[];
+}) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function toggle(key: BadgeKey, on: boolean) {
+    const next = on ? [...badges, key] : badges.filter((b) => b !== key);
+    setBusy(true);
+    const supabase = createClient();
+    const { error } = await supabase.rpc("set_tutor_badges", {
+      p_tutor_id: tutorId,
+      p_badges: next,
+    });
+    setBusy(false);
+
+    if (error) {
+      toast.error(error.message || "No se pudieron guardar las insignias.");
+      return;
+    }
+    toast.success(on ? `Insignia agregada: ${BADGES[key].label}.` : `Insignia quitada: ${BADGES[key].label}.`);
+    router.refresh();
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border p-4">
+      <h2 className="text-sm font-medium">Insignias</h2>
+      <p className="text-sm text-muted-foreground">
+        Salen junto a su nombre en el catálogo, su perfil y sus mentorías. Puede
+        tener varias.
+      </p>
+      {BADGE_KEYS.map((k) => (
+        <label key={k} className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="size-4"
+            checked={badges.includes(k)}
+            disabled={busy}
+            onChange={(e) => toggle(k, e.target.checked)}
+          />
+          <span
+            className={`size-2.5 rounded-full ${BADGES[k].bg}`}
+            aria-hidden
+          />
+          {BADGES[k].label}
+        </label>
+      ))}
     </div>
   );
 }

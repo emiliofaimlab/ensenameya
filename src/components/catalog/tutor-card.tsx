@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { PrecioDesde } from "@/components/precio/precio";
-import { BadgeCheckIcon } from "lucide-react";
+import { TutorBadges } from "@/components/catalog/tutor-badges";
 
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import type { FeaturedTutor } from "@/lib/catalog/queries";
@@ -47,9 +47,8 @@ export function TutorCard({
             <h3 className="truncate text-[15px] font-bold text-[#212121]">
               {name}
             </h3>
-            <p className="flex items-center gap-1 text-[11.5px] text-[#666666]">
-              <BadgeCheckIcon className="size-3 text-brand" />
-              Tutor verificado
+            <p className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-[#666666]">
+              <TutorBadges badges={tutor.badges} variant="line" />
             </p>
           </div>
         </div>
@@ -131,9 +130,8 @@ export function TutorCard({
         <h3 title={name} className="line-clamp-1 text-base font-bold">
           {name}
         </h3>
-        <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-[#666666]">
-          <BadgeCheckIcon className="size-3.5 text-brand" />
-          Tutor verificado
+        <p className="mt-1 flex flex-wrap items-center justify-center gap-x-2 text-xs text-[#666666]">
+          <TutorBadges badges={tutor.badges} variant="line" />
         </p>
       </div>
 

@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
+import { TutorBadges } from "@/components/catalog/tutor-badges";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
-  BadgeCheckIcon,
   BarChart3Icon,
   CalendarIcon,
-  CheckIcon,
   ClockIcon,
   GlobeIcon,
   StarIcon,
@@ -544,17 +543,12 @@ export default async function TutorProfilePage({
                       Figma; cambiarlo es decisión de marca. Si se decide, el par
                       con tokens es `bg-primary-muted
                       text-primary-muted-foreground` (7:1). */}
-                  <span
-                    title={tituloVerificado}
-                    className="inline-grid size-[22px] shrink-0 place-items-center rounded-full bg-primary text-white max-lg:order-2 lg:inline-flex lg:size-auto lg:h-[26px] lg:gap-1.5 lg:px-2.5 lg:text-xs lg:font-semibold"
-                  >
-                    <CheckIcon className="size-3 lg:hidden" aria-hidden />
-                    <BadgeCheckIcon
-                      className="size-3.5 max-lg:hidden"
-                      aria-hidden
-                    />
-                    <span className="max-lg:sr-only">Tutor verificado</span>
-                  </span>
+                  <TutorBadges
+                    badges={tutor.badges}
+                    variant="pill"
+                    verifiedTitle={tituloVerificado}
+                    className="max-lg:order-2"
+                  />
                 </div>
 
                 {/* G-01 · la valoración es una LÍNEA DE TEXTO, nunca un chip ni

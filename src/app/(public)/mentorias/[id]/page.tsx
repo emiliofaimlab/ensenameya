@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { TutorBadges } from "@/components/catalog/tutor-badges";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
@@ -1065,19 +1066,10 @@ export default async function ProductPage({
                         `title`. */}
                     <p className="flex items-center gap-2 text-[15px] font-bold text-[#262626] lg:text-base">
                       <span className="truncate">{tutorName}</span>
-                      <span
-                        // `role="img"` porque un `aria-label` en un `span`
-                        // genérico lo ignoran la mitad de los lectores: sin rol
-                        // no hay a qué colgar la etiqueta y el check se queda
-                        // mudo, que es justo lo contrario de lo que hace falta
-                        // cuando la insignia sustituye a un texto.
-                        role="img"
-                        title="Identidad y titulación revisadas por Enséñame Ya"
-                        aria-label="Tutor verificado"
-                        className="grid size-[22px] shrink-0 place-items-center rounded-full bg-primary text-white"
-                      >
-                        <CheckIcon className="size-3" strokeWidth={3.2} />
-                      </span>
+                      <TutorBadges
+                        badges={product.tutor.badges}
+                        variant="check"
+                      />
                     </p>
                     {product.tutor.ratingAvg &&
                     product.tutor.ratingCount > 0 ? (

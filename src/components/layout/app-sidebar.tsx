@@ -28,6 +28,7 @@ import {
   UserIcon,
   UsersIcon,
   ShieldIcon,
+  StarIcon,
   ImagesIcon,
   WalletIcon,
   WrenchIcon,
@@ -196,6 +197,9 @@ export const TUTOR_ITEMS: Item[] = [
       { href: "/tutor/reservas?f=pasadas", label: "Pasadas" },
     ],
   },
+  // EY-230 · el aviso de reseña nueva aterriza aquí: antes iba a `/tutor`, que
+  // no enseña ninguna, y el tutor tenía que abrir su ficha pública para leerla.
+  { href: "/tutor/resenas", label: "Mis reseñas", icon: StarIcon },
   // G-01 · «Payouts» pasa a «Mis pagos». Era la única entrada del menú en
   // inglés, y el propio panel ya llamaba «pagos» a lo que hay dentro.
   {

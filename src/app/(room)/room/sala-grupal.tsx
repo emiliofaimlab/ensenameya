@@ -111,6 +111,9 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
       endAt={gc.end_at}
       opensAt={s.access_opens_at ?? withMinutes(gc.start_at, -ACCESS_WINDOW_MIN)}
       closesAt={s.access_closes_at ?? withMinutes(gc.end_at, ACCESS_WINDOW_MIN)}
+      // EY-232 · «Extender 5 min» no existe en grupales: `extend_session` lo
+      // rechaza (`20261016220000`) y aquí el botón no se pinta.
+      extendida
       sessionStatus={s.status}
       bookingStatus={s.bookings?.status ?? "cancelled"}
       productTitle={gc.products?.title ?? "Clase grupal"}

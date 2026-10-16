@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { AvisoMano, BarraHerramientas } from "@/components/sala/barra-herramientas";
 import { canalDaily, canalSimulado, type CanalSala } from "@/components/sala/canal-sala";
 import { ContadorClase } from "@/components/sala/contador-clase";
+import { ExtenderClase } from "@/components/sala/extender-clase";
 import { PanelMateriales } from "@/components/sala/presentacion/panel-materiales";
 import { usePresentacion } from "@/components/sala/presentacion/use-presentacion";
 import { VisorPresentacion } from "@/components/sala/presentacion/visor-presentacion";
@@ -379,9 +380,10 @@ export function LiveRoom({
   bookingId,
   conversationId,
   startAt,
-  endAt,
+  endAt: endAtInicial,
   opensAt,
-  closesAt,
+  closesAt: closesAtInicial,
+  extendida: extendidaInicial,
   sessionStatus,
   bookingStatus,
   productTitle,
@@ -420,6 +422,8 @@ export function LiveRoom({
    *  cuándo se cierra la contabilidad, aunque desde B-2 caigan en el mismo
    *  instante: eso lo decide `session_live_window()` y no se toca. */
   closesAt: string;
+  /** EY-232 · `sessions.extended_at` no nulo: el tutor ya usó sus 5 min. */
+  extendida: boolean;
   sessionStatus: SessionStatus;
   bookingStatus: BookingStatus;
   productTitle: string;
@@ -486,6 +490,11 @@ export function LiveRoom({
    * (la sala aún no decidida) y el reloj entra en el efecto de montaje.
    */
   const [now, setNow] = useState<number | null>(null);
+  // EY-232 · el fin y el cierre de la sala se mueven si el tutor extiende la
+  // clase: llegan por Realtime (a los dos) o por la respuesta (a quien pulsa).
+  const [endAt, setEndAt] = useState(endAtInicial);
+  const [closesAt, setClosesAt] = useState(closesAtInicial);
+  const [extendida, setExtendida] = useState(extendidaInicial);
   const [joined, setJoined] = useState<Joined | null>(null);
   const [busy, setBusy] = useState(false);
   /**
@@ -953,7 +962,17 @@ export function LiveRoom({
             filter: `id=eq.${sessionId}`,
           },
           (payload) => {
-            const estado = (payload.new as { status?: SessionStatus }).status;
+            const fila = payload.new as {
+              status?: SessionStatus;
+              end_at?: string;
+              access_closes_at?: string | null;
+              extended_at?: string | null;
+            };
+            // EY-232 · el tutor extendió la clase: nuevo fin para los dos.
+            if (fila.end_at) setEndAt(fila.end_at);
+            if (fila.access_closes_at) setClosesAt(fila.access_closes_at);
+            if (fila.extended_at) setExtendida(true);
+            const estado = fila.status;
             // `in_progress` también llega por aquí (lo pone `join_session`) y
             // no es un cierre: solo cuentan los tres estados que cierran la
             // puerta, los mismos que rechaza la RPC.
@@ -1096,6 +1115,19 @@ export function LiveRoom({
     const herramientas = (
       <>
         <ContadorClase now={now} startAt={startAt} endAt={endAt} />
+        {isTutor && !extendida ? (
+          <ExtenderClase
+            sessionId={sessionId}
+            now={now}
+            endAt={endAt}
+            closesAt={closesAt}
+            onExtendida={(e, c) => {
+              setEndAt(e);
+              setClosesAt(c);
+              setExtendida(true);
+            }}
+          />
+        ) : null}
         <BarraHerramientas
           className="pointer-events-auto ml-auto"
           isTutor={isTutor}

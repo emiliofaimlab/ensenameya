@@ -51,6 +51,8 @@ export type TutorCardData = {
   approvedAt: string | null;
   /** `/tutores/<slug>`; solo lo baja `getTutorDetail`. Ver `tutorPath`. */
   slug?: string | null;
+  /** EY-231 · `tutor_profiles.badges`; sin consultar = la de siempre. Ver `TutorBadges`. */
+  badges?: string[] | null;
 };
 
 export type ProductTutor = {
@@ -60,6 +62,8 @@ export type ProductTutor = {
   headline: string | null;
   ratingAvg: number | null;
   ratingCount: number;
+  /** EY-231 · solo lo baja `getProductDetail`. */
+  badges?: string[] | null;
 };
 
 export type ProductCardData = {
@@ -298,6 +302,7 @@ type TutorRow = {
   bio: string | null;
   rating_avg: number | null;
   rating_count: number;
+  badges?: string[] | null;
 };
 
 /**
@@ -340,6 +345,7 @@ async function withProductFacts(rows: TutorRow[]): Promise<FeaturedTutor[]> {
     bio: r.bio,
     ratingAvg: r.rating_avg,
     ratingCount: r.rating_count,
+    badges: r.badges,
     // Ninguna tarjeta de listado pinta «tutor desde», así que sus `select` no
     // bajan `approved_at`: aquí `null` significa «no consultado» (§5.2).
     approvedAt: null,
@@ -464,7 +470,7 @@ export async function listApprovedTutors(opts: {
   // y el `count` sigue siendo el del conjunto filtrado.
   let base = supabase
     .from("tutors_public")
-    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count", {
+    .select("profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, badges", {
       count: "exact",
     })
     .eq("approval_status", "approved");
@@ -505,7 +511,7 @@ export async function listFeaturedTutors(limit = 4): Promise<FeaturedTutor[]> {
   const { data } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, badges",
     )
     .eq("approval_status", "approved")
     .order("rating_avg", { ascending: false, nullsFirst: false })
@@ -600,7 +606,7 @@ export const getTutorDetail = cache(async (
   const { data: t } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, slug, display_name, avatar_path, headline, bio, rating_avg, rating_count, teaching_level, approved_at",
+      "profile_id, slug, display_name, avatar_path, headline, bio, rating_avg, rating_count, badges, teaching_level, approved_at",
     )
     .eq("profile_id", id)
     .eq("approval_status", "approved")
@@ -628,6 +634,7 @@ export const getTutorDetail = cache(async (
       ratingCount: t.rating_count,
       approvedAt: t.approved_at,
       slug: t.slug,
+      badges: t.badges,
     },
     products,
   };
@@ -809,7 +816,7 @@ export const getProductDetail = cache(async (
       // oculta — la ficha ya no las pinta y bajar un jsonb sin tope para tirarlo
       // es justo lo que avisa el párrafo de abajo. Al reactivar la sección hay
       // que reponerlo aquí y en el mapeo de `tutor.faqs`.
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, badges",
     )
     .eq("profile_id", p.tutor_id)
     .eq("approval_status", "approved")
@@ -850,6 +857,7 @@ export const getProductDetail = cache(async (
       bio: tutor.bio,
       ratingAvg: tutor.rating_avg,
       ratingCount: tutor.rating_count,
+      badges: tutor.badges,
       // Vacío a propósito: la columna ya no se consulta (ver el select de arriba).
       faqs: [],
     },
@@ -1026,7 +1034,7 @@ export async function searchTutors(
   let query = supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, badges",
     )
     .eq("approval_status", "approved")
     .ilike("search_text", `%${term}%`);
@@ -1508,7 +1516,7 @@ export const getAcademyDetail = cache(async (
   const { data: tutorRows, error: tutorError } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count",
+      "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, badges",
     )
     .eq("academy_id", academy.id)
     .eq("approval_status", "approved")
