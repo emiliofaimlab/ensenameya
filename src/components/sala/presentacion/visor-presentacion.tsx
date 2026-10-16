@@ -279,16 +279,30 @@ export function VisorPresentacion({
   };
 
   // ── Teclado (tutor): flechas y Av/Re Pág ────────────────────────────────
-  const alTeclear = (e: React.KeyboardEvent) => {
+  //
+  // En el DOCUMENTO y no en la página: tras elegir el material en «Compartir»
+  // el foco se queda en la barra de controles, y un `onKeyDown` en la página
+  // solo oía las flechas si antes se hacía clic en ella (que con el lápiz
+  // encendido es dibujar). Se ignora lo que se escribe —el chat, un
+  // `<select>`— y los atajos con modificador.
+  const { irAPagina } = pres;
+  useEffect(() => {
     if (!isTutor || !total || mini) return;
-    if (e.key === "ArrowRight" || e.key === "PageDown") {
-      e.preventDefault();
-      if (pagina < total) pres.irAPagina(pagina + 1);
-    } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
-      e.preventDefault();
-      if (pagina > 1) pres.irAPagina(pagina - 1);
-    }
-  };
+    const alTeclear = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (e.key === "ArrowRight" || e.key === "PageDown") {
+        e.preventDefault();
+        if (pagina < total) irAPagina(pagina + 1);
+      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        e.preventDefault();
+        if (pagina > 1) irAPagina(pagina - 1);
+      }
+    };
+    document.addEventListener("keydown", alTeclear);
+    return () => document.removeEventListener("keydown", alTeclear);
+  }, [isTutor, total, mini, pagina, irAPagina]);
 
   // El padre solo monta el visor con una presentación abierta (el
   // `ResizeObserver` de arriba necesita que la zona exista desde el montaje).
@@ -324,7 +338,6 @@ export function VisorPresentacion({
       <div
         ref={zonaRef}
         tabIndex={isTutor && !mini ? 0 : -1}
-        onKeyDown={alTeclear}
         aria-label={
           isTutor && !mini
             ? "Página presentada. Usa las flechas para cambiar de página."
