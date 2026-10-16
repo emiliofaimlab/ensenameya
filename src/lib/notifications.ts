@@ -131,9 +131,10 @@ const TEXT: Record<string, string> = {
 const DESTINO: Record<string, string> = {
   welcome_student: "/app",
   welcome_tutor: "/tutor",
-  // El correo invita a ver su FICHA PÚBLICA («las reseñas salen en tu ficha y
-  // pesan en el orden de las búsquedas»), no a gestionar aquella reserva.
-  review_received_tutor: "/tutor",
+  // EY-230 · a «Mis reseñas», dentro del panel. Ni `/tutor` (no enseña
+  // ninguna) ni la ficha pública: está en `(public)` y la guarda de `(app)` no
+  // se cruza con un enlace a mano (regla de oro 13).
+  review_received_tutor: "/tutor/resenas",
   payout_account_changed: "/tutor/payouts",
   admin_alert: "/admin/alertas",
   // La baja se pide y se deshace desde ahí, y `/app` es el panel del ALUMNO:

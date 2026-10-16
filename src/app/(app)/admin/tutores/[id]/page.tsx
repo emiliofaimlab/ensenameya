@@ -12,7 +12,8 @@ import {
 } from "@/components/layout/panel-shell";
 import { ADMIN_ITEMS } from "@/components/layout/app-sidebar";
 import { Contacto } from "../../contacto";
-import { BioEditor, DocumentReview, TierPicker, TutorReview, type ReviewDoc } from "./review-actions";
+import { BioEditor, DocumentReview, BadgesPicker,
+  TierPicker, TutorReview, type ReviewDoc } from "./review-actions";
 import type { Database } from "@/lib/database.types";
 
 export const metadata = { title: "Revisar tutor · Enséñame Ya" };
@@ -62,7 +63,7 @@ export default async function AdminTutorPage({
   const { data: tutor, error } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, created_at, profiles!tutor_profiles_profile_id_fkey(full_name, timezone, phone)",
+      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, badges, created_at, profiles!tutor_profiles_profile_id_fkey(full_name, timezone, phone)",
     )
     .eq("profile_id", id)
     .maybeSingle();
@@ -247,6 +248,12 @@ export default async function AdminTutorPage({
                   name: t.name,
                   splitPct: Number(t.split_pct),
                 }))}
+              />
+            </div>
+            <div className="mt-4">
+              <BadgesPicker
+                tutorId={tutor.profile_id}
+                badges={tutor.badges}
               />
             </div>
             <p className="mt-4 text-xs text-[#6b6b6b]">

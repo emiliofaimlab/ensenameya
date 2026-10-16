@@ -45,7 +45,7 @@ export default async function RoomPage({
   const { data: s } = await supabase
     .from("sessions")
     .select(
-      "id, status, start_at, end_at, access_opens_at, access_closes_at, tutor_id, student_id, booking_id, session_ref, bookings(status, products(title))",
+      "id, status, start_at, end_at, access_opens_at, access_closes_at, extended_at, tutor_id, student_id, booking_id, session_ref, bookings(status, products(title))",
     )
     .eq("id", sessionId)
     .maybeSingle();
@@ -157,6 +157,7 @@ export default async function RoomPage({
       // "sin límite", que es lo que haría un rango construido con nulos.
       opensAt={s.access_opens_at ?? withMinutes(s.start_at, -ACCESS_WINDOW_MIN)}
       closesAt={s.access_closes_at ?? withMinutes(s.end_at, ACCESS_WINDOW_MIN)}
+      extendida={s.extended_at !== null}
       sessionStatus={s.status}
       bookingStatus={s.bookings?.status ?? "cancelled"}
       productTitle={s.bookings?.products?.title ?? "Mentoría"}

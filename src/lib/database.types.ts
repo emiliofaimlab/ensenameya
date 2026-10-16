@@ -2196,6 +2196,7 @@ export type Database = {
           daily_room_name: string | null
           daily_room_url: string | null
           end_at: string
+          extended_at: string | null
           id: string
           recordings_purged_at: string | null
           sequence_no: number | null
@@ -2216,6 +2217,7 @@ export type Database = {
           daily_room_name?: string | null
           daily_room_url?: string | null
           end_at: string
+          extended_at?: string | null
           id?: string
           recordings_purged_at?: string | null
           sequence_no?: number | null
@@ -2236,6 +2238,7 @@ export type Database = {
           daily_room_name?: string | null
           daily_room_url?: string | null
           end_at?: string
+          extended_at?: string | null
           id?: string
           recordings_purged_at?: string | null
           sequence_no?: number | null
@@ -2722,6 +2725,7 @@ export type Database = {
           approval_status: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at: string | null
           avatar_path: string | null
+          badges: string[]
           bio: string | null
           created_at: string
           display_name: string | null
@@ -2746,6 +2750,7 @@ export type Database = {
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
           avatar_path?: string | null
+          badges?: string[]
           bio?: string | null
           created_at?: string
           display_name?: string | null
@@ -2770,6 +2775,7 @@ export type Database = {
           approval_status?: Database["public"]["Enums"]["tutor_approval_status"]
           approved_at?: string | null
           avatar_path?: string | null
+          badges?: string[]
           bio?: string | null
           created_at?: string
           display_name?: string | null
@@ -3140,6 +3146,7 @@ export type Database = {
             | Database["public"]["Enums"]["tutor_approval_status"]
             | null
           avatar_path: string | null
+          badges: string[] | null
           bio: string | null
           display_name: string | null
           headline: string | null
@@ -3401,6 +3408,7 @@ export type Database = {
         Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
         Returns: Json
       }
+      extend_session: { Args: { p_session_id: string }; Returns: Json }
       f_unaccent: { Args: { "": string }; Returns: string }
       find_open_order: { Args: { p_lines: Json }; Returns: string }
       fondeo_del_cobro: {
@@ -3748,6 +3756,10 @@ export type Database = {
           p_reason?: string
         }
         Returns: boolean
+      }
+      set_tutor_badges: {
+        Args: { p_badges: string[]; p_tutor_id: string }
+        Returns: string[]
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

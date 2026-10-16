@@ -491,7 +491,7 @@ assert.equal(
   "/pedidos/or-9/confirmacion",
 );
 assert.equal(rutaFor("order_receipt", { booking_id: "bk-7" }), "/reservas");
-assert.equal(rutaFor("review_received_tutor", { booking_id: "bk-7" }), "/tutor");
+assert.equal(rutaFor("review_received_tutor", { booking_id: "bk-7" }), "/tutor/resenas");
 assert.equal(rutaFor("payout_account_changed", {}), "/tutor/payouts");
 assert.equal(rutaFor("welcome_student", {}), "/app");
 assert.equal(rutaFor("welcome_tutor", {}), "/tutor");
