@@ -6,24 +6,31 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { HandIcon, MicIcon, MicOffIcon, UndoIcon, VideoOffIcon } from "lucide-react";
+import { HandIcon, MicIcon, MicOffIcon, UndoIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { estadoContador, reloj } from "./contador-clase";
-import type { EstadoLocal, ParticipanteRemoto } from "./use-participante-remoto";
+import { estadoContador, reloj } from "./tiempo";
 
 /**
  * EY-221 · La ventana flotante «tipo Meet», nuestra.
  *
- * El motivo: el tutor comparte pantalla, cambia de pestaña y deja de ver al
- * alumno y su mano levantada. Esto la deja encima de todo.
+ * Corrección 5 (Emilio, 16-oct): SIN botón. Se abre sola cuando la persona se
+ * va de la pestaña de la llamada sin colgar (a mirar otra ventana) y se cierra
+ * al volver. Enseña las cámaras, el tiempo y lo que se esté compartiendo: es
+ * el mismo `EscenarioSala` de la sala, en compacto.
  *
- * Va con la **Document Picture-in-Picture API**, que hoy solo existe en Chrome
- * y Edge de escritorio — aceptado por el cliente: en los demás navegadores el
- * botón no aparece (`soportada`). Exige un gesto del usuario: se abre desde un
- * botón, nunca sola.
+ * ⚠️ «Sola» tiene letra pequeña. La Document Picture-in-Picture API exige un
+ * gesto del usuario, y la única excepción es la PiP AUTOMÁTICA de Chrome para
+ * videollamadas: la acción `enterpictureinpicture` de Media Session, que el
+ * navegador dispara al cambiar de PESTAÑA con cámara o micro en uso. Así que:
+ *  · solo Chrome/Edge de escritorio (el resto, sin ventana: aceptado por el
+ *    cliente desde EY-221);
+ *  · al cambiar de pestaña, no al pasar a otra aplicación;
+ *  · y el usuario puede negarlo en el permiso del sitio («Picture-in-picture
+ *    automático»).
  *
  * El contenido es un portal de React a un `div` de la ventana nueva: sigue
  * siendo el mismo árbol, recibe el mismo `now` de la sala cada segundo y sus
@@ -69,7 +76,7 @@ function copiarEstilos(destino: Document) {
   destino.body.className = document.body.className;
 }
 
-export function useVentanaFlotante() {
+export function useVentanaFlotante(enLlamada: boolean) {
   const soportada = useSyncExternalStore(
     sinCambios,
     () => api() !== null,
@@ -87,12 +94,9 @@ export function useVentanaFlotante() {
   const abrir = useCallback(async () => {
     const pip = api();
     if (!pip) return;
-    if (ventana.current) {
-      ventana.current.focus();
-      return;
-    }
+    if (ventana.current) return;
     try {
-      const w = await pip.requestWindow({ width: 340, height: 300 });
+      const w = await pip.requestWindow({ width: 420, height: 380 });
       ventana.current = w;
       w.document.title = "Enséñame Ya · Sala";
       copiarEstilos(w.document);
@@ -111,125 +115,107 @@ export function useVentanaFlotante() {
     }
   }, []);
 
+  // Se abre sola al irse de la pestaña (ver la nota de arriba) y se cierra al
+  // volver, que es cuando deja de hacer falta.
+  useEffect(() => {
+    if (!soportada || !enLlamada) return;
+    const accion = "enterpictureinpicture" as MediaSessionAction;
+    try {
+      navigator.mediaSession?.setActionHandler(accion, () => void abrir());
+    } catch {
+      /* navegador sin PiP automática: no hay ventana sola */
+    }
+    const alVolver = () => {
+      if (document.visibilityState === "visible") cerrar();
+    };
+    document.addEventListener("visibilitychange", alVolver);
+    return () => {
+      try {
+        navigator.mediaSession?.setActionHandler(accion, null);
+      } catch {
+        /* ídem */
+      }
+      document.removeEventListener("visibilitychange", alVolver);
+    };
+  }, [soportada, enLlamada, abrir, cerrar]);
+
   // Al salir de la sala, la ventana se va con ella.
   useEffect(() => () => ventana.current?.close(), []);
 
-  return { soportada, abierta: contenedor !== null, contenedor, abrir, cerrar };
-}
-
-function VideoRemoto({ track }: { track: MediaStreamTrack }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  useEffect(() => {
-    const v = ref.current;
-    if (!v) return;
-    v.srcObject = new MediaStream([track]);
-    void v.play().catch(() => {});
-    return () => {
-      v.srcObject = null;
-    };
-  }, [track]);
-  // Silenciado: el audio ya suena en la sala (dentro del iframe de Daily).
-  return (
-    <video
-      ref={ref}
-      muted
-      playsInline
-      autoPlay
-      className="size-full object-cover"
-    />
-  );
+  return { contenedor, cerrar };
 }
 
 export function VentanaFlotante({
   contenedor,
-  rolOtro,
-  remoto,
-  yo,
+  escenario,
   now,
   startAt,
   endAt,
+  closesAt,
+  extendida,
   manoDelOtro,
+  quienMano,
   miMano,
   onBajarManoDelOtro,
   onAlternarMiMano,
-  onAlternarMicro,
+  micro,
   onVolver,
 }: {
   contenedor: HTMLElement;
-  rolOtro: "alumno" | "tutor";
-  remoto: ParticipanteRemoto;
-  yo: EstadoLocal;
+  /** Cámaras + lo compartido: `EscenarioSala` en compacto. */
+  escenario: ReactNode;
   now: number;
   startAt: string;
   endAt: string;
+  closesAt: string;
+  extendida: boolean;
   manoDelOtro: boolean;
+  quienMano: string;
   miMano: boolean;
   onBajarManoDelOtro: () => void;
   onAlternarMiMano: () => void;
   /** `null` en la sala simulada: no hay micro que silenciar. */
-  onAlternarMicro: (() => void) | null;
+  micro: { activo: boolean; alternar: () => void } | null;
   onVolver: () => void;
 }) {
-  const { transcurrido, restante, fase } = estadoContador(now, startAt, endAt);
-  const elOtro = rolOtro === "alumno" ? "El alumno" : "El tutor";
+  const { transcurrido, hastaCierre, restante, fase } = estadoContador(now, startAt, endAt, closesAt, extendida);
 
   return createPortal(
     <div className="flex h-svh flex-col bg-[#14141a] text-white">
       <div className="relative min-h-0 flex-1 bg-[#0f0f14]">
-        {remoto.presente && remoto.video && remoto.camara ? (
-          <VideoRemoto track={remoto.video} />
-        ) : (
-          <div className="flex size-full flex-col items-center justify-center gap-1 p-3 text-center">
-            {remoto.presente ? (
-              <>
-                <p className="text-base font-semibold">
-                  {remoto.nombre ?? elOtro}
-                </p>
-                <p className="flex items-center gap-1 text-xs text-[#a3a3ad]">
-                  {!remoto.camara ? (
-                    <>
-                      <VideoOffIcon className="size-3.5" aria-hidden /> Cámara
-                      apagada
-                    </>
-                  ) : (
-                    "En la sala"
-                  )}
-                  {!remoto.micro ? " · micrófono silenciado" : ""}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-[#a3a3ad]">
-                {remoto.seFue
-                  ? `${elOtro} se fue de la sala`
-                  : `${elOtro} aún no se ha unido`}
-              </p>
-            )}
-          </div>
-        )}
+        {escenario}
 
         <p
           className={cn(
             "absolute top-2 left-2 rounded-full px-2 py-0.5 font-mono text-xs tabular-nums",
             fase === "aviso"
               ? "bg-amber-500 text-black"
-              : fase === "fin"
-                ? "bg-red-600"
-                : "bg-black/60",
+              : fase === "extendida"
+                ? "bg-[#0080ff]"
+                : fase === "extra"
+                  ? "bg-[#fe6a00]"
+                  : fase === "cerrada"
+                    ? "bg-red-600"
+                    : "bg-black/60",
           )}
         >
           {fase === "antes"
             ? "Aún no empieza"
-            : `${reloj(transcurrido)} · ${fase === "fin" ? "tiempo cumplido" : `quedan ${reloj(restante)}`}`}
+            : fase === "extra"
+              ? `Tiempo extra · cierra en ${reloj(hastaCierre)}`
+              : fase === "aviso" || fase === "extendida"
+                ? `${reloj(transcurrido)} · quedan ${reloj(restante)}`
+                : reloj(transcurrido)}
         </p>
 
         {manoDelOtro ? (
           <div
             role="status"
-            className="absolute inset-x-2 bottom-2 flex items-center justify-between gap-2 rounded-md bg-[#fe6a00] px-2 py-1.5 text-sm font-semibold text-white"
+            className="absolute inset-x-2 top-9 flex items-center justify-between gap-2 rounded-md bg-[#fe6a00] px-2 py-1.5 text-sm font-semibold text-white"
           >
             <span className="flex items-center gap-1.5">
               <HandIcon className="size-4" aria-hidden />
-              {elOtro} levantó la mano
+              {quienMano} levantó la mano
             </span>
             <button
               type="button"
@@ -243,18 +229,18 @@ export function VentanaFlotante({
       </div>
 
       <div className="flex shrink-0 items-center justify-center gap-2 border-t border-[#3a3a45] p-2">
-        {onAlternarMicro ? (
+        {micro ? (
           <button
             type="button"
-            onClick={onAlternarMicro}
-            aria-label={yo.micro ? "Silenciar mi micrófono" : "Activar mi micrófono"}
-            title={yo.micro ? "Silenciar" : "Activar micrófono"}
+            onClick={micro.alternar}
+            aria-label={micro.activo ? "Silenciar mi micrófono" : "Activar mi micrófono"}
+            title={micro.activo ? "Silenciar" : "Activar micrófono"}
             className={cn(
               "rounded-full p-2",
-              yo.micro ? "bg-[#26262f] hover:bg-[#3a3a45]" : "bg-red-600 hover:bg-red-700",
+              micro.activo ? "bg-[#26262f] hover:bg-[#3a3a45]" : "bg-red-600 hover:bg-red-700",
             )}
           >
-            {yo.micro ? (
+            {micro.activo ? (
               <MicIcon className="size-4" aria-hidden />
             ) : (
               <MicOffIcon className="size-4" aria-hidden />

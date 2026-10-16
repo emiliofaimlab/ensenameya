@@ -3818,7 +3818,10 @@ export type Database = {
         Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
         Returns: Json
       }
-      extend_session: { Args: { p_session_id: string }; Returns: Json }
+      extend_session: {
+        Args: { p_minutos?: number; p_session_id: string }
+        Returns: Json
+      }
       f_unaccent: { Args: { "": string }; Returns: string }
       find_open_order: { Args: { p_lines: Json }; Returns: string }
       fondeo_del_cobro: {

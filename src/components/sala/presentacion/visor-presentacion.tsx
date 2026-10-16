@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import {
   ChevronLeftIcon,
@@ -9,7 +9,6 @@ import {
   HighlighterIcon,
   PencilIcon,
   Trash2Icon,
-  XIcon,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -77,19 +76,25 @@ function pintarTrazos(
  * El tutor pasa páginas (botones o flechas del teclado) y el alumno sigue la
  * misma; cada uno renderiza a SU tamaño de pantalla, por eso los trazos van en
  * coordenadas relativas a la página y no en píxeles.
+ *
+ * Corrección 9 · sin barra de arriba. El paginador va abajo a la derecha y
+ * solo aparece al pasar el ratón; abajo a la izquierda, un lápiz flotante que
+ * enciende la anotación y abre sus opciones. «Dejar de presentar» vive en el
+ * botón Compartir de la barra de controles.
+ *
+ * `mini`: la versión de la franja (corrección 10, cuando una pantalla
+ * compartida pasa por delante), sin controles y sin dibujar.
  */
 export function VisorPresentacion({
   pres,
   sessionId,
   isTutor,
-  herramientas,
+  mini,
 }: {
   pres: Presentacion;
   sessionId: string;
   isTutor: boolean;
-  /** Contador y herramientas de la sala: mientras se presenta viven en ESTA
-   *  barra, no sobre la franja de vídeo, que en escritorio mide 320px. */
-  herramientas?: ReactNode;
+  mini?: boolean;
 }) {
   const estado = pres.estado;
   const docId = estado?.docId ?? null;
@@ -132,7 +137,10 @@ export function VisorPresentacion({
   useEffect(() => {
     const el = zonaRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => {
+    // El de la ventana DUEÑA del nodo: en la ventana flotante el visor vive en
+    // otro documento (Document Picture-in-Picture).
+    const RO = el.ownerDocument.defaultView?.ResizeObserver ?? ResizeObserver;
+    const ro = new RO(([e]) => {
       const r = e.contentRect;
       setZona({ w: Math.floor(r.width), h: Math.floor(r.height) });
     });
@@ -197,6 +205,21 @@ export function VisorPresentacion({
   }, [repintarNotas, pres.version]);
 
   const [util, setUtil] = useState<Util>("lapiz");
+  // El lápiz flotante: encendido, el lienzo dibuja y se ven las opciones.
+  const [anotando, setAnotando] = useState(false);
+  const dibuja = pres.puedeAnotar && anotando && !mini;
+  // El paginador aparece al mover el ratón o tocar y se esconde a los 2,5 s
+  // (laboratorio de Emilio): así también existe en pantallas táctiles.
+  const [paginador, setPaginador] = useState(false);
+  const ocultar = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mostrarPaginador = () => {
+    setPaginador(true);
+    if (ocultar.current) clearTimeout(ocultar.current);
+    ocultar.current = setTimeout(() => setPaginador(false), 2500);
+  };
+  useEffect(() => () => {
+    if (ocultar.current) clearTimeout(ocultar.current);
+  }, []);
   const [color, setColor] = useState<string>(COLORES[0].valor);
   const dibujando = useRef<{ id: string | null; x: number; y: number } | null>(
     null,
@@ -223,7 +246,7 @@ export function VisorPresentacion({
   };
 
   const alBajar = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!pres.puedeAnotar || e.button !== 0) return;
+    if (!dibuja || e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const { x, y } = punto(e);
     if (util === "goma") {
@@ -257,7 +280,7 @@ export function VisorPresentacion({
 
   // ── Teclado (tutor): flechas y Av/Re Pág ────────────────────────────────
   const alTeclear = (e: React.KeyboardEvent) => {
-    if (!isTutor || !total) return;
+    if (!isTutor || !total || mini) return;
     if (e.key === "ArrowRight" || e.key === "PageDown") {
       e.preventDefault();
       if (pagina < total) pres.irAPagina(pagina + 1);
@@ -287,131 +310,30 @@ export function VisorPresentacion({
     </button>
   );
 
+  const IconoUtil =
+    util === "resaltador" ? HighlighterIcon : util === "goma" ? EraserIcon : PencilIcon;
+
   return (
     <section
       aria-label={`Presentación: ${estado.nombre}`}
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[color:var(--sala-video)]"
+      onPointerMove={mini ? undefined : mostrarPaginador}
+      onPointerDown={mini ? undefined : mostrarPaginador}
+      className="relative flex size-full min-h-0 min-w-0 flex-col bg-[color:var(--sala-video)]"
     >
-      {/* Barra de la presentación */}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] px-3 py-1.5 text-xs text-[color:var(--sala-text)]">
-        <p className="min-w-0 max-w-[40%] truncate font-medium" title={estado.nombre}>
-          {estado.nombre}
-        </p>
-
-        <div className="flex items-center gap-1">
-          {isTutor ? (
-            <button
-              type="button"
-              onClick={() => pres.irAPagina(pagina - 1)}
-              disabled={pagina <= 1}
-              aria-label="Página anterior"
-              className="rounded-md p-1 hover:bg-white/10 disabled:opacity-40"
-            >
-              <ChevronLeftIcon className="size-4" aria-hidden />
-            </button>
-          ) : null}
-          <span className="tabular-nums" aria-live="polite">
-            Página {pagina}
-            {total ? ` de ${total}` : ""}
-          </span>
-          {isTutor ? (
-            <button
-              type="button"
-              onClick={() => pres.irAPagina(pagina + 1)}
-              disabled={!total || pagina >= total}
-              aria-label="Página siguiente"
-              className="rounded-md p-1 hover:bg-white/10 disabled:opacity-40"
-            >
-              <ChevronRightIcon className="size-4" aria-hidden />
-            </button>
-          ) : null}
-        </div>
-
-        {pres.puedeAnotar ? (
-          <div
-            role="toolbar"
-            aria-label="Herramientas de anotación"
-            className="flex items-center gap-1"
-          >
-            {botonUtil("lapiz", "Lápiz", PencilIcon)}
-            {botonUtil("resaltador", "Resaltador", HighlighterIcon)}
-            {botonUtil("goma", "Borrar trazo", EraserIcon)}
-            <span aria-hidden className="mx-1 h-4 w-px bg-white/20" />
-            {COLORES.map((c) => (
-              <button
-                key={c.valor}
-                type="button"
-                onClick={() => {
-                  setColor(c.valor);
-                  if (util === "goma") setUtil("lapiz");
-                }}
-                aria-pressed={color === c.valor}
-                aria-label={`Color ${c.nombre.toLowerCase()}`}
-                title={c.nombre}
-                className={cn(
-                  "size-5 rounded-full border-2",
-                  color === c.valor ? "border-white" : "border-transparent",
-                )}
-                style={{ backgroundColor: c.valor }}
-              />
-            ))}
-            {isTutor ? (
-              <button
-                type="button"
-                onClick={() => pres.limpiarPagina(pagina)}
-                aria-label="Limpiar la página"
-                title="Limpiar la página"
-                className="ml-1 rounded-md p-1.5 hover:bg-white/10"
-              >
-                <Trash2Icon className="size-4" aria-hidden />
-              </button>
-            ) : null}
-          </div>
-        ) : (
-          <span className="text-[color:var(--sala-supportive)]">
-            Presenta el tutor
-          </span>
-        )}
-
-        {isTutor ? (
-          <div className="ml-auto flex items-center gap-2">
-            <label className="flex cursor-pointer items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={estado.alumnoAnota}
-                onChange={(e) => pres.permitirAlumno(e.target.checked)}
-                className="accent-[#fe6a00]"
-              />
-              El alumno puede anotar
-            </label>
-            <button
-              type="button"
-              onClick={pres.dejarDePresentar}
-              className="inline-flex items-center gap-1 rounded-md border border-[color:var(--sala-border)] px-2 py-1 hover:bg-white/10"
-            >
-              <XIcon className="size-3.5" aria-hidden />
-              Dejar de presentar
-            </button>
-          </div>
-        ) : null}
-        {herramientas ? (
-          <div className={cn("flex items-center gap-2", !isTutor && "ml-auto")}>
-            {herramientas}
-          </div>
-        ) : null}
-      </div>
-
       {/* La página */}
       <div
         ref={zonaRef}
-        tabIndex={isTutor ? 0 : -1}
+        tabIndex={isTutor && !mini ? 0 : -1}
         onKeyDown={alTeclear}
         aria-label={
-          isTutor
+          isTutor && !mini
             ? "Página presentada. Usa las flechas para cambiar de página."
             : "Página presentada"
         }
-        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-2 outline-none focus-visible:ring-2 focus-visible:ring-[#fe6a00]"
+        className={cn(
+          "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-[#fe6a00]",
+          mini ? "p-0.5" : "p-2",
+        )}
       >
         {error ? (
           <p className="max-w-sm text-center text-sm text-[color:var(--sala-supportive)]">
@@ -435,12 +357,148 @@ export function VisorPresentacion({
             onPointerUp={alSoltar}
             onPointerCancel={alSoltar}
             className={cn(
-              "absolute inset-0 size-full touch-none",
-              pres.puedeAnotar && (util === "goma" ? "cursor-cell" : "cursor-crosshair"),
+              "absolute inset-0 size-full",
+              dibuja && "touch-none",
+              dibuja && (util === "goma" ? "cursor-cell" : "cursor-crosshair"),
             )}
           />
         </div>
       </div>
+
+      {mini ? (
+        <p
+          className="pointer-events-none absolute top-1.5 left-1.5 max-w-[calc(100%-0.75rem)] truncate rounded bg-black/60 px-1.5 py-0.5 text-xs text-white"
+          title={estado.nombre}
+        >
+          {estado.nombre}
+        </p>
+      ) : null}
+
+      {mini ? null : (
+        <>
+          {/* Paginador: abajo a la derecha, con el nombre del documento dentro.
+              Aparece al mover el ratón o tocar (y con el foco dentro). */}
+          <div
+            className={cn(
+              "absolute right-3 bottom-3 z-20 flex max-w-[calc(100%-5rem)] items-center gap-1 rounded-full bg-black/75 py-1 pr-1 pl-3 text-xs text-white shadow-lg transition-opacity focus-within:pointer-events-auto focus-within:opacity-100",
+              paginador ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+          >
+            <span className="min-w-0 truncate opacity-80" title={estado.nombre}>
+              {estado.nombre}
+            </span>
+            <span aria-hidden className="mx-1 h-3.5 w-px bg-white/25" />
+            {isTutor ? (
+              <button
+                type="button"
+                onClick={() => pres.irAPagina(pagina - 1)}
+                disabled={pagina <= 1}
+                aria-label="Página anterior"
+                className="rounded-full p-1 hover:bg-white/15 disabled:opacity-40"
+              >
+                <ChevronLeftIcon className="size-4" aria-hidden />
+              </button>
+            ) : null}
+            <span className={cn("whitespace-nowrap tabular-nums", !isTutor && "pr-2")} aria-live="polite">
+              {pagina}
+              {total ? ` de ${total}` : ""}
+            </span>
+            {isTutor ? (
+              <button
+                type="button"
+                onClick={() => pres.irAPagina(pagina + 1)}
+                disabled={!total || pagina >= total}
+                aria-label="Página siguiente"
+                className="rounded-full p-1 hover:bg-white/15 disabled:opacity-40"
+              >
+                <ChevronRightIcon className="size-4" aria-hidden />
+              </button>
+            ) : null}
+          </div>
+
+          {/* El lápiz flotante: lleva el icono de la herramienta activa y un
+              punto con el color; al pulsarlo enciende la anotación y abre sus
+              opciones encima. Escape las cierra. */}
+          {pres.puedeAnotar ? (
+            <div className="absolute bottom-3 left-3 z-20 flex flex-col-reverse items-start gap-2">
+              <button
+                type="button"
+                onClick={() => setAnotando((v) => !v)}
+                aria-pressed={anotando}
+                aria-label={anotando ? "Dejar de anotar" : "Anotar"}
+                title={anotando ? "Dejar de anotar" : "Anotar"}
+                className={cn(
+                  "relative flex size-11 items-center justify-center rounded-full text-white shadow-lg transition-colors focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none",
+                  anotando ? "bg-[#fe6a00]" : "bg-black/70 hover:bg-black/85",
+                )}
+              >
+                <IconoUtil className="size-5" aria-hidden />
+                <span
+                  aria-hidden
+                  className="absolute -top-0.5 -right-0.5 size-3.5 rounded-full border-2 border-[color:var(--sala-video)]"
+                  style={{ backgroundColor: color }}
+                />
+              </button>
+              {anotando ? (
+                <div
+                  role="toolbar"
+                  aria-label="Herramientas de anotación"
+                  onKeyDown={(e) => e.key === "Escape" && setAnotando(false)}
+                  className="flex flex-col gap-2 rounded-xl border border-[color:var(--sala-border)] bg-[color:var(--sala-bg)]/95 p-2 text-xs text-[color:var(--sala-text)] shadow-xl"
+                >
+                  <div className="flex items-center gap-1">
+                    {botonUtil("lapiz", "Lápiz", PencilIcon)}
+                    {botonUtil("resaltador", "Resaltador", HighlighterIcon)}
+                    {botonUtil("goma", "Borrar trazo", EraserIcon)}
+                    {isTutor ? (
+                      <button
+                        type="button"
+                        onClick={() => pres.limpiarPagina(pagina)}
+                        aria-label="Limpiar la página"
+                        title="Limpiar la página"
+                        className="rounded-md p-1.5 hover:bg-white/10"
+                      >
+                        <Trash2Icon className="size-4" aria-hidden />
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1.5 px-0.5">
+                    {COLORES.map((c) => (
+                      <button
+                        key={c.valor}
+                        type="button"
+                        onClick={() => {
+                          setColor(c.valor);
+                          if (util === "goma") setUtil("lapiz");
+                        }}
+                        aria-pressed={color === c.valor}
+                        aria-label={`Color ${c.nombre.toLowerCase()}`}
+                        title={c.nombre}
+                        className={cn(
+                          "size-6 rounded-full border-2",
+                          color === c.valor ? "border-white" : "border-transparent",
+                        )}
+                        style={{ backgroundColor: c.valor }}
+                      />
+                    ))}
+                  </div>
+                  {isTutor ? (
+                    <label className="flex cursor-pointer items-center gap-1.5 border-t border-[color:var(--sala-border)] px-0.5 pt-2">
+                      <input
+                        type="checkbox"
+                        checked={estado.alumnoAnota}
+                        onChange={(e) => pres.permitirAlumno(e.target.checked)}
+                        className="accent-[#fe6a00]"
+                      />
+                      El alumno puede anotar
+                    </label>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }

@@ -82,10 +82,10 @@ export function PanelMateriales({
           onCerrar();
         }
       }}
-      className="absolute top-12 right-3 z-30 flex max-h-[70%] w-[min(22rem,calc(100%-1.5rem))] flex-col overflow-hidden rounded-lg border border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] text-[color:var(--sala-text)] shadow-xl outline-none"
+      className="absolute bottom-3 left-1/2 z-30 flex max-h-[70%] w-[min(22rem,calc(100%-1.5rem))] -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] text-[color:var(--sala-text)] shadow-xl outline-none"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--sala-border)] px-3 py-2">
-        <h2 className="text-sm font-semibold">Presentar material</h2>
+        <h2 className="text-sm font-semibold">Documentos de la mentoría</h2>
         <button
           type="button"
           onClick={onCerrar}

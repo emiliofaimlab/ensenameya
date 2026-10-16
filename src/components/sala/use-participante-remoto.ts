@@ -1,83 +1,87 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { DailyCall, DailyParticipant } from "@daily-co/daily-js";
+import type { DailyCall, DailyParticipant, DailyTrackState } from "@daily-co/daily-js";
 
 /**
- * EY-221 · Quién es «el otro» en la llamada (las clases son 1:1) y en qué
- * estado está, para la mano levantada y la ventana flotante.
+ * Quién está en la llamada y con qué pistas, para pintar NUESTRAS teselas.
  *
- * ⚠️ `video` puede venir `null` CON LA CÁMARA ENCENDIDA. Con Daily Prebuilt
- * (`createFrame`) la llamada vive dentro del iframe de daily.co y las pistas
- * son de ESE documento: según la versión, `participants()` las expone o no al
- * nuestro. La ventana flotante usa la pista si llega y, si no, enseña el
- * nombre y el estado de cámara/micro. Ver `ventana-flotante.tsx`.
+ * Desde las correcciones de Emilio (16-oct) la sala ya no es Daily Prebuilt
+ * (`createFrame`) sino `createCallObject`: Daily solo lleva el transporte y la
+ * interfaz entera es nuestra. Por eso aquí salen las pistas de cámara, micro y
+ * pantalla de cada uno — antes vivían dentro del iframe y no se podían
+ * colocar.
  */
-export type ParticipanteRemoto = {
-  /** ¿está ahora en la llamada? */
-  presente: boolean;
-  /** Estuvo y se fue (para decir «Se fue de la sala» y no «aún no se unió»). */
-  seFue: boolean;
-  nombre: string | null;
+export type Participante = {
+  id: string;
+  local: boolean;
+  nombre: string;
+  owner: boolean;
+  /** Pistas `playable` o `null`. `persistentTrack`, como pide Daily: evita
+   *  los fotogramas negros al recolocar el `<video>`. */
   video: MediaStreamTrack | null;
+  audio: MediaStreamTrack | null;
+  pantalla: MediaStreamTrack | null;
+  pantallaAudio: MediaStreamTrack | null;
   camara: boolean;
   micro: boolean;
 };
 
-export type EstadoLocal = { micro: boolean };
-
-const VACIO: ParticipanteRemoto = {
-  presente: false,
-  seFue: false,
-  nombre: null,
-  video: null,
-  camara: false,
-  micro: false,
+/** Lo que necesitan la mano levantada (1:1) y la ventana flotante. */
+export type ParticipanteRemoto = {
+  presente: boolean;
+  /** Estuvo y se fue (para decir «Se fue de la sala» y no «aún no se unió»). */
+  seFue: boolean;
+  nombre: string | null;
 };
 
-function leer(call: DailyCall, estuvo: boolean) {
+function pista(t: DailyTrackState | undefined): MediaStreamTrack | null {
+  return t?.state === "playable" && t.persistentTrack instanceof MediaStreamTrack
+    ? t.persistentTrack
+    : null;
+}
+
+function aParticipante(p: DailyParticipant): Participante {
+  const enciende = (t: DailyTrackState | undefined) =>
+    !["off", "blocked"].includes(t?.state ?? "off");
+  return {
+    id: p.session_id,
+    local: p.local,
+    nombre: p.user_name || (p.local ? "Tú" : "Participante"),
+    owner: p.owner,
+    video: pista(p.tracks?.video),
+    audio: pista(p.tracks?.audio),
+    pantalla: pista(p.tracks?.screenVideo),
+    pantallaAudio: pista(p.tracks?.screenAudio),
+    camara: enciende(p.tracks?.video),
+    micro: enciende(p.tracks?.audio),
+  };
+}
+
+function leer(call: DailyCall): Participante[] {
   let ps: Record<string, DailyParticipant> = {};
   try {
     ps = call.participants() ?? {};
   } catch {
     /* llamada destruida */
   }
-  const otro = Object.values(ps).find((p) => !p.local);
-  const local = ps.local;
-  const remoto: ParticipanteRemoto = otro
-    ? {
-        presente: true,
-        seFue: false,
-        nombre: otro.user_name || null,
-        video:
-          otro.tracks?.video?.persistentTrack instanceof MediaStreamTrack
-            ? otro.tracks.video.persistentTrack
-            : null,
-        camara: otro.tracks?.video?.state === "playable",
-        micro: otro.tracks?.audio?.state === "playable",
-      }
-    : { ...VACIO, seFue: estuvo };
-  const yo: EstadoLocal = {
-    micro: local
-      ? !["off", "blocked"].includes(local.tracks?.audio?.state ?? "off")
-      : true,
-  };
-  return { remoto, yo };
+  // Yo primero; el resto en el orden en que entraron.
+  return Object.values(ps)
+    .map(aParticipante)
+    .sort((a, b) => Number(b.local) - Number(a.local));
 }
 
-export function useParticipanteRemoto(call: DailyCall | null) {
-  const [estado, setEstado] = useState<{
-    remoto: ParticipanteRemoto;
-    yo: EstadoLocal;
-  }>({ remoto: VACIO, yo: { micro: true } });
+export function useParticipantes(call: DailyCall | null) {
+  const [lista, setLista] = useState<Participante[]>([]);
+  const [estuvo, setEstuvo] = useState(false);
+  const [grabando, setGrabando] = useState(false);
 
   useEffect(() => {
     if (!call) return;
-    let estuvo = false;
     const actualizar = () => {
-      const r = leer(call, estuvo);
-      if (r.remoto.presente) estuvo = true;
-      setEstado(r);
+      const l = leer(call);
+      setLista(l);
+      if (l.some((p) => !p.local)) setEstuvo(true);
     };
     const eventos = [
       "joined-meeting",
@@ -87,15 +91,27 @@ export function useParticipanteRemoto(call: DailyCall | null) {
       "track-started",
       "track-stopped",
     ] as const;
+    const enGrabacion = () => setGrabando(true);
+    const finGrabacion = () => setGrabando(false);
     eventos.forEach((ev) => call.on(ev, actualizar));
+    call.on("recording-started", enGrabacion);
+    call.on("recording-stopped", finGrabacion);
     return () => {
       try {
         eventos.forEach((ev) => call.off(ev, actualizar));
+        call.off("recording-started", enGrabacion);
+        call.off("recording-stopped", finGrabacion);
       } catch {
         /* llamada ya destruida */
       }
     };
   }, [call]);
 
-  return estado;
+  const otro = lista.find((p) => !p.local);
+  const remoto: ParticipanteRemoto = {
+    presente: Boolean(otro),
+    seFue: !otro && estuvo,
+    nombre: otro?.nombre ?? null,
+  };
+  return { lista, yo: lista.find((p) => p.local) ?? null, remoto, grabando };
 }
