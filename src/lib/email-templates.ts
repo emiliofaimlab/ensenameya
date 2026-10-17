@@ -1274,7 +1274,10 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     const borra = Number.isNaN(t)
       ? null
       : dia(new Date(t + 30 * 86_400_000).toISOString(), x.tz);
-    const otro = alTutor(x) ? x.c.alumno : x.c.tutor;
+    // A6 · en una grupal el tutor recibe UNO por fecha: no se nombra a un
+    // alumno cualquiera, y la grabación se ve desde la ficha de la clase.
+    const grupal = Boolean(x.p?.group_class_id);
+    const otro = alTutor(x) ? (grupal ? null : x.c.alumno) : x.c.tutor;
     return {
       asunto: "Ya puedes ver la grabación de tu mentoría",
       familia: "clase",
@@ -1283,9 +1286,15 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       preheader: "La grabación está lista. Disponible 30 días desde la clase.",
       motivo: alTutor(x)
         ? "Recibes este correo porque diste esta mentoría."
-        : "Recibes este correo porque asististe a esta mentoría.",
+        : grupal
+          ? "Recibes este correo porque estás inscrito en esta clase."
+          : "Recibes este correo porque asististe a esta mentoría.",
       cuerpo: [
-        parrafo("Ya puedes ver y descargar la grabación desde la página de tu reserva."),
+        parrafo(
+          alTutor(x) && grupal
+            ? "Ya puedes ver y descargar la grabación desde la ficha de tu clase."
+            : "Ya puedes ver y descargar la grabación desde la página de tu reserva.",
+        ),
         tarjetaClase({
           titulo: x.c.clase,
           tutor: otro,

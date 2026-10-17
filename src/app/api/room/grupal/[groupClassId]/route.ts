@@ -12,9 +12,14 @@ import {
  * G3 · entrar a la sala COMPARTIDA de una fecha grupal (RG-12). Gemelo de
  * `/api/room/[sessionId]`: allí autoriza `join_session`, aquí
  * `join_group_class` (tutor anfitrión o alumno con su sesión pagada de esa
- * fecha), y la sala admite cupo + 1. El resto —sala con grabación, token corto
- * firmado en cada entrada, la API key sin salir del servidor— es lo mismo y
- * se explica allí.
+ * fecha), y la sala admite cupo + 4 (margen para otra pestaña o una
+ * reconexión). El resto —sala con grabación, token corto firmado en cada
+ * entrada, la API key sin salir del servidor— es lo mismo y se explica allí.
+ *
+ * B10 · el nombre que ven los demás sale enmascarado de `join_group_class`
+ * (RG-19): «Mariana X.» para un alumno —pueden ser menores, y el chat ya lo
+ * enmascaraba—, el nombre público para el tutor. Antes se leía aquí
+ * `profiles.full_name` y la sala enseñaba el nombre completo.
  */
 export async function POST(
   _req: Request,
@@ -37,6 +42,10 @@ export async function POST(
     ends_at: string;
     closes_at: string;
     max_participants: number;
+    /** El uuid de quien entra. */
+    user_id: string;
+    /** Ya enmascarado para un alumno; nunca null. */
+    user_name: string;
   };
 
   if (!isDailyConfigured()) {
@@ -48,15 +57,6 @@ export async function POST(
       endsAt: auth.ends_at,
     });
   }
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", user!.id)
-    .maybeSingle();
 
   try {
     // Grabación siempre (RN-42): en una grupal no hay `recording_allowed` por
@@ -70,8 +70,8 @@ export async function POST(
     );
     const token = await mintToken({
       room: auth.room_name,
-      userName: profile?.full_name ?? (auth.is_tutor ? "Tutor" : "Alumno"),
-      userId: user!.id,
+      userName: auth.user_name,
+      userId: auth.user_id,
       // El tutor es el anfitrión: silencia o saca a alguien desde la lista de
       // participantes de Daily, que solo enseña esos controles a un owner.
       isOwner: auth.is_tutor,

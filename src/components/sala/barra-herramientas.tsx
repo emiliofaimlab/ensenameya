@@ -310,7 +310,8 @@ export function BarraControles({
   micro: { activo: boolean; alternar: () => void };
   camara: { activo: boolean; alternar: () => void };
   compartir: Compartir;
-  mano: { arriba: boolean; alternar: () => void };
+  /** B8 · sin ella no hay botón: la tutora de una grupal no levanta la mano. */
+  mano?: { arriba: boolean; alternar: () => void };
   chat: { abierto: boolean; sinLeer: number; alternar: () => void };
   pantalla: { soportada: boolean; activa: boolean; alternar: () => void };
   /** `null` en la sala simulada: no hay dispositivos que cambiar. */
@@ -357,14 +358,16 @@ export function BarraControles({
           {camara.activo ? <VideoIcon className="size-5" aria-hidden /> : <VideoOffIcon className="size-5" aria-hidden />}
         </Boton>
         <BotonCompartir compartir={compartir} />
-        <Boton
-          etiqueta={mano.arriba ? "Bajar la mano" : "Levantar la mano"}
-          rotulo="Mano"
-          activo={mano.arriba}
-          onClick={mano.alternar}
-        >
-          <HandIcon className="size-5" aria-hidden />
-        </Boton>
+        {mano ? (
+          <Boton
+            etiqueta={mano.arriba ? "Bajar la mano" : "Levantar la mano"}
+            rotulo="Mano"
+            activo={mano.arriba}
+            onClick={mano.alternar}
+          >
+            <HandIcon className="size-5" aria-hidden />
+          </Boton>
+        ) : null}
         <Boton
           id="boton-chat-sala"
           etiqueta={
@@ -414,10 +417,13 @@ export function BarraControles({
 /** El indicador de «levantó la mano», sobre el escenario. */
 export function AvisoMano({
   quien,
+  pendientes,
   onBajar,
   className,
 }: {
   quien: string;
+  /** B8 · grupal: cuántas manos más esperan detrás de esta en la cola. */
+  pendientes?: number;
   onBajar: () => void;
   className?: string;
 }) {
@@ -430,7 +436,9 @@ export function AvisoMano({
       )}
     >
       <HandIcon className="size-4 animate-bounce" aria-hidden />
-      <span>{quien} levantó la mano</span>
+      <span>
+        {quien} levantó la mano{pendientes ? ` · ${pendientes} más esperando` : ""}
+      </span>
       <button
         type="button"
         onClick={onBajar}

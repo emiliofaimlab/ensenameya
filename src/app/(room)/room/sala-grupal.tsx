@@ -12,6 +12,8 @@ import { MESSAGE_COLUMNS, toChatMessage } from "@/lib/chat/messages";
 import { grupalDe } from "@/components/chat/grupo";
 import { SiteHeader } from "@/components/layout/site-header";
 import { ACCESS_WINDOW_MIN, withMinutes } from "@/lib/room-window";
+import { formatSessionTime } from "@/lib/booking";
+import { Button } from "@/components/ui/button";
 import { LiveRoom } from "./[sessionId]/live-room";
 
 /**
@@ -31,7 +33,7 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
   const { data: gc } = await supabase
     .from("group_classes")
     .select(
-      "id, product_id, tutor_id, start_at, end_at, products!group_classes_product_id_fkey(title, capacity)",
+      "id, product_id, tutor_id, start_at, end_at, status, rescheduled_at, products!group_classes_product_id_fkey(title, capacity)",
     )
     .eq("id", groupClassId)
     .maybeSingle();
@@ -40,26 +42,66 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
 
   // La sesión de la que cuelgan el «Entiendo» y el canal de cierre: la del
   // alumno, o —para el tutor, que no tiene— la primera viva de la fecha.
+  //
+  // M29 · la del tutor sale solo de una reserva VIVA: antes podía tocarle la
+  // de un alumno con un simple apartado y leía «Esta reserva no está activa».
+  // El `!inner` no cambia nada al alumno: su sesión siempre cuelga de su reserva.
   let q = supabase
     .from("sessions")
-    .select("id, status, booking_id, session_ref, access_opens_at, access_closes_at, bookings(status)")
+    .select("id, status, booking_id, session_ref, access_opens_at, access_closes_at, bookings!inner(status)")
     .eq("group_class_id", gc.id)
     .neq("status", "cancelled");
-  if (!esTutor) q = q.eq("student_id", user.id);
+  q = esTutor
+    ? q.in("bookings.status", ["confirmed", "in_progress", "completed"])
+    : q.eq("student_id", user.id);
   const { data: sesiones } = await q.order("id").limit(1);
   const s = sesiones?.[0];
 
   if (!s) {
-    // Tutor sin inscritos todavía, o alumno que se dio de baja.
+    // P42 · sin sesión: tutor sin inscritos todavía, alumno que se dio de
+    // baja, o una fecha cancelada, terminada o movida. Antes era un «No tienes
+    // un cupo activo» suelto, sin cabecera ni salida; ahora se dice cuál de
+    // los casos es y se ofrece la vuelta.
+    const [notices, tz, formato] = await Promise.all([
+      listNotices(user.id),
+      getUserTimezone(),
+      getFormatoHora(),
+    ]);
+    const mensaje =
+      gc.status === "cancelled"
+        ? esTutor
+          ? "Esta fecha se canceló."
+          : "Esta fecha se canceló; te devolvimos su parte."
+        : gc.status === "completed"
+          ? "Esta fecha ya terminó, así que su sala está cerrada."
+          : !esTutor && gc.rescheduled_at
+            ? `Esta fecha se movió al ${formatSessionTime(gc.start_at, tz, formato)} y ya no tienes un cupo activo en ella.`
+            : esTutor
+              ? "La sala se abre cuando haya al menos un inscrito con el pago confirmado."
+              : "No tienes un cupo activo en esta clase.";
     return (
-      <div className="mx-auto flex max-w-xl flex-col gap-3 px-4 py-16 text-center">
-        <h1 className="text-2xl font-bold">{gc.products?.title ?? "Clase grupal"}</h1>
-        <p className="text-sm text-muted-foreground">
-          {esTutor
-            ? "La sala se abre cuando haya al menos un inscrito con el pago confirmado."
-            : "No tienes un cupo activo en esta clase."}
-        </p>
-      </div>
+      <>
+        <SiteHeader
+          user={toHeaderUser(user, roles, { fullName, avatarPath, onboardingComplete })}
+          notices={notices}
+          formato={formato}
+        />
+        <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-4 py-16 text-center">
+          <h1 className="text-2xl font-bold">{gc.products?.title ?? "Clase grupal"}</h1>
+          <p className="text-sm text-muted-foreground">{mensaje}</p>
+          {/* Regla 13 · `<a>` y no `<Link>`: desde `(room)` a una ruta con
+              guarda de `(app)`, una navegación de cliente puede dejar la
+              pantalla en blanco. */}
+          <Button asChild variant="outline">
+            {esTutor ? (
+              <a href={`/tutor/clases-grupales/${gc.product_id}`}>Volver a la clase</a>
+            ) : (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages -- regla 13
+              <a href="/reservas">Volver a mis reservas</a>
+            )}
+          </Button>
+        </div>
+      </>
     );
   }
 
@@ -115,11 +157,23 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
       endAt={gc.end_at}
       opensAt={s.access_opens_at ?? withMinutes(gc.start_at, -ACCESS_WINDOW_MIN)}
       closesAt={s.access_closes_at ?? withMinutes(gc.end_at, ACCESS_WINDOW_MIN)}
-      // EY-232 · «Extender 5 min» no existe en grupales: `extend_session` lo
-      // rechaza (`20261016220000`) y aquí el botón no se pinta.
-      extendida
-      sessionStatus={s.status}
-      bookingStatus={s.bookings?.status ?? "cancelled"}
+      // B9 · una grupal no se extiende (`extend_session` lo rechaza,
+      // `20261016220000`, y el botón no se pinta), así que su contador nunca
+      // está en fase «extendida». Antes iba `true` y pintaba «Clase extendida
+      // · quedan 59:49» desde el minuto 0, tragándose el aviso de los 5 min.
+      extendida={false}
+      // M29 · al tutor el estado le sale de la FECHA, no de la sesión prestada
+      // de un alumno: la baja o el cierre de ése no son los de la clase.
+      sessionStatus={
+        esTutor
+          ? gc.status === "cancelled"
+            ? "cancelled"
+            : gc.status === "completed"
+              ? "completed"
+              : "scheduled"
+          : s.status
+      }
+      bookingStatus={esTutor ? "confirmed" : (s.bookings?.status ?? "cancelled")}
       productTitle={gc.products?.title ?? "Clase grupal"}
       // El n.º es de la sesión de un ALUMNO: al tutor, que entra con una
       // cualquiera de la fecha, no se le enseña.

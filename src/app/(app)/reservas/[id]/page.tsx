@@ -422,8 +422,12 @@ export default async function BookingDetailPage({
                         {/* US-1802 · la grabación vive 30 días desde la clase. El
                             nº de sesión viaja con el botón: una grabación se
                             reclama por correo ("la de la 7K3M9Q-2") y el uuid de
-                            la URL no sirve para eso. */}
-                        {s.status === "completed" ? (
+                            la URL no sirve para eso.
+                            A6 · RG-12: la grabación de la fecha la ven todos los
+                            inscritos, también quien faltó (`no_show`). La guarda
+                            B1 del endpoint solo rechaza `cancelled`. */}
+                        {s.status === "completed" ||
+                        (s.group_class_id && s.status === "no_show") ? (
                           <RecordingLink sessionId={s.id} nroSesion={s.session_ref} />
                         ) : null}
                         {/* Un evento de calendario es una CLASE, no una reserva:

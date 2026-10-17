@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FlagIcon, XIcon } from "lucide-react";
@@ -155,6 +154,10 @@ type Joined = {
   /** Sin credenciales de Daily la sala va simulada (ver `lib/daily.ts`). */
   simulated: boolean;
 };
+
+/** M6 · Daily rechaza la entrada porque la sala llegó a su cupo. */
+const SALA_LLENA =
+  "La sala está llena. Si la tienes abierta en otra pestaña, ciérrala y vuelve a entrar.";
 
 // EY-221 · AQUÍ VIVÍA `clock()`, el formato del cronómetro de la cabecera. El
 // cronómetro bajó a ser el contador superpuesto sobre el vídeo y su formato se
@@ -556,6 +559,17 @@ export function LiveRoom({
     canal,
     nombreOtro: isTutor ? (grupal ? "Un alumno" : "El alumno") : "El tutor",
     otroPresente: remoto.presente,
+    // B8 · en grupo la tutora lleva una cola con nombre y cada alumno solo ve
+    // la suya. Los ids son los `session_id` de Daily, los mismos que da
+    // `fromId` en el canal.
+    grupal: grupal
+      ? {
+          soyTutor: isTutor,
+          miId: yo?.id ?? (canal && "miId" in canal ? String(canal.miId) : null),
+          nombreDe: (id) => participantes.find((p) => p.id === id)?.nombre ?? "Un alumno",
+          presentes: participantes.map((p) => p.id),
+        }
+      : undefined,
   });
   const pres = usePresentacion({ canal, isTutor });
   // UN `sync-request` por canal, y DESPUÉS de que los dos hooks de arriba
@@ -685,7 +699,14 @@ export function LiveRoom({
         salirDeLaSala();
       });
       call.on("error", (e) => {
-        toast.error("Se perdió la conexión con la sala.");
+        // M6 · sala llena (otra pestaña abierta, o una reconexión que aún
+        // ocupa su lugar): se dice qué hacer. Mismo id que el `catch` del
+        // `join`, que suele saltar a la vez, para no duplicar el aviso.
+        if (e?.error?.type === "meeting-full") {
+          toast.error(SALA_LLENA, { id: "sala-join" });
+        } else {
+          toast.error("Se perdió la conexión con la sala.");
+        }
         console.error("[daily] error:", JSON.stringify(e));
       });
       call.on("camera-error", (e) => {
@@ -712,7 +733,19 @@ export function LiveRoom({
         });
       } catch (e) {
         console.error("[daily] join falló:", JSON.stringify(e));
-        toast.error("No pudimos conectar con la sala de video.");
+        // M6 · el `join` rechaza con el evento de error de Daily (o, según la
+        // versión, con su texto): se miran las dos formas.
+        const err = e as { error?: { type?: string }; errorMsg?: string } | null;
+        const llena =
+          err?.error?.type === "meeting-full" ||
+          String(err?.errorMsg ?? e).toLowerCase().includes("full");
+        toast.error(llena ? SALA_LLENA : "No pudimos conectar con la sala de video.", {
+          id: "sala-join",
+        });
+        // Sin esto la pantalla se quedaba en «Conectando con la sala…» para
+        // siempre: se vuelve al botón de entrar, y la limpieza del efecto
+        // destruye la llamada fallida.
+        if (!cancelled) setJoined(null);
       }
     })();
 
@@ -774,7 +807,10 @@ export function LiveRoom({
    * echado.
    */
   useEffect(() => {
-    if (!joined) return;
+    // M29 · la sesión que lleva la tutora de una grupal es la de UN alumno
+    // (no tiene propia): su baja o su cierre no deben sacarla de la sala. A la
+    // fecha la cierra la ventana de Daily (`eject_at_room_exp`).
+    if (!joined || (grupal && isTutor)) return;
 
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -840,7 +876,7 @@ export function LiveRoom({
       cancelado = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [joined, sessionId, salirDeLaSala]);
+  }, [joined, sessionId, salirDeLaSala, grupal, isTutor]);
 
   async function join() {
     setBusy(true);
@@ -944,7 +980,23 @@ export function LiveRoom({
       !joined.simulated && typeof navigator.mediaDevices?.getDisplayMedia === "function";
     const miMicro = joined.simulated ? !muted : (yo?.micro ?? false);
     const miCamara = joined.simulated ? !camOff : (yo?.camara ?? false);
-    const quienMano = isTutor ? (grupal ? "Un alumno" : "El alumno") : "El tutor";
+    // B8 · en grupo, a la tutora le avisa la PRIMERA mano de su cola (con su
+    // nombre); el alumno no ve manos ajenas. Fuera de grupal, como siempre.
+    const colaManos = grupal && isTutor ? mano.cola : [];
+    const manoAjena = grupal ? colaManos.length > 0 : mano.delOtro;
+    const quienMano = grupal
+      ? (colaManos[0]?.nombre ?? "Un alumno")
+      : isTutor
+        ? "El alumno"
+        : "El tutor";
+    const pendientesMano = colaManos.length > 1 ? colaManos.length - 1 : undefined;
+    const bajarManoAjena = grupal
+      ? () => {
+          if (colaManos[0]) mano.bajar(colaManos[0].id);
+        }
+      : mano.bajarLaDelOtro;
+    // La tutora de una grupal no levanta la mano: sin botón.
+    const miManoDisponible = !(grupal && isTutor);
     // G3 · en una grupal el tutor (owner) silencia o saca a alguien (RG-12):
     // lo que antes daba la lista de participantes de Prebuilt.
     const accionesTutor =
@@ -1199,11 +1251,12 @@ export function LiveRoom({
 
             {/* EY-221 · «levantó la mano», bien visible y dentro del contenedor
                 de pantalla completa (el toast, que va al `body`, ahí no se ve). */}
-            {mano.delOtro ? (
+            {manoAjena ? (
               <AvisoMano
                 className="absolute top-3 left-1/2 z-20 -translate-x-1/2"
                 quien={quienMano}
-                onBajar={mano.bajarLaDelOtro}
+                pendientes={pendientesMano}
+                onBajar={bajarManoAjena}
               />
             ) : null}
 
@@ -1241,11 +1294,12 @@ export function LiveRoom({
                 endAt={endAt}
                 closesAt={closesAt}
                 extendida={extendida}
-                manoDelOtro={mano.delOtro}
+                manoDelOtro={manoAjena}
                 quienMano={quienMano}
+                pendientes={pendientesMano}
                 miMano={mano.mia}
-                onBajarManoDelOtro={mano.bajarLaDelOtro}
-                onAlternarMiMano={mano.alternar}
+                onBajarManoDelOtro={bajarManoAjena}
+                onAlternarMiMano={miManoDisponible ? mano.alternar : undefined}
                 micro={
                   call ? { activo: miMicro, alternar: () => call.setLocalAudio(!miMicro) } : null
                 }
@@ -1382,7 +1436,7 @@ export function LiveRoom({
                 }
               : undefined,
           }}
-          mano={{ arriba: mano.mia, alternar: mano.alternar }}
+          mano={miManoDisponible ? { arriba: mano.mia, alternar: mano.alternar } : undefined}
           chat={{ abierto: chatAbierto, sinLeer, alternar: alternarChat }}
           pantalla={{
             soportada: pantalla.soportada,
@@ -1422,12 +1476,13 @@ export function LiveRoom({
           {/* También antes de entrar y después de salir: la consulta a soporte
               suele ser justo cuando la sala NO deja pasar. */}
           <SessionRef nro={sessionRef} />
-          <Link
+          {/* Regla de oro 13: de (room) a una ruta con guarda de (app), <a> y no <Link>. */}
+          <a
             href={volver.href}
             className="mt-1 text-sm text-muted-foreground underline-offset-2 hover:underline"
           >
             {volver.label}
-          </Link>
+          </a>
         </div>
 
         {now === null ? (
@@ -1467,7 +1522,7 @@ export function LiveRoom({
                   : "Esta reserva no está activa, así que la sala no está disponible."}
             </p>
             <Button asChild variant="outline">
-              <Link href={volver.href}>{volver.label}</Link>
+              <a href={volver.href}>{volver.label}</a>
             </Button>
           </>
         ) : beforeWindow ? (
@@ -1518,7 +1573,7 @@ export function LiveRoom({
               La ventana de acceso de esta sesión ya cerró.
             </p>
             <Button asChild variant="outline">
-              <Link href={volver.href}>{volver.label}</Link>
+              <a href={volver.href}>{volver.label}</a>
             </Button>
           </>
         ) : (

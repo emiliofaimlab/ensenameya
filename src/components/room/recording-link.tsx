@@ -21,12 +21,19 @@ type Result =
  * N-27 · lleva pegado el "N.º de sesión" cuando quien lo pinta se lo pasa. Es
  * el sitio donde más falta hace: una grabación se reclama por teléfono o por
  * correo ("la de la sesión 7K3M9Q-2"), y el uuid de la URL no sirve para eso.
+ *
+ * A6 · se pide por SESIÓN (`sessionId`, el alumno) o por FECHA grupal
+ * (`groupClassId`, la tutora, que en una grupal no tiene sesión propia). Uno
+ * de los dos.
  */
 export function RecordingLink({
   sessionId,
+  groupClassId,
   nroSesion,
 }: {
-  sessionId: string;
+  sessionId?: string;
+  /** `group_classes.id`: la grabación de esa fecha (RG-12). */
+  groupClassId?: string;
   /** `sessions.session_ref`. Opcional: sin él solo se pinta el botón. */
   nroSesion?: string | null;
 }) {
@@ -39,7 +46,11 @@ export function RecordingLink({
     if (w) w.opener = null;
 
     setBusy(true);
-    const res = await fetch(`/api/recordings/${sessionId}`);
+    const res = await fetch(
+      groupClassId
+        ? `/api/recordings/grupal/${groupClassId}`
+        : `/api/recordings/${sessionId}`,
+    );
     const data = (await res.json()) as Result;
     setBusy(false);
 
@@ -52,9 +63,13 @@ export function RecordingLink({
     w?.close();
     toast.info(
       data.status === "expired"
-        ? "La grabación ya caducó: se guarda 30 días desde la mentoría."
+        ? groupClassId
+          ? "La grabación ya caducó: se guarda 30 días desde la clase."
+          : "La grabación ya caducó: se guarda 30 días desde la mentoría."
         : data.status === "none"
-          ? "Esta mentoría no se grabó."
+          ? groupClassId
+            ? "Esta clase no se grabó."
+            : "Esta mentoría no se grabó."
           : "La grabación no está disponible todavía.",
     );
   }

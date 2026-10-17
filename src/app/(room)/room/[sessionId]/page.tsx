@@ -51,7 +51,19 @@ export default async function RoomPage({
     .eq("id", sessionId)
     .maybeSingle();
 
-  if (!s) notFound();
+  if (!s) {
+    // M3 · el enlace a la sala del Google Calendar y del ICS del TUTOR lleva
+    // el id de la FECHA (`/room/<group_class>`), no el de una sesión: sin esto
+    // daba 404, y así siguen sirviendo también los eventos ya escritos. La
+    // autorización la sigue poniendo `join_group_class`.
+    const { data: gc } = await supabase
+      .from("group_classes")
+      .select("id")
+      .eq("id", sessionId)
+      .maybeSingle();
+    if (gc) return <SalaGrupal groupClassId={gc.id} />;
+    notFound();
+  }
   // G3 · la sesión de un alumno en una grupal no tiene sala propia: entra a la
   // de su fecha. El enlace «Entrar a sala» de siempre sigue sirviendo.
   if (s.group_class_id) return <SalaGrupal groupClassId={s.group_class_id} />;

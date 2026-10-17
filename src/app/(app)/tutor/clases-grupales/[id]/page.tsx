@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { formatSessionTime } from "@/lib/booking";
 import { formatMoney } from "@/lib/catalog/format";
 import { TutorShell } from "@/components/layout/tutor-shell";
+import { RecordingLink } from "@/components/room/recording-link";
 import { PanelCard, StatusPill, type PillTone } from "@/components/layout/panel-shell";
 import { studentsOfTutor } from "../../students";
 import { StudentLink } from "../../student-link";
@@ -199,6 +200,12 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
                           // `cancelar_fecha_grupal` ya lo permite.
                           puedeCancelar={ciclo && new Date(f.start_at) > ahora}
                         />
+                      </div>
+                    ) : f.status === "completed" ? (
+                      // A6 · la tutora ve la grabación de cada fecha dada (antes
+                      // no tenía dónde).
+                      <div className="flex flex-wrap items-center gap-2">
+                        <RecordingLink groupClassId={f.id} />
                       </div>
                     ) : null}
                   </li>

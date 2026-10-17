@@ -3878,6 +3878,13 @@ export type Database = {
           user_id: string
         }[]
       }
+      grabacion_de_fecha: {
+        Args: { p_group_class: string }
+        Returns: {
+          end_at: string
+          room_name: string
+        }[]
+      }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean

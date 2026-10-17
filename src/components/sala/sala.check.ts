@@ -27,6 +27,12 @@ assert.equal(estadoContador(t("11:10"), S, E, C).fase, "cerrada");
 // Extendida: azul hasta el nuevo fin, aunque falten menos de 5 min.
 assert.equal(estadoContador(t("10:58"), S, E, C, true).fase, "extendida");
 assert.equal(estadoContador(t("11:01"), S, E, C, true).fase, "extra");
+// B9 · grupal (extendida = false): una grupal no se extiende, así que la sala
+// grupal pasa `false`. Con `true` pintaba «Clase extendida» desde el minuto 0
+// y el aviso de los 5 minutos no salía nunca (el tercer caso es ese fallo).
+assert.equal(estadoContador(t("10:00"), S, E, C, false).fase, "normal");
+assert.equal(estadoContador(t("10:55"), S, E, C, false).fase, "aviso");
+assert.equal(estadoContador(t("10:00"), S, E, C, true).fase, "extendida");
 assert.equal(estadoContador(t("10:30"), S, E, C).total, 60 * 60_000);
 assert.equal(puedeExtender("normal"), false);
 assert.equal(puedeExtender("extendida"), false);

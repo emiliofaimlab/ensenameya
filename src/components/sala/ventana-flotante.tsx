@@ -155,6 +155,7 @@ export function VentanaFlotante({
   extendida,
   manoDelOtro,
   quienMano,
+  pendientes,
   miMano,
   onBajarManoDelOtro,
   onAlternarMiMano,
@@ -171,9 +172,12 @@ export function VentanaFlotante({
   extendida: boolean;
   manoDelOtro: boolean;
   quienMano: string;
+  /** B8 · grupal: cuántas manos más esperan en la cola de la tutora. */
+  pendientes?: number;
   miMano: boolean;
   onBajarManoDelOtro: () => void;
-  onAlternarMiMano: () => void;
+  /** B8 · sin él no hay botón de mano propia (la tutora de una grupal). */
+  onAlternarMiMano?: () => void;
   /** `null` en la sala simulada: no hay micro que silenciar. */
   micro: { activo: boolean; alternar: () => void } | null;
   onVolver: () => void;
@@ -216,6 +220,7 @@ export function VentanaFlotante({
             <span className="flex items-center gap-1.5">
               <HandIcon className="size-4" aria-hidden />
               {quienMano} levantó la mano
+              {pendientes ? ` · ${pendientes} más esperando` : ""}
             </span>
             <button
               type="button"
@@ -247,19 +252,21 @@ export function VentanaFlotante({
             )}
           </button>
         ) : null}
-        <button
-          type="button"
-          onClick={onAlternarMiMano}
-          aria-pressed={miMano}
-          aria-label={miMano ? "Bajar la mano" : "Levantar la mano"}
-          title={miMano ? "Bajar la mano" : "Levantar la mano"}
-          className={cn(
-            "rounded-full p-2",
-            miMano ? "bg-[#fe6a00]" : "bg-[#26262f] hover:bg-[#3a3a45]",
-          )}
-        >
-          <HandIcon className="size-4" aria-hidden />
-        </button>
+        {onAlternarMiMano ? (
+          <button
+            type="button"
+            onClick={onAlternarMiMano}
+            aria-pressed={miMano}
+            aria-label={miMano ? "Bajar la mano" : "Levantar la mano"}
+            title={miMano ? "Bajar la mano" : "Levantar la mano"}
+            className={cn(
+              "rounded-full p-2",
+              miMano ? "bg-[#fe6a00]" : "bg-[#26262f] hover:bg-[#3a3a45]",
+            )}
+          >
+            <HandIcon className="size-4" aria-hidden />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={onVolver}
