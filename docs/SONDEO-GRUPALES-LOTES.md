@@ -288,11 +288,23 @@ Archivos: `tutor/clases-grupales/[id]/*`, `tutor/products/*` (incluido `product-
 - [x] **P51** 🔴 En móvil, la tarjeta «Inscritos / Cupos libres / Cupo mínimo» de la ficha se apila en tres filas. → Tres columnas compactas.
 - [x] **P53** 🔴 El reagendar en línea no rellena la fecha actual y queda apretado junto a «Entrar a sala». Tras cancelar una fecha, la cabecera «Fechas del ciclo» pasa a «Fecha» y pierde la numeración.
 
-## Lote 10 · Re-sondeo completo (½ – 1 día)
+## Lote 10 · Re-sondeo completo (½ – 1 día) · 🟡 parcial, 17-oct
 
-- [ ] Repetir el recorrido del sondeo del 16-oct contra el build de producción: tutora + 4 alumnos por Stripe y dLocal, clase llena, baja, segundo alumno, sala con 4 (uno en móvil), chat, ciclo (choque, reagenda, cancelar fecha) y admin.
-- [ ] Los 19 escenarios del anexo B de `PLAN-ACADEMIAS-Y-GRUPALES.md`.
-- [ ] Revisar que los 112 IDs de este documento estén en `[x]`, y anotar en este mismo fichero lo que se haya decidido no hacer.
+> **Hecho:**
+> - **Build de producción** (`npm run build` en una copia aparte, `../ensenameya-resondeo`, para no pisar el `.next` que sirve otra sesión): compila sin errores, y todas las pantallas tocadas pintan en `npm start` sin errores de servidor ni de consola. Se probaron catálogo, ficha, reserva, confirmación, baja, chat, sala antes de abrir, panel, ficha de la clase, «Mis mentorías», «Mis pagos», «Reservas», el selector de horarios al publicar y el admin. La navegación de cliente desde la ficha pública a la reserva (regla 13) no deja la pantalla en blanco.
+> - **Anexo B, lógica:** `scripts/anexo-b-grupales.sql` (solo dev, todo revertido) pasa los **11 escenarios** que se pueden probar en SQL: 4, 5, 7, 8, 9, 10, 11, 13, 16, 17 y 18.
+> - **Salió del re-sondeo:**
+>   - Un apartado caducado de una grupal le mandaba al tutor el correo de 1:1 («el horario volvió a quedar libre»): migración `20261017200000`.
+>   - «Si se llena» contaba los cupos libres a precio completo en un ciclo con fechas canceladas: ahora usa el precio vigente prorrateado.
+>
+> **Sin hacer** (queda para el piloto, con personas):
+> - Pagos reales por la interfaz con Stripe y dLocal.
+> - La sala con 4 personas por Daily: incluye la galería, la moderación, la antesala y el móvil del lote 5.
+> - La carrera por el último cupo (6), Google Calendar (14), las reseñas (15) y Safari/Chrome en móvil real con traductor (19).
+
+- [ ] Repetir el recorrido del sondeo del 16-oct contra el build de producción: tutora + 4 alumnos por Stripe y dLocal, clase llena, baja, segundo alumno, sala con 4 (uno en móvil), chat, ciclo (choque, reagenda, cancelar fecha) y admin. 🟡 _Hecho contra el build: el recorrido de pantallas y la lógica de la clase llena, la baja, el ciclo y el admin. Falta lo que pide personas: pagos reales y sala con 4._
+- [ ] Los 19 escenarios del anexo B de `PLAN-ACADEMIAS-Y-GRUPALES.md`. 🟡 _11 de 19 en SQL, todos en verde. Faltan 1-3, 6, 12, 14, 15 y 19: son de interfaz o de servicios externos._
+- [x] Revisar que los 112 IDs de este documento estén en `[x]`, y anotar en este mismo fichero lo que se haya decidido no hacer. _Quedan abiertos 8 a propósito: **M8, P27, A5, M2, M30, M14 y P31** esperan una decisión de Emilio (regla de oro 8), y **M21** pide medir `/api/pagos/checkout` contra el build. A ellos se suma la sub-nota de M7: el alumno sacado a mitad de ciclo sigue en el chat, y se decide con M2._
 
 ---
 

@@ -76,7 +76,7 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
   const [productoRes, fechasRes, reservasRes, students, { data: chat, error: chatError }, tier] = await Promise.all([
     supabase
       .from("products")
-      .select("id, title, status, pricing_model, capacity, min_seats, price_amount, currency")
+      .select("id, title, status, pricing_model, capacity, min_seats, price_amount, currency, package_num_sessions")
       .eq("id", id)
       .eq("tutor_id", userId)
       .maybeSingle(),
@@ -167,12 +167,18 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
   const ocupadas = reservas.filter((r) =>
     ["confirmed", "in_progress", "completed"].includes(r.status),
   ).length;
+  // Los cupos que quedan se venden al precio VIGENTE: con fechas canceladas
+  // del ciclo, prorrateado como `precio_vigente_grupal` (lote 1, M25).
+  const vivasN = fechas.filter((f) => f.status !== "cancelled").length;
+  const totalN = producto.package_num_sessions ?? 0;
+  const precioCupo =
+    totalN > vivasN && vivasN > 0
+      ? Math.round((producto.price_amount * vivasN) / totalN)
+      : producto.price_amount;
   const siSeLlena =
     tier === null || !pendientes.some((f) => new Date(f.start_at) > ahora)
       ? null
-      : cobrado +
-        Math.max(cupo - ocupadas, 0) *
-          Math.round((producto.price_amount * tier.splitPct) / 100);
+      : cobrado + Math.max(cupo - ocupadas, 0) * Math.round((precioCupo * tier.splitPct) / 100);
   const noCanceladas = fechas.filter((f) => f.status !== "cancelled");
   const ultimaFecha = noCanceladas[noCanceladas.length - 1] ?? null;
 
