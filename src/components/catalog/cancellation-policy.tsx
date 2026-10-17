@@ -9,10 +9,35 @@ const rules = [
   `Si el tutor cancela: reembolso del ${P.refundPct.tutorCancels} %.`,
 ];
 
+/**
+ * A12 · reglas de una clase grupal, que el alumno tiene que leer ANTES de
+ * pagar. Copia que se enseña: lo que manda son `cancel_booking`, la baja de un
+ * ciclo y el corte del mínimo en SQL (lotes 1 y 2, `2026101711…`/`…12…`).
+ */
+const minimo = `Si ${P.cutoffHours} h antes no se llega al cupo mínimo, la clase se cancela y te devolvemos el ${P.refundPct.tutorCancels} %.`;
+const rulesCiclo = [
+  `Te puedes dar de baja hasta que empiece la primera fecha: con ${P.cutoffHours} h o más, reembolso del ${P.refundPct.studentEarly} %; con menos, del ${P.refundPct.studentLate} %.`,
+  "Si faltas a una fecha, la pierdes.",
+  "Si el tutor cancela una fecha, te devolvemos la parte de esa fecha.",
+  minimo,
+];
+const rulesGrupal = [
+  rules[0],
+  rules[1],
+  `Si el tutor cancela o cambia la hora: reembolso del ${P.refundPct.tutorCancels} %.`,
+  minimo,
+];
+
 const subtitulo = "Única de Enséñame Ya, igual para todos los tutores.";
 
-/** Las tres reglas, idénticas en la tarjeta y en el plegado: una sola verdad. */
-function Reglas({ className }: { className?: string }) {
+/** Las reglas, idénticas en la tarjeta y en el plegado: una sola verdad. */
+function Reglas({
+  className,
+  lista = rules,
+}: {
+  className?: string;
+  lista?: string[];
+}) {
   return (
     <ul
       className={cn(
@@ -20,7 +45,7 @@ function Reglas({ className }: { className?: string }) {
         className,
       )}
     >
-      {rules.map((r) => (
+      {lista.map((r) => (
         <li key={r} className="flex gap-2">
           <span aria-hidden>•</span>
           <span>{r}</span>
@@ -49,11 +74,21 @@ export function CancellationPolicy({
   compact = false,
   variant = "card",
   className,
+  grupal,
 }: {
   compact?: boolean;
   variant?: "card" | "folded";
   className?: string;
+  /** A12 · ficha de una clase grupal; `ciclo` = más de una fecha y
+   *  `minimo: false` = sin `min_seats`, la regla del mínimo no aplica. */
+  grupal?: { ciclo: boolean; minimo?: boolean };
 }) {
+  const lista = grupal
+    ? (grupal.ciclo ? rulesCiclo : rulesGrupal).filter(
+        (r) => r !== minimo || grupal.minimo !== false,
+      )
+    : rules;
+
   if (compact) {
     return (
       <p className={cn("text-muted-foreground text-xs", className)}>
@@ -75,7 +110,7 @@ export function CancellationPolicy({
           <ChevronDownIcon className="text-brand size-4 shrink-0 transition-transform group-open:rotate-180" />
         </summary>
         <p className="text-muted-foreground px-3.5 text-xs">{subtitulo}</p>
-        <Reglas className="mt-2.5 px-3.5 pb-3 text-[13px]" />
+        <Reglas className="mt-2.5 px-3.5 pb-3 text-[13px]" lista={lista} />
       </details>
     );
   }
@@ -84,7 +119,7 @@ export function CancellationPolicy({
     <section className={cn("rounded-lg border p-4", className)}>
       <h2 className="text-sm font-semibold">Política de cancelación</h2>
       <p className="text-muted-foreground mt-1 text-xs">{subtitulo}</p>
-      <Reglas className="mt-3" />
+      <Reglas className="mt-3" lista={lista} />
     </section>
   );
 }

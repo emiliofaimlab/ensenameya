@@ -305,6 +305,16 @@ export function ProductForm({
    * `disabled` no entra en él—.
    */
   const bloqueada = grupal && groupPublished && !!product;
+  /**
+   * P24 · cuántas fechas cubre el precio. Publicada, la lista de fechas no se
+   * pinta (se gestionan en su ficha) y `fechas` se queda en la fila vacía
+   * inicial: el número lo trae el producto, que en una grupal guarda en
+   * `package_num_sessions` el nº de fechas (lo escribe `publicar_clase_grupal`).
+   */
+  const nFechas = groupPublished
+    ? (product?.packageNumSessions ?? 1)
+    : fechas.length;
+  const totalCiclo = Math.round(Number(precio) * 100);
   // Al editar no se cambia entre grupal y no grupal: las fechas y los cupos
   // vendidos no tienen equivalente 1:1 (y la BD lo prohíbe con fechas).
   const modelos = product
@@ -908,7 +918,13 @@ export function ProductForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label htmlFor="price" className={LABEL}>
-              {grupal ? "Precio por cupo" : "Precio"}
+              {/* P24 · en un ciclo el precio es el de TODAS las fechas: «por
+                  cupo» hacía creer al tutor que ponía el de cada una. */}
+              {grupal
+                ? nFechas > 1
+                  ? "Precio del ciclo, por alumno"
+                  : "Precio por cupo"
+                : "Precio"}
             </Label>
             <Input
               id="price"
@@ -923,6 +939,18 @@ export function ProductForm({
               disabled={bloqueada}
               className={FIELD}
             />
+            {/* Mismo patrón que el aviso de «por hora»: lo que paga el alumno
+                por el ciclo y a cuánto sale cada fecha, en vivo. */}
+            {grupal && nFechas > 1 && Number(precio) > 0 ? (
+              <p className="text-xs text-[#6b6b6b]">
+                El alumno paga{" "}
+                <strong className="font-semibold text-[#333333]">
+                  {formatMoney(totalCiclo, CURRENCY)}
+                </strong>{" "}
+                por las {nFechas} fechas (
+                {formatMoney(Math.round(totalCiclo / nFechas), CURRENCY)} c/u).
+              </p>
+            ) : null}
             {bloqueada ? <NotaBloqueada /> : null}
           </div>
           <div className="grid gap-1.5">

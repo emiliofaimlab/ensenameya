@@ -208,24 +208,28 @@ Funciones que se reescriben: `notify_booking`, `avisar_cambio_de_fecha_grupal`, 
 - [ ] **P39** Tras una cancelación del tutor o por no llegar al mínimo, el detalle solo dice «Cancelada», y el correo de cancelación de la clase dice «Se canceló tu cupo». → Leer `cancel_reason` y pintar un aviso con el motivo, y que el asunto diga «Se canceló la clase». _(aud. #36)_
 - [ ] **P40** La confirmación de inscripción (NTF-56) solo enseña la primera fecha y no lleva calendario. → Todas las fechas, y el `.ics` como en la 1:1. _(aud. #38)_
 
-## Lote 7 · Alumno: catálogo y ficha (1 día)
+## Lote 7 · Alumno: catálogo y ficha (1 día) · ✅ hecho el 17-oct
+
+> **Hecho, sin SQL:** mínimo y reglas de grupal o de ciclo en la ficha (A12); panel de próximas grupales en el perfil del tutor (M10); «Queda 1 cupo»/«¡Último cupo!» (P3); «Ya tienes tu cupo» (P7); pie según el caso (P8); textos que ya no son solo 1:1 (P23); «por cupo · N fechas (X c/u)» y la etiqueta del formulario del tutor (P24); fechas como rango y en hora local (P25); JSON-LD con `CourseInstance` por fecha, `SoldOut`/`Discontinued` y `noindex` si está cerrada (P30); aviso de privacidad ampliado también junto al botón de pagar (P34); chip «Clase grupal · máx. N» (P35); «Empiezan antes» (P36); salidas con la clase llena (P37); el «2» de «Cómo funciona» (P52). Verificado en vivo en el catálogo y la ficha del «Taller de álgebra en grupo». De la revisión adversarial salió además:
+> - En un ciclo ya empezado (una sola fecha viva) la ficha enseñaba las reglas de una clase suelta: «ciclo» se decide ahora por el número de fechas del producto.
+> - «Se da con un mínimo de N · faltan X» ya no sale a menos de 24 h, cuando el mínimo ya se evaluó (B7).
 
 Archivos: `grupal-panel.tsx`, `product-card.tsx`, `product-filters.tsx`, `lib/catalog/{queries,format}.ts`, `mentorias/[id]/page.tsx`, `tutores/[id]/page.tsx` y `mentorias/page.tsx`.
 
-- [ ] **A12** Antes de pagar no se informa del cupo mínimo ni de las reglas del ciclo (baja solo antes de la 1.ª fecha, la fecha a la que faltas se pierde, si el tutor cancela una fecha se devuelve solo esa). → `min_seats` de la vista (lote 1) en la ficha («Se da con un mínimo de 4 · faltan 2») y una política de grupal o de ciclo en la ficha. El checkout lo hace el lote 8 (M12). _(aud. #3, #22)_
-- [ ] **M10** El perfil de un tutor que solo da grupales dice «Este tutor aún no tiene mentorías disponibles para reservar». → Un panel «Próximas clases grupales» cuando no hay 1:1. _(aud. #2)_
-- [ ] **P3** «Quedan 1 cupos» (`product-card.tsx:72`, `grupal-panel.tsx:88`). → «Queda 1 cupo» o «¡Último cupo!». _(aud. #8)_
-- [ ] **P7** 🔴 Ya inscrito, el panel sigue titulado «Inscríbete en esta clase» (`grupal-panel.tsx:55`). → «Ya tienes tu cupo».
-- [ ] **P8** 🔴 «Cancela tu cupo con 24 h y recibe el 100 %» es fijo (`grupal-panel.tsx:127`), aunque la clase empiece en 1 h o sea un ciclo. → Un texto según el caso.
-- [ ] **P23** 🔴 Textos que solo hablan de 1:1: el pie dice «mentorías en vivo 1 - 1» y el catálogo «Sesiones, mentorías y paquetes».
-- [ ] **P24** El precio de un ciclo no dice qué incluye («20 US$ por cupo» sin «2 fechas» ni cuánto sale cada una), una grupal gratis dice «por sesión», y en el formulario del tutor «Precio por cupo» es en realidad el del ciclo entero. → En `format.ts`: «por cupo · N fechas (X c/u)», y en `product-form.tsx` la etiqueta «Precio del ciclo, por alumno» con el cálculo en vivo. _(aud. #6, #76)_
-- [ ] **P25** Las fechas no dicen en qué zona horaria están ni a qué hora terminan. → «En tu hora local (Caracas)» y el rango «18:00 – 19:00». _(aud. #9, #26)_
-- [ ] **P30** El JSON-LD dice `InStock` aunque la clase esté llena o cerrada, no lleva las fechas, y la ficha cerrada sigue indexable. → `SoldOut` o `Discontinued`, un `CourseInstance` por fecha y `noindex` si está cerrada. _(aud. #10)_
-- [ ] **P34** El aviso de privacidad (RG-19) se queda corto (no menciona cámara, micrófono ni la grabación compartida) y no sale en el checkout. → Ampliar el texto y repetirlo junto al botón de pagar. _(aud. #4)_
-- [ ] **P35** La ficha de una grupal se presenta como 1:1: el único chip es «Confirmación inmediata», sale «1 a 1» cuando ya no quedan fechas, y los metadatos dicen «Mentoría 1:1». → Decidir con `pricingModel`, y un chip «Clase grupal · máx. N». _(aud. #5)_
-- [ ] **P36** El filtro «Grupal» ordena por fecha de creación, no por cuándo empieza la clase. → Con `model=group`, ordenar por `inscripcion_cierra_at` y agregar «Empiezan antes». _(aud. #11)_
-- [ ] **P37** 🔴 Con la clase llena, el botón queda desactivado y no se ofrece nada más; en el checkout, solo «Volver a la clase». → «Ver otras clases de {tutor}» o «Reserva una sesión 1 a 1». _(aud. #13)_
-- [ ] **P52** 🔴 En «Cómo funciona», el paso 2 lleva un rayo en lugar del número 2.
+- [x] **A12** Antes de pagar no se informa del cupo mínimo ni de las reglas del ciclo (baja solo antes de la 1.ª fecha, la fecha a la que faltas se pierde, si el tutor cancela una fecha se devuelve solo esa). → `min_seats` de la vista (lote 1) en la ficha («Se da con un mínimo de 4 · faltan 2») y una política de grupal o de ciclo en la ficha. El checkout lo hace el lote 8 (M12). _(aud. #3, #22)_
+- [x] **M10** El perfil de un tutor que solo da grupales dice «Este tutor aún no tiene mentorías disponibles para reservar». → Un panel «Próximas clases grupales» cuando no hay 1:1. _(aud. #2)_
+- [x] **P3** «Quedan 1 cupos» (`product-card.tsx:72`, `grupal-panel.tsx:88`). → «Queda 1 cupo» o «¡Último cupo!». _(aud. #8)_
+- [x] **P7** 🔴 Ya inscrito, el panel sigue titulado «Inscríbete en esta clase» (`grupal-panel.tsx:55`). → «Ya tienes tu cupo».
+- [x] **P8** 🔴 «Cancela tu cupo con 24 h y recibe el 100 %» es fijo (`grupal-panel.tsx:127`), aunque la clase empiece en 1 h o sea un ciclo. → Un texto según el caso.
+- [x] **P23** 🔴 Textos que solo hablan de 1:1: el pie dice «mentorías en vivo 1 - 1» y el catálogo «Sesiones, mentorías y paquetes».
+- [x] **P24** El precio de un ciclo no dice qué incluye («20 US$ por cupo» sin «2 fechas» ni cuánto sale cada una), una grupal gratis dice «por sesión», y en el formulario del tutor «Precio por cupo» es en realidad el del ciclo entero. → En `format.ts`: «por cupo · N fechas (X c/u)», y en `product-form.tsx` la etiqueta «Precio del ciclo, por alumno» con el cálculo en vivo. _(aud. #6, #76)_
+- [x] **P25** Las fechas no dicen en qué zona horaria están ni a qué hora terminan. → «En tu hora local (Caracas)» y el rango «18:00 – 19:00». _(aud. #9, #26)_
+- [x] **P30** El JSON-LD dice `InStock` aunque la clase esté llena o cerrada, no lleva las fechas, y la ficha cerrada sigue indexable. → `SoldOut` o `Discontinued`, un `CourseInstance` por fecha y `noindex` si está cerrada. _(aud. #10)_
+- [x] **P34** El aviso de privacidad (RG-19) se queda corto (no menciona cámara, micrófono ni la grabación compartida) y no sale en el checkout. → Ampliar el texto y repetirlo junto al botón de pagar. _(aud. #4)_
+- [x] **P35** La ficha de una grupal se presenta como 1:1: el único chip es «Confirmación inmediata», sale «1 a 1» cuando ya no quedan fechas, y los metadatos dicen «Mentoría 1:1». → Decidir con `pricingModel`, y un chip «Clase grupal · máx. N». _(aud. #5)_
+- [x] **P36** El filtro «Grupal» ordena por fecha de creación, no por cuándo empieza la clase. → Con `model=group`, ordenar por `inscripcion_cierra_at` y agregar «Empiezan antes». _(aud. #11)_
+- [x] **P37** 🔴 Con la clase llena, el botón queda desactivado y no se ofrece nada más; en el checkout, solo «Volver a la clase». → «Ver otras clases de {tutor}» o «Reserva una sesión 1 a 1». _(aud. #13)_
+- [x] **P52** 🔴 En «Cómo funciona», el paso 2 lleva un rayo en lugar del número 2.
 
 ## Lote 8 · Alumno: checkout, regalo y su reserva (1 – 1½ días)
 

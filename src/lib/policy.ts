@@ -58,3 +58,10 @@ export const CANCELLATION_POLICY = {
 export const HOLD_POLICY = {
   minutes: 7,
 } as const;
+
+// P34 · RG-12 (la grupal se graba entera y la grabación la ven el tutor y los
+// inscritos durante 30 días) y RG-19 (se avisa ANTES de inscribirse, no en la
+// sala). Un solo texto para la ficha y para el checkout, junto al botón de
+// pagar: si cambia la retención de la grabación, cambia aquí.
+export const AVISO_PRIVACIDAD_GRUPAL =
+  "Es una clase en grupo y se graba entera. Los demás inscritos verán tu nombre y tu foto en la sala y en el chat de la clase, y te verán y escucharán si enciendes la cámara o el micrófono. La grabación la pueden ver el tutor y todos los inscritos durante 30 días.";

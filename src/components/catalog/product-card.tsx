@@ -66,11 +66,26 @@ export function ProductCard({
   // G2 · una grupal cambia el «1 a 1» por su fecha y sus cupos: es lo que
   // decide si se puede entrar, igual que la confirmación de abajo.
   const grupal = product.grupal ?? null;
+  // P35 · manda el modelo, no que haya fechas cargadas: una grupal sin
+  // `grupal` sigue siendo grupal, nunca «En vivo 1 a 1».
+  const esGrupal = product.pricingModel === "group";
   const datos: { k: string; Icon: LucideIcon; label: string }[] = [
     ...(duracion ? [{ k: "dur", Icon: ClockIcon, label: duracion }] : []),
     grupal
-      ? { k: "vivo", Icon: UsersIcon, label: grupal.cuposLibres > 0 ? `Quedan ${grupal.cuposLibres} cupos` : "Clase completa" }
-      : { k: "vivo", Icon: VideoIcon, label: "En vivo 1 a 1" },
+      ? {
+          k: "vivo",
+          Icon: UsersIcon,
+          // P3 · nada de «Quedan 1 cupos».
+          label:
+            grupal.cuposLibres === 1
+              ? "¡Último cupo!"
+              : grupal.cuposLibres > 0
+                ? `Quedan ${grupal.cuposLibres} cupos`
+                : "Clase completa",
+        }
+      : esGrupal
+        ? { k: "vivo", Icon: UsersIcon, label: "Clase grupal" }
+        : { k: "vivo", Icon: VideoIcon, label: "En vivo 1 a 1" },
     ...(grupal?.primeraFecha
       ? [{ k: "fecha", Icon: CalendarIcon, label: grupal.primeraFecha }]
       : []),
@@ -84,7 +99,7 @@ export function ProductCard({
    * decide si el alumno puede entrar hoy o tiene que esperar 24 h.
    */
   const confirmacion: { Icon: LucideIcon; label: string; className: string } =
-    grupal
+    esGrupal
       ? { Icon: UsersIcon, label: "Grupal", className: "text-brand" }
       : product.autoAccept
       ? {

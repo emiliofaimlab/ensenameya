@@ -113,6 +113,10 @@ export type GrupalInfo = {
   abierta: boolean;
   /** RG-17 · se puede regalar un cupo: quedan cupos y faltan más de 24 h. */
   regalable: boolean;
+  /** A12 · `products.min_seats`; null = sin mínimo. */
+  minSeats: number | null;
+  /** P8 · la primera fecha empieza en menos de 24 h (la baja sería al 50 %). */
+  menosDe24h: boolean;
 };
 
 export type ProductDetail = ProductCardData & {
@@ -250,7 +254,7 @@ export async function conGrupales<T extends ProductCardData>(
   const [{ data }, tz, formato] = await Promise.all([
     supabase
       .from("group_classes_public")
-      .select("product_id, start_at, end_at, cupos_libres, capacity, inscripcion_cierra_at")
+      .select("product_id, start_at, end_at, cupos_libres, capacity, inscripcion_cierra_at, min_seats")
       .in("product_id", ids)
       .order("start_at"),
     getViewerTimezone(),
@@ -270,6 +274,8 @@ export async function conGrupales<T extends ProductCardData>(
       capacity: g.capacity ?? 0,
       abierta: cierre > ahora,
       regalable: (g.cupos_libres ?? 0) > 0 && cierre - ahora > 24 * 3_600_000,
+      minSeats: g.min_seats ?? null,
+      menosDe24h: cierre - ahora < 24 * 3_600_000,
     };
     info.fechas.push({ startAt: g.start_at, endAt: g.end_at });
     porProducto.set(g.product_id, info);
@@ -905,7 +911,7 @@ export async function getCategoryBySlug(
  */
 /** Orden de P05. Todo se resuelve en columnas de `products`, así que la
  *  paginación sigue siendo consistente. */
-export type ProductSort = "recent" | "price_asc" | "price_desc";
+export type ProductSort = "recent" | "price_asc" | "price_desc" | "starts_soon";
 
 export async function listActiveProducts(opts: {
   categorySlug?: string;
@@ -973,7 +979,13 @@ export async function listActiveProducts(opts: {
       ? await base
           .order("price_amount", { ascending: opts.sort === "price_asc" })
           .range(from, from + PAGE_SIZE)
-      : await base
+      : opts.sort === "starts_soon" || (opts.model === "group" && !opts.sort)
+        ? // P36 · la que empieza antes, primero (es el corte de inscripción).
+          await base
+            .order("inscripcion_cierra_at", { ascending: true, nullsFirst: false })
+            .order("created_at", { ascending: false })
+            .range(from, from + PAGE_SIZE)
+        : await base
           .order("created_at", { ascending: false })
           .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 

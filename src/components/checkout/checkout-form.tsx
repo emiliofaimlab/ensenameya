@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowRightIcon } from "lucide-react";
+import { ArrowRightIcon, VideoIcon } from "lucide-react";
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
 import {
@@ -223,6 +223,7 @@ export function CheckoutForm({
   simulado,
   paypalDisponible = false,
   aceptaSola,
+  avisoGrupal,
 }: {
   productId: string;
   /**
@@ -313,6 +314,8 @@ export function CheckoutForm({
    * ese reembolso igualmente sería prometer algo que el código ya no hace.
    */
   aceptaSola: boolean;
+  /** P34 · RG-19, junto al botón de pagar. Solo en una clase grupal. */
+  avisoGrupal?: string;
 }) {
   const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
@@ -859,6 +862,12 @@ export function CheckoutForm({
               (`/reservas/[id]/pagar`) tiene que decir LO MISMO: cuando cada una
               escribía su párrafo, D-4 se aplicó solo a esta y allí se quedó
               contando media política. */}
+          {avisoGrupal ? (
+            <p className="mt-4 flex gap-2 rounded-[10px] bg-brand-muted px-3 py-2.5 text-xs text-[#33475b]">
+              <VideoIcon className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden />
+              {avisoGrupal}
+            </p>
+          ) : null}
           <PaymentPolicy
             aceptaSola={aceptaSola}
             className="mt-4 border-t border-[#e0e0e0] pt-4"

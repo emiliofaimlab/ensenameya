@@ -63,7 +63,9 @@ export function priceLabel(p: {
     case "per_package":
       return `${money}${p.packageNumSessions ? ` · ${p.packageNumSessions} sesiones` : ""}`;
     case "group":
-      return `${money} / cupo`; // RG-02: precio fijo por cupo
+      // RG-02: precio fijo por cupo. P24 · en un ciclo el cupo cubre las N
+      // fechas, y eso se dice (aquí no llega `grupal`: N es el del producto).
+      return `${money} / cupo${(p.packageNumSessions ?? 1) > 1 ? ` · ${p.packageNumSessions} fechas` : ""}`;
   }
 }
 
@@ -231,6 +233,8 @@ export function priceDisplay(p: {
     // («por sesión», «paquete · 6 sesiones»), nunca con «$0,00 / hora»: la
     // línea pequeña no puede reintroducir el cero que la grande quitó.
     const n = p.packageNumSessions ?? 1;
+    // P24 · una grupal gratis decía «por sesión». Mismo N que la rama pagada.
+    const nGrupal = p.grupal?.fechas.length || p.packageNumSessions || 1;
     return {
       amount: GRATIS,
       amountMinor: 0,
@@ -241,7 +245,11 @@ export function priceDisplay(p: {
             : "paquete"
           : p.pricingModel === "per_hour"
             ? "por hora"
-            : "por sesión",
+            : p.pricingModel === "group"
+              ? nGrupal > 1
+                ? `por cupo · ${nGrupal} fechas`
+                : "por cupo"
+              : "por sesión",
       isTotal: true,
     };
   }
@@ -278,7 +286,18 @@ export function priceDisplay(p: {
       // B2 · si el tutor canceló fechas antes de empezar, el que cobra
       // `create_booking_line` (y anuncia el checkout): solo las que quedan.
       const cupo = bookingTotal(p, p.grupal?.fechas.length);
-      return { amount: formatMoney(cupo, p.currency), amountMinor: cupo, note: "por cupo", isTotal: true };
+      // P24 · «20 US$ por cupo» no decía que cubre dos fechas ni cuánto sale
+      // cada una: en un ciclo la nota lo cuenta, como el paquete.
+      const n = p.grupal?.fechas.length || p.packageNumSessions || 1;
+      return {
+        amount: formatMoney(cupo, p.currency),
+        amountMinor: cupo,
+        note:
+          n > 1
+            ? `por cupo · ${n} fechas (${formatMoney(Math.round(cupo / n), p.currency)} c/u)`
+            : "por cupo",
+        isTotal: true,
+      };
     }
     // ponytail: un modelo que este código no conoce (p.ej. uno que llegue a la
     // BD antes que su código) pinta la tarifa en vez de tumbar el catálogo

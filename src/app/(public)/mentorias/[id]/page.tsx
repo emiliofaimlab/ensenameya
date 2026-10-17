@@ -11,6 +11,7 @@ import {
   EyeIcon,
   GlobeIcon,
   StarIcon,
+  UsersIcon,
   VideoIcon,
   ZapIcon,
 } from "lucide-react";
@@ -129,13 +130,17 @@ export async function generateMetadata({
   const id = await productIdFrom((await params).id);
   const product = id ? await getProductDetail(id) : null;
   if (!product) return { title: "Mentoría" };
+  // P35 · decide el modelo, no que queden fechas.
+  const esGrupal = product.pricingModel === "group";
 
   // §5.6 · la descripción de Google y de la vista previa de WhatsApp es el
   // `outcome` —la promesa que escribió el tutor—, no el título repetido. Sin
   // `outcome` se cae a una frase de plataforma en vez de inventarle una.
   const description =
     product.outcome ??
-    `Mentoría 1:1 en vivo con ${product.tutor.displayName ?? "tu tutor"} en Enséñame Ya.`;
+    (esGrupal
+      ? `Clase grupal en vivo con ${product.tutor.displayName ?? "tu tutor"} en Enséñame Ya.`
+      : `Mentoría 1:1 en vivo con ${product.tutor.displayName ?? "tu tutor"} en Enséñame Ya.`);
   const url = productPath(product);
 
   return {
@@ -143,6 +148,11 @@ export async function generateMetadata({
     description,
     // Relativas: las resuelve el `metadataBase` del layout raíz (§5.6).
     alternates: { canonical: url },
+    // P30 · una grupal cerrada ya no admite inscripciones: fuera del índice,
+    // pero sus enlaces se siguen.
+    ...(esGrupal && !product.grupal?.abierta
+      ? { robots: { index: false, follow: true } }
+      : {}),
     openGraph: {
       type: "website",
       title: `${product.title} · Enséñame Ya`,
@@ -229,6 +239,7 @@ export default async function ProductPage({
       : Promise.resolve(null),
   ]);
 
+  const esGrupal = product.pricingModel === "group";
   const tutorName =
     product.tutor.displayName ?? product.tutor.headline ?? "Tutor";
   // El nombre de pila es el que va en los títulos («Otras mentorías de
@@ -330,11 +341,31 @@ export default async function ProductPage({
       "@type": "Offer",
       // El precio va en unidades MAYORES y como cadena: schema.org lo pide así
       // y `price_amount` está en las menores (céntimos).
-      price: (product.priceAmount / 100).toFixed(2),
+      // P30 · en una grupal, el cupo (`priceDisplay`) y su disponibilidad real.
+      price: ((esGrupal ? precio.amountMinor : product.priceAmount) / 100).toFixed(2),
       priceCurrency: product.currency,
-      availability: "https://schema.org/InStock",
+      availability: !esGrupal
+        ? "https://schema.org/InStock"
+        : !product.grupal?.abierta
+          ? "https://schema.org/Discontinued"
+          : product.grupal.cuposLibres <= 0
+            ? "https://schema.org/SoldOut"
+            : "https://schema.org/InStock",
     },
-    ...(product.sessionDurationMin
+    // P30 · una grupal publica un `CourseInstance` por fecha.
+    ...(esGrupal && product.grupal?.fechas.length
+      ? {
+          hasCourseInstance: product.grupal.fechas.map((f) => ({
+            "@type": "CourseInstance",
+            courseMode: "Online",
+            startDate: f.startAt,
+            endDate: f.endAt,
+            ...(product.sessionDurationMin
+              ? { courseWorkload: `PT${product.sessionDurationMin}M` }
+              : {}),
+          })),
+        }
+      : !esGrupal && product.sessionDurationMin
       ? {
           hasCourseInstance: {
             "@type": "CourseInstance",
@@ -673,7 +704,15 @@ export default async function ProductPage({
                           naranja oscuro no es el `primary` de marca: a 12 px
                           sobre blanco el #fe6a00 se queda en 2,4:1 y esto es
                           texto, no un botón. */}
-                      {product.autoAccept ? (
+                      {esGrupal ? (
+                        // P35 · una grupal no se confirma: se presenta como lo que es.
+                        <li className={chip}>
+                          <UsersIcon className={iconoChip} aria-hidden />
+                          {product.grupal?.capacity
+                            ? `Clase grupal · máx. ${product.grupal.capacity}`
+                            : "Clase grupal"}
+                        </li>
+                      ) : product.autoAccept ? (
                         <li
                           className={`${chip} border-[#ffd7bd] bg-[#fff4ec] font-semibold text-[#c4470a]`}
                         >
@@ -742,14 +781,14 @@ export default async function ProductPage({
                         </span>
                       ) : null}
                       <span
-                        title={product.grupal ? "Clase en vivo, en grupo" : "Clase en vivo, 1 a 1"}
+                        title={esGrupal ? "Clase en vivo, en grupo" : "Clase en vivo, 1 a 1"}
                         className="inline-flex items-center gap-1.5 whitespace-nowrap"
                       >
                         <VideoIcon
                           className="size-3.5 shrink-0 lg:size-4"
                           aria-hidden
                         />
-                        {product.grupal ? "Grupal" : "1 a 1"}
+                        {esGrupal ? "Grupal" : "1 a 1"}
                       </span>
                     </p>
                   </div>
@@ -878,11 +917,12 @@ export default async function ProductPage({
                 <section>
                   <h2 className={h2}>Cómo funciona</h2>
                   <div className="mt-4 flex flex-col gap-2 lg:grid lg:grid-cols-3 lg:gap-3.5">
-                    {(product.pricingModel === "group"
+                    {(esGrupal
                       ? // G2 · en una grupal no se elige hora ni confirma nadie (RG-07).
                         [
                           { k: "1", titulo: "Te inscribes en sus fechas", zap: false },
-                          { k: "2", titulo: "Tu cupo queda al pagar", zap: true },
+                          // P52 · sin rayo: aquí no hay confirmación que destacar.
+                          { k: "2", titulo: "Tu cupo queda al pagar", zap: false },
                           { k: "3", titulo: "Entras a la sala con el grupo", zap: false },
                         ]
                       : [
@@ -971,7 +1011,27 @@ export default async function ProductPage({
                       ? undefined
                       : hrefRegalar(product.id, { user, onboardingComplete })
                   }
-                  footer={<CancellationPolicy variant="folded" className="mt-3" />}
+                  otrasHref={(() => {
+                    // P37 · llena o cerrada: primero una 1:1 del mismo tutor;
+                    // si no tiene, su perfil (público, `Link` sirve).
+                    const unoAUno = otrasMentorias.find((p) => p.pricingModel !== "group");
+                    return unoAUno
+                      ? { href: productPath(unoAUno), label: "Reserva una sesión 1 a 1" }
+                      : { href: `/tutores/${product.tutor.id}`, label: `Ver otras clases de ${nombreCorto}` };
+                  })()}
+                  footer={
+                    <CancellationPolicy
+                      variant="folded"
+                      className="mt-3"
+                      grupal={{
+                        // `fechas` son solo las que quedan: un ciclo empezado
+                        // tiene una y sigue siendo un ciclo (RG-16).
+                        ciclo: (product.packageNumSessions ?? 1) > 1,
+                        // B7 · a menos de 24 h el mínimo ya se evaluó.
+                        minimo: !!product.grupal?.minSeats && !product.grupal?.menosDe24h,
+                      }}
+                    />
+                  }
                 />
               ) : (
               <BookingPanel

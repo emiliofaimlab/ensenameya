@@ -8,6 +8,7 @@ import {
   requireUser,
 } from "@/lib/auth/server";
 import { getProductDetail } from "@/lib/catalog/queries";
+import { AVISO_PRIVACIDAD_GRUPAL } from "@/lib/policy";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
 import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
 import { metodosDeCheckout, paisDelPagador } from "@/lib/payments";
@@ -81,6 +82,11 @@ export default async function CheckoutPage({
         </h1>
         <Link href={`/mentorias/${productId}`} className="text-sm text-brand underline">
           Volver a la clase
+        </Link>
+        {/* P37 · no dejarlo en un callejón sin salida. `/tutores/…` es pública. */}
+        <Link href={`/tutores/${product.tutor.id}`} className="text-sm text-brand underline">
+          Ver otras clases de{" "}
+          {(product.tutor.displayName ?? "tu tutor").trim().split(/\s+/)[0]}
         </Link>
       </div>
     );
@@ -248,6 +254,7 @@ export default async function CheckoutPage({
         incluye={sessionsLabel(product)}
         precioPorSesion={perSessionLabel(product)}
         aceptaSola={product.autoAccept}
+        avisoGrupal={grupal ? AVISO_PRIVACIDAD_GRUPAL : undefined}
       />
     </div>
   );

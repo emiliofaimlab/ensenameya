@@ -7,7 +7,8 @@ import { Precio } from "@/components/precio/precio";
 import { formatSessionTime } from "@/lib/booking";
 import { priceDisplay } from "@/lib/catalog/format";
 import type { ProductDetail } from "@/lib/catalog/queries";
-import type { FormatoHora } from "@/lib/hora";
+import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
+import { AVISO_PRIVACIDAD_GRUPAL, CANCELLATION_POLICY as P } from "@/lib/policy";
 
 /**
  * G2 · el panel de la ficha de una CLASE GRUPAL. Sustituye a `BookingPanel`:
@@ -26,6 +27,7 @@ export function GrupalPanel({
   regaloHref,
   miInscripcionHref,
   miClaseHref,
+  otrasHref,
   footer,
 }: {
   product: ProductDetail;
@@ -39,6 +41,8 @@ export function GrupalPanel({
   miInscripcionHref?: string;
   /** M11 · la ficha del tutor, si quien mira ES el tutor de la clase. */
   miClaseHref?: string;
+  /** P37 · alternativa cuando la clase está llena o cerrada (ruta pública). */
+  otrasHref?: { href: string; label: string };
   footer?: ReactNode;
 }) {
   const g = product.grupal;
@@ -51,11 +55,27 @@ export function GrupalPanel({
     : llena
       ? "Esta clase ya no tiene cupos"
       : null;
+  // A12 · el mínimo solo se enseña mientras falta gente para llegar a él.
+  const inscritos = g ? g.capacity - g.cuposLibres : 0;
+  const faltanMin = g?.minSeats ? g.minSeats - inscritos : 0;
+  // P8 · la promesa del pie depende del caso: un ciclo solo admite la baja
+  // antes de la 1.ª fecha, y a menos de 24 h ya no es el 100 %.
+  const pie = cerrada
+    ? null
+    : (product.packageNumSessions ?? 1) > 1
+      ? "Pago protegido · Puedes darte de baja hasta que empiece la 1.ª fecha"
+      : g?.menosDe24h
+        ? `Pago protegido · Falta menos de ${P.cutoffHours} h: si cancelas, recibes el ${P.refundPct.studentLate} %`
+        : `Pago protegido · Cancela tu cupo con ${P.cutoffHours} h y recibe el ${P.refundPct.studentEarly} %`;
 
   return (
     <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
       <h2 className="text-lg font-bold text-[#19191f]">
-        Inscríbete en esta clase
+        {miClaseHref
+          ? "Tu clase grupal"
+          : miInscripcionHref
+            ? "Ya tienes tu cupo"
+            : "Inscríbete en esta clase"}
       </h2>
       <Precio
         amountMinor={precio.amountMinor}
@@ -73,10 +93,22 @@ export function GrupalPanel({
       <ul className="mt-2 flex flex-col gap-1.5 text-sm text-[#474747]">
         {(g?.fechas ?? []).map((f) => (
           <li key={f.startAt} className="rounded-[8px] bg-[#f5f5f5] px-3 py-2">
-            {formatSessionTime(f.startAt, timeZone, formato)}
+            {/* P25 · rango de inicio a fin, en la zona de quien mira. */}
+            {formatSessionTime(f.startAt, timeZone, formato)} –{" "}
+            {new Date(f.endAt).toLocaleTimeString("es", {
+              hour: "2-digit",
+              minute: "2-digit",
+              ...opcionesDeHora(formato),
+              timeZone,
+            })}
           </li>
         ))}
       </ul>
+      {g && g.fechas.length > 0 ? (
+        <p className="mt-1.5 text-xs text-[#6b6b6b]">
+          En tu hora local ({timeZone.split("/").pop()?.replace(/_/g, " ")})
+        </p>
+      ) : null}
       {g && g.fechas.length > 1 ? (
         <p className="mt-1.5 text-xs text-[#6b6b6b]">
           Pagas el ciclo completo. Si faltas a una fecha, la pierdes.
@@ -88,15 +120,23 @@ export function GrupalPanel({
         {g
           ? llena
             ? `Clase completa · ${g.capacity} cupos`
-            : `Quedan ${g.cuposLibres} de ${g.capacity} cupos`
+            : g.cuposLibres === 1
+              ? `Queda 1 cupo de ${g.capacity}`
+              : `Quedan ${g.cuposLibres} de ${g.capacity} cupos`
           : "Sin fechas publicadas"}
       </p>
+      {/* B7 · el cron mira el mínimo una vez, al entrar en las 24 h: después
+          ya no hay «faltan». */}
+      {g?.minSeats != null && faltanMin > 0 && !g.menosDe24h ? (
+        <p className="mt-1.5 text-xs text-[#6b6b6b]">
+          Se da con un mínimo de {g.minSeats} · faltan {faltanMin}
+        </p>
+      ) : null}
 
       {/* RG-19 · se avisa ANTES de inscribirse, no en la sala. */}
       <p className="mt-4 flex gap-2 rounded-[10px] bg-brand-muted px-3 py-2.5 text-xs text-[#33475b]">
         <VideoIcon className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden />
-        Es una clase en grupo y se graba: los demás inscritos verán tu nombre y
-        tu foto en la sala y en el chat de la clase.
+        {AVISO_PRIVACIDAD_GRUPAL}
       </p>
 
       {miClaseHref ? (
@@ -115,9 +155,17 @@ export function GrupalPanel({
           <a href={miInscripcionHref}>Ya estás inscrito · Ver mi inscripción</a>
         </Button>
       ) : motivo ? (
-        <Button disabled className="mt-4 h-12 w-full text-[15px]">
-          {motivo}
-        </Button>
+        <>
+          <Button disabled className="mt-4 h-12 w-full text-[15px]">
+            {motivo}
+          </Button>
+          {/* P37 · llena o cerrada no es un callejón sin salida. */}
+          {otrasHref ? (
+            <Button asChild variant="outline" className="mt-3 h-11 w-full text-[14px]">
+              <Link href={otrasHref.href}>{otrasHref.label}</Link>
+            </Button>
+          ) : null}
+        </>
       ) : (
         <Button asChild className="mt-4 h-12 w-full text-[15px]">
           <Link href={inscribirHref}>Inscribirme</Link>
@@ -133,9 +181,9 @@ export function GrupalPanel({
         </Button>
       ) : null}
 
-      <p className="mt-4 text-center text-xs text-[#6b6b6b]">
-        Pago protegido · Cancela tu cupo con 24 h y recibe el 100 %
-      </p>
+      {pie ? (
+        <p className="mt-4 text-center text-xs text-[#6b6b6b]">{pie}</p>
+      ) : null}
       {footer}
     </aside>
   );
