@@ -92,7 +92,7 @@ export default async function AppHome() {
         // B-2 · las columnas de ventana viajan con la sesión: sin ellas
         // este panel no puede saber si la sala está abierta, y ofrecía
         // "Entrar a sala" para clases de dentro de semanas.
-        "id, status, products(title, tutor_id), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
+        "id, status, products(title, tutor_id, pricing_model), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
       )
       .eq("student_id", user.id)
       .in("status", OPEN)
@@ -237,7 +237,12 @@ export default async function AppHome() {
                       href={`/reservas/${b.id}`}
                       tutor={nombreDelTutor(b.products?.tutor_id)}
                       tutorHref={perfilDelTutor(b.products?.tutor_id)}
-                      title={b.products?.title ?? "Mentoría"}
+                      // M28 · la misma etiqueta que en `/reservas`.
+                      title={
+                        b.products?.pricing_model === "group"
+                          ? `${b.products.title} · Grupal`
+                          : (b.products?.title ?? "Mentoría")
+                      }
                       when={s?.start_at ?? null}
                       timeZone={tz}
                       formato={formato}

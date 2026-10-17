@@ -30,10 +30,13 @@ import { cn } from "@/lib/utils";
  */
 export function HoldCountdown({
   hasta,
+  grupal = false,
   className,
 }: {
   /** ISO del instante en que el horario deja de estar prometido. */
   hasta: string | null;
+  /** M12 · en una clase grupal lo retenido es un cupo, no un horario. */
+  grupal?: boolean;
   className?: string;
 }) {
   /**
@@ -87,12 +90,13 @@ export function HoldCountdown({
       <ClockIcon className="mt-px size-3.5 shrink-0" />
       {agotado ? (
         <span>
-          Se acabó el tiempo de espera: este horario puede quedar libre en
-          cualquier momento. Completa el pago cuanto antes.
+          Se acabó el tiempo de espera: {grupal ? "tu cupo" : "este horario"}{" "}
+          puede quedar libre en cualquier momento. Completa el pago cuanto
+          antes.
         </span>
       ) : (
         <span>
-          Te guardamos este horario{" "}
+          {grupal ? "Te guardamos tu cupo" : "Te guardamos este horario"}{" "}
           {/* El texto del reloj sí cambia entre servidor y cliente —el
               servidor no sabe qué hora es donde está el alumno— y ese caso sí
               lo cubre `suppressHydrationWarning`, que silencia el texto de

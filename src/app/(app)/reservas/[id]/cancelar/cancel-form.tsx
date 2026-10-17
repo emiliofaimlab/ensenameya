@@ -118,7 +118,13 @@ export function CancelForm({
           disabled={busy}
           onClick={confirm}
         >
-          {busy ? "Cancelando…" : "Confirmar cancelación"}
+          {grupal
+            ? busy
+              ? "Dándote de baja…"
+              : "Confirmar mi baja"
+            : busy
+              ? "Cancelando…"
+              : "Confirmar cancelación"}
         </Button>
         <Button
           variant="outline"

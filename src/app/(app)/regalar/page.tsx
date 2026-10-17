@@ -258,15 +258,35 @@ export default async function RegalarPage({
                 <div className="flex-1">
                   <ProductCard product={p} compact />
                 </div>
-                <Button
-                  asChild
-                  className="h-11 w-full rounded-[10px] font-semibold"
-                >
-                  <Link href={`/regalar/mentoria/${p.id}`}>
-                    Regalar esta
-                    <span className="sr-only"> mentoría: {p.title}</span>
-                  </Link>
-                </Button>
+                {/* A11 · RG-17: un cupo grupal solo se regala si quedan cupos y
+                    faltan más de 24 h para la primera fecha (`regalable`, el
+                    mismo criterio que `comprar_regalo`). Se dice por qué en vez
+                    de dejar que el rechazo llegue al pagar. */}
+                {p.pricingModel === "group" && p.grupal && !p.grupal.regalable ? (
+                  <>
+                    <Button
+                      disabled
+                      className="h-11 w-full rounded-[10px] font-semibold"
+                    >
+                      No se puede regalar
+                    </Button>
+                    <p className="text-[12.5px] text-[#6b6b6b]">
+                      {p.grupal.cuposLibres <= 0
+                        ? "Esta clase ya no tiene cupos."
+                        : "Falta menos de 24 h para la primera fecha."}
+                    </p>
+                  </>
+                ) : (
+                  <Button
+                    asChild
+                    className="h-11 w-full rounded-[10px] font-semibold"
+                  >
+                    <Link href={`/regalar/mentoria/${p.id}`}>
+                      Regalar esta
+                      <span className="sr-only"> mentoría: {p.title}</span>
+                    </Link>
+                  </Button>
+                )}
               </li>
             ))}
           </ul>

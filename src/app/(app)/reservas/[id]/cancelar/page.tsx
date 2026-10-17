@@ -128,7 +128,7 @@ export default async function CancelBookingPage({
     return (
       <PanelShell
         back={{ href: `/reservas/${id}`, label: "Volver al detalle" }}
-        title={grupal ? "Cancelar mi cupo" : "Cancelar reserva"}
+        title={grupal ? "Darme de baja" : "Cancelar reserva"}
         description={tutor ? `${booking.products?.title} · con ${tutor}.` : undefined}
       >
         <section className="rounded-[16px] border border-[#e0e0e0] bg-card p-5">
@@ -160,7 +160,7 @@ export default async function CancelBookingPage({
   return (
     <PanelShell
       back={{ href: `/reservas/${id}`, label: "Volver al detalle" }}
-      title={grupal ? "Cancelar mi cupo" : "Cancelar reserva"}
+      title={grupal ? "Darme de baja" : "Cancelar reserva"}
       description={`${tutor ? `${booking.products?.title} · con ${tutor}. ` : ""}Revisa la política antes de confirmar. El reembolso depende de cuánto falte para ${grupal ? "la primera fecha" : "tu próxima sesión"}.`}
     >
 
@@ -251,7 +251,9 @@ export default async function CancelBookingPage({
             <dd className="font-medium text-[#333333]">
               {remaining} de {booking.num_sessions}
               {remaining === booking.num_sessions && booking.num_sessions > 1
-                ? " (paquete completo)"
+                ? grupal
+                  ? " (el ciclo completo)"
+                  : " (paquete completo)"
                 : ""}
             </dd>
           </div>

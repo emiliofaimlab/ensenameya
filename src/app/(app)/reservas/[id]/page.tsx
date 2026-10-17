@@ -82,7 +82,13 @@ const CANCELLABLE = new Set<BookingStatus>([
  */
 type PoliticaDeBaja =
   | { permitida: false; motivo: string }
-  | { permitida: true; motivo: null; es_tutor: boolean };
+  | {
+      permitida: true;
+      motivo: null;
+      es_tutor: boolean;
+      /** M13 · RG-11: el tutor movió una fecha después de la inscripción y la baja devuelve el 100 %. */
+      reagendada?: boolean;
+    };
 
 /** El motivo genérico de la RPC: con él no hay nada útil que explicar. */
 const MOTIVO_GENERICO = "reserva no cancelable o inexistente";
@@ -112,7 +118,7 @@ export default async function BookingDetailPage({
   ]);
   const supabase = await createClient();
 
-  const { data: booking } = await supabase
+  const { data: booking, error: bookingError } = await supabase
     .from("bookings")
     .select(
       // N-27 · `session_ref` es el "N.º de sesión" visible (`7K3M9Q-2`). Se pide
@@ -122,11 +128,18 @@ export default async function BookingDetailPage({
       // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
       // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
       // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
-      "id, status, cancel_reason, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model, status), sessions(id, start_at, end_at, status, session_ref, group_class_id, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
+      // M13 · `group_classes(…)` nombra la TABLA: la FK de `sessions` apunta
+      // también a la vista `group_classes_public`, y es la tabla la que guarda
+      // cuándo se reagendó la fecha y si se canceló. ⚠️ `cancel_reason` NO:
+      // el lote 1 (P33) le quitó el SELECT a anon/authenticated, y pedirla
+      // tumba la consulta ENTERA con 42501 (también en las 1:1).
+      "id, status, cancel_reason, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model, status, capacity), sessions(id, start_at, end_at, status, session_ref, group_class_id, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status), group_classes(rescheduled_at, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
     )
     .eq("id", id)
     .maybeSingle();
 
+  // Regla de oro 10: un fallo de la consulta no es «no existe».
+  if (bookingError) throw bookingError;
   if (!booking) notFound();
 
   const sessions = [...(booking.sessions ?? [])].sort((a, b) =>
@@ -281,6 +294,19 @@ export default async function BookingDetailPage({
   // Solo el alumno: esta es su pantalla (la RLS también deja leerla al tutor,
   // y para él la RPC responde con sus propias reglas).
   const puedeDarseDeBaja = politica?.permitida === true && !politica.es_tutor;
+  // M13 · RG-11: si el tutor movió una fecha después de la inscripción, la baja
+  // devuelve el 100 %, y eso hay que decirlo donde se ven las fechas.
+  const bajaPorReagenda =
+    politica?.permitida === true && !politica.es_tutor && politica.reagendada === true;
+  const reservaCancelada =
+    booking.status === "cancelled" || booking.status === "refunded";
+  // M28 · con quién se comparte la clase: la misma lista que alimenta el chat
+  // del grupo (nombres ya enmascarados por la RPC). Si falló, no se pinta: el
+  // chat ya dice que no está disponible.
+  const companeros =
+    esGrupal && inscritos?.data && !inscritos.error
+      ? inscritos.data.filter((x) => !x.es_tutor)
+      : null;
   const motivoSinBaja =
     politica && !politica.permitida && politica.motivo !== MOTIVO_GENERICO
       ? politica.motivo.charAt(0).toUpperCase() + politica.motivo.slice(1)
@@ -388,6 +414,21 @@ export default async function BookingDetailPage({
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-5">
+          {bajaPorReagenda ? (
+            <PanelCard className="border-[#f5c97a] bg-[#fff8eb]">
+              <p className="text-[13.5px] text-[#5c4100]">
+                El tutor cambió la hora de una fecha. Si la nueva hora no te
+                sirve, puedes darte de baja y te devolvemos el 100 %.
+              </p>
+              <Button
+                asChild
+                variant="outline"
+                className="mt-3 h-10 rounded-[8px] px-4 text-[13.5px] text-[#262626]"
+              >
+                <Link href={`/reservas/${booking.id}/cancelar`}>Darme de baja</Link>
+              </Button>
+            </PanelCard>
+          ) : null}
           <PanelCard>
             <PanelCardTitle>Sesiones</PanelCardTitle>
             {sessions.length === 0 ? (
@@ -408,7 +449,9 @@ export default async function BookingDetailPage({
                     >
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-[#19191f]">
-                          Sesión {i + 1}
+                          {s.group_class_id
+                            ? `Fecha ${i + 1} de ${sessions.length}`
+                            : `Sesión ${i + 1}`}
                         </p>
                         <p className="text-[13px] text-[#6b6b6b] first-letter:uppercase">
                           {formatSessionTime(s.start_at, tz, formato)} · tu hora local
@@ -422,6 +465,31 @@ export default async function BookingDetailPage({
                             reservas anteriores a la migración, que no tienen
                             número (`SessionRef` devuelve null y no pinta nada). */}
                         <SessionRef nro={s.session_ref} className="mt-1" />
+                        {/* M13 · una fecha grupal que cambió o se canceló dice
+                            por qué. El dinero no se calcula aquí: lo devuelto
+                            lo dice la fila «Reembolsado» de «Pago». */}
+                        {s.group_class_id &&
+                        s.status !== "cancelled" &&
+                        s.group_classes?.rescheduled_at &&
+                        new Date(s.group_classes.rescheduled_at).getTime() >
+                          new Date(booking.created_at).getTime() ? (
+                          <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
+                            El tutor cambió la hora de esta fecha después de tu
+                            inscripción.
+                          </p>
+                        ) : null}
+                        {s.group_class_id &&
+                        s.status === "cancelled" &&
+                        !reservaCancelada ? (
+                          <p className="mt-1 break-words text-[12.5px] text-[#6b6b6b]">
+                            {/* La fecha de la CLASE cancelada (la canceló el
+                                tutor) o solo la tuya (M1: te sacó del resto
+                                del ciclo y la clase sigue). */}
+                            {s.group_classes?.status === "cancelled"
+                              ? "El tutor canceló esta fecha. Te devolvimos la parte de esta fecha; el total devuelto está en \"Pago\"."
+                              : "El tutor te dio de baja del resto del ciclo: te devolvimos las fechas que faltaban; el total devuelto está en \"Pago\"."}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex flex-col items-end gap-1.5">
                         <StatusPill>
@@ -473,7 +541,10 @@ export default async function BookingDetailPage({
                         pendiente={reagendaPendiente(s.session_reschedules)}
                         tz={tz}
                         formato={formato}
+                        // M28 · en una grupal la baja va abajo («Darme de
+                        // baja»): aquí saldría un segundo botón al lado.
                         cancelarHref={
+                          !s.group_class_id &&
                           sessions.length === 1 &&
                           s.status === "scheduled" &&
                           puedeDarseDeBaja
@@ -645,6 +716,21 @@ export default async function BookingDetailPage({
               centímetros es ruido. */}
           <TutorSummary tutor={ficha} />
 
+          {/* M28 · con quién se comparte la clase, encima del chat del grupo. */}
+          {companeros ? (
+            <PanelCard>
+              <PanelCardTitle className="text-base">
+                Con quién compartes la clase · {companeros.length}
+                {booking.products?.capacity ? ` de ${booking.products.capacity}` : ""}
+              </PanelCardTitle>
+              <ul className="mt-2.5 flex flex-col gap-1 text-[13px] text-[#404040]">
+                {companeros.map((c) => (
+                  <li key={c.user_id}>{c.nombre}</li>
+                ))}
+              </ul>
+            </PanelCard>
+          ) : null}
+
           {/* B4 · en una grupal manda el chat del GRUPO: es donde están el
               tutor y los demás inscritos, y antes salía como un enlace pequeño
               mientras el privado ocupaba la tarjeta grande. El privado sigue
@@ -673,7 +759,10 @@ export default async function BookingDetailPage({
                   />
                 ) : (
                   <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
-                    El chat se habilita cuando la reserva esté confirmada.
+                    {/* P11 · una reserva cancelada no va a confirmarse. */}
+                    {reservaCancelada
+                      ? "Esta reserva está cancelada: el chat ya no está disponible."
+                      : "El chat se habilita cuando la reserva esté confirmada."}
                   </p>
                 )}
               </PanelCard>
@@ -702,7 +791,9 @@ export default async function BookingDetailPage({
               />
             ) : (
               <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
-                El chat se habilita cuando la reserva esté confirmada.
+                {reservaCancelada
+                  ? "Esta reserva está cancelada: el chat ya no está disponible."
+                  : "El chat se habilita cuando la reserva esté confirmada."}
               </p>
             )}
             {/* "Descargar conversación" del Figma depende de US-1703 (`EY-76`),
@@ -757,7 +848,7 @@ export default async function BookingDetailPage({
           >
             <Link href={`/reservas/${booking.id}/cancelar`}>
               {booking.products?.pricing_model === "group"
-                ? "Cancelar mi cupo"
+                ? "Darme de baja"
                 : "Cancelar reserva"}
             </Link>
           </Button>

@@ -552,6 +552,7 @@ export type Database = {
           payer_country: string | null
           pricing_model: Database["public"]["Enums"]["pricing_model"]
           product_id: string
+          sacado_por_admin_at: string | null
           session_duration_min: number
           status: Database["public"]["Enums"]["booking_status"]
           student_id: string
@@ -579,6 +580,7 @@ export type Database = {
           payer_country?: string | null
           pricing_model: Database["public"]["Enums"]["pricing_model"]
           product_id: string
+          sacado_por_admin_at?: string | null
           session_duration_min: number
           status?: Database["public"]["Enums"]["booking_status"]
           student_id: string
@@ -606,6 +608,7 @@ export type Database = {
           payer_country?: string | null
           pricing_model?: Database["public"]["Enums"]["pricing_model"]
           product_id?: string
+          sacado_por_admin_at?: string | null
           session_duration_min?: number
           status?: Database["public"]["Enums"]["booking_status"]
           student_id?: string
@@ -3374,6 +3377,7 @@ export type Database = {
       group_classes_public: {
         Row: {
           capacity: number | null
+          cupos_apartados: number | null
           cupos_libres: number | null
           end_at: string | null
           id: string | null
@@ -3796,6 +3800,7 @@ export type Database = {
           usable: boolean
         }[]
       }
+      cupos_apartados: { Args: { p_product: string }; Returns: number }
       cupos_libres: { Args: { p_product: string }; Returns: number }
       datos_de_cobro_del_tutor: { Args: { p_tutor: string }; Returns: Json }
       delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
@@ -3900,6 +3905,13 @@ export type Database = {
           context: string
           id: string
           rating: number
+        }[]
+      }
+      horarios_libres_del_tutor: {
+        Args: { p_desde?: string; p_duracion: number; p_hasta?: string }
+        Returns: {
+          slot_end: string
+          slot_start: string
         }[]
       }
       inscritos_de_clase: {

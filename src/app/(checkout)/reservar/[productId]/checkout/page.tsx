@@ -12,6 +12,7 @@ import { AVISO_PRIVACIDAD_GRUPAL } from "@/lib/policy";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
 import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
 import { metodosDeCheckout, paisDelPagador } from "@/lib/payments";
+import { createClient } from "@/lib/supabase/server";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import { ChangeSlotLink } from "@/components/checkout/change-slot-link";
 import { CheckoutSteps } from "@/components/checkout/checkout-steps";
@@ -72,14 +73,64 @@ export default async function CheckoutPage({
   // G2 · en una grupal las fechas no las elige el alumno: salen de la clase
   // (y `create_booking_line` exige que coincidan). La URL no las trae.
   const grupal = product.pricingModel === "group" ? product.grupal : null;
-  // Sin `redirect()`: a esta página se llega por navegación de cliente desde
-  // `(public)`, y un redirect ahí deja la pantalla en blanco (regla de oro 13).
-  if (product.pricingModel === "group" && (!grupal?.abierta || grupal.cuposLibres <= 0)) {
+  // M4 · la reserva viva de quien mira. Con el cupo apartado (sin pagar) la
+  // clase cuenta como llena POR ÉL, y cortarle aquí era no dejarle terminar.
+  let miReserva: { id: string; status: string } | null = null;
+  if (grupal && user) {
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from("bookings")
+      .select("id, status")
+      .eq("product_id", productId)
+      .eq("student_id", user.id)
+      .in("status", ["pending_payment", "pending_acceptance", "confirmed", "in_progress"])
+      .limit(1)
+      .maybeSingle();
+    // Si falla se sigue como sin reserva: el formulario la vuelve a buscar.
+    if (error) console.error("[checkout] reserva viva de la grupal", error);
+    else miReserva = data;
+  }
+  if (miReserva && miReserva.status !== "pending_payment") {
     return (
       <div className="flex flex-col gap-3">
         <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">
-          {grupal?.abierta ? "Esta clase ya no tiene cupos" : "La inscripción a esta clase ya cerró"}
+          Ya tienes tu cupo en esta clase
         </h1>
+        {/* `<a>`: `/reservas/…` cuelga de `(app)` (regla de oro 13). */}
+        <a href={`/reservas/${miReserva.id}`} className="text-sm text-brand underline">
+          Ver mi inscripción
+        </a>
+      </div>
+    );
+  }
+  const reutilizaApartado = miReserva?.status === "pending_payment" && grupal?.abierta;
+  // Sin `redirect()`: a esta página se llega por navegación de cliente desde
+  // `(public)`, y un redirect ahí deja la pantalla en blanco (regla de oro 13).
+  if (
+    product.pricingModel === "group" &&
+    !reutilizaApartado &&
+    (!grupal?.abierta || grupal.cuposLibres <= 0)
+  ) {
+    // M4 · llena solo por un pago en curso: puede liberarse en minutos.
+    const enPago = grupal?.abierta && grupal.cuposApartados > 0;
+    return (
+      <div className="flex flex-col gap-3">
+        <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">
+          {enPago
+            ? grupal.cuposApartados === 1
+              ? "Alguien está terminando de pagar el último cupo"
+              : `Hay ${grupal.cuposApartados} personas terminando de pagar`
+            : grupal?.abierta
+              ? "Esta clase ya no tiene cupos"
+              : "La inscripción a esta clase ya cerró"}
+        </h1>
+        {enPago ? (
+          <p className="text-sm text-[#6b6b6b]">
+            {grupal?.cuposApartados === 1
+              ? "Vuelve en unos minutos: si no completa el pago, el cupo se libera solo."
+              : "Vuelve en unos minutos: si no completan el pago, los cupos se liberan solos."}
+          </p>
+        ) : null}
         <Link href={`/mentorias/${productId}`} className="text-sm text-brand underline">
           Volver a la clase
         </Link>
@@ -178,8 +229,10 @@ export default async function CheckoutPage({
             mentira. El porqué completo está en `checkout-steps.tsx`.
 
             La única salida sigue siendo «Cambiar horario», que además suelta el
-            hold: un «volver al carrito» aquí dejaría el horario retenido. */}
-        <CheckoutSteps current={3} className="mb-5" />
+            hold: un «volver al carrito» aquí dejaría el horario retenido.
+
+            P6 · en una grupal no se pinta: no hubo Selección ni Revisión. */}
+        {grupal ? null : <CheckoutSteps current={3} className="mb-5" />}
         {/* La ÚNICA salida de esta pantalla, y no es una salida del sitio: es
             parte de la misma compra. Aislar el checkout no puede significar
             dejar a alguien encerrado con un horario que ya no le sirve.
@@ -255,6 +308,16 @@ export default async function CheckoutPage({
         precioPorSesion={perSessionLabel(product)}
         aceptaSola={product.autoAccept}
         avisoGrupal={grupal ? AVISO_PRIVACIDAD_GRUPAL : undefined}
+        // M12 · textos de cupo y política de grupal, igual que en la ficha.
+        grupal={
+          grupal
+            ? {
+                ciclo: (product.packageNumSessions ?? 1) > 1,
+                // B7 · a menos de 24 h el mínimo ya se evaluó (como en la ficha).
+                minimo: !!grupal.minSeats && !grupal.menosDe24h,
+              }
+            : undefined
+        }
       />
     </div>
   );

@@ -117,6 +117,8 @@ export type GrupalInfo = {
   minSeats: number | null;
   /** P8 · la primera fecha empieza en menos de 24 h (la baja sería al 50 %). */
   menosDe24h: boolean;
+  /** M4 · cupos retenidos por un pago en curso (`pending_payment`), sin decir de quién. */
+  cuposApartados: number;
 };
 
 export type ProductDetail = ProductCardData & {
@@ -254,7 +256,7 @@ export async function conGrupales<T extends ProductCardData>(
   const [{ data }, tz, formato] = await Promise.all([
     supabase
       .from("group_classes_public")
-      .select("product_id, start_at, end_at, cupos_libres, capacity, inscripcion_cierra_at, min_seats")
+      .select("product_id, start_at, end_at, cupos_libres, capacity, inscripcion_cierra_at, min_seats, cupos_apartados")
       .in("product_id", ids)
       .order("start_at"),
     getViewerTimezone(),
@@ -276,6 +278,7 @@ export async function conGrupales<T extends ProductCardData>(
       regalable: (g.cupos_libres ?? 0) > 0 && cierre - ahora > 24 * 3_600_000,
       minSeats: g.min_seats ?? null,
       menosDe24h: cierre - ahora < 24 * 3_600_000,
+      cuposApartados: g.cupos_apartados ?? 0,
     };
     info.fechas.push({ startAt: g.start_at, endAt: g.end_at });
     porProducto.set(g.product_id, info);

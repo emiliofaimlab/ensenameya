@@ -224,17 +224,19 @@ export default async function ProductPage({
     // QA anexo B · quien ya tiene su cupo no debe ver «Inscribirme»: el
     // checkout le contestaría «ya estás inscrito». Solo en grupales y con
     // sesión, en la misma tanda (no añade peldaño a la cascada).
+    // M4 · también el apartado sin pagar: quien lo tiene vería «Clase completa»
+    // por su propio cupo; con el estado se le ofrece terminar el pago.
     product.pricingModel === "group" && user
       ? createClient().then((sb) =>
           sb
             .from("bookings")
-            .select("id")
+            .select("id, status")
             .eq("product_id", product.id)
             .eq("student_id", user.id)
-            .in("status", ["pending_acceptance", "confirmed", "in_progress"])
+            .in("status", ["pending_payment", "pending_acceptance", "confirmed", "in_progress"])
             .limit(1)
             .maybeSingle()
-            .then(({ data }) => data?.id ?? null),
+            .then(({ data }) => data ?? null),
         )
       : Promise.resolve(null),
   ]);
@@ -1004,7 +1006,17 @@ export default async function ProductPage({
                   timeZone={timeZone}
                   formato={formato}
                   inscribirHref={`/reservar/${product.id}/checkout`}
-                  miInscripcionHref={miInscripcion ? `/reservas/${miInscripcion}` : undefined}
+                  miInscripcionHref={
+                    miInscripcion && miInscripcion.status !== "pending_payment"
+                      ? `/reservas/${miInscripcion.id}`
+                      : undefined
+                  }
+                  miApartadoHref={
+                    // Con la inscripción cerrada el pago ya no se puede terminar.
+                    miInscripcion?.status === "pending_payment" && product.grupal?.abierta
+                      ? `/reservar/${product.id}/checkout`
+                      : undefined
+                  }
                   miClaseHref={esMiMentoria ? `/tutor/clases-grupales/${product.id}` : undefined}
                   regaloHref={
                     esMiMentoria

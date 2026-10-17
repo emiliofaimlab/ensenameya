@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { EsperaConfirmacion } from "@/components/checkout/espera-confirmacion";
 import { CompartirReserva } from "@/components/compartir-reserva";
 import { codigoParaCompartir } from "@/lib/referral";
+import { AVISO_PRIVACIDAD_GRUPAL } from "@/lib/policy";
+import { roomOpen } from "@/lib/room-window";
 
 export const metadata = { title: "Reserva confirmada · Enséñame Ya" };
 
@@ -37,6 +39,28 @@ const STEPS = [
     icon: MessageSquareIcon,
     text: "Puedes chatear con tu tutor desde el detalle de la reserva.",
   },
+];
+
+/**
+ * A1 · los mismos pasos para una inscripción en una clase grupal: no hay
+ * horario que bloquear ni chat 1:1, sino fechas fijas, el chat del grupo y una
+ * grabación que ven todos los inscritos (el aviso es el de `lib/policy`, el
+ * mismo que se lee junto al botón de pagar).
+ */
+const STEPS_GRUPAL = [
+  {
+    icon: MailIcon,
+    text: "Revisa tu correo: incluye el recibo y las fechas de la clase.",
+  },
+  {
+    icon: VideoIcon,
+    text: 'Entra a la sala desde "Mis reservas": abre 10 minutos antes de cada fecha.',
+  },
+  {
+    icon: MessageSquareIcon,
+    text: "Escribe al grupo desde el chat de la clase, en el detalle de tu inscripción.",
+  },
+  { icon: VideoIcon, text: AVISO_PRIVACIDAD_GRUPAL },
 ];
 
 /**
@@ -70,7 +94,7 @@ export default async function ConfirmationPage({
       // 45,00 US$» a quien canjeó una mentoría gratis y NO pagó nada. Visto en
       // la preview el 12-sep. El importe es el de la reserva; lo que cambia es
       // quién lo puso.
-      "id, status, product_id, total_amount, currency, products(title, tutor_id, requirements), sessions(start_at, end_at, session_ref), payments(credit_amount)",
+      "id, status, product_id, total_amount, currency, products(title, tutor_id, requirements, pricing_model, capacity), sessions(id, status, start_at, end_at, access_opens_at, access_closes_at, session_ref), payments(credit_amount)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -82,6 +106,9 @@ export default async function ConfirmationPage({
   // llega por otro camino y a su ritmo. Decir "reserva registrada" con el pago
   // aún pendiente sería prometer algo que todavía no ha pasado.
   const pagoPendiente = booking.status === "pending_payment";
+  // A1 · una inscripción en una clase grupal no es una reserva 1:1: cambia el
+  // título, las fechas, los pasos y adónde lleva el botón.
+  const grupal = booking.products?.pricing_model === "group";
 
   /**
    * Cuánto de esta reserva lo puso un crédito (una mentoría gratis, un saldo o
@@ -100,14 +127,35 @@ export default async function ConfirmationPage({
   const requisitos = parseRequirements(booking.products?.requirements);
 
   // El código de invitación va junto a los nombres: no dependen uno de otro.
-  const [names, codigoRef] = await Promise.all([
+  // En grupal, los cupos van en la misma tanda: «3 de 3 inscritos» cuenta
+  // también los pagos en curso, el mismo número que enseña la ficha.
+  const [names, codigoRef, cupos] = await Promise.all([
     tutorNames(supabase, [booking.products?.tutor_id]),
     codigoParaCompartir(supabase, user.id),
+    grupal
+      ? supabase
+          .from("group_classes_public")
+          .select("cupos_libres, capacity")
+          .eq("product_id", booking.product_id)
+          .limit(1)
+          .maybeSingle()
+      : null,
   ]);
+  // Si la lectura falla no se inventa la cifra: el párrafo sale sin ella.
+  const cuposClase =
+    cupos && !cupos.error && cupos.data?.capacity != null && cupos.data.cupos_libres != null
+      ? {
+          inscritos: cupos.data.capacity - cupos.data.cupos_libres,
+          capacity: cupos.data.capacity,
+        }
+      : null;
   const tutor = names.get(booking.products?.tutor_id ?? "");
-  const sessions = [...(booking.sessions ?? [])].sort((a, b) =>
-    a.start_at.localeCompare(b.start_at),
-  );
+  // Una fecha que el tutor canceló no es una fecha de la clase: aquí solo las
+  // vivas (el detalle de la reserva explica las canceladas).
+  const sessions = [...(booking.sessions ?? [])]
+    .filter((s) => !grupal || s.status !== "cancelled")
+    .sort((a, b) => a.start_at.localeCompare(b.start_at));
+  const salaAbierta = grupal ? sessions.find((s) => roomOpen(s)) : undefined;
 
   const range = (s: { start_at: string; end_at: string }) =>
     `${formatSessionTime(s.start_at, tz, formato)} – ${new Date(
@@ -156,16 +204,30 @@ export default async function ConfirmationPage({
             que ya se hizo. Ver el componente. */}
         {pagoPendiente ? <EsperaConfirmacion /> : null}
         <h1 className="text-center text-[26px] font-bold text-[#19191f]">
-          {pagoPendiente ? "Estamos confirmando tu pago" : "¡Reserva registrada!"}
+          {pagoPendiente
+            ? "Estamos confirmando tu pago"
+            : grupal
+              ? "¡Tienes tu cupo!"
+              : "¡Reserva registrada!"}
         </h1>
         <p className="text-center text-sm text-[#6b6b6b]">
           {pagoPendiente ? (
             <>
-              Tu horario está reservado mientras el proveedor de pago nos
+              {grupal ? "Tu cupo está apartado" : "Tu horario está reservado"}{" "}
+              mientras el proveedor de pago nos
               confirma el cobro; suele tardar unos segundos. Puedes cerrar esta
               página: te avisamos por correo en cuanto esté, y desde{" "}
               <span className="font-medium text-[#333333]">Mis reservas</span>{" "}
               verás el estado actualizado.
+            </>
+          ) : grupal ? (
+            <>
+              {tutor
+                ? `Tu cupo en la clase de ${tutor} está confirmado`
+                : "Tu cupo en la clase está confirmado"}
+              {cuposClase
+                ? ` · ${cuposClase.inscritos} de ${cuposClase.capacity} inscritos.`
+                : "."}
             </>
           ) : booking.status === "confirmed" ? (
             // M-02 · la mentoría acepta sola (`products.auto_accept_bookings`),
@@ -211,7 +273,7 @@ export default async function ConfirmationPage({
           </dl>
 
           <p className="mt-3.5 border-t border-[#e0e0e0] pt-3.5 text-xs text-[#6b6b6b]">
-            Sesiones agendadas (horario bloqueado)
+            {grupal ? "Fechas de la clase" : "Sesiones agendadas (horario bloqueado)"}
           </p>
           <ul className="mt-2 flex flex-col gap-2">
             {sessions.map((s) => (
@@ -314,7 +376,7 @@ export default async function ConfirmationPage({
             Próximos pasos
           </h2>
           <ul className="mt-3.5 flex flex-col gap-3">
-            {STEPS.map(({ icon: Icon, text }) => (
+            {(grupal ? STEPS_GRUPAL : STEPS).map(({ icon: Icon, text }) => (
               <li key={text} className="flex items-center gap-3">
                 <span className="grid size-[30px] shrink-0 place-items-center rounded-full bg-brand text-white">
                   <Icon className="size-3.5" />
@@ -327,8 +389,15 @@ export default async function ConfirmationPage({
 
         <div className="mt-2 flex flex-wrap justify-center gap-3">
           <Button asChild className="h-[49px] rounded-[10px] px-6 font-semibold">
-            <Link href={`/reservas/${booking.id}`}>Ver detalle de la reserva</Link>
+            <Link href={`/reservas/${booking.id}`}>
+              {grupal ? "Ver mi inscripción" : "Ver detalle de la reserva"}
+            </Link>
           </Button>
+          {salaAbierta ? (
+            <Button asChild className="h-[49px] rounded-[10px] px-6 font-semibold">
+              <Link href={`/room/${salaAbierta.id}`}>Entrar a la sala</Link>
+            </Button>
+          ) : null}
           {/* Reunión del 25-sep: presumir la reserva, con el enlace de invitación.
               Ni con el pago en el aire ni cancelada: `RESERVA_COMPARTIBLE`. */}
           {RESERVA_COMPARTIBLE.has(booking.status) ? (

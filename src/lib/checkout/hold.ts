@@ -269,6 +269,15 @@ export function esCarreraDeHorario(error: ErrorDeRpc): boolean {
 }
 
 /**
+ * P38 · en una grupal la carrera de dos pestañas no choca contra el candado de
+ * sesiones sino contra «un cupo por alumno» de `create_booking_line`: la otra
+ * pestaña ya apartó el cupo, y ese apartado es reutilizable.
+ */
+export function esYaInscrito(error: ErrorDeRpc): boolean {
+  return (error?.message ?? "").toLowerCase().includes("ya estás inscrito");
+}
+
+/**
  * Qué se le enseña al alumno cuando no hay reserva que abrir.
  *
  * ⚠️ NUNCA `error.message` TAL CUAL. Del otro lado hay una función de Postgres

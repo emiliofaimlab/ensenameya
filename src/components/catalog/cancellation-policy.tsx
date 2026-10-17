@@ -30,6 +30,16 @@ const rulesGrupal = [
 
 const subtitulo = "Única de Enséñame Ya, igual para todos los tutores.";
 
+/**
+ * M12 · las reglas de una grupal, en un solo sitio: las lee esta tarjeta y el
+ * checkout (`PaymentPolicy`). `minimo: false` = sin `min_seats`.
+ */
+export function reglasDeGrupal(g: { ciclo: boolean; minimo?: boolean }): string[] {
+  return (g.ciclo ? rulesCiclo : rulesGrupal).filter(
+    (r) => r !== minimo || g.minimo !== false,
+  );
+}
+
 /** Las reglas, idénticas en la tarjeta y en el plegado: una sola verdad. */
 function Reglas({
   className,
@@ -83,11 +93,7 @@ export function CancellationPolicy({
    *  `minimo: false` = sin `min_seats`, la regla del mínimo no aplica. */
   grupal?: { ciclo: boolean; minimo?: boolean };
 }) {
-  const lista = grupal
-    ? (grupal.ciclo ? rulesCiclo : rulesGrupal).filter(
-        (r) => r !== minimo || grupal.minimo !== false,
-      )
-    : rules;
+  const lista = grupal ? reglasDeGrupal(grupal) : rules;
 
   if (compact) {
     return (

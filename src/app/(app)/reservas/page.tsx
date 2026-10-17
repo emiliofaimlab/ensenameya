@@ -194,14 +194,31 @@ export default async function ReservasPage() {
     ...new Set(filasDeRegalo.map((r) => r.product_id).filter(Boolean)),
   ] as string[];
 
-  const productosRes = idsDeProducto.length
-    ? await supabase
-        .from("products")
-        .select(
-          "id, title, tutor_id, pricing_model, price_amount, session_duration_min, package_num_sessions",
-        )
-        .in("id", idsDeProducto)
-    : null;
+  // P41 / M23 · las fechas de un cupo regalado van en el MISMO peldaño que la
+  // ficha: todavía no se sabe qué regalos son grupales, así que se piden para
+  // todos los productos del regalo, y los que no lo son vuelven sin filas. La
+  // vista solo trae las fechas pendientes (`status = 'scheduled'`).
+  const [productosRes, fechasRes] = idsDeProducto.length
+    ? await Promise.all([
+        supabase
+          .from("products")
+          .select(
+            "id, title, tutor_id, pricing_model, price_amount, session_duration_min, package_num_sessions, inscripcion_cierra_at",
+          )
+          .in("id", idsDeProducto),
+        supabase
+          .from("group_classes_public")
+          .select("product_id, start_at")
+          .in("product_id", idsDeProducto)
+          .order("start_at"),
+      ])
+    : ([null, null] as const);
+
+  const fechasDeClase = new Map<string, string[]>();
+  for (const f of fechasRes?.data ?? []) {
+    if (!f.product_id || !f.start_at) continue;
+    fechasDeClase.set(f.product_id, [...(fechasDeClase.get(f.product_id) ?? []), f.start_at]);
+  }
 
   // `as const` en la tupla y no por gusto: sin él TypeScript infiere
   // `(string | Producto)[][]` y el constructor de `Map` no lo acepta.
@@ -213,7 +230,9 @@ export default async function ReservasPage() {
   // se cae, el `Map` queda vacío y cada tarjeta caería en su rama de «sin
   // ficha» — que es cierta para una mentoría archivada y falsa para un fallo de
   // red. La tarjeta no puede distinguirlas, así que lo dice el aviso de arriba.
-  const errorRegalos = regalosLeidos.error ?? productosRes?.error ?? null;
+  // Las fechas de la clase también: sin ellas el cupo regalado no dice cuándo es.
+  const errorRegalos =
+    regalosLeidos.error ?? productosRes?.error ?? fechasRes?.error ?? null;
 
   // Un solo viaje a los tutores para las dos superficies: las reservas y los
   // regalos. `tutorNames` lee `tutor_profiles` (la tabla que hay debajo de
@@ -241,6 +260,11 @@ export default async function ReservasPage() {
     const p = r.product_id ? productos.get(r.product_id) : undefined;
     const sesiones =
       p?.pricing_model === "per_package" ? (p.package_num_sessions ?? 1) : 1;
+    const esGrupal = p?.pricing_model === "group";
+    const fechas = (p && fechasDeClase.get(p.id)) ?? [];
+    // P41 · un cupo regalado no es una «Sesión individual». Sin fechas leídas
+    // (ya empezó o la vista no las da), el respaldo es el número del producto.
+    const nFechas = fechas.length || (p?.package_num_sessions ?? 1);
     return {
       id: r.id as string,
       // `kind` decide qué tarjeta se pinta: 'saldo' es un BONO (su tutor se dio
@@ -261,9 +285,16 @@ export default async function ReservasPage() {
             titulo: p.title,
             // Le dice al destinatario cuántos horarios va a elegir: un paquete
             // le pedirá N y eso no se descubre bien a mitad del calendario.
-            formato: bookingFormatLabel(sesiones),
+            formato: esGrupal
+              ? nFechas > 1
+                ? `Clase grupal · ${nFechas} fechas`
+                : "Clase grupal"
+              : bookingFormatLabel(sesiones),
             tutor: names.get(p.tutor_id),
             tutorHref: perfilDelTutor(p.tutor_id),
+            grupal: esGrupal
+              ? { fechas, cierraAt: p.inscripcion_cierra_at ?? null }
+              : null,
             // La MISMA aritmética que congeló `comprar_regalo`
             // (`20260912110000:2216`), que a su vez es la de
             // `create_booking_line`. Sirve para decir la verdad sobre si al
@@ -373,7 +404,7 @@ export default async function ReservasPage() {
       {/* Lo accionable, arriba: un regalo cobrado y sin agendar es lo único de
           esta pantalla que espera a que alguien haga algo. */}
       {regalosVivos.map((r) => (
-        <RegaloPorAgendar key={r.id} regalo={r} timeZone={tz} />
+        <RegaloPorAgendar key={r.id} regalo={r} timeZone={tz} formato={formato} />
       ))}
 
       {/* Regla de oro 10 · si la lectura de los regalos se cae, se DICE. El

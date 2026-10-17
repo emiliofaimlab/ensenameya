@@ -26,6 +26,7 @@ export function GrupalPanel({
   inscribirHref,
   regaloHref,
   miInscripcionHref,
+  miApartadoHref,
   miClaseHref,
   otrasHref,
   footer,
@@ -39,6 +40,8 @@ export function GrupalPanel({
   regaloHref?: string;
   /** El detalle de SU reserva si quien mira ya tiene cupo en esta clase. */
   miInscripcionHref?: string;
+  /** M4 · quien mira tiene el cupo apartado y el pago a medias. */
+  miApartadoHref?: string;
   /** M11 · la ficha del tutor, si quien mira ES el tutor de la clase. */
   miClaseHref?: string;
   /** P37 · alternativa cuando la clase está llena o cerrada (ruta pública). */
@@ -50,11 +53,18 @@ export function GrupalPanel({
   const llena = !g || g.cuposLibres <= 0;
   const cerrada = !g?.abierta;
   const puedeRegalar = regaloHref && g?.regalable;
+  // M4 · llena solo por un pago en curso de OTRO: no es «completa» todavía.
+  const enPago =
+    g && llena && !cerrada && g.cuposApartados > 0 && !miApartadoHref && !miInscripcionHref
+      ? g.cuposApartados
+      : 0;
   const motivo = cerrada
     ? "La inscripción a esta clase ya cerró"
-    : llena
-      ? "Esta clase ya no tiene cupos"
-      : null;
+    : enPago
+      ? "Sin cupos por ahora"
+      : llena
+        ? "Esta clase ya no tiene cupos"
+        : null;
   // A12 · el mínimo solo se enseña mientras falta gente para llegar a él.
   const inscritos = g ? g.capacity - g.cuposLibres : 0;
   const faltanMin = g?.minSeats ? g.minSeats - inscritos : 0;
@@ -73,9 +83,11 @@ export function GrupalPanel({
       <h2 className="text-lg font-bold text-[#19191f]">
         {miClaseHref
           ? "Tu clase grupal"
-          : miInscripcionHref
-            ? "Ya tienes tu cupo"
-            : "Inscríbete en esta clase"}
+          : miApartadoHref
+            ? "Tu cupo está apartado"
+            : miInscripcionHref
+              ? "Ya tienes tu cupo"
+              : "Inscríbete en esta clase"}
       </h2>
       <Precio
         amountMinor={precio.amountMinor}
@@ -118,11 +130,13 @@ export function GrupalPanel({
       <p className="mt-4 flex items-center gap-2 text-sm text-[#474747]">
         <UsersIcon className="size-4 text-brand" aria-hidden />
         {g
-          ? llena
-            ? `Clase completa · ${g.capacity} cupos`
-            : g.cuposLibres === 1
-              ? `Queda 1 cupo de ${g.capacity}`
-              : `Quedan ${g.cuposLibres} de ${g.capacity} cupos`
+          ? enPago
+            ? `Sin cupos libres por ahora · ${enPago === 1 ? "1 cupo" : `${enPago} cupos`} en pago`
+            : llena
+              ? `Clase completa · ${g.capacity} cupos`
+              : g.cuposLibres === 1
+                ? `Queda 1 cupo de ${g.capacity}`
+                : `Quedan ${g.cuposLibres} de ${g.capacity} cupos`
           : "Sin fechas publicadas"}
       </p>
       {/* B7 · el cron mira el mínimo una vez, al entrar en las 24 h: después
@@ -146,6 +160,12 @@ export function GrupalPanel({
         <Button asChild className="mt-4 h-12 w-full text-[15px]">
           <a href={miClaseHref}>Es tu clase · Ver inscritos</a>
         </Button>
+      ) : miApartadoHref ? (
+        // M4 · `<a>` por la regla de oro 13: el checkout corre `requireUser()`
+        // con sesión y su guarda puede redirigir.
+        <Button asChild className="mt-4 h-12 w-full text-[15px]">
+          <a href={miApartadoHref}>Terminar mi pago</a>
+        </Button>
       ) : miInscripcionHref ? (
         // ponytail: `<a>` y no `<Link>`: `/reservas/…` cuelga de `(app)` y su
         // guarda puede redirigir (onboarding a medias tras un checkout de
@@ -159,6 +179,13 @@ export function GrupalPanel({
           <Button disabled className="mt-4 h-12 w-full text-[15px]">
             {motivo}
           </Button>
+          {enPago ? (
+            <p className="mt-2 text-xs text-[#6b6b6b]">
+              {enPago === 1
+                ? "Alguien está terminando de pagar el último cupo; vuelve en unos minutos."
+                : `Hay ${enPago} personas terminando de pagar; vuelve en unos minutos.`}
+            </p>
+          ) : null}
           {/* P37 · llena o cerrada no es un callejón sin salida. */}
           {otrasHref ? (
             <Button asChild variant="outline" className="mt-3 h-11 w-full text-[14px]">

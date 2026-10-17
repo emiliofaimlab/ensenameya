@@ -1752,5 +1752,11 @@ export async function POST(req: Request) {
     // `expire_stale_bookings`, dos datos que el cliente no tiene y no debería
     // adivinar.
     retencionHasta: retencion,
+    // P50 · para prellenar el formulario de Stripe: sin el país salía el de la
+    // geolocalización de Stripe y Link volvía a pedir el correo. El correo es el
+    // del propio usuario y solo vuelve a su navegador. Los parámetros de la
+    // Session no cambian, así que `VERSION_PARAMS` no sube.
+    paisPagador: cobrar.payerCountry ?? null,
+    correo: user.email ?? null,
   });
 }
