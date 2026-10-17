@@ -965,6 +965,7 @@ export default async function ProductPage({
                   formato={formato}
                   inscribirHref={`/reservar/${product.id}/checkout`}
                   miInscripcionHref={miInscripcion ? `/reservas/${miInscripcion}` : undefined}
+                  miClaseHref={esMiMentoria ? `/tutor/clases-grupales/${product.id}` : undefined}
                   regaloHref={
                     esMiMentoria
                       ? undefined

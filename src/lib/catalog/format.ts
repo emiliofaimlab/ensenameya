@@ -120,9 +120,11 @@ export function perSessionLabel(p: {
 export function sessionsLabel(p: {
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
+  /** Solo grupal: cuenta las fechas que quedan, no las publicadas (B2). */
+  grupal?: { fechas: unknown[] } | null;
 }): string | null {
   if (!p.sessionDurationMin) return null;
-  return `${p.packageNumSessions ?? 1} × ${p.sessionDurationMin} min`;
+  return `${p.grupal?.fechas.length || p.packageNumSessions || 1} × ${p.sessionDurationMin} min`;
 }
 
 /** Conectores: sin filtrarlos, "Profesora de Matemáticas" daba "PD". */
@@ -221,6 +223,8 @@ export function priceDisplay(p: {
   currency: string;
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
+  /** Solo grupal: con sus fechas vivas, el precio sale prorrateado (B2). */
+  grupal?: { fechas: unknown[] } | null;
 }): PriceDisplay {
   if (esGratis(p.priceAmount)) {
     // EY-219 · la cifra grande dice «Gratis» y la nota se queda con el modelo
@@ -269,9 +273,13 @@ export function priceDisplay(p: {
         isTotal: true,
       };
     }
-    case "group":
+    case "group": {
       // RG-02: el cupo es el total del alumno, también en un ciclo (RG-16).
-      return { amount: tarifa, amountMinor: p.priceAmount, note: "por cupo", isTotal: true };
+      // B2 · si el tutor canceló fechas antes de empezar, el que cobra
+      // `create_booking_line` (y anuncia el checkout): solo las que quedan.
+      const cupo = bookingTotal(p, p.grupal?.fechas.length);
+      return { amount: formatMoney(cupo, p.currency), amountMinor: cupo, note: "por cupo", isTotal: true };
+    }
     // ponytail: un modelo que este código no conoce (p.ej. uno que llegue a la
     // BD antes que su código) pinta la tarifa en vez de tumbar el catálogo
     // entero con un `undefined.amountMinor`.

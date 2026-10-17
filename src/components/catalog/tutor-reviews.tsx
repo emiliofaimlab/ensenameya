@@ -149,13 +149,17 @@ function ReviewItem({
       {/* §5.4 · de QUÉ mentoría habla la reseña. El azul es `#0b4f96` y no el
           `brand`: a 12px sobre blanco el #0080ff se queda en 3:1 de contraste
           y esto es texto, no un botón (WCAG AA pide 4.5:1). */}
-      {withContext && r.productTitle && r.productId ? (
+      {withContext && r.productTitle && r.productId && r.productActiva ? (
         <Link
           href={`/mentorias/${r.productId}`}
           className="-mt-1 text-xs font-medium text-[#0b4f96] hover:underline"
         >
           {r.productTitle}
         </Link>
+      ) : withContext && r.productTitle ? (
+        // R1 · sin enlace: la mentoría ya no está publicada (p. ej. una grupal
+        // que terminó y se archivó) y su ficha daría 404.
+        <p className="-mt-1 text-xs font-medium text-[#525252]">{r.productTitle}</p>
       ) : null}
 
       {r.comment ? (

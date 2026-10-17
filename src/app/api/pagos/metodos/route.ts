@@ -79,7 +79,7 @@ const noAutenticado = () =>
  * `return_url`. Un PaymentElement propio daría control sobre `usage` (ver más
  * abajo) a cambio de un segundo formulario de pago que mantener.
  */
-export async function POST() {
+export async function POST(req: Request) {
   const ctx = await quienLlama();
   if (!ctx) return noAutenticado();
   const { user, perfil, admin } = ctx;
@@ -109,7 +109,7 @@ export async function POST() {
   });
   if (customer !== perfil?.stripe_customer_id) await guardarCustomer(customer);
 
-  const base = siteUrl();
+  const base = siteUrl(new URL(req.url).origin); // D1
   const crearSesion = (cliente: string) =>
     crearSesionDeAltaDeTarjeta({
       customerId: cliente,

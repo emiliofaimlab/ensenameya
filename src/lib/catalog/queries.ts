@@ -100,8 +100,9 @@ export type ProductCardData = {
 
 /**
  * G2 · lo que el catálogo enseña de una clase grupal, de `group_classes_public`
- * (solo fechas `scheduled`). `abierta` = la primera fecha no ha empezado: es el
- * mismo corte con el que `create_booking_line` cierra la inscripción.
+ * (solo fechas `scheduled`). `abierta` = no ha empezado su primera fecha no
+ * cancelada (`products.inscripcion_cierra_at`): es el mismo corte con el que
+ * `create_booking_line` cierra la inscripción.
  */
 export type GrupalInfo = {
   fechas: { startAt: string; endAt: string }[];
@@ -227,11 +228,18 @@ async function withTutors<T extends ProductCardData & { tutorId: string }>(
  * página) y, con `soloAbiertas`, quita las clases cuya inscripción ya cerró:
  * un listado no debe ofrecer lo que no se puede comprar.
  *
- * ponytail: el filtro va DESPUÉS de paginar, así que una página puede salir
- * con una tarjeta de menos si una grupal cerrada caía en ella. Con pocas
- * grupales no se nota; si molesta, el corte pasa a la consulta (una columna
- * `products.inscripcion_cierra_at` mantenida por `publicar_clase_grupal`).
+ * M9 · el corte de verdad va ya EN LA CONSULTA de los listados paginados
+ * (`soloInscribibles`): este filtro queda de red para los que no paginan.
  */
+/**
+ * M9 · filtro PostgREST: las 1:1 pasan siempre y una grupal solo si su
+ * inscripción sigue abierta. En la consulta y no después, para que el `count`
+ * y las páginas cuadren (el catálogo decía «3 mentorías» y pintaba 2).
+ */
+export function soloInscribibles(): string {
+  return `pricing_model.neq.group,inscripcion_cierra_at.gt.${new Date().toISOString()}`;
+}
+
 export async function conGrupales<T extends ProductCardData>(
   rows: T[],
   { soloAbiertas = true }: { soloAbiertas?: boolean } = {},
@@ -242,7 +250,7 @@ export async function conGrupales<T extends ProductCardData>(
   const [{ data }, tz, formato] = await Promise.all([
     supabase
       .from("group_classes_public")
-      .select("product_id, start_at, end_at, cupos_libres, capacity")
+      .select("product_id, start_at, end_at, cupos_libres, capacity, inscripcion_cierra_at")
       .in("product_id", ids)
       .order("start_at"),
     getViewerTimezone(),
@@ -252,14 +260,16 @@ export async function conGrupales<T extends ProductCardData>(
   const porProducto = new Map<string, GrupalInfo>();
   for (const g of data ?? []) {
     if (!g.product_id || !g.start_at || !g.end_at) continue;
+    // B2/M25 · el corte es la primera fecha NO cancelada (`cierre_de_inscripcion`),
+    // no la primera pendiente: en un ciclo ya empezado la que sigue no reabre nada.
+    const cierre = g.inscripcion_cierra_at ? Date.parse(g.inscripcion_cierra_at) : 0;
     const info = porProducto.get(g.product_id) ?? {
       fechas: [],
       primeraFecha: formatSessionTime(g.start_at, tz, formato),
       cuposLibres: g.cupos_libres ?? 0,
       capacity: g.capacity ?? 0,
-      abierta: Date.parse(g.start_at) > ahora,
-      regalable:
-        (g.cupos_libres ?? 0) > 0 && Date.parse(g.start_at) - ahora > 24 * 3_600_000,
+      abierta: cierre > ahora,
+      regalable: (g.cupos_libres ?? 0) > 0 && cierre - ahora > 24 * 3_600_000,
     };
     info.fechas.push({ startAt: g.start_at, endAt: g.end_at });
     porProducto.set(g.product_id, info);
@@ -659,7 +669,8 @@ export async function listTutorProducts(
     .from("products")
     .select(TUTOR_PRODUCT_SELECT)
     .eq("tutor_id", tutorId)
-    .eq("status", "active");
+    .eq("status", "active")
+    .or(soloInscribibles());
   // Se excluye en la consulta y no al mapear: filtrándola después, la propia
   // mentoría se comería uno de los huecos del `limit` y la sección enseñaría
   // una tarjeta de menos justo en los tutores con pocas mentorías.
@@ -686,6 +697,8 @@ export type TutorReview = {
    */
   productId: string | null;
   productTitle: string | null;
+  /** Si su ficha se puede abrir (una grupal terminada queda archivada). */
+  productActiva: boolean;
 };
 
 /**
@@ -696,7 +709,7 @@ export type TutorReview = {
  * «este tutor no tiene reseñas», que es la clase de mentira que nadie reporta.
  */
 const REVIEW_SELECT =
-  "id, rating, comment, created_at, author_display, product_id, products!reviews_product_id_fkey(title)";
+  "id, rating, comment, created_at, author_display, product_id, products!reviews_product_id_fkey(title, status)";
 
 function mapReview(r: {
   id: string;
@@ -705,7 +718,7 @@ function mapReview(r: {
   created_at: string;
   author_display: string | null;
   product_id: string;
-  products: { title: string } | null;
+  products: { title: string; status: string } | null;
 }): TutorReview {
   return {
     id: r.id,
@@ -715,6 +728,8 @@ function mapReview(r: {
     author: r.author_display,
     productId: r.product_id,
     productTitle: r.products?.title ?? null,
+    // R1 · una grupal terminada se archiva (lote 1, M9) y su ficha da 404.
+    productActiva: r.products?.status === "active",
   };
 }
 
@@ -936,7 +951,8 @@ export async function listActiveProducts(opts: {
       "id, tutor_id, title, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, level, language, product_categories(categories(slug, name, icon))",
       { count: "exact" },
     )
-    .eq("status", "active");
+    .eq("status", "active")
+    .or(soloInscribibles());
   if (ids) base = base.in("id", ids);
   if (opts.model) base = base.eq("pricing_model", opts.model);
   if (opts.minPriceMinor) base = base.gte("price_amount", opts.minPriceMinor);

@@ -25,14 +25,14 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  const destino = `${siteUrl()}/tutor/payouts`;
+  const destino = `${siteUrl(new URL(req.url).origin)}/tutor/payouts`;
 
   const volver = (params: Record<string, string>) =>
     NextResponse.redirect(`${destino}?${new URLSearchParams(params)}`);
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.redirect(`${siteUrl()}/login`);
+  if (!user) return NextResponse.redirect(`${siteUrl(new URL(req.url).origin)}/login`);
 
   const fallo = url.searchParams.get("error");
   if (fallo) {
@@ -66,7 +66,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const cuenta = await canjearCodigoPaypal(code, `${siteUrl()}/api/tutor/paypal-connect/callback`);
+    const cuenta = await canjearCodigoPaypal(code, `${siteUrl(new URL(req.url).origin)}/api/tutor/paypal-connect/callback`);
 
     const { error } = await createAdminClient().rpc("conectar_cuenta_paypal", {
       p_tutor: user.id,

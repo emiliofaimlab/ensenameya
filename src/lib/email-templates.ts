@@ -2487,7 +2487,11 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
         ? "La clase grupal que te regalaron se llenó antes de que reservaras tu cupo"
         : causa === "clase_cancelada"
           ? "La clase grupal que te regalaron se canceló"
-          : "El tutor cerró su cuenta";
+          : causa === "inscripcion_cerrada"
+            ? "La clase grupal que te regalaron empezó antes de que reservaras tu cupo"
+            : causa === "fecha_cancelada"
+              ? "Se canceló una de las fechas de la clase grupal que te regalaron, así que su precio cambió"
+              : "El tutor cerró su cuenta";
     return {
       asunto: con("Tu regalo ahora vale con cualquier tutor", importe),
       familia: "ok",
@@ -2496,12 +2500,16 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       preheader: fecha
         ? `${porQue}; el regalo sigue pagado y se puede usar hasta el ${fecha}.`
         : `${porQue}, pero el regalo sigue pagado y se puede usar.`,
-      motivo: causa
+      motivo: causa === "fecha_cancelada"
+        ? "Recibes este correo porque hay un regalo de Enséñame Ya para una clase grupal que cambió de fechas."
+        : causa
         ? "Recibes este correo porque hay un regalo de Enséñame Ya para una clase grupal que ya no se puede reservar."
         : "Recibes este correo porque hay un regalo de Enséñame Ya cuyo tutor cerró su cuenta.",
       cuerpo: [
         parrafo(
-          causa
+          causa === "fecha_cancelada"
+            ? `${porQue}. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo, para esa misma clase o para reservar con cualquier tutor.`
+            : causa
             ? `${porQue}, así que esa clase en concreto ya no se puede reservar. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo para reservar con cualquier tutor.`
             : "El tutor de la mentoría regalada cerró su cuenta, así que esa mentoría en concreto ya no se puede agendar. <strong>El regalo no se pierde</strong>: sigue pagado y ahora vale como saldo para reservar con cualquier otro tutor.",
         ),

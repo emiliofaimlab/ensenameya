@@ -310,6 +310,16 @@ aviso y el cron devuelve 200 (§1.1). Es exactamente el fallo mudo contra el que
   borró**: revalidaba la sesión contra el servidor de Auth en cada render, varias veces por página.
 - **No hay Edge Functions.** Todo el código server-side son **Route Handlers** (`src/app/api/`) y
   Server Components. Se decidió en `20260717120000` y todo lo nuevo lo sigue.
+- **Ver los correos sin esperar al reloj** (B12 del sondeo de grupales): `SALIDA_CORREOS=<carpeta>
+  npm run check:correos` escribe un HTML por plantilla. En dev el reloj del correo lo ejecuta el
+  despliegue de la rama `dev`: lo que solo exista en otra rama no sale nunca desde ahí.
+- **Pagar por dLocal en local** (D2): dLocal no alcanza el webhook de tu máquina, así que el pago se
+  queda `pending`. Se le da el aviso que mandaría el sandbox (el webhook vuelve a preguntar a la API):
+  ```bash
+  node --env-file=.env.local scripts/dlocal-aviso-local.mjs DP-123456 http://localhost:3002
+  ```
+- **Volver del pago en local** (D1): fuera de Vercel, `siteUrl()` toma el origen de la petición, así
+  que Stripe devuelve al mismo host y puerto (`qa.localhost:3002`) con la sesión intacta.
 
 ---
 

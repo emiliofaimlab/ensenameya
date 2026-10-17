@@ -107,7 +107,7 @@ export default async function BookingDetailPage({
       // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
       // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
       // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
-      "id, status, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model), sessions(id, start_at, end_at, status, session_ref, group_class_id, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
+      "id, status, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model, status), sessions(id, start_at, end_at, status, session_ref, group_class_id, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -291,7 +291,9 @@ export default async function BookingDetailPage({
         </div>
         {/* La confirmación se ve UNA vez; quien vuelve después a presumir la
             reserva la encuentra aquí. Solo con la reserva viva. */}
-        {RESERVA_COMPARTIBLE.has(booking.status) ? (
+        {/* R1 · y con la mentoría publicada: una grupal que terminó se archiva
+            (lote 1, M9), y la imagen y el enlace de compartir darían 404. */}
+        {RESERVA_COMPARTIBLE.has(booking.status) && booking.products?.status === "active" ? (
           <CompartirReserva
             productId={booking.product_id}
             titulo={booking.products?.title ?? "Mentoría"}

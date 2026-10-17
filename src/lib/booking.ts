@@ -173,14 +173,26 @@ export function bookingFormatLabel(numSessions: number): string {
  * Total de UNA reserva del producto. Es lo mismo que congela `create_booking`
  * en servidor; aquí solo se muestra (el servidor sigue mandando, S-15).
  */
-export function bookingTotal(p: {
-  pricingModel: string;
-  priceAmount: number;
-  sessionDurationMin: number | null;
-}): number {
-  return p.pricingModel === "per_hour"
-    ? Math.round((p.priceAmount * (p.sessionDurationMin ?? 60)) / 60)
-    : p.priceAmount;
+export function bookingTotal(
+  p: {
+    pricingModel: string;
+    priceAmount: number;
+    sessionDurationMin: number | null;
+    packageNumSessions?: number | null;
+  },
+  /** Solo grupal: cuántas fechas le quedan a la clase (las `scheduled`). */
+  fechasVivas?: number,
+): number {
+  if (p.pricingModel === "per_hour") {
+    return Math.round((p.priceAmount * (p.sessionDurationMin ?? 60)) / 60);
+  }
+  // B2 · un ciclo al que el tutor le canceló fechas antes de que llegara este
+  // alumno cobra solo las que quedan. Misma cuenta que `create_booking_line`.
+  const n = p.packageNumSessions ?? 0;
+  if (p.pricingModel === "group" && fechasVivas && n > fechasVivas) {
+    return Math.round((p.priceAmount * fechasVivas) / n);
+  }
+  return p.priceAmount;
 }
 
 /**

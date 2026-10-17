@@ -289,5 +289,7 @@ export function mensajeDeApertura(error: ErrorDeRpc): string {
   if (m.includes("ya estás inscrito")) return "Ya estás inscrito en esta clase. La encuentras en Mis reservas.";
   if (m.includes("inscripción a esta clase ya cerró")) return "La inscripción a esta clase ya cerró.";
   if (m.includes("fechas de esta clase cambiaron")) return "El tutor cambió las fechas de esta clase. Vuelve a cargarla para ver las nuevas.";
+  // M11 · `create_booking_line` ya no deja al tutor inscribirse en su clase.
+  if (m.includes("tu propia clase")) return "Es tu propia clase: no puedes inscribirte.";
   return "No se pudo reservar el horario. Vuelve a intentarlo en un momento.";
 }

@@ -1205,7 +1205,7 @@ export async function POST(req: Request) {
   });
   if (customer !== perfil?.stripe_customer_id) await guardarCustomer(customer);
 
-  const base = siteUrl();
+  const base = siteUrl(new URL(req.url).origin);
   // 🎁 Dos relojes, y el del regalo no es el de la reserva: aquel se calcula
   // desde un hold de siete minutos y este desde una fila que vive treinta días.
   // El porqué entero está en `caducidadRegalo`; lo que hay que saber aquí es que

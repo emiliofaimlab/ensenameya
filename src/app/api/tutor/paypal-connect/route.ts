@@ -16,14 +16,14 @@ import { createClient } from "@/lib/supabase/server";
  * ⚠️ POST y no GET: manda al tutor a un flujo de autorización, así que un
  * prefetch del router no debe dispararlo.
  */
-export async function POST() {
+export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "no autenticado" }, { status: 401 });
 
   const state = randomUUID();
   const url = urlDeConexionPaypal({
-    returnUrl: `${siteUrl()}/api/tutor/paypal-connect/callback`,
+    returnUrl: `${siteUrl(new URL(req.url).origin)}/api/tutor/paypal-connect/callback`,
     state,
   });
   if (!url) return NextResponse.json({ error: "falta PAYPAL_CLIENT_ID" }, { status: 503 });

@@ -4,7 +4,7 @@ import { construirIcs } from "@/lib/calendar/ics";
 import type { EventoFeed } from "@/lib/calendar/rpc";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isEmailConfigured, sendEmail, type Adjunto } from "@/lib/email";
-import { renderEmail, type Contexto } from "@/lib/email-templates";
+import { PLANTILLAS_IDS, renderEmail, type Contexto } from "@/lib/email-templates";
 
 /**
  * US-1201 · vacía la cola de notificaciones por correo y las envía de verdad.
@@ -205,7 +205,10 @@ export async function GET(req: Request) {
   // desde `20260911170000` resuelve también el huso y el contexto del mismo
   // viaje: una consulta por LOTE, no una por correo.
   const { data: lote, error } = await supabase.rpc("pending_email_notifications", {
-    p_limit: LOTE,
+    // B12 · el triple: las filas con plantilla desconocida esperan hasta 24 h
+    // en la cola, y si se juntaran 50 ocuparían el lote entero sin dejar salir
+    // nada. Se piden de más y se ENVÍAN como mucho `LOTE` (abajo).
+    p_limit: LOTE * 3,
   });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -215,9 +218,36 @@ export async function GET(req: Request) {
   let permanentes = 0;
   let reintentables = 0;
 
+  let intentos = 0;
   for (const fila of lote ?? []) {
     // La puerta estrecha de arriba, en su único uso.
     const n = fila as typeof fila & ColumnasDelDoc33;
+
+    // D3 · las cuentas de QA de dev (`@ensenameya.dev`) no tienen buzón: cada
+    // envío es un rebote que ensucia la reputación del dominio verificado. En
+    // prod no existen, así que esto solo actúa en dev. Se marca ENVIADO y no
+    // `failed`: la campana esconde `failed` en las plantillas caducables
+    // («tu clase empieza…»), y el QA de dev necesita verlas.
+    if (n.email?.endsWith("@ensenameya.dev")) {
+      await supabase.rpc("mark_notification", { p_id: n.id, p_ok: true });
+      continue;
+    }
+
+    // B12 · una plantilla que este despliegue no conoce NO es un error de la
+    // fila: la migración que la encola llegó antes que el código que la pinta
+    // (o, en dev, el reloj lo ejecuta la rama `dev` y no la que la creó).
+    // Marcarla `failed` la perdía para siempre. Se queda `pending` y solo se da
+    // por perdida pasadas 24 h —lo decide la RPC, que es quien ve la fila—, para
+    // que no tapone el lote si se acumulan.
+    if (n.email && !PLANTILLAS_IDS.includes(n.template)) {
+      const { data: perdida } = await supabase.rpc("descartar_plantilla_desconocida", { p_id: n.id });
+      if (perdida) permanentes++;
+      else reintentables++;
+      continue;
+    }
+
+    if (intentos >= LOTE) break;
+    intentos++;
 
     const render = n.email
       ? renderEmail({

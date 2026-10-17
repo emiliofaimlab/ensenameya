@@ -31,7 +31,7 @@
  * `NEXT_PUBLIC_SITE_URL` sigue mandando sobre todo: es la salida para un
  * dominio propio el día que lo haya.
  */
-export function siteUrl(): string {
+export function siteUrl(origen?: string): string {
   const explicita = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (explicita) return explicita.replace(/\/$/, "");
 
@@ -47,5 +47,8 @@ export function siteUrl(): string {
   // Último recurso: la del despliegue. Inestable, pero mejor que nada — y en
   // `development` (vercel dev) es la única que hay.
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
+  // D1 · fuera de Vercel (local), el origen de la petición: con `next start
+  // --port 3002` o con `qa.localhost` el fijo de abajo devolvía al alumno a otro
+  // puerto u otro host —sin su cookie de sesión— después de pagar.
+  return origen ?? "http://localhost:3000";
 }

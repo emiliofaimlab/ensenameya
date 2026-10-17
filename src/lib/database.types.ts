@@ -2037,6 +2037,7 @@ export type Database = {
           faqs: Json
           id: string
           image_path: string | null
+          inscripcion_cierra_at: string | null
           language: string | null
           level: Database["public"]["Enums"]["teaching_level"] | null
           min_seats: number | null
@@ -2068,6 +2069,7 @@ export type Database = {
           faqs?: Json
           id?: string
           image_path?: string | null
+          inscripcion_cierra_at?: string | null
           language?: string | null
           level?: Database["public"]["Enums"]["teaching_level"] | null
           min_seats?: number | null
@@ -2099,6 +2101,7 @@ export type Database = {
           faqs?: Json
           id?: string
           image_path?: string | null
+          inscripcion_cierra_at?: string | null
           language?: string | null
           level?: Database["public"]["Enums"]["teaching_level"] | null
           min_seats?: number | null
@@ -3371,6 +3374,8 @@ export type Database = {
           cupos_libres: number | null
           end_at: string | null
           id: string | null
+          inscripcion_cierra_at: string | null
+          min_seats: number | null
           product_id: string | null
           sequence_no: number | null
           start_at: string | null
@@ -3675,6 +3680,7 @@ export type Database = {
         Args: { p_base: number; p_pct: number }
         Returns: number
       }
+      cierre_de_inscripcion: { Args: { p_product: string }; Returns: string }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
       comprar_regalo: {
@@ -3785,6 +3791,10 @@ export type Database = {
       cupos_libres: { Args: { p_product: string }; Returns: number }
       datos_de_cobro_del_tutor: { Args: { p_tutor: string }; Returns: Json }
       delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
+      descartar_plantilla_desconocida: {
+        Args: { p_id: string }
+        Returns: boolean
+      }
       destino_connect: { Args: { p_payout_id: string }; Returns: string }
       disparar_correos_pendientes: { Args: never; Returns: undefined }
       emitir_credito_de_referido: {
@@ -4017,6 +4027,7 @@ export type Database = {
         }[]
       }
       pre_booking_message_cap: { Args: never; Returns: number }
+      precio_vigente_grupal: { Args: { p_product: string }; Returns: number }
       process_notifications: { Args: never; Returns: Json }
       process_pending_account_deletions: {
         Args: { p_limit?: number }
@@ -4094,6 +4105,7 @@ export type Database = {
         Args: { p_causa: string; p_product: string }
         Returns: number
       }
+      regalos_de_grupales_cerradas: { Args: never; Returns: number }
       report_conversation: {
         Args: { p_conversation_id: string; p_reason: string }
         Returns: string

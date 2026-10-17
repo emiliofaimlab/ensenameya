@@ -229,7 +229,7 @@ export default async function CheckoutPage({
         timeZone={tz}
         formato={formato}
         durationMin={product.sessionDurationMin}
-        total={bookingTotal(product)}
+        total={bookingTotal(product, grupal?.fechas.length)}
         currency={product.currency}
         productTitle={product.title}
         tutorName={tutorName}

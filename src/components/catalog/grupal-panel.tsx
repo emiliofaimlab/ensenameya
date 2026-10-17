@@ -25,6 +25,7 @@ export function GrupalPanel({
   inscribirHref,
   regaloHref,
   miInscripcionHref,
+  miClaseHref,
   footer,
 }: {
   product: ProductDetail;
@@ -36,6 +37,8 @@ export function GrupalPanel({
   regaloHref?: string;
   /** El detalle de SU reserva si quien mira ya tiene cupo en esta clase. */
   miInscripcionHref?: string;
+  /** M11 · la ficha del tutor, si quien mira ES el tutor de la clase. */
+  miClaseHref?: string;
   footer?: ReactNode;
 }) {
   const g = product.grupal;
@@ -96,7 +99,14 @@ export function GrupalPanel({
         tu foto en la sala y en el chat de la clase.
       </p>
 
-      {miInscripcionHref ? (
+      {miClaseHref ? (
+        // M11 · el tutor no se inscribe en su propia clase (`create_booking_line`
+        // ya lo rechaza). `<a>` por la regla de oro 13: `/tutor/…` cuelga de
+        // `(app)` y su guarda puede redirigir.
+        <Button asChild className="mt-4 h-12 w-full text-[15px]">
+          <a href={miClaseHref}>Es tu clase · Ver inscritos</a>
+        </Button>
+      ) : miInscripcionHref ? (
         // ponytail: `<a>` y no `<Link>`: `/reservas/…` cuelga de `(app)` y su
         // guarda puede redirigir (onboarding a medias tras un checkout de
         // invitado); una navegación completa esquiva la pantalla en blanco de

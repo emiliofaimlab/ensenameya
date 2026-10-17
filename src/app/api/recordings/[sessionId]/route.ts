@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { getSessionContext } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -41,7 +42,7 @@ export async function GET(
 
   const { data: session } = await supabase
     .from("sessions")
-    .select("id, status, end_at, daily_room_name, group_class_id")
+    .select("id, status, end_at, daily_room_name, group_class_id, booking_id, tutor_id")
     .eq("id", sessionId)
     .maybeSingle();
 
@@ -49,10 +50,36 @@ export async function GET(
     return NextResponse.json({ error: "no encontrada" }, { status: 404 });
   }
 
+  // B1 · que la RLS devuelva la sesión NO basta en una grupal: quien se dio de
+  // baja, o abrió el checkout y lo abandonó, conserva su fila de `sessions`, y
+  // con ella se llevaba el enlace firmado de la clase entera (caras y voces de
+  // los demás). Para el ALUMNO, la sesión tiene que seguir viva y su reserva,
+  // pagada. El tutor (que en grupal no tiene sesión propia y llega por la de un
+  // alumno) y el admin (la ficha de un reporte, EY-189) no dependen de eso: si
+  // ese alumno se reembolsó, la grabación de la clase sigue siendo suya. En 1:1
+  // la sala es la de esa sesión: una cancelada nunca llegó a grabarse.
+  const { user, roles } = await getSessionContext();
+  const esAlumno = user?.id !== session.tutor_id && !roles.includes("admin");
+  if (session.group_class_id && esAlumno) {
+    const { data: reserva } = await supabase
+      .from("bookings")
+      .select("status")
+      .eq("id", session.booking_id)
+      .maybeSingle();
+    if (
+      session.status === "cancelled" ||
+      !reserva ||
+      !["confirmed", "in_progress", "completed"].includes(reserva.status)
+    ) {
+      return NextResponse.json({ error: "no encontrada" }, { status: 404 });
+    }
+  }
+
   // G3 · una sesión grupal no tiene sala propia: graba la de su FECHA (RG-12),
   // y la ven todos los inscritos. El nombre de sala no tiene grant de columna
   // para el cliente (`20261009210000`), así que se lee con service_role — y
-  // solo después de que la RLS de arriba haya dicho que esta sesión es tuya.
+  // solo después de que la RLS y la guarda B1 de arriba hayan dicho que esta
+  // sesión es tuya y sigue viva.
   if (session.group_class_id) {
     const { data: g } = await createAdminClient()
       .from("group_classes")
