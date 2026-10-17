@@ -31,6 +31,7 @@ import { useManoLevantada } from "@/components/sala/use-mano-levantada";
 import { usePantallaCompleta } from "@/components/sala/use-pantalla-completa";
 import { useParticipantes } from "@/components/sala/use-participante-remoto";
 import { useVentanaFlotante, VentanaFlotante } from "@/components/sala/ventana-flotante";
+import { VistaPrevia } from "@/components/sala/vista-previa";
 
 type SessionStatus = Database["public"]["Enums"]["session_status"];
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
@@ -371,6 +372,11 @@ export function LiveRoom({
   };
 }) {
   const router = useRouter();
+  // P43 · UN sustantivo en toda la sala: antes una grupal decía «Clase
+  // grupal» arriba y «Esta mentoría se graba» o «abre 10 minutos antes de la
+  // mentoría» abajo. Llega por props a los componentes que lo escriben.
+  const sustantivo = grupal ? "clase" : "mentoría";
+  const esGrupal = Boolean(grupal);
   // G3 · en una grupal se vuelve a la clase (tutor) o a la inscripción
   // (alumno), no a la lista de reservas; ver `grupal.volverHref`.
   const volver = grupal
@@ -411,6 +417,15 @@ export function LiveRoom({
    * de ahí lo mueve el propio componente al escribir en la base.
    */
   const [entendido, setEntendido] = useState(entendidoInicial);
+  /**
+   * M5 · con qué se entra a una grupal, elegido en la vista previa de la
+   * antesala. El alumno llega con el micro APAGADO (en un grupo, todos con el
+   * micro abierto es ruido desde el primer segundo); el tutor, abierto. Se
+   * copia a un ref en `join()` para que el efecto de Daily lo lea sin
+   * depender de él (cambiarlo no debe rehacer la llamada). En 1:1 no se usa.
+   */
+  const [previa, setPrevia] = useState({ micro: isTutor, camara: true });
+  const previaRef = useRef(previa);
   /**
    * A dónde se va uno al salir de la sala: SU detalle de la reserva.
    *
@@ -728,8 +743,9 @@ export function LiveRoom({
         await call.join({
           url: joined.roomUrl,
           token: joined.token ?? undefined,
-          startVideoOff: false,
-          startAudioOff: false,
+          // M5 · en grupal, lo elegido en la vista previa; en 1:1, todo abierto.
+          startVideoOff: esGrupal ? !previaRef.current.camara : false,
+          startAudioOff: esGrupal ? !previaRef.current.micro : false,
         });
       } catch (e) {
         console.error("[daily] join falló:", JSON.stringify(e));
@@ -762,7 +778,9 @@ export function LiveRoom({
     // así que entra en la lista sin recrear la llamada en cada render. Si algún
     // día deja de serlo, este efecto empezaría a destruir y rehacer la llamada:
     // comprobarlo antes de tocarla.
-  }, [live, joined, salirDeLaSala]);
+    // `esGrupal` es un booleano: la prop `grupal` es un objeto nuevo en cada
+    // refresco del servidor y, en la lista, destruiría la llamada.
+  }, [live, joined, salirDeLaSala, esGrupal]);
 
   // La ventana flotante se abre sola al irse de la pestaña (corrección 5).
   const flotante = useVentanaFlotante(live);
@@ -857,9 +875,14 @@ export function LiveRoom({
             }
             if (saliendo.current) return;
             toast(
+              // P43 · una grupal no se «marca como completada»: termina.
               estado === "cancelled"
-                ? "La sesión se canceló."
-                : "La mentoría se marcó como completada.",
+                ? grupal
+                  ? "Tu cupo en esta clase se canceló."
+                  : "La sesión se canceló."
+                : grupal
+                  ? "La clase terminó."
+                  : "La mentoría se marcó como completada.",
             );
             // Colgar antes de navegar: el desmontaje ya llama a `destroy()`,
             // pero eso ocurre después del render y deja la cámara encendida
@@ -879,6 +902,7 @@ export function LiveRoom({
   }, [joined, sessionId, salirDeLaSala, grupal, isTutor]);
 
   async function join() {
+    previaRef.current = previa;
     setBusy(true);
     // El endpoint autoriza vía `join_session` (ventana, participante, ciclo) y
     // firma el token contra Daily con la API key (server-only).
@@ -976,8 +1000,11 @@ export function LiveRoom({
     const presentando = pres.estado !== null;
     // Compartir pantalla no existe en los navegadores móviles: ahí el botón
     // «Compartir» solo ofrece documentos (o no sale, para el alumno).
+    // M5 · en una grupal, el alumno solo si el tutor se lo concedió.
     const puedeCompartirPantalla =
-      !joined.simulated && typeof navigator.mediaDevices?.getDisplayMedia === "function";
+      !joined.simulated &&
+      typeof navigator.mediaDevices?.getDisplayMedia === "function" &&
+      (!grupal || isTutor || Boolean(yo?.puedePantalla));
     const miMicro = joined.simulated ? !muted : (yo?.micro ?? false);
     const miCamara = joined.simulated ? !camOff : (yo?.camara ?? false);
     // B8 · en grupo, a la tutora le avisa la PRIMERA mano de su cola (con su
@@ -1007,6 +1034,19 @@ export function LiveRoom({
               : {
                   silenciar: () => call.updateParticipant(p.id, { setAudio: false }),
                   sacar: () => call.updateParticipant(p.id, { eject: true }),
+                  // M5 · conceder o quitar la pantalla (el token del alumno
+                  // nace sin `screenVideo`, ver `api/room/grupal`).
+                  pantalla: {
+                    permitida: p.puedePantalla,
+                    alternar: () =>
+                      call.updateParticipant(p.id, {
+                        updatePermissions: {
+                          canSend: p.puedePantalla
+                            ? ["video", "audio"]
+                            : ["video", "audio", "screenVideo", "screenAudio"],
+                        },
+                      }),
+                  },
                 }
         : undefined;
     const tarjetaDoc = pres.estado
@@ -1187,7 +1227,8 @@ export function LiveRoom({
         >
         {/* Escenario + chat. `relative` porque en móvil el panel se SUPERPONE a
             esta zona (ver el `aside`), no se pone al lado: a 375px dos
-            columnas no caben, y partir el alto dejaría el vídeo en un sello. */}
+            columnas no caben, y partir el alto dejaría el vídeo en un sello.
+            P49 · desde `md` (tableta) ya va al lado. */}
         <div className="relative flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col bg-[color:var(--sala-video)]">
             <div className="relative min-h-0 flex-1">
@@ -1225,9 +1266,14 @@ export function LiveRoom({
               />
             </div>
 
-            {/* Corrección 6 · el reloj, flotando arriba a la izquierda. */}
-            <div className="pointer-events-none absolute top-3 left-3 z-10">
+            {/* Corrección 6 · el reloj, flotando arriba a la izquierda.
+                P18 · y el aviso de la mano en el MISMO contenedor, detrás de
+                él: antes iba centrado y suelto (`absolute left-1/2`) y en
+                móvil tapaba el contador. Ahora en ancho queda al lado y en
+                móvil baja debajo (`flex-wrap`). */}
+            <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start gap-2">
               <ContadorClase
+                sustantivo={sustantivo}
                 now={now}
                 startAt={startAt}
                 endAt={endAt}
@@ -1247,24 +1293,24 @@ export function LiveRoom({
                     : undefined
                 }
               />
+              {/* EY-221 · «levantó la mano», bien visible y dentro del contenedor
+                  de pantalla completa (el toast, que va al `body`, ahí no se ve). */}
+              {manoAjena ? (
+                <AvisoMano
+                  className="pointer-events-auto max-w-full"
+                  quien={quienMano}
+                  pendientes={pendientesMano}
+                  onBajar={bajarManoAjena}
+                />
+              ) : null}
             </div>
-
-            {/* EY-221 · «levantó la mano», bien visible y dentro del contenedor
-                de pantalla completa (el toast, que va al `body`, ahí no se ve). */}
-            {manoAjena ? (
-              <AvisoMano
-                className="absolute top-3 left-1/2 z-20 -translate-x-1/2"
-                quien={quienMano}
-                pendientes={pendientesMano}
-                onBajar={bajarManoAjena}
-              />
-            ) : null}
 
             {isTutor && panelMateriales ? (
               <PanelMateriales
                 sessionId={sessionId}
                 docActual={pres.estado?.docId ?? null}
                 onCerrar={() => setPanelMateriales(false)}
+                sustantivo={sustantivo}
                 onElegir={(m) => {
                   pres.presentar(m.id, m.nombre);
                   setPanelMateriales(false);
@@ -1320,15 +1366,18 @@ export function LiveRoom({
               se perdería los mensajes de ese rato. Es además el comportamiento
               que ya tenía la sala, donde el panel estaba siempre montado.
 
-              Móvil: `absolute inset-0` sobre la zona de vídeo. Escritorio
-              (`lg:`): vuelve al flujo como columna de 360px a la derecha, que
-              es el "chat incrustado a la derecha" que pidió el cliente. */}
+              Móvil: `absolute inset-0` sobre la zona de vídeo. Desde `md:`
+              vuelve al flujo como columna a la derecha (300px; 360px desde
+              `lg:`), que es el "chat incrustado a la derecha" que pidió el
+              cliente. P49 · antes eso era solo desde `lg:`, y en una tableta
+              el chat tapaba entero el vídeo. El escenario se estrecha solo: la
+              franja la decide su container query, no la pantalla. */}
           <aside
             id="panel-chat-sala"
-            aria-label="Chat de la mentoría"
+            aria-label={`Chat de la ${sustantivo}`}
             className={
               chatAbierto
-                ? "absolute inset-0 z-20 flex flex-col border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] lg:relative lg:inset-auto lg:z-auto lg:w-[360px] lg:shrink-0 lg:border-l"
+                ? "absolute inset-0 z-20 flex flex-col border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] md:relative md:inset-auto md:z-auto md:w-[300px] md:shrink-0 md:border-l lg:w-[360px]"
                 : "hidden"
             }
           >
@@ -1444,6 +1493,14 @@ export function LiveRoom({
             alternar: () => void pantalla.alternar(),
           }}
           call={call}
+          sustantivo={sustantivo}
+          // M5 · el tutor de una grupal silencia a todos de un golpe (`*` no
+          // incluye al local).
+          silenciarTodos={
+            isTutor && grupal && call
+              ? () => call.updateParticipants({ "*": { setAudio: false } })
+              : undefined
+          }
           onSalir={() => {
             // Con Daily, `leave()` dispara `left-meeting`, que es quien sale.
             if (call && !joined.simulated) void call.leave();
@@ -1518,7 +1575,7 @@ export function LiveRoom({
               {sessionCancelled
                 ? "Esta sesión se canceló, así que su sala no se abre."
                 : sessionEnded
-                  ? "Esta mentoría ya se dio por terminada, así que su sala está cerrada."
+                  ? `Esta ${sustantivo} ya se dio por terminada, así que su sala está cerrada.`
                   : "Esta reserva no está activa, así que la sala no está disponible."}
             </p>
             <Button asChild variant="outline">
@@ -1535,8 +1592,7 @@ export function LiveRoom({
                 {human(opens - now)}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                La sala abre 10 minutos antes de la mentoría y sigue abierta 10
-                minutos después.
+                {`La sala abre 10 minutos antes de la ${sustantivo} y sigue abierta 10 minutos después.`}
               </p>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -1565,6 +1621,7 @@ export function LiveRoom({
               marcado={entendido}
               onChange={setEntendido}
               grupal={Boolean(grupal)}
+              sustantivo={sustantivo}
             />
           </>
         ) : afterWindow ? (
@@ -1584,6 +1641,16 @@ export function LiveRoom({
                   sala, así que aquí ya solo se llega con clase viva. */}
               {`La sala está abierta. Cierra en ${human(closes - now)}.`}
             </p>
+            {/* M5 · en una grupal, la vista previa: te ves y eliges con qué
+                entras. Se desmonta al entrar (cambia la rama) y suelta la
+                cámara antes del `join` de Daily. */}
+            {grupal ? (
+              <VistaPrevia
+                micro={previa.micro}
+                camara={previa.camara}
+                onCambio={(micro, camara) => setPrevia({ micro, camara })}
+              />
+            ) : null}
             {/* El aviso se lee ANTES de entrar, no a mitad de clase. */}
             <RecordingConsent
               sessionId={sessionId}
@@ -1591,6 +1658,7 @@ export function LiveRoom({
               marcado={entendido}
               onChange={setEntendido}
               grupal={Boolean(grupal)}
+              sustantivo={sustantivo}
             />
             {/* ⚠️ `!entendido` deshabilita: la casilla es obligatoria desde que
                 el aviso dejó de ser un permiso y pasó a ser un «Entiendo» de

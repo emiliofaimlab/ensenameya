@@ -25,11 +25,14 @@ export function PanelMateriales({
   docActual,
   onElegir,
   onCerrar,
+  sustantivo = "mentoría",
 }: {
   sessionId: string;
   docActual: string | null;
   onElegir: (m: MaterialDeSala) => void;
   onCerrar: () => void;
+  /** P43 · «clase» en una grupal, «mentoría» en 1:1. */
+  sustantivo?: string;
 }) {
   const [carga, setCarga] = useState<Carga>({ fase: "cargando" });
   const panelRef = useRef<HTMLDivElement>(null);
@@ -85,7 +88,7 @@ export function PanelMateriales({
       className="absolute bottom-3 left-1/2 z-30 flex max-h-[70%] w-[min(22rem,calc(100%-1.5rem))] -translate-x-1/2 flex-col overflow-hidden rounded-lg border border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] text-[color:var(--sala-text)] shadow-xl outline-none"
     >
       <div className="flex shrink-0 items-center justify-between border-b border-[color:var(--sala-border)] px-3 py-2">
-        <h2 className="text-sm font-semibold">Documentos de la mentoría</h2>
+        <h2 className="text-sm font-semibold">Documentos de la {sustantivo}</h2>
         <button
           type="button"
           onClick={onCerrar}
@@ -107,8 +110,7 @@ export function PanelMateriales({
           </p>
         ) : carga.materiales.length === 0 ? (
           <p className="p-2 text-sm text-[color:var(--sala-supportive)]">
-            Esta mentoría no tiene materiales. Puedes subirlos (en PDF) desde
-            el formulario de la mentoría.
+            {`Esta ${sustantivo} no tiene materiales. Puedes subirlos (en PDF) desde el formulario de la ${sustantivo}.`}
           </p>
         ) : (
           <ul className="flex flex-col gap-1">

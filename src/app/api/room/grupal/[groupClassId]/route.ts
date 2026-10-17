@@ -76,6 +76,9 @@ export async function POST(
       // participantes de Daily, que solo enseña esos controles a un owner.
       isOwner: auth.is_tutor,
       endsAt: new Date(auth.ends_at),
+      // M5 · el alumno entra sin poder compartir pantalla; se lo concede el
+      // tutor. Antes cualquiera podía compartir y tapar al tutor.
+      canSend: auth.is_tutor ? undefined : ["video", "audio"],
     });
     return NextResponse.json({
       roomUrl,

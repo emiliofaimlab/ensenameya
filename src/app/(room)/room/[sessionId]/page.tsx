@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ChatMessage } from "@/components/chat/chat-thread";
@@ -41,6 +40,9 @@ export default async function RoomPage({
   const { user, roles, fullName, avatarPath, onboardingComplete } =
     await requireUser();
   const { sessionId } = await params;
+  // Un id que no es UUID hace fallar a PostgREST, y `SalaGrupal` convierte el
+  // fallo en pantalla de error (regla 10): que sea el 404 de siempre.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) notFound();
 
   const supabase = await createClient();
   const { data: s } = await supabase
@@ -56,13 +58,11 @@ export default async function RoomPage({
     // el id de la FECHA (`/room/<group_class>`), no el de una sesión: sin esto
     // daba 404, y así siguen sirviendo también los eventos ya escritos. La
     // autorización la sigue poniendo `join_group_class`.
-    const { data: gc } = await supabase
-      .from("group_classes")
-      .select("id")
-      .eq("id", sessionId)
-      .maybeSingle();
-    if (gc) return <SalaGrupal groupClassId={gc.id} />;
-    notFound();
+    //
+    // P26 · directo, sin leer antes `group_classes` para ver si existe:
+    // `SalaGrupal` ya la lee y hace `notFound()` sin fecha. Era un nivel más
+    // de la cascada.
+    return <SalaGrupal groupClassId={sessionId} />;
   }
   // G3 · la sesión de un alumno en una grupal no tiene sala propia: entra a la
   // de su fecha. El enlace «Entrar a sala» de siempre sigue sirviendo.

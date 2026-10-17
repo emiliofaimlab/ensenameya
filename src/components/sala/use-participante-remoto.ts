@@ -25,6 +25,9 @@ export type Participante = {
   pantallaAudio: MediaStreamTrack | null;
   camara: boolean;
   micro: boolean;
+  /** M5 · puede compartir pantalla. En una grupal el alumno entra sin ese
+   *  permiso (`canSend` del token) y el tutor se lo concede o se lo quita. */
+  puedePantalla: boolean;
 };
 
 /** Lo que necesitan la mano levantada (1:1) y la ventana flotante. */
@@ -44,6 +47,7 @@ function pista(t: DailyTrackState | undefined): MediaStreamTrack | null {
 function aParticipante(p: DailyParticipant): Participante {
   const enciende = (t: DailyTrackState | undefined) =>
     !["off", "blocked"].includes(t?.state ?? "off");
+  const canSend = p.permissions?.canSend;
   return {
     id: p.session_id,
     local: p.local,
@@ -55,6 +59,7 @@ function aParticipante(p: DailyParticipant): Participante {
     pantallaAudio: pista(p.tracks?.screenAudio),
     camara: enciende(p.tracks?.video),
     micro: enciende(p.tracks?.audio),
+    puedePantalla: canSend === true || (canSend instanceof Set && canSend.has("screenVideo")),
   };
 }
 

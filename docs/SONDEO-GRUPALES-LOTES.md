@@ -172,20 +172,25 @@ Funciones y archivos: `join_group_class` (margen de Daily, expulsiones), `api/ro
 - [x] **M29** La tutora entra a su clase con la sesión de un alumno cualquiera (la primera por UUID): si ese alumno solo tiene un apartado, o se da de baja, a ella le dicen «Esta reserva no está activa» o la sacan. → Que el estado de la tutora salga de `group_classes.status`, no de una sesión prestada. _(aud. #42)_
 - [x] **P42** Con la fecha cancelada o reagendada, la sala dice «No tienes un cupo activo», sin cabecera ni salida. → Estados explícitos («Esta fecha se canceló; te devolvimos su parte», «Se movió al…») y un enlace de vuelta. _(aud. #50)_
 
-## Lote 5 · Sala: galería, moderación y pulido (1 día)
+## Lote 5 · Sala: galería, moderación y pulido (1 día) · ✅ hecho el 17-oct (salvo M30, que espera a Emilio)
+
+> **Hecho, sin SQL:** galería que calcula columnas sin scroll con el tutor primero (B11, `galeria()` con casos en `sala.check.ts`); el alumno de una grupal entra sin pantalla compartida (token `canSend`), con el micro apagado y una antesala con vista previa, y el tutor concede la pantalla o «Silencia a todos» (M5); casilla con nombre accesible (P15); menús de tesela con Escape, `role="menu"` y foco (P16); insignia «Tutor» (P17); aviso de mano junto al contador (P18); `loading.tsx` en `(room)` y cascada de tres niveles en vez de cinco (P26); «clase»/«mentoría» por props (P43); chat lateral u hoja según el ancho (P49). ⚠️ **No verificado en vivo con Daily**: necesita una llamada con varias personas y queda para el re-sondeo del lote 10. De la revisión adversarial salió además:
+> - Con la galería sin scroll, el menú de moderación quedaba recortado en teselas pequeñas (11 personas en móvil) y «Sacar de la sala» no se podía pulsar: ahora el menú va `fixed` y se abre hacia donde quepa.
+> - La insignia «Tutor» quedaba tapada por el contador cuando el tutor va primero: ahora va junto al nombre.
+> - `/room/<id que no es UUID>` daba la pantalla de error en vez del 404; la 1:1 había pasado a decir «clase» en el contador; al darse de baja un alumno se leía «La clase se canceló».
 
 Archivos: `escenario-sala.tsx`, `tesela.tsx`, la barra y los menús de `live-room.tsx`, `recording-consent.tsx` y un `loading.tsx` nuevo en `(room)`.
 
-- [ ] **B11** 🔴 La sala en móvil no aguanta un grupo: con 4 personas, teselas de 210 px en una sola columna sin scroll, y la cuarta queda debajo de la barra. Con 11, la mayoría no se ve (`escenario-sala.tsx:73-83`). → Una galería que calcule columnas y tamaño según `n` y el contenedor, sin scroll, con `content-[safe_center]` y la tutora fija en primer lugar. _(aud. #45)_
-- [ ] **M5** Moderación insuficiente: cualquier alumno puede compartir pantalla y tapar al tutor, y todos entran con micro y cámara abiertos y sin vista previa. → Token de alumno sin `screenVideo` (el tutor puede concederlo), entrada con `startAudioOff: true`, una antesala mínima con vista previa y «Silenciar a todos». _(aud. #48)_
-- [ ] **M30** ⚖️ La grabación no incluye el documento que presenta el tutor ni sus anotaciones (viajan por `app-message`). → Publicar el lienzo del visor como pista mientras se presenta (`canvas.captureStream`). _(aud. #51)_
-- [ ] **P15** 🔴 La casilla del aviso de grabación no tiene nombre accesible: el lector de pantalla lee «on».
-- [ ] **P16** 🔴 Los menús «Opciones de…» de las teselas no se cierran con Escape ni al abrir otro: quedan varios abiertos a la vez. Además no tienen `role="menu"`.
-- [ ] **P17** 🔴 Nada distingue a la tutora como anfitriona en su tesela. → Insignia «Tutora».
-- [ ] **P18** 🔴 El aviso de «mano levantada» tapa el contador de tiempo.
-- [ ] **P26** 🔴 «Entrar a sala» tarda de 6 a 8 s sin ninguna señal: no hay `loading.tsx` en `(room)` y la carga son cuatro niveles de consultas en serie. → Esqueleto de la antesala y una cascada aplanada. _(aud. #53)_
-- [ ] **P43** 🔴 La sala mezcla «Clase grupal» y «mentoría» («Esta mentoría se graba», «abre 10 minutos antes de la mentoría»), y al cerrar dice que «se marcó como completada». → Un sustantivo que llegue por props. _(aud. #52)_
-- [ ] **P49** 🔴 En anchos de tableta, el chat de la sala tapa entero el video. → Panel lateral o hoja inferior según el ancho.
+- [x] **B11** 🔴 La sala en móvil no aguanta un grupo: con 4 personas, teselas de 210 px en una sola columna sin scroll, y la cuarta queda debajo de la barra. Con 11, la mayoría no se ve (`escenario-sala.tsx:73-83`). → Una galería que calcule columnas y tamaño según `n` y el contenedor, sin scroll, con `content-[safe_center]` y la tutora fija en primer lugar. _(aud. #45)_
+- [x] **M5** Moderación insuficiente: cualquier alumno puede compartir pantalla y tapar al tutor, y todos entran con micro y cámara abiertos y sin vista previa. → Token de alumno sin `screenVideo` (el tutor puede concederlo), entrada con `startAudioOff: true`, una antesala mínima con vista previa y «Silenciar a todos». _(aud. #48)_
+- [ ] **M30** ⚖️ ⏸ _(espera a Emilio)_ La grabación no incluye el documento que presenta el tutor ni sus anotaciones (viajan por `app-message`). → Publicar el lienzo del visor como pista mientras se presenta (`canvas.captureStream`). _(aud. #51)_
+- [x] **P15** 🔴 La casilla del aviso de grabación no tiene nombre accesible: el lector de pantalla lee «on».
+- [x] **P16** 🔴 Los menús «Opciones de…» de las teselas no se cierran con Escape ni al abrir otro: quedan varios abiertos a la vez. Además no tienen `role="menu"`.
+- [x] **P17** 🔴 Nada distingue a la tutora como anfitriona en su tesela. → Insignia «Tutora».
+- [x] **P18** 🔴 El aviso de «mano levantada» tapa el contador de tiempo.
+- [x] **P26** 🔴 «Entrar a sala» tarda de 6 a 8 s sin ninguna señal: no hay `loading.tsx` en `(room)` y la carga son cuatro niveles de consultas en serie. → Esqueleto de la antesala y una cascada aplanada. _(aud. #53)_
+- [x] **P43** 🔴 La sala mezcla «Clase grupal» y «mentoría» («Esta mentoría se graba», «abre 10 minutos antes de la mentoría»), y al cerrar dice que «se marcó como completada». → Un sustantivo que llegue por props. _(aud. #52)_
+- [x] **P49** 🔴 En anchos de tableta, el chat de la sala tapa entero el video. → Panel lateral o hoja inferior según el ancho.
 
 ## Lote 6 · Avisos y correos (1 día)
 

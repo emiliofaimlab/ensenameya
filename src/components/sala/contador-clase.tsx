@@ -52,7 +52,10 @@ export function ContadorClase({
   extendida,
   extender,
   className,
+  sustantivo = "mentoría",
 }: {
+  /** P43 · «clase» en grupal, «mentoría» en 1:1. */
+  sustantivo?: "clase" | "mentoría";
   now: number;
   startAt: string;
   endAt: string;
@@ -108,7 +111,7 @@ export function ContadorClase({
       role="timer"
       aria-label={
         fase === "antes"
-          ? `La mentoría empieza en ${reloj(inicio - now)}`
+          ? `La ${sustantivo} empieza en ${reloj(inicio - now)}`
           : `La clase lleva ${reloj(transcurrido)}${aviso ? `. ${aviso}` : ""}`
       }
       className={cn(

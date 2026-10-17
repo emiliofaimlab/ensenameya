@@ -1,7 +1,7 @@
 // npm run check:sala — el reloj y el turno de lo compartido en la sala.
 import assert from "node:assert/strict";
 
-import { actualizarOrden, ordenados } from "./escenario.ts";
+import { actualizarOrden, galeria, ordenados } from "./escenario.ts";
 import { estadoContador, puedeExtender, reloj } from "./tiempo.ts";
 
 // ── reloj ────────────────────────────────────────────────────────────────
@@ -58,5 +58,32 @@ assert.deepEqual(ordenados(o), ["pantalla:a"]);
 o = actualizarOrden(o, ["pantalla:a", "doc"], 5);
 assert.deepEqual(ordenados(o), ["pantalla:a", "doc"]);
 assert.deepEqual(ordenados(actualizarOrden(o, [], 6)), []);
+
+// ── B11 · galería sin scroll ─────────────────────────────────────────────
+// Cabe entera: `columnas` × ancho a lo ancho y `filas` × alto a lo alto.
+const cabe = (n: number, ancho: number, alto: number) => {
+  const { columnas, anchoTesela } = galeria(n, ancho, alto);
+  const filas = Math.ceil(n / columnas);
+  assert.ok(columnas * anchoTesela + 8 * (columnas - 1) <= ancho, `${n} en ${ancho}x${alto}: ancho`);
+  assert.ok(filas * (anchoTesela / (16 / 9)) + 8 * (filas - 1) <= alto, `${n} en ${ancho}x${alto}: alto`);
+  return { columnas, anchoTesela };
+};
+// El caso del sondeo: 4 personas en un móvil (359x476 de escenario). Una
+// columna de teselas de ≤ 211 px, que es lo que entra sin desplazar.
+const movil4 = cabe(4, 359, 476);
+assert.equal(movil4.columnas, 1);
+assert.ok(movil4.anchoTesela <= 211);
+// 11 en escritorio. Con 700 de alto ganan 3 columnas (4 filas de 300 px):
+// con 4 columnas la tesela saldría de 294. Con 600 de alto, sí 4.
+assert.equal(cabe(11, 1200, 700).columnas, 3);
+assert.equal(cabe(11, 1200, 600).columnas, 4);
+for (const n of [1, 2, 3, 5, 8, 11]) {
+  cabe(n, 359, 476);
+  cabe(n, 768, 500);
+  cabe(n, 1440, 760);
+  cabe(n, 260, 146); // la ventana flotante
+}
+assert.deepEqual(galeria(0, 800, 600), { columnas: 1, anchoTesela: 0 });
+assert.deepEqual(galeria(3, 0, 600), { columnas: 1, anchoTesela: 0 });
 
 console.log("check:sala OK");

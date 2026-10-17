@@ -30,32 +30,44 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
     await requireUser();
   const supabase = await createClient();
 
-  const { data: gc } = await supabase
-    .from("group_classes")
-    .select(
-      "id, product_id, tutor_id, start_at, end_at, status, rescheduled_at, products!group_classes_product_id_fkey(title, capacity)",
-    )
-    .eq("id", groupClassId)
-    .maybeSingle();
+  // P26 · la fecha y las sesiones, a la vez: la lectura de sesiones ya no
+  // espera a saber si eres el tutor (eso se decide abajo, en JS). Antes eran
+  // dos niveles de la cascada en serie.
+  //
+  // La sesión de la que cuelgan el «Entiendo» y el canal de cierre: la del
+  // alumno, o —para el tutor, que no tiene— la primera viva de la fecha.
+  // La RLS ya deja al alumno ver solo la suya, y al tutor las de su fecha.
+  const [{ data: gc, error: gcError }, { data: sesiones, error: sesionesError }] = await Promise.all([
+    supabase
+      .from("group_classes")
+      .select(
+        "id, product_id, tutor_id, start_at, end_at, status, rescheduled_at, products!group_classes_product_id_fkey(title, capacity)",
+      )
+      .eq("id", groupClassId)
+      .maybeSingle(),
+    supabase
+      .from("sessions")
+      .select(
+        "id, status, booking_id, session_ref, student_id, access_opens_at, access_closes_at, bookings!inner(status)",
+      )
+      .eq("group_class_id", groupClassId)
+      .neq("status", "cancelled")
+      .order("id"),
+  ]);
+  // Regla de oro 10: un fallo de lectura no puede pintarse como «no tienes un
+  // cupo activo» (una mentira creíble). Que salga la pantalla de error.
+  if (gcError || sesionesError) throw new Error("No pudimos abrir la sala. Inténtalo de nuevo.");
   if (!gc) notFound();
   const esTutor = gc.tutor_id === user.id;
 
-  // La sesión de la que cuelgan el «Entiendo» y el canal de cierre: la del
-  // alumno, o —para el tutor, que no tiene— la primera viva de la fecha.
-  //
   // M29 · la del tutor sale solo de una reserva VIVA: antes podía tocarle la
   // de un alumno con un simple apartado y leía «Esta reserva no está activa».
   // El `!inner` no cambia nada al alumno: su sesión siempre cuelga de su reserva.
-  let q = supabase
-    .from("sessions")
-    .select("id, status, booking_id, session_ref, access_opens_at, access_closes_at, bookings!inner(status)")
-    .eq("group_class_id", gc.id)
-    .neq("status", "cancelled");
-  q = esTutor
-    ? q.in("bookings.status", ["confirmed", "in_progress", "completed"])
-    : q.eq("student_id", user.id);
-  const { data: sesiones } = await q.order("id").limit(1);
-  const s = sesiones?.[0];
+  const s = (sesiones ?? []).find((x) =>
+    esTutor
+      ? ["confirmed", "in_progress", "completed"].includes(x.bookings?.status ?? "")
+      : x.student_id === user.id,
+  );
 
   if (!s) {
     // P42 · sin sesión: tutor sin inscritos todavía, alumno que se dio de
@@ -105,31 +117,42 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
     );
   }
 
-  const [{ data: conv, error: convError }, inscritos, { data: consents }, notices, tz, formato] =
-    await Promise.all([
-      supabase
-        .from("conversations")
-        .select("id")
-        .eq("kind", "group")
-        .eq("group_product_id", gc.product_id)
-        .maybeSingle(),
-      supabase.rpc("inscritos_de_clase", { p_product: gc.product_id }),
-      supabase
-        .from("session_recording_consents")
-        .select("user_id")
-        .eq("session_id", s.id),
-      listNotices(user.id),
-      getUserTimezone(),
-      getFormatoHora(),
-    ]);
-
-  const { data: msgs, error: msgsError } = conv
-    ? await supabase
-        .from("messages")
-        .select(MESSAGE_COLUMNS)
-        .eq("conversation_id", conv.id)
-        .order("created_at")
-    : { data: null, error: null };
+  // P26 · el hilo y sus mensajes, a la vez: los mensajes se filtran por el
+  // hilo del grupo con un embed (FK nombrada, regla 10) en vez de esperar a
+  // tener su id. Tercer y último nivel: requireUser → [fecha ‖ sesiones] →
+  // [todo esto].
+  const [
+    { data: conv, error: convError },
+    { data: msgs, error: msgsError },
+    inscritos,
+    { data: consents },
+    notices,
+    tz,
+    formato,
+  ] = await Promise.all([
+    supabase
+      .from("conversations")
+      .select("id")
+      .eq("kind", "group")
+      .eq("group_product_id", gc.product_id)
+      .maybeSingle(),
+    supabase
+      .from("messages")
+      .select(
+        `${MESSAGE_COLUMNS}, conversations!messages_conversation_id_fkey!inner(kind, group_product_id)` as const,
+      )
+      .eq("conversations.kind", "group")
+      .eq("conversations.group_product_id", gc.product_id)
+      .order("created_at"),
+    supabase.rpc("inscritos_de_clase", { p_product: gc.product_id }),
+    supabase
+      .from("session_recording_consents")
+      .select("user_id")
+      .eq("session_id", s.id),
+    listNotices(user.id),
+    getUserTimezone(),
+    getFormatoHora(),
+  ]);
 
   // P45 · cualquiera de las tres lecturas que falle deja el chat «no
   // disponible», dicho en la sala; antes se quedaba en «Abriendo la

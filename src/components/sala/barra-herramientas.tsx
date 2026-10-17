@@ -88,8 +88,11 @@ function Boton({
   );
 }
 
-/** Un desplegable que se abre hacia ARRIBA, pegado a su botón. */
-function useDesplegable() {
+/**
+ * Un desplegable pegado a su botón: se cierra tocando fuera o con Escape.
+ * P16 · también lo usa el menú de cada tesela (`tesela.tsx`).
+ */
+export function useDesplegable() {
   const [abierto, setAbierto] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -146,7 +149,7 @@ function Opcion({
 
 /**
  * Corrección 4 · «Compartir» despliega: 1. Pantalla · 2. Documentos de la
- * mentoría. Y dentro está también el «dejar de…» de cada uno (corrección 9:
+ * mentoría (o de la clase, P43). Y dentro está también el «dejar de…» de cada uno (corrección 9:
  * «Dejar de presentar» se fue de la barra del PDF).
  */
 export type Compartir = {
@@ -156,7 +159,13 @@ export type Compartir = {
   documentos?: { presentando: boolean; elegir: () => void; dejar: () => void };
 };
 
-function BotonCompartir({ compartir }: { compartir: Compartir }) {
+function BotonCompartir({
+  compartir,
+  sustantivo,
+}: {
+  compartir: Compartir;
+  sustantivo: string;
+}) {
   const { abierto, setAbierto, ref } = useDesplegable();
   const { pantalla, documentos } = compartir;
   if (!pantalla && !documentos) return null;
@@ -193,7 +202,7 @@ function BotonCompartir({ compartir }: { compartir: Compartir }) {
                 icono={<FileTextIcon className="size-4" aria-hidden />}
                 onClick={cerrarY(documentos.elegir)}
               >
-                {documentos.presentando ? "Cambiar de documento" : "Documentos de la mentoría"}
+                {documentos.presentando ? "Cambiar de documento" : `Documentos de la ${sustantivo}`}
               </Opcion>
               {documentos.presentando ? (
                 <Opcion icono={<XIcon className="size-4" aria-hidden />} onClick={cerrarY(documentos.dejar)}>
@@ -305,6 +314,8 @@ export function BarraControles({
   pantalla,
   call,
   onSalir,
+  silenciarTodos,
+  sustantivo = "mentoría",
 }: {
   grabando: boolean;
   micro: { activo: boolean; alternar: () => void };
@@ -317,6 +328,10 @@ export function BarraControles({
   /** `null` en la sala simulada: no hay dispositivos que cambiar. */
   call: DailyCall | null;
   onSalir: () => void;
+  /** M5 · solo el tutor de una grupal: silencia a todos menos a él. */
+  silenciarTodos?: () => void;
+  /** P43 · «clase» en una grupal, «mentoría» en 1:1. */
+  sustantivo?: string;
 }) {
   return (
     <div
@@ -357,7 +372,17 @@ export function BarraControles({
         >
           {camara.activo ? <VideoIcon className="size-5" aria-hidden /> : <VideoOffIcon className="size-5" aria-hidden />}
         </Boton>
-        <BotonCompartir compartir={compartir} />
+        <BotonCompartir compartir={compartir} sustantivo={sustantivo} />
+        {silenciarTodos ? (
+          <Boton
+            etiqueta="Silenciar a todos"
+            rotulo="Silenciar"
+            pulsable={false}
+            onClick={silenciarTodos}
+          >
+            <MicOffIcon className="size-5" aria-hidden />
+          </Boton>
+        ) : null}
         {mano ? (
           <Boton
             etiqueta={mano.arriba ? "Bajar la mano" : "Levantar la mano"}

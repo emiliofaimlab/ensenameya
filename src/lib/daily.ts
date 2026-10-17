@@ -238,6 +238,12 @@ export async function mintToken(opts: {
   isOwner: boolean;
   /** Fin de la sesión (`sessions.end_at`), NO el cierre de la ventana ni el de la sala. */
   endsAt: Date;
+  /**
+   * M5 · qué puede emitir quien entra. Sin él, todo (lo de siempre, y lo de
+   * la 1:1). En una grupal el alumno entra sin pantalla: se la concede el
+   * tutor desde su tesela (`updatePermissions`).
+   */
+  canSend?: Array<"video" | "audio" | "screenVideo" | "screenAudio">;
 }): Promise<string> {
   const res = await daily("/meeting-tokens", {
     method: "POST",
@@ -263,6 +269,7 @@ export async function mintToken(opts: {
         // minuto. Que el segundo en entrar lo pida otra vez es inocuo — la
         // grabación ya está en marcha y Daily no abre una segunda.
         start_cloud_recording: true,
+        ...(opts.canSend ? { permissions: { canSend: opts.canSend } } : {}),
       },
     }),
   });

@@ -1,24 +1,29 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { FileTextIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Tesela, Video } from "./tesela";
+import { galeria } from "./escenario";
+import { Tesela, Video, type AccionesTesela } from "./tesela";
 import type { Participante } from "./use-participante-remoto";
-
-type Acciones = { silenciar: () => void; sacar: () => void };
 
 /**
  * Lo que se ve encima de la barra de controles (correcciones 7, 8 y 10).
  *
- * · Sin nada compartido: la rejilla de cámaras.
+ * · Sin nada compartido: la rejilla de cámaras. B11 · SIN SCROLL: el tamaño
+ *   de cada tesela lo calcula `galeria()` (`escenario.ts`) con el número de
+ *   personas y el tamaño MEDIDO del contenedor, para que todas quepan enteras.
+ *   Antes era un `auto-fit` de 280 px con `overflow-auto`: en un móvil con 4
+ *   personas la cuarta quedaba debajo de la barra, y con 11 casi nadie se veía.
  * · Con algo compartido —pantalla o documento, el mismo trato—: lo ÚLTIMO
  *   ocupa el escenario y todo lo demás (lo compartido antes y las cámaras) va
  *   en una franja aparte, abajo en móvil y a la derecha en escritorio, para que
  *   nada tape lo que se está viendo.
  *
  * `compartidos` llega ya ordenado (`escenario.ts`): el último es el principal.
+ * Las cámaras, en la rejilla y en la franja, van con el tutor (`owner`)
+ * primero, luego tú y luego el resto en el orden en que entraron.
  * Se pinta igual en la sala y en la ventana flotante (`compacto`).
  *
  * Del laboratorio de Emilio: la franja se decide por el ancho del ESCENARIO
@@ -45,19 +50,42 @@ export function EscenarioSala({
   tarjetaDoc: { nombre: string; pagina: number } | null;
   /** 1:1 sin el otro: el rótulo de su tesela vacía («Esperando al alumno…»). */
   ausente?: string | null;
-  acciones?: (p: Participante) => Acciones | undefined;
+  acciones?: (p: Participante) => AccionesTesela | undefined;
   compacto?: boolean;
   /** Lo que se pinta sin nadie en la llamada (sala simulada). */
   vacio?: ReactNode;
 }) {
-  const tesela = (p: Participante, className?: string) => (
-    <Tesela key={p.id} p={p} acciones={acciones?.(p)} className={className} />
+  // B11 · el tamaño de la rejilla, medido. El `ref` es un estado (y no un
+  // `useRef`) para que el efecto se entere de cuándo aparece el contenedor:
+  // solo existe sin nada compartido. `contentRect` ya llega sin el `p-2`.
+  const [caja, setCaja] = useState<HTMLDivElement | null>(null);
+  const [medida, setMedida] = useState({ ancho: 0, alto: 0 });
+  useEffect(() => {
+    if (!caja) return;
+    // El `ResizeObserver` de la ventana DEL contenedor: en la flotante es
+    // otro documento (Picture-in-Picture), y el de la pestaña —que en ese
+    // momento está oculta— puede no llegar a medir nunca.
+    const RO = caja.ownerDocument.defaultView?.ResizeObserver ?? ResizeObserver;
+    const ro = new RO(([e]) => {
+      if (e) setMedida({ ancho: e.contentRect.width, alto: e.contentRect.height });
+    });
+    ro.observe(caja);
+    return () => ro.disconnect();
+  }, [caja]);
+
+  // El tutor primero, luego tú, luego el resto (`sort` es estable).
+  const orden = [...participantes].sort(
+    (a, b) => Number(b.owner) - Number(a.owner) || Number(b.local) - Number(a.local),
   );
-  const teselas = (className: string) => [
-    ...participantes.map((p) => tesela(p, className)),
+  const tesela = (p: Participante, className?: string, style?: CSSProperties) => (
+    <Tesela key={p.id} p={p} acciones={acciones?.(p)} className={className} style={style} />
+  );
+  const teselas = (className: string, style?: CSSProperties) => [
+    ...orden.map((p) => tesela(p, className, style)),
     ausente && participantes.length > 0 ? (
       <div
         key="ausente"
+        style={style}
         className={cn(
           "flex items-center justify-center rounded-lg border border-dashed border-[color:var(--sala-border)] p-2 text-center text-xs text-[color:var(--sala-supportive)]",
           className,
@@ -70,16 +98,18 @@ export function EscenarioSala({
 
   if (compartidos.length === 0) {
     if (participantes.length === 0) return <>{vacio}</>;
+    // Igual en la sala y en la ventana flotante: lo que cambia es la medida.
+    const { anchoTesela } = galeria(
+      participantes.length + (ausente ? 1 : 0),
+      medida.ancho,
+      medida.alto,
+    );
     return (
       <div
-        className={cn(
-          "grid size-full content-center gap-2 overflow-auto p-2",
-          compacto
-            ? "grid-cols-[repeat(auto-fit,minmax(min(100%,140px),1fr))]"
-            : "grid-cols-[repeat(auto-fit,minmax(min(100%,280px),1fr))]",
-        )}
+        ref={setCaja}
+        className="flex size-full flex-wrap content-[safe_center] justify-center gap-2 overflow-hidden p-2"
       >
-        {teselas("aspect-video")}
+        {teselas("aspect-video shrink-0", { width: anchoTesela })}
       </div>
     );
   }
