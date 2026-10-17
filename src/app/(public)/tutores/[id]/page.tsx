@@ -660,7 +660,10 @@ export default async function TutorProfilePage({
                       className="inline-flex h-[46px] min-w-0 grow-[1.25] basis-0 items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary px-2.5 text-xs font-semibold whitespace-nowrap text-white shadow-[0_6px_18px_rgb(0_0_0/0.18)] lg:hidden"
                     >
                       <CalendarIcon className="size-4 shrink-0" aria-hidden />
-                      Reserva con {nombreCorto}
+                      {/* Q3 · si solo da grupales, #reservar enseña sus clases (M10). */}
+                      {unoAUno.length === 0 && grupales.length > 0
+                        ? "Ver sus clases"
+                        : `Reserva con ${nombreCorto}`}
                     </a>
 
                     {esMiFicha ? null : (

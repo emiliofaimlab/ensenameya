@@ -1,8 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRightIcon, VideoIcon } from "lucide-react";
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
@@ -324,7 +322,6 @@ export function CheckoutForm({
    *  suelta). `minimo` = la clase tiene `min_seats`. */
   grupal?: { ciclo: boolean; minimo?: boolean };
 }) {
-  const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
   /**
    * 🔑 EL RADIO. 'tarjeta' de por defecto y NO por preferencia nuestra: es que
@@ -572,7 +569,8 @@ export function CheckoutForm({
         setApertura({ fase: "ya_pagada", bookingId: yaHabia.id });
         // `replace` para que el «atrás» que trajo hasta aquí no devuelva otra
         // vez a este checkout muerto: se sustituye la entrada del historial.
-        router.replace(`/reservas/${yaHabia.id}`);
+        // Q4 · navegación COMPLETA: cruza de (checkout) a (app) (regla de oro 13).
+        window.location.replace(`/reservas/${yaHabia.id}`);
         return;
       }
 
@@ -616,7 +614,7 @@ export function CheckoutForm({
 
           if (rescatada && rescatada.status !== "pending_payment") {
             setApertura({ fase: "ya_pagada", bookingId: rescatada.id });
-            router.replace(`/reservas/${rescatada.id}`);
+            window.location.replace(`/reservas/${rescatada.id}`); // Q4 · regla 13
             return;
           }
           if (!rescatada) {
@@ -673,7 +671,7 @@ export function CheckoutForm({
     // entre `create_booking` y el checkout, cortar dejaría la reserva creada y
     // sin cobro abierto, que es peor que terminar y no pintar nada.
     void abrir(alumnoId);
-  }, [clave, productId, slots, alumnoId, tutorId, durationMin, router, abrirCobro]);
+  }, [clave, productId, slots, alumnoId, tutorId, durationMin, abrirCobro]);
 
   /**
    * Camino simulado (`payment_routing_rules` aún en 'simulated'): no hay
@@ -704,7 +702,8 @@ export function CheckoutForm({
       return;
     }
     // AL06 — confirmación como página propia.
-    router.push(`/reservas/${apertura.bookingId}/confirmacion`);
+    // Q4 · navegación completa: de (checkout) a (app), regla de oro 13.
+    window.location.assign(`/reservas/${apertura.bookingId}/confirmacion`);
   }
 
   return (
@@ -1035,13 +1034,14 @@ export function CheckoutForm({
                 ? "Ya tienes tu cupo en esta clase. Te llevamos a tu inscripción."
                 : "Este horario ya está pagado: tu reserva está hecha. Te llevamos a ella."}
             </p>
-            <Link
+            {/* Regla de oro 13: <a>, no <Link>, de (checkout) a (app). */}
+            <a
               href={`/reservas/${apertura.bookingId}`}
               className="mt-3 flex w-fit items-center gap-1.5 text-[13px] font-semibold text-brand hover:underline"
             >
               {grupal ? "Ver mi inscripción" : "Ver mi reserva"}
               <ArrowRightIcon className="size-4" />
-            </Link>
+            </a>
           </div>
         ) : null}
 

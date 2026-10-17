@@ -100,7 +100,7 @@ export default async function TutorBookingDetailPage({
       // de la sala de Daily.
       // MN-05 · la ventana de acceso viaja con la sesión (`20260820190000`): es
       // lo que decide si el botón de sala sirve, y no se recalcula aquí.
-      "id, status, pricing_model, product_id, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status))",
+      "id, status, pricing_model, product_id, tutor_id, student_id, total_amount, currency, num_sessions, session_duration_min, products(title), sessions(id, start_at, end_at, status, session_ref, access_opens_at, access_closes_at, renunciada_at, session_reschedules(id, new_start_at, proposed_by, status))",
     )
     .eq("id", id)
     .eq("tutor_id", user.id)
@@ -117,12 +117,23 @@ export default async function TutorBookingDetailPage({
   // no ofrece una baja que el servidor vaya a rechazar. Va en paralelo con el
   // alumno para no añadir otro escalón a la cascada.
   const grupal = booking.pricing_model === "group";
-  const [student, politicaRes] = await Promise.all([
+  const [student, politicaRes, chatGrupoRes] = await Promise.all([
     studentOfTutor(supabase, booking.student_id),
     grupal
       ? supabase.rpc("politica_de_baja", { p_booking: booking.id })
       : Promise.resolve(null),
+    // Q1 · en una grupal manda el chat del GRUPO (el privado va aparte).
+    grupal && CHAT_BOOKING.has(booking.status)
+      ? supabase
+          .from("conversations")
+          .select("id")
+          .eq("kind", "group")
+          .eq("group_product_id", booking.product_id)
+          .maybeSingle()
+      : Promise.resolve(null),
   ]);
+  const chatGrupo = chatGrupoRes?.data ?? null;
+  const chatGrupoError = chatGrupoRes?.error ?? null;
   // Si la política no se pudo leer, el botón no sale: ofrecer una baja sin
   // saber si el servidor la acepta es justo lo que M26 quiere evitar.
   const politica = (politicaRes?.data ?? null) as unknown as PoliticaDeBaja | null;
@@ -196,7 +207,12 @@ export default async function TutorBookingDetailPage({
               <div>
                 <p className="text-xs text-[#6b6b6b]">Formato</p>
                 <p className="mt-0.5 text-[13px] font-medium text-[#404040]">
-                  {bookingFormatLabel(booking.num_sessions)}
+                  {/* Q1 · una grupal no es un «paquete de N sesiones». */}
+                  {grupal
+                    ? booking.num_sessions > 1
+                      ? `Clase grupal · ${booking.num_sessions} fechas`
+                      : "Clase grupal"
+                    : bookingFormatLabel(booking.num_sessions)}
                 </p>
               </div>
               {booking.session_duration_min ? (
@@ -226,7 +242,7 @@ export default async function TutorBookingDetailPage({
                     >
                       <div className="min-w-0">
                         <p className="text-[13px] font-medium text-[#404040]">
-                          Sesión {i + 1} ·{" "}
+                          {grupal ? "Fecha" : "Sesión"} {i + 1} ·{" "}
                           <span className="first-letter:uppercase">
                             {formatSessionTime(s.start_at, tz, formato)}
                           </span>
@@ -235,6 +251,12 @@ export default async function TutorBookingDetailPage({
                             correo. "Sesión 2" no distingue nada: todas las
                             reservas tienen una. */}
                         <SessionRef nro={s.session_ref} className="mt-0.5" />
+                        {/* M14 · el alumno renunció a esta fecha tras la reagenda. */}
+                        {s.renunciada_at ? (
+                          <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
+                            El alumno renunció a esta fecha después de que la reagendaras.
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-2.5">
                         <StatusPill>
@@ -395,12 +417,49 @@ export default async function TutorBookingDetailPage({
           </PanelCard>
         </div>
 
+        <div className="flex flex-col gap-5">
+        {grupal ? (
+          <PanelCard className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-[#19191f]">Chat del grupo</h2>
+            {chatGrupoError ? (
+              <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                El chat no está disponible. Vuelve a intentarlo en unos minutos.
+              </p>
+            ) : chatOpen && chatGrupo ? (
+              <>
+                <p className="text-[13px] text-[#6b6b6b]">
+                  Chat del grupo con los inscritos que ya pagaron.
+                </p>
+                <Button asChild className="h-[43px] w-fit rounded-[8px] px-5 text-sm font-semibold">
+                  <Link href={`/chat/${chatGrupo.id}`}>Abrir chat del grupo</Link>
+                </Button>
+              </>
+            ) : chatOpen && booking.status === "completed" ? (
+              <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                El chat del grupo se borra 30 días después de la última fecha de la clase.
+              </p>
+            ) : chatOpen ? (
+              <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                El chat no está disponible. Vuelve a intentarlo en unos minutos.
+              </p>
+            ) : (
+              <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                El chat se habilita cuando la reserva esté confirmada.
+              </p>
+            )}
+          </PanelCard>
+        ) : null}
         <PanelCard className="flex flex-col gap-3">
           <h2 className="text-base font-semibold text-[#19191f]">
-            {/* Con nombre cuando lo hay: "Chat con Alumno" sonaría a error. */}
-            {student?.fullName
-              ? `Chat con ${student.fullName}`
-              : "Chat con el alumno"}
+            {/* Con nombre cuando lo hay: "Chat con Alumno" sonaría a error.
+                Q1 · en una grupal es el chat PRIVADO, aparte del grupo. */}
+            {grupal
+              ? student?.fullName
+                ? `Chat privado con ${student.fullName}`
+                : "Chat privado con el alumno"
+              : student?.fullName
+                ? `Chat con ${student.fullName}`
+                : "Chat con el alumno"}
           </h2>
           {chatOpen ? (
             <ChatThread
@@ -417,6 +476,7 @@ export default async function TutorBookingDetailPage({
             </p>
           )}
         </PanelCard>
+        </div>
       </div>
     </PanelShell>
   );

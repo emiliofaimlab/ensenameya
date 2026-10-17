@@ -592,13 +592,11 @@ function cerrado(r: RegaloRecibido): {
   fecha: string | null;
   verbo: string;
 } {
+  // Q2 · un cupo de clase grupal no se agenda: se inscribe.
   if (r.status === "consumed")
-    return {
-      label: "Ya agendado",
-      tone: "green",
-      fecha: r.consumedAt,
-      verbo: "Agendado el",
-    };
+    return r.producto?.grupal
+      ? { label: "Ya inscrito", tone: "green", fecha: r.consumedAt, verbo: "Inscrito el" }
+      : { label: "Ya agendado", tone: "green", fecha: r.consumedAt, verbo: "Agendado el" };
   if (r.status === "refunded")
     return { label: "Devuelto", tone: "neutral", fecha: null, verbo: "" };
   if (r.status === "revoked")

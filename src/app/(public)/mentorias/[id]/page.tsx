@@ -215,7 +215,8 @@ export default async function ProductPage({
    * propias la promesa ya resuelta no viaja a la base.
    */
   const hayResenasPropias = resenas.reviews.length > 0;
-  const [otrasMentorias, respuestaMin, resenasTutor, miInscripcion] = await Promise.all([
+  const esGrupalFicha = product.pricingModel === "group";
+  const [otrasMentorias, respuestaMin, resenasTutor, miInscripcion, unoAUnoDelTutor] = await Promise.all([
     listTutorProducts(product.tutor.id, product.id, 2),
     tutorResponseTime(product.tutor.id),
     hayResenasPropias
@@ -234,6 +235,22 @@ export default async function ProductPage({
             .eq("product_id", product.id)
             .eq("student_id", user.id)
             .in("status", ["pending_payment", "pending_acceptance", "confirmed", "in_progress"])
+            .limit(1)
+            .maybeSingle()
+            .then(({ data }) => data ?? null),
+        )
+      : Promise.resolve(null),
+    // Q5 · ¿el tutor tiene ALGUNA 1:1 activa? «Otras mentorías» solo carga 2 y
+    // la salida de P37 dependía de que la 1:1 cayera entre ellas. Si falla, se
+    // ofrece el perfil (no alimenta una lista).
+    esGrupalFicha
+      ? createClient().then((sb) =>
+          sb
+            .from("products")
+            .select("id, slug")
+            .eq("tutor_id", product.tutor.id)
+            .eq("status", "active")
+            .neq("pricing_model", "group")
             .limit(1)
             .maybeSingle()
             .then(({ data }) => data ?? null),
@@ -1025,10 +1042,10 @@ export default async function ProductPage({
                   }
                   otrasHref={(() => {
                     // P37 · llena o cerrada: primero una 1:1 del mismo tutor;
-                    // si no tiene, su perfil (público, `Link` sirve).
-                    const unoAUno = otrasMentorias.find((p) => p.pricingModel !== "group");
-                    return unoAUno
-                      ? { href: productPath(unoAUno), label: "Reserva una sesión 1 a 1" }
+                    // si no tiene, su perfil (público, `Link` sirve). Q5 · se
+                    // pregunta por cualquier 1:1 activa, no solo entre las 2.
+                    return unoAUnoDelTutor
+                      ? { href: productPath(unoAUnoDelTutor), label: "Reserva una sesión 1 a 1" }
                       : { href: `/tutores/${product.tutor.id}`, label: `Ver otras clases de ${nombreCorto}` };
                   })()}
                   footer={
