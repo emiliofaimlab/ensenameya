@@ -1,4 +1,8 @@
-import { getFormatoHora, getSessionContext } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getViewerTimezone,
+  getSessionContext,
+} from "@/lib/auth/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
 import { cartCount } from "@/lib/cart/resolve";
 import { listConversations } from "@/components/chat/conversations";
@@ -14,16 +18,28 @@ export default async function PublicLayout({
   // Roles además del usuario: el header necesita saber a qué panel enlazar.
   // US-1203: los avisos vienen en el MISMO viaje que roles y perfil
   // (`session_bootstrap`); sin sesión llegan vacíos y la campana ni se monta.
-  const { user, roles, fullName, avatarPath, notices, onboardingComplete } =
-    await getSessionContext();
+  const {
+    user,
+    roles,
+    fullName,
+    avatarPath,
+    notices,
+    noticesUnread,
+    onboardingComplete,
+  } = await getSessionContext();
   // EY-177 · el contador del carrito. Se lee de la cookie, no de la base, así
   // que no cuesta un viaje y funciona igual SIN sesión — que es el caso que
   // importa: un anónimo puede apuntar mentorías antes de registrarse.
   // Mismo empujón que en `(app)`: la burbuja la pide al final del árbol.
   if (user) void listConversations().catch(() => {});
-  // Las dos lecturas de cookie de la cabecera, juntas: el contador del
-  // carrito y el formato de hora que baja a la campana.
-  const [carrito, formato] = await Promise.all([cartCount(), getFormatoHora()]);
+  // Las lecturas de la cabecera, juntas: el contador del carrito, el formato
+  // de hora y la zona que bajan a la campana (P13). La zona no cuesta viaje:
+  // está memoizada y sale del perfil que ya trajo `session_bootstrap`.
+  const [carrito, formato, zona] = await Promise.all([
+    cartCount(),
+    getFormatoHora(),
+    getViewerTimezone(),
+  ]);
   return (
     <div className="flex min-h-svh flex-col">
       {/* `TimezoneSync` estaba aquí y subió al layout raíz (RV-03): montado solo
@@ -36,8 +52,10 @@ export default async function PublicLayout({
           onboardingComplete,
         })}
         notices={notices}
+        noticesUnread={noticesUnread}
         cartCount={carrito}
         formato={formato}
+        zona={zona}
       />
       {/* `flex flex-col` (y no solo `flex-1`) para que la pantalla de carga
           pueda estirarse hasta el pie con `flex-1`. Sin esto medía lo que

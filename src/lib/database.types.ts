@@ -3378,6 +3378,7 @@ export type Database = {
           end_at: string | null
           id: string | null
           inscripcion_cierra_at: string | null
+          inscritos_pagados: number | null
           min_seats: number | null
           product_id: string | null
           sequence_no: number | null
@@ -3910,6 +3911,7 @@ export type Database = {
           user_id: string
         }[]
       }
+      inscritos_pagados: { Args: { p_product: string }; Returns: number }
       iso_utc: { Args: { p_momento: string }; Returns: string }
       join_group_class: { Args: { p_group_class: string }; Returns: Json }
       join_session: { Args: { p_session_id: string }; Returns: Json }

@@ -275,9 +275,11 @@ export default async function TutorHomePage() {
     monedaDeCobroDelTutor(userId),
     // G1 · sus próximas fechas grupales, una fila por fecha, con el cupo y los
     // libres ya contados por la vista (`group_classes_public`).
+    // M17 · y los PAGADOS aparte (`inscritos_pagados`): «inscritos» es cupo
+    // pagado en todas las pantallas; los que están pagando se dicen aparte.
     supabase
       .from("group_classes_public")
-      .select("id, product_id, start_at, end_at, capacity, cupos_libres, title")
+      .select("id, product_id, start_at, end_at, capacity, cupos_libres, title, inscritos_pagados")
       .eq("tutor_id", userId)
       .gte("end_at", new Date().toISOString())
       .order("start_at")
@@ -309,7 +311,13 @@ export default async function TutorHomePage() {
       grupal: {
         productId: g.product_id!,
         titulo: g.title ?? "Clase grupal",
-        ocupados: (g.capacity ?? 0) - (g.cupos_libres ?? 0),
+        // M17 · igual que `/tutor/clases-grupales/[id]`: inscritos son los que
+        // PAGARON; los cupos apartados por un pago en curso van aparte.
+        ocupados: g.inscritos_pagados ?? 0,
+        pagando: Math.max(
+          (g.capacity ?? 0) - (g.cupos_libres ?? 0) - (g.inscritos_pagados ?? 0),
+          0,
+        ),
         cupo: g.capacity ?? 0,
       },
     })),
@@ -672,6 +680,7 @@ export default async function TutorHomePage() {
                         <p className="flex items-center gap-1 truncate text-xs text-[#404040]">
                           <UsersIcon className="size-3.5 shrink-0" aria-hidden />
                           Clase grupal · {s.grupal.ocupados}/{s.grupal.cupo} inscritos
+                          {s.grupal.pagando > 0 ? ` · +${s.grupal.pagando} pagando` : ""}
                         </p>
                         <p className="text-[11.5px] text-[#6b6b6b] first-letter:uppercase">
                           {cuando(s.start_at, tz, formato)}

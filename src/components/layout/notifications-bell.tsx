@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   FILTRO_AVISOS_VISIBLES,
   NOTICES_LIMIT,
+  agruparAvisos,
   toNotice,
   type AppNotice,
   type NotificationRow,
@@ -63,8 +64,24 @@ export function NotificationsBell({
   variante = "icono",
   formato = FORMATO_POR_DEFECTO,
   dosPapeles = false,
+  noLeidos,
+  zona,
 }: {
   initial: AppNotice[];
+  /**
+   * A3 · cuántos quedan sin leer, contados en SQL sobre TODOS los avisos
+   * (`session_bootstrap().notices_unread`). Contados sobre `initial` —los 8 de
+   * `NOTICES_LIMIT`— nunca pasaban de 8 y el «9+» era inalcanzable. Sin él
+   * (la sala no lo pasa, o el RPC no lo trajo) se cuenta la lista, como antes.
+   */
+  noLeidos?: number | null;
+  /**
+   * P13 · zona IANA del perfil, la que resuelve el layout. El resto del panel
+   * dice «Horas en tu zona», y la campana pintaba la del navegador. Además así
+   * servidor y cliente pintan la misma hora al hidratar. Sin ella, el
+   * navegador, que es lo que hacía antes.
+   */
+  zona?: string;
   /**
    * EY-224 · la cuenta es tutor Y alumno. La lista es ÚNICA y mezclada
    * (decidido con el cliente), así que a quien tiene los dos papeles cada aviso
@@ -110,13 +127,29 @@ export function NotificationsBell({
     setInitialVisto(initial);
     setNotices(initial);
   }
+  // A3 · el contador va aparte de la lista, con el mismo patrón que `initial`.
+  const [sinLeer, setSinLeer] = useState<number | null>(noLeidos ?? null);
+  const [noLeidosVisto, setNoLeidosVisto] = useState(noLeidos);
+  if (noLeidos !== noLeidosVisto) {
+    setNoLeidosVisto(noLeidos);
+    setSinLeer(noLeidos ?? null);
+  }
   // Controlado (antes no lo era) para poder cerrarlo A MANO: cuando el aviso
   // abre la burbuja no hay navegación, y sin cerrar esto el desplegable se
   // quedaba abierto tapando el hilo que el usuario acaba de pedir.
   const [abierta, setAbierta] = useState(false);
 
   async function load() {
-    const { data } = await createClient()
+    const supabase = createClient();
+    // A3 · el contador, en paralelo con la lista y con su MISMO filtro: un
+    // `count` sobre toda la tabla, no la longitud de las 8 que se pintan.
+    const conteo = supabase
+      .from("notifications")
+      .select("id", { count: "exact", head: true })
+      .eq("recipient_id", userId)
+      .is("read_at", null)
+      .or(FILTRO_AVISOS_VISIBLES);
+    const lista = supabase
       .from("notifications")
       .select("id, type, template, payload, created_at, read_at")
       // Ver la nota del prop `userId`: sin esto, un admin se traía los avisos
@@ -131,15 +164,22 @@ export function NotificationsBell({
       .or(FILTRO_AVISOS_VISIBLES)
       .order("created_at", { ascending: false })
       .limit(NOTICES_LIMIT);
+    const [{ data }, { count, error }] = await Promise.all([lista, conteo]);
     setNotices(((data ?? []) as NotificationRow[]).map(toNotice));
+    // Regla de oro 10: un fallo NO es un cero. Se deja el número que había.
+    if (error) console.error("[notificaciones:conteo]", error.code, error.message);
+    else setSinLeer(count ?? 0);
   }
 
-  const unread = notices.filter((n) => !n.read).length;
+  const unread = sinLeer ?? notices.filter((n) => !n.read).length;
+  // A3 · las inscripciones a la misma clase, en una línea.
+  const visibles = agruparAvisos(notices);
 
   async function markAllRead() {
     if (unread === 0) return;
     // Optimista: el usuario ya las está viendo, que el punto se apague ya.
     setNotices((prev) => prev.map((n) => ({ ...n, read: true })));
+    setSinLeer(0);
     await createClient()
       .from("notifications")
       .update({ read_at: new Date().toISOString() })
@@ -158,13 +198,20 @@ export function NotificationsBell({
    * Abrir un aviso lo da por leído. No se espera: el clic navega igual. ⚠️ El
    * `.then()` no es adorno: el builder de PostgREST es perezoso y sin él la
    * petición no sale nunca.
+   *
+   * Recibe los `ids` del aviso y no uno solo: una línea agrupada («3 alumnos se
+   * inscribieron…») son tres filas, y marcar solo la primera dejaba el
+   * contador en 2 con la línea ya leída.
    */
-  function markRead(id: string) {
-    setNotices((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  function markRead(ids: string[]) {
+    setNotices((prev) =>
+      prev.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)),
+    );
+    setSinLeer((prev) => (prev === null ? null : Math.max(0, prev - ids.length)));
     createClient()
       .from("notifications")
       .update({ read_at: new Date().toISOString() })
-      .eq("id", id)
+      .in("id", ids)
       .eq("recipient_id", userId)
       .is("read_at", null)
       .then(() => {});
@@ -352,13 +399,13 @@ export function NotificationsBell({
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
 
-        {notices.length === 0 ? (
+        {visibles.length === 0 ? (
           <p className="px-2 py-6 text-center text-[13px] text-muted-foreground">
             No tienes avisos todavía.
           </p>
         ) : (
           <ul className="max-h-80 overflow-y-auto">
-            {notices.map((n) => {
+            {visibles.map((n) => {
               const inner = (
                 <>
                   <span className="flex items-start gap-2">
@@ -388,6 +435,8 @@ export function NotificationsBell({
                       month: "short",
                       hour: "2-digit",
                       minute: "2-digit",
+                      // P13 · la zona del perfil; sin ella, la del navegador.
+                      timeZone: zona,
                       ...opcionesDeHora(formato),
                     })}
                   </time>
@@ -403,7 +452,7 @@ export function NotificationsBell({
                     href={n.href}
                     className="block hover:underline"
                     onClick={(e) => {
-                      if (!n.read) markRead(n.id);
+                      if (!n.read) markRead(n.ids);
                       if (alHilo) abrirHiloEnBurbuja(e, n.href);
                     }}
                   >

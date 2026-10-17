@@ -108,8 +108,25 @@ const PAYLOADS: Record<string, Record<string, unknown>> = {
   booking_new_tutor: { booking_id: "b7f3a91c" },
   booking_expiring_tutor: { booking_id: "b7f3a91c" },
   booking_confirmed_student: { booking_id: "b7f3a91c" },
-  group_enrolled_student: { booking_id: "b7f3a91c" },
+  // Lote 6 · cada uno es el `jsonb_build_object` de su trigger (P14: la
+  // inscripción lleva lo cobrado; A2: las dos bajas son nuevas).
+  group_enrolled_student: {
+    booking_id: "b7f3a91c", product_id: "p-4417", para: "alumno",
+    clase: "Cálculo diferencial: límites y derivadas", amount: 2400, currency: "USD",
+  },
   group_enrolled_tutor: { booking_id: "b7f3a91c" },
+  group_left_tutor: {
+    booking_id: "b7f3a91c", product_id: "p-4417", para: "tutor",
+    clase: "Cálculo diferencial: límites y derivadas", alumno: "Lucía F.", inscritos: 2, cupo: 3,
+  },
+  group_left_student: {
+    booking_id: "b7f3a91c", product_id: "p-4417", para: "alumno",
+    clase: "Cálculo diferencial: límites y derivadas",
+  },
+  group_cancelled: {
+    booking_id: "b7f3a91c", product_id: "p-4417", para: "alumno",
+    clase: "Cálculo diferencial: límites y derivadas", alcance: "clase",
+  },
   booking_reminder_24h: { booking_id: "b7f3a91c", session_id: "s-2231" },
   session_starting: { booking_id: "b7f3a91c", session_id: "s-2231" },
   cancellation: { booking_id: "b7f3a91c" },
@@ -319,6 +336,21 @@ const VARIANTES: [string, string, Record<string, unknown>][] = [
   // distingue de la del comprador. Si esta rama dejara de existir, a quien
   // recibió el regalo le llegaría un correo hablándole del dinero que no puso.
   ["gift_expired · destinatario", "gift_expired", { credit_id: "cr-2", product_id: "p-4417" }],
+  // Lote 6 · las ramas de las grupales que el payload de arriba no toca.
+  [
+    "group_cancelled · cupo con motivo",
+    "group_cancelled",
+    { booking_id: "b7f3a91c", product_id: "p-4417", para: "alumno", alcance: "cupo", motivo: "Conducta en la sala" },
+  ],
+  // M20 · al tutor, cuando cancela el equipo: SIN `booking_id`.
+  [
+    "group_cancelled · tutor (equipo)",
+    "group_cancelled",
+    { product_id: "p-4417", para: "tutor", alcance: "clase", clase: "Cálculo", motivo: "Fuera de las normas" },
+  ],
+  ["group_min_cancelled · tutor sin reserva", "group_min_cancelled", { product_id: "p-4417", para: "tutor", clase: "Cálculo" }],
+  // Sin `inscritos`/`cupo` (o sin nombre): la caja se cae, no pinta «undefined».
+  ["group_left_tutor · sin recuento", "group_left_tutor", { booking_id: "b7f3a91c", para: "tutor" }],
 ];
 
 for (const [quien, template, payload] of VARIANTES) {
@@ -382,6 +414,38 @@ const conFicha = renderEmail({
 })!;
 assert.ok(conFicha.html.includes("Cálculo diferencial"), "la ficha de la clase no llegó al correo");
 assert.ok(conFicha.text.includes("60 minutos"), "la duración no llegó al texto plano");
+
+// P40 · un ciclo de tres fechas enseña las tres, una por línea.
+const ciclo = revisar(
+  renderEmail({
+    template: "group_enrolled_student",
+    payload: PAYLOADS.group_enrolled_student,
+    nombre: "Ana",
+    baseUrl: BASE,
+    contexto: {
+      ...LLENO,
+      fechas: [
+        { sesion_id: "s-1", inicio: "2026-09-15T23:00:00Z" },
+        { sesion_id: "s-2", inicio: "2026-09-22T23:00:00Z" },
+        { sesion_id: "s-3", inicio: "2026-09-29T23:00:00Z" },
+      ],
+    },
+    timezone: "America/Bogota",
+    ahora: AHORA,
+  }),
+  "group_enrolled_student (ciclo de 3)",
+);
+const bloqueFechas = ciclo.text.split("Fechas del ciclo")[1]?.split("\n\n")[0] ?? "";
+assert.equal(
+  bloqueFechas.trim().split("\n").length,
+  3,
+  "P40: el ciclo de tres fechas no pinta tres líneas",
+);
+// En un ciclo, un .ics por fecha (el de `sesion_id` solo traía la primera).
+assert.ok(
+  ["s-1", "s-2", "s-3"].every((id) => ciclo.html.includes(`${BASE}/api/calendario/sesion/${id}`)),
+  "P40: la inscripción no lleva un .ics por fecha",
+);
 
 console.log(
   `OK · ${IDS.length} plantillas + ${VARIANTES.length} ramas × 2 contextos` +

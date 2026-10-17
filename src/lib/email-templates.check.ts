@@ -900,6 +900,113 @@ assert.equal(papelDelAviso("group_enrolled_student", null), "alumno");
   assert.ok(!r.text.includes("Lucía"), "recordatorio grupal: se nombra a UN alumno de la clase");
 }
 
+// ── Lote 6 · avisos de las grupales ─────────────────────────────────────────
+//
+// A2 · la baja de UN alumno no es la cancelación de la clase: al tutor no se le
+// dice «el horario volvió a quedar libre» (eso es de la 1:1), sino cuántos
+// cupos pagados quedan.
+{
+  const r = renderEmail({
+    template: "group_left_tutor",
+    payload: { booking_id: "bk-7", product_id: "pr-1", para: "tutor", clase: "Álgebra", alumno: "Elena G.", inscritos: 2, cupo: 3 },
+    nombre: "Camilo", baseUrl: BASE, contexto: ctxClase, ahora: AHORA,
+  })!;
+  assert.ok(r.subject.includes("Elena G. se dio de baja"), "A2: el asunto al tutor no nombra a quien se dio de baja");
+  assert.ok(r.text.includes("Quedan 2 inscritos pagados de 3 cupos"), "A2: el tutor no sabe cuántos cupos pagados quedan");
+  assert.ok(!r.text.includes("horario"), "A2: al tutor se le habla de un horario libre en una clase que sigue");
+  assert.ok(r.text.includes(`${BASE}/tutor/clases-grupales/pr-1`), "A2: el botón del tutor no lleva a su clase grupal");
+}
+{
+  const r = renderEmail({
+    template: "group_left_student",
+    payload: { booking_id: "bk-7", product_id: "pr-1", para: "alumno", clase: "Álgebra" },
+    nombre: "Lucía", baseUrl: BASE, contexto: ctxClase, ahora: AHORA,
+  })!;
+  assert.ok(r.subject.startsWith("Te diste de baja"), "A2: el asunto al alumno no dice que se dio de baja");
+  assert.ok(/25,00\sUS\$/.test(r.text), "A2: la baja con reembolso no dice cuánto se devuelve");
+  assert.ok(r.text.includes(`${BASE}/tutores/tu-1`), "A2: «Buscar otra clase» no lleva a la ficha del tutor");
+  const sinReembolso = renderEmail({
+    template: "group_left_student",
+    payload: { booking_id: "bk-7", para: "alumno" },
+    nombre: "Lucía", baseUrl: BASE, contexto: { clase: "Álgebra" }, ahora: AHORA,
+  })!;
+  assert.ok(!sinReembolso.text.includes("Tu reembolso"), "A2: se promete un reembolso que el contexto no trae");
+  assert.ok(sinReembolso.text.includes(`${BASE}/mentorias`), "A2: sin tutor, «Buscar otra clase» no cae al catálogo");
+}
+
+// P14 + P40 · la inscripción grupal es UN aviso: lleva el recibo (monto y
+// datos fiscales), TODAS las fechas del ciclo y el enlace al `.ics`.
+{
+  const fechas = [
+    { sesion_id: "se-1", inicio: "2026-09-15T15:00:00Z" },
+    { sesion_id: "se-2", inicio: "2026-09-22T15:00:00Z" },
+    { sesion_id: "se-3", inicio: "2026-09-29T15:00:00Z" },
+  ];
+  const r = renderEmail({
+    template: "group_enrolled_student",
+    payload: { booking_id: "bk-7", product_id: "pr-1", para: "alumno", clase: "Álgebra", amount: 4500, currency: "USD" },
+    nombre: "Lucía", baseUrl: BASE, timezone: "America/Bogota", ahora: AHORA,
+    contexto: { ...ctxClase, sesion_id: "se-1", inicio: fechas[0].inicio, fechas },
+  })!;
+  assert.ok(/Tu pago de 45,00\sUS\$/.test(r.text), "P14: la inscripción no dice cuánto se pagó");
+  assert.ok(r.text.includes("EIN 42-2277169"), "P14: la inscripción ya no lleva los datos fiscales del recibo");
+  assert.ok(r.html.includes("Fechas del ciclo"), "P40: el ciclo no enseña la lista de fechas");
+  for (const dia of ["15 de septiembre", "22 de septiembre", "29 de septiembre"]) {
+    assert.ok(r.text.includes(dia), `P40: falta la fecha «${dia}» del ciclo`);
+  }
+  assert.ok(r.text.includes(`${BASE}/api/calendario/sesion/se-1`), "P40: la inscripción no lleva el .ics");
+
+  const una = renderEmail({
+    template: "group_enrolled_student",
+    payload: { booking_id: "bk-7", amount: 4500, currency: "USD" },
+    nombre: "Lucía", baseUrl: BASE, ahora: AHORA,
+    contexto: { ...ctxClase, fechas: [fechas[0]] },
+  })!;
+  assert.ok(!una.html.includes("Fechas del ciclo"), "P40: una clase de una sola fecha pinta la lista del ciclo");
+}
+
+// P39 · cancelar la CLASE no es cancelar el cupo de uno.
+{
+  const r = renderEmail({
+    template: "group_cancelled",
+    payload: { booking_id: "bk-7", product_id: "pr-1", para: "alumno", clase: "Álgebra", alcance: "clase", motivo: "El tutor se enfermó" },
+    nombre: "Lucía", baseUrl: BASE, contexto: ctxClase, ahora: AHORA,
+  })!;
+  assert.ok(r.subject.includes("Se canceló la clase"), "P39: el asunto dice «tu cupo» cuando se canceló la clase");
+  assert.ok(!r.text.includes("Se canceló tu cupo"), "P39: la cancelación de la clase habla de «tu cupo»");
+  assert.ok(r.text.includes("El tutor se enfermó"), "P39: se perdió el motivo");
+  // Las filas viejas, sin `alcance`, siguen como estaban.
+  const vieja = renderEmail({
+    template: "group_cancelled",
+    payload: { booking_id: "bk-7" },
+    nombre: "Lucía", baseUrl: BASE, contexto: ctxClase, ahora: AHORA,
+  })!;
+  assert.ok(vieja.subject.startsWith("Se canceló tu cupo"), "P39: una fila sin `alcance` cambió de asunto");
+}
+
+// M20 · el equipo cancela la clase: al tutor le llega uno, SIN `booking_id`,
+// que lleva a su clase grupal y no promete ningún reembolso.
+{
+  const r = renderEmail({
+    template: "group_cancelled",
+    payload: { product_id: "pr-1", para: "tutor", alcance: "clase", clase: "Álgebra", motivo: "Contenido fuera de las normas" },
+    nombre: "Camilo", baseUrl: BASE, contexto: { clase: "Álgebra", inicio: "2026-09-15T15:00:00Z", product_id: "pr-1", tutor_id: "tu-1" }, ahora: AHORA,
+  })!;
+  assert.ok(r.subject.startsWith("Se canceló tu clase grupal"), "M20: el asunto al tutor no es el suyo");
+  assert.ok(r.text.includes(`${BASE}/tutor/clases-grupales/pr-1`), "M20: el botón del tutor no lleva a su clase grupal");
+  assert.ok(!r.text.includes("Tu reembolso"), "M20: al tutor se le promete un reembolso");
+  assert.ok(r.text.includes("Contenido fuera de las normas"), "M20: al tutor no le llega el motivo");
+
+  // NTF-53 al tutor sin reserva (la clase se canceló sin pagados): pinta igual.
+  const min = renderEmail({
+    template: "group_min_cancelled",
+    payload: { product_id: "pr-1", para: "tutor", clase: "Álgebra" },
+    nombre: "Camilo", baseUrl: BASE, contexto: { clase: "Álgebra", inicio: "2026-09-15T15:00:00Z", product_id: "pr-1" }, ahora: AHORA,
+  })!;
+  assert.ok(min.text.includes(`${BASE}/tutor/clases-grupales/pr-1`), "M20: NTF-53 al tutor no lleva a su clase grupal");
+  assert.ok(min.html.includes("Álgebra"), "M20: NTF-53 al tutor sin reserva perdió la ficha de la clase");
+}
+
 const aserciones = readFileSync(new URL(import.meta.url), "utf8").match(/\bassert\.\w+\(/g)!.length;
 
 console.log(

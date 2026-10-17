@@ -65,8 +65,12 @@ type ColumnasDelDoc33 = {
   contexto: Contexto | null;
 };
 
-/** La plantilla —y la única— que lleva el evento adjunto. */
-const PLANTILLA_CON_ICS = "booking_confirmed_student";
+/**
+ * Las plantillas que llevan el evento adjunto: la confirmación de la 1:1 y,
+ * desde el lote 6 (P40), la inscripción grupal, que adjunta UN evento por
+ * fecha del ciclo.
+ */
+const PLANTILLA_CON_ICS = new Set(["booking_confirmed_student", "group_enrolled_student"]);
 
 /**
  * El `.ics` de la clase, para adjuntarlo a la confirmación (Doc 33 §5.2).
@@ -85,8 +89,9 @@ const PLANTILLA_CON_ICS = "booking_confirmed_student";
  *      para `session_ref`/`num_sessions` pasa por `bookings` y `products`, y un
  *      `permission denied` ahí no rompe el build ni el typecheck — se come el
  *      adjunto en silencio, que es el fallo más caro de encontrar.
- *   3. Lo que se pierde es cosmético: `CREATED`/`LAST-MODIFIED` y la línea del
- *      número de sesión. Lo que sostiene el evento —`DTSTART`, `DTEND`,
+ *   3. Lo que se pierde es cosmético: `CREATED`/`LAST-MODIFIED` y, en la
+ *      1:1, la línea del número de sesión (la grupal la arma con la posición
+ *      de cada fecha en `contexto.fechas`). Lo que sostiene el evento —`DTSTART`, `DTEND`,
  *      `SUMMARY`, el `UID` y el enlace a la sala— sale entero del contexto.
  *
  * ⚠️ SALE IDÉNTICO AL DE `/api/calendario/sesion/[sessionId]`, y tiene que
@@ -105,51 +110,74 @@ function adjuntoIcs(
   c: Contexto | null,
   origin: string,
 ): Adjunto[] | undefined {
-  if (template !== PLANTILLA_CON_ICS) return undefined;
+  if (!PLANTILLA_CON_ICS.has(template)) return undefined;
+  const grupal = template === "group_enrolled_student";
   // Sin estos cuatro no hay evento que valga. `duracion_min` entra en la lista
   // aunque el pliego solo pida tres: sin ella habría que inventarse el `DTEND`,
   // y un evento que ocupa la hora equivocada en la agenda del alumno es peor
   // que no tener evento. El enlace «Añadir al calendario» del cuerpo sigue ahí
   // para ese caso, y ese sí sabe la duración real.
-  if (!c?.sesion_id || !c.inicio || !c.clase || !c.duracion_min) return undefined;
+  // `sesion_id` e `inicio` se miran por fecha, abajo: en la grupal vienen
+  // en `fechas`, una por sesión.
+  if (!c?.clase || !c.duracion_min) return undefined;
+
+  const duracionMin = c.duracion_min;
+  const titulo = c.clase;
 
   try {
-    const inicio = new Date(c.inicio);
+    // P40 · en la grupal, una fecha por sesión no cancelada del ciclo
+    // (`contexto.fechas`). Sin `fechas` —filas viejas, o la 1:1— la única
+    // sesión del contexto, como siempre.
+    const crudas =
+      grupal && c.fechas?.length
+        ? c.fechas
+        : [{ sesion_id: c.sesion_id, inicio: c.inicio }];
+
     // `new Date("cualquier cosa")` no lanza: devuelve `Invalid Date`, y de ahí
-    // sale un `.ics` con `DTSTART:Invalid`. Se comprueba a mano.
-    if (Number.isNaN(inicio.getTime())) return undefined;
+    // sale un `.ics` con `DTSTART:Invalid`. Se comprueba a mano, y la fecha
+    // que no se pueda leer se cae sola en vez de llevarse a las demás.
+    const validas = crudas.flatMap((f) => {
+      if (!f.sesion_id || !f.inicio) return [];
+      const inicio = new Date(f.inicio);
+      return Number.isNaN(inicio.getTime()) ? [] : [{ sesion_id: f.sesion_id, inicio }];
+    });
+    if (validas.length === 0) return undefined;
 
-    const fin = new Date(inicio.getTime() + c.duracion_min * 60_000);
-    const cuando = inicio.toISOString();
+    const eventos = validas.map(({ sesion_id, inicio }, i): EventoFeed => {
+      const fin = new Date(inicio.getTime() + duracionMin * 60_000);
+      const cuando = inicio.toISOString();
 
-    const evento: EventoFeed = {
-      session_id: c.sesion_id,
-      start_at: cuando,
-      end_at: fin.toISOString(),
-      // `CREATED` y `LAST-MODIFIED` no los trae el contexto. Se usa el inicio
-      // de la clase: con `SEQUENCE` fijo en 0 ningún cliente los mira para
-      // decidir qué versión gana, así que su único trabajo es ser fechas
-      // válidas y coherentes entre sí.
-      created_at: cuando,
-      updated_at: cuando,
-      // Este correo es, literalmente, el de «el tutor aceptó tu reserva».
-      estado: "confirmada",
-      // ⚠️ `0` es deliberado, igual que en la descarga suelta: el feed calcula
-      // el SEQUENCE como segundos entre el alta y el último cambio, así que
-      // siempre gana él. Si no, el `.ics` del correo competiría con el del
-      // calendario suscrito y ganaría el congelado.
-      secuencia: 0,
-      titulo: c.clase,
-      // El contexto trae el nombre ENTERO del tutor y el feed lo enmascara
-      // («María G.»). No se pone por lo de arriba: mismo UID, misma forma.
-      con: null,
-      session_ref: null,
-      sequence_no: null,
-      num_sessions: 1,
-    };
+      return {
+        session_id: sesion_id,
+        start_at: cuando,
+        end_at: fin.toISOString(),
+        // `CREATED` y `LAST-MODIFIED` no los trae el contexto. Se usa el inicio
+        // de la clase: con `SEQUENCE` fijo en 0 ningún cliente los mira para
+        // decidir qué versión gana, así que su único trabajo es ser fechas
+        // válidas y coherentes entre sí.
+        created_at: cuando,
+        updated_at: cuando,
+        // Este correo es, literalmente, el de «el tutor aceptó tu reserva» o
+        // el de «tienes tu cupo»: en los dos la clase ya es firme.
+        estado: "confirmada",
+        // ⚠️ `0` es deliberado, igual que en la descarga suelta: el feed calcula
+        // el SEQUENCE como segundos entre el alta y el último cambio, así que
+        // siempre gana él. Si no, el `.ics` del correo competiría con el del
+        // calendario suscrito y ganaría el congelado.
+        secuencia: 0,
+        titulo,
+        // El contexto trae el nombre ENTERO del tutor y el feed lo enmascara
+        // («María G.»). No se pone por lo de arriba: mismo UID, misma forma.
+        con: null,
+        session_ref: null,
+        // «Sesión 2 de 4» solo en el ciclo grupal; la 1:1 sigue como estaba.
+        sequence_no: grupal ? i + 1 : null,
+        num_sessions: grupal ? validas.length : 1,
+      };
+    });
 
     const ics = construirIcs({
-      eventos: [evento],
+      eventos,
       // Las fechas van en UTC con `Z`, así que la zona solo sería una pista de
       // presentación y en un evento suelto no pinta nada. El huso del
       // destinatario ya manda en el CUERPO del correo, que es donde se lee.
@@ -162,7 +190,7 @@ function adjuntoIcs(
       {
         // Genérico a propósito: el nombre del fichero lo ve el alumno en el
         // adjunto y `session_ref` no le dice nada.
-        filename: "mentoria.ics",
+        filename: grupal ? "clase-grupal.ics" : "mentoria.ics",
         content: Buffer.from(ics, "utf8").toString("base64"),
         contentType: "text/calendar; charset=utf-8",
       },

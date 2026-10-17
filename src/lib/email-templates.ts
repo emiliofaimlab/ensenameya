@@ -94,6 +94,12 @@ export type Contexto = {
   /** Fin del plazo de las 24 h de aceptación (RN-38), ISO en UTC. */
   limite?: string;
   sesion_id?: string;
+  /**
+   * P40 · todas las fechas NO canceladas de la reserva, en orden, con su
+   * sesión. `inicio` en ISO UTC. En la 1:1 es una sola; en un ciclo grupal,
+   * una por fecha. Las filas viejas no la traen.
+   */
+  fechas?: { sesion_id?: string; inicio?: string }[];
   tutor_id?: string;
   product_id?: string;
   /** Quién canceló: 'tutor' | 'student' | 'system'. */
@@ -771,32 +777,69 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
    */
   group_enrolled_student: (x) => {
     const d = dia(x.c.inicio, x.tz);
+    // P14 · es también el RECIBO: desde el lote 6 las grupales sueltas ya no
+    // encolan `payment_receipt`, así que el monto y los datos fiscales van
+    // aquí. El monto viene en el payload (siempre); el contexto, de respaldo.
+    const importe = dinero(x.p?.amount ?? x.c.importe, x.p?.currency ?? x.c.moneda);
+    // P40 · un ciclo enseña TODAS sus fechas, no solo la primera.
+    const fechas = (x.c.fechas ?? [])
+      .map((f) => cuando(f.inicio, x.tz))
+      .filter((f): f is string => Boolean(f));
     return {
       asunto: x.c.clase ? `Inscripción confirmada: ${x.c.clase}` : "Tu inscripción está confirmada",
       familia: "ok",
       epigrafe: "Clase grupal",
       titulo: "Tienes tu cupo",
-      preheader: d ? `Tu cupo está reservado. La primera fecha es el ${d}.` : "Tu cupo está reservado.",
+      preheader: d
+        ? `Tu cupo está reservado. La primera fecha es el ${d}. Adentro van tu recibo y las fechas.`
+        : "Tu cupo está reservado. Adentro van tu recibo y las fechas.",
       motivo: "Recibes este correo porque te inscribiste en una clase grupal.",
       cuerpo: [
+        // El monto va en la frase, como en `payment_receipt`: la ficha se cae
+        // entera si el contexto no vino, y un recibo sin monto no es un recibo.
         parrafo(
-          "Tu pago está hecho y tu cupo, reservado. Es una clase grupal: compartes la sala con el tutor y con los demás inscritos.",
+          `${importe ? `Tu pago de <strong>${esc(importe)}</strong> está hecho` : "Tu pago está hecho"} y tu cupo, reservado. Es una clase grupal: compartes la sala con el tutor y con los demás inscritos.`,
         ),
         tarjetaClase({
           titulo: x.c.clase,
           tutor: x.c.tutor,
           cuando: cuando(x.c.inicio, x.tz),
           duracion: duracion(x.c.duracion_min),
+          importe,
           acento: VERDE,
           fondo: "#e9f7ef",
         }),
+        fechas.length > 1 ? caja(fechas.map(esc).join("<br>"), "ok", "Fechas del ciclo") : null,
         parrafo(
           "El botón para entrar a la sala se activa <strong>10 minutos antes</strong> de cada fecha. En la página de tu inscripción tienes todas las fechas y el chat del grupo.",
           { top: 18 },
         ),
         boton("Ver mi inscripción", x.url),
+        // El `.ics` va también como ADJUNTO, con un evento por fecha
+        // (`notifications-send`). El enlace se queda para el cliente que
+        // descarta adjuntos, como en `booking_confirmed_student`; en un ciclo,
+        // uno por fecha (el de `sesion_id` solo traía la primera).
+        ...((x.c.fechas ?? []).filter((f) => f.sesion_id).length > 1
+          ? (x.c.fechas ?? [])
+              .filter((f) => f.sesion_id)
+              .map((f, i) =>
+                enlaceSecundario(
+                  `Agregar la fecha ${i + 1} al calendario (.ics)`,
+                  `${x.base}/api/calendario/sesion/${f.sesion_id}`,
+                ),
+              )
+          : [
+              x.c.sesion_id
+                ? enlaceSecundario("Agregar al calendario (.ics)", `${x.base}/api/calendario/sesion/${x.c.sesion_id}`)
+                : null,
+            ]),
         nota(
           "Los demás inscritos ven tu nombre y tu foto en la sala y en el chat del grupo. La clase se graba y la grabación la ven todos los inscritos durante 30 días.",
+        ),
+        nota(
+          [x.c.metodo ? `Pagado con ${esc(x.c.metodo)}` : null, "Ensename Ya, LLC · EIN 42-2277169"]
+            .filter(Boolean)
+            .join(" · "),
         ),
       ],
     };
@@ -954,24 +997,67 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
    * NTF-55 · se canceló la clase, una fecha del ciclo (`fecha` en el payload)
    * o el cupo del alumno lo canceló el tutor o el equipo. Siempre con reembolso
    * (RN-37: si cancela el tutor, 100 %; una fecha de ciclo, su parte).
+   *
+   * P39 · `alcance` dice QUÉ se canceló: con 'clase' se canceló la clase
+   * entera y el asunto lo dice así; «Se canceló tu cupo» queda para 'cupo' y
+   * para las filas viejas sin `alcance`.
+   *
+   * M20 · al TUTOR solo le llega cuando cancela el equipo (sin `booking_id`:
+   * es uno por clase, no uno por alumno). Sin reembolso, que no es suyo.
    */
   group_cancelled: (x) => {
     const fecha = typeof x.p?.fecha === "string" ? x.p.fecha : null;
+    // M27 · la última fecha pendiente de un ciclo empezado: ya no hay «resto».
+    const ultimaFecha = Boolean(fecha) && x.p?.quedan_fechas === false;
     const motivo = typeof x.p?.motivo === "string" && x.p.motivo.trim() ? x.p.motivo.trim() : null;
+
+    if (alTutor(x)) {
+      return {
+        asunto: x.c.clase ? `Se canceló tu clase grupal: ${x.c.clase}` : "Se canceló tu clase grupal",
+        familia: "alerta",
+        epigrafe: "Clase grupal",
+        titulo: "El equipo canceló tu clase",
+        preheader: "El equipo canceló tu clase grupal y devuelve el 100 % a cada inscrito.",
+        motivo: "Recibes este correo porque eres tutor de esta clase.",
+        cuerpo: [
+          parrafo(
+            "El equipo de Enséñame Ya canceló tu clase grupal y a cada inscrito se le devuelve el 100 %.",
+          ),
+          motivo ? caja(esc(motivo), "clase", "Motivo") : null,
+          tarjetaClase({
+            titulo: x.c.clase,
+            tutor: "Tú",
+            cuando: cuando(x.c.inicio, x.tz),
+            duracion: duracion(x.c.duracion_min),
+            acento: ROJO,
+            fondo: "#fdeceb",
+          }),
+          boton("Ver mi clase grupal", x.url),
+        ],
+      };
+    }
+
     // M1 · lo sacaron con el ciclo empezado: se devuelve solo lo que faltaba.
     const tramos = !fecha && x.p?.tramos === true;
+    const clase = !fecha && !tramos && x.p?.alcance === "clase";
     const reembolso = fecha ? null : dinero(x.c.reembolso, x.c.moneda);
     return {
       asunto: fecha
         ? con("Se canceló una fecha de tu clase grupal", cuandoCorto(fecha, x.tz))
-        : x.c.clase
-          ? `Se canceló tu cupo: ${x.c.clase}`
-          : "Se canceló tu cupo en una clase grupal",
+        : clase
+          ? x.c.clase
+            ? `Se canceló la clase: ${x.c.clase}`
+            : "Se canceló una clase grupal"
+          : x.c.clase
+            ? `Se canceló tu cupo: ${x.c.clase}`
+            : "Se canceló tu cupo en una clase grupal",
       familia: "alerta",
       epigrafe: "Clase grupal",
-      titulo: fecha ? "Se canceló una fecha" : "Se canceló tu cupo",
+      titulo: fecha ? "Se canceló una fecha" : clase ? "Se canceló la clase" : "Se canceló tu cupo",
       preheader: fecha
-        ? "Te devolvemos la parte de esa fecha. El resto del ciclo sigue igual."
+        ? ultimaFecha
+          ? "Era la última fecha del ciclo: te devolvemos su parte y el ciclo termina aquí."
+          : "Te devolvemos la parte de esa fecha. El resto del ciclo sigue igual."
         : tramos
           ? "Te devolvemos la parte de las fechas que faltaban."
           : "Te devolvemos el 100 % por el mismo medio de pago.",
@@ -979,12 +1065,18 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       cuerpo: [
         parrafo(
           fecha
-            ? `El tutor canceló la fecha del <strong>${esc(cuando(fecha, x.tz) ?? "")}</strong>. Te devolvemos la parte de esa fecha; las demás fechas del ciclo siguen igual.`
+            ? `El tutor canceló la fecha del <strong>${esc(cuando(fecha, x.tz) ?? "")}</strong>. ${
+                ultimaFecha
+                  ? "Era la última fecha del ciclo: te devolvemos su parte y el ciclo termina aquí."
+                  : "Te devolvemos la parte de esa fecha; las demás fechas del ciclo siguen igual."
+              }`
             : tramos
               ? "Ya no estás inscrito en las fechas que quedaban de este ciclo. Te devolvemos la parte de esas fechas; las que ya se dieron no se devuelven."
-              : motivo
-                ? "Tu cupo en esta clase grupal se canceló."
-                : "Tu cupo en esta clase grupal se canceló y no fue por algo que hicieras tú.",
+              : clase
+                ? "La clase grupal se canceló. Te devolvemos el 100 % por el mismo medio de pago."
+                : motivo
+                  ? "Tu cupo en esta clase grupal se canceló."
+                  : "Tu cupo en esta clase grupal se canceló y no fue por algo que hicieras tú.",
         ),
         motivo ? caja(esc(motivo), "clase", "Motivo") : null,
         tarjetaClase({
@@ -1003,6 +1095,94 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
             )
           : null,
         boton("Ver mi inscripción", x.url),
+      ],
+    };
+  },
+
+  /**
+   * NTF-09 · A2 · un alumno se dio de baja de una clase grupal. Al TUTOR: la
+   * clase sigue para los demás. Existe porque antes le llegaba `cancellation`,
+   * la de la 1:1, que dice «el horario volvió a quedar libre», y es falso: la
+   * clase sigue en pie y solo se liberó un cupo.
+   *
+   * `alumno` viene ya enmascarado del trigger («Elena G.»); `inscritos` son los
+   * cupos PAGADOS que quedan tras la baja.
+   */
+  group_left_tutor: (x) => {
+    const alumno =
+      typeof x.p?.alumno === "string" && x.p.alumno.trim() ? x.p.alumno.trim() : "Un alumno";
+    const inscritos = typeof x.p?.inscritos === "number" ? x.p.inscritos : null;
+    const cupo = typeof x.p?.cupo === "number" ? x.p.cupo : null;
+    return {
+      asunto: x.c.clase
+        ? `${alumno} se dio de baja: ${x.c.clase}`
+        : "Un alumno se dio de baja de tu clase grupal",
+      familia: "clase",
+      epigrafe: "Clase grupal",
+      titulo: "Un alumno se dio de baja",
+      preheader: "La clase sigue igual para los demás y su cupo vuelve a quedar libre.",
+      motivo: "Recibes este correo porque eres tutor de esta clase.",
+      cuerpo: [
+        parrafo(
+          `<strong>${esc(alumno)}</strong> se dio de baja de tu clase grupal. La clase sigue igual para los demás y su cupo vuelve a quedar libre.`,
+        ),
+        inscritos !== null && cupo !== null
+          ? caja(
+              inscritos === 0
+                ? `Ya no queda ningún inscrito pagado (cupo de ${cupo}).`
+                : inscritos === 1
+                  ? `Queda 1 inscrito pagado de ${cupo} cupos.`
+                  : `Quedan ${inscritos} inscritos pagados de ${cupo} cupos.`,
+              "clase",
+            )
+          : null,
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: "Tú",
+          cuando: cuando(x.c.inicio, x.tz),
+          duracion: duracion(x.c.duracion_min),
+        }),
+        boton("Ver mi clase grupal", x.url),
+      ],
+    };
+  },
+
+  /**
+   * NTF-09 · A2 · al ALUMNO que se dio de baja de una clase grupal. Sustituye
+   * a `cancellation`, que le hablaba de una mentoría y de un horario libre.
+   * El reembolso solo se dice si el contexto lo trae: una baja fuera de plazo
+   * puede no tenerlo.
+   */
+  group_left_student: (x) => {
+    const reembolso = dinero(x.c.reembolso, x.c.moneda);
+    return {
+      asunto: x.c.clase ? `Te diste de baja: ${x.c.clase}` : "Te diste de baja de una clase grupal",
+      familia: "alerta",
+      epigrafe: "Clase grupal",
+      titulo: "Tu baja quedó registrada",
+      preheader: reembolso
+        ? `Ya no estás inscrito. Te devolvemos ${reembolso}.`
+        : "Ya no estás inscrito en esta clase grupal.",
+      motivo: "Recibes este correo porque te diste de baja de una clase grupal.",
+      cuerpo: [
+        parrafo("Ya no estás inscrito en esta clase grupal."),
+        reembolso
+          ? caja(
+              `Te devolvemos <strong>${esc(reembolso)}</strong> por el mismo medio de pago. No tienes que pedirlo.`,
+              "compra",
+              "Tu reembolso",
+            )
+          : null,
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: x.c.tutor,
+          cuando: cuando(x.c.inicio, x.tz),
+          duracion: duracion(x.c.duracion_min),
+        }),
+        boton(
+          "Buscar otra clase",
+          x.c.tutor_id ? `${x.base}/tutores/${x.c.tutor_id}` : `${x.base}/mentorias`,
+        ),
       ],
     };
   },

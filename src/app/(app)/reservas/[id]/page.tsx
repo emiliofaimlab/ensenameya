@@ -122,7 +122,7 @@ export default async function BookingDetailPage({
       // MN-05 · `access_opens_at`/`access_closes_at` vienen de la fila, no de
       // una fórmula repetida aquí: son la ventana de acceso a la sala (7 días
       // a cada lado desde `20260820190000`) y quien decide si el botón sirve.
-      "id, status, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model, status), sessions(id, start_at, end_at, status, session_ref, group_class_id, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
+      "id, status, cancel_reason, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model, status), sessions(id, start_at, end_at, status, session_ref, group_class_id, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -352,6 +352,25 @@ export default async function BookingDetailPage({
             {done > 0 ? ` · ${done} completada${done === 1 ? "" : "s"}` : ""}
           </p>
         </div>
+        {/* P39 · una grupal cancelada dice POR QUÉ. «Cancelada» a secas no
+            distingue entre la clase que no llegó al mínimo, la que canceló el
+            tutor o el equipo, y la baja propia. El texto del mínimo es el que
+            escribe `cancelar_clase_grupal`; cualquier otro motivo se enseña tal
+            cual (React lo escapa). */}
+        {booking.status === "cancelled" && esGrupal && booking.cancel_reason ? (
+          <PanelCard>
+            <PanelCardTitle>
+              {booking.cancel_reason === "No se alcanzó el cupo mínimo de la clase"
+                ? "Se canceló la clase"
+                : "Motivo de la cancelación"}
+            </PanelCardTitle>
+            <p className="mt-2 break-words text-[13.5px] text-[#404040]">
+              {booking.cancel_reason === "No se alcanzó el cupo mínimo de la clase"
+                ? "La clase no llegó al cupo mínimo 24 horas antes de la primera fecha. Te devolvemos el 100 %."
+                : booking.cancel_reason}
+            </p>
+          </PanelCard>
+        ) : null}
         {/* La confirmación se ve UNA vez; quien vuelve después a presumir la
             reserva la encuentra aquí. Solo con la reserva viva. */}
         {/* R1 · y con la mentoría publicada: una grupal que terminó se archiva

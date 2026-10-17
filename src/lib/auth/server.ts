@@ -62,6 +62,12 @@ type SessionContext = {
   /** Los avisos de la campana. Vienen en el MISMO viaje que roles y perfil
    *  (`session_bootstrap`); el layout ya no los pide por separado. */
   notices: AppNotice[];
+  /**
+   * A3 · cuántos avisos visibles quedan sin leer, contados en SQL sobre TODA
+   * la tabla y no sobre los 8 de `notices` (que nunca pasaban de 8). `null` si
+   * el RPC no lo trajo: la campana cae entonces a contar su lista.
+   */
+  noticesUnread: number | null;
 };
 
 /**
@@ -97,6 +103,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext> => {
     avatarPath: null,
     timezone: null,
     notices: [] as AppNotice[],
+    noticesUnread: null,
   };
   if (!user)
     return { user: null, roles: [], onboardingComplete: false, ...empty };
@@ -129,6 +136,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext> => {
       timezone: string | null;
     } | null;
     notices?: NotificationRow[];
+    notices_unread?: number;
   };
   const profile = boot.profile ?? null;
 
@@ -140,6 +148,8 @@ export const getSessionContext = cache(async (): Promise<SessionContext> => {
     avatarPath: profile?.avatar_path ?? null,
     timezone: profile?.timezone ?? null,
     notices: (boot.notices ?? []).map(toNotice),
+    noticesUnread:
+      typeof boot.notices_unread === "number" ? boot.notices_unread : null,
   };
 });
 

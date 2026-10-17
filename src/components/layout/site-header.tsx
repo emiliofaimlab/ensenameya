@@ -269,8 +269,10 @@ function SearchBox({ className }: { className?: string }) {
 export function SiteHeader({
   user,
   notices = [],
+  noticesUnread,
   cartCount = 0,
   formato,
+  zona,
 }: {
   user?: HeaderUser | null;
   /** US-1203 · avisos ya consultados por el layout (server). */
@@ -285,6 +287,12 @@ export function SiteHeader({
   /** 12 h o 24 h (`ey-h12`). La cabecera no pinta horas: solo la baja a la
    *  campana, que es cliente y no puede leer la cookie sin parpadear. */
   formato?: FormatoHora;
+  /** A3 · no leídos contados en SQL sobre todos los avisos, no sobre los 8 de
+   *  `notices`. Opcional: la sala también monta esta cabecera y no lo pasa. */
+  noticesUnread?: number | null;
+  /** P13 · zona IANA del perfil (o del navegador), igual que `formato`: la
+   *  cabecera solo la baja a la campana. Opcional por la misma razón. */
+  zona?: string;
 }) {
   const pathname = usePathname();
   const panelCookie = useSyncExternalStore(
@@ -570,8 +578,10 @@ export function SiteHeader({
               {user ? (
                 <NotificationsBell
                   initial={notices}
+                  noLeidos={noticesUnread}
                   userId={user.id}
                   formato={formato}
+                  zona={zona}
                   dosPapeles={user.dosPapeles}
                 />
               ) : null}
@@ -858,8 +868,10 @@ export function SiteHeader({
                         >
                           <NotificationsBell
                             initial={notices}
+                            noLeidos={noticesUnread}
                             userId={user.id}
                             formato={formato}
+                            zona={zona}
                             variante="fila"
                             dosPapeles={user.dosPapeles}
                           />
