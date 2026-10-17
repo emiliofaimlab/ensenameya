@@ -72,6 +72,18 @@ const CANCELLABLE = new Set<BookingStatus>([
   "confirmed",
 ]);
 
+/**
+ * M26 · lo que devuelve `politica_de_baja` (`20261017120000`); en los tipos
+ * generados es `Json`. Aquí solo hace falta saber si se permite, y el motivo
+ * cuando no. Los montos los pinta la pantalla de baja.
+ */
+type PoliticaDeBaja =
+  | { permitida: false; motivo: string }
+  | { permitida: true; motivo: null; es_tutor: boolean };
+
+/** El motivo genérico de la RPC: con él no hay nada útil que explicar. */
+const MOTIVO_GENERICO = "reserva no cancelable o inexistente";
+
 export const metadata = { title: "Detalle de reserva · Enséñame Ya" };
 
 /**
@@ -170,9 +182,16 @@ export default async function BookingDetailPage({
   // pantalla de la queja («tras reservar no hay forma de llegar al tutor»).
   // `fichas` puede venir vacío si le retiraron la aprobación — `TutorSummary`
   // sabe qué hacer con eso y no enlaza a un 404.
-  const [fichas, codigoRef] = await Promise.all([
+  //
+  // M26 · y en la misma tanda, la regla de la baja (ver el botón, al final):
+  // no depende de nada de lo anterior, así que no alarga la cascada. Si el
+  // estado ya descarta la baja, ni se pregunta.
+  const [fichas, codigoRef, { data: politicaRaw }] = await Promise.all([
     tutorCards(supabase, [booking.products?.tutor_id]),
     codigoParaCompartir(supabase, user.id),
+    CANCELLABLE.has(booking.status)
+      ? supabase.rpc("politica_de_baja", { p_booking: booking.id })
+      : Promise.resolve({ data: null }),
   ]);
   const ficha = fichas.get(booking.products?.tutor_id ?? "");
   const tutor = ficha?.displayName ?? undefined;
@@ -222,6 +241,18 @@ export default async function BookingDetailPage({
         .eq("booking_id", id)
         .order("created_at")
     : { data: null };
+
+  // M26 · el botón de baja solo sale si `politica_de_baja` la permite: es la
+  // misma regla con la que `cancel_booking` decide, así que la pantalla ya no
+  // ofrece una baja que después se rechaza (RG-16, clase obligatoria).
+  const politica = politicaRaw as unknown as PoliticaDeBaja | null;
+  // Solo el alumno: esta es su pantalla (la RLS también deja leerla al tutor,
+  // y para él la RPC responde con sus propias reglas).
+  const puedeDarseDeBaja = politica?.permitida === true && !politica.es_tutor;
+  const motivoSinBaja =
+    politica && !politica.permitida && politica.motivo !== MOTIVO_GENERICO
+      ? politica.motivo.charAt(0).toUpperCase() + politica.motivo.slice(1)
+      : null;
 
   const initial: ChatMessage[] = (msgs ?? []).map((m) => ({
     id: m.id,
@@ -390,7 +421,7 @@ export default async function BookingDetailPage({
                         cancelarHref={
                           sessions.length === 1 &&
                           s.status === "scheduled" &&
-                          CANCELLABLE.has(booking.status)
+                          puedeDarseDeBaja
                             ? `/reservas/${booking.id}/cancelar`
                             : null
                         }
@@ -603,19 +634,35 @@ export default async function BookingDetailPage({
           columnas la marcan las sesiones y el pago, y el hilo gana todo el alto
           que ocupaba este párrafo.
 
-          Solo se ha movido: mismo texto, mismo `CANCELLABLE`, mismo botón. Los
-          plazos siguen leyéndose de `lib/policy.ts` (RN-37) y no escritos aquí,
-          que es lo que mantiene esta tarjeta y las páginas legales diciendo lo
-          mismo. */}
+          Los plazos siguen leyéndose de `lib/policy.ts` (RN-37) y no escritos
+          aquí, que es lo que mantiene esta tarjeta y las páginas legales
+          diciendo lo mismo. El botón, desde M26, lo decide `politica_de_baja`. */}
       <PanelCard>
         <PanelCardTitle>Política de cancelación</PanelCardTitle>
-        <p className="mt-3.5 text-sm text-[#6b6b6b]">
-          Cancela con {P.cutoffHours} h o más de anticipación y recibe{" "}
-          {P.refundPct.studentEarly} % de reembolso. Con menos de{" "}
-          {P.cutoffHours} h, el reembolso es del {P.refundPct.studentLate} %. Si
-          cancela el tutor, {P.refundPct.tutorCancels} %.
-        </p>
-        {CANCELLABLE.has(booking.status) ? (
+        {esGrupal ? (
+          // RG-16 y RG-11 · en una grupal los plazos se cuentan desde la
+          // primera fecha, y hay dos reglas que en 1:1 no existen.
+          <p className="mt-3.5 text-sm text-[#6b6b6b]">
+            Cancela con {P.cutoffHours} h o más antes de la primera fecha y
+            recibe {P.refundPct.studentEarly} % de reembolso. Con menos de{" "}
+            {P.cutoffHours} h, el reembolso es del {P.refundPct.studentLate} %.
+            Una vez empezada la clase ya no puedes darte de baja. Si el tutor
+            cambia una fecha después de tu inscripción, te devolvemos el{" "}
+            {P.refundPct.studentEarly} %. Si cancela el tutor,{" "}
+            {P.refundPct.tutorCancels} %.
+          </p>
+        ) : (
+          <p className="mt-3.5 text-sm text-[#6b6b6b]">
+            Cancela con {P.cutoffHours} h o más de anticipación y recibe{" "}
+            {P.refundPct.studentEarly} % de reembolso. Con menos de{" "}
+            {P.cutoffHours} h, el reembolso es del {P.refundPct.studentLate} %. Si
+            cancela el tutor, {P.refundPct.tutorCancels} %.
+          </p>
+        )}
+        {motivoSinBaja ? (
+          <p className="mt-3.5 text-[13px] text-[#6b6b6b]">{motivoSinBaja}.</p>
+        ) : null}
+        {puedeDarseDeBaja ? (
           <Button
             asChild
             variant="outline"

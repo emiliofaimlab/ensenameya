@@ -183,6 +183,7 @@ export function ProductForm({
   submitLabel,
   groupClassesEnabled = false,
   groupPublished = false,
+  groupLiveSeats = 0,
   timezone = "UTC",
 }: {
   userId: string;
@@ -211,6 +212,12 @@ export function ProductForm({
   groupClassesEnabled?: boolean;
   /** G1 · la grupal ya tiene fechas: se gestionan en su ficha, no aquí. */
   groupPublished?: boolean;
+  /**
+   * B6 · reservas vivas de la grupal publicada (pagando, por aceptar,
+   * confirmadas o en curso): el cupo no puede bajar de aquí. Es la misma
+   * cuenta de `products_guarda_grupal`, que es quien manda.
+   */
+  groupLiveSeats?: number;
   /** Zona del tutor: las fechas de una grupal se teclean en SU hora (RN-01). */
   timezone?: string;
 }) {
@@ -291,6 +298,13 @@ export function ProductForm({
   );
   const [fechas, setFechas] = useState<FechaPared[]>([{ fecha: "", hora: "" }]);
   const grupal = pricingModel === "group";
+  /**
+   * B6 · con la clase publicada, mínimo, precio y duración quedan fijos
+   * (`products_guarda_grupal` los rechaza): se enseñan deshabilitados y al
+   * guardar viajan los valores de siempre, no los del `FormData` —un input
+   * `disabled` no entra en él—.
+   */
+  const bloqueada = grupal && groupPublished && !!product;
   // Al editar no se cambia entre grupal y no grupal: las fechas y los cupos
   // vendidos no tienen equivalente 1:1 (y la BD lo prohíbe con fechas).
   const modelos = product
@@ -336,12 +350,18 @@ export function ProductForm({
 
     // Precio en unidades mayores → menores (USD, 2 decimales).
     const priceMajor = Number(form.get("price"));
-    if (!Number.isFinite(priceMajor) || priceMajor < 0)
+    if (!bloqueada && (!Number.isFinite(priceMajor) || priceMajor < 0))
       return toast.error("Indica un precio válido.");
-    const priceAmount = Math.round(priceMajor * 100);
+    const priceAmount =
+      bloqueada && product
+        ? product.priceAmount
+        : Math.round(priceMajor * 100);
 
     // Duración ≥ 30 min (RN-03).
-    const duration = Number(form.get("session_duration_min"));
+    const duration =
+      bloqueada && product
+        ? (product.sessionDurationMin ?? 60)
+        : Number(form.get("session_duration_min"));
     if (!Number.isFinite(duration) || duration < 30)
       return toast.error("La duración mínima es 30 minutos.");
 
@@ -369,7 +389,15 @@ export function ProductForm({
         capacity > CUPO_MAX
       )
         return toast.error(`El cupo va de ${CUPO_MIN} a ${CUPO_MAX} alumnos.`);
-      if (minimo.trim()) {
+      if (groupPublished && capacity < groupLiveSeats)
+        return toast.error(
+          `Ya hay ${groupLiveSeats === 1 ? "1 alumno inscrito o pagando" : `${groupLiveSeats} alumnos inscritos o pagando`}: el cupo no puede quedar por debajo.`,
+        );
+      if (bloqueada && product) {
+        minSeats = product.minSeats;
+        if (minSeats != null && capacity < minSeats)
+          return toast.error(`El cupo no puede quedar por debajo del mínimo de ${minSeats} alumnos.`);
+      } else if (minimo.trim()) {
         minSeats = Number(minimo);
         if (!Number.isInteger(minSeats) || minSeats < 1 || minSeats > capacity)
           return toast.error("El mínimo tiene que estar entre 1 y el cupo.");
@@ -385,6 +413,17 @@ export function ProductForm({
           return toast.error("Las fechas tienen que ser futuras.");
         if (new Set(fechasUtc).size !== fechasUtc.length)
           return toast.error("Hay dos fechas repetidas.");
+        // B7 · lo mismo que rechaza `publicar_clase_grupal`: el mínimo se
+        // revisa una vez a las 24 h, y con menos de 48 h la clase no tiene
+        // tiempo de llenarse.
+        if (
+          minSeats !== null &&
+          Math.min(...fechasUtc.map((iso) => new Date(iso).getTime())) <
+            Date.now() + 48 * 3600 * 1000
+        )
+          return toast.error(
+            "Con cupo mínimo, la primera fecha tiene que estar a más de 48 horas.",
+          );
       }
     }
 
@@ -881,8 +920,10 @@ export function ProductForm({
               value={precio}
               onChange={(e) => setPrecio(e.target.value)}
               placeholder="40"
+              disabled={bloqueada}
               className={FIELD}
             />
+            {bloqueada ? <NotaBloqueada /> : null}
           </div>
           <div className="grid gap-1.5">
             <Label className={LABEL}>Moneda</Label>
@@ -905,8 +946,10 @@ export function ProductForm({
               required
               value={duracion}
               onChange={(e) => setDuracion(e.target.value)}
+              disabled={bloqueada}
               className={FIELD}
             />
+            {bloqueada ? <NotaBloqueada /> : null}
             {/* Con «por hora» el precio NO es lo que paga el alumno: el servidor
                 multiplica por la duración (RN-10, `create_booking`). Sin decirlo
                 aquí, el tutor pone 40 y 90 min y descubre el cobro de 60 cuando
@@ -1064,7 +1107,7 @@ export function ProductForm({
               <Input
                 id="capacity"
                 type="number"
-                min={CUPO_MIN}
+                min={groupPublished ? Math.max(CUPO_MIN, groupLiveSeats, product?.minSeats ?? 0) : CUPO_MIN}
                 max={CUPO_MAX}
                 step={1}
                 required
@@ -1072,6 +1115,22 @@ export function ProductForm({
                 onChange={(e) => setCupo(e.target.value)}
                 className={FIELD}
               />
+              {/* B6 · el cupo puede subir, pero no dejar fuera de la sala a
+                  quien ya pagó. */}
+              {groupPublished && groupLiveSeats > 0 ? (
+                <p
+                  className={cn(
+                    "text-xs",
+                    Number(cupo) < groupLiveSeats
+                      ? "text-[#bf3333]"
+                      : "text-[#6b6b6b]",
+                  )}
+                >
+                  {Number(cupo) < groupLiveSeats
+                    ? `No puede quedar por debajo de ${groupLiveSeats === 1 ? "el alumno ya inscrito o pagando" : `los ${groupLiveSeats} alumnos ya inscritos o pagando`}.`
+                    : `Ya hay ${groupLiveSeats === 1 ? "1 alumno inscrito o pagando" : `${groupLiveSeats} alumnos inscritos o pagando`}: puedes subirlo, no bajarlo de ahí.`}
+                </p>
+              ) : null}
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="min_seats" className={LABEL}>
@@ -1086,12 +1145,18 @@ export function ProductForm({
                 value={minimo}
                 onChange={(e) => setMinimo(e.target.value)}
                 placeholder="Sin mínimo"
+                disabled={bloqueada}
                 className={FIELD}
               />
-              <p className="text-xs text-[#6b6b6b]">
-                Si 24 horas antes de la primera fecha no hay ese número de
-                inscritos, la clase se cancela sola y todos recuperan el 100 %.
-              </p>
+              {bloqueada ? (
+                <NotaBloqueada />
+              ) : (
+                <p className="text-xs text-[#6b6b6b]">
+                  Si 24 horas antes de la primera fecha no hay ese número de
+                  inscritos, la clase se cancela sola y todos recuperan el 100 %.
+                  Con mínimo, la primera fecha tiene que estar a más de 48 horas.
+                </p>
+              )}
             </div>
           </div>
 
@@ -1447,5 +1512,14 @@ export function ProductForm({
         </div>
       )}
     </form>
+  );
+}
+
+/** B6 · la nota de los campos que una grupal publicada ya no deja cambiar. */
+function NotaBloqueada() {
+  return (
+    <p className="text-xs text-[#6b6b6b]">
+      Con la clase publicada esto ya no se cambia: cancélala y publica otra.
+    </p>
   );
 }

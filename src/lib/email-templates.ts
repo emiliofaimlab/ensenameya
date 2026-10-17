@@ -958,6 +958,8 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
   group_cancelled: (x) => {
     const fecha = typeof x.p?.fecha === "string" ? x.p.fecha : null;
     const motivo = typeof x.p?.motivo === "string" && x.p.motivo.trim() ? x.p.motivo.trim() : null;
+    // M1 · lo sacaron con el ciclo empezado: se devuelve solo lo que faltaba.
+    const tramos = !fecha && x.p?.tramos === true;
     const reembolso = fecha ? null : dinero(x.c.reembolso, x.c.moneda);
     return {
       asunto: fecha
@@ -970,13 +972,19 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       titulo: fecha ? "Se canceló una fecha" : "Se canceló tu cupo",
       preheader: fecha
         ? "Te devolvemos la parte de esa fecha. El resto del ciclo sigue igual."
-        : "Te devolvemos el 100 % por el mismo medio de pago.",
+        : tramos
+          ? "Te devolvemos la parte de las fechas que faltaban."
+          : "Te devolvemos el 100 % por el mismo medio de pago.",
       motivo: "Recibes este correo porque estabas inscrito en esta clase.",
       cuerpo: [
         parrafo(
           fecha
             ? `El tutor canceló la fecha del <strong>${esc(cuando(fecha, x.tz) ?? "")}</strong>. Te devolvemos la parte de esa fecha; las demás fechas del ciclo siguen igual.`
-            : "Tu cupo en esta clase grupal se canceló y no fue por algo que hicieras tú.",
+            : tramos
+              ? "Ya no estás inscrito en las fechas que quedaban de este ciclo. Te devolvemos la parte de esas fechas; las que ya se dieron no se devuelven."
+              : motivo
+                ? "Tu cupo en esta clase grupal se canceló."
+                : "Tu cupo en esta clase grupal se canceló y no fue por algo que hicieras tú.",
         ),
         motivo ? caja(esc(motivo), "clase", "Motivo") : null,
         tarjetaClase({

@@ -95,6 +95,9 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
     ["pending_payment", "pending_acceptance", "confirmed", "in_progress"].includes(r.status),
   );
   const pagadas = vivas.filter((r) => r.status === "confirmed" || r.status === "in_progress");
+  // M15 · a quién avisa una reagenda: las reservas vivas menos las que siguen
+  // pagando (esas todavía no son de la clase).
+  const avisados = vivas.filter((r) => r.status !== "pending_payment").length;
   const cupo = producto.capacity ?? 0;
   const pendientes = fechas.filter((f) => f.status === "scheduled");
   const empezada = fechas.some((f) => f.status !== "cancelled" && new Date(f.start_at) <= new Date());
@@ -185,7 +188,11 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
                           groupClassId={f.id}
                           reagendable={new Date(f.start_at) >= enUnDia}
                           timezone={tz}
-                          puedeCancelar={ciclo && pendientes.length > 1}
+                          inscritos={avisados}
+                          // A10 · en un ciclo, cualquier fecha que aún no empezó,
+                          // aunque sea la última que queda viva:
+                          // `cancelar_fecha_grupal` ya lo permite.
+                          puedeCancelar={ciclo && new Date(f.start_at) > ahora}
                         />
                       </div>
                     ) : null}

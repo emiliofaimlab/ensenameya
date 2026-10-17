@@ -7,12 +7,13 @@ import { BOOKING_STATUS_LABEL, formatSessionTime } from "@/lib/booking";
 import { formatMoney } from "@/lib/catalog/format";
 import { PanelCard, PanelShell, StatusPill } from "@/components/layout/panel-shell";
 import { ADMIN_ITEMS } from "@/components/layout/app-sidebar";
-import { CancelarClaseAdmin, SacarAlumno } from "./acciones";
+import { CancelarClaseAdmin, CancelarFechaAdmin, SacarAlumno } from "./acciones";
 
 export const metadata = { title: "Clase grupal · Admin · Enséñame Ya" };
 
 const VIVAS = new Set(["pending_payment", "pending_acceptance", "confirmed", "in_progress"]);
-const SACABLE = new Set(["pending_acceptance", "confirmed"]);
+// M1 · `in_progress` también: con el ciclo empezado se devuelven las fechas que faltan.
+const SACABLE = new Set(["pending_acceptance", "confirmed", "in_progress"]);
 const FECHA: Record<string, string> = {
   scheduled: "Programada",
   cancelled: "Cancelada",
@@ -21,8 +22,9 @@ const FECHA: Record<string, string> = {
 
 /**
  * G4 · la ficha de UNA clase grupal para el admin (§11.4): fechas, inscritos
- * con su pago y su reembolso, y las dos acciones —cancelar la clase entera o
- * sacar a un alumno, las dos con el 100 %—. Todo con el cliente del admin:
+ * con su pago y su reembolso, y las acciones —cancelar la clase entera (100 %),
+ * cancelar una fecha (lo que costaba esa fecha) o sacar a un alumno (100 %
+ * antes de empezar; las fechas que faltan después, M1)—. Todo con el cliente del admin:
  * sus políticas `*_admin` le dejan leer productos, reservas y pagos.
  */
 export default async function AdminClaseGrupalPage({ params }: { params: Promise<{ id: string }> }) {
@@ -58,8 +60,11 @@ export default async function AdminClaseGrupalPage({ params }: { params: Promise
   const fechas = fechasRes.data ?? [];
   const reservas = reservasRes.data ?? [];
   const vivas = reservas.filter((r) => VIVAS.has(r.status));
+  // Los que están pagando no recuperan nada al cancelar una fecha: nunca se cobró.
+  const avisados = vivas.filter((r) => r.status !== "pending_payment").length;
   const empezada = fechas.some((f) => f.status !== "cancelled" && new Date(f.start_at) <= new Date());
   const pendientes = fechas.filter((f) => f.status === "scheduled").length;
+  const ahora = new Date();
 
   return (
     <PanelShell
@@ -79,7 +84,10 @@ export default async function AdminClaseGrupalPage({ params }: { params: Promise
                   {fechas.length > 1 ? `${f.sequence_no}. ` : ""}
                   {formatSessionTime(f.start_at, tz, formato)}
                 </span>
-                <span className="flex gap-2">
+                <span className="flex flex-wrap items-center gap-2">
+                  {f.status === "scheduled" && new Date(f.start_at) > ahora ? (
+                    <CancelarFechaAdmin groupClassId={f.id} inscritos={avisados} />
+                  ) : null}
                   {f.rescheduled_at ? <StatusPill tone="amber">Reagendada</StatusPill> : null}
                   <StatusPill tone={f.status === "cancelled" ? "red" : f.status === "completed" ? "green" : "neutral"}>
                     {FECHA[f.status] ?? f.status}
@@ -128,7 +136,7 @@ export default async function AdminClaseGrupalPage({ params }: { params: Promise
                           {pago?.refunded_amount ? formatMoney(pago.refunded_amount, pago.currency) : "—"}
                         </td>
                         <td className="py-2.5 text-right">
-                          {SACABLE.has(r.status) ? <SacarAlumno bookingId={r.id} nombre={nombre} /> : null}
+                          {SACABLE.has(r.status) ? <SacarAlumno bookingId={r.id} nombre={nombre} empezada={empezada} /> : null}
                         </td>
                       </tr>
                     );

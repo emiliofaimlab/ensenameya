@@ -2041,6 +2041,7 @@ export type Database = {
           language: string | null
           level: Database["public"]["Enums"]["teaching_level"] | null
           min_seats: number | null
+          minimo_evaluado_at: string | null
           outcome: string | null
           package_num_sessions: number | null
           price_amount: number
@@ -2073,6 +2074,7 @@ export type Database = {
           language?: string | null
           level?: Database["public"]["Enums"]["teaching_level"] | null
           min_seats?: number | null
+          minimo_evaluado_at?: string | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount: number
@@ -2105,6 +2107,7 @@ export type Database = {
           language?: string | null
           level?: Database["public"]["Enums"]["teaching_level"] | null
           min_seats?: number | null
+          minimo_evaluado_at?: string | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount?: number
@@ -4026,6 +4029,7 @@ export type Database = {
           type: string
         }[]
       }
+      politica_de_baja: { Args: { p_booking: string }; Returns: Json }
       pre_booking_message_cap: { Args: never; Returns: number }
       precio_vigente_grupal: { Args: { p_product: string }; Returns: number }
       process_notifications: { Args: never; Returns: Json }

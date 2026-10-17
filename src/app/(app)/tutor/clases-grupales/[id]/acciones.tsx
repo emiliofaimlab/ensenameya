@@ -13,8 +13,31 @@ import { Input } from "@/components/ui/input";
 const FIELD = "h-10 rounded-[8px] px-3 text-sm";
 
 /**
- * Las acciones de una fecha: reagendarla (RG-11) y, en un ciclo con más de una
- * fecha pendiente, cancelarla (RG-16). Cada una abre su propio paso de
+ * M15 · el primer día y la primera hora que acepta una reagenda (ahora + 24 h),
+ * como los escriben los `<input type="date|time">`, en la zona del tutor. Se
+ * calcula al abrir el formulario, no al pintar la página: así no se queda viejo
+ * y no hay desajuste de hidratación.
+ */
+function minimoReagenda(timezone: string): { fecha: string; hora: string } {
+  const p = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+      .formatToParts(new Date(Date.now() + 24 * 3_600_000))
+      .map((x) => [x.type, x.value]),
+  );
+  return { fecha: `${p.year}-${p.month}-${p.day}`, hora: `${p.hour}:${p.minute}` };
+}
+
+/**
+ * Las acciones de una fecha: reagendarla (RG-11) y, en un ciclo, cancelarla
+ * mientras no haya empezado, aunque sea la última que queda (RG-16, A10). Cada una abre su propio paso de
  * confirmación en la página: `confirm()` no existe en todos los navegadores
  * donde se abre esto.
  */
@@ -22,12 +45,15 @@ export function FechaAcciones({
   groupClassId,
   reagendable,
   timezone,
+  inscritos,
   puedeCancelar,
 }: {
   groupClassId: string;
   /** RG-11 · faltan 24 h o más para la hora PROGRAMADA (lo vuelve a mirar la RPC). */
   reagendable: boolean;
   timezone: string;
+  /** M15 · reservas vivas de la clase: a quién avisa la reagenda. */
+  inscritos: number;
   puedeCancelar: boolean;
 }) {
   const router = useRouter();
@@ -35,13 +61,18 @@ export function FechaAcciones({
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [minimo, setMinimo] = useState({ fecha: "", hora: "" });
 
   async function reagendar() {
     if (!fecha || !hora) return toast.error("Elige el día y la hora nuevos.");
+    const nuevo = paredAUtc(fecha, hora, timezone);
+    // Aviso temprano; la regla la vuelve a mirar la RPC con el mismo texto.
+    if (new Date(nuevo).getTime() < Date.now() + 24 * 3_600_000)
+      return toast.error("La hora nueva tiene que estar al menos a 24 horas.");
     setEnviando(true);
     const { error } = await createClient().rpc("reagendar_clase_grupal", {
       p_group_class: groupClassId,
-      p_nuevo_inicio: paredAUtc(fecha, hora, timezone),
+      p_nuevo_inicio: nuevo,
     });
     setEnviando(false);
     if (error) return toast.error(error.message);
@@ -64,15 +95,32 @@ export function FechaAcciones({
 
   if (modo === "reagendar")
     return (
-      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-        <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} aria-label="Día nuevo" className={FIELD} />
-        <Input type="time" step={300} value={hora} onChange={(e) => setHora(e.target.value)} aria-label="Hora nueva" className={`${FIELD} w-28`} />
-        <Button type="button" onClick={reagendar} disabled={enviando} className="h-10">
-          {enviando ? "Moviendo…" : "Mover fecha"}
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => setModo("nada")} className="h-10">
-          Volver
-        </Button>
+      <div className="flex w-full flex-col gap-1.5 sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input type="date" min={minimo.fecha} value={fecha} onChange={(e) => setFecha(e.target.value)} aria-label="Día nuevo" className={FIELD} />
+          {/* La hora solo tiene tope si el día es el primero posible. */}
+          <Input
+            type="time"
+            step={300}
+            min={fecha === minimo.fecha ? minimo.hora : undefined}
+            value={hora}
+            onChange={(e) => setHora(e.target.value)}
+            aria-label="Hora nueva"
+            className={`${FIELD} w-28`}
+          />
+          <Button type="button" onClick={reagendar} disabled={enviando} className="h-10">
+            {enviando ? "Moviendo…" : "Mover fecha"}
+          </Button>
+          <Button type="button" variant="ghost" onClick={() => setModo("nada")} className="h-10">
+            Volver
+          </Button>
+        </div>
+        <p className="text-xs text-[#6b6b6b]">
+          {inscritos > 0
+            ? `Se avisará a ${inscritos} ${inscritos === 1 ? "inscrito" : "inscritos"}.`
+            : "Todavía no hay inscritos a quien avisar."}{" "}
+          La hora nueva tiene que estar al menos a 24 horas.
+        </p>
       </div>
     );
 
@@ -96,7 +144,10 @@ export function FechaAcciones({
         variant="outline"
         disabled={!reagendable}
         title={reagendable ? undefined : "Solo se reagenda con 24 horas de anticipación."}
-        onClick={() => setModo("reagendar")}
+        onClick={() => {
+          setMinimo(minimoReagenda(timezone));
+          setModo("reagendar");
+        }}
         className="h-9"
       >
         Reagendar

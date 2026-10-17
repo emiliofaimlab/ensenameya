@@ -16,6 +16,18 @@ const REASONS = [
   "Otro",
 ];
 
+// P10 · en una grupal no hay «otro tutor» que buscar ni una confirmación que
+// esperar: el cupo se compra ya confirmado. Motivos propios, y el del cambio de
+// fecha porque RG-11 lo convierte en una baja al 100 %.
+const REASONS_GRUPAL = [
+  "Ya no puedo asistir en esas fechas",
+  "El tutor cambió una fecha y no me sirve",
+  "El temario no es lo que esperaba",
+  "Me inscribí por error",
+  "Problemas de pago",
+  "Otro",
+];
+
 /**
  * US-604 (SCR-AL07) — confirmar cancelación. El reembolso lo decide
  * `cancel_booking` en servidor según RN-37 (la estimación de la pantalla es
@@ -24,9 +36,16 @@ const REASONS = [
  * El motivo se persiste en `bookings.cancel_reason` (decisión 23), y lo escribe
  * la propia RPC: el cliente no tiene UPDATE sobre `bookings` (US-1402).
  */
-export function CancelForm({ bookingId }: { bookingId: string }) {
+export function CancelForm({
+  bookingId,
+  grupal = false,
+}: {
+  bookingId: string;
+  grupal?: boolean;
+}) {
   const router = useRouter();
-  const [reason, setReason] = useState(REASONS[0]);
+  const reasons = grupal ? REASONS_GRUPAL : REASONS;
+  const [reason, setReason] = useState(reasons[0]);
   const [detail, setDetail] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -74,7 +93,7 @@ export function CancelForm({ bookingId }: { bookingId: string }) {
           onChange={(e) => setReason(e.target.value)}
           className="mt-1.5 h-[45px] w-full rounded-[10px] border border-[#e0e0e0] bg-muted px-3.5 text-sm text-[#4d4d4d] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         >
-          {REASONS.map((r) => (
+          {reasons.map((r) => (
             <option key={r} value={r}>
               {r}
             </option>

@@ -47,9 +47,11 @@
 
 ## Decisiones para Emilio (pedirlas antes del lote 2)
 
+> **16-oct · Emilio confirmó además las tres reglas que fija el lote 2:** B6 (con la clase publicada, el cupo solo sube y nunca por debajo de los inscritos; mínimo, precio y duración fijos), B7 (el mínimo se revisa una sola vez a las 24 h y no se admite mínimo con la primera fecha a menos de 48 h) y M15 (la hora nueva de una reagenda también con 24 h o más, y el 100 % por reagenda solo para quien ya estaba inscrito).
+
 | ID | Pregunta | Propuesta por defecto |
 | :-- | :-- | :-- |
-| M1 | ¿Qué recibe un alumno al que se saca a mitad de un ciclo? | Se le devuelven solo las fechas que faltan (por tramos, como `cancelar_fecha_grupal`) |
+| M1 | ¿Qué recibe un alumno al que se saca a mitad de un ciclo? | ✅ **Decidido (Emilio, 16-oct):** solo las fechas que faltan (por tramos, como `cancelar_fecha_grupal`) |
 | M14 | RG-11 frente a RG-16: si el tutor mueve una fecha de un ciclo ya empezado, ¿qué puede hacer el alumno? | Recuperar solo esa fecha (gross/N), no darse de baja del ciclo |
 | M2 | ¿Un alumno expulsado de la sala puede volver a entrar? | No, en esa fecha. Sí en las siguientes del ciclo |
 | M8 | ¿Se mantiene el chat privado alumno–tutor en las grupales? | Se mantiene, pero los hilos vacíos no se le muestran al tutor |
@@ -100,23 +102,31 @@ Esta vista gana dos columnas: `inscripcion_cierra_at` y `min_seats` (la usa el l
 - [x] **P32** Una clase grupal gratis genera órdenes de pago de 0 US$ al tutor. → Agregar `and p.gross_amount > 0` en `build_payout_for_tutor`, en `run_payout_batch` y en `tutor_balance`, como ya hacen las de academia. _(aud. #93)_
 - [x] **P33** `cancel_reason` y `cancelled_at` de `group_classes` los puede leer cualquiera con la clave anon. → `revoke select (cancel_reason, cancelled_at) … from anon`. _(aud. #12)_
 
-## Lote 2 · Bajas, reembolsos, mínimo y edición de la clase (1 – 1½ días)
+## Lote 2 · Bajas, reembolsos, mínimo y edición de la clase (1 – 1½ días) · ✅ hecho el 16-oct
+
+> **Hecho:** migración `20261017120000` (aplicada en dev y probada en transacciones revertidas) y las pantallas de baja del alumno, la ficha y la baja del tutor, la ficha de la clase, el formulario y la ficha del admin. Verificado en vivo con «Sondeo: Ciclo de pronunciación» (A8: 15,75 ya devueltos + 15,75 ahora sobre 31,50). Además de lo previsto, salió de la revisión adversarial:
+> - Al sacar a un alumno a mitad de ciclo (M1) la reserva no se cancela y `notify_booking` no avisaba: ahora `cancel_booking` encola NTF-55 con `tramos`, y el correo dice «la parte de las fechas que faltaban» en vez del 100 %.
+> - B6 congela también `package_num_sessions` (es la N del prorrateo: moverla era cambiar el precio) y la moneda, y el cupo no baja del mínimo (antes saltaba un check en inglés).
+> - RN-23 (`enforce_product_publish_guard`) solo en la PUBLICACIÓN: con un tutor suspendido fallaban en silencio la marca de B7 y el cierre de inscripción del lote 1.
+> - Sin fechas por delante no hay «Sacar» (dejaba el pago en «reembolso parcial» de 0), y `cancel_booking` bloquea el pago antes de la política (carrera con `cancelar_fecha_grupal` que rompía A8).
+> - El motivo que elige el tutor le llega al alumno por correo: el formulario lo dice y el correo ya no afirma «no fue por algo que hicieras tú» cuando trae motivo.
+> - La baja del alumno avisa cuando pagó una parte con saldo (vuelve al saldo, no a la tarjeta).
 
 Funciones que se reescriben: `cancel_booking`, `reagendar_clase_grupal`, `cancelar_grupales_sin_minimo`, `publicar_clase_grupal` (solo la regla del mínimo), `admin_sacar_de_clase_grupal` y el trigger `products_guarda_grupal`. Pantallas: `reservas/[id]/cancelar`, `tutor/reservas/[id]` y la ficha del tutor.
 
-- [ ] **B6** Con la clase publicada, el tutor puede cambiar cupo, mínimo, precio y duración sin ningún freno:
+- [x] **B6** Con la clase publicada, el tutor puede cambiar cupo, mínimo, precio y duración sin ningún freno:
   - bajar el cupo por debajo de los inscritos deja fuera de la sala (Daily admite cupo + 1) a alumnos que pagaron;
   - poner un mínimo con menos de 24 h hace que el cron cancele la clase.
 
   → Que `products_guarda_grupal` salte también con `update of capacity, min_seats, price_amount, session_duration_min`: el cupo nunca por debajo de las reservas vivas, y mínimo, precio y duración fijos tras publicar. Bloquear esos campos en `product-form.tsx`. _(aud. #68, #84)_
-- [ ] **B7** El mínimo se revisa durante todo el último día, cada 15 min, y no una vez a las 24 h. Una baja tardía tumba la clase para los demás con un correo que dice «faltando 24 horas». Además, una clase publicada con mínimo y la primera fecha a menos de 24 h se cancela sola. → `products.minimo_evaluado_at`: el cron evalúa una sola vez y marca. Rechazar el mínimo si la primera fecha está a menos de 48 h (en `publicar_clase_grupal` y en el formulario). Corregir el texto de NTF-53. _(aud. #32, #83)_
-- [ ] **A8** Si ya hubo un reembolso parcial (una fecha del ciclo cancelada), la pantalla de baja promete más de lo que se devuelve y la baja al 50 % devuelve menos de lo justo. → `v_refund := v_prev + round((gross - v_prev) * pct / 100)` en `cancel_booking`, y que la pantalla lea `payments.refunded_amount`. _(aud. #28)_
-- [ ] **A10** El tutor no puede cancelar la última fecha que queda de un ciclo ya empezado, y el admin tampoco desde su ficha. → `puedeCancelar = ciclo && start_at > ahora` (`tutor/clases-grupales/[id]/page.tsx:188`), más el botón «Cancelar fecha» por fila en el admin. _(aud. #73)_
-- [ ] **M1** ⚖️ Desde la ficha 1:1 de la reserva, el tutor puede cancelar el cupo de un alumno de la grupal con el 100 % del ciclo (aunque ya se dieran fechas) y le ofrece «Reagendar». Además, el «Sacar» del admin a mitad de ciclo falla con `in_progress` o devuelve todo. → En `tutor/reservas/[id]`, si es grupal, esconder Cancelar y Reagendar y enlazar a la ficha de la clase. En `cancel_booking` y `admin_sacar_de_clase_grupal`, reembolso por tramos (según la decisión). _(aud. #71, #91)_
-- [ ] **M15** Reagendar exige 24 h sobre la hora vieja, pero la nueva puede ser dentro de 5 minutos, y desordena el ciclo. Además, el 100 % por reagenda también lo cobra quien se inscribió después del cambio. → `p_nuevo_inicio >= now() + 24 h`, reordenar `sequence_no` en ciclos y exigir `rescheduled_at > bookings.created_at` en `cancel_booking`. En la interfaz, `min` en el input y «Se avisará a N inscritos». _(aud. #79, #85, #86)_
-- [ ] **M26** El botón «Cancelar mi cupo» y la estimación «100 % · Tu caso» aparecen cuando `cancel_booking` va a rechazar la baja (RG-16), y la política mostrada no menciona RG-16 ni RG-11. → Una RPC `politica_de_baja(p_booking)` → `{permitida, pct, motivo}` que usen el detalle, la pantalla de baja y la propia `cancel_booking`. _(aud. #29)_
-- [ ] **P9** 🔴 La pantalla de baja dice «Faltan 0 h» con 45 minutos por delante (`cancelar/page.tsx:34`). → Mostrar minutos por debajo de 1 h.
-- [ ] **P10** 🔴 Los motivos de baja son de 1:1 en una grupal: «Encontré otro tutor», «El tutor tarda en confirmar». → Una lista propia para grupales.
+- [x] **B7** El mínimo se revisa durante todo el último día, cada 15 min, y no una vez a las 24 h. Una baja tardía tumba la clase para los demás con un correo que dice «faltando 24 horas». Además, una clase publicada con mínimo y la primera fecha a menos de 24 h se cancela sola. → `products.minimo_evaluado_at`: el cron evalúa una sola vez y marca. Rechazar el mínimo si la primera fecha está a menos de 48 h (en `publicar_clase_grupal` y en el formulario). Corregir el texto de NTF-53. _(aud. #32, #83)_
+- [x] **A8** Si ya hubo un reembolso parcial (una fecha del ciclo cancelada), la pantalla de baja promete más de lo que se devuelve y la baja al 50 % devuelve menos de lo justo. → `v_refund := v_prev + round((gross - v_prev) * pct / 100)` en `cancel_booking`, y que la pantalla lea `payments.refunded_amount`. _(aud. #28)_
+- [x] **A10** El tutor no puede cancelar la última fecha que queda de un ciclo ya empezado, y el admin tampoco desde su ficha. → `puedeCancelar = ciclo && start_at > ahora` (`tutor/clases-grupales/[id]/page.tsx:188`), más el botón «Cancelar fecha» por fila en el admin. _(aud. #73)_
+- [x] **M1** ⚖️ Desde la ficha 1:1 de la reserva, el tutor puede cancelar el cupo de un alumno de la grupal con el 100 % del ciclo (aunque ya se dieran fechas) y le ofrece «Reagendar». Además, el «Sacar» del admin a mitad de ciclo falla con `in_progress` o devuelve todo. → En `tutor/reservas/[id]`, si es grupal, esconder Cancelar y Reagendar y enlazar a la ficha de la clase. En `cancel_booking` y `admin_sacar_de_clase_grupal`, reembolso por tramos (según la decisión). _(aud. #71, #91)_
+- [x] **M15** Reagendar exige 24 h sobre la hora vieja, pero la nueva puede ser dentro de 5 minutos, y desordena el ciclo. Además, el 100 % por reagenda también lo cobra quien se inscribió después del cambio. → `p_nuevo_inicio >= now() + 24 h`, reordenar `sequence_no` en ciclos y exigir `rescheduled_at > bookings.created_at` en `cancel_booking`. En la interfaz, `min` en el input y «Se avisará a N inscritos». _(aud. #79, #85, #86)_
+- [x] **M26** El botón «Cancelar mi cupo» y la estimación «100 % · Tu caso» aparecen cuando `cancel_booking` va a rechazar la baja (RG-16), y la política mostrada no menciona RG-16 ni RG-11. → Una RPC `politica_de_baja(p_booking)` → `{permitida, pct, motivo}` que usen el detalle, la pantalla de baja y la propia `cancel_booking`. _(aud. #29)_
+- [x] **P9** 🔴 La pantalla de baja dice «Faltan 0 h» con 45 minutos por delante (`cancelar/page.tsx:34`). → Mostrar minutos por debajo de 1 h.
+- [x] **P10** 🔴 Los motivos de baja son de 1:1 en una grupal: «Encontré otro tutor», «El tutor tarda en confirmar». → Una lista propia para grupales.
 
 ## Lote 3 · Chat del grupo (1 día)
 
@@ -125,6 +135,7 @@ Funciones que se reescriben: `my_conversations` (`drop` + `create`, reponer gran
 - [ ] **B3** 🔴 La tutora abre el chat de su grupo y ve una consulta previa de 1:1: «Chat con tu alumno · Conversación de solo lectura», «te quedan 4 de 5 mensajes» y los mensajes sin autor. En su burbuja, cada clase aparece como «tu alumno · Sin mentoría reservada». La causa: `my_conversations` (`20260820180000:442`) no filtra `kind`, y `chat/[threadId]/page.tsx` mira la bandeja antes que el hilo de grupo. → Filtrar por `kind`, y que la página mire primero `hiloDeGrupo`. _(aud. #54)_
 - [ ] **B4** Los mensajes del grupo no avisan a nadie: `notify_new_message` sale si `student_id` es null (`20260826160000:145`). El hilo de grupo no aparece en la bandeja del alumno, y su reserva muestra en grande el chat privado y el del grupo solo como enlace. → En el aviso, una rama `kind='group'` (todos los miembros menos el emisor, con dedupe por hora). Que `my_conversations` devuelva los hilos de grupo con su título. En la reserva grupal, el chat del grupo como principal. _(aud. #33, #55, #57, #92)_
 - [ ] **M7** El chat de hasta 11 desconocidos no tiene «Reportar» (`report_conversation` exige ser alumno o tutor del par). Además, «Descargar la conversación» da 404 al alumno y un archivo falso, «Conversación con tu alumno», a la tutora. → Pertenencia con `puede_ver_conversacion` en el reporte, `ReportConversation` también en modo grupal y una exportación de grupo en `api/chat/[threadId]/download`. _(aud. #56, #59)_
+  - ➕ **Nuevo (lote 2, 16-oct):** el alumno que el tutor saca con el ciclo empezado (M1) queda con la reserva `completed`, no `cancelled`, y `puede_ver_conversacion` admite `completed`: **sigue en el chat del grupo** y puede leerlo. → Que la pertenencia exija además alguna sesión suya de esa clase no cancelada, o que no tenga sesiones canceladas por M1 con fecha futura. Decidirlo junto con M2 (expulsión de la sala).
 - [ ] **M8** ⚖️ 🔴 La tutora recibe un hilo privado vacío por cada inscrito de cada clase (10 alumnos son 10 hilos). → Según la decisión: esconder al tutor los hilos sin mensajes que solo tienen grupales, o no crear el par en grupales. _(aud. #58)_
 - [ ] **M31** Participantes y autoría pobres: no hay fotos (RG-19), la tutora no se distingue y quien se fue firma «Participante». → Pasar `avatar_path` y `es_tutor` desde `inscritos_de_clase`, con avatar, insignia «Tutor», avatares apilados en la cabecera y «(tú)». _(aud. #61)_
 - [ ] **P12** 🔴 Quien se dio de baja y abre el enlace del chat recibe un 404 seco. → «Ya no formas parte de este grupo» con un enlace a su reserva. _(aud. #64)_

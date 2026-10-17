@@ -26,6 +26,7 @@ export default async function EditProductPage({
     { data: rules },
     { data: ruleLinks },
     { count: fechasGrupales },
+    { count: reservasVivas },
     tz,
   ] = await Promise.all([
       supabase
@@ -70,6 +71,14 @@ export default async function EditProductPage({
         .from("group_classes")
         .select("id", { count: "exact", head: true })
         .eq("product_id", id),
+      // B6 · reservas vivas: el cupo de una grupal publicada no baja de aquí.
+      // Mismos estados que `products_guarda_grupal`. Si la cuenta falla queda
+      // en 0 y el formulario no frena: frena el trigger, que es quien manda.
+      supabase
+        .from("bookings")
+        .select("id", { count: "exact", head: true })
+        .eq("product_id", id)
+        .in("status", ["pending_payment", "pending_acceptance", "confirmed", "in_progress"]),
       getUserTimezone(),
     ]);
 
@@ -89,6 +98,7 @@ export default async function EditProductPage({
         materials={materials ?? []}
         isApproved={approvalStatus === "approved"}
         groupPublished={(fechasGrupales ?? 0) > 0}
+        groupLiveSeats={reservasVivas ?? 0}
         timezone={tz}
         product={{
           id: product.id,
