@@ -17,6 +17,9 @@ export type Participante = {
   local: boolean;
   nombre: string;
   owner: boolean;
+  /** M2 · el `auth.uid()` de Supabase con que `mintToken` firma el token
+   *  (`user_id` de Daily). Es lo que pide `expulsar_de_clase_grupal`. */
+  userId: string | null;
   /** Pistas `playable` o `null`. `persistentTrack`, como pide Daily: evita
    *  los fotogramas negros al recolocar el `<video>`. */
   video: MediaStreamTrack | null;
@@ -53,6 +56,9 @@ function aParticipante(p: DailyParticipant): Participante {
     local: p.local,
     nombre: p.user_name || (p.local ? "Tú" : "Participante"),
     owner: p.owner,
+    userId: p.user_id || null,
+    // M30 · las pistas personalizadas (`tracks.documento`, la del visor) no
+    // se leen aquí a propósito: no pintan tesela; solo van a la grabación.
     video: pista(p.tracks?.video),
     audio: pista(p.tracks?.audio),
     pantalla: pista(p.tracks?.screenVideo),

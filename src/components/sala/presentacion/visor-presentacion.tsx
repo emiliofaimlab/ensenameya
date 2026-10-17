@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { DailyCall } from "@daily-co/daily-js";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import {
   ChevronLeftIcon,
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Herramienta } from "../canal-sala";
 import { abrirMaterial } from "./pdf";
 import type { Presentacion, Trazo } from "./use-presentacion";
+import { usePistaDocumento } from "./use-pista-documento";
 
 /** Los tres colores de anotación. Rojo, el azul de marca y verde. */
 const COLORES = [
@@ -84,17 +86,22 @@ function pintarTrazos(
  *
  * `mini`: la versión de la franja (corrección 10, cuando una pantalla
  * compartida pasa por delante), sin controles y sin dibujar.
+ *
+ * `call` (M30): solo el visor PRINCIPAL del tutor la recibe; con ella publica
+ * el documento como pista para la grabación (`usePistaDocumento`).
  */
 export function VisorPresentacion({
   pres,
   sessionId,
   isTutor,
   mini,
+  call,
 }: {
   pres: Presentacion;
   sessionId: string;
   isTutor: boolean;
   mini?: boolean;
+  call?: DailyCall | null;
 }) {
   const estado = pres.estado;
   const docId = estado?.docId ?? null;
@@ -203,6 +210,9 @@ export function VisorPresentacion({
   useEffect(() => {
     repintarNotas();
   }, [repintarNotas, pres.version]);
+
+  // M30 · mientras el tutor presenta, página + trazos van a la grabación.
+  usePistaDocumento(call ?? null, isTutor && !mini && Boolean(call) && Boolean(docId), paginaRef, notasRef);
 
   const [util, setUtil] = useState<Util>("lapiz");
   // El lápiz flotante: encendido, el lienzo dibuja y se ven las opciones.

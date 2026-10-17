@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { MicOffIcon, MoreVerticalIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -96,7 +96,9 @@ function Iniciales({ nombre }: { nombre: string }) {
 /** Lo que el tutor de una grupal puede hacer sobre la tesela de un alumno. */
 export type AccionesTesela = {
   silenciar: () => void;
-  sacar: () => void;
+  /** M2 · persiste la expulsión de esta fecha y luego saca al alumno. Si
+   *  falla, avisa ella misma (toast) y resuelve sin expulsar. */
+  sacar: (motivo: string | null) => Promise<void>;
   /** M5 · el alumno entra sin poder compartir pantalla; se lo concede el tutor. */
   pantalla?: { permitida: boolean; alternar: () => void };
 };
@@ -154,6 +156,28 @@ export function Tesela({
   const cerrarY = (fn: () => void) => () => {
     setAbierto(false);
     fn();
+  };
+  // M2 · el diálogo de «Sacar de la sala» (antes un `window.confirm`).
+  const [sacando, setSacando] = useState(false);
+  const [motivo, setMotivo] = useState("");
+  const [corriendo, setCorriendo] = useState(false);
+  const cerrarDialogo = () => {
+    if (corriendo) return;
+    setSacando(false);
+    setMotivo("");
+    // En la línea de P16: el foco vuelve al botón que abrió el menú.
+    botonRef.current?.focus();
+  };
+  const confirmarSacar = async () => {
+    if (!acciones || corriendo) return;
+    setCorriendo(true);
+    try {
+      await acciones.sacar(motivo.trim() || null);
+    } finally {
+      setCorriendo(false);
+      setSacando(false);
+      setMotivo("");
+    }
   };
   return (
     <div
@@ -229,7 +253,7 @@ export function Tesela({
                 role="menuitem"
                 onClick={() => {
                   setAbierto(false);
-                  if (window.confirm(`¿Sacar a ${p.nombre} de la sala?`)) acciones.sacar();
+                  setSacando(true);
                 }}
                 className="px-3 py-2 text-left text-red-400 hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none"
               >
@@ -237,6 +261,70 @@ export function Tesela({
               </button>
             </div>
           ) : null}
+        </div>
+      ) : null}
+      {/* M2 · diálogo propio. Va `fixed` DENTRO de la tesela y no en un portal
+          al `body`: la tesela puede vivir en la ventana flotante (Document
+          PiP), que es OTRO documento, y un portal al principal ahí no se
+          vería. Mismo aviso que el menú: un `transform` en un ancestro lo
+          rompería. */}
+      {acciones && sacando ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) cerrarDialogo();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              cerrarDialogo();
+            }
+          }}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={`sacar-${p.id}-titulo`}
+            aria-describedby={`sacar-${p.id}-cuerpo`}
+            className="flex w-full max-w-sm flex-col gap-3 rounded-lg border border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] p-4 text-sm text-[color:var(--sala-text)] shadow-lg"
+          >
+            <h2 id={`sacar-${p.id}-titulo`} className="text-base font-semibold">
+              ¿Sacar a {p.nombre} de la sala?
+            </h2>
+            <p id={`sacar-${p.id}-cuerpo`} className="text-[color:var(--sala-supportive)]">
+              No podrá volver a entrar en esta fecha. En las siguientes fechas del ciclo sí podrá.
+            </p>
+            <label className="flex flex-col gap-1">
+              <span>Motivo (opcional)</span>
+              <textarea
+                autoFocus
+                value={motivo}
+                maxLength={500}
+                rows={3}
+                disabled={corriendo}
+                onChange={(e) => setMotivo(e.target.value)}
+                className="resize-none rounded-md border border-[color:var(--sala-border)] bg-[color:var(--sala-surface)] px-2 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#fe6a00]"
+              />
+            </label>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={cerrarDialogo}
+                disabled={corriendo}
+                className="rounded-md px-3 py-1.5 hover:bg-white/10 focus-visible:bg-white/10 focus-visible:outline-none disabled:opacity-40"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmarSacar()}
+                disabled={corriendo}
+                className="rounded-md bg-red-600 px-3 py-1.5 font-semibold text-white hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:opacity-50"
+              >
+                Sacar de la sala
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

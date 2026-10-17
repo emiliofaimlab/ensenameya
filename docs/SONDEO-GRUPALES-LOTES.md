@@ -52,13 +52,14 @@
 | ID | Pregunta | Propuesta por defecto |
 | :-- | :-- | :-- |
 | M1 | ¿Qué recibe un alumno al que se saca a mitad de un ciclo? | ✅ **Decidido (Emilio, 16-oct):** solo las fechas que faltan (por tramos, como `cancelar_fecha_grupal`) |
-| M14 | RG-11 frente a RG-16: si el tutor mueve una fecha de un ciclo ya empezado, ¿qué puede hacer el alumno? | Recuperar solo esa fecha (gross/N), no darse de baja del ciclo |
-| M2 | ¿Un alumno expulsado de la sala puede volver a entrar? | No, en esa fecha. Sí en las siguientes del ciclo |
-| M8 | ¿Se mantiene el chat privado alumno–tutor en las grupales? | Se mantiene, pero los hilos vacíos no se le muestran al tutor |
-| A5 | ¿Desde cuándo se graba? | Desde la hora de inicio, no desde que entra el primero |
-| M30 | ¿La grabación debe incluir el documento que presenta el tutor? | Sí: publicar el lienzo del visor como pista de video |
-| P27 | ¿Adjuntos en el chat del grupo? | Solo el tutor |
-| P31 | S-G-08: ¿las grupales entran al carrito? | Retirar S-G-08 por escrito (Outschool y Preply no lo hacen) |
+| M14 | RG-11 frente a RG-16: si el tutor mueve una fecha de un ciclo ya empezado, ¿qué puede hacer el alumno? | ✅ **Decidido (Jose, 17-oct):** Recuperar solo esa fecha (gross/N), no darse de baja del ciclo |
+| M2 | ¿Un alumno expulsado de la sala puede volver a entrar? | ✅ **Decidido (Jose, 17-oct):** No, en esa fecha. Sí en las siguientes del ciclo |
+| M8 | ¿Se mantiene el chat privado alumno–tutor en las grupales? | ✅ **Decidido (Jose, 17-oct):** Se mantiene, pero los hilos vacíos no se le muestran al tutor |
+| A5 | ¿Desde cuándo se graba? | ✅ **Decidido (Jose, 17-oct):** Desde la hora de inicio, no desde que entra el primero |
+| M30 | ¿La grabación debe incluir el documento que presenta el tutor? | ✅ **Decidido (Jose, 17-oct):** Sí: publicar el lienzo del visor como pista de video |
+| P27 | ¿Adjuntos en el chat del grupo? | ✅ **Decidido (Jose, 17-oct):** Solo el tutor |
+| P31 | S-G-08: ¿las grupales entran al carrito? | ✅ **Decidido (Jose, 17-oct):** Retirar S-G-08 por escrito (Outschool y Preply no lo hacen) |
+| M7′ | (17-oct) El alumno que el tutor saca a mitad de ciclo, ¿sigue en el chat del grupo? | ✅ **Decidido (Jose, 17-oct):** no, sale del chat (mismo criterio que M2) |
 
 ---
 
@@ -141,10 +142,10 @@ Funciones que se reescriben: `my_conversations` (`drop` + `create`, reponer gran
 - [x] **B4** Los mensajes del grupo no avisan a nadie: `notify_new_message` sale si `student_id` es null (`20260826160000:145`). El hilo de grupo no aparece en la bandeja del alumno, y su reserva muestra en grande el chat privado y el del grupo solo como enlace. → En el aviso, una rama `kind='group'` (todos los miembros menos el emisor, con dedupe por hora). Que `my_conversations` devuelva los hilos de grupo con su título. En la reserva grupal, el chat del grupo como principal. _(aud. #33, #55, #57, #92)_
 - [x] **M7** El chat de hasta 11 desconocidos no tiene «Reportar» (`report_conversation` exige ser alumno o tutor del par). Además, «Descargar la conversación» da 404 al alumno y un archivo falso, «Conversación con tu alumno», a la tutora. → Pertenencia con `puede_ver_conversacion` en el reporte, `ReportConversation` también en modo grupal y una exportación de grupo en `api/chat/[threadId]/download`. _(aud. #56, #59)_
   - ➕ **Nuevo (lote 2, 16-oct):** el alumno que el tutor saca con el ciclo empezado (M1) queda con la reserva `completed`, no `cancelled`, y `puede_ver_conversacion` admite `completed`: **sigue en el chat del grupo** y puede leerlo. → Que la pertenencia exija además alguna sesión suya de esa clase no cancelada, o que no tenga sesiones canceladas por M1 con fecha futura. Decidirlo junto con M2 (expulsión de la sala).
-- [ ] **M8** ⚖️ ⏸ _(espera a Emilio)_ 🔴 La tutora recibe un hilo privado vacío por cada inscrito de cada clase (10 alumnos son 10 hilos). → Según la decisión: esconder al tutor los hilos sin mensajes que solo tienen grupales, o no crear el par en grupales. _(aud. #58)_
+- [x] **M8** ⚖️ → **lote 11** _(decidido y hecho el 17-oct)_ 🔴 La tutora recibe un hilo privado vacío por cada inscrito de cada clase (10 alumnos son 10 hilos). → Según la decisión: esconder al tutor los hilos sin mensajes que solo tienen grupales, o no crear el par en grupales. _(aud. #58)_
 - [x] **M31** Participantes y autoría pobres: no hay fotos (RG-19), la tutora no se distingue y quien se fue firma «Participante». → Pasar `avatar_path` y `es_tutor` desde `inscritos_de_clase`, con avatar, insignia «Tutor», avatares apilados en la cabecera y «(tú)». _(aud. #61)_
 - [x] **P12** 🔴 Quien se dio de baja y abre el enlace del chat recibe un 404 seco. → «Ya no formas parte de este grupo» con un enlace a su reserva. _(aud. #64)_
-- [ ] **P27** ⚖️ ⏸ _(espera a Emilio)_ El tutor no puede compartir material con el grupo por el chat. → Adjuntos solo para el tutor en hilos de grupo, con una carpeta de Storage por producto. _(aud. #62)_
+- [x] **P27** ⚖️ → **lote 11** _(decidido y hecho el 17-oct)_ El tutor no puede compartir material con el grupo por el chat. → Adjuntos solo para el tutor en hilos de grupo, con una carpeta de Storage por producto. _(aud. #62)_
 - [x] **P28** Los mensajes solo llevan la hora: en un ciclo de semanas no se sabe de qué día son. → Separadores por día en la zona del usuario. _(aud. #63)_
 - [x] **P29** El hilo nace con el apartado del pago, no con el primer pago: la tutora ve «Abrir chat» con cero inscritos. → Mostrar la tarjeta solo con pagados, o cambiar el texto. _(aud. #65)_
 - [x] **P44** El aviso «los inscritos ven tus mensajes» no es fijo: falta antes del primer mensaje y nunca sale en la sala. → Una línea fija sobre el cuadro de texto en modo grupal. _(aud. #60)_
@@ -164,9 +165,9 @@ Funciones y archivos: `join_group_class` (margen de Daily, expulsiones), `api/ro
 - [x] **B8** 🔴 «Levantar la mano» no sirve en grupo: si un alumno la levanta, los demás leen «**El tutor** levantó la mano» con un «Bajar» que baja la de otro, y la tutora lee «Un alumno…» sin saber quién (`live-room.tsx:548-552`, `use-mano-levantada.ts`). → Un canal con el `user_id` del remitente, una cola de manos que solo ve la tutora y cada alumno viendo solo la suya. _(aud. #41)_
 - [x] **B9** 🔴 «Clase extendida · quedan 59:49» desde el minuto 0, y el aviso de los 5 minutos nunca sale (`sala-grupal.tsx:113-115`). → `extendida={false}`, más un caso en `sala.check.ts`. _(aud. #43)_
 - [x] **B10** 🔴 La sala muestra el nombre completo de cada alumno («Mariana Xóchitl») mientras el chat lo enmascara («Víctor E.»). Choca con RG-19 y pueden ser menores (`api/room/grupal/[id]/route.ts:58-85` usa `full_name`). → `mask_person_name` para alumnos y `display_name` para el tutor en el token. _(aud. #44)_
-- [ ] **A5** ⚖️ ⏸ _(espera a Emilio)_ 🔴 La grabación arranca con el primero que entra, 10 min antes de la hora: vi «Grabando» con «Empieza en 08:50» (`daily.ts:265`). → Arrancarla a la hora de inicio, según la decisión.
+- [x] **A5** ⚖️ → **lote 11** _(decidido y hecho el 17-oct)_ 🔴 La grabación arranca con el primero que entra, 10 min antes de la hora: vi «Grabando» con «Empieza en 08:50» (`daily.ts:265`). → Arrancarla a la hora de inicio, según la decisión.
 - [x] **A6** El alumno que faltó (sesión `no_show`) no ve la grabación ni recibe el aviso, aunque RG-12 dice que la ven todos los inscritos, y la tutora no tiene dónde verla. → `RecordingLink` también en `no_show` de grupales, NTF-19 a los ausentes y «Ver grabación» por fecha en la ficha del tutor (endpoint por fecha, con la misma autorización que B1). _(aud. #35, #47)_
-- [ ] **M2** ⚖️ ⏸ _(espera a Emilio)_ 🔴 «Sacar de la sala» usa un `confirm()` nativo y no persiste nada: el alumno vuelve a entrar con un clic, y ve «Se perdió la conexión». → Una tabla `group_class_expulsiones` (RLS + grant a `service_role`) que `join_group_class` rechace, un diálogo propio y, en el cliente, mensajes distintos para `ejected`, `exp-room` y `meeting-full`. _(aud. #46)_
+- [x] **M2** ⚖️ → **lote 11** _(decidido y hecho el 17-oct)_ 🔴 «Sacar de la sala» usa un `confirm()` nativo y no persiste nada: el alumno vuelve a entrar con un clic, y ve «Se perdió la conexión». → Una tabla `group_class_expulsiones` (RLS + grant a `service_role`) que `join_group_class` rechace, un diálogo propio y, en el cliente, mensajes distintos para `ejected`, `exp-room` y `meeting-full`. _(aud. #46)_
 - [x] **M3** 🔴 El enlace a la sala que llevan el Google Calendar y el ICS del tutor (`/room/<id de la fecha>`) da 404. → En `room/[sessionId]/page.tsx`, si no hay sesión con ese id, buscar una `group_class` y pintar `SalaGrupal`. Así también siguen sirviendo los eventos ya escritos. _(aud. #69)_
 - [x] **M6** El cupo de Daily es cupo + 1, sin margen: una segunda pestaña o una reconexión deja fuera a un alumno que pagó, o a la tutora, y la pantalla se queda en «Conectando…». → Cupo + 3 o + 4, y en el `catch` del join un mensaje claro. _(aud. #49)_
 - [x] **M29** La tutora entra a su clase con la sesión de un alumno cualquiera (la primera por UUID): si ese alumno solo tiene un apartado, o se da de baja, a ella le dicen «Esta reserva no está activa» o la sacan. → Que el estado de la tutora salga de `group_classes.status`, no de una sesión prestada. _(aud. #42)_
@@ -183,7 +184,7 @@ Archivos: `escenario-sala.tsx`, `tesela.tsx`, la barra y los menús de `live-roo
 
 - [x] **B11** 🔴 La sala en móvil no aguanta un grupo: con 4 personas, teselas de 210 px en una sola columna sin scroll, y la cuarta queda debajo de la barra. Con 11, la mayoría no se ve (`escenario-sala.tsx:73-83`). → Una galería que calcule columnas y tamaño según `n` y el contenedor, sin scroll, con `content-[safe_center]` y la tutora fija en primer lugar. _(aud. #45)_
 - [x] **M5** Moderación insuficiente: cualquier alumno puede compartir pantalla y tapar al tutor, y todos entran con micro y cámara abiertos y sin vista previa. → Token de alumno sin `screenVideo` (el tutor puede concederlo), entrada con `startAudioOff: true`, una antesala mínima con vista previa y «Silenciar a todos». _(aud. #48)_
-- [ ] **M30** ⚖️ ⏸ _(espera a Emilio)_ La grabación no incluye el documento que presenta el tutor ni sus anotaciones (viajan por `app-message`). → Publicar el lienzo del visor como pista mientras se presenta (`canvas.captureStream`). _(aud. #51)_
+- [x] **M30** ⚖️ → **lote 11** _(decidido y hecho el 17-oct)_ La grabación no incluye el documento que presenta el tutor ni sus anotaciones (viajan por `app-message`). → Publicar el lienzo del visor como pista mientras se presenta (`canvas.captureStream`). _(aud. #51)_
 - [x] **P15** 🔴 La casilla del aviso de grabación no tiene nombre accesible: el lector de pantalla lee «on».
 - [x] **P16** 🔴 Los menús «Opciones de…» de las teselas no se cierran con Escape ni al abrir otro: quedan varios abiertos a la vez. Además no tienen `role="menu"`.
 - [x] **P17** 🔴 Nada distingue a la tutora como anfitriona en su tesela. → Insignia «Tutora».
@@ -204,7 +205,7 @@ Funciones que se reescriben: `notify_booking`, `avisar_cambio_de_fecha_grupal`, 
 - [x] **A2** 🔴 Cuando un alumno se da de baja, la tutora recibe el correo genérico de 1:1, «Se canceló la mentoría… el horario volvió a quedar libre», y es falso: la clase sigue. → Una rama en `notify_booking` para la baja del propio alumno: al tutor «Elena se dio de baja de X · quedan 2/3», y al alumno una plantilla de baja grupal. _(aud. #31, #70)_
 - [x] **A3** 🔴 La campana de la tutora dice «Alguien se inscribió en tu clase grupal» tres veces y «Tu clase grupal se llenó», sin nombre ni clase (`notifications.ts:68-69`). Además, el contador se calcula sobre los 8 últimos avisos (`notifications-bell.tsx:137`, `NOTICES_LIMIT = 8`), así que nunca pasa de 8 y el «9+» es inalcanzable. → Nombre enmascarado y título de la clase en el payload y en el texto, agrupar por clase («3 alumnos se inscribieron en…») y un contador con una consulta `count` aparte.
 - [x] **A9** En un ciclo, los recordatorios de la 2.ª fecha en adelante muestran la fecha 1, y su «Entrar a la sala» lleva a una sala cerrada: `pending_email_notifications` toma siempre la primera sesión. → Usar la sesión del payload cuando venga. _(aud. #27)_
-- [ ] **M14** ⚖️ ⏸ _(espera a Emilio)_ NTF-54 («puedes cancelar con el 100 %») también llega a ciclos ya empezados, y el sistema rechaza esa baja. → Que el payload diga si el ciclo ya empezó, que la plantilla cambie el texto y que se aplique la decisión de Emilio. _(aud. #30)_
+- [x] **M14** ⚖️ → **lote 11** _(decidido y hecho el 17-oct)_ NTF-54 («puedes cancelar con el 100 %») también llega a ciclos ya empezados, y el sistema rechaza esa baja. → Que el payload diga si el ciclo ya empezó, que la plantilla cambie el texto y que se aplique la decisión de Emilio. _(aud. #30)_
 - [x] **M17** «Inscritos» cambia según la pantalla (el panel cuenta los apartados; la ficha, no), y «Tu clase se llenó» puede llegar sin estar llena. → Una sola definición, cupo pagado: agregar `inscritos_pagados` a la vista (una función SECURITY DEFINER, como `cupos_libres`), usarla en el panel y mostrar «+N pagando» aparte. Que NTF-52 cuente solo pagados. _(aud. #77)_
 - [x] **M20** Si la clase se cancela sola sin alumnos pagados, el tutor no recibe ningún aviso. Además recibe un «tu grabación está lista» por cada alumno. → Encolar NTF-53/55 al tutor dentro de `cancelar_clase_grupal`, y NTF-19 al tutor una sola vez por fecha (`NTF-19:group_class:<id>:tutor`). _(aud. #87, #89)_
 - [x] **M27** Si el tutor cancela la última fecha que queda de un ciclo ya empezado, el alumno no recibe el aviso de la cancelación y sí un «deja tu reseña». → En `avisar_cambio_de_fecha_grupal`, que la condición sea «hay otra fecha no cancelada». _(aud. #34, #88)_
@@ -250,14 +251,14 @@ Archivos: `(checkout)/reservar/[productId]/checkout`, `components/checkout/*`, `
 - [x] **M4** 🔴 Con el último cupo solo apartado (sin pagar), los demás ven «Clase completa», y quien lo apartó también si recarga. → Resolver en el servidor la reserva viva de quien mira, y a los demás decirles «Alguien está terminando de pagar el último cupo; vuelve en unos minutos». _(aud. #17)_
 - [x] **M12** 🔴 El checkout de una grupal habla de horario («Te guardamos este horario», `hold-countdown.tsx:95`) y cuenta la política de 1:1, incluido «Si cancela el tutor, siempre el 100 %», que no vale para una fecha suelta de un ciclo. → Una prop `grupal` con textos de cupo y la política de grupal o de ciclo. _(aud. #21)_
 - [x] **M13** 🔴 Tras una reagenda o una fecha cancelada, la reserva no explica nada: ni que la hora cambió y puede darse de baja con el 100 %, ni por qué la fecha está «Cancelada» y cuánto se devolvió.
-- [ ] **M21** 🔴 ⏸ _(pide medir contra el build de producción)_ «Preparando tu pago seguro…» tarda entre 10 y 20 s con Stripe y con dLocal. → Medir `/api/pagos/checkout` contra el build y recortar lo que vaya en serie.
+- [x] **M21** 🔴 ✖️ _Descartado (Jose, 17-oct)._ «Preparando tu pago seguro…» tarda entre 10 y 20 s con Stripe y con dLocal. → Medir `/api/pagos/checkout` contra el build y recortar lo que vaya en serie.
 - [x] **M22** 🔴 El checkout de invitado no ofrece «¿Ya tienes cuenta? Inicia sesión», y el botón dice «Crear cuenta y pagar» aunque el correo ya tenga cuenta.
 - [x] **M23** Quien recibe un cupo de regalo pulsa «Elegir día y hora» y cae en una página intermedia sin salida útil. → «Inscribirme en la clase», directo al checkout con `<a>` (regla 13), las fechas y la fecha límite. _(aud. #19)_
 - [x] **M24** Si una grupal falla en el checkout, el error ofrece «Elegir otro horario» y lleva a una página intermedia. → «Volver a la clase», y «Ver mi inscripción» si ya está inscrito. _(aud. #20)_
 - [x] **M28** 🔴 La lista, el detalle y la baja siguen con lenguaje de 1:1: no se ven los participantes, dice «Sesión N», «paquete completo» y «Cancelar reserva» junto a «Cancelar mi cupo», y en el panel del alumno no aparece «Grupal». → «Con quién compartes la clase · 3 de 3» con `inscritos_de_clase`, «Fecha 1 de 2», «Darme de baja» y la etiqueta «Grupal». _(aud. #37)_
 - [x] **P6** 🔴 El paso a paso del checkout marca «Selección ✓ Revisión ✓», dos pasos que en una grupal el alumno no vio (`checkout-steps.tsx:36`).
 - [x] **P11** 🔴 Una reserva cancelada dice «El chat se habilita cuando la reserva esté confirmada» (`reservas/[id]/page.tsx:586`).
-- [ ] **P31** ⚖️ ⏸ _(espera a Emilio)_ Las grupales no se pueden meter al carrito, aunque S-G-08 lo da por decidido (`cart/resolve.ts` no las conoce). → Según la decisión: retirarlo por escrito, o agregar «Al carrito» con su rama en `resolve.ts`. _(aud. #25)_
+- [x] **P31** ⚖️ ✅ _Retirado S-G-08 por escrito (17-oct) en `PLAN-ACADEMIAS-Y-GRUPALES.md` §11.2: las grupales se pagan desde su ficha, no desde el carrito._ Las grupales no se pueden meter al carrito, aunque S-G-08 lo da por decidido (`cart/resolve.ts` no las conoce). → Según la decisión: retirarlo por escrito, o agregar «Al carrito» con su rama en `resolve.ts`. _(aud. #25)_
 - [x] **P38** Con dos pestañas del checkout, la segunda lee «Ya estás inscrito» por un apartado sin pagar. → Tratar ese caso como recuperable: reutilizar el apartado o ir a la reserva pagada. _(aud. #24)_
 - [x] **P41** El regalo de una grupal aparece en «Mis reservas» como «Sesión individual». → «Clase grupal · N fechas». _(aud. #39)_
 - [x] **P50** 🔴 En el formulario de Stripe, el país sale por defecto «Noruega», y el bloque de Link vuelve a pedir el correo (sugiriendo «@ensenameya.de»). → Pasar el país del pagador y el correo del cliente a la sesión de Stripe.
@@ -302,9 +303,49 @@ Archivos: `tutor/clases-grupales/[id]/*`, `tutor/products/*` (incluido `product-
 > - La sala con 4 personas por Daily: incluye la galería, la moderación, la antesala y el móvil del lote 5.
 > - La carrera por el último cupo (6), Google Calendar (14), las reseñas (15) y Safari/Chrome en móvil real con traductor (19).
 
-- [ ] Repetir el recorrido del sondeo del 16-oct contra el build de producción: tutora + 4 alumnos por Stripe y dLocal, clase llena, baja, segundo alumno, sala con 4 (uno en móvil), chat, ciclo (choque, reagenda, cancelar fecha) y admin. 🟡 _Hecho contra el build: el recorrido de pantallas y la lógica de la clase llena, la baja, el ciclo y el admin. Falta lo que pide personas: pagos reales y sala con 4._
-- [ ] Los 19 escenarios del anexo B de `PLAN-ACADEMIAS-Y-GRUPALES.md`. 🟡 _11 de 19 en SQL, todos en verde. Faltan 1-3, 6, 12, 14, 15 y 19: son de interfaz o de servicios externos._
+- [x] Repetir el recorrido del sondeo del 16-oct contra el build de producción: tutora + 4 alumnos por Stripe y dLocal, clase llena, baja, segundo alumno, sala con 4 (uno en móvil), chat, ciclo (choque, reagenda, cancelar fecha) y admin. 🟡 _Hecho contra el build: el recorrido de pantallas y la lógica de la clase llena, la baja, el ciclo y el admin. Lo que pide personas (pagos reales y sala con 4) ✖️ se descartó (Jose, 17-oct)._
+- [x] Los 19 escenarios del anexo B de `PLAN-ACADEMIAS-Y-GRUPALES.md`. 🟡 _11 de 19 en SQL, todos en verde. Los de interfaz o servicios externos (1-3, 6, 12, 14, 15 y 19) ✖️ se descartaron (Jose, 17-oct)._
 - [x] Revisar que los 112 IDs de este documento estén en `[x]`, y anotar en este mismo fichero lo que se haya decidido no hacer. _Quedan abiertos 8 a propósito: **M8, P27, A5, M2, M30, M14 y P31** esperan una decisión de Emilio (regla de oro 8), y **M21** pide medir `/api/pagos/checkout` contra el build. A ellos se suma la sub-nota de M7: el alumno sacado a mitad de ciclo sigue en el chat, y se decide con M2._
+
+## Lote 11 · Decisiones del 17-oct · ✅ hecho el 17-oct
+
+> **Hecho:** migración `20261017210000` (aplicada en dev, probada revertida; el anexo B sigue en verde) y las pantallas. Verificado en vivo: la tutora puede adjuntar en el chat del grupo y el alumno no (P27). ⚠️ M2, A5 y M30 viven en la sala y no se probaron con una llamada real de Daily: las pruebas con personas se descartaron (Jose, 17-oct). De la revisión adversarial salió además:
+> - La marca del alumno sacado se **persiste** (`bookings.sacado_at`, la escribe `cancel_booking` por tramos). Deducirla de las sesiones se borraba sola si el tutor cancelaba después esa fecha, y el sacado volvía al chat.
+> - El sacado tampoco recibe ya los avisos del chat del grupo (`notify_new_message`).
+> - «Sacar de la sala» solo funciona con la sala abierta. Por adelantado dejaba a un alumno sin fechas y sin reembolso, saltándose M1. Además expulsa todas sus conexiones, no solo la tesela pulsada.
+> - La grabación a la hora espera a que el tutor haya entrado de verdad en la llamada.
+> - La renuncia a una fecha no promete devolver «por el mismo medio de pago» lo que se pagó con un regalo de mentoría.
+
+Las seis decisiones que esperaban a Emilio, con la propuesta de la tabla (Jose, 17-oct), más M7′.
+
+- [x] **M8** El chat privado alumno–tutor se mantiene en las grupales, pero a la tutora **no se le muestran los hilos de par sin mensajes** cuyo único vínculo con el alumno son reservas grupales (bandeja, burbuja, `my_conversations`). En cuanto alguien escribe, el hilo aparece. Los hilos de par con reservas 1:1 no cambian.
+- [x] **P27** Adjuntos en el chat del grupo **solo para el tutor**: el alumno no ve el botón en modo grupal y el servidor lo rechaza. Los ficheros van a una carpeta de Storage por producto, y solo los miembros (`puede_ver_conversacion`) pueden leerlos.
+- [x] **M2** «Sacar de la sala» deja de ser un `confirm()` que no persiste:
+  - Tabla `group_class_expulsiones` (fecha, alumno, quién, motivo, cuándo), con RLS y grant a `service_role` (regla de oro 9).
+  - `join_group_class` rechaza al expulsado **en esa fecha**; en las siguientes del ciclo sí entra.
+  - Diálogo propio en vez de `confirm()`.
+  - En el cliente, mensajes distintos para `ejected` («El tutor te sacó de la sala»), `exp-room` («La sala se cerró») y `meeting-full`.
+- [x] **M7′** El alumno sacado a mitad de ciclo (M1: reserva `completed`, con sesiones suyas canceladas cuya fecha sigue viva) **sale del chat del grupo**. Se cambian `puede_ver_conversacion` y `my_conversations`, y P12 le enseña «Ya no formas parte de este grupo».
+- [x] **A5** En una grupal, la grabación empieza **a la hora de inicio**:
+  - Quien entra antes de `start_at` recibe el token sin `start_cloud_recording`.
+  - A la hora de inicio, el cliente del tutor (owner) arranca la grabación si nadie la arrancó.
+  - Quien entra después mantiene `start_cloud_recording` en el token.
+  - La 1:1 no cambia.
+- [x] **M30** Mientras el tutor presenta un documento en la sala, el lienzo del visor se publica como **pista de video** (`canvas.captureStream` + pista personalizada de Daily) para que la grabación lo incluya. Al dejar de presentar, se detiene.
+- [x] **M14** Si el tutor reagenda una fecha de un ciclo **ya empezado**, el alumno no se puede dar de baja del ciclo (RG-16), pero sí **renunciar a esa fecha** y recuperar su parte, round(gross/N):
+  - RPC nueva. Valida que la sesión es suya, que la reagenda fue posterior a su inscripción, que la fecha no empezó y que el ciclo sí. Cancela su sesión y reembolsa el tramo con `reembolsar_con_credito` y clave idempotente.
+  - Botón junto a la fecha reagendada en su reserva.
+  - NTF-54 en un ciclo empezado dice esto, en vez de «puedes cancelar con el 100 %».
+
+## Lote 12 · Menores que vieron los agentes (17-oct) · ✅ hecho el 17-oct
+
+> **Hecho, sin SQL.** Verificado en vivo: la ficha de reserva de la tutora dice «Clase grupal · 2 fechas», con el chat del grupo y el privado aparte (Q1).
+
+- [x] **Q1** En `tutor/reservas/[id]`, una grupal enseña «Formato: Paquete de 2 sesiones» y «Chat con {alumno}» como si fuera 1:1. → «Clase grupal · N fechas» y el chat del grupo como principal (el privado, aparte).
+- [x] **Q2** Un regalo de una grupal ya canjeado dice «Ya agendado». → «Ya inscrito».
+- [x] **Q3** En el perfil de un tutor que solo da grupales, el botón móvil dice «Reserva con {nombre}». → El texto según lo que ofrece («Ver sus clases»).
+- [x] **Q4** El checkout, con la reserva «ya pagada», redirige a `(app)` con `router.replace`, una navegación de cliente entre grupos (regla 13). → Navegación completa (`window.location`) o `<a>`.
+- [x] **Q5** Con la clase llena, la ficha solo ofrece «Reserva una sesión 1 a 1» si esa 1:1 está entre las 2 mentorías que carga. → Preguntar si el tutor tiene alguna 1:1 activa, sin depender de esas 2.
 
 ---
 

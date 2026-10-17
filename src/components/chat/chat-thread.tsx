@@ -21,6 +21,7 @@ import {
   attachmentUrl,
   humanSize,
   uploadAttachment,
+  uploadGroupAttachment,
   type Attachment,
 } from "@/lib/chat/attachments";
 import {
@@ -392,7 +393,14 @@ export function ChatThread({
   // medias (la reserva nace en `pending_payment`). Eso no es una compra, así
   // que ni adjuntos ni trato de cliente — el servidor lo reenvía por la vía de
   // consulta aunque se le mande el `booking_id`.
-  const puedeAdjuntar = Boolean(bookingId) && hasBooking !== false;
+  //
+  // Lote 11 (P27) · en el chat del GRUPO el clip es solo del tutor. Tampoco
+  // aquí esconderlo es la barrera: la ponen `send_group_attachment` (rechaza a
+  // quien no es el tutor del hilo) y la política de INSERT de Storage sobre la
+  // carpeta `grupo/<producto>/`.
+  const puedeAdjuntar = grupal
+    ? Boolean(grupal.miembros.find((m) => m.userId === currentUserId)?.esTutor)
+    : Boolean(bookingId) && hasBooking !== false;
   // «Todavía no ha pagado nadie». Desde MN-06 esto solo puede ser el checkout en
   // curso o un hilo cerrado; la diferencia la marca `soloLectura`, y de ella
   // dependen los textos de abajo.
@@ -761,9 +769,13 @@ export function ChatThread({
   }
 
   async function attach(file: File) {
-    if (!bookingId) return; // sin reserva no hay dónde subirlo (ni RPC que lo acepte)
+    // P27 · en el grupo la carpeta es la del producto y la RPC, la del grupo.
+    const enGrupo = Boolean(grupal && conversationId);
+    if (!enGrupo && !bookingId) return; // sin reserva no hay dónde subirlo (ni RPC que lo acepte)
     setBusy(true);
-    const res = await uploadAttachment(bookingId, file);
+    const res = enGrupo
+      ? await uploadGroupAttachment(conversationId!, file)
+      : await uploadAttachment(bookingId!, file);
     setBusy(false);
     if ("error" in res) {
       toast.error(res.error);
@@ -776,7 +788,8 @@ export function ChatThread({
       createdAt: new Date().toISOString(),
       // Un adjunto solo existe con la reserva pagada detrás (el `check` de la
       // tabla ata las dos cosas), así que aquí la etiqueta es siempre la suya.
-      bookingId,
+      // En el grupo no hay reserva que etiquetar.
+      bookingId: enGrupo ? null : (bookingId ?? null),
       attachment: res.attachment,
     });
     toast.success("Documento compartido.");

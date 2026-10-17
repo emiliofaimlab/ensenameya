@@ -79,6 +79,10 @@ export async function POST(
       // M5 · el alumno entra sin poder compartir pantalla; se lo concede el
       // tutor. Antes cualquiera podía compartir y tapar al tutor.
       canSend: auth.is_tutor ? undefined : ["video", "audio"],
+      // A5 · la grabación empieza a la hora de inicio: quien entra antes
+      // recibe el token sin arrancarla, y a la hora la arranca el cliente del
+      // tutor. Quien entra después la sigue pidiendo (inocuo si ya graba).
+      startRecording: Date.now() >= new Date(auth.starts_at).getTime(),
     });
     return NextResponse.json({
       roomUrl,

@@ -244,6 +244,13 @@ export async function mintToken(opts: {
    * tutor desde su tesela (`updatePermissions`).
    */
   canSend?: Array<"video" | "audio" | "screenVideo" | "screenAudio">;
+  /**
+   * A5 · si el token arranca la grabación al entrar. Por defecto sí (la 1:1
+   * no cambia). En una grupal, quien entra ANTES de la hora de inicio lo
+   * recibe en `false`: la grabación la arranca a la hora el cliente del tutor
+   * (owner), o el token del primero que entre ya en hora.
+   */
+  startRecording?: boolean;
 }): Promise<string> {
   const res = await daily("/meeting-tokens", {
     method: "POST",
@@ -268,7 +275,13 @@ export async function mintToken(opts: {
         // la clase empieza igual y tiene que quedar grabada desde el primer
         // minuto. Que el segundo en entrar lo pida otra vez es inocuo — la
         // grabación ya está en marcha y Daily no abre una segunda.
-        start_cloud_recording: true,
+        //
+        // A5 · en una GRUPAL, quien entra antes de la hora de inicio no la
+        // arranca (`startRecording: false`): se grababa la antesala, 10 min
+        // antes de empezar. A la hora la arranca el cliente del tutor
+        // (`live-room.tsx`), y quien entra ya en hora la sigue pidiendo aquí.
+        // La 1:1 no pasa la opción: graba desde el primero que entra.
+        start_cloud_recording: opts.startRecording ?? true,
         ...(opts.canSend ? { permissions: { canSend: opts.canSend } } : {}),
       },
     }),

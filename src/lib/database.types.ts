@@ -552,6 +552,7 @@ export type Database = {
           payer_country: string | null
           pricing_model: Database["public"]["Enums"]["pricing_model"]
           product_id: string
+          sacado_at: string | null
           sacado_por_admin_at: string | null
           session_duration_min: number
           status: Database["public"]["Enums"]["booking_status"]
@@ -580,6 +581,7 @@ export type Database = {
           payer_country?: string | null
           pricing_model: Database["public"]["Enums"]["pricing_model"]
           product_id: string
+          sacado_at?: string | null
           sacado_por_admin_at?: string | null
           session_duration_min: number
           status?: Database["public"]["Enums"]["booking_status"]
@@ -608,6 +610,7 @@ export type Database = {
           payer_country?: string | null
           pricing_model?: Database["public"]["Enums"]["pricing_model"]
           product_id?: string
+          sacado_at?: string | null
           sacado_por_admin_at?: string | null
           session_duration_min?: number
           status?: Database["public"]["Enums"]["booking_status"]
@@ -1124,6 +1127,62 @@ export type Database = {
             foreignKeyName: "google_calendar_connections_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_class_expulsiones: {
+        Row: {
+          created_at: string
+          expulsado_por: string | null
+          group_class_id: string
+          id: string
+          motivo: string | null
+          student_id: string
+        }
+        Insert: {
+          created_at?: string
+          expulsado_por?: string | null
+          group_class_id: string
+          id?: string
+          motivo?: string | null
+          student_id: string
+        }
+        Update: {
+          created_at?: string
+          expulsado_por?: string | null
+          group_class_id?: string
+          id?: string
+          motivo?: string | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_class_expulsiones_expulsado_por_fkey"
+            columns: ["expulsado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_class_expulsiones_group_class_id_fkey"
+            columns: ["group_class_id"]
+            isOneToOne: false
+            referencedRelation: "group_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_class_expulsiones_group_class_id_fkey"
+            columns: ["group_class_id"]
+            isOneToOne: false
+            referencedRelation: "group_classes_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_class_expulsiones_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -2542,6 +2601,7 @@ export type Database = {
           group_class_id: string | null
           id: string
           recordings_purged_at: string | null
+          renunciada_at: string | null
           sequence_no: number | null
           session_ref: string | null
           start_at: string
@@ -2564,6 +2624,7 @@ export type Database = {
           group_class_id?: string | null
           id?: string
           recordings_purged_at?: string | null
+          renunciada_at?: string | null
           sequence_no?: number | null
           session_ref?: string | null
           start_at: string
@@ -2586,6 +2647,7 @@ export type Database = {
           group_class_id?: string | null
           id?: string
           recordings_purged_at?: string | null
+          renunciada_at?: string | null
           sequence_no?: number | null
           session_ref?: string | null
           start_at?: string
@@ -3841,6 +3903,10 @@ export type Database = {
         Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
         Returns: Json
       }
+      expulsar_de_clase_grupal: {
+        Args: { p_group_class: string; p_motivo?: string; p_student: string }
+        Returns: undefined
+      }
       extend_session: {
         Args: { p_minutos?: number; p_session_id: string }
         Returns: Json
@@ -4137,6 +4203,7 @@ export type Database = {
         Returns: number
       }
       regalos_de_grupales_cerradas: { Args: never; Returns: number }
+      renunciar_fecha_grupal: { Args: { p_session: string }; Returns: Json }
       report_conversation: {
         Args: { p_conversation_id: string; p_reason: string }
         Returns: string
@@ -4198,6 +4265,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      sacado_del_grupo: { Args: { p_booking: string }; Returns: boolean }
       search_product_ids_fuzzy: {
         Args: { p_limit?: number; p_q: string }
         Returns: {
@@ -4206,6 +4274,15 @@ export type Database = {
       }
       send_conversation_message: {
         Args: { p_body: string; p_conversation_id: string }
+        Returns: string
+      }
+      send_group_attachment: {
+        Args: {
+          p_attachment_name: string
+          p_attachment_path: string
+          p_attachment_size: number
+          p_conversation_id: string
+        }
         Returns: string
       }
       send_message: {

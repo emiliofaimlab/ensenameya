@@ -46,6 +46,7 @@ import { roomOpen } from "@/lib/room-window";
 import { reservaResenable } from "@/lib/resena";
 import { ResenaAlColgar } from "./resena-al-colgar";
 import { ChatPrivadoButton } from "./chat-privado-button";
+import { RenunciarFechaButton } from "./renunciar-fecha-button";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -133,7 +134,7 @@ export default async function BookingDetailPage({
       // cuándo se reagendó la fecha y si se canceló. ⚠️ `cancel_reason` NO:
       // el lote 1 (P33) le quitó el SELECT a anon/authenticated, y pedirla
       // tumba la consulta ENTERA con 42501 (también en las 1:1).
-      "id, status, cancel_reason, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model, status, capacity), sessions(id, start_at, end_at, status, session_ref, group_class_id, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status), group_classes(rescheduled_at, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
+      "id, status, cancel_reason, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, created_at, products(title, tutor_id, requirements, pricing_model, status, capacity), sessions(id, start_at, end_at, status, session_ref, group_class_id, renunciada_at, access_opens_at, access_closes_at, session_reschedules(id, new_start_at, proposed_by, status), group_classes(rescheduled_at, status)), payments(status, gross_amount, currency, paid_at, refunded_amount), reviews(id)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -267,10 +268,30 @@ export default async function BookingDetailPage({
   // y sin error también es un fallo mientras la clase sigue: la reserva pagada
   // lo tiene. Con la reserva `completed` no: el hilo se purga a los 30 días
   // de la última fecha (`hilo_grupal_caducado`).
-  const chatGrupoBorrado = esGrupal && chatOpen && !chatGrupo && booking.status === "completed";
+  //
+  // Lote 11 (M7′) · al alumno que el tutor sacó a mitad de ciclo (M1) el hilo
+  // ya no se le enseña (`puede_ver_conversacion`), y eso no es ni un fallo ni
+  // el hilo purgado: tiene su propio texto. Se deduce de SUS sesiones con la
+  // misma condición que `sacado_del_grupo` en SQL: una fecha suya cancelada sin
+  // haber renunciado a ella y cuya clase sigue en pie. Con `chatOpen`: una
+  // reserva cancelada también tiene sus fechas canceladas, y ahí manda «Esta
+  // reserva está cancelada».
+  const sacadoDelGrupo =
+    esGrupal &&
+    chatOpen &&
+    sessions.some(
+      (s) =>
+        s.group_class_id &&
+        s.status === "cancelled" &&
+        !s.renunciada_at &&
+        s.group_classes?.status !== "cancelled",
+    );
+  const chatGrupoBorrado =
+    esGrupal && chatOpen && !chatGrupo && booking.status === "completed" && !sacadoDelGrupo;
   const chatGrupoNoDisponible =
     esGrupal &&
     chatOpen &&
+    !sacadoDelGrupo &&
     (Boolean(chatGrupoError) ||
       (!chatGrupo && !chatGrupoBorrado) ||
       Boolean(grupoMsgs?.error) ||
@@ -300,6 +321,32 @@ export default async function BookingDetailPage({
     politica?.permitida === true && !politica.es_tutor && politica.reagendada === true;
   const reservaCancelada =
     booking.status === "cancelled" || booking.status === "refunded";
+  // Lote 11 (M14) · con el ciclo ya empezado no hay baja (RG-16): si el tutor
+  // reagendó una fecha después de la inscripción, la salida es renunciar a ESA
+  // fecha. La estimación de su parte es round(gross/N), la misma cuenta que
+  // `renunciar_fecha_grupal`; lo devuelto de verdad lo dice «Pago».
+  const ahora = new Date();
+  const cicloEmpezado = sessions.some(
+    (x) => x.group_class_id && x.status !== "cancelled" && new Date(x.start_at) <= ahora,
+  );
+  const puedeRenunciarFechas =
+    esGrupal &&
+    cicloEmpezado &&
+    booking.student_id === user.id &&
+    (booking.status === "confirmed" || booking.status === "in_progress");
+  const parteDeFecha =
+    payment && booking.num_sessions > 0
+      ? Math.round(payment.gross_amount / booking.num_sessions)
+      : null;
+  /** ¿Se le ofrece «Renunciar a esta fecha» en esta fila? `renunciar_fecha_grupal` vuelve a comprobarlo todo. */
+  const renunciable = (s: (typeof sessions)[number]) =>
+    puedeRenunciarFechas &&
+    Boolean(s.group_class_id) &&
+    s.status === "scheduled" &&
+    new Date(s.start_at) > ahora &&
+    Boolean(s.group_classes?.rescheduled_at) &&
+    new Date(s.group_classes!.rescheduled_at!).getTime() >
+      new Date(booking.created_at).getTime();
   // M28 · con quién se comparte la clase: la misma lista que alimenta el chat
   // del grupo (nombres ya enmascarados por la RPC). Si falló, no se pinta: el
   // chat ya dice que no está disponible.
@@ -476,6 +523,9 @@ export default async function BookingDetailPage({
                           <p className="mt-1 text-[12.5px] text-[#6b6b6b]">
                             El tutor cambió la hora de esta fecha después de tu
                             inscripción.
+                            {renunciable(s)
+                              ? " Si la nueva hora no te sirve, puedes renunciar a esta fecha y te devolvemos su parte."
+                              : null}
                           </p>
                         ) : null}
                         {s.group_class_id &&
@@ -485,7 +535,9 @@ export default async function BookingDetailPage({
                             {/* La fecha de la CLASE cancelada (la canceló el
                                 tutor) o solo la tuya (M1: te sacó del resto
                                 del ciclo y la clase sigue). */}
-                            {s.group_classes?.status === "cancelled"
+                            {s.renunciada_at
+                              ? "Renunciaste a esta fecha porque el tutor cambió la hora; lo devuelto está en \"Pago\"."
+                              : s.group_classes?.status === "cancelled"
                               ? "El tutor canceló esta fecha. Te devolvimos la parte de esta fecha; el total devuelto está en \"Pago\"."
                               : "El tutor te dio de baja del resto del ciclo: te devolvimos las fechas que faltaban; el total devuelto está en \"Pago\"."}
                           </p>
@@ -513,6 +565,13 @@ export default async function BookingDetailPage({
                             A6 · RG-12: la grabación de la fecha la ven todos los
                             inscritos, también quien faltó (`no_show`). La guarda
                             B1 del endpoint solo rechaza `cancelled`. */}
+                        {renunciable(s) && parteDeFecha !== null && payment ? (
+                          <RenunciarFechaButton
+                            sessionId={s.id}
+                            parte={parteDeFecha}
+                            currency={payment.currency}
+                          />
+                        ) : null}
                         {s.status === "completed" ||
                         (s.group_class_id && s.status === "no_show") ? (
                           <RecordingLink sessionId={s.id} nroSesion={s.session_ref} />
@@ -743,6 +802,12 @@ export default async function BookingDetailPage({
                   // P45 · nunca desaparecer en silencio.
                   <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
                     El chat no está disponible. Vuelve a intentarlo en unos minutos.
+                  </p>
+                ) : sacadoDelGrupo ? (
+                  // Lote 11 (M7′) · el sacado ya no lee el hilo del grupo.
+                  <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                    Ya no formas parte de este grupo: el tutor te dio de baja del
+                    resto del ciclo, así que ya no puedes leer su chat.
                   </p>
                 ) : chatGrupoBorrado ? (
                   <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">

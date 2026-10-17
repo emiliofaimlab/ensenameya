@@ -462,6 +462,8 @@ export function LiveRoom({
   useEffect(() => {
     endAtRef.current = endAt;
   }, [endAt]);
+  /** M2 · el tutor me sacó (`ejected`): al salir no se pide reseña. */
+  const expulsado = useRef(false);
   const salirDeLaSala = useCallback(() => {
     if (saliendo.current) return;
     saliendo.current = true;
@@ -472,6 +474,7 @@ export function LiveRoom({
     // El tutor no lo ve nunca. Misma navegación de siempre (regla 13).
     const pedirResena =
       !isTutor &&
+      !expulsado.current &&
       Date.now() >= Date.parse(endAtRef.current) - RESENA_MIN_ANTES_DEL_FIN * 60_000;
     router.push(
       pedirResena ? `${detalleDeLaReserva}?resena=1` : detalleDeLaReserva,
@@ -593,6 +596,29 @@ export function LiveRoom({
   useEffect(() => {
     canal?.enviar({ k: "sync-request" });
   }, [canal]);
+
+  // A5 · en una grupal la grabación empieza A LA HORA DE INICIO: quien entra
+  // antes recibe el token sin `start_cloud_recording` (`api/room/grupal`).
+  // Llegada la hora, el cliente del tutor (owner, el único con permiso) la
+  // arranca si aún no graba. Una sola vez: si ya la arrancó el token de un
+  // alumno que entró en hora, Daily lo rechaza con un error no fatal
+  // (`recording-error`), que no rompe nada. La 1:1 no pasa por aquí. El ref
+  // guarda la LLAMADA a la que ya se le pidió: si se reentra, se pide otra vez.
+  const grabacionPedida = useRef<DailyCall | null>(null);
+  useEffect(() => {
+    if (!esGrupal || !isTutor || !call || !joined || joined.simulated) return;
+    if (grabando || grabacionPedida.current === call) return;
+    if (now === null || now < Date.parse(startAt)) return;
+    // `joined` llega con la respuesta del API, ANTES de `call.join`: si la hora
+    // cae a mitad del join, el pedido se perdía. El tic de `now` reintenta.
+    if (call.meetingState() !== "joined-meeting") return;
+    grabacionPedida.current = call;
+    try {
+      call.startRecording();
+    } catch (e) {
+      console.warn("[daily] no se pudo arrancar la grabación:", e);
+    }
+  }, [esGrupal, isTutor, call, joined, grabando, now, startAt]);
 
   /** El contenedor que va a pantalla completa: vídeo + presentación + chat. */
   const salaRef = useRef<HTMLDivElement>(null);
@@ -717,8 +743,20 @@ export function LiveRoom({
         // M6 · sala llena (otra pestaña abierta, o una reconexión que aún
         // ocupa su lugar): se dice qué hacer. Mismo id que el `catch` del
         // `join`, que suele saltar a la vez, para no duplicar el aviso.
-        if (e?.error?.type === "meeting-full") {
+        //
+        // M2 · y se distingue por qué se cae: antes el expulsado leía «Se
+        // perdió la conexión» y volvía a entrar con un clic. Los literales son
+        // los de `DailyFatalErrorType` (daily-js 0.91).
+        const tipo = e?.error?.type;
+        if (tipo === "meeting-full") {
           toast.error(SALA_LLENA, { id: "sala-join" });
+        } else if (tipo === "ejected") {
+          // Antes de `left-meeting`, que es el que navega: así
+          // `salirDeLaSala` ya sabe que no toca pedir reseña.
+          expulsado.current = true;
+          toast.error("El tutor te sacó de la sala.", { id: "sala-join" });
+        } else if (tipo === "exp-room") {
+          toast("La sala se cerró.");
         } else {
           toast.error("Se perdió la conexión con la sala.");
         }
@@ -1033,7 +1071,32 @@ export function LiveRoom({
               ? undefined
               : {
                   silenciar: () => call.updateParticipant(p.id, { setAudio: false }),
-                  sacar: () => call.updateParticipant(p.id, { eject: true }),
+                  // M2 · primero se PERSISTE la expulsión de esta fecha
+                  // (`join_group_class` la rechaza luego) y solo entonces se
+                  // expulsa: si la RPC falla, no se saca a medias. `userId`
+                  // es el `auth.uid()` que firmó su token.
+                  sacar: async (motivo: string | null) => {
+                    if (!p.userId) {
+                      toast.error("No se pudo sacar al alumno.");
+                      return;
+                    }
+                    const { error } = await createClient().rpc("expulsar_de_clase_grupal", {
+                      p_group_class: grupal.groupClassId,
+                      p_student: p.userId,
+                      p_motivo: motivo ?? undefined,
+                    });
+                    if (error) {
+                      toast.error(error.message || "No se pudo sacar al alumno.");
+                      return;
+                    }
+                    // Todas sus conexiones (la sala admite cupo + 4 justo
+                    // para la segunda pestaña), no solo la tesela pulsada.
+                    const suyas = Object.values(call.participants()).filter(
+                      (x) => !x.local && x.user_id === p.userId,
+                    );
+                    if (suyas.length === 0) call.updateParticipant(p.id, { eject: true });
+                    for (const x of suyas) call.updateParticipant(x.session_id, { eject: true });
+                  },
                   // M5 · conceder o quitar la pantalla (el token del alumno
                   // nace sin `screenVideo`, ver `api/room/grupal`).
                   pantalla: {
@@ -1235,8 +1298,10 @@ export function LiveRoom({
               <EscenarioSala
                 participantes={participantes}
                 compartidos={compartidos}
+                // M30 · solo el visor principal publica el documento como pista
+                // (`call`); el mini de la franja, no.
                 documento={
-                  <VisorPresentacion pres={pres} sessionId={sessionId} isTutor={isTutor} />
+                  <VisorPresentacion pres={pres} sessionId={sessionId} isTutor={isTutor} call={call} />
                 }
                 tarjetaDoc={tarjetaDoc}
                 ausente={ausente}

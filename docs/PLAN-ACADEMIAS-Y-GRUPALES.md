@@ -287,7 +287,7 @@ Se comprueban contra dev, en transacciones revertidas, como el 16-sep. **Los och
 | `/classes`, `/search`, `/categories/[slug]` | Filtro «Grupal» (`MODELS`, `src/components/catalog/product-filters.tsx:75`). La tarjeta (`product-card.tsx`) lleva la etiqueta «Grupal», la fecha y hora en la zona del alumno (`src/lib/tz.ts`) y «Quedan N cupos» |
 | Ficha `/products/[id]` y `/tutores/[id]` | `booking-panel.tsx`: en lugar del selector de horarios, las fechas fijas y el botón «Inscribirme». Clase llena = botón desactivado. Aviso de privacidad (RG-19) antes de continuar |
 | Checkout `/reservar/[productId]/checkout` | El hold aparta un cupo (`src/lib/checkout/hold.ts`: `holdsQueSolapan` no aplica a grupales; el mensaje de clase llena se reconoce aparte de `esCarreraDeHorario`). Pasarela, 5 % y créditos como hoy (`/api/pagos/checkout`, `/api/pagos/credito` para precio 0) |
-| Carrito (`/carrito`, `src/lib/cart/resolve.ts`) | La clase grupal entra como una línea más (S-G-08) |
+| Carrito (`/carrito`, `src/lib/cart/resolve.ts`) | ~~La clase grupal entra como una línea más (S-G-08)~~ **Retirado (17-oct, P31 del sondeo):** una grupal no entra al carrito; se paga desde su ficha, con su fecha y su cupo (como Outschool o Preply) |
 | `/reservas` y `/reservas/[id]` | La reserva grupal aparece junto a las 1:1 con «Grupal · N participantes», las fechas y el enlace al chat grupal. «Cancelar mi cupo» con la política de RG-09 o RG-11 |
 | Regalar | En una clase grupal, «Regalar» solo aparece si se cumple RG-17 |
 | SEO | `sitemap.ts` incluye las clases grupales activas y futuras. `npm run check:seo` en verde |

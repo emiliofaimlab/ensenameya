@@ -960,8 +960,14 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
    * NTF-54 · RG-11: el tutor movió la hora de una fecha. La nueva hora viaja en
    * el payload (`nuevo_inicio`): el contexto de la reserva trae su PRIMERA
    * fecha, que en un ciclo puede no ser la que cambió.
+   *
+   * Lote 11 (M14) · si el ciclo YA empezó (`ciclo_empezado` en el payload), no
+   * hay baja con el 100 % (RG-16): lo que se ofrece es renunciar a ESA fecha y
+   * recuperar su parte. Sin la clave (avisos encolados antes del lote 11) se
+   * entiende «no empezado», el texto de siempre.
    */
   group_rescheduled: (x) => {
+    const empezado = x.p?.ciclo_empezado === true;
     const nuevo = typeof x.p?.nuevo_inicio === "string" ? x.p.nuevo_inicio : x.c.inicio;
     const antes = typeof x.p?.anterior === "string" ? x.p.anterior : undefined;
     const corto = cuandoCorto(nuevo, x.tz);
@@ -970,7 +976,9 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
       familia: "clase",
       epigrafe: "Clase grupal",
       titulo: "El tutor cambió la hora",
-      preheader: "Si la nueva hora no te sirve, puedes cancelar tu cupo con el 100 % de reembolso.",
+      preheader: empezado
+        ? "Si la nueva hora no te sirve, puedes renunciar a esta fecha y te devolvemos su parte."
+        : "Si la nueva hora no te sirve, puedes cancelar tu cupo con el 100 % de reembolso.",
       motivo: "Recibes este correo porque estás inscrito en esta clase.",
       cuerpo: [
         parrafo(
@@ -985,7 +993,9 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
           duracion: duracion(x.c.duracion_min),
         }),
         parrafo(
-          "Si la nueva hora no te sirve, puedes <strong>cancelar tu cupo con el 100 % de reembolso</strong> hasta que empiece la clase, aunque falten menos de 24 horas.",
+          empezado
+            ? "Como el ciclo ya empezó, no puedes darte de baja de la clase, pero si la nueva hora no te sirve puedes <strong>renunciar a esta fecha</strong> desde tu inscripción y te devolvemos su parte. Las demás fechas siguen igual."
+            : "Si la nueva hora no te sirve, puedes <strong>cancelar tu cupo con el 100 % de reembolso</strong> hasta que empiece la clase, aunque falten menos de 24 horas.",
           { top: 18 },
         ),
         boton("Ver mi inscripción", x.url),
