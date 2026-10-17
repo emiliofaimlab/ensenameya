@@ -3,7 +3,9 @@ import Link from "next/link";
 import { PencilIcon, TriangleAlertIcon, UsersIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
+import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
+import { formatSessionTime } from "@/lib/booking";
 import { codigoParaCompartir } from "@/lib/referral";
 import { initialsFrom, priceLabel, storageUrl } from "@/lib/catalog/format";
 import {
@@ -103,6 +105,9 @@ export default async function TutorProductsPage() {
     { data: rules, error: errorRules },
     { data: links, error: errorLinks },
     codigoRef,
+    { data: proximas, error: errorProximas },
+    tz,
+    formato,
   ] = await Promise.all([
     supabase
       .from("products")
@@ -126,7 +131,29 @@ export default async function TutorProductsPage() {
     // «Compartir mi reserva». En paralelo con lo demás: no añade peldaño.
     // Sin código (nunca abrió «Invita y gana») el enlace sale sin `ref`.
     codigoParaCompartir(supabase, userId),
+    // P47 · la próxima fecha de cada grupal y cuántos pagaron, para la línea
+    // «Próxima: … · 3/6 inscritos» de su tarjeta.
+    supabase
+      .from("group_classes_public")
+      .select("product_id, start_at, capacity, inscritos_pagados")
+      .eq("tutor_id", userId)
+      .gte("start_at", new Date().toISOString())
+      .order("start_at"),
+    getUserTimezone(),
+    getFormatoHora(),
   ]);
+  // Ordenadas por `start_at`: la primera fila de cada producto es su próxima.
+  // Regla de oro 10 · si la consulta falla, la línea no se pinta (nunca un
+  // «0/6» falso), por eso el mapa queda vacío en vez de mirar `data` a ciegas.
+  const proximaDe = new Map<string, { start_at: string; capacity: number; inscritos: number }>();
+  if (!errorProximas)
+    for (const g of proximas ?? [])
+      if (g.product_id && g.start_at && !proximaDe.has(g.product_id))
+        proximaDe.set(g.product_id, {
+          start_at: g.start_at,
+          capacity: g.capacity ?? 0,
+          inscritos: g.inscritos_pagados ?? 0,
+        });
   const refQuery = codigoRef ? `?ref=${encodeURIComponent(codigoRef)}` : "";
 
   // Regla de oro 10 · con `const { data }` a secas un fallo de la consulta se
@@ -288,6 +315,7 @@ export default async function TutorProductsPage() {
               // G1 · una grupal no usa las franjas semanales: sus horas son
               // sus fechas. El aviso de «sin franja» no le aplica.
               const huerfana = !grupal && sinHorario(p.id);
+              const proxima = proximaDe.get(p.id);
               return (
                 <li key={p.id} data-f={filtrosDe(p.status)}>
                   <PanelCard>
@@ -336,6 +364,12 @@ export default async function TutorProductsPage() {
                               : ""}
                             {cats.length ? ` · ${cats.join(", ")}` : ""}
                           </p>
+                          {grupal && proxima ? (
+                            <p className="mt-0.5 text-xs text-[#6b6b6b]">
+                              Próxima: {formatSessionTime(proxima.start_at, tz, formato)} ·{" "}
+                              {proxima.inscritos}/{proxima.capacity} inscritos
+                            </p>
+                          ) : null}
 
                           {/* §2.3 · la línea de chips. Sustituye a las dos líneas
                             de texto que había (el modo de aceptación suelto y
@@ -442,6 +476,9 @@ export default async function TutorProductsPage() {
                           productId={p.id}
                           title={p.title}
                           status={p.status}
+                          pricingModel={p.pricing_model}
+                          // Si la consulta falló no se sabe: se ofrece la ficha.
+                          conFechasPendientes={Boolean(errorProximas) || proximaDe.has(p.id)}
                           isApproved={approvalStatus === "approved"}
                           rutaCompartir={`/mentorias/${p.id}${refQuery}`}
                         />

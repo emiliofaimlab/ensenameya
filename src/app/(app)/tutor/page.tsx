@@ -14,6 +14,7 @@ import {
   type TutorBalance,
 } from "@/lib/payouts";
 import { roomOpen } from "@/lib/room-window";
+import { zonaLegible } from "@/lib/zona-legible";
 import { cn } from "@/lib/utils";
 import { studentsOfTutor } from "./students";
 import { ChatDeReservaButton } from "./chat-button";
@@ -310,6 +311,8 @@ export default async function TutorHomePage() {
       start_at: g.start_at!,
       grupal: {
         productId: g.product_id!,
+        // P47 · para decidir si la sala de esta fecha ya está abierta.
+        endAt: g.end_at!,
         titulo: g.title ?? "Clase grupal",
         // M17 · igual que `/tutor/clases-grupales/[id]`: inscritos son los que
         // PAGARON; los cupos apartados por un pago en curso van aparte.
@@ -629,7 +632,7 @@ export default async function TutorHomePage() {
                 {/* La zona horaria se dice UNA vez bajo el título y no en cada
                     fila: antes cada hora arrastraba «· tu hora local». */}
                 <p className="truncate text-xs text-[#6b6b6b]">
-                  Horas en tu zona: {tz}
+                  Horas en tu zona: {zonaLegible(tz)}
                 </p>
               </div>
               <Link
@@ -686,13 +689,30 @@ export default async function TutorHomePage() {
                           {cuando(s.start_at, tz, formato)}
                         </p>
                       </div>
-                      {/* La ficha de la clase: ahí está «Entrar a sala» de
-                          cada fecha (G3) y el chat del grupo. */}
-                      <PanelIconButton asChild label="Ver clase">
-                        <Link href={`/tutor/clases-grupales/${s.grupal.productId}`}>
-                          <EyeIcon className="size-4" />
-                        </Link>
-                      </PanelIconButton>
+                      {/* P47 · la cámara se suma al ojo dentro de la ventana
+                          de la sala y con alguien inscrito, igual que en la
+                          fila 1:1 (ver B-2 más abajo). El ojo lleva a la
+                          ficha: ahí están todas las fechas y el chat. */}
+                      <div className="flex items-center gap-2">
+                        {roomOpen({
+                          status: "scheduled",
+                          start_at: s.start_at,
+                          end_at: s.grupal.endAt,
+                          access_opens_at: null,
+                          access_closes_at: null,
+                        }) && s.grupal.ocupados > 0 ? (
+                          <PanelIconButton asChild label="Entrar a la sala" tone="primary">
+                            <Link href={`/room/grupal/${s.id}`}>
+                              <VideoIcon className="size-[17px]" />
+                            </Link>
+                          </PanelIconButton>
+                        ) : null}
+                        <PanelIconButton asChild label="Ver clase">
+                          <Link href={`/tutor/clases-grupales/${s.grupal.productId}`}>
+                            <EyeIcon className="size-4" />
+                          </Link>
+                        </PanelIconButton>
+                      </div>
                     </li>
                   ) : (
                   <li

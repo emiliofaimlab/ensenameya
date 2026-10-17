@@ -7,6 +7,7 @@ import { BOOKING_STATUS_LABEL, formatSessionTime } from "@/lib/booking";
 import { formatMoney } from "@/lib/catalog/format";
 import { PanelCard, PanelShell, StatusPill } from "@/components/layout/panel-shell";
 import { ADMIN_ITEMS } from "@/components/layout/app-sidebar";
+import { PAYMENT_BADGE } from "../../badges";
 import { CancelarClaseAdmin, CancelarFechaAdmin, SacarAlumno } from "./acciones";
 
 export const metadata = { title: "Clase grupal · Admin · Enséñame Ya" };
@@ -14,6 +15,15 @@ export const metadata = { title: "Clase grupal · Admin · Enséñame Ya" };
 const VIVAS = new Set(["pending_payment", "pending_acceptance", "confirmed", "in_progress"]);
 // M1 · `in_progress` también: con el ciclo empezado se devuelven las fechas que faltan.
 const SACABLE = new Set(["pending_acceptance", "confirmed", "in_progress"]);
+/** P22 · el riel como lo dice una persona; lo que no esté aquí sale tal cual. */
+const PROVEEDOR: Record<string, string> = {
+  stripe: "Stripe",
+  dlocal: "dLocal",
+  dlocalgo: "dLocal",
+  paypal: "PayPal",
+  simulated: "Simulado",
+};
+
 const FECHA: Record<string, string> = {
   scheduled: "Programada",
   cancelled: "Cancelada",
@@ -130,7 +140,10 @@ export default async function AdminClaseGrupalPage({ params }: { params: Promise
                         </td>
                         <td className="py-2.5 pr-3">{BOOKING_STATUS_LABEL[r.status]}</td>
                         <td className="py-2.5 pr-3">
-                          {pago ? `${formatMoney(pago.gross_amount, pago.currency)} · ${pago.status} · ${pago.provider}` : "—"}
+                          {/* P22 · antes «paid · stripe», en inglés y crudo. */}
+                          {pago
+                            ? `${formatMoney(pago.gross_amount, pago.currency)} · ${PAYMENT_BADGE[pago.status]?.label ?? pago.status} · ${pago.provider ? (PROVEEDOR[pago.provider] ?? pago.provider) : "sin riel"}`
+                            : "—"}
                         </td>
                         <td className="py-2.5 pr-3">
                           {pago?.refunded_amount ? formatMoney(pago.refunded_amount, pago.currency) : "—"}
@@ -149,7 +162,7 @@ export default async function AdminClaseGrupalPage({ params }: { params: Promise
 
         {pendientes > 0 && !empezada ? (
           <div>
-            <CancelarClaseAdmin productId={p.id} inscritos={vivas.length} />
+            <CancelarClaseAdmin productId={p.id} inscritos={avisados} />
           </div>
         ) : null}
       </div>

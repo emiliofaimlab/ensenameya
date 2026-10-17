@@ -17,6 +17,7 @@ import {
   parseRequirements,
 } from "@/lib/product-requirements";
 import { cn } from "@/lib/utils";
+import { zonaLegible } from "@/lib/zona-legible";
 import type { Database } from "@/lib/database.types";
 import { PanelCard } from "@/components/layout/panel-shell";
 import {
@@ -25,6 +26,7 @@ import {
   type AvailabilityScope,
 } from "./availability-blocks";
 import { AcceptanceMode } from "./acceptance-mode";
+import { HorariosLibres } from "./horarios-libres";
 import {
   CoverImagePicker,
   MaterialsPicker,
@@ -92,6 +94,13 @@ const MAX_OUTCOME = 160;
 function enumerar(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   return `${items.slice(0, -1).join(", ")} y ${items.at(-1)}`;
+}
+
+/** P2 · «faltó el material» / «faltaron las categorías»: concuerda con lo que falta. */
+function falto(items: string[]): string {
+  return items.length > 1 || /^(las|los) /.test(items[0] ?? "")
+    ? "faltaron"
+    : "faltó";
 }
 
 /** DD-03 — mismas etiquetas que el filtro del Figma (386:1196). */
@@ -604,10 +613,19 @@ export function ProductForm({
     // secas dejaba al tutor sin saber si repetir el alta entera o solo volver a
     // adjuntar — que es lo que N-05 pide evitar.
     const aMedias: string[] = [];
+    // M19 · si la grupal no llega a publicarse y el borrador se queda, los
+    // materiales que sí se guardaron dejan de estar pendientes.
+    let materialesGuardados = false;
 
+    // M19 · idempotente: un reintento sobre el mismo producto no choca con la
+    // PK (product_id, category_id) ni avisa de un fallo que no existe.
+    // `ignoreDuplicates` es ON CONFLICT DO NOTHING: basta el grant de insert.
     const { error: catErr } = await supabase
       .from("product_categories")
-      .insert([...selected].map((category_id) => ({ product_id: productId!, category_id })));
+      .upsert(
+        [...selected].map((category_id) => ({ product_id: productId!, category_id })),
+        { onConflict: "product_id,category_id", ignoreDuplicates: true },
+      );
     if (catErr) aMedias.push("las categorías");
 
     // N-04 · las franjas elegidas. En modo «toda mi disponibilidad» no hay nada
@@ -650,6 +668,11 @@ export function ProductForm({
             ? "el material adjunto"
             : `los ${subidos.length} materiales`,
         );
+      } else if (grupal && !groupPublished && !product) {
+        // M19 · en el alta de una grupal siguen pendientes hasta que se
+        // publique: si choca se borra el producto entero y el reintento los
+        // tiene que volver a subir.
+        materialesGuardados = true;
       } else {
         // Ya no están pendientes. La lista definitiva la trae el servidor en
         // el `router.refresh()` de más abajo, con los ids reales.
@@ -665,8 +688,28 @@ export function ProductForm({
         p_fechas: fechasUtc,
       });
       if (pubErr) {
-        // El borrador ya existe: el reintento lo edita (ver `creadoId`).
-        setCreadoId(productId!);
+        // M19 · «no crea nada» (RG-05): en un ALTA se borra el producto recién
+        // creado —categorías, materiales y franjas caen por cascade— y lo
+        // subido en este intento. Si el borrado falla, el de antes: queda el
+        // borrador y el reintento lo edita (ver `creadoId`).
+        let nada = false;
+        // Solo el producto creado en ESTE intento: un reintento sobre un
+        // borrador anterior (`creadoId`) se llevaría por cascade sus materiales.
+        if (!isEdit) {
+          const { error: delErr } = await supabase
+            .from("products")
+            .delete()
+            .eq("id", productId!);
+          if (!delErr) {
+            await retirar();
+            setCreadoId(null);
+            nada = true;
+          }
+        }
+        if (!nada) {
+          setCreadoId(productId!);
+          if (materialesGuardados) setStagedMaterials([]);
+        }
         setLoading(false);
         const choques =
           pubErr.code === "23P01" && pubErr.details
@@ -683,18 +726,24 @@ export function ProductForm({
             : null;
         toast.error(
           choques
-            ? `Estas fechas chocan con tu agenda: ${choques}. Muévelas y vuelve a publicar.`
-            : `La clase se guardó como borrador, pero no se publicó: ${pubErr.message}`,
+            ? `Estas fechas chocan con tu agenda: ${choques}. Muévelas y vuelve a publicar${nada ? ": no se guardó nada" : ""}.`
+            : nada
+              ? `No se publicó la clase y no se guardó nada: ${pubErr.message}`
+              : `La clase se guardó como borrador, pero no se publicó: ${pubErr.message}`,
           { duration: 12_000 },
         );
         return;
       }
       if (aMedias.length > 0)
         toast.error(
-          `La clase se publicó, pero faltó ${enumerar(aMedias)}. Complétalo desde «Editar».`,
+          `La clase se publicó, pero ${falto(aMedias)} ${enumerar(aMedias)}. Complétalo desde «Editar».`,
           { duration: 12_000 },
         );
       else toast.success("Clase grupal publicada.");
+      setStagedMaterials([]);
+      // P19 · el formulario es largo: sin esto la ficha nueva se abría con el
+      // scroll heredado, en el pie de página.
+      window.scrollTo(0, 0);
       router.push(`/tutor/clases-grupales/${productId}`);
       router.refresh();
       return;
@@ -715,7 +764,7 @@ export function ProductForm({
       // Dentro del asistente NO se abre nada: sacar al tutor a media alta es
       // justo lo que N-03 vino a arreglar, así que se le dice dónde rematarlo.
       toast.error(
-        `La mentoría se guardó, pero faltó ${enumerar(aMedias)}. ${
+        `La mentoría se guardó, pero ${falto(aMedias)} ${enumerar(aMedias)}. ${
           onCreated
             ? "Complétalo desde «Mis mentorías» cuando termines el registro."
             : "Complétalo desde aquí."
@@ -1205,10 +1254,31 @@ export function ProductForm({
               <legend className={LABEL}>
                 Fechas · una para una clase suelta, varias para un ciclo
               </legend>
-              <p className="text-xs text-[#6b6b6b]">
-                Horas en tu zona: {timezone}. Cada fecha dura {duracion} min y
-                deja de ofrecerse en tu agenda 1:1 en cuanto publiques.
+              {/* P4 · el nombre de la zona sale del ICU, y el de Node y el del
+                  navegador pueden no coincidir. */}
+              <p className="text-xs text-[#6b6b6b]" suppressHydrationWarning>
+                Horas en tu zona: {zonaLegible(timezone)}. Cada fecha dura{" "}
+                {duracion} min y deja de ofrecerse en tu agenda 1:1 en cuanto
+                publiques.
               </p>
+              {/* M18 · elegir viendo la agenda; los inputs siguen debajo. */}
+              <HorariosLibres
+                duracion={Number(duracion)}
+                timezone={timezone}
+                elegidas={fechas
+                  .filter((f) => f.fecha && f.hora)
+                  .map((f) => paredAUtc(f.fecha, f.hora, timezone))}
+                lleno={fechas.length >= MAX_FECHAS}
+                onElegir={(f) =>
+                  setFechas((p) => {
+                    // Se rellena la primera fila vacía; si no hay, una nueva.
+                    const vacia = p.findIndex((x) => !x.fecha && !x.hora);
+                    if (vacia >= 0)
+                      return p.map((x, j) => (j === vacia ? f : x));
+                    return p.length >= MAX_FECHAS ? p : [...p, f];
+                  })
+                }
+              />
               {fechas.map((f, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-2">
                   <Input
@@ -1484,7 +1554,10 @@ export function ProductForm({
         </PanelCard>
       )}
 
-      {/* 193:30 — la política es única de plataforma, no se configura aquí. */}
+      {/* 193:30 — la política es la misma para todas y no se configura aquí.
+          P5 · sin jerga interna, y en una grupal con sus reglas: bajas hasta la
+          primera fecha, ninguna con el ciclo empezado, y el 100 % si el tutor
+          cancela o mueve. */}
       <div className="flex gap-3 rounded-[16px] border border-[#b2d9ff] bg-[#e5f2ff] p-5">
         <InfoIcon className="mt-0.5 size-5 shrink-0 text-brand" />
         <div>
@@ -1492,10 +1565,9 @@ export function ProductForm({
             Política de cancelación
           </p>
           <p className="mt-1 text-[12.5px] text-[#405980]">
-            La política es única de plataforma (RN-37): reembolso{" "}
-            {P.refundPct.studentEarly} % si se cancela con ≥{P.cutoffHours} h de
-            anticipación, {P.refundPct.studentLate} % si es con menos. No se
-            configura por mentoría.
+            {grupal
+              ? `El alumno puede darse de baja hasta que empiece la primera fecha: con ${P.cutoffHours} horas o más recupera el ${P.refundPct.studentEarly} %; con menos, el ${P.refundPct.studentLate} %. En un ciclo no hay bajas una vez empezado. Si cancelas la clase o una fecha, cada inscrito recupera lo que costaba; si mueves una fecha, quien no pueda ir se va con el 100 %. Es la misma para todas las clases y no se configura aquí.`
+              : `Si el alumno cancela con ${P.cutoffHours} horas o más de anticipación recupera el ${P.refundPct.studentEarly} %; con menos, el ${P.refundPct.studentLate} %. Si cancelas tú, recupera el ${P.refundPct.tutorCancels} %. Es la misma para todas las mentorías y no se configura aquí.`}
           </p>
         </div>
       </div>

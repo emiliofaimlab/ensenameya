@@ -223,6 +223,20 @@ export function serviceFee(baseMinor: number): number {
 }
 
 /**
+ * A4 · lo que le queda al TUTOR de un pago tras lo que se devolvió al alumno:
+ * `neto × (1 − devuelto/gross)`. Sin devolución, el neto tal cual.
+ *
+ * 🔴 SOLO PINTA. Manda `public.parte_del_tutor(bigint, bigint, bigint)`
+ * (`20261009090000`), que es la cuenta con la que se arma el payout y el saldo
+ * de «Mis ingresos». Si divergen, manda el SQL: por eso el redondeo es el mismo
+ * (`round` del numeric = `Math.round` en cifras positivas).
+ */
+export function parteDelTutor(neto: number, gross: number, devuelto: number): number {
+  if (devuelto <= 0 || gross <= 0) return neto;
+  return neto - Math.round((neto * Math.min(devuelto, gross)) / gross);
+}
+
+/**
  * Lo que el alumno puede saber de su tutor desde sus propias pantallas.
  *
  * V-6 · Es lo mismo que devolvía `tutorNames` con cuatro columnas más. El

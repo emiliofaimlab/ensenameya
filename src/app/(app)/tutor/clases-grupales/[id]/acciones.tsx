@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import { paredAUtc } from "@/lib/availability";
+import { formatMoney } from "@/lib/catalog/format";
 import { PanelCard } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,12 +14,10 @@ import { Input } from "@/components/ui/input";
 const FIELD = "h-10 rounded-[8px] px-3 text-sm";
 
 /**
- * M15 · el primer día y la primera hora que acepta una reagenda (ahora + 24 h),
- * como los escriben los `<input type="date|time">`, en la zona del tutor. Se
- * calcula al abrir el formulario, no al pintar la página: así no se queda viejo
- * y no hay desajuste de hidratación.
+ * Un instante como lo escriben los `<input type="date|time">`, en la zona del
+ * tutor (la «pared»).
  */
-function minimoReagenda(timezone: string): { fecha: string; hora: string } {
+function paredDe(iso: string | number, timezone: string): { fecha: string; hora: string } {
   const p = Object.fromEntries(
     new Intl.DateTimeFormat("en-US", {
       timeZone: timezone,
@@ -29,10 +28,19 @@ function minimoReagenda(timezone: string): { fecha: string; hora: string } {
       hour: "2-digit",
       minute: "2-digit",
     })
-      .formatToParts(new Date(Date.now() + 24 * 3_600_000))
+      .formatToParts(new Date(iso))
       .map((x) => [x.type, x.value]),
   );
   return { fecha: `${p.year}-${p.month}-${p.day}`, hora: `${p.hour}:${p.minute}` };
+}
+
+/**
+ * M15 · el primer día y la primera hora que acepta una reagenda (ahora + 24 h).
+ * Se calcula al abrir el formulario, no al pintar la página: así no se queda
+ * viejo y no hay desajuste de hidratación.
+ */
+function minimoReagenda(timezone: string): { fecha: string; hora: string } {
+  return paredDe(Date.now() + 24 * 3_600_000, timezone);
 }
 
 /**
@@ -43,18 +51,29 @@ function minimoReagenda(timezone: string): { fecha: string; hora: string } {
  */
 export function FechaAcciones({
   groupClassId,
+  inicio,
   reagendable,
   timezone,
   inscritos,
   puedeCancelar,
+  devolucion,
+  dejasDeCobrar,
+  currency,
 }: {
   groupClassId: string;
+  /** P53 · `start_at` de la fecha: el reagendar arranca en ella. */
+  inicio: string;
   /** RG-11 · faltan 24 h o más para la hora PROGRAMADA (lo vuelve a mirar la RPC). */
   reagendable: boolean;
   timezone: string;
   /** M15 · reservas vivas de la clase: a quién avisa la reagenda. */
   inscritos: number;
   puedeCancelar: boolean;
+  /** P21 · lo que se devuelve entre los inscritos al cancelar esta fecha. */
+  devolucion: number;
+  /** P21 · la parte del tutor de ese mismo tramo. */
+  dejasDeCobrar: number;
+  currency: string;
 }) {
   const router = useRouter();
   const [modo, setModo] = useState<"nada" | "reagendar" | "cancelar">("nada");
@@ -95,7 +114,7 @@ export function FechaAcciones({
 
   if (modo === "reagendar")
     return (
-      <div className="flex w-full flex-col gap-1.5 sm:w-auto">
+      <div className="flex w-full basis-full flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <Input type="date" min={minimo.fecha} value={fecha} onChange={(e) => setFecha(e.target.value)} aria-label="Día nuevo" className={FIELD} />
           {/* La hora solo tiene tope si el día es el primero posible. */}
@@ -127,7 +146,11 @@ export function FechaAcciones({
   if (modo === "cancelar")
     return (
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-[12.5px] text-[#a82929]">Se reembolsa esta fecha a cada inscrito.</p>
+        <p className="text-[12.5px] text-[#a82929]">
+          {devolucion > 0
+            ? `Se devuelven ${formatMoney(devolucion, currency)} entre los inscritos (lo que costaba esta fecha) y dejas de cobrar ${formatMoney(dejasDeCobrar, currency)}.`
+            : "Todavía nadie pagó: no hay nada que devolver."}
+        </p>
         <Button type="button" variant="destructive" onClick={cancelar} disabled={enviando} className="h-10">
           {enviando ? "Cancelando…" : "Sí, cancelar la fecha"}
         </Button>
@@ -138,25 +161,39 @@ export function FechaAcciones({
     );
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        disabled={!reagendable}
-        title={reagendable ? undefined : "Solo se reagenda con 24 horas de anticipación."}
-        onClick={() => {
-          setMinimo(minimoReagenda(timezone));
-          setModo("reagendar");
-        }}
-        className="h-9"
-      >
-        Reagendar
-      </Button>
-      {puedeCancelar ? (
-        <Button type="button" variant="ghost" onClick={() => setModo("cancelar")} className="h-9 text-[#bf3333]">
-          Cancelar fecha
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!reagendable}
+          title={reagendable ? undefined : "Solo se reagenda con 24 horas de anticipación."}
+          onClick={() => {
+            const min = minimoReagenda(timezone);
+            // P53 · arranca en la fecha actual si todavía vale; si no, en el
+            // mínimo. Las dos son «aaaa-mm-dd hh:mm», así que se comparan como texto.
+            const actual = paredDe(inicio, timezone);
+            const desde =
+              `${actual.fecha} ${actual.hora}` >= `${min.fecha} ${min.hora}` ? actual : min;
+            setMinimo(min);
+            setFecha(desde.fecha);
+            setHora(desde.hora);
+            setModo("reagendar");
+          }}
+          className="h-9"
+        >
+          Reagendar
         </Button>
-      ) : null}
+        {puedeCancelar ? (
+          <Button type="button" variant="ghost" onClick={() => setModo("cancelar")} className="h-9 text-[#bf3333]">
+            Cancelar fecha
+          </Button>
+        ) : null}
+      </div>
+      {/* P20 · el `title` no se ve en móvil: el porqué va escrito. */}
+      {reagendable ? null : (
+        <p className="text-xs text-[#6b6b6b]">Ya no se puede reagendar: faltan menos de 24 horas.</p>
+      )}
     </div>
   );
 }
@@ -186,7 +223,7 @@ export function CancelarClase({ productId, inscritos }: { productId: string; ins
       <h2 className="text-base font-semibold text-[#19191f]">Cancelar la clase</h2>
       <p className="text-[13px] text-[#6b6b6b]">
         {inscritos > 0
-          ? `${inscritos === 1 ? "El inscrito recupera" : `Los ${inscritos} inscritos recuperan`} el 100 % de lo que pagó${inscritos === 1 ? "" : "n"}. La clase deja de publicarse.`
+          ? `${inscritos === 1 ? "El inscrito recupera" : `Los ${inscritos} inscritos recuperan`} el 100 % de lo que ${inscritos === 1 ? "pagó" : "pagaron"}. La clase deja de publicarse.`
           : "Todavía no hay inscritos. La clase deja de publicarse."}
       </p>
       {abierto ? (
@@ -195,8 +232,8 @@ export function CancelarClase({ productId, inscritos }: { productId: string; ins
             value={motivo}
             onChange={(e) => setMotivo(e.target.value)}
             maxLength={300}
-            placeholder="Motivo (opcional): se guarda con la cancelación"
-            aria-label="Motivo de la cancelación"
+            placeholder="Mensaje para los inscritos (opcional): lo verán en el correo"
+            aria-label="Mensaje para los inscritos"
             className={FIELD}
           />
           <div className="flex flex-wrap gap-2">

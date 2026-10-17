@@ -27,6 +27,7 @@ import {
   Undo2Icon,
   UserIcon,
   UsersIcon,
+  UsersRoundIcon,
   ShieldIcon,
   StarIcon,
   ImagesIcon,
@@ -299,6 +300,10 @@ export const ADMIN_ITEMS: Item[] = [
   // en el menú es lo que hace buscar los reembolsos donde no están.
   { href: "/admin/reembolsos", label: "Reembolsos", icon: Undo2Icon },
   { href: "/admin/bookings", label: "Reservas", icon: TicketIcon },
+  // P22 · antes solo se llegaba a una clase grupal desde la ficha de su tutor.
+  // Va tras Reservas porque son eso mismo, agrupadas por clase. `UsersIcon` ya
+  // es de Tutores; el de personas redondeado dice «grupo» sin leer la etiqueta.
+  { href: "/admin/clases-grupales", label: "Clases grupales", icon: UsersRoundIcon },
   { href: "/admin/categorias", label: "Categorías", icon: FolderTreeIcon },
   { href: "/admin/tiers", label: "Tiers", icon: PercentIcon },
   { href: "/admin/stats", label: "Estadísticas", icon: BarChart3Icon },

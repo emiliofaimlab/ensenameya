@@ -22,6 +22,7 @@ import {
 import { CompartirMentoriaDialog } from "./compartir-mentoria";
 
 type Status = Database["public"]["Enums"]["product_status"];
+type PricingModel = Database["public"]["Enums"]["pricing_model"];
 
 type Action = {
   label: string;
@@ -31,6 +32,10 @@ type Action = {
   done: string;
   needsApproval?: boolean;
   confirm?: string;
+  /** M16 · no cambia el estado: lleva a esta ruta, donde está el paso completo. */
+  href?: string;
+  /** Va en rojo (lo definitivo). Archivar lo es siempre. */
+  destructive?: boolean;
 };
 
 // M3 (Doc 2 §2.6) — transiciones válidas por estado. `archived` es terminal
@@ -82,6 +87,62 @@ const ACTIONS: Record<Status, Action[]> = {
 };
 
 /**
+ * M16 · una clase grupal no es una 1:1 con otro precio: tiene fechas e
+ * inscritos que han pagado. Archivarla dejaba una clase fantasma —las fechas y
+ * los inscritos seguían— y publicarla sin fechas daba el error crudo de la BD.
+ *   · Publicar lleva al formulario, a «Cupo y fechas»: se publica CON fechas
+ *     (`publicar_clase_grupal`).
+ *   · Pausar es «Cerrar inscripciones»: los ya inscritos siguen en la clase.
+ *   · No hay Archivar: lo que lo sustituye es «Cancelar la clase», que vive en
+ *     su ficha con la confirmación y el reembolso (`cancelar_clase_grupal`).
+ */
+const CANCELAR_GRUPAL = (productId: string): Action => ({
+  label: "Cancelar la clase",
+  to: "archived",
+  done: "",
+  href: `/tutor/clases-grupales/${productId}`,
+  destructive: true,
+});
+
+// Sin fechas por delante (dada o cancelada) no hay nada que cancelar: la ficha
+// no pinta «Cancelar la clase» y la grupal se quedaba sin forma de archivarse.
+const ARCHIVAR_O_CANCELAR = (productId: string, conFechas: boolean): Action =>
+  conFechas
+    ? CANCELAR_GRUPAL(productId)
+    : (ACTIONS.active.find((a) => a.to === "archived") ?? CANCELAR_GRUPAL(productId));
+
+const ACTIONS_GRUPAL = (productId: string, conFechas: boolean): Record<Status, Action[]> => ({
+  draft: [
+    {
+      label: "Publicar",
+      to: "active",
+      done: "",
+      needsApproval: true,
+      href: `/tutor/products/${productId}/edit#cupo-y-fechas`,
+    },
+    ACTIONS.draft[1],
+  ],
+  active: [
+    {
+      label: "Cerrar inscripciones",
+      to: "paused",
+      done: "Inscripciones cerradas. Los inscritos siguen en la clase.",
+    },
+    ARCHIVAR_O_CANCELAR(productId, conFechas),
+  ],
+  paused: [
+    {
+      label: "Reabrir inscripciones",
+      to: "active",
+      done: "Inscripciones abiertas.",
+      needsApproval: true,
+    },
+    ARCHIVAR_O_CANCELAR(productId, conFechas),
+  ],
+  archived: [],
+});
+
+/**
  * Columnas que viaja una copia. Lista EXPLÍCITA y no un `select("*")`: la tabla
  * tiene `search_vector` (generada, el insert la rechaza), `slug` y `created_at`,
  * y copiar a ciegas rompería el día que alguien añada otra columna calculada.
@@ -97,8 +158,10 @@ const ACTIONS: Record<Status, Action[]> = {
  *     acaba de fallar). Si algún día se borra la vieja al cambiarla, esto tiene
  *     que pasar a copiar el fichero.
  */
+// M16 · `capacity` y `min_seats` también: sin ellos la copia de una grupal
+// violaba el check del cupo y «Duplicar» fallaba. En una 1:1 van nulos.
 const COPIABLES =
-  "title, tutor_id, description, outcome, pricing_model, price_amount, currency, session_duration_min, start_time_increment_min, package_num_sessions, level, language, faqs, requirements, auto_accept_bookings, cancellation_policy, image_path";
+  "title, tutor_id, description, outcome, pricing_model, price_amount, currency, session_duration_min, start_time_increment_min, package_num_sessions, level, language, faqs, requirements, auto_accept_bookings, cancellation_policy, image_path, capacity, min_seats";
 
 /**
  * §2.3 · Las acciones de la tarjeta dejan de ser botones de texto y se meten
@@ -115,13 +178,19 @@ export function ProductStatusActions({
   productId,
   title,
   status,
+  pricingModel,
   isApproved,
   rutaCompartir,
+  conFechasPendientes = true,
 }: {
   productId: string;
   /** Solo para la etiqueta: con cuatro tarjetas hay cuatro «Más acciones». */
   title: string;
   status: Status;
+  /** M16 · una grupal tiene su propio menú (ver `ACTIONS_GRUPAL`). */
+  pricingModel: PricingModel;
+  /** M16 · la grupal aún tiene fechas por delante (si no, se archiva sin más). */
+  conFechasPendientes?: boolean;
   isApproved: boolean;
   /**
    * EY-225 · `/mentorias/<id>` con el `?ref=` del tutor, resuelto en servidor
@@ -133,11 +202,15 @@ export function ProductStatusActions({
   const [busy, setBusy] = useState(false);
   // EY-223 · el diálogo de compartir vive FUERA del menú (ver su cabecera).
   const [compartir, setCompartir] = useState(false);
-  const actions = ACTIONS[status];
+  const actions = (pricingModel === "group" ? ACTIONS_GRUPAL(productId, conFechasPendientes) : ACTIONS)[status];
 
   async function run(a: Action) {
     if (a.needsApproval && !isApproved) {
       toast.error("Tu perfil de tutor debe estar aprobado para publicar.");
+      return;
+    }
+    if (a.href) {
+      router.push(a.href);
       return;
     }
     if (a.confirm && !window.confirm(a.confirm)) return;
@@ -303,7 +376,7 @@ export function ProductStatusActions({
                 disabled={busy || blocked}
                 // Archivar y descartar son definitivos: van en rojo para que no
                 // se pulsen por inercia al buscar «Pausar».
-                variant={a.to === "archived" ? "destructive" : "default"}
+                variant={a.to === "archived" || a.destructive ? "destructive" : "default"}
                 onSelect={() => void run(a)}
               >
                 {a.label}
