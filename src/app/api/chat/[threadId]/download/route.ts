@@ -8,6 +8,7 @@ import {
   getConversation,
 } from "@/components/chat/conversations";
 import { counterpartFallback } from "@/components/chat/types";
+import { grupalDe } from "@/components/chat/grupo";
 import { NRO_SESION_LABEL } from "@/components/room/session-ref";
 
 /**
@@ -52,6 +53,33 @@ export async function GET(
   const { user, fullName: miNombre } = await getSessionContext();
   if (!user) {
     return NextResponse.json({ error: "auth requerido" }, { status: 401 });
+  }
+
+  // M7 · el chat de una clase grupal se mira PRIMERO, igual que en la página:
+  // por la vía de par daba 404 al alumno y a la tutora un archivo falso,
+  // «Conversación con tu alumno». Va con la sesión del usuario y su RLS
+  // (`puede_ver_conversacion`): quien no es miembro no lo ve.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadId)) {
+    return NextResponse.json({ error: "no encontrada" }, { status: 404 });
+  }
+  const { data: grupo, error: errGrupo } = await supabase
+    .from("conversations")
+    .select("id, group_product_id, products!conversations_group_product_id_fkey(title)")
+    .eq("id", threadId)
+    .eq("kind", "group")
+    .maybeSingle();
+  if (errGrupo) {
+    return NextResponse.json({ error: "no disponible" }, { status: 500 });
+  }
+  if (grupo?.group_product_id) {
+    return descargaDeGrupo({
+      supabase,
+      format,
+      yo: user.id,
+      id: grupo.id,
+      productId: grupo.group_product_id,
+      titulo: grupo.products?.title ?? "Clase grupal",
+    });
   }
 
   // Igual que la página del hilo: el parámetro puede ser la conversación o —por
@@ -234,6 +262,128 @@ export async function GET(
     "",
     "Los archivos adjuntos no van en esta descarga: ábrelos desde el chat y",
     "guárdalos aparte antes de que la conversación se borre.",
+  ];
+
+  return new NextResponse(lines.join("\n"), {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+    },
+  });
+}
+
+/**
+ * M7 · La exportación del chat de una clase grupal.
+ *
+ * No reutiliza la de par a propósito: aquella está escrita para DOS personas
+ * («Alumno: X · Tutor: Y», las reservas del par) y con diez dentro cada línea
+ * de su cabecera sería falsa. Aquí la cabecera es la lista de miembros, con la
+ * insignia del tutor —en una disputa importa saber quién daba la clase— y cada
+ * mensaje firmado con su nombre. Quien ya no es miembro firma «Ya no está en el
+ * grupo», igual que en pantalla.
+ *
+ * Los errores no se tragan (regla de oro 10): un archivo «(sin mensajes)» por
+ * un fallo de consulta sería una prueba falsa.
+ */
+async function descargaDeGrupo({
+  supabase,
+  format,
+  yo,
+  id,
+  productId,
+  titulo,
+}: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  format: "txt" | "json";
+  yo: string;
+  id: string;
+  productId: string;
+  titulo: string;
+}) {
+  const [msgs, inscritos] = await Promise.all([
+    supabase
+      .from("messages")
+      .select("id, sender_id, body, created_at")
+      .eq("conversation_id", id)
+      .order("created_at"),
+    supabase.rpc("inscritos_de_clase", { p_product: productId }),
+  ]);
+  if (msgs.error || inscritos.error) {
+    return NextResponse.json({ error: "no disponible" }, { status: 500 });
+  }
+
+  const { miembros } = grupalDe(inscritos.data);
+  const porId = new Map(miembros.map((m) => [m.userId, m]));
+  const rows = msgs.data ?? [];
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `chat-grupo-${id.slice(0, 8)}-${stamp}.${format}`;
+
+  if (format === "json") {
+    const body = JSON.stringify(
+      {
+        conversacion: id,
+        clase: titulo,
+        participantes: miembros.map((m) => ({
+          nombre: m.nombre,
+          es_tutor: m.esTutor,
+        })),
+        exportado_en: new Date().toISOString(),
+        mensajes: rows.map((m) => {
+          const autor = porId.get(m.sender_id);
+          return {
+            fecha: m.created_at,
+            // `null` = ya no está en el grupo: no se inventa un nombre.
+            nombre: autor?.nombre ?? null,
+            es_tutor: autor?.esTutor ?? false,
+            texto: m.body,
+          };
+        }),
+      },
+      null,
+      2,
+    );
+    return new NextResponse(body, {
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      },
+    });
+  }
+
+  // Las fechas del .txt van en la hora local de quien descarga (RN-02).
+  const tz = await getUserTimezone();
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleString("es", {
+      timeZone: tz,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  const firma = (senderId: string) => {
+    const m = porId.get(senderId);
+    if (!m) return "Ya no está en el grupo";
+    return `${m.nombre}${m.esTutor ? " (tutor)" : ""}${senderId === yo ? " (tú)" : ""}`;
+  };
+
+  const lines = [
+    `Chat del grupo «${titulo}»`,
+    `Participantes: ${
+      miembros.length > 0 ? miembros.map((m) => firma(m.userId)).join(", ") : "(nadie)"
+    }`,
+    `Descargado: ${fmt(new Date().toISOString())} (${tz})`,
+    "Se borra 30 días después de la última fecha de la clase.",
+    "",
+    "─".repeat(60),
+    "",
+    ...(rows.length === 0
+      ? ["(sin mensajes)"]
+      : rows.map(
+          (m) => `[${fmt(m.created_at)}] ${firma(m.sender_id)}:\n    ${m.body.trim()}`,
+        )),
   ];
 
   return new NextResponse(lines.join("\n"), {

@@ -49,8 +49,15 @@ import { asRpc } from "./rpc";
 export function ReportConversation({
   conversationId,
   trigger,
+  grupal = false,
 }: {
   conversationId: string;
+  /**
+   * Lote 3 (M7) · el chat de una clase grupal. Solo cambia el texto: en un
+   * grupo no hay «la otra persona», hay hasta once, y el reporte tiene que
+   * decir quién. La llamada es la misma (`report_conversation` acepta miembros).
+   */
+  grupal?: boolean;
   /**
    * EY-189 · El botón que abre el diálogo, si el de por defecto no sirve.
    *
@@ -110,10 +117,13 @@ export function ReportConversation({
       </DialogTrigger>
       <DialogContent className="sm:max-w-[440px]">
         <DialogHeader>
-          <DialogTitle>Reportar esta conversación</DialogTitle>
+          <DialogTitle>
+            {grupal ? "Reportar el chat del grupo" : "Reportar esta conversación"}
+          </DialogTitle>
           <DialogDescription>
-            Cuéntanos qué pasó. Lo revisa una persona del equipo; mientras
-            tanto la conversación sigue como está.
+            {grupal
+              ? "Cuéntanos qué pasó y quién lo escribió. Lo revisa una persona del equipo; mientras tanto el chat sigue como está."
+              : "Cuéntanos qué pasó. Lo revisa una persona del equipo; mientras tanto la conversación sigue como está."}
           </DialogDescription>
         </DialogHeader>
         <Textarea
@@ -121,7 +131,11 @@ export function ReportConversation({
           onChange={(e) => setMotivo(e.target.value)}
           rows={4}
           maxLength={2000}
-          placeholder="Por ejemplo: me pide pagar por fuera de la plataforma, o me está escribiendo cosas que no vienen a cuento."
+          placeholder={
+            grupal
+              ? "Por ejemplo: alguien del grupo pide pagar por fuera de la plataforma, o escribe cosas que no vienen a cuento."
+              : "Por ejemplo: me pide pagar por fuera de la plataforma, o me está escribiendo cosas que no vienen a cuento."
+          }
         />
         <DialogFooter>
           <Button

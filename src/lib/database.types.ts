@@ -3637,6 +3637,10 @@ export type Database = {
       avisar_clases_de_manana: { Args: never; Returns: number }
       avisar_clases_que_empiezan: { Args: never; Returns: number }
       avisar_creditos_por_expirar: { Args: never; Returns: Json }
+      avisar_mensaje_nuevo: {
+        Args: { p_conversation: string; p_dest: string }
+        Returns: undefined
+      }
       avisar_payouts_sin_reclamar: {
         Args: { p_dias?: number }
         Returns: number
@@ -3957,8 +3961,10 @@ export type Database = {
         Returns: {
           blocked_at: string
           can_chat: boolean
+          group_product_id: string
           has_booking: boolean
           id: string
+          kind: string
           last_booking_id: string
           last_message_at: string
           last_product_title: string
@@ -4117,6 +4123,10 @@ export type Database = {
       request_account_deletion: { Args: { p_user_id: string }; Returns: Json }
       request_withdrawal: {
         Args: { p_retention_days?: number }
+        Returns: string
+      }
+      reserva_tras_salir_del_grupo: {
+        Args: { p_conversation_id: string }
         Returns: string
       }
       respond_booking: {

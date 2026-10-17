@@ -44,7 +44,8 @@ export type ReportRow = {
   handledByName: string | null;
   reporterId: string;
   reporterName: string | null;
-  reportedId: string;
+  /** Null cuando el tutor reporta el chat de su clase grupal: el reportado es el grupo (L3 · M7). */
+  reportedId: string | null;
   reportedName: string | null;
   reporterIsTutor: boolean;
   blockedAt: string | null;
@@ -76,7 +77,7 @@ type ReportRpcRow = {
   handled_by_name: string | null;
   reporter_id: string;
   reporter_name: string | null;
-  reported_id: string;
+  reported_id: string | null;
   reported_name: string | null;
   reporter_is_tutor: boolean;
   blocked_at: string | null;
@@ -209,7 +210,9 @@ export async function readReportThread(
  * Encajan por estructura, que es lo único que TypeScript necesita.
  */
 export function reportParties(r: ReportRow, suspendidos: Set<string>) {
-  const tutorId = r.reporterIsTutor ? r.reporterId : r.reportedId;
+  // En un grupo el tutor nunca queda sin id: si reporta un alumno, el
+  // reportado ES el tutor; si reporta el tutor, es él quien reporta.
+  const tutorId = (r.reporterIsTutor ? r.reporterId : r.reportedId) as string;
   const tutorName = r.reporterIsTutor ? r.reporterName : r.reportedName;
   const alumnoId = r.reporterIsTutor ? r.reportedId : r.reporterId;
   const alumnoName = r.reporterIsTutor ? r.reportedName : r.reporterName;
@@ -220,11 +223,12 @@ export function reportParties(r: ReportRow, suspendidos: Set<string>) {
       name: tutorName,
       suspended: suspendidos.has(tutorId),
     },
-    alumno: {
-      id: alumnoId,
-      name: alumnoName,
-      suspended: suspendidos.has(alumnoId),
-    },
+    // L3 · M7: el tutor que reporta el chat de su grupo no señala a un alumno
+    // (`reported_id` null, `reported_name` = «Grupo «…»»): no hay a quién
+    // desactivar ni contactar.
+    alumno: alumnoId
+      ? { id: alumnoId, name: alumnoName, suspended: suspendidos.has(alumnoId) }
+      : null,
   };
 }
 

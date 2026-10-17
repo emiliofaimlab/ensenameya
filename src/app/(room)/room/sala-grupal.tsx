@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
 import { listNotices } from "@/lib/notifications-server";
 import { MESSAGE_COLUMNS, toChatMessage } from "@/lib/chat/messages";
+import { grupalDe } from "@/components/chat/grupo";
 import { SiteHeader } from "@/components/layout/site-header";
 import { ACCESS_WINDOW_MIN, withMinutes } from "@/lib/room-window";
 import { LiveRoom } from "./[sessionId]/live-room";
@@ -62,7 +63,7 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
     );
   }
 
-  const [{ data: conv }, inscritos, { data: consents }, notices, tz, formato] =
+  const [{ data: conv, error: convError }, inscritos, { data: consents }, notices, tz, formato] =
     await Promise.all([
       supabase
         .from("conversations")
@@ -80,17 +81,20 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
       getFormatoHora(),
     ]);
 
-  const { data: msgs } = conv
+  const { data: msgs, error: msgsError } = conv
     ? await supabase
         .from("messages")
         .select(MESSAGE_COLUMNS)
         .eq("conversation_id", conv.id)
         .order("created_at")
-    : { data: null };
+    : { data: null, error: null };
 
-  const nombres = Object.fromEntries(
-    (inscritos.data ?? []).map((i) => [i.user_id, i.nombre]),
-  );
+  // P45 · cualquiera de las tres lecturas que falle deja el chat «no
+  // disponible», dicho en la sala; antes se quedaba en «Abriendo la
+  // conversación…» para siempre. Sin hilo también: con un inscrito pagado
+  // (si no, no habría sesión `s`) el hilo del grupo tiene que existir.
+  const chatNoDisponible =
+    Boolean(convError) || Boolean(inscritos.error) || Boolean(msgsError) || !conv;
 
   return (
     <LiveRoom
@@ -105,8 +109,8 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
       formato={formato}
       sessionId={s.id}
       bookingId={s.booking_id}
-      // Reportar aún no admite hilos de grupo (`20261009110000`).
-      conversationId={null}
+      // M7 · `report_conversation` ya admite a cualquier miembro del grupo.
+      conversationId={conv?.id ?? null}
       startAt={gc.start_at}
       endAt={gc.end_at}
       opensAt={s.access_opens_at ?? withMinutes(gc.start_at, -ACCESS_WINDOW_MIN)}
@@ -129,7 +133,8 @@ export async function SalaGrupal({ groupClassId }: { groupClassId: string }) {
         groupClassId: gc.id,
         capacity: gc.products?.capacity ?? 10,
         chatConversationId: conv?.id ?? null,
-        nombres,
+        chat: grupalDe(inscritos.data),
+        chatNoDisponible,
         volverHref: esTutor
           ? `/tutor/clases-grupales/${gc.product_id}`
           : `/reservas/${s.booking_id}`,

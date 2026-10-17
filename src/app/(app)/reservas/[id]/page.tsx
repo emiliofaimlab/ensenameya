@@ -32,6 +32,8 @@ import {
   AvisoCopiaCalendario,
 } from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import { grupalDe } from "@/components/chat/grupo";
+import { MESSAGE_COLUMNS, toChatMessage } from "@/lib/chat/messages";
 import { TutorSummary } from "@/components/tutor-summary";
 import { RecordingLink } from "@/components/room/recording-link";
 import { SessionRef } from "@/components/room/session-ref";
@@ -43,6 +45,7 @@ import type { Database } from "@/lib/database.types";
 import { roomOpen } from "@/lib/room-window";
 import { reservaResenable } from "@/lib/resena";
 import { ResenaAlColgar } from "./resena-al-colgar";
+import { ChatPrivadoButton } from "./chat-privado-button";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -223,16 +226,45 @@ export default async function BookingDetailPage({
   // una consulta a cambio de nada.
   // G3 · el hilo del grupo (RG-13). Solo lo lee quien pagó (`puede_ver_conversacion`).
   const esGrupal = booking.products?.pricing_model === "group";
-  const { data: chatGrupo } = esGrupal && chatOpen
+  const { data: chatGrupo, error: chatGrupoError } = esGrupal && chatOpen
     ? await supabase
         .from("conversations")
         .select("id")
         .eq("kind", "group")
         .eq("group_product_id", booking.product_id)
         .maybeSingle()
-    : { data: null };
+    : { data: null, error: null };
 
-  const { data: msgs } = chatOpen
+  // B4 · en una grupal el chat PRINCIPAL es el del grupo: sus mensajes y quién
+  // es quién (nombre, foto, tutor) se cargan aquí, en paralelo. El 1:1 con el
+  // tutor queda detrás de «Escribirle en privado», en la burbuja.
+  const [grupoMsgs, inscritos] = chatGrupo
+    ? await Promise.all([
+        supabase
+          .from("messages")
+          .select(MESSAGE_COLUMNS)
+          .eq("conversation_id", chatGrupo.id)
+          .order("created_at"),
+        supabase.rpc("inscritos_de_clase", { p_product: booking.product_id }),
+      ])
+    : ([null, null] as const);
+  const mensajesGrupo: ChatMessage[] = (grupoMsgs?.data ?? []).map(toChatMessage);
+  // P45 · si algo de esto falla, se DICE (regla de oro 10): antes la tarjeta
+  // desaparecía y el alumno no sabía que existía un chat del grupo. Sin hilo
+  // y sin error también es un fallo mientras la clase sigue: la reserva pagada
+  // lo tiene. Con la reserva `completed` no: el hilo se purga a los 30 días
+  // de la última fecha (`hilo_grupal_caducado`).
+  const chatGrupoBorrado = esGrupal && chatOpen && !chatGrupo && booking.status === "completed";
+  const chatGrupoNoDisponible =
+    esGrupal &&
+    chatOpen &&
+    (Boolean(chatGrupoError) ||
+      (!chatGrupo && !chatGrupoBorrado) ||
+      Boolean(grupoMsgs?.error) ||
+      Boolean(inscritos?.error));
+
+  // El hilo 1:1 por reserva solo se pinta en una reserva 1:1.
+  const { data: msgs } = chatOpen && !esGrupal
     ? await supabase
         .from("messages")
         .select(
@@ -590,17 +622,48 @@ export default async function BookingDetailPage({
               centímetros es ruido. */}
           <TutorSummary tutor={ficha} />
 
-          {chatGrupo ? (
-            <PanelCard className="flex items-center justify-between gap-3">
-              <p className="text-[13px] text-[#474747]">
-                Chat del grupo con el tutor y los demás inscritos.
-              </p>
-              <Button asChild variant="outline" size="sm" className="h-9 shrink-0 rounded-[8px] px-3.5 text-[13px]">
-                <Link href={`/chat/${chatGrupo.id}`}>Abrir chat</Link>
-              </Button>
-            </PanelCard>
-          ) : null}
-
+          {/* B4 · en una grupal manda el chat del GRUPO: es donde están el
+              tutor y los demás inscritos, y antes salía como un enlace pequeño
+              mientras el privado ocupaba la tarjeta grande. El privado sigue
+              existiendo, debajo y en la burbuja. */}
+          {esGrupal ? (
+            <>
+              <PanelCard className="flex flex-col gap-3">
+                <PanelCardTitle className="text-base">Chat del grupo</PanelCardTitle>
+                {chatGrupoNoDisponible ? (
+                  // P45 · nunca desaparecer en silencio.
+                  <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                    El chat no está disponible. Vuelve a intentarlo en unos minutos.
+                  </p>
+                ) : chatGrupoBorrado ? (
+                  <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                    El chat del grupo se borra 30 días después de la última fecha de la clase.
+                  </p>
+                ) : chatOpen && chatGrupo ? (
+                  <ChatThread
+                    formato={formato}
+                    timeZone={tz}
+                    conversationId={chatGrupo.id}
+                    currentUserId={user.id}
+                    initialMessages={mensajesGrupo}
+                    grupal={grupalDe(inscritos?.data)}
+                  />
+                ) : (
+                  <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
+                    El chat se habilita cuando la reserva esté confirmada.
+                  </p>
+                )}
+              </PanelCard>
+              {chatOpen ? (
+                <PanelCard className="flex items-center justify-between gap-3">
+                  <p className="text-[13px] text-[#474747]">
+                    ¿Algo solo para el tutor?
+                  </p>
+                  <ChatPrivadoButton bookingId={booking.id} />
+                </PanelCard>
+              ) : null}
+            </>
+          ) : (
           <PanelCard className="flex flex-col gap-3">
             <PanelCardTitle className="text-base">
               {tutor ? `Chat con ${tutor}` : "Chat con el tutor"}
@@ -622,6 +685,7 @@ export default async function BookingDetailPage({
             {/* "Descargar conversación" del Figma depende de US-1703 (`EY-76`),
                 reabierta el 17-jul: la retención del chat sigue sin decidirse. */}
           </PanelCard>
+          )}
         </div>
       </div>
 

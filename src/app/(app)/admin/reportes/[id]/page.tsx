@@ -78,7 +78,10 @@ export default async function AdminReporteDetallePage({
     // EY-189 · Las clases del par, que es el «ver la llamada» que pidió el
     // cliente. Se piden por par y no por reporte porque la tabla de reportes no
     // guarda `session_id` (ver `listPairSessions`).
-    listPairSessions(partes.alumno.id, partes.tutor.id),
+    // Un reporte de grupo hecho por su tutor no tiene par (L3 · M7).
+    partes.alumno
+      ? listPairSessions(partes.alumno.id, partes.tutor.id)
+      : Promise.resolve({ sesiones: [], error: null }),
   ]);
   const { mensajes, error: errorHilo } = hilo;
   const { sesiones, error: errorClases } = clases;
@@ -155,14 +158,14 @@ export default async function AdminReporteDetallePage({
               que decir: una fila que repite «activa / activa» en todos los
               reportes es ruido, y lo que importa saber de un vistazo al reabrir
               un caso es a quién ya se sancionó. */}
-          {partes.tutor.suspended || partes.alumno.suspended ? (
+          {partes.tutor.suspended || partes.alumno?.suspended ? (
             <PanelRow
               label="Cuentas desactivadas"
               value={[
                 partes.tutor.suspended
                   ? `${partes.tutor.name ?? "el tutor"} (tutor)`
                   : null,
-                partes.alumno.suspended
+                partes.alumno?.suspended
                   ? `${partes.alumno.name ?? "el estudiante"} (estudiante)`
                   : null,
               ]

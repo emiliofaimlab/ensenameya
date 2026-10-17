@@ -14,6 +14,7 @@ import { RESENA_MIN_ANTES_DEL_FIN } from "@/lib/resena";
 import { Button } from "@/components/ui/button";
 import { AddToCalendar } from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import type { GrupalChat } from "@/components/chat/grupo";
 import { ReportConversation } from "@/components/chat/report-conversation";
 import { RecordingConsent } from "@/components/room/recording-consent";
 import { SessionRef } from "@/components/room/session-ref";
@@ -356,7 +357,13 @@ export function LiveRoom({
     groupClassId: string;
     capacity: number;
     chatConversationId: string | null;
-    nombres: Record<string, string>;
+    /** Quién es quién en el hilo del grupo: nombre, foto y si es el tutor. */
+    chat: GrupalChat;
+    /**
+     * P45 · alguna lectura del hilo falló (o no hay hilo). La sala lo dice en
+     * vez de quedarse en «Abriendo la conversación…» para siempre.
+     */
+    chatNoDisponible?: boolean;
     volverHref: string;
   };
 }) {
@@ -1036,6 +1043,7 @@ export function LiveRoom({
             {conversationId ? (
               <ReportConversation
                 conversationId={conversationId}
+                grupal={Boolean(grupal)}
                 trigger={
                   <button
                     type="button"
@@ -1303,6 +1311,13 @@ export function LiveRoom({
               style={VARS_CHAT_SALA}
               className="min-h-0 flex-1 bg-background p-3 text-foreground"
             >
+              {grupal && (grupal.chatNoDisponible || !grupal.chatConversationId) ? (
+                // P45 · sin hilo no se monta el chat: se quedaría en «Abriendo
+                // la conversación…» sin salir nunca de ahí.
+                <p className="py-6 text-center text-[13px] text-muted-foreground">
+                  El chat no está disponible.
+                </p>
+              ) : (
               <ChatThread
                 formato={formato}
                 timeZone={timeZone}
@@ -1311,9 +1326,7 @@ export function LiveRoom({
                 // 360px y ya se lee entero en la ficha de la reserva.
                 sinAvisoDeRetencion
                 {...(grupal
-                  ? grupal.chatConversationId
-                    ? { conversationId: grupal.chatConversationId, grupal: { nombres: grupal.nombres } }
-                    : {}
+                  ? { conversationId: grupal.chatConversationId ?? undefined, grupal: grupal.chat }
                   : { bookingId })}
                 currentUserId={currentUserId}
                 firstSessionAt={firstSessionAt}
@@ -1325,6 +1338,7 @@ export function LiveRoom({
                 visible={chatAbierto}
                 onIncoming={avisarMensaje}
               />
+              )}
             </div>
           </aside>
         </div>

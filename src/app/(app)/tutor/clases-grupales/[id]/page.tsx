@@ -48,7 +48,7 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
   const [tz, formato] = await Promise.all([getUserTimezone(), getFormatoHora()]);
   const supabase = await createClient();
 
-  const [productoRes, fechasRes, reservasRes, students, { data: chat }] = await Promise.all([
+  const [productoRes, fechasRes, reservasRes, students, { data: chat, error: chatError }] = await Promise.all([
     supabase
       .from("products")
       .select("id, title, status, pricing_model, capacity, min_seats, price_amount, currency")
@@ -66,7 +66,8 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
       .eq("product_id", id)
       .order("created_at"),
     studentsOfTutor(supabase),
-    // G3 · el hilo del grupo nace con el primer cupo confirmado.
+    // G3 · el hilo del grupo. Ojo: nace al publicar la clase, no con el primer
+    // pago (P29), por eso la tarjeta mira además si alguien pagó.
     supabase
       .from("conversations")
       .select("id")
@@ -102,6 +103,10 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
   const pendientes = fechas.filter((f) => f.status === "scheduled");
   const empezada = fechas.some((f) => f.status !== "cancelled" && new Date(f.start_at) <= new Date());
   const ciclo = fechas.filter((f) => f.status !== "cancelled").length > 1;
+  // P29 · el hilo nace al publicar, no con el primer pago: sin nadie que haya
+  // pagado, «Abrir chat» llevaba a un grupo vacío. `pagadas` no sirve aquí:
+  // deja fuera `completed` y escondería el chat de una clase ya dada.
+  const conPago = reservas.some((r) => ["confirmed", "in_progress", "completed"].includes(r.status));
   const ahora = new Date();
   const enUnDia = new Date(ahora.getTime() + 24 * 3_600_000);
 
@@ -203,7 +208,15 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
           )}
         </PanelCard>
 
-        {chat ? (
+        {/* P45 · un fallo al leer el hilo se dice; antes la tarjeta se
+            esfumaba y el tutor no sabía que su grupo tenía chat. */}
+        {chatError ? (
+          <PanelCard>
+            <p className="text-[13px] text-[#474747]">
+              El chat no está disponible. Vuelve a intentarlo en unos minutos.
+            </p>
+          </PanelCard>
+        ) : chat && conPago ? (
           <PanelCard className="flex items-center justify-between gap-3">
             <p className="text-[13px] text-[#474747]">
               Chat del grupo con los inscritos que ya pagaron.
