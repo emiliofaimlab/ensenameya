@@ -85,7 +85,12 @@ export function TrustCards({
               {title}
             </h2>
           ) : null}
-          <ul className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {/* EY-236 · `/aprende` trae seis: a cuatro por fila quedaban 4 + 2. */}
+          <ul
+            className={`mt-6 grid gap-6 sm:grid-cols-2 ${
+              points.length % 3 === 0 ? "lg:grid-cols-3" : "lg:grid-cols-4"
+            }`}
+          >
             {points.map(({ icon: Icon, title: t, text }) => (
               <li
                 key={t}

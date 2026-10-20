@@ -15,7 +15,7 @@ import type { Database } from "@/lib/database.types";
  * app—, así que la columna se quedaba null siempre y quién trajo a quién no lo
  * sabía nadie: ni nosotros ni RF, que tampoco tenía dado de alta a ningún
  * referidor. Desde `20260911120000` el enlace lo emitimos NOSOTROS
- * (`<origen>/?ref=<code>`) y ese `code` es el del referidor en RF: de él cuelga
+ * (`<origen>/aprende?ref=<code>` o `/ensena`, según la campaña — EY-236) y ese `code` es el del referidor en RF: de él cuelga
  * la conversión que el cron manda a RF, y como cada código pertenece a UNA
  * campaña, identifica también el programa. La cookie dejó de ser un rastro
  * decorativo y es el único eslabón entre el clic y la recompensa.

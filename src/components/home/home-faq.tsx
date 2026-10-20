@@ -99,7 +99,8 @@ export function HomeFaq({
   /** P03 lo monta a dos columnas, con un panel de contacto a la izquierda. */
   aside?: {
     title: string;
-    text: string;
+    /** Opcional desde EY-236: las landings solo traen el título. */
+    text?: string;
     /** El Figma pinta aquí "Contactar a soporte". Estuvo sin enlazar hasta el
      *  17-ago porque no existía ningún canal —el panel prometía respuesta en
      *  24 h y no ofrecía dónde escribir—; ahora apunta a `/contacto` (DL-01).
@@ -139,7 +140,9 @@ export function HomeFaq({
         <Section className="grid gap-12 lg:grid-cols-[340px_1fr] lg:gap-20">
           <div>
             <h2 className="text-[27px] font-bold">{aside.title}</h2>
-            <p className="mt-4 text-sm text-muted-foreground">{aside.text}</p>
+            {aside.text ? (
+              <p className="mt-4 text-sm text-muted-foreground">{aside.text}</p>
+            ) : null}
             {aside.cta ? (
               <Button
                 asChild

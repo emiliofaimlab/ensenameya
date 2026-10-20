@@ -56,6 +56,8 @@ export const RUTAS_FIJAS = [
   "/academias",
   "/nosotros",
   "/como-funciona",
+  "/ensena",
+  "/aprende",
   "/contacto",
   "/terms",
   "/terms/es",
