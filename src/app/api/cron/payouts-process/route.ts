@@ -370,6 +370,7 @@ export async function GET(req: Request) {
   let esperandoPersona = 0;
   let balanceAjeno = 0;
   let sinPais = 0;
+  let importeNoPositivo = 0;
   let descuadrados = 0;
   let enDuda = 0;
   let esperandoBarrido = 0;
@@ -429,6 +430,17 @@ export async function GET(req: Request) {
       ejecutor: claveEjecutor,
       financia: fila.funding_provider,
     };
+
+    // 🔴 UN IMPORTE ≤ 0 NO SALE HACIA NINGÚN SITIO, ni PSP ni persona. La BD ya
+    // lo impide (`payouts_amount_positivo`, `20261020120000`), y esto es la
+    // segunda llave: el 19-oct una orden de 0 —mentorías gratis— llegó a Wise y
+    // volvió como «Amount is too small». La fila no se toca: es para el admin.
+    if (!(fila.amount > 0)) {
+      importeNoPositivo++;
+      console.error("[C2] 🔴 orden con importe ≤ 0 — no se manda", base);
+      if (simulacro) ensayo.push({ ...base, haria: "nada: importe ≤ 0" });
+      continue;
+    }
 
     // ⚠️ ANTES DE `!psp`, Y EL ORDEN ES LO ÚNICO QUE LO HACE FUNCIONAR: el
     // adaptador de 'manual' existe pero no sabe pagar (`LocalProvider`), así que
@@ -1465,6 +1477,8 @@ export async function GET(req: Request) {
       sinEjecutor,
       // La orden no tiene país de destino congelado.
       sinPais,
+      // Importe ≤ 0: no se manda a nadie (`20261020120000`).
+      importeNoPositivo,
       // `payouts.amount` no cuadra con `suma(payout_items) + suma(payout_adjustments)`.
       // ⚠️ Desde `20260912100000` las recompensas del tutor viajan dentro de la
       // orden sin ser líneas: cotejar solo contra `payout_items` metía aquí a
