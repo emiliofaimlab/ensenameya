@@ -507,6 +507,13 @@ export function LiveRoom({
    * misma salida haría dos o tres `router.push` seguidos.
    */
   const saliendo = useRef(false);
+  // EY-235 · `endAt` va por ref y NO en las dependencias: `salirDeLaSala` entra
+  // en las del efecto que monta Daily, y si cambiara al extender la clase (que
+  // mueve `endAt`) ese efecto haría `destroy()` y cortaría la llamada.
+  const endAtRef = useRef(endAt);
+  useEffect(() => {
+    endAtRef.current = endAt;
+  }, [endAt]);
   const salirDeLaSala = useCallback(() => {
     if (saliendo.current) return;
     saliendo.current = true;
@@ -517,11 +524,12 @@ export function LiveRoom({
     // El tutor no lo ve nunca. Misma navegación de siempre (regla 13).
     const pedirResena =
       !isTutor &&
-      Date.now() >= Date.parse(endAt) - RESENA_MIN_ANTES_DEL_FIN * 60_000;
+      Date.now() >=
+        Date.parse(endAtRef.current) - RESENA_MIN_ANTES_DEL_FIN * 60_000;
     router.push(
       pedirResena ? `${detalleDeLaReserva}?resena=1` : detalleDeLaReserva,
     );
-  }, [router, detalleDeLaReserva, isTutor, endAt]);
+  }, [router, detalleDeLaReserva, isTutor]);
   // Controles locales de la sala simulada (con Daily real los trae el SDK).
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
