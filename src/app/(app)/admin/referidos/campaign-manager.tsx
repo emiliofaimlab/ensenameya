@@ -367,7 +367,7 @@ export function CampaignManager({
                           {f.rfLang ? ` · ${f.rfLang}` : ""}
                         </p>
                         {/* La landing de RF. No es lo que se comparte —eso es
-                            APP_BASE_URL/?ref=<code>—, pero es cómo el admin
+                            APP_BASE_URL/aprende|ensena?ref=<code>, según la audiencia—, pero es cómo el admin
                             reconoce la campaña en el panel de RF. */}
                         <a
                           href={f.rfUrl}

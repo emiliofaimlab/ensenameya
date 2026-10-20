@@ -464,8 +464,13 @@ export default async function ReferidosPage() {
               // `encodeURIComponent`: el `code` lo emite RF, no un usuario, pero un
               // día que traiga un `&` o un `#` el enlace se rompe en silencio y
               // la atribución se pierde sin que nadie vea un error.
+              // EY-236 · cada campaña aterriza en su landing: alumnos en
+              // `/aprende`, tutores en `/ensena`. El `ref` se guarda en
+              // cualquier ruta (proxy), así que la atribución no cambia.
               const enlace =
-                code && origen ? `${origen}/?ref=${encodeURIComponent(code)}` : null;
+                code && origen
+                  ? `${origen}/${alumnos ? "aprende" : "ensena"}?ref=${encodeURIComponent(code)}`
+                  : null;
               const n = porCampaña.get(c.rf_campaign_id);
 
               return (
