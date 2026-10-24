@@ -24,6 +24,7 @@ export default async function EditProductPage({
     { data: materials },
     { data: rules },
     { data: ruleLinks },
+    { data: perfil },
   ] = await Promise.all([
       supabase
         .from("products")
@@ -66,6 +67,13 @@ export default async function EditProductPage({
         .from("product_availability_rules")
         .select("rule_id")
         .eq("product_id", id),
+      // G1 · RG-18: con el interruptor, el asistente enseña el paso «Tipo»
+      // (bloqueado al editar: el tipo no cambia, pero se ve qué es).
+      supabase
+        .from("tutor_profiles")
+        .select("group_classes_enabled")
+        .eq("profile_id", userId)
+        .maybeSingle(),
     ]);
 
   if (!product) notFound();
@@ -83,6 +91,7 @@ export default async function EditProductPage({
         availabilityRules={rules ?? []}
         materials={materials ?? []}
         isApproved={approvalStatus === "approved"}
+        groupClassesEnabled={perfil?.group_classes_enabled ?? false}
         product={{
           id: product.id,
           title: product.title,
