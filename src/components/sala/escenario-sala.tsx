@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
-import { FileTextIcon } from "lucide-react";
+import { FileTextIcon, MaximizeIcon, MinimizeIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { galeria } from "./escenario";
@@ -31,6 +31,11 @@ import type { Participante } from "./use-participante-remoto";
  * el escenario se estrecha y la franja baja sola; el documento, cuando no es lo
  * principal, va en la franja como TARJETA (nombre y página), no como miniatura
  * ilegible; y en 1:1 la tesela del otro está siempre, aunque no haya llegado.
+ *
+ * Rediseño de Emilio (24-oct) · con algo compartido, el botón de pantalla
+ * completa sale de la barra y se pinta AQUÍ, sobre lo compartido, abajo a la
+ * derecha: es donde se está mirando cuando se quiere agrandar. Sin nada
+ * compartido sigue en la barra (`BarraControles`, `pantalla.enEscenario`).
  */
 export function EscenarioSala({
   participantes,
@@ -41,6 +46,7 @@ export function EscenarioSala({
   acciones,
   compacto,
   vacio,
+  pantallaCompleta,
 }: {
   participantes: Participante[];
   compartidos: string[];
@@ -54,6 +60,8 @@ export function EscenarioSala({
   compacto?: boolean;
   /** Lo que se pinta sin nadie en la llamada (sala simulada). */
   vacio?: ReactNode;
+  /** Solo en la sala (no en la flotante) y donde el navegador la soporta. */
+  pantallaCompleta?: { activa: boolean; alternar: () => void };
 }) {
   // B11 · el tamaño de la rejilla, medido. El `ref` es un estado (y no un
   // `useRef`) para que el efecto se entere de cuándo aparece el contenedor:
@@ -162,7 +170,30 @@ export function EscenarioSala({
   return (
     <div className="@container/area size-full">
       <div className={cn("flex size-full flex-col", !compacto && "@4xl/area:flex-row")}>
-        <div className="relative min-h-0 min-w-0 flex-1">{compartido(principal, false)}</div>
+        <div className="relative min-h-0 min-w-0 flex-1">
+          {compartido(principal, false)}
+          {pantallaCompleta && !compacto ? (
+            <button
+              type="button"
+              onClick={pantallaCompleta.alternar}
+              aria-pressed={pantallaCompleta.activa}
+              aria-label={pantallaCompleta.activa ? "Salir de pantalla completa" : "Pantalla completa"}
+              title={pantallaCompleta.activa ? "Salir de pantalla completa" : "Pantalla completa"}
+              className={cn(
+                // Con un documento, por ENCIMA de su paginador, que ya ocupa
+                // la esquina (`visor-presentacion.tsx`, `right-3 bottom-3`).
+                "absolute right-3 z-20 flex size-10 items-center justify-center rounded-full bg-black/70 text-white shadow-lg transition-colors hover:bg-black/85 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none",
+                principal === "doc" ? "bottom-14" : "bottom-3",
+              )}
+            >
+              {pantallaCompleta.activa ? (
+                <MinimizeIcon className="size-5" aria-hidden />
+              ) : (
+                <MaximizeIcon className="size-5" aria-hidden />
+              )}
+            </button>
+          ) : null}
+        </div>
         <div
           aria-label="Cámaras"
           className={cn(

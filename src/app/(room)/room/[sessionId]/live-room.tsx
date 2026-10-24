@@ -1306,6 +1306,12 @@ export function LiveRoom({
                 tarjetaDoc={tarjetaDoc}
                 ausente={ausente}
                 acciones={accionesTutor}
+                // Con algo compartido, pantalla completa va aquí y no en la barra.
+                pantallaCompleta={
+                  pantalla.soportada
+                    ? { activa: pantalla.activa, alternar: () => void pantalla.alternar() }
+                    : undefined
+                }
                 vacio={
                   joined.simulated ? (
                     // Sin credenciales de Daily: la sala, el token y la ventana
@@ -1556,11 +1562,15 @@ export function LiveRoom({
             soportada: pantalla.soportada,
             activa: pantalla.activa,
             alternar: () => void pantalla.alternar(),
+            // Lo mismo que decide `EscenarioSala`: con algo compartido el
+            // botón vive sobre el escenario.
+            enEscenario: compartidos.length > 0,
           }}
           call={call}
           sustantivo={sustantivo}
           // M5 · el tutor de una grupal silencia a todos de un golpe (`*` no
-          // incluye al local).
+          // incluye al local). Con ella su botón de micro despliega «Yo» /
+          // «Sala» en vez de haber dos botones de silenciar.
           silenciarTodos={
             isTutor && grupal && call
               ? () => call.updateParticipants({ "*": { setAudio: false } })

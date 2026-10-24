@@ -5,6 +5,7 @@ import { MicOffIcon, MoreVerticalIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useDesplegable } from "./barra-herramientas";
+import { eligeSalida, usePrefsSala } from "./preferencias-sala";
 import type { Participante } from "./use-participante-remoto";
 
 /** Un `<video>` sobre una pista. Siempre mudo: el audio va aparte. */
@@ -47,6 +48,7 @@ export function Video({
 
 function Audio({ track }: { track: MediaStreamTrack }) {
   const ref = useRef<HTMLAudioElement>(null);
+  const { salida } = usePrefsSala();
   useEffect(() => {
     const a = ref.current;
     if (!a) return;
@@ -56,6 +58,15 @@ function Audio({ track }: { track: MediaStreamTrack }) {
       a.srcObject = null;
     };
   }, [track]);
+  // El altavoz elegido en «Configuración» (`preferencias-sala.ts`): en call
+  // object el sonido es NUESTRO, así que la salida se cambia aquí y no en
+  // Daily. `""` es la del sistema. Un `deviceId` que ya no existe hace
+  // fallar `setSinkId`, y entonces se queda sonando por donde estaba.
+  useEffect(() => {
+    const a = ref.current;
+    if (!a || !eligeSalida()) return;
+    a.setSinkId(salida).catch((e: unknown) => console.warn("[sala] salida de audio:", e));
+  }, [salida]);
   return <audio ref={ref} autoPlay />;
 }
 
@@ -125,6 +136,8 @@ export function Tesela({
   acciones?: AccionesTesela;
 }) {
   const { abierto, setAbierto, ref } = useDesplegable();
+  // «Vista propia en espejo» (Configuración): solo voltea TU tesela, para ti.
+  const { espejo } = usePrefsSala();
   const botonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   // P16 · al abrir, el foco entra al menú (a la primera opción que se pueda
@@ -187,7 +200,7 @@ export function Tesela({
         className,
       )}
     >
-      {p.video ? <Video track={p.video} espejo={p.local} /> : <Iniciales nombre={p.nombre} />}
+      {p.video ? <Video track={p.video} espejo={p.local && espejo} /> : <Iniciales nombre={p.nombre} />}
       <p className="absolute bottom-1.5 left-1.5 flex max-w-[calc(100%-0.75rem)] items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-xs text-white">
         {/* P17 · el anfitrión se distingue (en 1:1 y en grupal el token del
             tutor es `is_owner`, y nadie más lo es). Va junto al nombre: arriba
