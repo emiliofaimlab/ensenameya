@@ -24,6 +24,18 @@ const REASONS = [
 ];
 
 /**
+ * P10/M1 · sacar a un alumno de una grupal no es cancelar una clase propia:
+ * «ya no puedo en ese horario» tiraría la clase entera, no un cupo.
+ */
+const REASONS_GRUPAL = [
+  "El alumno me pidió salir de la clase",
+  "No tiene el nivel que pide la clase",
+  "Comportamiento inadecuado con el grupo",
+  "Se inscribió por error",
+  "Otro",
+];
+
+/**
  * N-34 · confirmación de la cancelación del tutor.
  *
  * El reembolso lo decide `cancel_booking` en servidor (RN-37: cancela el tutor
@@ -34,8 +46,16 @@ const REASONS = [
  * orden de foco y "Confirmar" pide antes elegir un motivo. Es el sustituto
  * deliberado del `confirm()`, que se despachaba con un Intro.
  */
-export function TutorCancelForm({ bookingId }: { bookingId: string }) {
+export function TutorCancelForm({
+  bookingId,
+  grupal = false,
+}: {
+  bookingId: string;
+  /** M1 · sacar a un alumno de una clase grupal, no cancelar una 1:1. */
+  grupal?: boolean;
+}) {
   const router = useRouter();
+  const reasons = grupal ? REASONS_GRUPAL : REASONS;
   // Sin preselección a propósito: con un motivo ya elegido, confirmar es un
   // solo clic y volvemos a tener el problema que quitamos.
   const [reason, setReason] = useState("");
@@ -43,7 +63,10 @@ export function TutorCancelForm({ bookingId }: { bookingId: string }) {
   const [busy, setBusy] = useState(false);
 
   async function confirm() {
-    if (!reason) return toast.error("Elige el motivo de la cancelación.");
+    if (!reason)
+      return toast.error(
+        grupal ? "Elige el motivo." : "Elige el motivo de la cancelación.",
+      );
 
     setBusy(true);
     const supabase = createClient();
@@ -55,15 +78,25 @@ export function TutorCancelForm({ bookingId }: { bookingId: string }) {
       p_reason: detailText ? `${reason} — ${detailText}` : reason,
     });
     if (error) {
-      toast.error(error.message || "No se pudo cancelar la reserva.");
+      toast.error(
+        error.message ||
+          (grupal
+            ? "No se pudo sacar al alumno de la clase."
+            : "No se pudo cancelar la reserva."),
+      );
       setBusy(false);
       return;
     }
-    const pct = (data as { refund_pct?: number } | null)?.refund_pct;
+    const res = data as { refund_pct?: number; tramos?: boolean } | null;
+    const pct = res?.refund_pct;
     toast.success(
-      pct != null
-        ? `Reserva cancelada. Se reembolsa el ${pct} % al alumno.`
-        : "Reserva cancelada.",
+      grupal
+        ? res?.tramos
+          ? "Listo: el alumno queda fuera de las fechas que faltan y se le devuelve esa parte."
+          : "Listo: el alumno deja la clase y se le devuelve el 100 %."
+        : pct != null
+          ? `Reserva cancelada. Se reembolsa el ${pct} % al alumno.`
+          : "Reserva cancelada.",
     );
     router.push(`/tutor/reservas/${bookingId}`);
     router.refresh();
@@ -73,11 +106,12 @@ export function TutorCancelForm({ bookingId }: { bookingId: string }) {
     <>
       <section className="rounded-[16px] border border-[#e0e0e0] bg-card p-5">
         <h2 className="text-base font-semibold text-[#19191f]">
-          Motivo de la cancelación
+          {grupal ? "Por qué lo sacas de la clase" : "Motivo de la cancelación"}
         </h2>
         <p className="mt-1 text-xs text-[#6b6b6b]">
-          Queda registrado en la reserva. Ayuda al equipo a entender qué está
-          fallando y, si el alumno reclama, es lo que se consulta.
+          {grupal
+            ? "Tu alumno lo verá en el correo que le avisa, junto con lo que escribas abajo."
+            : "Queda registrado en la reserva. Ayuda al equipo a entender qué está fallando y, si el alumno reclama, es lo que se consulta."}
         </p>
 
         <label
@@ -94,7 +128,7 @@ export function TutorCancelForm({ bookingId }: { bookingId: string }) {
           className="mt-1.5 h-[45px] w-full rounded-[10px] border border-[#e0e0e0] bg-muted px-3.5 text-sm text-[#4d4d4d] outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <option value="">Elige un motivo…</option>
-          {REASONS.map((r) => (
+          {reasons.map((r) => (
             <option key={r} value={r}>
               {r}
             </option>
@@ -132,7 +166,13 @@ export function TutorCancelForm({ bookingId }: { bookingId: string }) {
           disabled={busy || !reason}
           onClick={confirm}
         >
-          {busy ? "Cancelando…" : "Sí, cancelar la reserva"}
+          {busy
+            ? grupal
+              ? "Sacando…"
+              : "Cancelando…"
+            : grupal
+              ? "Sí, sacarlo de la clase"
+              : "Sí, cancelar la reserva"}
         </Button>
       </div>
     </>

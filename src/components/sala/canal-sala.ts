@@ -13,6 +13,9 @@ import type { DailyCall, DailyEventObjectAppMessage } from "@daily-co/daily-js";
  *    mandan LOS DOS lados, así que da igual quién llegue primero, y también
  *    recupera al tutor si recarga mientras el alumno sigue dentro.
  *  · `mano` / `mano-bajar` → levantar/bajar la propia; pedir bajar la del otro.
+ *    B8 · en una grupal `mano-bajar` lleva `a`: el `session_id` de Daily de
+ *    quien debe bajarla (lo manda la tutora desde su cola; cada alumno solo
+ *    obedece el que trae su id). Sin `a` es el 1:1 de siempre: lo baja el otro.
  *  · `pres` → {docId, página, alumnoAnota}. Con `reset` el receptor borra los
  *    trazos que tuviera antes de recibir los que siguen.
  *  · `trazo` → puntos que se AÑADEN al trazo `id` (lo crea si no existe). Se
@@ -31,7 +34,7 @@ export type Herramienta = "lapiz" | "resaltador";
 export type MensajeSala =
   | { k: "sync-request" }
   | { k: "mano"; arriba: boolean }
-  | { k: "mano-bajar" }
+  | { k: "mano-bajar"; a?: string }
   | {
       k: "pres";
       docId: string;
@@ -143,7 +146,7 @@ export function canalDaily(call: DailyCall): CanalSala & { cerrar(): void } {
  */
 export function canalSimulado(
   sessionId: string,
-): CanalSala & { cerrar(): void } {
+): CanalSala & { cerrar(): void; miId: string } {
   const yo = Math.random().toString(36).slice(2);
   const bc =
     typeof BroadcastChannel === "undefined"
@@ -158,6 +161,9 @@ export function canalSimulado(
   };
   bc?.addEventListener("message", alMensaje);
   return {
+    // B8 · sin Daily no hay `session_id`: es el id con el que los demás ven a
+    // esta pestaña, y el que tiene que comparar `mano-bajar`.
+    miId: yo,
     enviar(m) {
       bc?.postMessage({ de: yo, sobre: { [SELLO]: 1, m } satisfies Sobre });
     },

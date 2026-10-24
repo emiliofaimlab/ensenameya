@@ -1205,7 +1205,7 @@ export async function POST(req: Request) {
   });
   if (customer !== perfil?.stripe_customer_id) await guardarCustomer(customer);
 
-  const base = siteUrl();
+  const base = siteUrl(new URL(req.url).origin);
   // 🎁 Dos relojes, y el del regalo no es el de la reserva: aquel se calcula
   // desde un hold de siete minutos y este desde una fila que vive treinta días.
   // El porqué entero está en `caducidadRegalo`; lo que hay que saber aquí es que
@@ -1752,5 +1752,9 @@ export async function POST(req: Request) {
     // `expire_stale_bookings`, dos datos que el cliente no tiene y no debería
     // adivinar.
     retencionHasta: retencion,
+    // P50 · para prellenar el formulario de Stripe: sin el país salía el de la
+    // geolocalización de Stripe. El correo NO va: ver `stripe-embed.tsx`.
+    // Los parámetros de la Session no cambian, así que `VERSION_PARAMS` no sube.
+    paisPagador: cobrar.payerCountry ?? null,
   });
 }

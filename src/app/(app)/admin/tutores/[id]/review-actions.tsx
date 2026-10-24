@@ -412,3 +412,46 @@ export function BioEditor({ tutorId, bio }: { tutorId: string; bio: string | nul
     </div>
   );
 }
+
+/**
+ * RG-18 · el interruptor de clases grupales del tutor. Va por RPC
+ * (`admin_habilitar_grupales`): la columna no tiene grant de columna, y es lo
+ * que impide que el tutor se las encienda solo.
+ */
+export function GrupalesSwitch({ tutorId, activo }: { tutorId: string; activo: boolean }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function cambiar() {
+    setBusy(true);
+    const { error } = await createClient().rpc("admin_habilitar_grupales", {
+      p_tutor: tutorId,
+      p_activo: !activo,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message || "No se pudo cambiar.");
+      return;
+    }
+    toast.success(activo ? "Clases grupales apagadas." : "Clases grupales activadas.");
+    router.refresh();
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="text-[13px] font-medium text-[#404040]">
+          {activo ? "Activadas" : "Apagadas"}
+        </p>
+        <p className="text-xs text-[#6b6b6b]">
+          {activo
+            ? "Puede publicar clases grupales."
+            : "No ve el tipo «Clase grupal» al crear una mentoría."}
+        </p>
+      </div>
+      <Button size="sm" variant={activo ? "outline" : "default"} disabled={busy} onClick={cambiar}>
+        {activo ? "Apagar" : "Activar"}
+      </Button>
+    </div>
+  );
+}

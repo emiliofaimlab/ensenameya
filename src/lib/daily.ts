@@ -118,10 +118,13 @@ export async function ensureRoom(
    *  sigue obligatorio: se cuenta desde que CADA persona entra, así que es el
    *  único que acota una pestaña olvidada. */
   ejectAfterSec: number,
+  /** G3 · RG-12: cupo + tutor en una sala grupal. Sin él, el tope de Daily. */
+  maxParticipants?: number,
 ): Promise<string> {
   const exp = Math.floor(expiresAt.getTime() / 1000);
   const properties = {
     exp,
+    ...(maxParticipants ? { max_participants: maxParticipants } : {}),
     // B-2 · con `exp` de vuelta a `end_at + 10 min`, esto VUELVE a ser un tope
     // real: expulsa a quien siga dentro cuando la sala muere. Con los 7 días de
     // MN-05 no lo era y el único tope efectivo era la línea de abajo, que se
@@ -235,6 +238,19 @@ export async function mintToken(opts: {
   isOwner: boolean;
   /** Fin de la sesión (`sessions.end_at`), NO el cierre de la ventana ni el de la sala. */
   endsAt: Date;
+  /**
+   * M5 · qué puede emitir quien entra. Sin él, todo (lo de siempre, y lo de
+   * la 1:1). En una grupal el alumno entra sin pantalla: se la concede el
+   * tutor desde su tesela (`updatePermissions`).
+   */
+  canSend?: Array<"video" | "audio" | "screenVideo" | "screenAudio">;
+  /**
+   * A5 · si el token arranca la grabación al entrar. Por defecto sí (la 1:1
+   * no cambia). En una grupal, quien entra ANTES de la hora de inicio lo
+   * recibe en `false`: la grabación la arranca a la hora el cliente del tutor
+   * (owner), o el token del primero que entre ya en hora.
+   */
+  startRecording?: boolean;
 }): Promise<string> {
   const res = await daily("/meeting-tokens", {
     method: "POST",
@@ -259,7 +275,14 @@ export async function mintToken(opts: {
         // la clase empieza igual y tiene que quedar grabada desde el primer
         // minuto. Que el segundo en entrar lo pida otra vez es inocuo — la
         // grabación ya está en marcha y Daily no abre una segunda.
-        start_cloud_recording: true,
+        //
+        // A5 · en una GRUPAL, quien entra antes de la hora de inicio no la
+        // arranca (`startRecording: false`): se grababa la antesala, 10 min
+        // antes de empezar. A la hora la arranca el cliente del tutor
+        // (`live-room.tsx`), y quien entra ya en hora la sigue pidiendo aquí.
+        // La 1:1 no pasa la opción: graba desde el primero que entra.
+        start_cloud_recording: opts.startRecording ?? true,
+        ...(opts.canSend ? { permissions: { canSend: opts.canSend } } : {}),
       },
     }),
   });

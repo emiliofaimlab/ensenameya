@@ -65,11 +65,14 @@ type Errores = Partial<Record<"email" | "form", string>>;
 export function FormularioDeRegalo({
   productId,
   dias,
+  grupal = false,
   className,
 }: {
   productId: string;
   /** Días para agendar (`gift_expiry_days()`); `null` = no se pudo leer. */
   dias: number | null;
+  /** A11 · es un cupo de clase grupal: las fechas ya están fijadas. */
+  grupal?: boolean;
   className?: string;
 }) {
   const router = useRouter();
@@ -194,14 +197,23 @@ export function FormularioDeRegalo({
       {/* Lo último que se lee antes de pulsar, y lo repite a propósito: son las
           dos condiciones del regalo, no letra pequeña. Sin número si no se pudo
           leer `gift_expiry_days()` — mejor «caduca» que un plazo inventado. */}
-      <p className="rounded-[10px] bg-muted px-3.5 py-3 text-[12.5px] text-pretty text-[#595959]">
-        Al continuar pagarás el precio íntegro de la mentoría por adelantado.
-        Quien la reciba elige el día y la hora con ese tutor y{" "}
-        {dias === null
-          ? "tiene un plazo para agendarla"
-          : `tiene ${dias} días para agendarla`}{" "}
-        desde que se confirme el pago.
-      </p>
+      {grupal ? (
+        <p className="rounded-[10px] bg-muted px-3.5 py-3 text-[12.5px] text-pretty text-[#595959]">
+          Al continuar pagarás el cupo completo por adelantado. Quien lo reciba
+          se inscribe en la clase con las fechas ya fijadas y{" "}
+          {dias === null ? "tiene un plazo" : `tiene ${dias} días`} para
+          hacerlo, siempre antes de que empiece la clase.
+        </p>
+      ) : (
+        <p className="rounded-[10px] bg-muted px-3.5 py-3 text-[12.5px] text-pretty text-[#595959]">
+          Al continuar pagarás el precio íntegro de la mentoría por adelantado.
+          Quien la reciba elige el día y la hora con ese tutor y{" "}
+          {dias === null
+            ? "tiene un plazo para agendarla"
+            : `tiene ${dias} días para agendarla`}{" "}
+          desde que se confirme el pago.
+        </p>
+      )}
 
       <FieldError id={idCampo("form-error")} message={errores.form} />
 
@@ -232,6 +244,17 @@ function mensajeDeFallo(raw: string | undefined): string {
   }
   if (m.includes("regalos sin pagar")) {
     return "Tienes regalos sin pagar. Termina o abandona uno antes de empezar otro: los verás en «Mis regalos».";
+  }
+  // A11 · RG-17 y las academias: `comprar_regalo` lo rechaza con su motivo, y
+  // el motivo se puede leer tal cual.
+  if (m.includes("ya no se puede regalar")) {
+    return "Falta menos de 24 h para la primera fecha: esta clase ya no se puede regalar.";
+  }
+  if (m.includes("ya no tiene cupos para regalar")) {
+    return "Esta clase ya no tiene cupos para regalar.";
+  }
+  if (m.includes("clases de academia no se pueden regalar")) {
+    return "Las clases de una academia no se pueden regalar.";
   }
   if (m.includes("no parece un correo")) {
     return "Ese correo no parece válido. Revísalo.";

@@ -1,15 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FlagIcon, XIcon } from "lucide-react";
-import type {
-  DailyCall,
-  DailyCustomTrayButtons,
-  DailyThemeConfig,
-} from "@daily-co/daily-js";
+import type { DailyCall } from "@daily-co/daily-js";
 
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
@@ -18,22 +13,25 @@ import { RESENA_MIN_ANTES_DEL_FIN } from "@/lib/resena";
 import { Button } from "@/components/ui/button";
 import { AddToCalendar } from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
+import type { GrupalChat } from "@/components/chat/grupo";
 import { ReportConversation } from "@/components/chat/report-conversation";
 import { RecordingConsent } from "@/components/room/recording-consent";
 import { SessionRef } from "@/components/room/session-ref";
-import { cn } from "@/lib/utils";
 // EY-221 · herramientas de la clase en vivo (ver `components/sala/`).
-import { AvisoMano, BarraHerramientas } from "@/components/sala/barra-herramientas";
+import { AvisoMano, BarraControles } from "@/components/sala/barra-herramientas";
 import { canalDaily, canalSimulado, type CanalSala } from "@/components/sala/canal-sala";
 import { ContadorClase } from "@/components/sala/contador-clase";
-import { ExtenderClase } from "@/components/sala/extender-clase";
+import { actualizarOrden, ordenados } from "@/components/sala/escenario";
+import { EscenarioSala } from "@/components/sala/escenario-sala";
 import { PanelMateriales } from "@/components/sala/presentacion/panel-materiales";
 import { usePresentacion } from "@/components/sala/presentacion/use-presentacion";
 import { VisorPresentacion } from "@/components/sala/presentacion/visor-presentacion";
+import { AudiosRemotos } from "@/components/sala/tesela";
 import { useManoLevantada } from "@/components/sala/use-mano-levantada";
 import { usePantallaCompleta } from "@/components/sala/use-pantalla-completa";
-import { useParticipanteRemoto } from "@/components/sala/use-participante-remoto";
+import { useParticipantes } from "@/components/sala/use-participante-remoto";
 import { useVentanaFlotante, VentanaFlotante } from "@/components/sala/ventana-flotante";
+import { VistaPrevia } from "@/components/sala/vista-previa";
 
 type SessionStatus = Database["public"]["Enums"]["session_status"];
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
@@ -66,9 +64,10 @@ type BookingStatus = Database["public"]["Enums"]["booking_status"];
  *     tokens oscuros. Si algún día Diana entrega paleta oscura, este objeto es
  *     el único sitio que hay que cambiar.
  *
- * Se usa dos veces y por eso vive en un objeto: como `theme` de Daily —que
- * exige hex en JS, no variables CSS— y como variables CSS del marco nuestro
- * (`VARS_SALA`), para que el iframe y el panel de chat no puedan desafinar.
+ * Vive en un objeto porque se reparte en DOS juegos de variables CSS: los de
+ * la sala (`VARS_SALA`) y los del chat (`VARS_CHAT_SALA`). Antes había un
+ * tercer consumidor, el `theme` del iframe de Daily Prebuilt; desde que la
+ * sala es nuestra (`createCallObject`, correcciones del 16-oct) ya no.
  */
 const SALA = {
   /** `--primary` de globals.css. */
@@ -90,19 +89,7 @@ const SALA = {
   supportiveText: "#a3a3ad",
 } as const;
 
-/**
- * El mismo objeto en el formato que espera Daily. Se pasa como `DailyTheme`
- * suelto (no como `{ light, dark }`) a propósito: la sala es oscura siempre,
- * pase lo que pase con el modo del navegador o el del propio Prebuilt.
- */
-const TEMA_DAILY: DailyThemeConfig = { colors: { ...SALA } };
-
-/**
- * Y el mismo objeto como variables CSS, para el marco que sí es nuestro (barra
- * de sesión y panel de chat). Sin esto los hex estarían escritos dos veces —una
- * para Daily y otra en clases de Tailwind— y el día que cambie uno, el iframe y
- * el panel de al lado dejarían de ser el mismo color.
- */
+/** El mismo objeto como variables CSS, para toda la sala. */
 const VARS_SALA = {
   "--sala-bg": SALA.background,
   "--sala-surface": SALA.backgroundAccent,
@@ -153,102 +140,13 @@ const VARS_CHAT_SALA = {
 } as React.CSSProperties;
 
 /**
- * El icono del botón de chat de la barra de Daily, **incrustado como `data:`
- * URI y no servido desde `/public`**.
- *
- * ⚠️ ANTES ERA `/img/room-chat.svg` Y SALÍA ROTO. Quien pide ese fichero no
- * somos nosotros: es el IFRAME DE DAILY, que vive en `https://*.daily.co`. Se
- * le pasaba la URL absoluta con `window.location.origin`, y en desarrollo eso
- * es `http://localhost:3000` → **contenido mixto**, que el navegador bloquea
- * sin decir nada visible: el bloqueo ocurre dentro del iframe ajeno, así que en
- * nuestra consola no aparece. Solo se ve el icono roto en la barra.
- *
- * En producción, con la app en https, la petición sí habría salido. Pero
- * arreglarlo con «pues ya funcionará en prod» deja el botón roto en local y en
- * cualquier preview por http, que es donde se prueba. Con un `data:` URI **no
- * hay petición**: ni cross-origin, ni mixed content, ni dependencia del
- * protocolo. Se ve igual en los tres sitios.
- *
- * Y de paso desaparece la razón por la que `botonesTray()` solo se podía llamar
- * desde efectos: ya no lee `window`.
- *
- * Sigue siendo blanco a mano y no `currentColor`: Daily lo pinta como IMAGEN,
- * no lo inserta en su DOM, así que no hereda color. La barra es oscura siempre
- * porque el `theme` que le pasamos fija `background`. 36×36 es lo que espera
- * la barra de Prebuilt.
+ * El `destroy()` de la última llamada, si sigue en curso. Daily solo admite UNA
+ * instancia viva por página y `destroy()` es asíncrono: crear la siguiente
+ * antes de que termine lanza «Duplicate DailyIframe instances» y la sala se
+ * queda sin llamada (pasaba al recrearla, y pasa con el doble montaje del modo
+ * estricto en desarrollo).
  */
-// Glifo RELLENO, como los nativos de Prebuilt (Personas, Compartir): con trazo
-// fino salía más pequeño y más débil que sus vecinos de barra.
-const ICONO_CHAT = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="1.5 2.5 21 21">' +
-    '<path fill="#ffffff" d="M5 3.5h14A2.5 2.5 0 0 1 21.5 6v9.5A2.5 2.5 0 0 1 19 18h-8.2l-4.6 3.6c-.5.4-1.2 0-1.2-.6V18H5a2.5 2.5 0 0 1-2.5-2.5V6A2.5 2.5 0 0 1 5 3.5Z"/>' +
-    "</svg>",
-)}`;
-
-/**
- * MN-04 · El botón de chat que se inyecta EN LA BARRA DE DAILY.
- *
- * Es lo que hace que esto se sienta una sala y no «un iframe con una columna al
- * lado»: el usuario abre y cierra el panel desde la misma barra donde tiene el
- * micro y la cámara. Daily lo pinta y nos avisa por `custom-button-click`; el
- * panel sigue siendo nuestro.
- *
- * `visualState: 'sidebar-open'` es el estado que Prebuilt usa para sus propios
- * paneles laterales (participantes, red): el botón se queda "encendido"
- * mientras el panel está abierto, igual que los suyos.
- *
- * (Ya NO depende de `window`: el icono es un `data:` URI de módulo. Antes leía
- * `window.location.origin` y por eso solo podía llamarse desde efectos.)
- */
-/**
- * EY-221 · El icono de «levantar la mano» de la barra de Daily. Mismo truco que
- * `ICONO_CHAT` (data: URI, trazo blanco a mano) y por los mismos motivos.
- */
-// Relleno, como `ICONO_CHAT` (glifo «pan_tool» de Material Icons, Apache-2.0).
-const ICONO_MANO = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
-    '<path fill="#ffffff" d="M23 5.5V20c0 2.2-1.8 4-4 4h-7.3c-1.08 0-2.1-.43-2.85-1.19L1 14.83s1.26-1.23 1.3-1.25c.22-.19.49-.29.79-.29.22 0 .42.06.6.16.04.01 4.31 2.46 4.31 2.46V4c0-.83.67-1.5 1.5-1.5S11 3.17 11 4v7h1V1.5c0-.83.67-1.5 1.5-1.5S15 .67 15 1.5V11h1V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11h1V5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5Z"/>' +
-    "</svg>",
-)}`;
-
-function botonesTray(
-  abierto: boolean,
-  sinLeer: number,
-  manoArriba: boolean,
-): DailyCustomTrayButtons {
-  return {
-    // EY-221 · levantar la mano. `active` es el estado «encendido» de Prebuilt
-    // para un botón que no abre panel (el chat usa `sidebar-open`).
-    mano: {
-      iconPath: ICONO_MANO,
-      iconPathDarkMode: ICONO_MANO,
-      label: manoArriba ? "Bajar mano" : "Mano",
-      tooltip: manoArriba ? "Bajar la mano" : "Levantar la mano",
-      visualState: manoArriba ? "active" : "default",
-    },
-    chat: {
-      iconPath: ICONO_CHAT,
-      // El mismo para los dos modos: nuestro `theme` fija `background` oscuro
-      // pase lo que pase, así que el trazo blanco vale siempre. Si un día la
-      // sala tuviera modo claro, aquí va la variante oscura.
-      iconPathDarkMode: ICONO_CHAT,
-      // V-2 · el contador va en el RÓTULO porque es lo único que hay.
-      // `DailyCustomTrayButtons` expone `iconPath`, `label`, `tooltip` y
-      // `visualState`: no hay insignia, y el icono es un SVG remoto que Daily
-      // carga por URL, así que tampoco se puede dibujar el número encima. Un
-      // «Chat (3)» en la barra es feo pero se ve, que es de lo que va esto.
-      // El botón de nuestra barra de arriba sí lleva punto.
-      label: sinLeer > 0 ? `Chat (${sinLeer > 9 ? "9+" : sinLeer})` : "Chat",
-      tooltip:
-        sinLeer > 0
-          ? `${sinLeer === 1 ? "1 mensaje" : `${sinLeer} mensajes`} sin leer`
-          : abierto
-            ? "Ocultar el chat"
-            : "Mostrar el chat",
-      visualState: abierto ? "sidebar-open" : "default",
-    },
-  };
-}
+let destruyendo: Promise<void> = Promise.resolve();
 
 type Joined = {
   roomUrl: string;
@@ -257,6 +155,10 @@ type Joined = {
   /** Sin credenciales de Daily la sala va simulada (ver `lib/daily.ts`). */
   simulated: boolean;
 };
+
+/** M6 · Daily rechaza la entrada porque la sala llegó a su cupo. */
+const SALA_LLENA =
+  "La sala está llena. Si la tienes abierta en otra pestaña, ciérrala y vuelve a entrar.";
 
 // EY-221 · AQUÍ VIVÍA `clock()`, el formato del cronómetro de la cabecera. El
 // cronómetro bajó a ser el contador superpuesto sobre el vídeo y su formato se
@@ -395,6 +297,7 @@ export function LiveRoom({
   firstSessionAt,
   initialMessages,
   entendido: entendidoInicial,
+  grupal,
 }: {
   /**
    * V-2 · El `SiteHeader` real, ya renderizado por `page.tsx`. Llega como slot
@@ -447,8 +350,41 @@ export function LiveRoom({
    * `RecordingConsent`.
    */
   entendido: boolean;
+  /**
+   * G3 · sala COMPARTIDA de una fecha grupal (RG-12). Cambia el endpoint
+   * (`join_group_class`), la rejilla (cupo + 1), el chat (el del grupo, con el
+   * nombre de cada uno) y a dónde se vuelve. `sessionId` sigue siendo la
+   * sesión del alumno —o una de la fecha, para el tutor—: de ella cuelgan el
+   * «Entiendo» de la grabación y el canal de cierre.
+   */
+  grupal?: {
+    groupClassId: string;
+    capacity: number;
+    chatConversationId: string | null;
+    /** Quién es quién en el hilo del grupo: nombre, foto y si es el tutor. */
+    chat: GrupalChat;
+    /**
+     * P45 · alguna lectura del hilo falló (o no hay hilo). La sala lo dice en
+     * vez de quedarse en «Abriendo la conversación…» para siempre.
+     */
+    chatNoDisponible?: boolean;
+    volverHref: string;
+  };
 }) {
   const router = useRouter();
+  // P43 · UN sustantivo en toda la sala: antes una grupal decía «Clase
+  // grupal» arriba y «Esta mentoría se graba» o «abre 10 minutos antes de la
+  // mentoría» abajo. Llega por props a los componentes que lo escriben.
+  const sustantivo = grupal ? "clase" : "mentoría";
+  const esGrupal = Boolean(grupal);
+  // G3 · en una grupal se vuelve a la clase (tutor) o a la inscripción
+  // (alumno), no a la lista de reservas; ver `grupal.volverHref`.
+  const volver = grupal
+    ? { href: grupal.volverHref, label: isTutor ? "Volver a la clase" : "Volver a mi inscripción" }
+    : { href: isTutor ? "/tutor/reservas" : "/reservas", label: "Volver a mis reservas" };
+  const endpointSala = grupal
+    ? `/api/room/grupal/${grupal.groupClassId}`
+    : `/api/room/${sessionId}`;
   /**
    * RV-18 · `now` arranca en `null` A PROPÓSITO, y no en `Date.now()`.
    *
@@ -471,6 +407,7 @@ export function LiveRoom({
   const [extendida, setExtendida] = useState(extendidaInicial);
   const [joined, setJoined] = useState<Joined | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
   /**
    * El «Entiendo» de la grabación, que ahora es OBLIGATORIO para entrar.
    *
@@ -480,6 +417,15 @@ export function LiveRoom({
    * de ahí lo mueve el propio componente al escribir en la base.
    */
   const [entendido, setEntendido] = useState(entendidoInicial);
+  /**
+   * M5 · con qué se entra a una grupal, elegido en la vista previa de la
+   * antesala. El alumno llega con el micro APAGADO (en un grupo, todos con el
+   * micro abierto es ruido desde el primer segundo); el tutor, abierto. Se
+   * copia a un ref en `join()` para que el efecto de Daily lo lea sin
+   * depender de él (cambiarlo no debe rehacer la llamada). En 1:1 no se usa.
+   */
+  const [previa, setPrevia] = useState({ micro: isTutor, camara: true });
+  const previaRef = useRef(previa);
   /**
    * A dónde se va uno al salir de la sala: SU detalle de la reserva.
    *
@@ -494,26 +440,30 @@ export function LiveRoom({
    * `/reservas/<id>`) y cada uno solo puede leer el suyo: mandar al alumno al
    * del tutor sería un 404 por RLS.
    */
-  const detalleDeLaReserva = isTutor
-    ? `/tutor/reservas/${bookingId}`
-    : `/reservas/${bookingId}`;
+  const detalleDeLaReserva = grupal
+    ? grupal.volverHref
+    : isTutor
+      ? `/tutor/reservas/${bookingId}`
+      : `/reservas/${bookingId}`;
   /**
    * Una sola salida, aunque la empujen tres cosas a la vez.
    *
-   * Se sale por cuatro caminos —el botón «Salir» de Daily, el de la sala
-   * simulada, «Marcar completada» y el cierre que llega por Realtime— y varios
+   * Se sale por cuatro caminos —el «Salir» de la barra de controles (en
+   * real o simulada), «Marcar completada» y el cierre que llega por Realtime— y varios
    * se encadenan: `leave()` dispara `left-meeting`, y navegar desmonta el
    * componente, cuyo `destroy()` puede disparar otro. Sin este pestillo, la
    * misma salida haría dos o tres `router.push` seguidos.
    */
   const saliendo = useRef(false);
-  // EY-235 · `endAt` va por ref y NO en las dependencias: `salirDeLaSala` entra
-  // en las del efecto que monta Daily, y si cambiara al extender la clase (que
-  // mueve `endAt`) ese efecto haría `destroy()` y cortaría la llamada.
+  // ⚠️ El fin va por ref y NO en las dependencias de `salirDeLaSala`: de ella
+  // cuelga el efecto que crea la llamada, y extender la clase (que mueve
+  // `endAt`) destruía y rehacía la llamada entera a mitad de clase.
   const endAtRef = useRef(endAt);
   useEffect(() => {
     endAtRef.current = endAt;
   }, [endAt]);
+  /** M2 · el tutor me sacó (`ejected`): al salir no se pide reseña. */
+  const expulsado = useRef(false);
   const salirDeLaSala = useCallback(() => {
     if (saliendo.current) return;
     saliendo.current = true;
@@ -524,13 +474,13 @@ export function LiveRoom({
     // El tutor no lo ve nunca. Misma navegación de siempre (regla 13).
     const pedirResena =
       !isTutor &&
-      Date.now() >=
-        Date.parse(endAtRef.current) - RESENA_MIN_ANTES_DEL_FIN * 60_000;
+      !expulsado.current &&
+      Date.now() >= Date.parse(endAtRef.current) - RESENA_MIN_ANTES_DEL_FIN * 60_000;
     router.push(
       pedirResena ? `${detalleDeLaReserva}?resena=1` : detalleDeLaReserva,
     );
   }, [router, detalleDeLaReserva, isTutor]);
-  // Controles locales de la sala simulada (con Daily real los trae el SDK).
+  // Micro y cámara de la sala simulada (con Daily, el estado es el de la llamada).
   const [muted, setMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
   /**
@@ -561,8 +511,7 @@ export function LiveRoom({
    * sin un solo aviso.
    *
    * Vive aquí y no en el hilo porque quien tiene que enseñarlo es el marco: el
-   * botón de la barra de arriba y el de la barra de Daily, los dos fuera del
-   * componente de chat.
+   * botón de chat de la barra de controles, fuera del componente de chat.
    */
   const [sinLeer, setSinLeer] = useState(0);
   /**
@@ -605,22 +554,7 @@ export function LiveRoom({
       action: { label: "Abrir", onClick: abrirChat },
     });
   }, [abrirChat]);
-  const frameRef = useRef<HTMLDivElement>(null);
-  // Para devolver el foco al cerrar el panel desde su aspa: si no, el
-  // `display:none` del `aside` deja el foco huérfano y el navegador lo manda
-  // al `body`, o sea a tabular desde el principio.
-  const toggleChatRef = useRef<HTMLButtonElement>(null);
   const callRef = useRef<DailyCall | null>(null);
-  // Espejo de `chatAbierto` y de `sinLeer` para el efecto que crea el iframe:
-  // ese efecto NO puede depender del estado del chat (recrearía la llamada
-  // entera al abrir el panel), pero sí necesita saber en qué estado nace el
-  // botón de la barra. `false` de arranque desde V-2: el panel nace plegado.
-  const chatAbiertoRef = useRef(false);
-  const sinLeerRef = useRef(0);
-  // EY-221 · lo mismo para la mano: el efecto que crea el iframe no puede
-  // depender de ella (ni de su callback, que cambia cuando nace el canal).
-  const manoArribaRef = useRef(false);
-  const alternarManoRef = useRef<() => void>(() => {});
   // MN-05 · cuándo se pidió entrada. Solo se usa para saber si fue ANTES de que
   // la mentoría empezara; ver el efecto de re-autorización más abajo.
   const joinedAt = useRef<number | null>(null);
@@ -638,11 +572,22 @@ export function LiveRoom({
   );
   useEffect(() => () => canal?.cerrar(), [canal]);
 
-  const { remoto, yo } = useParticipanteRemoto(call);
+  const { lista: participantes, yo, remoto, grabando } = useParticipantes(call);
   const mano = useManoLevantada({
     canal,
-    nombreOtro: isTutor ? "El alumno" : "El tutor",
+    nombreOtro: isTutor ? (grupal ? "Un alumno" : "El alumno") : "El tutor",
     otroPresente: remoto.presente,
+    // B8 · en grupo la tutora lleva una cola con nombre y cada alumno solo ve
+    // la suya. Los ids son los `session_id` de Daily, los mismos que da
+    // `fromId` en el canal.
+    grupal: grupal
+      ? {
+          soyTutor: isTutor,
+          miId: yo?.id ?? (canal && "miId" in canal ? String(canal.miId) : null),
+          nombreDe: (id) => participantes.find((p) => p.id === id)?.nombre ?? "Un alumno",
+          presentes: participantes.map((p) => p.id),
+        }
+      : undefined,
   });
   const pres = usePresentacion({ canal, isTutor });
   // UN `sync-request` por canal, y DESPUÉS de que los dos hooks de arriba
@@ -652,16 +597,33 @@ export function LiveRoom({
     canal?.enviar({ k: "sync-request" });
   }, [canal]);
 
+  // A5 · en una grupal la grabación empieza A LA HORA DE INICIO: quien entra
+  // antes recibe el token sin `start_cloud_recording` (`api/room/grupal`).
+  // Llegada la hora, el cliente del tutor (owner, el único con permiso) la
+  // arranca si aún no graba. Una sola vez: si ya la arrancó el token de un
+  // alumno que entró en hora, Daily lo rechaza con un error no fatal
+  // (`recording-error`), que no rompe nada. La 1:1 no pasa por aquí. El ref
+  // guarda la LLAMADA a la que ya se le pidió: si se reentra, se pide otra vez.
+  const grabacionPedida = useRef<DailyCall | null>(null);
+  useEffect(() => {
+    if (!esGrupal || !isTutor || !call || !joined || joined.simulated) return;
+    if (grabando || grabacionPedida.current === call) return;
+    if (now === null || now < Date.parse(startAt)) return;
+    // `joined` llega con la respuesta del API, ANTES de `call.join`: si la hora
+    // cae a mitad del join, el pedido se perdía. El tic de `now` reintenta.
+    if (call.meetingState() !== "joined-meeting") return;
+    grabacionPedida.current = call;
+    try {
+      call.startRecording();
+    } catch (e) {
+      console.warn("[daily] no se pudo arrancar la grabación:", e);
+    }
+  }, [esGrupal, isTutor, call, joined, grabando, now, startAt]);
+
   /** El contenedor que va a pantalla completa: vídeo + presentación + chat. */
   const salaRef = useRef<HTMLDivElement>(null);
   const pantalla = usePantallaCompleta(salaRef);
-  const flotante = useVentanaFlotante();
   const [panelMateriales, setPanelMateriales] = useState(false);
-
-  // Espejos para el efecto de Daily (ver `manoArribaRef`).
-  useEffect(() => {
-    alternarManoRef.current = mano.alternar;
-  }, [mano.alternar]);
 
   const opens = new Date(opensAt).getTime();
   const closes = new Date(closesAt).getTime();
@@ -689,29 +651,6 @@ export function LiveRoom({
       clearInterval(id);
     };
   }, []);
-
-  // MN-04 · El botón de la barra de Daily tiene que reflejar si el panel está
-  // abierto, y el iframe no se entera solo. Este efecto hace las dos cosas:
-  // mantiene el espejo para cuando la llamada se cree DESPUÉS, y repinta el
-  // botón cuando ya existe. Sin setState: no hay render en cascada.
-  useEffect(() => {
-    chatAbiertoRef.current = chatAbierto;
-    sinLeerRef.current = sinLeer;
-    manoArribaRef.current = mano.mia;
-    // ⚠️ `updateCustomTrayButtons()` NO es tolerante: en daily-js 0.91 empieza
-    // por un guardia de estado y **lanza** `"only supported after join"` si la
-    // llamada aún no está en `joined-meeting`. Y la ventana existe de verdad:
-    // `callRef.current` se asigna antes del `await call.join(...)`, y entre
-    // medias están la carga del iframe desde daily.co y el permiso de cámara.
-    // Cerrar el chat en ese hueco tumbaba la sala. Si todavía no se ha unido no
-    // pasa nada: el espejo de arriba ya guarda el estado y el listener de
-    // `joined-meeting` repinta el botón en cuanto se puede.
-    const call = callRef.current;
-    if (call && call.meetingState() === "joined-meeting") {
-      call.updateCustomTrayButtons(botonesTray(chatAbierto, sinLeer, mano.mia));
-    }
-  }, [chatAbierto, sinLeer, mano.mia]);
-
 
   // ⚠️ MN-04 · AQUÍ VIVÍA EL "MODO TEATRO", y se retira a propósito.
   //
@@ -756,63 +695,29 @@ export function LiveRoom({
   // "En vivo" es un estado DERIVADO: uniste y la ventana sigue abierta.
   const live = joined !== null && !afterWindow;
 
-  // Embed de Daily: se monta al unirse y se destruye al salir/desmontar. El SDK
-  // trae los controles (micro, cámara, salir, compartir pantalla) y la
-  // reconexión automática ante caída de red (US-803).
+  // La llamada de Daily: se crea al unirse y se destruye al salir/desmontar.
+  //
+  // ⚠️ Correcciones de Emilio (16-oct) · ya NO es Daily Prebuilt
+  // (`createFrame`), es `createCallObject`: Daily lleva el transporte —y con
+  // él la reconexión ante caída de red (US-803) y la grabación que arranca el
+  // token (`start_cloud_recording`)— y la interfaz ENTERA es nuestra. Era la
+  // única forma de tener la barra a todo el ancho, el «Compartir» con
+  // desplegable, las cámaras en franja al compartir y el turno entre pantalla
+  // y documento: todo eso vivía dentro del iframe de daily.co.
+  //
+  // Lo que se reconstruyó a cambio: teselas (`tesela.tsx`), sonido de los demás
+  // (`AudiosRemotos`), selector de micro/cámara, aviso de grabación y, en
+  // grupales, silenciar/sacar (antes la lista de participantes de Prebuilt).
   useEffect(() => {
-    if (!live || !joined || joined.simulated || !frameRef.current || callRef.current) return;
+    if (!live || !joined || joined.simulated || callRef.current) return;
 
     let cancelled = false;
     void (async () => {
-      const DailyIframe = (await import("@daily-co/daily-js")).default;
-      if (cancelled || !frameRef.current) return;
+      const Daily = (await import("@daily-co/daily-js")).default;
+      await destruyendo;
+      if (cancelled) return;
 
-      const call = DailyIframe.createFrame(frameRef.current, {
-        // MN-04 · La sala hablaba INGLÉS. Todo lo que se ve dentro del iframe lo
-        // escribe Daily —"Waiting for others to join", "People", "Share",
-        // "Leave", el permiso de cámara— y por defecto sale en inglés aunque el
-        // resto del producto esté en español. `lang` no se estaba pasando: es
-        // una línea y es la diferencia entre una sala nuestra y una sala ajena.
-        // ⚠️ No se usa `'user'` (el idioma del navegador) a propósito: el
-        // producto es en español y no queremos media sala en el idioma del
-        // sistema operativo de cada uno.
-        lang: "es",
-        showLeaveButton: true,
-        // SIN el botón de pantalla completa de Daily. Antes (reunión 7-ago) el
-        // motivo era que ponía el IFRAME a pantalla completa y se llevaba por
-        // delante nuestro chat, que vivía fuera. Desde MN-04 el motivo es otro
-        // y más simple: la sala YA ocupa el viewport, así que ese botón solo
-        // serviría para tapar el chat y la barra de sesión — y su versión útil
-        // ("quiero más vídeo") es el botón de chat de aquí abajo.
-        showFullscreenButton: false,
-        // MN-04 · Mentorías 1:1: dos teselas caben de sobra en la rejilla, y la
-        // tira lateral de participantes de Prebuilt solo restaría ancho al
-        // vídeo repitiendo lo que ya se ve. Si algún día hay sesiones de grupo,
-        // esta línea es la que hay que quitar.
-        showParticipantsBar: false,
-        layoutConfig: { grid: { maxTilesPerPage: 2 } },
-        // MN-04 · el naranja de marca dentro del iframe. Ver `SALA`.
-        theme: TEMA_DAILY,
-        // MN-04 · nuestro botón de chat, en SU barra. Nace en el estado que
-        // tenga el panel ahora mismo: el efecto de arriba puede haber corrido
-        // antes de que terminara el `import()` dinámico.
-        customTrayButtons: botonesTray(
-          chatAbiertoRef.current,
-          sinLeerRef.current,
-          manoArribaRef.current,
-        ),
-        // El contenedor es `relative` y el iframe se ancla a sus cuatro lados:
-        // con `height: 100%` a secas, un contenedor que saca su alto del flex
-        // deja el iframe en 0 en algunos navegadores.
-        iframeStyle: {
-          position: "absolute",
-          top: "0",
-          left: "0",
-          width: "100%",
-          height: "100%",
-          border: "0",
-        },
-      });
+      const call = Daily.createCallObject({ subscribeToTracksAutomatically: true });
       callRef.current = call;
       // EY-221 · el canal de la sala (mano, presentación) y la llamada como
       // estado, para los hooks. El canal se crea ANTES del `join`: encola lo
@@ -820,9 +725,7 @@ export function LiveRoom({
       setCanal(canalDaily(call));
       setCall(call);
 
-      // El «Salir» de la barra de Daily. Antes esto era `setJoined(null)` +
-      // `router.refresh()`, o sea quedarse en la sala pintando su pantalla de
-      // antesala — el aviso de grabación incluido. Ahora se sale de verdad: al
+      // Colgar (nuestro «Salir»), ser expulsado o que la sala caduque: al
       // detalle de la reserva. Ver `salirDeLaSala`.
       //
       // ⚠️ EL `cancelled` NO SOBRA. La limpieza de este efecto llama a
@@ -831,53 +734,79 @@ export function LiveRoom({
       // enlace de la cabecera, con su confirmación de `GuardaDeSalida` ya
       // aceptada— desmontaría el componente, el `destroy()` dispararía este
       // manejador y un `router.push` al detalle pisaría la navegación que el
-      // usuario acababa de pedir. `cancelled` solo se pone a true en esa
-      // limpieza, así que distingue «se fue de la llamada» de «estamos
-      // recogiendo».
+      // usuario acababa de pedir.
       call.on("left-meeting", () => {
         if (cancelled) return;
         salirDeLaSala();
       });
       call.on("error", (e) => {
-        toast.error("Se perdió la conexión con la sala.");
+        // M6 · sala llena (otra pestaña abierta, o una reconexión que aún
+        // ocupa su lugar): se dice qué hacer. Mismo id que el `catch` del
+        // `join`, que suele saltar a la vez, para no duplicar el aviso.
+        //
+        // M2 · y se distingue por qué se cae: antes el expulsado leía «Se
+        // perdió la conexión» y volvía a entrar con un clic. Los literales son
+        // los de `DailyFatalErrorType` (daily-js 0.91).
+        const tipo = e?.error?.type;
+        if (tipo === "meeting-full") {
+          toast.error(SALA_LLENA, { id: "sala-join" });
+        } else if (tipo === "ejected") {
+          // Antes de `left-meeting`, que es el que navega: así
+          // `salirDeLaSala` ya sabe que no toca pedir reseña.
+          expulsado.current = true;
+          toast.error("El tutor te sacó de la sala.", { id: "sala-join" });
+        } else if (tipo === "exp-room") {
+          toast("La sala se cerró.");
+        } else {
+          toast.error("Se perdió la conexión con la sala.");
+        }
         console.error("[daily] error:", JSON.stringify(e));
       });
-      // MN-04 · el clic llega desde dentro del iframe. `button_id` es la clave
-      // del objeto que se le pasó en `customTrayButtons`.
-      call.on("custom-button-click", (e) => {
-        if (e.button_id === "mano") {
-          alternarManoRef.current();
-          return;
-        }
-        if (e.button_id !== "chat") return;
-        alternarChat();
-      });
-      // Y aquí se salda la deuda del efecto de arriba: mientras la llamada no
-      // estaba unida, `updateCustomTrayButtons()` no se podía llamar (lanza).
-      // El espejo guardó el estado real del panel; al unirse se repinta el
-      // botón para que no salga apagado con el chat abierto, o al revés.
-      call.on("joined-meeting", () => {
-        call.updateCustomTrayButtons(
-          botonesTray(
-            chatAbiertoRef.current,
-            sinLeerRef.current,
-            manoArribaRef.current,
-          ),
+      call.on("camera-error", (e) => {
+        toast.error(
+          e?.error?.type === "permissions"
+            ? "El navegador no deja usar la cámara o el micrófono. Revisa los permisos del sitio."
+            : "No pudimos encender la cámara o el micrófono.",
         );
+      });
+      call.on("network-connection", (e) => {
+        if (e?.event === "interrupted") {
+          toast.warning("Conexión inestable. Reconectando…", { id: "sala-red" });
+        } else if (e?.event === "connected") {
+          toast.dismiss("sala-red");
+        }
       });
 
       try {
-        await call.join({ url: joined.roomUrl, token: joined.token ?? undefined });
+        await call.join({
+          url: joined.roomUrl,
+          token: joined.token ?? undefined,
+          // M5 · en grupal, lo elegido en la vista previa; en 1:1, todo abierto.
+          startVideoOff: esGrupal ? !previaRef.current.camara : false,
+          startAudioOff: esGrupal ? !previaRef.current.micro : false,
+        });
       } catch (e) {
         console.error("[daily] join falló:", JSON.stringify(e));
-        toast.error("No pudimos conectar con la sala de video.");
+        // M6 · el `join` rechaza con el evento de error de Daily (o, según la
+        // versión, con su texto): se miran las dos formas.
+        const err = e as { error?: { type?: string }; errorMsg?: string } | null;
+        const llena =
+          err?.error?.type === "meeting-full" ||
+          String(err?.errorMsg ?? e).toLowerCase().includes("full");
+        toast.error(llena ? SALA_LLENA : "No pudimos conectar con la sala de video.", {
+          id: "sala-join",
+        });
+        // Sin esto la pantalla se quedaba en «Conectando con la sala…» para
+        // siempre: se vuelve al botón de entrar, y la limpieza del efecto
+        // destruye la llamada fallida.
+        if (!cancelled) setJoined(null);
       }
     })();
 
     return () => {
       cancelled = true;
       if (callRef.current) {
-        void callRef.current.destroy();
+        destruyendo = callRef.current.destroy().catch(() => {});
         callRef.current = null;
       }
       setCall(null);
@@ -885,9 +814,27 @@ export function LiveRoom({
     };
     // `salirDeLaSala` es estable (`useCallback` sobre el router y una cadena),
     // así que entra en la lista sin recrear la llamada en cada render. Si algún
-    // día deja de serlo, este efecto empezaría a destruir y rehacer el iframe:
+    // día deja de serlo, este efecto empezaría a destruir y rehacer la llamada:
     // comprobarlo antes de tocarla.
-  }, [live, joined, salirDeLaSala, alternarChat]);
+    // `esGrupal` es un booleano: la prop `grupal` es un objeto nuevo en cada
+    // refresco del servidor y, en la lista, destruiría la llamada.
+  }, [live, joined, salirDeLaSala, esGrupal]);
+
+  // La ventana flotante se abre sola al irse de la pestaña (corrección 5).
+  const flotante = useVentanaFlotante(live);
+
+  // Corrección 10 · lo compartido se turna: el último va al escenario.
+  const clavesCompartidas = [
+    ...participantes.filter((p) => p.pantalla).map((p) => `pantalla:${p.id}`),
+    ...(pres.estado ? ["doc"] : []),
+  ];
+  const [orden, setOrden] = useState({});
+  const ordenNuevo = actualizarOrden(orden, clavesCompartidas, now ?? 0);
+  // Ajuste de estado durante el render (el patrón de React para estado
+  // derivado de props): `actualizarOrden` devuelve el mismo objeto si no hay
+  // cambios, así que esto no hace bucle.
+  if (ordenNuevo !== orden) setOrden(ordenNuevo);
+  const compartidos = ordenados(ordenNuevo);
 
   /**
    * ⚠️ SACAR AL OTRO CUANDO LA SESIÓN SE CIERRA.
@@ -916,7 +863,10 @@ export function LiveRoom({
    * echado.
    */
   useEffect(() => {
-    if (!joined) return;
+    // M29 · la sesión que lleva la tutora de una grupal es la de UN alumno
+    // (no tiene propia): su baja o su cierre no deben sacarla de la sala. A la
+    // fecha la cierra la ventana de Daily (`eject_at_room_exp`).
+    if (!joined || (grupal && isTutor)) return;
 
     const supabase = createClient();
     let channel: ReturnType<typeof supabase.channel> | null = null;
@@ -963,9 +913,14 @@ export function LiveRoom({
             }
             if (saliendo.current) return;
             toast(
+              // P43 · una grupal no se «marca como completada»: termina.
               estado === "cancelled"
-                ? "La sesión se canceló."
-                : "La mentoría se marcó como completada.",
+                ? grupal
+                  ? "Tu cupo en esta clase se canceló."
+                  : "La sesión se canceló."
+                : grupal
+                  ? "La clase terminó."
+                  : "La mentoría se marcó como completada.",
             );
             // Colgar antes de navegar: el desmontaje ya llama a `destroy()`,
             // pero eso ocurre después del render y deja la cámara encendida
@@ -982,13 +937,14 @@ export function LiveRoom({
       cancelado = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [joined, sessionId, salirDeLaSala]);
+  }, [joined, sessionId, salirDeLaSala, grupal, isTutor]);
 
   async function join() {
+    previaRef.current = previa;
     setBusy(true);
     // El endpoint autoriza vía `join_session` (ventana, participante, ciclo) y
     // firma el token contra Daily con la API key (server-only).
-    const res = await fetch(`/api/room/${sessionId}`, { method: "POST" });
+    const res = await fetch(endpointSala, { method: "POST" });
     const body = await res.json();
     setBusy(false);
 
@@ -1033,8 +989,8 @@ export function LiveRoom({
     if (joinedAt.current === null || joinedAt.current >= liveOpens) return;
     if (now < liveOpens || now > liveCloses) return;
     cicloPedido.current = true;
-    void fetch(`/api/room/${sessionId}`, { method: "POST" });
-  }, [joined, now, liveOpens, liveCloses, sessionId]);
+    void fetch(endpointSala, { method: "POST" });
+  }, [joined, now, liveOpens, liveCloses, endpointSala]);
 
   // N-24 · AQUÍ VIVÍA "Subir documentos", y se quita por feedback del cliente:
   // subir un archivo se ofrecía DOS veces en la misma pantalla —este botón de la
@@ -1053,13 +1009,10 @@ export function LiveRoom({
   // pelearse con `customTrayButtons`.
 
   async function complete() {
-    if (
-      !window.confirm(
-        "¿Marcar la sesión como completada? La sala se cierra para los dos: al alumno se le saca y ninguno podrá volver a entrar.",
-      )
-    ) {
-      return;
-    }
+    // La confirmación es la del botón, en línea («¿Cerrar la sala para los
+    // dos?», laboratorio de Emilio): un `window.confirm` no se ve en pantalla
+    // completa y saca a todo el mundo del vídeo.
+    setConfirmando(false);
     setBusy(true);
     const supabase = createClient();
     const { error } = await supabase.rpc("complete_session", { p_session_id: sessionId });
@@ -1082,51 +1035,93 @@ export function LiveRoom({
 
   // ── Estado en vivo (unido) ────────────────────────────────────────────────
   if (live && joined && now !== null) {
-    // EY-221 · AQUÍ SE CALCULABAN `total` y `elapsed` para el cronómetro de la
-    // cabecera. Se mudaron, con su tope MN-05 incluido (el transcurrido no pasa
-    // del total), a `estadoContador()` de `components/sala/contador-clase.tsx`,
-    // que comparten el contador sobre el vídeo y la ventana flotante.
     const presentando = pres.estado !== null;
-    // Contador + herramientas. Sin presentación van SOBRE el vídeo; con ella, en
-    // la barra del PDF: en escritorio el vídeo baja a una columna de 320px y ahí
-    // tapaban la tesela del propio usuario.
-    const herramientas = (
-      <>
-        <ContadorClase now={now} startAt={startAt} endAt={endAt} />
-        {isTutor && !extendida ? (
-          <ExtenderClase
-            sessionId={sessionId}
-            now={now}
-            endAt={endAt}
-            closesAt={closesAt}
-            onExtendida={(e, c) => {
-              setEndAt(e);
-              setClosesAt(c);
-              setExtendida(true);
-            }}
-          />
-        ) : null}
-        <BarraHerramientas
-          className="pointer-events-auto ml-auto"
-          isTutor={isTutor}
-          panelMaterialesAbierto={panelMateriales}
-          presentando={presentando}
-          onPresentar={() => setPanelMateriales((v) => !v)}
-          manoArriba={mano.mia}
-          onMano={mano.alternar}
-          flotante={{
-            soportada: flotante.soportada,
-            abierta: flotante.abierta,
-            alternar: () => (flotante.abierta ? flotante.cerrar() : void flotante.abrir()),
-          }}
-          pantalla={{
-            soportada: pantalla.soportada,
-            activa: pantalla.activa,
-            alternar: () => void pantalla.alternar(),
-          }}
-        />
-      </>
-    );
+    // Compartir pantalla no existe en los navegadores móviles: ahí el botón
+    // «Compartir» solo ofrece documentos (o no sale, para el alumno).
+    // M5 · en una grupal, el alumno solo si el tutor se lo concedió.
+    const puedeCompartirPantalla =
+      !joined.simulated &&
+      typeof navigator.mediaDevices?.getDisplayMedia === "function" &&
+      (!grupal || isTutor || Boolean(yo?.puedePantalla));
+    const miMicro = joined.simulated ? !muted : (yo?.micro ?? false);
+    const miCamara = joined.simulated ? !camOff : (yo?.camara ?? false);
+    // B8 · en grupo, a la tutora le avisa la PRIMERA mano de su cola (con su
+    // nombre); el alumno no ve manos ajenas. Fuera de grupal, como siempre.
+    const colaManos = grupal && isTutor ? mano.cola : [];
+    const manoAjena = grupal ? colaManos.length > 0 : mano.delOtro;
+    const quienMano = grupal
+      ? (colaManos[0]?.nombre ?? "Un alumno")
+      : isTutor
+        ? "El alumno"
+        : "El tutor";
+    const pendientesMano = colaManos.length > 1 ? colaManos.length - 1 : undefined;
+    const bajarManoAjena = grupal
+      ? () => {
+          if (colaManos[0]) mano.bajar(colaManos[0].id);
+        }
+      : mano.bajarLaDelOtro;
+    // La tutora de una grupal no levanta la mano: sin botón.
+    const miManoDisponible = !(grupal && isTutor);
+    // G3 · en una grupal el tutor (owner) silencia o saca a alguien (RG-12):
+    // lo que antes daba la lista de participantes de Prebuilt.
+    const accionesTutor =
+      isTutor && grupal && call
+        ? (p: (typeof participantes)[number]) =>
+            p.local
+              ? undefined
+              : {
+                  silenciar: () => call.updateParticipant(p.id, { setAudio: false }),
+                  // M2 · primero se PERSISTE la expulsión de esta fecha
+                  // (`join_group_class` la rechaza luego) y solo entonces se
+                  // expulsa: si la RPC falla, no se saca a medias. `userId`
+                  // es el `auth.uid()` que firmó su token.
+                  sacar: async (motivo: string | null) => {
+                    if (!p.userId) {
+                      toast.error("No se pudo sacar al alumno.");
+                      return;
+                    }
+                    const { error } = await createClient().rpc("expulsar_de_clase_grupal", {
+                      p_group_class: grupal.groupClassId,
+                      p_student: p.userId,
+                      p_motivo: motivo ?? undefined,
+                    });
+                    if (error) {
+                      toast.error(error.message || "No se pudo sacar al alumno.");
+                      return;
+                    }
+                    // Todas sus conexiones (la sala admite cupo + 4 justo
+                    // para la segunda pestaña), no solo la tesela pulsada.
+                    const suyas = Object.values(call.participants()).filter(
+                      (x) => !x.local && x.user_id === p.userId,
+                    );
+                    if (suyas.length === 0) call.updateParticipant(p.id, { eject: true });
+                    for (const x of suyas) call.updateParticipant(x.session_id, { eject: true });
+                  },
+                  // M5 · conceder o quitar la pantalla (el token del alumno
+                  // nace sin `screenVideo`, ver `api/room/grupal`).
+                  pantalla: {
+                    permitida: p.puedePantalla,
+                    alternar: () =>
+                      call.updateParticipant(p.id, {
+                        updatePermissions: {
+                          canSend: p.puedePantalla
+                            ? ["video", "audio"]
+                            : ["video", "audio", "screenVideo", "screenAudio"],
+                        },
+                      }),
+                  },
+                }
+        : undefined;
+    const tarjetaDoc = pres.estado
+      ? { nombre: pres.estado.nombre, pagina: pres.estado.pagina }
+      : null;
+    // 1:1 · la tesela del otro está aunque no haya llegado (laboratorio).
+    const ausente =
+      grupal || remoto.presente
+        ? null
+        : remoto.seFue
+          ? `${isTutor ? "El alumno" : "El tutor"} se fue de la sala`
+          : `Esperando ${isTutor ? "al alumno" : "al tutor"}…`;
 
     return (
       /*
@@ -1156,10 +1151,10 @@ export function LiveRoom({
             vídeo y se quería que no se notara. Con la cabecera de marca justo
             arriba, dos barras oscuras encadenadas separaban el logo del vídeo
             con una zanja negra; el cliente pidió esta en blanco y así engancha
-            con la cabecera y hace de borde superior del área de Daily.
+            con la cabecera y hace de borde superior del área de vídeo.
 
-            Micro, cámara, compartir pantalla, dispositivos y "salir" siguen
-            siendo de Daily y viven en SU barra, abajo. */}
+            Micro, cámara, compartir, mano, chat, dispositivos y «Salir» viven
+            en la barra de controles, abajo (`BarraControles`). */}
         <header className="flex shrink-0 items-center gap-4 border-b bg-background px-3 py-2 text-foreground sm:px-4">
           <div className="flex min-w-0 flex-col">
             <h1 className="truncate text-sm font-bold">{productTitle}</h1>
@@ -1170,59 +1165,11 @@ export function LiveRoom({
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-3">
-            {/*
-              MN-04 · El interruptor del chat también aquí, y no solo en la barra
-              de Daily. Tres razones, y ninguna es de gusto:
-              · La barra de Daily **aparece y desaparece con el ratón**, así que
-                el único camino de vuelta al chat sería un botón efímero.
-              · Vive DENTRO del iframe: para un lector de pantalla o para el
-                teclado, nuestro panel se quedaría sin control alcanzable.
-              · En móvil el panel tapa la barra entera, incluido ese botón.
-              Aquí además puede declarar `aria-expanded`/`aria-controls`, cosa
-              que un botón inyectado en un iframe ajeno no puede.
-            */}
-            {/*
-              `<button>` plano y no el componente `Button`: aquí lleva un punto
-              de aviso posicionado y dos atributos ARIA propios, y para eso una
-              etiqueta suelta es más honesta que pelearse con las variantes.
-
-              ⚠️ V-2 · CON PUNTO DE AVISO, y es la mitad de la petición. Plegar
-              el chat por defecto sin esto es dejar sordo al usuario: los
-              mensajes entran, el hilo los recibe —sigue montado— y nadie se
-              entera. El punto sale de `sinLeer`, que solo se mueve cuando el
-              panel está plegado (ver `visible` en `chat-thread.tsx`).
-            */}
-            <button
-              ref={toggleChatRef}
-              type="button"
-              aria-expanded={chatAbierto}
-              aria-controls="panel-chat-sala"
-              onClick={alternarChat}
-              className="relative rounded-md border px-2.5 py-1 text-xs hover:bg-muted"
-            >
-              {chatAbierto ? "Ocultar chat" : "Mostrar chat"}
-              {sinLeer > 0 ? (
-                <span
-                  // `aria-hidden` en el punto y el número en texto para el
-                  // lector: un círculo naranja no se puede leer en voz alta.
-                  aria-hidden
-                  // `primary` (#fe6a00) y no `brand` (#0080ff): la naranja es
-                  // el acento de la sala — el mismo `SALA.accent` que Daily usa
-                  // dentro del iframe para sus botones activos. Con el azul,
-                  // dos avisos a diez centímetros hablarían en dos colores.
-                  className="absolute -top-1.5 -right-1.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] leading-4 font-bold text-primary-foreground"
-                >
-                  {sinLeer > 9 ? "9+" : sinLeer}
-                </span>
-              ) : null}
-              {sinLeer > 0 ? (
-                <span className="sr-only">
-                  {" "}
-                  ({sinLeer === 1 ? "1 mensaje" : `${sinLeer} mensajes`} sin
-                  leer)
-                </span>
-              ) : null}
-            </button>
+            {/* Corrección 1 · AQUÍ VIVÍA «Mostrar chat». Existía porque la barra
+                de Daily vivía dentro de su iframe —sin teclado ni lector de
+                pantalla— y aparecía y desaparecía con el ratón. La barra de
+                controles ya es nuestra y fija: su botón de chat lleva el
+                contador de no leídos y es alcanzable, así que este sobraba. */}
 
             {/*
               EY-189 · «Reportar conducta», dentro de la clase.
@@ -1251,12 +1198,10 @@ export function LiveRoom({
             {conversationId ? (
               <ReportConversation
                 conversationId={conversationId}
+                grupal={Boolean(grupal)}
                 trigger={
                   <button
                     type="button"
-                    // Mismas medidas que «Mostrar chat», su vecino: en una
-                    // barra de tres controles, dos pesos distintos se leen como
-                    // dos jerarquías que aquí no existen.
                     // El rótulo se esconde por debajo de `sm`: a 375px esta
                     // barra ya iba justa con el cronómetro y «Marcar
                     // completada», y una etiqueta más la desbordaba. El icono
@@ -1302,121 +1247,141 @@ export function LiveRoom({
               el reloj del cobro no puede ser un icono de 36px sin etiqueta en
               una barra que aparece y desaparece con el ratón.
             */}
+            {/* G3 · una fecha grupal la cierra el cron, no el tutor: su
+                `complete_session` es por sesión y cerraría solo la de un alumno. */}
             {isTutor &&
+            !grupal &&
             (sessionStatus === "scheduled" || sessionStatus === "in_progress") &&
             now >= liveOpens &&
             now <= liveCloses ? (
-              <Button size="sm" disabled={busy} onClick={complete}>
-                Marcar completada
-              </Button>
+              confirmando ? (
+                <div
+                  role="alertdialog"
+                  aria-label="Confirmar el cierre de la sesión"
+                  className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-2 py-1 text-xs"
+                >
+                  <span>¿Cerrar la sala para los dos?</span>
+                  <Button size="sm" disabled={busy} onClick={complete}>
+                    Completar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setConfirmando(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              ) : (
+                <Button size="sm" disabled={busy} onClick={() => setConfirmando(true)}>
+                  Marcar completada
+                </Button>
+              )
             ) : null}
           </div>
         </header>
 
-        {/* Vídeo + chat. `relative` porque en móvil el panel se SUPERPONE a esta
-            zona (ver el `aside`), no se pone al lado: a 375px dos columnas no
-            caben, y partir el alto dejaría el vídeo en un sello.
+        {/* EY-221 · EL contenedor que va a pantalla completa (`salaRef`):
+            escenario, chat Y barra de controles. Lleva fondo propio porque en
+            pantalla completa no hay nada detrás.
 
-            EY-221 · y es EL contenedor que va a pantalla completa (`salaRef`):
-            vídeo, presentación, contador y chat. Lleva fondo propio porque en
-            pantalla completa no hay nada detrás. */}
+            Corrección 7 · la barra va FUERA de la fila escenario + chat, a
+            todo el ancho y siempre abajo; lo compartido se adapta al espacio
+            que queda encima. */}
         <div
           ref={salaRef}
-          className="relative flex min-h-0 flex-1 bg-[color:var(--sala-bg)]"
+          className="relative flex min-h-0 flex-1 flex-col bg-[color:var(--sala-bg)]"
         >
+        {/* Escenario + chat. `relative` porque en móvil el panel se SUPERPONE a
+            esta zona (ver el `aside`), no se pone al lado: a 375px dos
+            columnas no caben, y partir el alto dejaría el vídeo en un sello.
+            P49 · desde `md` (tableta) ya va al lado. */}
+        <div className="relative flex min-h-0 flex-1">
           <div className="relative flex min-w-0 flex-1 flex-col bg-[color:var(--sala-video)]">
-            {/*
-              EY-221 · Presentación + vídeo. Presentando, el PDF se queda el
-              sitio grande y el vídeo pasa a una franja (abajo en móvil, a la
-              derecha en escritorio).
-
-              ⚠️ El hueco del vídeo es SIEMPRE el segundo hijo de este div, con
-              o sin visor delante: si cambiara de posición, React lo
-              desmontaría y con él el iframe de Daily — o sea, la llamada.
-              Abrir o cerrar la presentación solo le cambia las clases.
-            */}
-            <div
-              className={cn(
-                "flex min-h-0 flex-1 flex-col",
-                presentando && "lg:flex-row",
-              )}
-            >
-              {pres.estado ? (
-                <VisorPresentacion
-                  pres={pres}
-                  sessionId={sessionId}
-                  isTutor={isTutor}
-                  herramientas={herramientas}
-                />
-              ) : null}
-              <div
-                className={cn(
-                  "relative overflow-hidden",
-                  presentando
-                    ? "h-44 shrink-0 border-t border-[color:var(--sala-border)] lg:h-auto lg:w-80 lg:border-t-0 lg:border-l"
-                    : "min-h-0 flex-1",
-                )}
-              >
-                {joined.simulated ? (
-                  // Sin credenciales de Daily: la sala, el token y la ventana ya
-                  // funcionan; falta solo el transporte de video.
-                  <div className="absolute inset-0 flex items-center justify-center text-[color:var(--sala-supportive)]">
-                    <div className="flex flex-col items-center gap-2 p-6 text-center">
-                      <p className="text-sm uppercase tracking-wide">Sala simulada</p>
-                      <p className="max-w-sm text-sm">
-                        Falta configurar el proveedor de video. La sala, el token y la
-                        ventana de acceso ya funcionan.
-                      </p>
-                      <p className="mt-2 break-all font-mono text-xs opacity-70">
-                        {joined.roomUrl}
-                      </p>
+            <div className="relative min-h-0 flex-1">
+              <EscenarioSala
+                participantes={participantes}
+                compartidos={compartidos}
+                // M30 · solo el visor principal publica el documento como pista
+                // (`call`); el mini de la franja, no.
+                documento={
+                  <VisorPresentacion pres={pres} sessionId={sessionId} isTutor={isTutor} call={call} />
+                }
+                tarjetaDoc={tarjetaDoc}
+                ausente={ausente}
+                acciones={accionesTutor}
+                // Con algo compartido, pantalla completa va aquí y no en la barra.
+                pantallaCompleta={
+                  pantalla.soportada
+                    ? { activa: pantalla.activa, alternar: () => void pantalla.alternar() }
+                    : undefined
+                }
+                vacio={
+                  joined.simulated ? (
+                    // Sin credenciales de Daily: la sala, el token y la ventana
+                    // ya funcionan; falta solo el transporte de video.
+                    <div className="flex size-full items-center justify-center text-[color:var(--sala-supportive)]">
+                      <div className="flex flex-col items-center gap-2 p-6 text-center">
+                        <p className="text-sm uppercase tracking-wide">Sala simulada</p>
+                        <p className="max-w-sm text-sm">
+                          Falta configurar el proveedor de video. La sala, el token y la
+                          ventana de acceso ya funcionan.
+                        </p>
+                        <p className="mt-2 break-all font-mono text-xs opacity-70">
+                          {joined.roomUrl}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  // El iframe prefabricado de Daily: sus teselas, su barra de
-                  // controles, su selector de dispositivos, su compartir pantalla y
-                  // su reconexión de red (US-803). Lo nuestro es el marco y el chat
-                  // — el rediseño de MN-04 se hizo SOBRE Prebuilt, no migrando a
-                  // `createCallObject`, que habría obligado a reimplementar todo eso.
-                  // (EY-221: `absolute inset-0` en vez de `flex-1` porque ahora
-                  // vive dentro del hueco del vídeo, que es quien se dimensiona.)
-                  <div ref={frameRef} className="absolute inset-0" />
-                )}
-
-                {/* EY-221 · Contador y herramientas SOBRE el vídeo, solo sin
-                    presentación (con ella van en la barra del PDF). `top-12` y
-                    no `top-3`: la franja de arriba es la barra de Daily, con sus
-                    propios botones en las esquinas. */}
-                {presentando ? null : (
-                  <div className="pointer-events-none absolute inset-x-3 top-12 z-10 flex flex-wrap items-start justify-between gap-2">
-                    {herramientas}
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-sm text-[color:var(--sala-supportive)]">
+                      Conectando con la sala…
+                    </div>
+                  )
+                }
+              />
             </div>
 
-            {/* EY-221 · «levantó la mano», bien visible y dentro del contenedor
-                de pantalla completa (el toast, que va al `body`, ahí no se ve). */}
-            {mano.delOtro ? (
-              <AvisoMano
-                // Sin presentación, arriba (debajo del contador). Presentando,
-                // abajo: arriba está la barra del visor con «Dejar de
-                // presentar», y taparla justo cuando el tutor atiende es lo
-                // peor. En móvil queda encima de la franja del vídeo.
-                className={cn(
-                  "absolute left-1/2 z-20 -translate-x-1/2",
-                  presentando ? "bottom-48 lg:bottom-6" : "top-16",
-                )}
-                quien={isTutor ? "El alumno" : "El tutor"}
-                onBajar={mano.bajarLaDelOtro}
+            {/* Corrección 6 · el reloj, flotando arriba a la izquierda.
+                P18 · y el aviso de la mano en el MISMO contenedor, detrás de
+                él: antes iba centrado y suelto (`absolute left-1/2`) y en
+                móvil tapaba el contador. Ahora en ancho queda al lado y en
+                móvil baja debajo (`flex-wrap`). */}
+            <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start gap-2">
+              <ContadorClase
+                sustantivo={sustantivo}
+                now={now}
+                startAt={startAt}
+                endAt={endAt}
+                closesAt={closesAt}
+                extendida={extendida}
+                extender={
+                  // G3 · una grupal no se extiende (`extend_session` lo rechaza).
+                  isTutor && !extendida && !grupal
+                    ? {
+                        sessionId,
+                        onExtendida: (e, c) => {
+                          setEndAt(e);
+                          setClosesAt(c);
+                          setExtendida(true);
+                        },
+                      }
+                    : undefined
+                }
               />
-            ) : null}
+              {/* EY-221 · «levantó la mano», bien visible y dentro del contenedor
+                  de pantalla completa (el toast, que va al `body`, ahí no se ve). */}
+              {manoAjena ? (
+                <AvisoMano
+                  className="pointer-events-auto max-w-full"
+                  quien={quienMano}
+                  pendientes={pendientesMano}
+                  onBajar={bajarManoAjena}
+                />
+              ) : null}
+            </div>
 
             {isTutor && panelMateriales ? (
               <PanelMateriales
                 sessionId={sessionId}
                 docActual={pres.estado?.docId ?? null}
                 onCerrar={() => setPanelMateriales(false)}
+                sustantivo={sustantivo}
                 onElegir={(m) => {
                   pres.presentar(m.id, m.nombre);
                   setPanelMateriales(false);
@@ -1427,62 +1392,39 @@ export function LiveRoom({
             {flotante.contenedor ? (
               <VentanaFlotante
                 contenedor={flotante.contenedor}
-                rolOtro={isTutor ? "alumno" : "tutor"}
-                remoto={remoto}
-                yo={yo}
+                escenario={
+                  <EscenarioSala
+                    compacto
+                    participantes={participantes}
+                    compartidos={compartidos}
+                    // En la flotante el documento principal va entero (sin
+                    // controles), no como tarjeta.
+                    documento={
+                      <VisorPresentacion pres={pres} sessionId={sessionId} isTutor={isTutor} mini />
+                    }
+                    tarjetaDoc={tarjetaDoc}
+                    ausente={ausente}
+                  />
+                }
                 now={now}
                 startAt={startAt}
                 endAt={endAt}
-                manoDelOtro={mano.delOtro}
+                closesAt={closesAt}
+                extendida={extendida}
+                manoDelOtro={manoAjena}
+                quienMano={quienMano}
+                pendientes={pendientesMano}
                 miMano={mano.mia}
-                onBajarManoDelOtro={mano.bajarLaDelOtro}
-                onAlternarMiMano={mano.alternar}
-                onAlternarMicro={
-                  call ? () => call.setLocalAudio(!yo.micro) : null
+                onBajarManoDelOtro={bajarManoAjena}
+                onAlternarMiMano={miManoDisponible ? mano.alternar : undefined}
+                micro={
+                  call ? { activo: miMicro, alternar: () => call.setLocalAudio(!miMicro) } : null
                 }
                 onVolver={() => {
                   window.focus();
                   flotante.cerrar();
                 }}
               />
-            ) : null}
-
-            {/* Barra de controles SOLO en simulado: con Daily real esta franja
-                la pinta el iframe (y con ella la reconexión, US-803). Aquí se
-                pinta a mano para que la sala siga siendo ejercitable sin
-                credenciales — incluido el botón que abre el chat, que en real
-                vive en la barra de Daily. */}
-            {joined.simulated ? (
-              <div className="flex shrink-0 flex-wrap items-center justify-center gap-2 border-t border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] p-3">
-                <Button
-                  size="sm"
-                  variant={muted ? "default" : "outline"}
-                  onClick={() => setMuted((m) => !m)}
-                >
-                  {muted ? "Activar micrófono" : "Silenciar"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant={camOff ? "default" : "outline"}
-                  onClick={() => setCamOff((c) => !c)}
-                >
-                  {camOff ? "Activar cámara" : "Apagar cámara"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant={chatAbierto ? "default" : "outline"}
-                  aria-pressed={chatAbierto}
-                  onClick={alternarChat}
-                >
-                  {sinLeer > 0 ? `Chat (${sinLeer > 9 ? "9+" : sinLeer})` : "Chat"}
-                </Button>
-                {/* El gemelo del «Salir» de la barra de Daily, y va al mismo
-                    sitio: el detalle de la reserva. Antes era `setJoined(null)`
-                    y devolvía a la antesala con el aviso de grabación. */}
-                <Button size="sm" variant="destructive" onClick={salirDeLaSala}>
-                  Salir
-                </Button>
-              </div>
             ) : null}
           </div>
 
@@ -1495,24 +1437,26 @@ export function LiveRoom({
               se perdería los mensajes de ese rato. Es además el comportamiento
               que ya tenía la sala, donde el panel estaba siempre montado.
 
-              Móvil: `absolute inset-0` sobre la zona de vídeo. Escritorio
-              (`lg:`): vuelve al flujo como columna de 360px a la derecha, que
-              es el "chat incrustado a la derecha" que pidió el cliente. */}
+              Móvil: `absolute inset-0` sobre la zona de vídeo. Desde `md:`
+              vuelve al flujo como columna a la derecha (300px; 360px desde
+              `lg:`), que es el "chat incrustado a la derecha" que pidió el
+              cliente. P49 · antes eso era solo desde `lg:`, y en una tableta
+              el chat tapaba entero el vídeo. El escenario se estrecha solo: la
+              franja la decide su container query, no la pantalla. */}
           <aside
             id="panel-chat-sala"
-            aria-label="Chat de la mentoría"
+            aria-label={`Chat de la ${sustantivo}`}
             className={
               chatAbierto
-                ? "absolute inset-0 z-20 flex flex-col border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] lg:relative lg:inset-auto lg:z-auto lg:w-[360px] lg:shrink-0 lg:border-l"
+                ? "absolute inset-0 z-20 flex flex-col border-[color:var(--sala-border)] bg-[color:var(--sala-bg)] md:relative md:inset-auto md:z-auto md:w-[300px] md:shrink-0 md:border-l lg:w-[360px]"
                 : "hidden"
             }
           >
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[color:var(--sala-border)] px-4 py-3">
               <h2 className="font-semibold">Chat</h2>
               <div className="flex items-center gap-2">
-                {/* ⚠️ Este aspa NO es un duplicado del botón de la barra de
-                    Daily: en móvil el panel TAPA el iframe, así que ese botón
-                    queda debajo y no hay forma de volver al vídeo sin esto. */}
+                {/* El aspa es el gesto esperado para cerrar un panel; el botón
+                    de chat de la barra hace lo mismo. */}
                 <button
                   type="button"
                   onClick={() => {
@@ -1520,7 +1464,7 @@ export function LiveRoom({
                     // El `aside` pasa a `display:none` con el foco DENTRO: sin
                     // esto el navegador lo devuelve al `body` y quien navega con
                     // teclado tiene que tabular desde el principio de la página.
-                    toggleChatRef.current?.focus();
+                    document.getElementById("boton-chat-sala")?.focus();
                   }}
                   aria-label="Ocultar el chat"
                   className="rounded-md p-1 text-[color:var(--sala-supportive)] hover:bg-[color:var(--sala-surface)] hover:text-[color:var(--sala-text)]"
@@ -1541,6 +1485,13 @@ export function LiveRoom({
               style={VARS_CHAT_SALA}
               className="min-h-0 flex-1 bg-background p-3 text-foreground"
             >
+              {grupal && (grupal.chatNoDisponible || !grupal.chatConversationId) ? (
+                // P45 · sin hilo no se monta el chat: se quedaría en «Abriendo
+                // la conversación…» sin salir nunca de ahí.
+                <p className="py-6 text-center text-[13px] text-muted-foreground">
+                  El chat no está disponible.
+                </p>
+              ) : (
               <ChatThread
                 formato={formato}
                 timeZone={timeZone}
@@ -1548,7 +1499,9 @@ export function LiveRoom({
                 // El aviso de retención ocupa media columna en un panel de
                 // 360px y ya se lee entero en la ficha de la reserva.
                 sinAvisoDeRetencion
-                bookingId={bookingId}
+                {...(grupal
+                  ? { conversationId: grupal.chatConversationId ?? undefined, grupal: grupal.chat }
+                  : { bookingId })}
                 currentUserId={currentUserId}
                 firstSessionAt={firstSessionAt}
                 initialMessages={initialMessages}
@@ -1559,8 +1512,77 @@ export function LiveRoom({
                 visible={chatAbierto}
                 onIncoming={avisarMensaje}
               />
+              )}
             </div>
           </aside>
+        </div>
+
+        <BarraControles
+          grabando={grabando}
+          micro={{
+            activo: miMicro,
+            alternar: joined.simulated
+              ? () => setMuted((m) => !m)
+              : () => call?.setLocalAudio(!miMicro),
+          }}
+          camara={{
+            activo: miCamara,
+            alternar: joined.simulated
+              ? () => setCamOff((c) => !c)
+              : () => call?.setLocalVideo(!miCamara),
+          }}
+          compartir={{
+            pantalla: puedeCompartirPantalla
+              ? {
+                  activa: Boolean(yo?.pantalla),
+                  alternar: () =>
+                    yo?.pantalla
+                      ? call?.stopScreenShare()
+                      : call?.startScreenShare({
+                          // Sin la propia pestaña de la sala en la lista: compartirla
+                          // es un espejo infinito.
+                          displayMediaOptions: {
+                            selfBrowserSurface: "exclude",
+                            surfaceSwitching: "include",
+                          },
+                        }),
+                }
+              : undefined,
+            documentos: isTutor
+              ? {
+                  presentando,
+                  elegir: () => setPanelMateriales(true),
+                  dejar: pres.dejarDePresentar,
+                }
+              : undefined,
+          }}
+          mano={miManoDisponible ? { arriba: mano.mia, alternar: mano.alternar } : undefined}
+          chat={{ abierto: chatAbierto, sinLeer, alternar: alternarChat }}
+          pantalla={{
+            soportada: pantalla.soportada,
+            activa: pantalla.activa,
+            alternar: () => void pantalla.alternar(),
+            // Lo mismo que decide `EscenarioSala`: con algo compartido el
+            // botón vive sobre el escenario.
+            enEscenario: compartidos.length > 0,
+          }}
+          call={call}
+          sustantivo={sustantivo}
+          // M5 · el tutor de una grupal silencia a todos de un golpe (`*` no
+          // incluye al local). Con ella su botón de micro despliega «Yo» /
+          // «Sala» en vez de haber dos botones de silenciar.
+          silenciarTodos={
+            isTutor && grupal && call
+              ? () => call.updateParticipants({ "*": { setAudio: false } })
+              : undefined
+          }
+          onSalir={() => {
+            // Con Daily, `leave()` dispara `left-meeting`, que es quien sale.
+            if (call && !joined.simulated) void call.leave();
+            else salirDeLaSala();
+          }}
+        />
+        <AudiosRemotos lista={participantes} />
         </div>
       </div>
     );
@@ -1581,17 +1603,18 @@ export function LiveRoom({
 
       <div className="mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center gap-4 px-4 py-10 text-center">
         <div className="flex flex-col items-center gap-1">
-          <p className="text-sm text-muted-foreground">Mentoría</p>
+          <p className="text-sm text-muted-foreground">{grupal ? "Clase grupal" : "Mentoría"}</p>
           <h1 className="text-xl font-semibold">{productTitle}</h1>
           {/* También antes de entrar y después de salir: la consulta a soporte
               suele ser justo cuando la sala NO deja pasar. */}
           <SessionRef nro={sessionRef} />
-          <Link
-            href={isTutor ? "/tutor/reservas" : "/reservas"}
+          {/* Regla de oro 13: de (room) a una ruta con guarda de (app), <a> y no <Link>. */}
+          <a
+            href={volver.href}
             className="mt-1 text-sm text-muted-foreground underline-offset-2 hover:underline"
           >
-            Volver a mis reservas
-          </Link>
+            {volver.label}
+          </a>
         </div>
 
         {now === null ? (
@@ -1627,11 +1650,11 @@ export function LiveRoom({
               {sessionCancelled
                 ? "Esta sesión se canceló, así que su sala no se abre."
                 : sessionEnded
-                  ? "Esta mentoría ya se dio por terminada, así que su sala está cerrada."
+                  ? `Esta ${sustantivo} ya se dio por terminada, así que su sala está cerrada.`
                   : "Esta reserva no está activa, así que la sala no está disponible."}
             </p>
             <Button asChild variant="outline">
-              <Link href={isTutor ? "/tutor/reservas" : "/reservas"}>Volver a mis reservas</Link>
+              <a href={volver.href}>{volver.label}</a>
             </Button>
           </>
         ) : beforeWindow ? (
@@ -1644,8 +1667,7 @@ export function LiveRoom({
                 {human(opens - now)}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
-                La sala abre 10 minutos antes de la mentoría y sigue abierta 10
-                minutos después.
+                {`La sala abre 10 minutos antes de la ${sustantivo} y sigue abierta 10 minutos después.`}
               </p>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -1673,6 +1695,8 @@ export function LiveRoom({
               userId={currentUserId}
               marcado={entendido}
               onChange={setEntendido}
+              grupal={Boolean(grupal)}
+              sustantivo={sustantivo}
             />
           </>
         ) : afterWindow ? (
@@ -1681,7 +1705,7 @@ export function LiveRoom({
               La ventana de acceso de esta sesión ya cerró.
             </p>
             <Button asChild variant="outline">
-              <Link href={isTutor ? "/tutor/reservas" : "/reservas"}>Volver a mis reservas</Link>
+              <a href={volver.href}>{volver.label}</a>
             </Button>
           </>
         ) : (
@@ -1692,12 +1716,24 @@ export function LiveRoom({
                   sala, así que aquí ya solo se llega con clase viva. */}
               {`La sala está abierta. Cierra en ${human(closes - now)}.`}
             </p>
+            {/* M5 · en una grupal, la vista previa: te ves y eliges con qué
+                entras. Se desmonta al entrar (cambia la rama) y suelta la
+                cámara antes del `join` de Daily. */}
+            {grupal ? (
+              <VistaPrevia
+                micro={previa.micro}
+                camara={previa.camara}
+                onCambio={(micro, camara) => setPrevia({ micro, camara })}
+              />
+            ) : null}
             {/* El aviso se lee ANTES de entrar, no a mitad de clase. */}
             <RecordingConsent
               sessionId={sessionId}
               userId={currentUserId}
               marcado={entendido}
               onChange={setEntendido}
+              grupal={Boolean(grupal)}
+              sustantivo={sustantivo}
             />
             {/* ⚠️ `!entendido` deshabilita: la casilla es obligatoria desde que
                 el aviso dejó de ser un permiso y pasó a ser un «Entiendo» de

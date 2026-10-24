@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getFormatoHora, getUserTimezone, requireUser } from "@/lib/auth/server";
@@ -14,6 +15,9 @@ import {
   conversationSubtitle,
   counterpartFallback,
 } from "@/components/chat/types";
+import { grupalDe, type MiembroGrupo } from "@/components/chat/grupo";
+import { asRpc } from "@/components/chat/rpc";
+import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import { MESSAGE_COLUMNS, toChatMessage } from "@/lib/chat/messages";
 
 export const metadata = { title: "Mensajes · Enséñame Ya" };
@@ -99,6 +103,42 @@ export default async function ChatPage({
     getUserTimezone(),
   ]);
 
+  // 0) G3 · ¿Es el chat de una clase grupal (RG-13)? Se mira PRIMERO.
+  //
+  // ⚠️ B3 · hasta el lote 3 esto iba DESPUÉS de la bandeja, y la bandeja
+  // (`my_conversations`) no filtraba `kind`: la tutora abría el chat de su
+  // grupo y caía en la rama de par —«Chat con tu alumno · Conversación de solo
+  // lectura», topes de consulta y mensajes sin autor—. Hoy la bandeja SÍ trae
+  // los hilos de grupo (con su título), pero esta página los pinta con su
+  // propia rama, así que el orden es lo que garantiza que nunca caigan en la
+  // de par. La RLS (`puede_ver_conversacion`) deja fuera a quien no pagó o se
+  // dio de baja.
+  // Un id que no es UUID hace fallar a PostgREST (y `hiloDeGrupo` lanza): 404.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(threadId)) notFound();
+  const grupo = await hiloDeGrupo(threadId);
+  if (grupo) {
+    return (
+      <Container>
+        <Section className="flex flex-col gap-6">
+          {/* `PageHeader` solo admite texto en `description`: las caras y la
+              insignia van justo debajo, en su propio renglón. */}
+          <div className="flex flex-col gap-2">
+            <PageHeader title={grupo.titulo} description="Chat del grupo" />
+            <Participantes miembros={grupo.grupal.miembros} yo={user.id} />
+          </div>
+          <ChatThread
+            formato={formato}
+            timeZone={timeZone}
+            conversationId={grupo.id}
+            currentUserId={user.id}
+            initialMessages={grupo.mensajes}
+            grupal={grupo.grupal}
+          />
+        </Section>
+      </Container>
+    );
+  }
+
   // 1) ¿Es una conversación mía?
   let conversation = await getConversation(threadId);
 
@@ -108,7 +148,37 @@ export default async function ChatPage({
     if (id) conversation = await getConversation(id);
   }
 
-  if (!conversation) notFound();
+  if (!conversation) {
+    // P12 · quien se dio de baja de una clase grupal y abre el enlace del chat
+    // (un correo, la campana) recibía un 404 seco. La RLS ya no le deja leer
+    // el hilo —es lo correcto—, pero sí se le puede decir por qué y llevarle a
+    // su reserva. La RPC solo devuelve id si el hilo es de grupo y quien mira
+    // tuvo reserva en esa clase y ya no es miembro; a cualquier otro, `null`.
+    const supabase = await createClient();
+    const { data: reservaId } = await asRpc(supabase).rpc(
+      "reserva_tras_salir_del_grupo",
+      { p_conversation_id: threadId },
+    );
+    if (typeof reservaId === "string") {
+      return (
+        <Container>
+          <Section className="flex flex-col gap-6">
+            <PageHeader
+              title="Ya no formas parte de este grupo"
+              description="Tu lugar en esta clase ya no está activo, así que ya no puedes leer su chat. En tu reserva ves por qué."
+            />
+            <Link
+              href={`/reservas/${reservaId}`}
+              className="font-semibold text-brand hover:underline"
+            >
+              Ver mi reserva
+            </Link>
+          </Section>
+        </Container>
+      );
+    }
+    notFound();
+  }
 
   const supabase = await createClient();
   const { data: msgs } = await supabase
@@ -177,5 +247,92 @@ export default async function ChatPage({
         />
       </Section>
     </Container>
+  );
+}
+
+/** G3 · el hilo de una clase grupal, con quién está dentro. `null` si no es
+ *  un hilo de grupo o si quien mira no es miembro.
+ *
+ *  P45 · los errores SE LANZAN (regla de oro 10): convertirlos en `null`
+ *  mandaba el hilo de grupo a la rama de par o a un 404, y en `[]` pintaba un
+ *  grupo vacío. Mejor la pantalla de error que una mentira creíble. */
+async function hiloDeGrupo(id: string) {
+  const supabase = await createClient();
+  const { data: c, error } = await supabase
+    .from("conversations")
+    .select("id, group_product_id, products!conversations_group_product_id_fkey(title)")
+    .eq("id", id)
+    .eq("kind", "group")
+    .maybeSingle();
+  if (error) throw new Error(`hilo de grupo: ${error.message}`);
+  if (!c?.group_product_id) return null;
+  const [msgs, inscritos] = await Promise.all([
+    supabase
+      .from("messages")
+      .select(MESSAGE_COLUMNS)
+      .eq("conversation_id", c.id)
+      .order("created_at"),
+    supabase.rpc("inscritos_de_clase", { p_product: c.group_product_id }),
+  ]);
+  if (msgs.error) throw new Error(`mensajes del grupo: ${msgs.error.message}`);
+  if (inscritos.error) {
+    throw new Error(`inscritos del grupo: ${inscritos.error.message}`);
+  }
+  return {
+    id: c.id,
+    titulo: c.products?.title ?? "Clase grupal",
+    mensajes: (msgs.data ?? []).map(toChatMessage),
+    grupal: grupalDe(inscritos.data),
+  };
+}
+
+/**
+ * M31 · La cabecera del chat del grupo: las caras apiladas (hasta cuatro y
+ * «+N») y la lista de nombres, con «(tú)» detrás del propio y la insignia
+ * «Tutor» — con once personas, saber quién da la clase es lo primero.
+ */
+function Participantes({ miembros, yo }: { miembros: MiembroGrupo[]; yo: string }) {
+  const visibles = miembros.slice(0, 4);
+  const resto = miembros.length - visibles.length;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+      <span className="flex shrink-0 -space-x-1.5" aria-hidden>
+        {visibles.map((m) => {
+          const foto = storageUrl("avatars", m.avatarPath);
+          return (
+            <span
+              key={m.userId}
+              className="grid size-7 place-items-center overflow-hidden rounded-full bg-[#e0eeff] text-[10px] font-semibold text-brand ring-2 ring-background"
+            >
+              {foto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={foto} alt="" className="size-7 object-cover" />
+              ) : (
+                initialsFrom(m.nombre)
+              )}
+            </span>
+          );
+        })}
+        {resto > 0 ? (
+          <span className="grid size-7 place-items-center rounded-full bg-muted text-[10px] font-semibold ring-2 ring-background">
+            +{resto}
+          </span>
+        ) : null}
+      </span>
+      <span>
+        {miembros.map((m, i) => (
+          <span key={m.userId}>
+            {i > 0 ? ", " : null}
+            {m.nombre}
+            {m.userId === yo ? " (tú)" : null}
+            {m.esTutor ? (
+              <span className="ml-1 rounded-full bg-brand-muted px-1.5 py-px text-[11px] font-semibold text-brand-foreground">
+                Tutor
+              </span>
+            ) : null}
+          </span>
+        ))}
+      </span>
+    </div>
   );
 }

@@ -2,11 +2,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CalendarClockIcon, HourglassIcon, VideoIcon } from "lucide-react";
 
-import { requireUser } from "@/lib/auth/server";
+import { getFormatoHora, getUserTimezone, requireUser } from "@/lib/auth/server";
 import { panelMenu } from "@/lib/auth/panel-items";
 import { getProductDetail } from "@/lib/catalog/queries";
 import { priceDisplay, sessionsLabel } from "@/lib/catalog/format";
-import { serviceFee, SERVICE_FEE_PCT } from "@/lib/booking";
+import { formatSessionTime, serviceFee, SERVICE_FEE_PCT } from "@/lib/booking";
 import { ProductCover } from "@/components/catalog/product-cover";
 import { Precio, PrecioEnLinea } from "@/components/precio/precio";
 import {
@@ -61,10 +61,12 @@ export default async function ConfirmarRegaloPage({
   // `getProductDetail` solo devuelve mentorías regalables por las mismas
   // razones por las que son reservables: `status = 'active'` y tutor aprobado,
   // que es lo mismo que revalida `comprar_regalo` antes de crear nada.
-  const [product, dias, menu] = await Promise.all([
+  const [product, dias, menu, tz, formato] = await Promise.all([
     getProductDetail(productId),
     diasParaAgendar(),
     panelMenu(user.id, roles),
+    getUserTimezone(),
+    getFormatoHora(),
   ]);
   if (!product) notFound();
 
@@ -92,6 +94,22 @@ export default async function ConfirmarRegaloPage({
    * por adelantado y por el precio íntegro, y eso exige saber cuál es.
    */
   const sinTotal = !precio.isTotal;
+
+  /**
+   * A11 · un cupo de clase grupal: las fechas ya están fijadas y quien lo
+   * recibe solo se inscribe. RG-17 · solo se regala con cupos libres y a más de
+   * 24 h de la primera fecha (`regalable`, el mismo criterio que
+   * `comprar_regalo`); sin fechas pendientes (`grupal` null) tampoco.
+   */
+  const esGrupal = product.pricingModel === "group";
+  const g = esGrupal ? (product.grupal ?? null) : null;
+  const grupalBloqueada = esGrupal && !g?.regalable;
+  // RG-01 (24-oct) · `g` null es ya la plantilla: sin fechas, sin cupo que regalar.
+  const motivoGrupal = !g
+    ? "Esta es una clase grupal."
+    : g.cuposLibres <= 0
+      ? "Esta clase ya no tiene cupos."
+      : "Falta menos de 24 h para la primera fecha.";
 
   return (
     <PanelShell
@@ -129,17 +147,34 @@ export default async function ConfirmarRegaloPage({
           <ul className="mt-3 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[12.5px] text-[#4d4d4d]">
             <li className="flex items-center gap-1.5 whitespace-nowrap">
               <VideoIcon className="size-3.5 shrink-0 text-brand" aria-hidden />
-              En vivo 1 a 1
+              {esGrupal
+                ? `Clase grupal${g && g.fechas.length > 1 ? ` · ${g.fechas.length} fechas` : ""}`
+                : "En vivo 1 a 1"}
             </li>
             {/* `sessionsLabel` escribe «4 × 60 min» en paquetes y «1 × 60 min»
                 en sueltas; para una sola sesión la tarjeta del catálogo prefiere
                 «60 min» a secas, y aquí por lo mismo. */}
-            {(product.packageNumSessions ?? 1) > 1 ? (
+            {esGrupal ? (
+              product.sessionDurationMin ? (
+                <li className="whitespace-nowrap">{product.sessionDurationMin} min</li>
+              ) : null
+            ) : (product.packageNumSessions ?? 1) > 1 ? (
               <li className="whitespace-nowrap">{sessionsLabel(product)}</li>
             ) : product.sessionDurationMin ? (
               <li className="whitespace-nowrap">{product.sessionDurationMin} min</li>
             ) : null}
           </ul>
+
+          {/* Las fechas de la clase, en la zona de quien mira (RN-01/02). */}
+          {g && g.fechas.length > 0 ? (
+            <ul className="mt-2 flex flex-col gap-0.5 text-[12.5px] text-[#4d4d4d]">
+              {g.fechas.map((f) => (
+                <li key={f.startAt} className="first-letter:uppercase">
+                  {formatSessionTime(f.startAt, tz, formato)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
           {/* 💰 EL CARGO POR SERVICIO, desglosado ANTES de crear la fila del
               dinero (punto 7 · 16-sep-2026).
@@ -198,8 +233,9 @@ export default async function ConfirmarRegaloPage({
                 aria-hidden
               />
               <span>
-                El día y la hora los elige quien lo recibe. Tú no reservas ningún
-                horario ahora.
+                {esGrupal
+                  ? "Las fechas ya están fijadas: quien lo recibe solo tiene que inscribirse antes de que empiece la clase."
+                  : "El día y la hora los elige quien lo recibe. Tú no reservas ningún horario ahora."}
               </span>
             </li>
             <li className="flex items-start gap-2">
@@ -220,12 +256,14 @@ export default async function ConfirmarRegaloPage({
         <PanelCard>
           <PanelCardTitle className="text-[17px]">Para quién es</PanelCardTitle>
 
-          {esMia || sinTotal ? (
+          {esMia || sinTotal || grupalBloqueada ? (
             <div className="mt-3.5 rounded-xl border border-dashed border-[#e0e0e0] p-5">
               <p role="alert" className="text-[13px] text-[#595959]">
                 {esMia
                   ? "Esta mentoría es tuya: no puedes regalártela. Elige la de otro tutor y te llevamos de vuelta aquí."
-                  : "Esta mentoría se cobra por hora y todavía no tiene una duración declarada, así que no podemos cerrar el precio del regalo. Elige otra o pídesela a su tutor como reserva normal."}
+                  : grupalBloqueada
+                    ? `${motivoGrupal} No se puede regalar un cupo.`
+                    : "Esta mentoría se cobra por hora y todavía no tiene una duración declarada, así que no podemos cerrar el precio del regalo. Elige otra o pídesela a su tutor como reserva normal."}
               </p>
               <Button asChild variant="outline" className="mt-3.5 h-11 rounded-[10px]">
                 <Link href="/regalar">Elegir otra mentoría</Link>
@@ -235,6 +273,7 @@ export default async function ConfirmarRegaloPage({
             <FormularioDeRegalo
               productId={product.id}
               dias={dias}
+              grupal={esGrupal}
               className="mt-3.5"
             />
           )}

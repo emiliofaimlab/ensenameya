@@ -46,6 +46,8 @@ export type RespuestaDeCobro = {
   /** Se conserva por compatibilidad; `modo: 'simulado'` dice lo mismo. */
   simulated?: boolean;
   retencionHasta?: string | null;
+  /** P50 · Stripe embebido: país del pagador (ISO-2), para prellenar. */
+  paisPagador?: string | null;
   error?: string;
 };
 
@@ -119,7 +121,11 @@ export function interpretar(salida: RespuestaDeCobro): Apertura {
   if (salida.clientSecret && salida.publishableKey) {
     return {
       tipo: "embebido",
-      embed: { clientSecret: salida.clientSecret, publishableKey: salida.publishableKey },
+      embed: {
+        clientSecret: salida.clientSecret,
+        publishableKey: salida.publishableKey,
+        pais: salida.paisPagador ?? null,
+      },
     };
   }
   return { tipo: "error", mensaje: "No se pudo abrir el pago." };

@@ -1,4 +1,8 @@
-import { getFormatoHora, requireUser } from "@/lib/auth/server";
+import {
+  getFormatoHora,
+  getViewerTimezone,
+  requireUser,
+} from "@/lib/auth/server";
 import { toHeaderUser } from "@/lib/auth/header-user";
 import { cartCount } from "@/lib/cart/resolve";
 import { listConversations } from "@/components/chat/conversations";
@@ -13,8 +17,15 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   // Área autenticada: sin sesión → /login?next=… (SCR-AU01).
-  const { user, roles, fullName, avatarPath, notices, onboardingComplete } =
-    await requireUser();
+  const {
+    user,
+    roles,
+    fullName,
+    avatarPath,
+    notices,
+    noticesUnread,
+    onboardingComplete,
+  } = await requireUser();
   // US-1203: la campana se pinta ya en el servidor, sin ida y vuelta extra.
   // EY-177 · el mismo contador que en lo público: el carrito es del navegador
   // (cookie), no de la sesión, así que cruzar de `(public)` a `(app)` no lo
@@ -29,9 +40,14 @@ export default async function AppLayout({
 
   // Los avisos ya vienen en `requireUser()` (`session_bootstrap`): eran una
   // consulta más, y encadenada, porque necesitaban el id de la sesión.
-  // Las dos lecturas de cookie de la cabecera, juntas: el contador del
-  // carrito y el formato de hora que baja a la campana.
-  const [carrito, formato] = await Promise.all([cartCount(), getFormatoHora()]);
+  // Las lecturas de la cabecera, juntas: el contador del carrito, el formato
+  // de hora y la zona que bajan a la campana (P13). La zona no cuesta viaje:
+  // está memoizada y sale del perfil que ya trajo `session_bootstrap`.
+  const [carrito, formato, zona] = await Promise.all([
+    cartCount(),
+    getFormatoHora(),
+    getViewerTimezone(),
+  ]);
 
   // El modo de la ruta (asistente AL01/TU01 con "Guardar y salir", admin con su
   // píldora y su pie) NO se decide aquí: este layout se renderiza una vez y se
@@ -47,8 +63,10 @@ export default async function AppLayout({
           onboardingComplete,
         })}
         notices={notices}
+        noticesUnread={noticesUnread}
         cartCount={carrito}
         formato={formato}
+        zona={zona}
       />
       {/* Columna flexible: el fondo de cada pantalla lo pone ELLA, así que para
           que llegue hasta abajo tiene que poder estirarse. Sin esto, `main`

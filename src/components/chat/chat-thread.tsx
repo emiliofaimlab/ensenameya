@@ -13,6 +13,7 @@ import {
   type FormatoHora,
 } from "@/lib/hora";
 import { cn } from "@/lib/utils";
+import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,6 +21,7 @@ import {
   attachmentUrl,
   humanSize,
   uploadAttachment,
+  uploadGroupAttachment,
   type Attachment,
 } from "@/lib/chat/attachments";
 import {
@@ -33,6 +35,7 @@ import {
   quedanLabel,
   TOPE_POR_LADO,
 } from "@/lib/chat/limits";
+import type { GrupalChat, MiembroGrupo } from "./grupo";
 import { asRpc } from "./rpc";
 import { ReportConversation } from "./report-conversation";
 import type { CounterpartRole } from "./types";
@@ -177,6 +180,68 @@ function AttachmentLink({ a, mine }: { a: Attachment; mine: boolean }) {
  */
 const SONDEO_MS = 4000;
 
+/**
+ * P28 · La clave del día LOCAL de un instante (`2026-10-16`). `en-CA` porque
+ * es el único locale que formatea así de serie; sin `timeZone` (la burbuja)
+ * vale la del navegador, que es la misma con la que se pinta la hora.
+ */
+function claveDia(iso: string | number, timeZone?: string): string {
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone });
+}
+
+/**
+ * P28 · El texto del separador: «Hoy», «Ayer» o «Jueves, 16 de octubre». En
+ * un ciclo de varias semanas la hora sola no dice de qué clase es un mensaje.
+ */
+function etiquetaDia(iso: string, timeZone?: string): string {
+  const dia = claveDia(iso, timeZone);
+  const ahora = Date.now();
+  if (dia === claveDia(ahora, timeZone)) return "Hoy";
+  if (dia === claveDia(ahora - 86_400_000, timeZone)) return "Ayer";
+  const texto = new Date(iso).toLocaleDateString("es", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone,
+  });
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+/**
+ * M31 · Quién firma un mensaje ajeno en el chat del grupo: foto (o iniciales),
+ * nombre e insignia «Tutor». Sin miembro, en un mensaje que ya estaba al abrir
+ * el hilo, es que se fue del grupo; en uno que llega en vivo puede ser alguien
+ * que se inscribió después de cargar la lista: ese firma «Participante».
+ */
+function AutorDeGrupo({ miembro, seFue }: { miembro: MiembroGrupo | undefined; seFue: boolean }) {
+  if (!miembro) {
+    return (
+      <span className="mb-0.5 text-[11px] font-semibold text-muted-foreground italic">
+        {seFue ? "Ya no está en el grupo" : "Participante"}
+      </span>
+    );
+  }
+  const foto = storageUrl("avatars", miembro.avatarPath);
+  return (
+    <span className="mb-0.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground">
+      <span className="grid size-5 shrink-0 place-items-center overflow-hidden rounded-full bg-[#e0eeff] text-[9px] font-semibold text-brand">
+        {foto ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={foto} alt="" className="size-5 object-cover" />
+        ) : (
+          initialsFrom(miembro.nombre)
+        )}
+      </span>
+      {miembro.nombre}
+      {miembro.esTutor ? (
+        <span className="rounded-full bg-brand-muted px-1.5 py-px text-[10px] font-semibold text-brand-foreground">
+          Tutor
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export function ChatThread({
   conversationId: conversationIdProp,
   bookingId,
@@ -193,6 +258,7 @@ export function ChatThread({
   onIncoming,
   formato = FORMATO_POR_DEFECTO,
   timeZone,
+  grupal,
 }: {
   /** El hilo. Lo pasan las pantallas nuevas (bandeja, `/chat/[id]`). */
   conversationId?: string;
@@ -284,9 +350,20 @@ export function ChatThread({
    * nunca, porque entonces el mensaje se está viendo.
    */
   onIncoming?: () => void;
+  /**
+   * G3 · hilo de una clase grupal (RG-13). No es una consulta —no hay topes—,
+   * no admite adjuntos (cuelgan de una reserva) y cada mensaje ajeno lleva el
+   * nombre de quien lo escribió: con diez personas, «el otro» no existe.
+   *
+   * Lote 3 (M31) · lleva también los miembros (foto, insignia «Tutor»). Se
+   * construye siempre con `grupalDe(inscritos)` de `./grupo`.
+   */
+  grupal?: GrupalChat;
 }) {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
+  // Quién había escrito al abrir el hilo (para distinguir «se fue» de «llegó después»).
+  const [remitentesIniciales] = useState(() => new Set(initialMessages.map((m) => m.senderId)));
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   // La conversación resuelta a partir de `bookingId`, para las pantallas que
@@ -316,11 +393,19 @@ export function ChatThread({
   // medias (la reserva nace en `pending_payment`). Eso no es una compra, así
   // que ni adjuntos ni trato de cliente — el servidor lo reenvía por la vía de
   // consulta aunque se le mande el `booking_id`.
-  const puedeAdjuntar = Boolean(bookingId) && hasBooking !== false;
+  //
+  // Lote 11 (P27) · en el chat del GRUPO el clip es solo del tutor. Tampoco
+  // aquí esconderlo es la barrera: la ponen `send_group_attachment` (rechaza a
+  // quien no es el tutor del hilo) y la política de INSERT de Storage sobre la
+  // carpeta `grupo/<producto>/`.
+  const puedeAdjuntar = grupal
+    ? Boolean(grupal.miembros.find((m) => m.userId === currentUserId)?.esTutor)
+    : Boolean(bookingId) && hasBooking !== false;
   // «Todavía no ha pagado nadie». Desde MN-06 esto solo puede ser el checkout en
   // curso o un hilo cerrado; la diferencia la marca `soloLectura`, y de ella
   // dependen los textos de abajo.
-  const esConsulta = hasBooking === false || (!bookingId && hasBooking === undefined);
+  const esConsulta =
+    !grupal && (hasBooking === false || (!bookingId && hasBooking === undefined));
   // MN-06 · el hilo está cerrado. `=== false` y no `!canChat`: `undefined` es
   // «no me lo han dicho», y ahí manda el comportamiento de siempre (ver la nota
   // de la prop).
@@ -684,9 +769,13 @@ export function ChatThread({
   }
 
   async function attach(file: File) {
-    if (!bookingId) return; // sin reserva no hay dónde subirlo (ni RPC que lo acepte)
+    // P27 · en el grupo la carpeta es la del producto y la RPC, la del grupo.
+    const enGrupo = Boolean(grupal && conversationId);
+    if (!enGrupo && !bookingId) return; // sin reserva no hay dónde subirlo (ni RPC que lo acepte)
     setBusy(true);
-    const res = await uploadAttachment(bookingId, file);
+    const res = enGrupo
+      ? await uploadGroupAttachment(conversationId!, file)
+      : await uploadAttachment(bookingId!, file);
     setBusy(false);
     if ("error" in res) {
       toast.error(res.error);
@@ -699,7 +788,8 @@ export function ChatThread({
       createdAt: new Date().toISOString(),
       // Un adjunto solo existe con la reserva pagada detrás (el `check` de la
       // tabla ata las dos cosas), así que aquí la etiqueta es siempre la suya.
-      bookingId,
+      // En el grupo no hay reserva que etiquetar.
+      bookingId: enGrupo ? null : (bookingId ?? null),
       attachment: res.attachment,
     });
     toast.success("Documento compartido.");
@@ -722,7 +812,11 @@ export function ChatThread({
         <p className="text-[11px] text-muted-foreground">
           {esConsulta
             ? "Si no llegas a reservar, esta conversación se borra a los 30 días del último mensaje."
-            : "Los mensajes se borran a los 30 días de escribirse."}{" "}
+            : grupal
+              ? // P44 · quién lee el chat lo dice la línea fija de abajo,
+                // junto al cuadro de texto; aquí solo la retención.
+                "Chat del grupo: se borra 30 días después de la última fecha de la clase."
+              : "Los mensajes se borran a los 30 días de escribirse."}{" "}
           <a
             href={`/api/chat/${conversationId}/download`}
             download
@@ -730,7 +824,7 @@ export function ChatThread({
           >
             Descargar la conversación
           </a>
-          {esConsulta ? (
+          {esConsulta || grupal ? (
             "."
           ) : (
             <>
@@ -772,44 +866,77 @@ export function ChatThread({
                 : "Aún no hay mensajes. Escribe el primero."}
           </p>
         ) : (
-          messages.map((m) => {
+          messages.map((m, i) => {
             const mine = m.senderId === currentUserId;
+            // P28 · separador cuando cambia el día LOCAL entre dos mensajes
+            // (y antes del primero). En todos los modos, no solo en grupo.
+            const nuevoDia =
+              i === 0 ||
+              claveDia(m.createdAt, timeZone) !==
+                claveDia(messages[i - 1]!.createdAt, timeZone);
             return (
-              <div
-                key={m.id}
-                className={cn("flex flex-col", mine ? "items-end" : "items-start")}
-              >
-                {/* N-22 · `wrap-anywhere` + `min-w-0`: una URL larga es una
-                    sola "palabra" y sin esto empujaba la burbuja más allá del
-                    80 %, metía barra horizontal en el hilo y estrujaba el resto
-                    de los mensajes. `wrap-anywhere` (y no `break-words`) porque
-                    además de partir la palabra reduce el ancho mínimo del
-                    contenido, que es lo que el flex mira para repartir sitio.
-                    ⚠️ Nada de `overflow-hidden` aquí: eso no parte la URL, la
-                    recorta — el mensaje llegaría cortado y sin manera de leerlo
-                    entero. */}
+              <div key={m.id} className="flex flex-col gap-2">
+                {nuevoDia ? (
+                  <div
+                    role="separator"
+                    className="my-1 flex items-center gap-2 text-[11px] text-muted-foreground"
+                  >
+                    <span className="h-px flex-1 bg-border" />
+                    <span>{etiquetaDia(m.createdAt, timeZone)}</span>
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+                ) : null}
                 <div
-                  className={cn(
-                    "flex max-w-[80%] min-w-0 flex-col gap-1.5 rounded-2xl px-3 py-2 text-sm wrap-anywhere",
-                    mine ? "bg-foreground text-background" : "bg-muted",
-                  )}
+                  className={cn("flex flex-col", mine ? "items-end" : "items-start")}
                 >
-                  {m.attachment ? <AttachmentLink a={m.attachment} mine={mine} /> : null}
-                  {m.body ? <span>{conEnlaces(m.body)}</span> : null}
+                  {grupal && !mine ? (
+                    <AutorDeGrupo
+                      miembro={grupal.miembros.find((x) => x.userId === m.senderId)}
+                      seFue={remitentesIniciales.has(m.senderId)}
+                    />
+                  ) : null}
+                  {/* N-22 · `wrap-anywhere` + `min-w-0`: una URL larga es una
+                      sola "palabra" y sin esto empujaba la burbuja más allá del
+                      80 %, metía barra horizontal en el hilo y estrujaba el resto
+                      de los mensajes. `wrap-anywhere` (y no `break-words`) porque
+                      además de partir la palabra reduce el ancho mínimo del
+                      contenido, que es lo que el flex mira para repartir sitio.
+                      ⚠️ Nada de `overflow-hidden` aquí: eso no parte la URL, la
+                      recorta — el mensaje llegaría cortado y sin manera de leerlo
+                      entero. */}
+                  <div
+                    className={cn(
+                      "flex max-w-[80%] min-w-0 flex-col gap-1.5 rounded-2xl px-3 py-2 text-sm wrap-anywhere",
+                      mine ? "bg-foreground text-background" : "bg-muted",
+                    )}
+                  >
+                    {m.attachment ? <AttachmentLink a={m.attachment} mine={mine} /> : null}
+                    {m.body ? <span>{conEnlaces(m.body)}</span> : null}
+                  </div>
+                  <time className="mt-0.5 text-[11px] text-muted-foreground" dateTime={m.createdAt}>
+                    {new Date(m.createdAt).toLocaleTimeString("es", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                      timeZone,
+                      ...opcionesDeHora(formato),
+                    })}
+                  </time>
                 </div>
-                <time className="mt-0.5 text-[11px] text-muted-foreground" dateTime={m.createdAt}>
-                  {new Date(m.createdAt).toLocaleTimeString("es", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    timeZone,
-                    ...opcionesDeHora(formato),
-                  })}
-                </time>
               </div>
             );
           })
         )}
       </div>
+
+      {/* P44 · en el chat del grupo, quién lee lo que escribes se dice SIEMPRE
+          y pegado al cuadro de texto: también sin mensajes y también en la sala
+          (no cuelga de `sinAvisoDeRetencion`). Con once desconocidos dentro,
+          enterarse después de escribir es tarde. */}
+      {grupal ? (
+        <p className="text-[11px] text-muted-foreground">
+          Todo el grupo lee este chat: el tutor y los inscritos ven lo que escribes.
+        </p>
+      ) : null}
 
       {blocked ? (
         <p className="rounded-lg border border-dashed p-4 text-center text-[13px] text-muted-foreground">
@@ -942,7 +1069,10 @@ export function ChatThread({
           <span>{avisoTopes}</span>
           {/* ⚠️ Reportar sigue disponible en un hilo cerrado, y es deliberado:
               lo que hay que denunciar ya está escrito. */}
-          <ReportConversation conversationId={conversationId} />
+          {/* M7 · también en el chat del grupo: `report_conversation` acepta
+              miembros desde el lote 3, y con hasta once desconocidos dentro es
+              donde más falta hace. */}
+          <ReportConversation conversationId={conversationId} grupal={Boolean(grupal)} />
         </div>
       ) : null}
     </div>

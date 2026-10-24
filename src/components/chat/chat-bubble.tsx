@@ -23,6 +23,7 @@ import {
   type Conversation,
 } from "./types";
 import { asRpc, type ConversationRow } from "./rpc";
+import { grupalDe, type GrupalChat, type MiembroGrupo } from "./grupo";
 import {
   consumirPeticion,
   peticionSnapshot,
@@ -45,7 +46,58 @@ export type { Conversation } from "./types";
 
 /** Con quién hablas, o el respaldo por rol. Nunca un "Alumno" de relleno. */
 function nombreDe(c: Conversation): string {
+  // B3/B4 · en un hilo de grupo `counterpart` es el título de la clase: el
+  // respaldo por rol («tu alumno») describía a una persona que no existe.
+  if (c.kind === "group") return c.counterpart ?? "Clase grupal";
   return c.counterpart ?? counterpartFallback(c.counterpartRole);
+}
+
+/**
+ * La línea pequeña de la fila y de la cabecera. En un hilo de grupo no hay
+ * «mentorías del par» que contar —salía «Sin mentoría reservada» a la tutora
+ * en cada clase—: se dice qué es.
+ */
+function subtituloDe(c: Conversation): string {
+  return c.kind === "group" ? "Chat del grupo" : conversationSubtitle(c);
+}
+
+/**
+ * M31 · Los miembros del grupo en la cabecera, apilados: hasta cuatro caras y
+ * «+N» con el resto. Con once personas dentro, ver quién está es lo primero.
+ */
+function AvataresApilados({ miembros }: { miembros: MiembroGrupo[] }) {
+  if (miembros.length === 0) return null;
+  const visibles = miembros.slice(0, 4);
+  const resto = miembros.length - visibles.length;
+  return (
+    <span
+      className="flex shrink-0 -space-x-1.5"
+      aria-label={`${miembros.length} en el grupo`}
+    >
+      {visibles.map((m) => {
+        const foto = storageUrl("avatars", m.avatarPath);
+        return (
+          <span
+            key={m.userId}
+            title={m.esTutor ? `${m.nombre} (tutor)` : m.nombre}
+            className="grid size-6 place-items-center overflow-hidden rounded-full bg-[#e0eeff] text-[9px] font-semibold text-brand ring-2 ring-card"
+          >
+            {foto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={foto} alt="" className="size-6 object-cover" />
+            ) : (
+              initialsFrom(m.nombre)
+            )}
+          </span>
+        );
+      })}
+      {resto > 0 ? (
+        <span className="grid size-6 place-items-center rounded-full bg-muted text-[9px] font-semibold text-[#6b6b6b] ring-2 ring-card">
+          +{resto}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 /**
@@ -156,6 +208,13 @@ export function ChatBubble({
   const [mensajes, setMensajes] = useState<{
     conversationId: string;
     lista: ChatMessage[];
+    /** Lote 3 · los miembros, solo en un hilo de grupo. */
+    grupal: GrupalChat | null;
+    /**
+     * P45 · alguna consulta falló. Sin esto el hilo se quedaba en «Abriendo
+     * la conversación…» para siempre (regla de oro 10: un error no es vacío).
+     */
+    fallo: boolean;
   } | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const ultimoRefresco = useRef(0);
@@ -333,20 +392,40 @@ export function ChatBubble({
     let cancelado = false;
     const id = abierta.id;
 
+    // B4/M31 · en un hilo de grupo hacen falta además los miembros, para
+    // firmar cada mensaje. Las dos consultas van a la vez.
+    const producto = abierta.kind === "group" ? abierta.groupProductId : null;
+
     void (async () => {
-      const { data } = await createClient()
-        .from("messages")
-        .select(MESSAGE_COLUMNS)
-        .eq("conversation_id", id)
-        .order("created_at");
+      const supabase = createClient();
+      const [msgs, inscritos] = await Promise.all([
+        supabase
+          .from("messages")
+          .select(MESSAGE_COLUMNS)
+          .eq("conversation_id", id)
+          .order("created_at"),
+        producto
+          ? supabase.rpc("inscritos_de_clase", { p_product: producto })
+          : Promise.resolve(null),
+      ]);
       // Sin esto, cambiar de conversación deprisa puede pintar los mensajes de
       // la anterior encima de la nueva.
-      if (!cancelado) {
-        setMensajes({
-          conversationId: id,
-          lista: (data ?? []).map((m) => toChatMessage(m as MessageRow)),
-        });
-      }
+      if (cancelado) return;
+      // Regla de oro 10 · un fallo NO es una lista vacía: un grupo «sin
+      // mensajes» o sin miembros sería una mentira creíble.
+      // Un hilo de grupo sin clase tampoco se puede pintar: caería en la rama
+      // de par, que es justo el B3.
+      const fallo = Boolean(
+        msgs.error || inscritos?.error || (abierta.kind === "group" && !producto),
+      );
+      setMensajes({
+        conversationId: id,
+        lista: fallo
+          ? []
+          : (msgs.data ?? []).map((m) => toChatMessage(m as MessageRow)),
+        grupal: inscritos ? grupalDe(inscritos.data) : null,
+        fallo,
+      });
     })();
 
     return () => {
@@ -468,8 +547,9 @@ export function ChatBubble({
 
   // Los mensajes solo valen si son los de la conversación que está en el
   // título (ver el estado `mensajes`).
-  const mensajesDeAbierta =
-    abierta && mensajes?.conversationId === abierta.id ? mensajes.lista : null;
+  const deAbierta =
+    abierta && mensajes?.conversationId === abierta.id ? mensajes : null;
+  const mensajesDeAbierta = deAbierta ? deAbierta.lista : null;
 
   return (
     <div
@@ -507,10 +587,13 @@ export function ChatBubble({
                 // MN-08 · «3 mentorías · Álgebra desde cero». El contador va
                 // delante porque esto trunca; el porqué, en `types.ts`.
                 <p className="truncate text-[11px] text-[#6b6b6b]">
-                  {conversationSubtitle(abierta)}
+                  {subtituloDe(abierta)}
                 </p>
               ) : null}
             </div>
+            {deAbierta?.grupal ? (
+              <AvataresApilados miembros={deAbierta.grupal.miembros} />
+            ) : null}
             <button
               type="button"
               aria-label="Cerrar mensajes"
@@ -533,10 +616,27 @@ export function ChatBubble({
                 height: `clamp(140px, calc(100dvh - ${ALTO_FUERA_DEL_CUERPO}), 520px)`,
               }}
             >
-              {abierta === null || mensajesDeAbierta === null ? (
+              {deAbierta?.fallo ? (
+                <p className="m-auto text-[13px] text-[#6b6b6b]">
+                  El chat no está disponible.
+                </p>
+              ) : abierta === null || mensajesDeAbierta === null ? (
                 <p className="m-auto text-[13px] text-[#6b6b6b]">
                   Abriendo la conversación…
                 </p>
+              ) : deAbierta?.grupal ? (
+                // B4 · el chat de una clase grupal: sin reserva, topes ni
+                // «Ver sus mentorías» — no es un par, es el grupo.
+                <ChatThread
+                  formato={formato}
+                  key={abierta.id}
+                  conversationId={abierta.id}
+                  blocked={abierta.blocked}
+                  currentUserId={currentUserId}
+                  initialMessages={mensajesDeAbierta}
+                  grupal={deAbierta.grupal}
+                  fill
+                />
               ) : (
                 <ChatThread
                   formato={formato}
@@ -635,7 +735,7 @@ export function ChatBubble({
                         {/* MN-08 · el recuento de mentorías del par, delante
                             del título de la última reserva. */}
                         <span className="block truncate text-xs text-[#6b6b6b]">
-                          {conversationSubtitle(c)}
+                          {subtituloDe(c)}
                         </span>
                       </span>
                       {sinLeer > 0 ? (

@@ -131,16 +131,19 @@ export type Recorrido<T> =
  * un riel que el alumno no eligió — y con Stripe o dLocal eso mismo es un
  * formulario de tarjeta que la persona todavía tiene que rellenar.
  *
- * Se resuelve quitándolo del TRAMO DE RESPALDO y solo de ahí. Sigue en
+ * Se resuelve dejándolo entrar SOLO por `preferido`. Sigue en
  * `charge_providers`, así que `set_charge_provider` lo sigue permitiendo y el
- * radio funciona igual; y sigue entrando por `preferido`, `cobrador` y
- * `snapshot`, que NO se filtran y no pueden filtrarse:
+ * radio funciona igual.
  *
- *   · `preferido` es la elección: es el caso para el que existe todo esto.
- *   · `cobrador` y `snapshot` son «aquí ya hay un cobro de PayPal abierto».
- *     Quitarlos abriría un SEGUNDO cobro con tarjeta al recargar la pantalla,
- *     con el de PayPal vivo y pagable. Justo lo que la cabecera de arriba
- *     existe para impedir.
+ * ⚠️ HASTA EL 24-OCT ENTRABA TAMBIÉN POR `cobrador` y `snapshot` («aquí ya hay
+ * un cobro de PayPal abierto, se reencuentra»). Eso convertía la ida a PayPal
+ * en un callejón: el alumno pulsaba «Pagar con PayPal», volvía atrás sin
+ * aprobar, y cada carga del checkout —que pide el cobro SIN radio— lo
+ * redirigía otra vez a PayPal sin dejarle elegir tarjeta. Ahora sin radio se
+ * monta la tarjeta, y el pedido de PayPal se reencuentra igual si lo vuelve a
+ * elegir: su `PayPal-Request-Id` es determinista por sujeto. El precio es el
+ * mismo que ya se aceptó con `preferido` arriba —dos vehículos vivos para una
+ * reserva— y lo cubren las mismas tres redes (X-02 devuelve el segundo pago).
  *
  * ponytail: una lista de claves en este fichero, no una columna nueva en
  * `payment_routing_rules`. El techo es que la distinción vive en el código y no
@@ -156,13 +159,12 @@ export function cadenaDeCobro(opts: {
   /** El riel que el alumno eligió a mano, ya validado contra `ruteo`. */
   preferido?: string | null;
 }): string[] {
-  // 🔴 El tramo de respaldo, y SOLO él, pierde a los rieles que no respaldan.
-  // Los tres de delante van enteros: leer el bloque de arriba antes de moverlo.
-  const respaldo = opts.ruteo.filter((c) => !SOLO_POR_ELECCION.has(c));
-
+  // 🔴 Los rieles que no respaldan solo entran si son el `preferido`: leer el
+  // bloque de arriba antes de moverlo.
   const cadena: string[] = [];
-  for (const clave of [opts.preferido, opts.cobrador, opts.snapshot, ...respaldo]) {
+  for (const clave of [opts.preferido, opts.cobrador, opts.snapshot, ...opts.ruteo]) {
     if (!clave) continue;
+    if (SOLO_POR_ELECCION.has(clave) && clave !== opts.preferido) continue;
     if (cadena.includes(clave)) continue;
     cadena.push(clave);
   }

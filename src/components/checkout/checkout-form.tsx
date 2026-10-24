@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowRightIcon } from "lucide-react";
+import { ArrowRightIcon, VideoIcon } from "lucide-react";
 import { StripeEmbed, type Embed } from "@/components/checkout/stripe-embed";
 import { DlocalEmbed } from "@/components/checkout/dlocal-embed";
 import {
@@ -35,6 +33,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   buscarReservaDelAlumno,
   esCarreraDeHorario,
+  esYaInscrito,
   holdsQueSolapan,
   liberarHolds,
   mensajeDeApertura,
@@ -91,7 +90,9 @@ type Apertura =
    * sellado que proteger. El porqué completo, en `hayQueElegirCredito`.
    */
   | { fase: "eligiendo"; bookingId: string }
-  | { fase: "error"; mensaje: string }
+  /** M24 · `inscrito` = el rechazo fue «ya estás inscrito» y no apareció el
+   *  apartado propio: se ofrece ir a sus reservas. */
+  | { fase: "error"; mensaje: string; inscrito?: boolean }
   /**
    * Estos horarios YA están comprados: existe una reserva de este alumno que
    * pasó de `pending_payment`. No se abre ningún cobro y se le lleva a su
@@ -223,6 +224,8 @@ export function CheckoutForm({
   simulado,
   paypalDisponible = false,
   aceptaSola,
+  avisoGrupal,
+  grupal,
 }: {
   productId: string;
   /**
@@ -313,8 +316,12 @@ export function CheckoutForm({
    * ese reembolso igualmente sería prometer algo que el código ya no hace.
    */
   aceptaSola: boolean;
+  /** P34 · RG-19, junto al botón de pagar. Solo en una clase grupal. */
+  avisoGrupal?: string;
+  /** M12 · clase grupal: textos de cupo y su política (de ciclo o de fecha
+   *  suelta). `minimo` = la clase tiene `min_seats`. */
+  grupal?: { ciclo: boolean; minimo?: boolean };
 }) {
-  const router = useRouter();
   const [apertura, setApertura] = useState<Apertura>({ fase: "abriendo" });
   /**
    * 🔑 EL RADIO. 'tarjeta' de por defecto y NO por preferencia nuestra: es que
@@ -562,7 +569,8 @@ export function CheckoutForm({
         setApertura({ fase: "ya_pagada", bookingId: yaHabia.id });
         // `replace` para que el «atrás» que trajo hasta aquí no devuelva otra
         // vez a este checkout muerto: se sustituye la entrada del historial.
-        router.replace(`/reservas/${yaHabia.id}`);
+        // Q4 · navegación COMPLETA: cruza de (checkout) a (app) (regla de oro 13).
+        window.location.replace(`/reservas/${yaHabia.id}`);
         return;
       }
 
@@ -595,7 +603,8 @@ export function CheckoutForm({
           // choque contra el índice único de `sessions`. Si la ganadora era el
           // propio alumno —que es justo lo que pasa con dos pestañas suyas— la
           // reserva buena ya existe: se busca UNA vez más antes de rendirse.
-          const rescatada = esCarreraDeHorario(error)
+          // P38 · en una grupal la misma carrera llega como «ya estás inscrito».
+          const rescatada = esCarreraDeHorario(error) || esYaInscrito(error)
             ? await buscarReservaDelAlumno(supabase, {
                 studentId: alumnoId,
                 productId,
@@ -605,16 +614,21 @@ export function CheckoutForm({
 
           if (rescatada && rescatada.status !== "pending_payment") {
             setApertura({ fase: "ya_pagada", bookingId: rescatada.id });
-            router.replace(`/reservas/${rescatada.id}`);
+            window.location.replace(`/reservas/${rescatada.id}`); // Q4 · regla 13
             return;
           }
           if (!rescatada) {
             // Y si tampoco aparece, texto NUESTRO: el mensaje crudo de Postgres
             // puede traer dentro el nombre de un índice o un fallo de
             // configuración nuestro contado como si fuera culpa de quien paga.
-            setApertura({ fase: "error", mensaje: mensajeDeApertura(error) });
+            setApertura({
+              fase: "error",
+              mensaje: mensajeDeApertura(error),
+              inscrito: esYaInscrito(error),
+            });
             return;
           }
+          // Apartado sin pagar: se sigue con él (la ruta reabre el MISMO cobro).
           bookingId = rescatada.id;
         } else {
           bookingId = data;
@@ -657,7 +671,7 @@ export function CheckoutForm({
     // entre `create_booking` y el checkout, cortar dejaría la reserva creada y
     // sin cobro abierto, que es peor que terminar y no pintar nada.
     void abrir(alumnoId);
-  }, [clave, productId, slots, alumnoId, tutorId, durationMin, router, abrirCobro]);
+  }, [clave, productId, slots, alumnoId, tutorId, durationMin, abrirCobro]);
 
   /**
    * Camino simulado (`payment_routing_rules` aún en 'simulated'): no hay
@@ -688,7 +702,8 @@ export function CheckoutForm({
       return;
     }
     // AL06 — confirmación como página propia.
-    router.push(`/reservas/${apertura.bookingId}/confirmacion`);
+    // Q4 · navegación completa: de (checkout) a (app), regla de oro 13.
+    window.location.assign(`/reservas/${apertura.bookingId}/confirmacion`);
   }
 
   return (
@@ -859,8 +874,15 @@ export function CheckoutForm({
               (`/reservas/[id]/pagar`) tiene que decir LO MISMO: cuando cada una
               escribía su párrafo, D-4 se aplicó solo a esta y allí se quedó
               contando media política. */}
+          {avisoGrupal ? (
+            <p className="mt-4 flex gap-2 rounded-[10px] bg-brand-muted px-3 py-2.5 text-xs text-[#33475b]">
+              <VideoIcon className="mt-0.5 size-3.5 shrink-0 text-brand" aria-hidden />
+              {avisoGrupal}
+            </p>
+          ) : null}
           <PaymentPolicy
             aceptaSola={aceptaSola}
+            grupal={grupal}
             className="mt-4 border-t border-[#e0e0e0] pt-4"
           />
         </PanelCard>
@@ -922,7 +944,11 @@ export function CheckoutForm({
             reserva sigue en `pending_payment` y `expire_stale_bookings` se la
             lleva igual. */}
         {apertura.fase === "lista" || apertura.fase === "credito" ? (
-          <HoldCountdown hasta={apertura.retencionHasta} className="mt-3.5" />
+          <HoldCountdown
+            hasta={apertura.retencionHasta}
+            grupal={Boolean(grupal)}
+            className="mt-3.5"
+          />
         ) : null}
 
         {/* 💳 EL SELECTOR DE CRÉDITO, ANTES DEL FORMULARIO DE PAGO.
@@ -1004,16 +1030,18 @@ export function CheckoutForm({
         {apertura.fase === "ya_pagada" ? (
           <div className="mt-3.5 rounded-xl border border-dashed border-[#e0e0e0] p-5">
             <p className="text-[13px] text-[#4b4b4b]" aria-live="polite">
-              Este horario ya está pagado: tu reserva está hecha. Te llevamos a
-              ella.
+              {grupal
+                ? "Ya tienes tu cupo en esta clase. Te llevamos a tu inscripción."
+                : "Este horario ya está pagado: tu reserva está hecha. Te llevamos a ella."}
             </p>
-            <Link
+            {/* Regla de oro 13: <a>, no <Link>, de (checkout) a (app). */}
+            <a
               href={`/reservas/${apertura.bookingId}`}
               className="mt-3 flex w-fit items-center gap-1.5 text-[13px] font-semibold text-brand hover:underline"
             >
-              Ver mi reserva
+              {grupal ? "Ver mi inscripción" : "Ver mi reserva"}
               <ArrowRightIcon className="size-4" />
-            </Link>
+            </a>
           </div>
         ) : null}
 
@@ -1042,9 +1070,22 @@ export function CheckoutForm({
               productId={productId}
               studentId={alumnoId}
               slots={slots}
-              etiqueta="Elegir otro horario"
+              // M24 · en una grupal no hay horario que elegir: vuelve a la clase.
+              etiqueta={grupal ? "Volver a la clase" : "Elegir otro horario"}
+              destino={grupal ? `/mentorias/${productId}` : undefined}
               className="mt-3 flex w-fit items-center gap-1.5 text-[13px] font-semibold text-brand hover:underline"
             />
+            {apertura.inscrito ? (
+              // `<a>` por la regla de oro 13: de `(checkout)` a `(app)`.
+              // eslint-disable-next-line @next/next/no-html-link-for-pages -- regla 13
+              <a
+                href="/reservas"
+                className="mt-2 flex w-fit items-center gap-1.5 text-[13px] font-semibold text-brand hover:underline"
+              >
+                Ver mi inscripción
+                <ArrowRightIcon className="size-4" />
+              </a>
+            ) : null}
           </div>
         ) : null}
 

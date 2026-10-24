@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-
 import { requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import type { ChatMessage } from "@/components/chat/chat-thread";
@@ -8,6 +7,7 @@ import { toHeaderUser } from "@/lib/auth/header-user";
 import { listNotices } from "@/lib/notifications-server";
 import { SiteHeader } from "@/components/layout/site-header";
 import { LiveRoom } from "./live-room";
+import { SalaGrupal } from "../sala-grupal";
 import { ACCESS_WINDOW_MIN, withMinutes } from "@/lib/room-window";
 
 export const metadata = { title: "Sala en vivo · Enséñame Ya" };
@@ -40,17 +40,33 @@ export default async function RoomPage({
   const { user, roles, fullName, avatarPath, onboardingComplete } =
     await requireUser();
   const { sessionId } = await params;
+  // Un id que no es UUID hace fallar a PostgREST, y `SalaGrupal` convierte el
+  // fallo en pantalla de error (regla 10): que sea el 404 de siempre.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) notFound();
 
   const supabase = await createClient();
   const { data: s } = await supabase
     .from("sessions")
     .select(
-      "id, status, start_at, end_at, access_opens_at, access_closes_at, extended_at, tutor_id, student_id, booking_id, session_ref, bookings(status, products(title))",
+      "id, status, start_at, end_at, access_opens_at, access_closes_at, extended_at, tutor_id, student_id, booking_id, session_ref, group_class_id, bookings(status, products(title))",
     )
     .eq("id", sessionId)
     .maybeSingle();
 
-  if (!s) notFound();
+  if (!s) {
+    // M3 · el enlace a la sala del Google Calendar y del ICS del TUTOR lleva
+    // el id de la FECHA (`/room/<group_class>`), no el de una sesión: sin esto
+    // daba 404, y así siguen sirviendo también los eventos ya escritos. La
+    // autorización la sigue poniendo `join_group_class`.
+    //
+    // P26 · directo, sin leer antes `group_classes` para ver si existe:
+    // `SalaGrupal` ya la lee y hace `notFound()` sin fecha. Era un nivel más
+    // de la cascada.
+    return <SalaGrupal groupClassId={sessionId} />;
+  }
+  // G3 · la sesión de un alumno en una grupal no tiene sala propia: entra a la
+  // de su fecha. El enlace «Entrar a sala» de siempre sigue sirviendo.
+  if (s.group_class_id) return <SalaGrupal groupClassId={s.group_class_id} />;
 
   // El panel de chat de LV01 es el hilo de EP-17, no una copia: se precarga el
   // mismo histórico que `/chat/<reserva>` y Realtime sigue desde ahí.

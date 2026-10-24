@@ -4,9 +4,11 @@ import type { LucideIcon } from "lucide-react";
 import {
   ArrowUpRightIcon,
   BarChart3Icon,
+  CalendarIcon,
   CheckIcon,
   ClockIcon,
   StarIcon,
+  UsersIcon,
   VideoIcon,
   ZapIcon,
 } from "lucide-react";
@@ -61,9 +63,32 @@ export function ProductCard({
   // P05 (básico/intermedio/avanzado). Sin nivel —mentorías anteriores al
   // campo— el dato no se pinta en vez de inventar uno.
   const nivel = LEVELS.find((l) => l.id === product.level)?.label ?? null;
+  // G2 · una grupal cambia el «1 a 1» por su fecha y sus cupos: es lo que
+  // decide si se puede entrar, igual que la confirmación de abajo.
+  const grupal = product.grupal ?? null;
+  // P35 · manda el modelo, no que haya fechas cargadas: una grupal sin
+  // `grupal` sigue siendo grupal, nunca «En vivo 1 a 1».
+  const esGrupal = product.pricingModel === "group";
   const datos: { k: string; Icon: LucideIcon; label: string }[] = [
     ...(duracion ? [{ k: "dur", Icon: ClockIcon, label: duracion }] : []),
-    { k: "vivo", Icon: VideoIcon, label: "En vivo 1 a 1" },
+    grupal
+      ? {
+          k: "vivo",
+          Icon: UsersIcon,
+          // P3 · nada de «Quedan 1 cupos».
+          label:
+            grupal.cuposLibres === 1
+              ? "¡Último cupo!"
+              : grupal.cuposLibres > 0
+                ? `Quedan ${grupal.cuposLibres} cupos`
+                : "Clase completa",
+        }
+      : esGrupal
+        ? { k: "vivo", Icon: UsersIcon, label: "Clase grupal" }
+        : { k: "vivo", Icon: VideoIcon, label: "En vivo 1 a 1" },
+    ...(grupal?.primeraFecha
+      ? [{ k: "fecha", Icon: CalendarIcon, label: grupal.primeraFecha }]
+      : []),
     ...(nivel ? [{ k: "nivel", Icon: BarChart3Icon, label: nivel }] : []),
   ];
 
@@ -74,7 +99,9 @@ export function ProductCard({
    * decide si el alumno puede entrar hoy o tiene que esperar 24 h.
    */
   const confirmacion: { Icon: LucideIcon; label: string; className: string } =
-    product.autoAccept
+    esGrupal
+      ? { Icon: UsersIcon, label: "Grupal", className: "text-brand" }
+      : product.autoAccept
       ? {
           Icon: ZapIcon,
           label: "Confirmación inmediata",

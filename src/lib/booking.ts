@@ -173,14 +173,26 @@ export function bookingFormatLabel(numSessions: number): string {
  * Total de UNA reserva del producto. Es lo mismo que congela `create_booking`
  * en servidor; aquí solo se muestra (el servidor sigue mandando, S-15).
  */
-export function bookingTotal(p: {
-  pricingModel: string;
-  priceAmount: number;
-  sessionDurationMin: number | null;
-}): number {
-  return p.pricingModel === "per_hour"
-    ? Math.round((p.priceAmount * (p.sessionDurationMin ?? 60)) / 60)
-    : p.priceAmount;
+export function bookingTotal(
+  p: {
+    pricingModel: string;
+    priceAmount: number;
+    sessionDurationMin: number | null;
+    packageNumSessions?: number | null;
+  },
+  /** Solo grupal: cuántas fechas le quedan a la clase (las `scheduled`). */
+  fechasVivas?: number,
+): number {
+  if (p.pricingModel === "per_hour") {
+    return Math.round((p.priceAmount * (p.sessionDurationMin ?? 60)) / 60);
+  }
+  // B2 · un ciclo al que el tutor le canceló fechas antes de que llegara este
+  // alumno cobra solo las que quedan. Misma cuenta que `create_booking_line`.
+  const n = p.packageNumSessions ?? 0;
+  if (p.pricingModel === "group" && fechasVivas && n > fechasVivas) {
+    return Math.round((p.priceAmount * fechasVivas) / n);
+  }
+  return p.priceAmount;
 }
 
 /**
@@ -208,6 +220,20 @@ export const SERVICE_FEE_PCT = 5;
 
 export function serviceFee(baseMinor: number): number {
   return Math.max(0, Math.round((Math.max(0, baseMinor) * SERVICE_FEE_PCT) / 100));
+}
+
+/**
+ * A4 · lo que le queda al TUTOR de un pago tras lo que se devolvió al alumno:
+ * `neto × (1 − devuelto/gross)`. Sin devolución, el neto tal cual.
+ *
+ * 🔴 SOLO PINTA. Manda `public.parte_del_tutor(bigint, bigint, bigint)`
+ * (`20261009090000`), que es la cuenta con la que se arma el payout y el saldo
+ * de «Mis ingresos». Si divergen, manda el SQL: por eso el redondeo es el mismo
+ * (`round` del numeric = `Math.round` en cifras positivas).
+ */
+export function parteDelTutor(neto: number, gross: number, devuelto: number): number {
+  if (devuelto <= 0 || gross <= 0) return neto;
+  return neto - Math.round((neto * Math.min(devuelto, gross)) / gross);
 }
 
 /**

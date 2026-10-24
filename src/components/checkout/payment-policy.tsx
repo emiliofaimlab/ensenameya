@@ -1,5 +1,6 @@
 import { ShieldCheckIcon } from "lucide-react";
 
+import { reglasDeGrupal } from "@/components/catalog/cancellation-policy";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import { cn } from "@/lib/utils";
 
@@ -29,6 +30,7 @@ import { cn } from "@/lib/utils";
  */
 export function PaymentPolicy({
   aceptaSola,
+  grupal,
   className,
 }: {
   /**
@@ -51,6 +53,12 @@ export function PaymentPolicy({
    * justamente en la dirección que vende, que es la peor.
    */
   aceptaSola: boolean | "mixto";
+  /**
+   * M12 · clase grupal. Siempre acepta sola (`products_guarda_grupal`) y su
+   * política es otra: «si cancela el tutor, siempre el 100 %» no vale para una
+   * fecha suelta de un ciclo. Las reglas salen de `reglasDeGrupal`.
+   */
+  grupal?: { ciclo: boolean; minimo?: boolean };
   className?: string;
 }) {
   return (
@@ -67,7 +75,9 @@ export function PaymentPolicy({
             Cuándo queda confirmada
           </dt>
           <dd>
-            {aceptaSola === "mixto"
+            {grupal
+              ? "En cuanto se acredite el pago: el cupo es tuyo, sin esperar a nadie."
+              : aceptaSola === "mixto"
               ? `Depende de la mentoría, y lo tienes marcado en cada una: unas quedan confirmadas en cuanto se acredite el pago, y otras esperan al tutor, que tiene ${P.cutoffHours} h para aceptarlas. Si no responde a tiempo, esa mentoría —solo esa— se cancela sola y se te devuelve el ${P.refundPct.studentEarly} %.`
               : aceptaSola
                 ? "En cuanto se acredite el pago: el horario es tuyo, sin esperar a nadie."
@@ -77,12 +87,22 @@ export function PaymentPolicy({
       </div>
       <div>
         <dt className="font-semibold text-[#4b4b4b]">Si cancelas</dt>
-        <dd>
-          Con {P.cutoffHours} h o más de anticipación te devolvemos el{" "}
-          {P.refundPct.studentEarly} %; con menos de {P.cutoffHours} h, el{" "}
-          {P.refundPct.studentLate} %. Si cancela el tutor, siempre el{" "}
-          {P.refundPct.tutorCancels} %.
-        </dd>
+        {grupal ? (
+          <dd>
+            <ul className="flex flex-col gap-0.5">
+              {reglasDeGrupal(grupal).map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          </dd>
+        ) : (
+          <dd>
+            Con {P.cutoffHours} h o más de anticipación te devolvemos el{" "}
+            {P.refundPct.studentEarly} %; con menos de {P.cutoffHours} h, el{" "}
+            {P.refundPct.studentLate} %. Si cancela el tutor, siempre el{" "}
+            {P.refundPct.tutorCancels} %.
+          </dd>
+        )}
       </div>
     </dl>
   );

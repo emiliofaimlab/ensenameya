@@ -1,10 +1,17 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { getFormatoHora, getUserTimezone, requireUser } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { getProductDetail, rangoPublicado } from "@/lib/catalog/queries";
-import { bookingTotal, tutorNames } from "@/lib/booking";
+import {
+  getProductDetail,
+  listClasesAbiertas,
+  rangoPublicado,
+  type ClaseAbierta,
+} from "@/lib/catalog/queries";
+import { bookingTotal, formatSessionTime, tutorNames } from "@/lib/booking";
 import { cartCount } from "@/lib/cart/resolve";
+import type { FormatoHora } from "@/lib/hora";
 import { PanelShell } from "@/components/layout/panel-shell";
 import { SlotPicker } from "./slot-picker";
 
@@ -43,14 +50,39 @@ export default async function ReservarPage({
   searchParams: Promise<{ slot?: string }>;
 }) {
   const [{ productId }, { slot }] = await Promise.all([params, searchParams]);
-  await requireUser();
+  const { user } = await requireUser();
 
   // getProductDetail solo devuelve productos reservables (active + tutor aprobado).
   const product = await getProductDetail(productId);
   if (!product) notFound();
 
+  // RG-01 (24-oct) · una clase grupal YA NACIDA no tiene horarios que elegir:
+  // llega aquí un enlace viejo o guardado. Se manda a elegir en su plantilla.
+  // Enlace y no `redirect()`: cruzar de grupo con un redirect deja la pantalla
+  // en blanco (regla de oro 13).
+  if (product.pricingModel === "group" && product.groupTemplateId) {
+    return (
+      <div className="mx-auto flex max-w-xl flex-col gap-3 px-4 py-10">
+        <h1 className="text-2xl font-bold text-[#19191f]">{product.title}</h1>
+        <p className="text-sm text-[#474747]">
+          Esta clase ya tiene sus fechas. Elige entre las clases abiertas o abre
+          un horario nuevo.
+        </p>
+        <Link
+          href={`/reservar/${product.groupTemplateId}`}
+          className="text-sm font-semibold text-brand underline"
+        >
+          Ver los horarios
+        </Link>
+      </div>
+    );
+  }
+  // RG-01 (24-oct) · la PLANTILLA grupal se reserva como una 1:1: mismo
+  // selector, y además arriba las clases que ya nacieron y admiten gente.
+  const grupal = product.pricingModel === "group";
+
   const supabase = await createClient();
-  const [{ data: slots }, names, tz, formato, enCarrito] = await Promise.all([
+  const [{ data: slots }, names, tz, formato, enCarrito, clases] = await Promise.all([
     // ⚠️ El rango va EXPLÍCITO. Sin él la RPC caía a su default de 21 días
     // mientras la ficha pública pedía 60 y `create_booking` revalidaba contra
     // 30: tres ventanas para los mismos huecos. Aquí el síntoma era el
@@ -78,11 +110,29 @@ export default async function ReservarPage({
     // lugar de aparecer de golpe tras la hidratación. No cuesta un viaje a la
     // base — `cartCount()` solo lee la cookie.
     cartCount(),
+    grupal ? listClasesAbiertas(productId) : Promise.resolve<ClaseAbierta[]>([]),
   ]);
+
+  // RG-01 · ¿ya está dentro de alguna? Se le enseña la suya en vez de «Unirme».
+  const misReservas = new Map<string, { id: string; status: string }>();
+  if (grupal && clases.length > 0) {
+    const { data: mias, error } = await supabase
+      .from("bookings")
+      .select("id, status, product_id")
+      .eq("student_id", user.id)
+      .in("product_id", clases.map((c) => c.productId))
+      .in("status", ["pending_payment", "pending_acceptance", "confirmed", "in_progress"]);
+    // Sin esto la tarjeta ofrecería «Unirme» y el checkout contestaría «ya
+    // estás inscrito»: molesto, no peligroso. Se sigue, pero se anota.
+    if (error) console.error("[reservar] reservas en clases grupales", error);
+    for (const b of mias ?? []) misReservas.set(b.product_id, b);
+  }
 
   const tutorName = names.get(product.tutor.id) ?? product.tutor.headline ?? undefined;
   const required =
-    product.pricingModel === "per_package" ? (product.packageNumSessions ?? 1) : 1;
+    product.pricingModel === "per_package" || grupal
+      ? (product.packageNumSessions ?? 1)
+      : 1;
 
   // Se compara por INSTANTE, no por cadena: el hueco que enlaza la ficha sale
   // de otra llamada a `get_available_slots` (con rango de fechas propio) y basta
@@ -101,7 +151,7 @@ export default async function ReservarPage({
   // No hay riesgo de bucle con el checkout —que rebota aquí cuando la selección
   // no cuadra— porque ese rebote es a `/reservar/<id>` PELADO, sin `?slot=`, y
   // sin `?slot=` esta condición no se cumple nunca.
-  if (required === 1 && elegido) {
+  if (required === 1 && elegido && !grupal) {
     redirect(`/reservar/${productId}/checkout?slots=${encodeURIComponent(elegido)}`);
   }
 
@@ -141,13 +191,22 @@ export default async function ReservarPage({
           <p className="text-[13px] text-[#6b6b6b]">con {tutorName}</p>
         ) : null}
         <h1 className="text-2xl font-bold tracking-tight text-balance text-[#19191f] sm:text-[24px]">
-          {required > 1
-            ? `Agenda tu paquete: ${product.title}`
-            : `Agenda tu sesión: ${product.title}`}
+          {grupal
+            ? `Clase grupal: ${product.title}`
+            : required > 1
+              ? `Agenda tu paquete: ${product.title}`
+              : `Agenda tu sesión: ${product.title}`}
         </h1>
         <p className="text-sm text-[#6b6b6b]">
-          {required > 1 ? `Elige ${required} sesiones` : "Elige tu horario"}
+          {grupal
+            ? required > 1
+              ? `Ciclo de ${required} fechas`
+              : "Una fecha"
+            : required > 1
+              ? `Elige ${required} sesiones`
+              : "Elige tu horario"}
           {product.sessionDurationMin ? ` de ${product.sessionDurationMin} min` : ""}
+          {grupal && product.capacity ? `, hasta ${product.capacity} alumnos` : ""}
           . Todos los horarios están en tu hora local.
         </p>
         {/* Traía una hora concreta y ya no está entre las libres: se la
@@ -166,7 +225,27 @@ export default async function ReservarPage({
         ) : null}
       </div>
 
+      {grupal && clases.length > 0 ? (
+        <ClasesAbiertas
+          clases={clases}
+          misReservas={misReservas}
+          timeZone={tz}
+          formato={formato}
+        />
+      ) : null}
+      {grupal ? (
+        <h2 className="mt-2 text-[17px] font-bold text-[#19191f]">
+          {clases.length > 0 ? "O abre un horario nuevo" : "Elige el horario de tu clase"}
+          <span className="mt-0.5 block text-[13px] font-normal text-[#6b6b6b]">
+            {required > 1
+              ? `Elige las ${required} fechas del ciclo. Quien venga después se suma a ellas.`
+              : "La hora la eliges tú; quien venga después se suma a tu clase."}
+          </span>
+        </h2>
+      ) : null}
+
       <SlotPicker
+        abrirGrupal={grupal}
         productId={productId}
         productTitle={product.title}
         tutorName={tutorName}
@@ -186,5 +265,93 @@ export default async function ReservarPage({
         enCarrito={enCarrito}
       />
     </PanelShell>
+  );
+}
+
+/**
+ * RG-01 (24-oct) · las clases ya abiertas de esta plantilla, DESTACADAS y
+ * PRIMERO: «Jue 18:00 · 3 inscritos · quedan 5 cupos». Elegir una es sumarse,
+ * sin escoger nada más. Una llena no llega aquí (`listClasesAbiertas`), salvo
+ * la que lo está solo por pagos en curso, que sale sin botón.
+ *
+ * `<a>` y no `<Link>`: el checkout cuelga de `(checkout)`, otro grupo de rutas
+ * (regla de oro 13).
+ */
+function ClasesAbiertas({
+  clases,
+  misReservas,
+  timeZone,
+  formato,
+}: {
+  clases: ClaseAbierta[];
+  misReservas: Map<string, { id: string; status: string }>;
+  timeZone: string;
+  formato: FormatoHora;
+}) {
+  return (
+    <section aria-labelledby="clases-abiertas" className="flex flex-col gap-3">
+      <h2 id="clases-abiertas" className="text-[17px] font-bold text-[#19191f]">
+        Clases ya programadas
+        <span className="mt-0.5 block text-[13px] font-normal text-[#6b6b6b]">
+          Súmate a una: ya tienen hora y compañeros.
+        </span>
+      </h2>
+      <ul className="grid gap-3 sm:grid-cols-2">
+        {clases.map((c) => {
+          const mia = misReservas.get(c.productId);
+          const soloEnPago = c.cuposLibres <= 0;
+          return (
+            <li
+              key={c.productId}
+              className="flex flex-col gap-2 rounded-[14px] border-2 border-brand bg-brand/5 p-4"
+            >
+              <ul className="flex flex-col gap-0.5 text-sm font-semibold text-[#19191f]">
+                {c.fechas.map((f) => (
+                  <li key={f.startAt} className="first-letter:uppercase">
+                    {formatSessionTime(f.startAt, timeZone, formato)}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[13px] text-[#474747]">
+                {c.inscritos === 1 ? "1 inscrito" : `${c.inscritos} inscritos`}
+                {" · "}
+                {soloEnPago
+                  ? "sin cupos por ahora"
+                  : c.cuposLibres === 1
+                    ? "¡último cupo!"
+                    : `quedan ${c.cuposLibres} cupos`}
+                {c.minSeats && c.inscritos < c.minSeats
+                  ? ` · se confirma con ${c.minSeats}`
+                  : ""}
+              </p>
+              {mia ? (
+                <a
+                  href={
+                    mia.status === "pending_payment"
+                      ? `/reservar/${c.productId}/checkout`
+                      : `/reservas/${mia.id}`
+                  }
+                  className="text-sm font-semibold text-brand underline underline-offset-2"
+                >
+                  {mia.status === "pending_payment" ? "Terminar mi pago" : "Ya estás inscrito · ver"}
+                </a>
+              ) : soloEnPago ? (
+                <p className="text-xs text-[#6b6b6b]">
+                  Alguien está terminando de pagar: si no lo completa, el cupo
+                  se libera en minutos.
+                </p>
+              ) : (
+                <a
+                  href={`/reservar/${c.productId}/checkout`}
+                  className="inline-flex h-10 items-center justify-center rounded-[10px] bg-brand px-4 text-sm font-semibold text-white"
+                >
+                  Unirme a esta clase
+                </a>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

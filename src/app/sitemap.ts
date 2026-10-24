@@ -31,7 +31,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       .from("tutor_profiles")
       .select("profile_id, slug")
       .eq("approval_status", "approved"),
-    supabase.from("products").select("id, slug, updated_at").eq("status", "active"),
+    // RG-01 (24-oct) · la plantilla grupal es la ficha que se indexa, como una
+    // 1:1; las clases que nacen de ella (`group_template_id`) no tienen ficha propia.
+    supabase
+      .from("products")
+      .select("id, slug, updated_at")
+      .eq("status", "active")
+      .is("group_template_id", null),
     supabase.from("categories").select("slug").eq("is_active", true),
     supabase.from("academies_public").select("slug"),
   ]);

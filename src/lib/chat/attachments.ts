@@ -88,6 +88,66 @@ export async function uploadAttachment(
   };
 }
 
+/**
+ * Lote 11 (P27) · Sube un documento al chat de una clase GRUPAL.
+ *
+ * Gemela de `uploadAttachment`, con dos diferencias: la carpeta es la del
+ * PRODUCTO (`grupo/<group_product_id>/…`) y no la de una reserva —el hilo es
+ * de todo el grupo, no de un par—, y solo el TUTOR puede subir. La barrera no
+ * es esconder el clip al alumno: es `send_group_attachment` (rechaza a quien no
+ * es el tutor del hilo) y la política de INSERT de Storage sobre esa carpeta.
+ * Leer lo puede cualquier miembro (`puede_ver_conversacion`), así que
+ * `attachmentUrl` sirve sin cambios.
+ */
+export async function uploadGroupAttachment(
+  conversationId: string,
+  file: File,
+): Promise<{ id: string; attachment: Attachment } | { error: string }> {
+  const problema = fileProblem(file, {
+    types: ATTACHMENT_TYPES,
+    maxBytes: ATTACHMENT_MAX_BYTES,
+    hint: ATTACHMENT_HINT,
+  });
+  if (problema) return { error: problema };
+
+  const supabase = createClient();
+  const { data: conv, error: convErr } = await supabase
+    .from("conversations")
+    .select("group_product_id")
+    .eq("id", conversationId)
+    .eq("kind", "group")
+    .maybeSingle();
+  if (convErr) return { error: "No se pudo subir el archivo." };
+  const productId = conv?.group_product_id;
+  if (!productId) return { error: "Este chat no es el de una clase grupal." };
+
+  const path = `grupo/${productId}/${crypto.randomUUID()}-${file.name}`;
+
+  const { error: upErr } = await supabase.storage
+    .from("chat-attachments")
+    .upload(path, file, { contentType: file.type });
+  if (upErr) return { error: "No se pudo subir el archivo." };
+
+  const { data, error } = await supabase.rpc("send_group_attachment", {
+    p_conversation_id: conversationId,
+    p_attachment_path: path,
+    p_attachment_name: file.name,
+    p_attachment_size: file.size,
+  });
+
+  if (error) {
+    // Misma limpieza —y misma advertencia— que en `uploadAttachment`: sin
+    // política de DELETE en el bucket este `remove` hoy no borra nada.
+    await supabase.storage.from("chat-attachments").remove([path]);
+    return { error: error.message || "No se pudo compartir el archivo." };
+  }
+
+  return {
+    id: data as string,
+    attachment: { path, name: file.name, size: file.size },
+  };
+}
+
 /** URL firmada (60 s) para abrir un adjunto: el bucket es privado. */
 export async function attachmentUrl(path: string): Promise<string | null> {
   const supabase = createClient();

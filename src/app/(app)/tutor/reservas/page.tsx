@@ -9,6 +9,7 @@ import {
   aceptaAntesDe,
   formatSessionTime,
   BOOKING_STATUS_LABEL,
+  parteDelTutor,
   porProximidad,
   sesionVigente,
 } from "@/lib/booking";
@@ -40,7 +41,17 @@ type Reserva = {
   currency: string;
   created_at: string;
   student_id: string;
+  /** P48 · las grupales se agrupan por producto en vez de ir una por alumno. */
+  pricing_model: Database["public"]["Enums"]["pricing_model"];
+  product_id: string;
   products: { title: string } | null;
+  /** A4 · lo que se pinta es la parte del TUTOR, no lo que pagó el alumno. */
+  payments: {
+    status: string;
+    gross_amount: number;
+    tutor_net_amount: number;
+    refunded_amount: number | null;
+  } | null;
   reviews: unknown;
   sessions:
     | {
@@ -50,9 +61,30 @@ type Reserva = {
         status: string;
         access_opens_at: string | null;
         access_closes_at: string | null;
+        group_class_id: string | null;
       }[]
     | null;
 };
+
+/**
+ * A4 · el monto de una reserva para el tutor: su neto tras lo devuelto
+ * (`parteDelTutor`). Antes salía `total_amount`, lo que pagó el alumno con el
+ * cargo por servicio del 5 % dentro: 21 US$ donde la tutora iba a cobrar 16.
+ * Sin pago todavía no hay neto que enseñar.
+ */
+function netoDe(b: Reserva): number | null {
+  const p = b.payments;
+  // Solo lo que el tutor cobrará: un hold abandonado (pago pending/failed) o
+  // una baja cancelada no llegan al payout (`build_payout_for_tutor`).
+  if (!p || !["paid", "partially_refunded", "refunded"].includes(p.status) || b.status === "cancelled")
+    return null;
+  return parteDelTutor(p.tutor_net_amount, p.gross_amount, p.refunded_amount ?? 0);
+}
+
+function montoDe(b: Reserva): string {
+  const neto = netoDe(b);
+  return neto === null ? "—" : formatMoney(neto, b.currency);
+}
 
 /** ¿Espera respuesta del tutor? Es el único estado que pide acción (RN-38). */
 const esPorAceptar = (b: Reserva) => b.status === "pending_acceptance";
@@ -273,7 +305,7 @@ function FilaDeReserva({
             {cuando ? formatSessionTime(cuando, tz, formato) : "Por agendar"}
           </span>
           {" · "}
-          {formatMoney(reserva.total_amount, reserva.currency)}
+          {montoDe(reserva)}
         </p>
         {rating !== null ? <Valoracion rating={rating} /> : null}
       </div>
@@ -310,6 +342,101 @@ function FilaDeReserva({
         </PanelIconButton>
       </div>
     </li>
+  );
+}
+
+/**
+ * P48 · una clase grupal es UNA fila, no una por alumno: con seis inscritos la
+ * lista repetía seis veces el mismo título y la misma fecha, y la baja de una
+ * alumna caía suelta en «Pasadas» con la fecha futura de la clase. Misma
+ * rejilla `estado(104) · cámara(36) · ojo(36)` que `FilaDeReserva`, para que
+ * los iconos no bailen entre una fila y otra.
+ *
+ * `data-f` sale de TODAS sus reservas: la fila se ve bajo cualquier chip que
+ * case con alguna (los chips siguen contando reservas, no clases).
+ */
+function FilaDeClaseGrupal({
+  reservas,
+  tz,
+  formato,
+}: {
+  reservas: Reserva[];
+  tz: string;
+  formato: FormatoHora;
+}) {
+  const primera = reservas[0];
+  const pagadas = reservas.filter((b) =>
+    ["confirmed", "in_progress", "completed"].includes(b.status),
+  ).length;
+  const cuando = fechaDeClase(reservas);
+  const neto = reservas.reduce((t, b) => t + (netoDe(b) ?? 0), 0);
+  // La sala abre por FECHA de la clase (G3): cualquier inscrito con la sala
+  // de su sesión abierta vale para encontrar la `group_class_id`.
+  const sala =
+    reservas
+      .map((b) => salaDeLaReserva(b.status, b.sessions))
+      .find((x) => x?.group_class_id) ?? null;
+
+  return (
+    <li
+      data-f={filtrosDe(reservas)}
+      className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3"
+    >
+      <div className="min-w-[180px] flex-1">
+        <p className="truncate text-[13px] font-semibold text-[#19191f]">
+          {primera.products?.title ?? "Clase grupal"}
+        </p>
+        <p className="truncate text-[12px] text-[#404040]">
+          Clase grupal · {pagadas} {pagadas === 1 ? "inscrito" : "inscritos"}
+          {" · "}
+          <span className="first-letter:uppercase">
+            {cuando ? formatSessionTime(cuando, tz, formato) : "Sin fecha"}
+          </span>
+          {" · "}
+          {formatMoney(neto, primera.currency)}
+        </p>
+      </div>
+
+      <div className="ml-auto grid shrink-0 grid-cols-[104px_36px_36px] items-center justify-items-end gap-2">
+        <StatusPill tone="gray" className="whitespace-nowrap">
+          Clase grupal
+        </StatusPill>
+        {sala?.group_class_id ? (
+          <PanelIconButton asChild tone="primary" label="Entrar a la sala">
+            <Link href={`/room/grupal/${sala.group_class_id}`}>
+              <VideoIcon aria-hidden className="size-4" />
+            </Link>
+          </PanelIconButton>
+        ) : (
+          <span />
+        )}
+        {/* La ficha de la clase: fechas, inscritos, ingresos y acciones. */}
+        <PanelIconButton asChild label="Ver clase">
+          <Link href={`/tutor/clases-grupales/${primera.product_id}`}>
+            <EyeIcon aria-hidden className="size-4" />
+          </Link>
+        </PanelIconButton>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * P48 · la fecha de una clase grupal: la vigente o, si ya no queda ninguna, la
+ * última que hubo, mirando solo fechas NO canceladas. Con las canceladas
+ * dentro, la sesión que la baja de un alumno deja cancelada en el futuro se
+ * convertía en «la última» de una clase ya dada.
+ */
+function fechaDeClase(reservas: Reserva[]): string | null {
+  const todas = reservas
+    .flatMap((b) => b.sessions ?? [])
+    .sort((x, y) => x.start_at.localeCompare(y.start_at));
+  const vivas = todas.filter((x) => x.status !== "cancelled");
+  return (
+    sesionVigente(vivas)?.start_at ??
+    vivas[vivas.length - 1]?.start_at ??
+    todas[todas.length - 1]?.start_at ??
+    null
   );
 }
 
@@ -362,7 +489,9 @@ export default async function TutorReservasPage() {
       // La reseña es §4.5, y la FK va NOMBRADA por la regla de oro 10: en el
       // día que alguien cree una tabla puente entre `bookings` y `reviews`, un
       // embed sin nombrar se cae entero con PGRST201 en vez de degradarse.
-      "id, status, total_amount, currency, created_at, student_id, products(title), reviews!reviews_booking_id_fkey(rating), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at)",
+      // A4/P48 · el pago (1:1) para el neto del tutor, y `pricing_model` +
+      // `product_id` + `group_class_id` para agrupar las grupales por clase.
+      "id, status, total_amount, currency, created_at, student_id, pricing_model, product_id, products(title), payments(status, gross_amount, tutor_net_amount, refunded_amount), reviews!reviews_booking_id_fkey(rating), sessions(id, start_at, end_at, status, access_opens_at, access_closes_at, group_class_id)",
     )
     .eq("tutor_id", userId)
     .order("created_at", { ascending: false });
@@ -384,13 +513,66 @@ export default async function TutorReservasPage() {
   // servidor. Los tres grupos son excluyentes por construcción (`esPasada` es
   // «ni por aceptar ni próxima»), así que ninguna reserva se pinta dos veces.
   const porAceptar = reservas.filter(esPorAceptar);
-  const proximas = reservas.filter(esProxima).sort(porProximidad);
+
+  // P48 · las grupales salen de la lista por alumno y se agrupan por clase
+  // (producto). Una clase va a PRÓXIMAS si alguna de sus reservas lo es y si
+  // no a PASADAS; sus bajas cuentan dentro de ella, no como filas sueltas.
+  const resto = reservas.filter((b) => !esPorAceptar(b));
+  const grupales = new Map<string, Reserva[]>();
+  for (const b of resto) {
+    if (b.pricing_model !== "group") continue;
+    // Un checkout abandonado (cancelada sin cobro) no es de la clase: con él,
+    // una grupal sin inscritos salía en «Pasadas» con su fecha futura.
+    if (b.status === "cancelled" && !["paid", "partially_refunded", "refunded"].includes(b.payments?.status ?? "")) continue;
+    const suyas = grupales.get(b.product_id) ?? [];
+    suyas.push(b);
+    grupales.set(b.product_id, suyas);
+  }
+  type Fila =
+    | { tipo: "reserva"; key: string; reserva: Reserva; rows: Reserva[]; fecha: string | null; sessions: Reserva["sessions"] }
+    | { tipo: "grupal"; key: string; reservas: Reserva[]; rows: Reserva[]; fecha: string | null; sessions: Reserva["sessions"] };
+  const filas: Fila[] = [
+    ...resto
+      .filter((b) => b.pricing_model !== "group")
+      .map((b): Fila => ({
+        tipo: "reserva",
+        key: b.id,
+        reserva: b,
+        rows: [b],
+        fecha: fechaDeReserva(b),
+        sessions: b.sessions,
+      })),
+    ...[...grupales].map(([productId, rs]): Fila => ({
+      tipo: "grupal",
+      key: `grupal-${productId}`,
+      reservas: rs,
+      rows: rs,
+      fecha: fechaDeClase(rs),
+      // Para ordenar por proximidad: solo las sesiones de reservas vivas.
+      sessions: rs.filter(esProxima).flatMap((b) => b.sessions ?? []),
+    })),
+  ];
+
+  const proximasFilas = filas.filter((x) => x.rows.some(esProxima)).sort(porProximidad);
   // §4.4 · las pasadas, la más reciente primero. Las que no tienen sesión
   // quedan al final (cadena vacía) conservando el `created_at desc` del orden.
-  const pasadas = reservas
-    .filter(esPasada)
-    .sort((a, b) =>
-      (fechaDeReserva(b) ?? "").localeCompare(fechaDeReserva(a) ?? ""),
+  const pasadasFilas = filas
+    .filter((x) => !x.rows.some(esProxima))
+    .sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? ""));
+  // Los rótulos y sus `data-f` siguen mirando reservas, no filas.
+  const proximas = proximasFilas.flatMap((x) => x.rows);
+  const pasadas = pasadasFilas.flatMap((x) => x.rows);
+  const pintar = (x: Fila) =>
+    x.tipo === "grupal" ? (
+      <FilaDeClaseGrupal key={x.key} reservas={x.reservas} tz={tz} formato={formato} />
+    ) : (
+      <FilaDeReserva
+        key={x.key}
+        reserva={x.reserva}
+        student={students.get(x.reserva.student_id)}
+        tz={tz}
+        formato={formato}
+      />
     );
 
   return (
@@ -514,7 +696,7 @@ export default async function TutorReservasPage() {
                             : "Por agendar"}
                         </span>
                         {" · "}
-                        {formatMoney(b.total_amount, b.currency)}
+                        {montoDe(b)}
                       </p>
                     </div>
                     <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -539,15 +721,7 @@ export default async function TutorReservasPage() {
               <div data-f={filtrosDe(proximas)}>
                 <RotuloDeGrupo id="proximas">Próximas</RotuloDeGrupo>
                 <ul className="divide-y divide-[#e0e0e0]">
-                  {proximas.map((b) => (
-                    <FilaDeReserva
-                      key={b.id}
-                      reserva={b}
-                      student={students.get(b.student_id)}
-                      tz={tz}
-                      formato={formato}
-                    />
-                  ))}
+                  {proximasFilas.map(pintar)}
                 </ul>
               </div>
             ) : null}
@@ -563,15 +737,7 @@ export default async function TutorReservasPage() {
               <div data-f={filtrosDe(pasadas)}>
                 <RotuloDeGrupo id="pasadas">Pasadas</RotuloDeGrupo>
                 <ul className="divide-y divide-[#e0e0e0]">
-                  {pasadas.map((b) => (
-                    <FilaDeReserva
-                      key={b.id}
-                      reserva={b}
-                      student={students.get(b.student_id)}
-                      tz={tz}
-                      formato={formato}
-                    />
-                  ))}
+                  {pasadasFilas.map(pintar)}
                 </ul>
               </div>
             ) : null}

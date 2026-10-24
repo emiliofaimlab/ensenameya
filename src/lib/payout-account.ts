@@ -373,8 +373,8 @@ export function validarCuenta(
  */
 /**
  * ⚠️ C2r · Son las dos FAMILIAS DE DATO que un tutor puede tener que declarar, y
- * ya no coinciden con «automático o a mano»: PayPal y Airtm son automáticos y
- * piden un identificador, igual que el riel manual. Lo que esta pantalla
+ * ya no coinciden con «automático o a mano»: PayPal es automático y
+ * pide un identificador, igual que el riel manual. Lo que esta pantalla
  * necesita saber es qué campos pintar, no quién ejecuta — así que es el mismo
  * par que `FamiliaDeDato` en `@/lib/payments`, del que sale por `payoutCountries()`.
  */

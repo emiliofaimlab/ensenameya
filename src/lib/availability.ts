@@ -165,3 +165,37 @@ export function buildUsedBy(
   }
   return usedBy;
 }
+
+/**
+ * G1 · hora de PARED en la zona del tutor → instante UTC (ISO). Cuando el tutor
+ * MUEVE una fecha de una clase grupal ya nacida (RG-11) teclea «martes 18:00»,
+ * y quiere decir SU martes 18:00, no el del navegador ni el de UTC (RN-01/02).
+ * (Desde el 24-oct ya no publica fechas: la hora la fija el primer alumno.) Sin librería:
+ * se calcula el desfase de esa zona en ese instante con `Intl` y se corrige
+ * una segunda vez, porque el desfase puede cambiar al cruzar un cambio de
+ * horario. Una hora que no existe (el salto de primavera) cae en la siguiente.
+ */
+export function paredAUtc(fecha: string, hora: string, tz: string): string {
+  const [y, mo, d] = fecha.split("-").map(Number);
+  const [h, mi] = hora.split(":").map(Number);
+  const pared = Date.UTC(y, mo - 1, d, h, mi);
+  const desfase = (t: number) => {
+    const p = Object.fromEntries(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        hourCycle: "h23",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+        .formatToParts(new Date(t))
+        .map((x) => [x.type, Number(x.value)]),
+    );
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) - t;
+  };
+  let t = pared - desfase(pared);
+  t = pared - desfase(t);
+  return new Date(t).toISOString();
+}

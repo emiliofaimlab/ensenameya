@@ -6,7 +6,7 @@ import { useCallback, useSyncExternalStore, type RefObject } from "react";
  * EY-221 · Pantalla completa del CONTENEDOR de la sala (vídeo + presentación +
  * contador + chat), con la Fullscreen API. No es el botón de Daily —ese pone
  * a pantalla completa solo su iframe, y se llevaba por delante todo lo nuestro;
- * por eso sigue apagado (`showFullscreenButton: false`).
+ * por eso se apagó cuando la sala era Daily Prebuilt (hoy ya no hay iframe).
  *
  * ⚠️ En pantalla completa SOLO se ve el subárbol del contenedor. Lo que se
  * pinte por portal en el `body` —los toasts de sonner, los diálogos de Radix—

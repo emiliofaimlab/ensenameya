@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EyeIcon, VideoIcon } from "lucide-react";
+import { EyeIcon, UsersIcon, VideoIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
@@ -14,6 +14,7 @@ import {
   type TutorBalance,
 } from "@/lib/payouts";
 import { roomOpen } from "@/lib/room-window";
+import { zonaLegible } from "@/lib/zona-legible";
 import { cn } from "@/lib/utils";
 import { studentsOfTutor } from "./students";
 import { ChatDeReservaButton } from "./chat-button";
@@ -179,6 +180,7 @@ export default async function TutorHomePage() {
     students,
     tier,
     monedaDeCobro,
+    { data: proximasGrupales },
   ] = await Promise.all([
     supabase
       .from("tutor_profiles")
@@ -200,6 +202,10 @@ export default async function TutorHomePage() {
         "id, start_at, end_at, status, booking_id, student_id, access_opens_at, access_closes_at, bookings(products(title))",
       )
       .eq("tutor_id", userId)
+      // G1 · las sesiones de una clase grupal son una por ALUMNO a la misma
+      // hora: aquí saldrían repetidas y se comerían el `limit`. La fecha
+      // grupal llega aparte, una sola vez (`proximasGrupales`).
+      .is("group_class_id", null)
       .in("status", ["scheduled", "in_progress"])
       // Se filtra por el FIN, no por el inicio: una clase que empezó hace un
       // rato sigue en curso, y desaparecer del panel dejaría al tutor creyendo
@@ -240,7 +246,8 @@ export default async function TutorHomePage() {
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("tutor_id", userId)
-      .eq("status", "active"),
+      .eq("status", "active")
+      .is("group_template_id", null),
     // ⚠️ NOVENA CONSULTA, Y NO ES UN ADORNO. El documento da `payout_country`
     // como proxy de «cuenta de cobro empezada», pero desde `20260908130000`
     // ese país ya NO lo elige el tutor: lo deduce un trigger de su zona
@@ -268,6 +275,17 @@ export default async function TutorHomePage() {
     // ninguna de las otras: por dentro hace sus propias lecturas en paralelo y
     // está memoizada con `cache()`, así que la petición la resuelve una vez.
     monedaDeCobroDelTutor(userId),
+    // G1 · sus próximas fechas grupales, una fila por fecha, con el cupo y los
+    // libres ya contados por la vista (`group_classes_public`).
+    // M17 · y los PAGADOS aparte (`inscritos_pagados`): «inscritos» es cupo
+    // pagado en todas las pantallas; los que están pagando se dicen aparte.
+    supabase
+      .from("group_classes_public")
+      .select("id, product_id, start_at, end_at, capacity, cupos_libres, title, inscritos_pagados")
+      .eq("tutor_id", userId)
+      .gte("end_at", new Date().toISOString())
+      .order("start_at")
+      .limit(10),
   ]);
 
   const balance = balanceData as unknown as TutorBalance;
@@ -285,7 +303,29 @@ export default async function TutorHomePage() {
   const firstName = profile?.profiles?.full_name?.split(" ")[0];
   const aviso = APPROVAL_PILL[approvalStatus];
 
-  const sesiones = nextSessions ?? [];
+  // 1:1 y fechas grupales en UNA lista por hora: la tarjeta es «Próximas
+  // sesiones» y el tutor da las dos.
+  const sesiones = [
+    ...(nextSessions ?? []).map((s) => ({ ...s, grupal: null })),
+    ...(proximasGrupales ?? []).map((g) => ({
+      id: g.id!,
+      start_at: g.start_at!,
+      grupal: {
+        productId: g.product_id!,
+        // P47 · para decidir si la sala de esta fecha ya está abierta.
+        endAt: g.end_at!,
+        titulo: g.title ?? "Clase grupal",
+        // M17 · igual que `/tutor/clases-grupales/[id]`: inscritos son los que
+        // PAGARON; los cupos apartados por un pago en curso van aparte.
+        ocupados: g.inscritos_pagados ?? 0,
+        pagando: Math.max(
+          (g.capacity ?? 0) - (g.cupos_libres ?? 0) - (g.inscritos_pagados ?? 0),
+          0,
+        ),
+        cupo: g.capacity ?? 0,
+      },
+    })),
+  ].sort((a, b) => a.start_at.localeCompare(b.start_at));
   const porAceptar = pendientes ?? [];
   // El total de la consulta, no el de la página: la lista enseña 5 y el
   // contador del menú cuenta la tabla entera. Si divergieran, el menú diría 7
@@ -593,7 +633,7 @@ export default async function TutorHomePage() {
                 {/* La zona horaria se dice UNA vez bajo el título y no en cada
                     fila: antes cada hora arrastraba «· tu hora local». */}
                 <p className="truncate text-xs text-[#6b6b6b]">
-                  Horas en tu zona: {tz}
+                  Horas en tu zona: {zonaLegible(tz)}
                 </p>
               </div>
               <Link
@@ -628,7 +668,54 @@ export default async function TutorHomePage() {
               </div>
             ) : (
               <ul className="mt-2 divide-y divide-[#e0e0e0]">
-                {sesiones.slice(0, 5).map((s) => (
+                {sesiones.slice(0, 5).map((s) =>
+                  s.grupal ? (
+                    <li
+                      key={s.id}
+                      className="flex flex-wrap items-center justify-between gap-3 py-3 last:pb-0"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p
+                          title={s.grupal.titulo}
+                          className="truncate text-[13px] font-semibold text-[#19191f]"
+                        >
+                          {s.grupal.titulo}
+                        </p>
+                        <p className="flex items-center gap-1 truncate text-xs text-[#404040]">
+                          <UsersIcon className="size-3.5 shrink-0" aria-hidden />
+                          Clase grupal · {s.grupal.ocupados}/{s.grupal.cupo} inscritos
+                          {s.grupal.pagando > 0 ? ` · +${s.grupal.pagando} pagando` : ""}
+                        </p>
+                        <p className="text-[11.5px] text-[#6b6b6b] first-letter:uppercase">
+                          {cuando(s.start_at, tz, formato)}
+                        </p>
+                      </div>
+                      {/* P47 · la cámara se suma al ojo dentro de la ventana
+                          de la sala y con alguien inscrito, igual que en la
+                          fila 1:1 (ver B-2 más abajo). El ojo lleva a la
+                          ficha: ahí están todas las fechas y el chat. */}
+                      <div className="flex items-center gap-2">
+                        {roomOpen({
+                          status: "scheduled",
+                          start_at: s.start_at,
+                          end_at: s.grupal.endAt,
+                          access_opens_at: null,
+                          access_closes_at: null,
+                        }) && s.grupal.ocupados > 0 ? (
+                          <PanelIconButton asChild label="Entrar a la sala" tone="primary">
+                            <Link href={`/room/grupal/${s.id}`}>
+                              <VideoIcon className="size-[17px]" />
+                            </Link>
+                          </PanelIconButton>
+                        ) : null}
+                        <PanelIconButton asChild label="Ver clase">
+                          <Link href={`/tutor/clases-grupales/${s.grupal.productId}`}>
+                            <EyeIcon className="size-4" />
+                          </Link>
+                        </PanelIconButton>
+                      </div>
+                    </li>
+                  ) : (
                   <li
                     key={s.id}
                     className="flex flex-wrap items-center justify-between gap-3 py-3 last:pb-0"
@@ -699,7 +786,8 @@ export default async function TutorHomePage() {
                       </PanelIconButton>
                     </div>
                   </li>
-                ))}
+                  ),
+                )}
               </ul>
             )}
           </PanelCard>

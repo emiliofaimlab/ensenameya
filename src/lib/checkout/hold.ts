@@ -269,6 +269,15 @@ export function esCarreraDeHorario(error: ErrorDeRpc): boolean {
 }
 
 /**
+ * P38 · en una grupal la carrera de dos pestañas no choca contra el candado de
+ * sesiones sino contra «un cupo por alumno» de `create_booking_line`: la otra
+ * pestaña ya apartó el cupo, y ese apartado es reutilizable.
+ */
+export function esYaInscrito(error: ErrorDeRpc): boolean {
+  return (error?.message ?? "").toLowerCase().includes("ya estás inscrito");
+}
+
+/**
  * Qué se le enseña al alumno cuando no hay reserva que abrir.
  *
  * ⚠️ NUNCA `error.message` TAL CUAL. Del otro lado hay una función de Postgres
@@ -282,5 +291,14 @@ export function mensajeDeApertura(error: ErrorDeRpc): string {
   if (esCarreraDeHorario(error)) {
     return "Ese horario acaba de ocuparse. Elige otro y seguimos con el pago.";
   }
+  // G2 · los cuatro rechazos de una grupal (`20261008140000`) se pueden
+  // contar tal cual: dicen qué pasó con la clase, no con nuestra base.
+  const m = (error?.message ?? "").toLowerCase();
+  if (m.includes("ya no tiene cupos")) return "Esta clase ya no tiene cupos.";
+  if (m.includes("ya estás inscrito")) return "Ya estás inscrito en esta clase. La encuentras en Mis reservas.";
+  if (m.includes("inscripción a esta clase ya cerró")) return "La inscripción a esta clase ya cerró.";
+  if (m.includes("fechas de esta clase cambiaron")) return "El tutor cambió las fechas de esta clase. Vuelve a cargarla para ver las nuevas.";
+  // M11 · `create_booking_line` ya no deja al tutor inscribirse en su clase.
+  if (m.includes("tu propia clase")) return "Es tu propia clase: no puedes inscribirte.";
   return "No se pudo reservar el horario. Vuelve a intentarlo en un momento.";
 }

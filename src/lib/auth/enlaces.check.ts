@@ -48,6 +48,7 @@ const SUPERFICIES = [
   "src/components/home",
   "src/components/auth",
   "src/components/catalog",
+  "src/components/landing",
 ];
 
 /**

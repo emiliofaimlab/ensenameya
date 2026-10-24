@@ -168,7 +168,10 @@ async function cartProducts(ids: string[]): Promise<Map<string, CartProduct>> {
       "id, title, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, tutor_id, image_path",
     )
     .in("id", ids)
-    .eq("status", "active");
+    .eq("status", "active")
+    // RG-01 (24-oct) · una grupal no va por el carrito: abre su clase en
+    // `/reservar` y paga directo. Su línea cae a `no_disponible`.
+    .neq("pricing_model", "group");
   if (!productos || productos.length === 0) return out;
 
   const tutorIds = [...new Set(productos.map((p) => p.tutor_id))];

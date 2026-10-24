@@ -1,5 +1,8 @@
 # B2B — Perfil «academia»
 
+> ⚠️ **Sustituido (2-oct-2026)** por `REQUERIMIENTOS.md` (Academias, Emilio) y
+> `docs/PLAN-ACADEMIAS-Y-GRUPALES.md`. Se conserva como historia de la vitrina.
+
 > **Estado: construida la VITRINA, nada del motor.** Nace de la consulta de
 > Néstor (14-sep-2026) a raíz de la alianza con un tutor de inglés que trae su
 > propia metodología y su propio *supply* («Tutorías de inglés powered by

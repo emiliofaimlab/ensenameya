@@ -37,6 +37,8 @@ const SORTS: { value: ProductSort; label: string }[] = [
   { value: "recent", label: "Más relevantes" },
   { value: "price_asc", label: "Precio: de menor a mayor" },
   { value: "price_desc", label: "Precio: de mayor a menor" },
+  // RG-01 (24-oct) · «Empiezan antes» (P36) se retiró: una grupal ya no tiene
+  // fecha de inicio propia, la elige el alumno como en una 1:1.
 ];
 
 export default async function ClassesPage({
@@ -55,7 +57,6 @@ export default async function ClassesPage({
 }) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
-  const sort = SORTS.find((s) => s.value === sp.sort)?.value;
   const active: ProductFilterState = {
     cat: sp.cat,
     model: MODELS.some((m) => m.id === sp.model) ? sp.model : undefined,
@@ -65,6 +66,8 @@ export default async function ClassesPage({
     level: LEVELS.some((l) => l.id === sp.level) ? sp.level : undefined,
     lang: LANGUAGES.some((l) => l.id === sp.lang) ? sp.lang : undefined,
   };
+  const sorts = SORTS;
+  const sort = sorts.find((s) => s.value === sp.sort)?.value;
 
   // La moneda del visitante, para que los tramos de precio se lean en la misma
   // moneda que los precios de las tarjetas. Está memoizada con `cache()` y sus
@@ -151,14 +154,13 @@ export default async function ClassesPage({
           </div>
           {/* R4 (acuerdo del 17-ago): «mentoría» al 100 %. El Figma P05 decía
               «Clases, mentorías y paquetes»: «clases» sale y entra «sesiones»
-              (palabra permitida), con la misma longitud para que el párrafo
-              siga en 4 líneas a 390 — la versión larga con los tres modelos
-              («Sesiones individuales, paquetes y mentorías por hora») sumaba
-              una quinta línea al hero (medido). */}
+              (palabra permitida). P23 · desde las grupales el texto nombra
+              los dos formatos («1 a 1» y «clases grupales»): el anterior solo
+              hablaba de 1:1. Es algo más largo que el de 4 líneas a 390. */}
           <p className="mt-4 max-w-3xl text-pretty text-[15px] text-white/90">
             Elige el servicio ideal para ti y asegura el resultado que buscas
-            hoy. Sesiones, mentorías y paquetes con una meta clara, medible y
-            diseñada para tu éxito.
+            hoy. Sesiones 1 a 1, clases grupales y paquetes con una meta clara,
+            medible y diseñada para tu éxito.
           </p>
 
           {/* Acotada a MENTORÍAS: buscando desde este módulo no se quieren
@@ -323,14 +325,18 @@ export default async function ClassesPage({
                     <span className="max-sm:sr-only">
                       {" "}
                       por:{" "}
-                      {SORTS.find((s) => s.value === (sort ?? "recent"))!.label}
+                      {sorts.find(
+                        (s) =>
+                          s.value ===
+                          (sort ?? "recent"),
+                      )!.label}
                     </span>
                   </span>
                   <ChevronDownIcon className="size-3.5 transition-transform group-open:rotate-180" />
                 </summary>
                 {/* Filas de 44 px por debajo de `lg` (tacto), 36 desde 1024 como hoy. */}
                 <ul className="absolute right-0 z-10 mt-1 w-60 rounded-[8px] border bg-card p-1 shadow-md">
-                  {SORTS.map((s) => (
+                  {sorts.map((s) => (
                     <li key={s.value}>
                       <Link
                         href={buildHref({ ...active, sort: s.value })}

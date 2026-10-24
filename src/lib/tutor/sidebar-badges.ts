@@ -61,17 +61,20 @@ export const tutorSidebarBadges = cache(
         .from("products")
         .select("id", { count: "exact", head: true })
         .eq("tutor_id", userId)
-        .eq("status", "active"),
+        .eq("status", "active")
+        .is("group_template_id", null),
       supabase
         .from("products")
         .select("id", { count: "exact", head: true })
         .eq("tutor_id", userId)
-        .eq("status", "paused"),
+        .eq("status", "paused")
+        .is("group_template_id", null),
       supabase
         .from("products")
         .select("id", { count: "exact", head: true })
         .eq("tutor_id", userId)
-        .eq("status", "draft"),
+        .eq("status", "draft")
+        .is("group_template_id", null),
       // «Mis cuentas» pide acción cuando hay dinero esperando y el tutor no
       // ha elegido método: es lo que deja el pago del lunes «por decidir»
       // (H-01). El porqué del saldo, más abajo.

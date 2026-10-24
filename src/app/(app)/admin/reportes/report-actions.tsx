@@ -106,8 +106,8 @@ export function ReportActions({
   blocked: boolean;
   /** El tutor del hilo (lo sea quien reporta o quien es reportado). */
   tutor: ReportParty;
-  /** El alumno del hilo. */
-  alumno: ReportParty;
+  /** El alumno del hilo. Null en el reporte de un grupo hecho por su tutor. */
+  alumno: ReportParty | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -241,8 +241,8 @@ export function ReportActions({
 
   /** Las dos partes, con la etiqueta que el admin lee en el menú. */
   const partes: { parte: ReportParty; rol: "tutor" | "alumno" }[] = [
-    { parte: tutor, rol: "tutor" },
-    { parte: alumno, rol: "alumno" },
+    { parte: tutor, rol: "tutor" as const },
+    ...(alumno ? [{ parte: alumno, rol: "alumno" as const }] : []),
   ];
 
   /**

@@ -59,6 +59,14 @@ export type ConversationRow = {
   blocked_at: string | null;
   last_booking_id: string | null;
   last_product_title: string | null;
+  /**
+   * Lote 3 (B3/B4) · `pair` = alumno ↔ tutor; `group` = el chat de una clase
+   * grupal. En las de grupo `other_name` es el título de la clase, `other_id`
+   * el tutor y `last_booking_id` la reserva pagada de quien mira (null para el
+   * tutor). `toConversation` cae a `pair` si la RPC vieja sigue desplegada.
+   */
+  kind: "pair" | "group";
+  group_product_id: string | null;
 };
 
 /** Fila de `unread_conversation_counts()`. */

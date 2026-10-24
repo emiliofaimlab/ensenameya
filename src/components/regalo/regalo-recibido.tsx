@@ -9,6 +9,8 @@ import {
   type PillTone,
 } from "@/components/layout/panel-shell";
 import { Button } from "@/components/ui/button";
+import { formatSessionTime } from "@/lib/booking";
+import type { FormatoHora } from "@/lib/hora";
 
 /**
  * ── EL REGALO, VISTO POR QUIEN LO RECIBE ───────────────────────────────────
@@ -85,6 +87,12 @@ export type RegaloRecibido = {
      * `comprar_regalo`. `null` cuando no se ha podido leer.
      */
     totalHoy: number | null;
+    /**
+     * P41 / M23 · solo en un cupo de clase grupal: sus fechas pendientes (UTC,
+     * de `group_classes_public`) y hasta cuándo hay inscripción. Quien lo
+     * recibe no elige día y hora: se inscribe en fechas ya fijadas.
+     */
+    grupal?: { fechas: string[]; cierraAt: string | null } | null;
   } | null;
 };
 
@@ -215,9 +223,12 @@ function plazo(
 export function RegaloPorAgendar({
   regalo,
   timeZone,
+  formato,
 }: {
   regalo: RegaloRecibido;
   timeZone: string;
+  /** 12 h o 24 h de quien mira, para las fechas de una clase grupal. */
+  formato?: FormatoHora;
 }) {
   // El bono no es una variante de esta tarjeta: no hay mentoría que nombrar, no
   // hay precio de hoy contra el que comparar y el botón lleva a otro sitio.
@@ -234,6 +245,7 @@ export function RegaloPorAgendar({
   // `null` NO es «gratis»: es «no lo sabemos», y se dice distinto.
   const cubreTodo = totalHoy !== null && regalo.amount >= totalHoy;
   const caducidad = plazo(regalo.expiresAt, timeZone);
+  const grupal = p?.grupal ?? null;
 
   return (
     <PanelCard className="border-[1.5px] border-brand/40 bg-[#f5faff]">
@@ -325,6 +337,29 @@ export function RegaloPorAgendar({
         </StatusPill>
       </div>
 
+      {/* M23 · un cupo grupal no se agenda: las fechas ya están fijadas, y lo
+          que caduca de verdad es la inscripción, que cierra antes que el
+          regalo si la clase empieza antes. */}
+      {grupal ? (
+        <>
+          {grupal.fechas.length > 0 ? (
+            <ul className="mt-2 flex flex-col gap-0.5 text-[13px] text-[#333333]">
+              {grupal.fechas.map((f) => (
+                <li key={f} className="first-letter:uppercase">
+                  {formatSessionTime(f, timeZone, formato)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {grupal.cierraAt ? (
+            <p className="mt-2 text-[13px] text-[#333333]">
+              Inscríbete antes del {fechaLocal(grupal.cierraAt, timeZone)}: ahí
+              cierra la inscripción.
+            </p>
+          ) : null}
+        </>
+      ) : null}
+
       {/* La cifra, SOLO cuando hay una cifra que decir. En el caso normal —el
           regalo cubre el 100 %— el chip verde ya lo dice entero y una frase
           repitiéndolo es justo el peso de más que aplanaba la tarjeta. Los
@@ -349,7 +384,8 @@ export function RegaloPorAgendar({
           />{" "}
           de los{" "}
           <PrecioEnLinea amountMinor={totalHoy} currency={regalo.currency} /> que
-          cuesta hoy: la diferencia la pagas tú al agendarla.
+          cuesta hoy: la diferencia la pagas tú{" "}
+          {grupal ? "al inscribirte" : "al agendarla"}.
         </p>
       )}
 
@@ -381,7 +417,21 @@ export function RegaloPorAgendar({
           plazo a su fila: una píldora al lado del botón se lee como parte del
           botón. */}
       <div className="mt-4">
-        {p && regalo.productId ? (
+        {p && regalo.productId && grupal ? (
+          // M23 · un cupo grupal va DIRECTO al checkout: no hay día ni hora que
+          // elegir, y la página intermedia de `/reservar/<id>` no tenía salida
+          // útil. ⚠️ `<a>` y no `Link`, por la regla de oro 13: el checkout
+          // vive en el grupo `(checkout)`, así que esto SÍ cruza de grupo de
+          // rutas, y un `redirect()` de su guarda dejaría la pantalla en blanco.
+          <Button
+            asChild
+            className="h-11 w-full rounded-[8px] px-5 text-[14px] font-semibold sm:h-[38px] sm:w-auto sm:text-[13px]"
+          >
+            <a href={`/reservar/${regalo.productId}/checkout`}>
+              Inscribirme en la clase
+            </a>
+          </Button>
+        ) : p && regalo.productId ? (
           // El camino NORMAL de reserva de esa mentoría: calendario del tutor y
           // después el checkout, donde el selector le ofrece este regalo. Es un
           // enlace dentro de `(app)` —de `/reservas` a `/reservar/<id>`, los dos
@@ -542,13 +592,11 @@ function cerrado(r: RegaloRecibido): {
   fecha: string | null;
   verbo: string;
 } {
+  // Q2 · un cupo de clase grupal no se agenda: se inscribe.
   if (r.status === "consumed")
-    return {
-      label: "Ya agendado",
-      tone: "green",
-      fecha: r.consumedAt,
-      verbo: "Agendado el",
-    };
+    return r.producto?.grupal
+      ? { label: "Ya inscrito", tone: "green", fecha: r.consumedAt, verbo: "Inscrito el" }
+      : { label: "Ya agendado", tone: "green", fecha: r.consumedAt, verbo: "Agendado el" };
   if (r.status === "refunded")
     return { label: "Devuelto", tone: "neutral", fecha: null, verbo: "" };
   if (r.status === "revoked")

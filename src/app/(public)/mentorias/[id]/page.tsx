@@ -11,6 +11,7 @@ import {
   EyeIcon,
   GlobeIcon,
   StarIcon,
+  UsersIcon,
   VideoIcon,
   ZapIcon,
 } from "lucide-react";
@@ -25,7 +26,8 @@ import { tutorResponseTime } from "@/components/chat/conversations";
 import { responseTimeLabel } from "@/components/chat/types";
 import { Container } from "@/components/layout/container";
 import { BookingPanel } from "@/components/catalog/booking-panel";
-import { hrefRegalar } from "@/components/catalog/regalo-links";
+import { GrupalReservaPanel } from "@/components/catalog/grupal-reserva-panel";
+import { hrefRegalar, hrefReservar } from "@/components/catalog/regalo-links";
 import { CancellationPolicy } from "@/components/catalog/cancellation-policy";
 import { ProductCard } from "@/components/catalog/product-card";
 import { ProductCover } from "@/components/catalog/product-cover";
@@ -125,15 +127,24 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }) {
   const id = await productIdFrom((await params).id);
-  const product = id ? await getProductDetail(id) : null;
+  const base = id ? await getProductDetail(id) : null;
+  // RG-01 (24-oct) · una clase grupal NACIDA se presenta con la ficha de su
+  // plantilla (ver la nota de `ProductPage`).
+  const product = base?.groupTemplateId
+    ? ((await getProductDetail(base.groupTemplateId)) ?? base)
+    : base;
   if (!product) return { title: "Mentoría" };
+  // P35 · decide el modelo, no que queden fechas.
+  const esGrupal = product.pricingModel === "group";
 
   // §5.6 · la descripción de Google y de la vista previa de WhatsApp es el
   // `outcome` —la promesa que escribió el tutor—, no el título repetido. Sin
   // `outcome` se cae a una frase de plataforma en vez de inventarle una.
   const description =
     product.outcome ??
-    `Mentoría 1:1 en vivo con ${product.tutor.displayName ?? "tu tutor"} en Enséñame Ya.`;
+    (esGrupal
+      ? `Clase grupal en vivo con ${product.tutor.displayName ?? "tu tutor"} en Enséñame Ya.`
+      : `Mentoría 1:1 en vivo con ${product.tutor.displayName ?? "tu tutor"} en Enséñame Ya.`);
   const url = productPath(product);
 
   return {
@@ -141,6 +152,12 @@ export async function generateMetadata({
     description,
     // Relativas: las resuelve el `metadataBase` del layout raíz (§5.6).
     alternates: { canonical: url },
+    // RG-01 (24-oct) · la plantilla grupal siempre admite reservas (la hora la
+    // elige el alumno). Una clase NACIDA no se indexa: es una fecha concreta,
+    // y su canónica ya es la de la plantilla.
+    ...(base?.groupTemplateId
+      ? { robots: { index: false, follow: true } }
+      : {}),
     openGraph: {
       type: "website",
       title: `${product.title} · Enséñame Ya`,
@@ -183,7 +200,7 @@ export default async function ProductPage({
    * botón escribe o abre el alta (§3.4). Va por `getSessionContext()`, que es
    * `getClaims()` + `cache()`, no `auth.getUser()`.
    */
-  const [product, resenas, timeZone, formato, { user, onboardingComplete }] =
+  const [base, resenasBase, timeZone, formato, { user, onboardingComplete }] =
     await Promise.all([
       getProductDetail(id),
       listProductReviews(id),
@@ -192,7 +209,28 @@ export default async function ProductPage({
       getFormatoHora(),
       getSessionContext(),
     ]);
-  if (!product) notFound();
+  if (!base) notFound();
+
+  /**
+   * RG-01 (24-oct) · una clase grupal NACIDA (la que abrió un alumno al elegir
+   * hora) se enseña con la ficha de su PLANTILLA: ahí se elige entre las clases
+   * abiertas o se abre otra. Llegan aquí los enlaces de una reserva, del correo
+   * o del checkout. Sin `redirect()`: a esta página se llega por navegación de
+   * cliente desde otros grupos (regla de oro 13). Solo esta rama, rara, paga el
+   * segundo viaje; si la plantilla ya no está publicada, se queda la nacida.
+   */
+  let product = base;
+  let resenas = resenasBase;
+  if (base.groupTemplateId) {
+    const [tpl, resTpl] = await Promise.all([
+      getProductDetail(base.groupTemplateId),
+      listProductReviews(base.groupTemplateId),
+    ]);
+    if (tpl) {
+      product = tpl;
+      resenas = resTpl;
+    }
+  }
 
   /**
    * Segunda tanda: lo que necesita el id del TUTOR, que solo se sabe después de
@@ -209,8 +247,12 @@ export default async function ProductPage({
     hayResenasPropias
       ? Promise.resolve<Awaited<ReturnType<typeof listTutorReviews>>>([])
       : listTutorReviews(product.tutor.id),
+    // RG-01 (24-oct) · aquí se buscaban la inscripción de quien mira y una 1:1
+    // del tutor para el panel de fechas fijas de la grupal. Ese panel ya no
+    // existe: la grupal se reserva en el selector, que mira lo suyo.
   ]);
 
+  const esGrupal = product.pricingModel === "group";
   const tutorName =
     product.tutor.displayName ?? product.tutor.headline ?? "Tutor";
   // El nombre de pila es el que va en los títulos («Otras mentorías de
@@ -270,7 +312,25 @@ export default async function ProductPage({
    */
   const gruposFaq: { titulo: string; faqs: readonly Faq[] }[] = [
     { titulo: `De ${nombreCorto}, sobre esta mentoría`, faqs: product.faqs },
-    { titulo: "Sobre la plataforma", faqs: PRODUCT_FAQ },
+    {
+      titulo: "Sobre la plataforma",
+      // G2 · la respuesta genérica dice «1 a 1»; en una grupal sería falsa.
+      faqs:
+        product.pricingModel === "group"
+          ? PRODUCT_FAQ.map((f) =>
+              f.a.startsWith("Son sesiones 1 a 1")
+                ? { ...f, a: "Es una clase en grupo, en una sala de video integrada en la plataforma, con el tutor y los demás inscritos. Entras desde tu panel a la hora de cada fecha; no necesitas instalar nada." }
+                : f.q.startsWith("¿Qué pasa si necesito reprogramar")
+                  ? {
+                      q: "¿Puedo cambiar la hora de una fecha?",
+                      // RG-01/RG-11 · la hora la fija quien abre la clase; después
+                      // solo el tutor la mueve.
+                      a: "No: la hora la fija quien abre la clase y vale para todo el grupo. Si el tutor la cambia, te avisamos y puedes cancelar tu cupo con el 100 % de reembolso hasta que empiece la clase, aunque falten menos de 24 horas.",
+                    }
+                  : f,
+            )
+          : PRODUCT_FAQ,
+    },
   ].filter((g) => g.faqs.length > 0);
 
   /**
@@ -295,8 +355,10 @@ export default async function ProductPage({
       "@type": "Offer",
       // El precio va en unidades MAYORES y como cadena: schema.org lo pide así
       // y `price_amount` está en las menores (céntimos).
-      price: (product.priceAmount / 100).toFixed(2),
+      // P30 · en una grupal, el cupo (`priceDisplay`) y su disponibilidad real.
+      price: ((esGrupal ? precio.amountMinor : product.priceAmount) / 100).toFixed(2),
       priceCurrency: product.currency,
+      // RG-01 (24-oct) · la grupal se reserva como una 1:1: siempre a la venta.
       availability: "https://schema.org/InStock",
     },
     ...(product.sessionDurationMin
@@ -638,7 +700,15 @@ export default async function ProductPage({
                           naranja oscuro no es el `primary` de marca: a 12 px
                           sobre blanco el #fe6a00 se queda en 2,4:1 y esto es
                           texto, no un botón. */}
-                      {product.autoAccept ? (
+                      {esGrupal ? (
+                        // P35 · una grupal no se confirma: se presenta como lo que es.
+                        <li className={chip}>
+                          <UsersIcon className={iconoChip} aria-hidden />
+                          {product.capacity
+                            ? `Clase grupal · máx. ${product.capacity}`
+                            : "Clase grupal"}
+                        </li>
+                      ) : product.autoAccept ? (
                         <li
                           className={`${chip} border-[#ffd7bd] bg-[#fff4ec] font-semibold text-[#c4470a]`}
                         >
@@ -707,14 +777,14 @@ export default async function ProductPage({
                         </span>
                       ) : null}
                       <span
-                        title="Clase en vivo, 1 a 1"
+                        title={esGrupal ? "Clase en vivo, en grupo" : "Clase en vivo, 1 a 1"}
                         className="inline-flex items-center gap-1.5 whitespace-nowrap"
                       >
                         <VideoIcon
                           className="size-3.5 shrink-0 lg:size-4"
                           aria-hidden
                         />
-                        1 a 1
+                        {esGrupal ? "Grupal" : "1 a 1"}
                       </span>
                     </p>
                   </div>
@@ -843,7 +913,16 @@ export default async function ProductPage({
                 <section>
                   <h2 className={h2}>Cómo funciona</h2>
                   <div className="mt-4 flex flex-col gap-2 lg:grid lg:grid-cols-3 lg:gap-3.5">
-                    {[
+                    {(esGrupal
+                      ? // RG-01 (24-oct) · se elige hora como en una 1:1, o se suma
+                        // a una clase ya abierta; no confirma nadie (RG-07).
+                        [
+                          { k: "1", titulo: "Eliges horario o te sumas a una clase", zap: false },
+                          // P52 · sin rayo: aquí no hay confirmación que destacar.
+                          { k: "2", titulo: "Tu cupo queda al pagar", zap: false },
+                          { k: "3", titulo: "Entras a la sala con el grupo", zap: false },
+                        ]
+                      : [
                       { k: "1", titulo: "Eliges día y hora", zap: false },
                       product.autoAccept
                         ? {
@@ -857,7 +936,7 @@ export default async function ProductPage({
                             zap: false,
                           },
                       { k: "3", titulo: "Entras desde tu panel", zap: false },
-                    ].map((paso) => (
+                    ]).map((paso) => (
                       <div
                         key={paso.k}
                         className="flex items-center gap-3 rounded-[14px] border border-[#e6e6e6] px-3.5 py-3 lg:gap-3.5 lg:px-4 lg:py-[18px]"
@@ -916,6 +995,24 @@ export default async function ProductPage({
                   `mb-3.5` es la separación con el panel. */}
               <div aria-hidden className="mb-3.5 aspect-video max-lg:hidden" />
 
+              {product.pricingModel === "group" ? (
+                <GrupalReservaPanel
+                  product={product}
+                  esMia={esMiMentoria}
+                  reservarHref={hrefReservar(product.id, { user, onboardingComplete })}
+                  footer={
+                    <CancellationPolicy
+                      variant="folded"
+                      className="mt-3"
+                      grupal={{
+                        ciclo: (product.packageNumSessions ?? 1) > 1,
+                        // B7 · el mínimo se evalúa una vez, 24 h antes.
+                        minimo: !!product.minSeats,
+                      }}
+                    />
+                  }
+                />
+              ) : (
               <BookingPanel
                 products={[product]}
                 selectedDay={sp.d}
@@ -962,6 +1059,7 @@ export default async function ProductPage({
                   <CancellationPolicy variant="folded" className="mt-3" />
                 }
               />
+              )}
             </div>
 
             {/* Fila 3 · lo que se lee DESPUÉS de decidir. En móvil va detrás del

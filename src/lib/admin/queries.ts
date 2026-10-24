@@ -755,6 +755,8 @@ const CSV_TECHO = 20_000;
 
 export type BookingCsvRow = BookingListRow & {
   bookingRef: string | null;
+  /** G4 · «Grupal» o «1:1»: el CSV separa los ingresos de las clases grupales. */
+  tipo: string;
   numSessions: number;
   sessionDurationMin: number;
   subtotalAmount: number;
@@ -780,7 +782,7 @@ export async function allBookingsForCsv(f: {
     let q = supabase
       .from("bookings")
       .select(
-        "id, booking_ref, status, currency, total_amount, subtotal_amount, num_sessions, session_duration_min, tier_split_pct, created_at, completed_at, cancelled_at, cancel_reason, payer_country, payee_country, products(title), student:profiles!bookings_student_id_fkey(full_name), tutor:profiles!bookings_tutor_id_fkey(full_name)",
+        "id, booking_ref, status, currency, total_amount, subtotal_amount, num_sessions, session_duration_min, tier_split_pct, created_at, completed_at, cancelled_at, cancel_reason, payer_country, payee_country, pricing_model, products(title), student:profiles!bookings_student_id_fkey(full_name), tutor:profiles!bookings_tutor_id_fkey(full_name)",
       );
     if (status) q = q.eq("status", status);
     if (fromInclusive) q = q.gte("created_at", fromInclusive);
@@ -799,6 +801,7 @@ export async function allBookingsForCsv(f: {
       filas.push({
         id: b.id,
         bookingRef: b.booking_ref,
+        tipo: b.pricing_model === "group" ? "Grupal" : "1:1",
         status: b.status,
         currency: b.currency,
         totalAmount: b.total_amount,
@@ -823,6 +826,8 @@ export async function allBookingsForCsv(f: {
 }
 
 export type PaymentCsvRow = PaymentListRow & {
+  /** G4 · «Grupal» o «1:1», de la reserva. */
+  tipo: string;
   serviceFeePct: number;
   tierSplitPct: number;
   creditAmount: number;
@@ -849,7 +854,7 @@ export async function allPaymentsForCsv(
     let q = supabase
       .from("payments")
       .select(
-        "id, booking_id, status, currency, gross_amount, credit_amount, platform_fee_amount, tutor_net_amount, service_fee_amount, service_fee_pct, tier_split_pct, refunded_amount, provider, provider_payment_id, payer_country, payee_country, created_at, paid_at, failed_at, bookings(products(title), student:profiles!bookings_student_id_fkey(full_name), tutor:profiles!bookings_tutor_id_fkey(full_name))",
+        "id, booking_id, status, currency, gross_amount, credit_amount, platform_fee_amount, tutor_net_amount, service_fee_amount, service_fee_pct, tier_split_pct, refunded_amount, provider, provider_payment_id, payer_country, payee_country, created_at, paid_at, failed_at, bookings(pricing_model, products(title), student:profiles!bookings_student_id_fkey(full_name), tutor:profiles!bookings_tutor_id_fkey(full_name))",
       );
     if (status) q = q.eq("status", status);
     if (f.provider) q = q.eq("provider", f.provider);
@@ -875,6 +880,7 @@ export async function allPaymentsForCsv(
         platformFeeAmount: p.platform_fee_amount,
         tutorNetAmount: p.tutor_net_amount,
         serviceFeeAmount: p.service_fee_amount,
+        tipo: p.bookings?.pricing_model === "group" ? "Grupal" : "1:1",
         serviceFeePct: p.service_fee_pct,
         tierSplitPct: p.tier_split_pct,
         refundedAmount: p.refunded_amount,

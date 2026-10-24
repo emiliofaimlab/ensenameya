@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 import { VideoIcon } from "lucide-react";
 
@@ -40,6 +40,8 @@ export function RecordingConsent({
   userId,
   marcado,
   onChange,
+  grupal,
+  sustantivo,
 }: {
   sessionId: string;
   userId: string;
@@ -47,8 +49,17 @@ export function RecordingConsent({
   marcado: boolean;
   /** Avisa al padre, que es quien habilita el botón de entrar. */
   onChange: (marcado: boolean) => void;
+  /** G3 · en una grupal la grabación la ven todos los inscritos (RG-12). */
+  grupal?: boolean;
+  /** P43 · «clase» en una grupal, «mentoría» en 1:1: lo decide la sala. */
+  sustantivo: string;
 }) {
   const [busy, setBusy] = useState(false);
+  // P15 · la casilla se nombra con la frase entera (y se describe con el
+  // aviso de abajo): sin esto el lector de pantalla leía «on».
+  const id = useId();
+  const textoId = `${id}-texto`;
+  const avisoId = `${id}-aviso`;
 
   async function toggle(next: boolean) {
     setBusy(true);
@@ -75,11 +86,13 @@ export function RecordingConsent({
     <div className="rounded-lg border p-4 text-left">
       <p className="flex items-center gap-1.5 text-sm font-medium">
         <VideoIcon className="size-4 text-muted-foreground" />
-        Esta mentoría se graba
+        Esta {sustantivo} se graba
       </p>
       <p className="mt-1 text-xs text-muted-foreground">
-        La sesión queda grabada de principio a fin. La grabación está disponible
-        para ti y para la otra persona durante 30 días, y después se borra.
+        La sesión queda grabada de principio a fin. La grabación está disponible{" "}
+        {grupal
+          ? "para el tutor y todos los inscritos de la clase durante 30 días, y después se borra."
+          : "para ti y para la otra persona durante 30 días, y después se borra."}
       </p>
       <label className="mt-3 flex items-start gap-2.5 text-sm">
         <input
@@ -87,13 +100,15 @@ export function RecordingConsent({
           checked={marcado}
           disabled={busy}
           onChange={(e) => toggle(e.target.checked)}
+          aria-labelledby={textoId}
+          aria-describedby={!marcado ? avisoId : undefined}
           className="mt-0.5 size-[18px] shrink-0 rounded-[5px] border-input accent-primary"
         />
         {/* El texto de la casilla es lo que se acepta, así que dice
             exactamente eso y no «acepto que se grabe»: no hay nada que
             aceptar, la grabación no depende de esta casilla. */}
-        <span>
-          Entiendo que esta mentoría será grabada y acepto los{" "}
+        <span id={textoId}>
+          Entiendo que esta {sustantivo} será grabada y acepto los{" "}
           <a
             href="/terms"
             target="_blank"
@@ -108,7 +123,7 @@ export function RecordingConsent({
       {!marcado ? (
         // El «por qué no puedo entrar» pegado a la casilla y no junto al botón:
         // el botón está deshabilitado, así que no puede explicarse solo.
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p id={avisoId} className="mt-2 text-xs text-muted-foreground">
           Marca la casilla para poder entrar a la sala.
         </p>
       ) : null}

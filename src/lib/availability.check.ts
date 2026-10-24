@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { horasSemana, seSolapan, huecosDeFranja, type Rule } from "./availability.ts";
+import { horasSemana, seSolapan, huecosDeFranja, paredAUtc, type Rule } from "./availability.ts";
 
 /**
  * Comprobación del contador de horas del tutor. Sin framework:
@@ -119,6 +119,18 @@ assert.equal(seSolapan({ start_time: "09:00", end_time: "10:00" }, a), true);
 assert.equal(huecosDeFranja({ start_time: "08:00:00", end_time: "17:00:00" }, 60, null), 9);
 assert.equal(huecosDeFranja({ start_time: "09:00:00", end_time: "10:00:00" }, 90, null), 0);
 
+// ── paredAUtc · la hora que teclea el tutor, en SU zona ─────────────────────
+// Caracas no tiene horario de verano (UTC−4 todo el año).
+assert.equal(paredAUtc("2026-10-20", "18:00", "America/Caracas"), "2026-10-20T22:00:00.000Z");
+// Madrid en verano (UTC+2) y en invierno (UTC+1): el desfase lo decide la FECHA.
+assert.equal(paredAUtc("2026-07-01", "10:00", "Europe/Madrid"), "2026-07-01T08:00:00.000Z");
+assert.equal(paredAUtc("2026-12-01", "10:00", "Europe/Madrid"), "2026-12-01T09:00:00.000Z");
+// El día del cambio a horario de invierno (25-oct-2026, a las 3:00 vuelve a las 2:00).
+assert.equal(paredAUtc("2026-10-25", "12:00", "Europe/Madrid"), "2026-10-25T11:00:00.000Z");
+// Medianoche en una zona por detrás de UTC: cambia de día al pasar a UTC.
+assert.equal(paredAUtc("2026-11-03", "23:30", "America/Mexico_City"), "2026-11-04T05:30:00.000Z");
+assert.equal(paredAUtc("2026-11-03", "08:00", "UTC"), "2026-11-03T08:00:00.000Z");
+
 console.log(
-  "✓ availability: día vacío, duplicado exacto, solape parcial, franja pausada, semana por día y solapes",
+  "✓ availability: día vacío, duplicado exacto, solape parcial, franja pausada, semana por día, solapes y hora de pared → UTC",
 );

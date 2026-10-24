@@ -391,7 +391,9 @@ export default async function TutorPayoutsPage({
     supabase
       .from("payout_items")
       .select(
-        "payout_id, amount, payments(bookings(booking_ref, products(title)))",
+        // A4 · `pricing_model` y `product_id` para juntar los cupos de una
+        // misma clase grupal en una sola línea (ver `reservasPorPayout`).
+        "payout_id, amount, payments(bookings(booking_ref, pricing_model, product_id, products(title)))",
       ),
     // 🔑 `rielesDelPais`: lo que se puede hacer por ESTE país, preguntándoselo
     // al enrutador. Va DENTRO del `Promise.all` desde que el país lo trae la
@@ -812,8 +814,25 @@ export default async function TutorPayoutsPage({
     { ref: string; titulo: string; amount: number }[]
   >();
   if (!errorItems) {
+    // A4 · los cupos de una misma clase grupal dentro de un payout van en UNA
+    // línea («Clase grupal · título · 3 cupos») con la suma: seis líneas con
+    // el mismo título no dejaban ver cuánto dejó la clase. Por eso el contador
+    // del `<summary>` cuenta líneas y no reservas: una clase cuenta 1.
+    const grupalDe = new Map<string, { titulo: string; amount: number; n: number }>();
     for (const it of itemsData ?? []) {
       const booking = it.payments?.bookings;
+      if (booking?.pricing_model === "group" && booking.product_id) {
+        const clave = `${it.payout_id}:${booking.product_id}`;
+        const g = grupalDe.get(clave) ?? {
+          titulo: booking.products?.title ?? "Clase grupal",
+          amount: 0,
+          n: 0,
+        };
+        g.amount += it.amount;
+        g.n += 1;
+        grupalDe.set(clave, g);
+        continue;
+      }
       const lista = reservasPorPayout.get(it.payout_id) ?? [];
       lista.push({
         // Sin `booking_ref` (las reservas viejas no lo tienen) se cae al guion:
@@ -824,6 +843,17 @@ export default async function TutorPayoutsPage({
         amount: it.amount,
       });
       reservasPorPayout.set(it.payout_id, lista);
+    }
+    for (const [clave, g] of grupalDe) {
+      const payoutId = clave.slice(0, clave.indexOf(":"));
+      const lista = reservasPorPayout.get(payoutId) ?? [];
+      lista.push({
+        // Una línea son varias reservas: ningún `booking_ref` la identifica.
+        ref: "—",
+        titulo: `Clase grupal · ${g.titulo} · ${g.n} ${g.n === 1 ? "cupo" : "cupos"}`,
+        amount: g.amount,
+      });
+      reservasPorPayout.set(payoutId, lista);
     }
   }
 
@@ -1399,9 +1429,9 @@ export default async function TutorPayoutsPage({
                               </span>
                             </summary>
                             <ul className="mt-2 grid gap-1.5">
-                              {reservas.map((r) => (
+                              {reservas.map((r, i) => (
                                 <li
-                                  key={`${p.id}-${r.ref}-${r.amount}`}
+                                  key={`${p.id}-${r.ref}-${r.amount}-${i}`}
                                   className="text-[12.5px] leading-[1.45] text-[#4d4d4d]"
                                 >
                                   <span className="font-semibold tabular-nums text-[#19191f]">

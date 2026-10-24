@@ -215,8 +215,8 @@ export type QuienEjecuta = "proveedor" | "persona";
  *
  * Hasta hoy esto era `"banco" | "manual"`, dos valores que mezclaban dos
  * preguntas distintas y que funcionaban por accidente porque solo había dos
- * rieles. Con los de la decisión del 3-sep ya no: **PayPal y Airtm son
- * AUTOMÁTICOS y piden un identificador, no coordenadas bancarias.** Con una
+ * rieles. Con los de la decisión del 3-sep ya no: **PayPal es
+ * AUTOMÁTICO y pide un identificador, no coordenadas bancarias.** Con una
  * sola dimensión no hay dónde ponerlos sin mentir.
  *
  * Las dos preguntas son independientes y cada consumidor necesita UNA:

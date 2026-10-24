@@ -62,6 +62,10 @@ export function priceLabel(p: {
       return `${money} / hora`;
     case "per_package":
       return `${money}${p.packageNumSessions ? ` · ${p.packageNumSessions} sesiones` : ""}`;
+    case "group":
+      // RG-02: precio fijo por cupo. P24 · en un ciclo el cupo cubre las N
+      // fechas, y eso se dice (aquí no llega `grupal`: N es el del producto).
+      return `${money} / cupo${(p.packageNumSessions ?? 1) > 1 ? ` · ${p.packageNumSessions} fechas` : ""}`;
   }
 }
 
@@ -78,6 +82,9 @@ export function modelLabel(p: {
       return "Por hora";
     case "per_package":
       return `Paquete · ${p.packageNumSessions ?? 1} sesiones`;
+    case "group":
+      // RG-16: con varias fechas es un ciclo; package_num_sessions = nº de fechas.
+      return (p.packageNumSessions ?? 1) > 1 ? `Grupal · ${p.packageNumSessions} fechas` : "Grupal";
   }
 }
 
@@ -115,9 +122,11 @@ export function perSessionLabel(p: {
 export function sessionsLabel(p: {
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
+  /** Solo grupal: cuenta las fechas que quedan, no las publicadas (B2). */
+  grupal?: { fechas: unknown[] } | null;
 }): string | null {
   if (!p.sessionDurationMin) return null;
-  return `${p.packageNumSessions ?? 1} × ${p.sessionDurationMin} min`;
+  return `${p.grupal?.fechas.length || p.packageNumSessions || 1} × ${p.sessionDurationMin} min`;
 }
 
 /** Conectores: sin filtrarlos, "Profesora de Matemáticas" daba "PD". */
@@ -216,12 +225,16 @@ export function priceDisplay(p: {
   currency: string;
   sessionDurationMin: number | null;
   packageNumSessions: number | null;
+  /** Solo grupal: con sus fechas vivas, el precio sale prorrateado (B2). */
+  grupal?: { fechas: unknown[] } | null;
 }): PriceDisplay {
   if (esGratis(p.priceAmount)) {
     // EY-219 · la cifra grande dice «Gratis» y la nota se queda con el modelo
     // («por sesión», «paquete · 6 sesiones»), nunca con «$0,00 / hora»: la
     // línea pequeña no puede reintroducir el cero que la grande quitó.
     const n = p.packageNumSessions ?? 1;
+    // P24 · una grupal gratis decía «por sesión». Mismo N que la rama pagada.
+    const nGrupal = p.grupal?.fechas.length || p.packageNumSessions || 1;
     return {
       amount: GRATIS,
       amountMinor: 0,
@@ -232,7 +245,11 @@ export function priceDisplay(p: {
             : "paquete"
           : p.pricingModel === "per_hour"
             ? "por hora"
-            : "por sesión",
+            : p.pricingModel === "group"
+              ? nGrupal > 1
+                ? `por cupo · ${nGrupal} fechas`
+                : "por cupo"
+              : "por sesión",
       isTotal: true,
     };
   }
@@ -264,9 +281,27 @@ export function priceDisplay(p: {
         isTotal: true,
       };
     }
-    // ponytail: un modelo que este código no conoce (p.ej. `group` de la rama de
-    // grupales, ya presente en la BD de dev) pinta la tarifa en vez de tumbar
-    // el catálogo entero con un `undefined.amountMinor`.
+    case "group": {
+      // RG-02: el cupo es el total del alumno, también en un ciclo (RG-16).
+      // B2 · si el tutor canceló fechas antes de empezar, el que cobra
+      // `create_booking_line` (y anuncia el checkout): solo las que quedan.
+      const cupo = bookingTotal(p, p.grupal?.fechas.length);
+      // P24 · «20 US$ por cupo» no decía que cubre dos fechas ni cuánto sale
+      // cada una: en un ciclo la nota lo cuenta, como el paquete.
+      const n = p.grupal?.fechas.length || p.packageNumSessions || 1;
+      return {
+        amount: formatMoney(cupo, p.currency),
+        amountMinor: cupo,
+        note:
+          n > 1
+            ? `por cupo · ${n} fechas (${formatMoney(Math.round(cupo / n), p.currency)} c/u)`
+            : "por cupo",
+        isTotal: true,
+      };
+    }
+    // ponytail: un modelo que este código no conoce (p.ej. uno que llegue a la
+    // BD antes que su código) pinta la tarifa en vez de tumbar el catálogo
+    // entero con un `undefined.amountMinor`.
     default:
       return { amount: tarifa, amountMinor: p.priceAmount, note: "", isTotal: true };
   }
@@ -281,6 +316,8 @@ export function priceUnitLabel(p: { pricingModel: PricingModel }): string {
       return "hora";
     case "per_package":
       return "paquete";
+    case "group":
+      return "cupo";
   }
 }
 

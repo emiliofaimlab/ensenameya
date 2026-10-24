@@ -85,6 +85,12 @@ export function DatosInvitado({
   const idCampo = (base: string) => `${base}-${uid}`;
 
   const [modo, setModo] = useState<"alta" | "login">("alta");
+  /**
+   * M22 · la persona ELIGIÓ entrar con su cuenta (no se lo dedujo un fallo).
+   * Así escribir el correo no deshace la elección, y el botón es el correcto
+   * sin que la pantalla revele si ese correo existe (S-40).
+   */
+  const [loginElegido, setLoginElegido] = useState(false);
   const [loading, setLoading] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -217,7 +223,9 @@ export function DatosInvitado({
     <div className={className}>
       <p className="text-[13px] leading-relaxed text-[#6b6b6b]">
         {modo === "login"
-          ? "Si ya tienes cuenta con ese correo, escribe tu contraseña para continuar con la compra."
+          ? loginElegido
+            ? "Entra con tu cuenta para continuar con la compra."
+            : "Si ya tienes cuenta con ese correo, escribe tu contraseña para continuar con la compra."
           : "Creamos tu cuenta con estos datos para poder reservar tu horario y enviarte la confirmación."}
       </p>
 
@@ -236,9 +244,10 @@ export function DatosInvitado({
             autoComplete="email"
             required
             // Cambiar el correo deshace el modo login: la contraseña que se
-            // pida a partir de ahora ya no es la de esa otra cuenta.
+            // pida a partir de ahora ya no es la de esa otra cuenta. Salvo si
+            // el login lo eligió la persona (M22): ahí está tecleando el suyo.
             onChange={() => {
-              if (modo === "login") setModo("alta");
+              if (modo === "login" && !loginElegido) setModo("alta");
               if (errores.email) setErrores((p) => ({ ...p, email: undefined }));
             }}
             aria-invalid={Boolean(errores.email)}
@@ -371,6 +380,27 @@ export function DatosInvitado({
               ? "Iniciar sesión y continuar"
               : etiqueta}
         </Button>
+
+        {/* M22 · la salida explícita para quien ya tiene cuenta. */}
+        <button
+          type="button"
+          onClick={() => {
+            setErrores({});
+            if (modo === "alta") {
+              setModo("login");
+              setLoginElegido(true);
+              document.getElementById(idCampo("password"))?.focus();
+            } else {
+              setModo("alta");
+              setLoginElegido(false);
+            }
+          }}
+          className="text-[13px] text-brand hover:underline"
+        >
+          {modo === "alta"
+            ? "¿Ya tienes cuenta? Inicia sesión"
+            : "¿No tienes cuenta? Créala aquí"}
+        </button>
       </form>
     </div>
   );

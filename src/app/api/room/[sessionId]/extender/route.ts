@@ -8,7 +8,8 @@ import {
 } from "@/lib/daily";
 
 /**
- * EY-232 — el tutor extiende la clase 5 minutos (una vez, gratis).
+ * EY-232 — el tutor extiende la clase 5, 10 o 20 minutos (una vez, gratis).
+ * Los minutos llegan en el cuerpo (`{ minutos }`); la RPC los valida.
  *
  * `extend_session` AUTORIZA y mueve `end_at` (el trigger recalcula
  * `access_closes_at`). Lo que la BD no puede hacer es avisar a Daily: la sala
@@ -17,14 +18,16 @@ import {
  * ruta. Los navegadores se enteran del nuevo fin por Realtime (`live-room.tsx`).
  */
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   const { sessionId } = await params;
   const supabase = await createClient();
 
+  const { minutos } = (await req.json().catch(() => ({}))) as { minutos?: unknown };
   const { data, error } = await supabase.rpc("extend_session", {
     p_session_id: sessionId,
+    p_minutos: typeof minutos === "number" ? minutos : 5,
   });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 409 });
@@ -52,7 +55,7 @@ export async function POST(
       );
     } catch (e) {
       // La BD ya se movió: la clase no se cierra antes por el cron, pero la
-      // sala sí. Se dice, para que el tutor no crea que tiene 5 minutos más.
+      // sala sí. Se dice, para que el tutor no crea que tiene minutos de más.
       console.error("[room/extender] Daily falló:", e);
       return NextResponse.json(
         { error: "No pudimos alargar la sala de video." },

@@ -72,6 +72,14 @@ export type Conversation = {
   bookingId: string | null;
   /** Título de la mentoría de esa reserva, para la línea pequeña. */
   productTitle: string | null;
+  /**
+   * Lote 3 (B3/B4) · hilo de par o chat de una clase grupal. En un hilo de
+   * grupo `counterpart` es el título de la clase y no una persona: la burbuja
+   * lo pinta distinto y pide los miembros con `inscritos_de_clase`.
+   */
+  kind: "pair" | "group";
+  /** La clase grupal del hilo (`group_product_id`); `null` en los de par. */
+  groupProductId: string | null;
 };
 
 /**
@@ -105,6 +113,9 @@ export function toConversation(r: ConversationRow): Conversation {
     blocked: r.blocked_at !== null,
     bookingId: r.last_booking_id,
     productTitle: r.last_product_title,
+    // Sin `kind` (RPC anterior al lote 3) todo era par.
+    kind: r.kind ?? "pair",
+    groupProductId: r.group_product_id ?? null,
   };
 }
 

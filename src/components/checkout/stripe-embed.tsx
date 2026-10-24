@@ -13,7 +13,12 @@ import {
 } from "@stripe/react-stripe-js/checkout";
 
 /** Lo que devuelve `/api/pagos/checkout` para montar el formulario. */
-export type Embed = { clientSecret: string; publishableKey: string };
+export type Embed = {
+  clientSecret: string;
+  publishableKey: string;
+  /** P50 · país del pagador (ISO-2), para prellenar. */
+  pais?: string | null;
+};
 
 /**
  * MN-01 · SOLO LOS CAMPOS DE LA TARJETA, Y POR QUÉ HUBO QUE CAMBIAR DE MODO.
@@ -153,7 +158,7 @@ function Formulario() {
   );
 }
 
-export function StripeEmbed({ clientSecret, publishableKey }: Embed) {
+export function StripeEmbed({ clientSecret, publishableKey, pais }: Embed) {
   // La promesa de `loadStripe` se crea UNA vez (inicializador perezoso del
   // estado): rehacerla en cada render remonta el formulario y se pierde lo
   // escrito.
@@ -185,7 +190,20 @@ export function StripeEmbed({ clientSecret, publishableKey }: Embed) {
     <CheckoutFormProvider
       key={clientSecret}
       stripe={stripe}
-      options={{ clientSecret, appearance }}
+      // P50 · sin esto el país salía «Noruega» (geolocalización de Stripe).
+      //
+      // ⚠️ EL CORREO NO SE PRELLENA, y no es un olvido: la Session siempre nace
+      // con `customer` (`stripe-provider.ts`), que ya lleva el correo, y Stripe
+      // rechaza `defaultValues.email` encima de eso —«You cannot update the
+      // email because a customer… is already set»— y el formulario NO SE PINTA.
+      // Lo metió P50 el 17-oct y tumbó todo pago con tarjeta por Stripe.
+      options={{
+        clientSecret,
+        appearance,
+        defaultValues: {
+          ...(pais ? { billingAddress: { address: { country: pais } } } : {}),
+        },
+      }}
     >
       {/*
         El tope de ancho vive AQUÍ, en el componente compartido, y no en cada

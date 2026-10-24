@@ -36,6 +36,7 @@ export function ChangeSlotLink({
   slots,
   etiqueta,
   className,
+  destino: destinoForzado,
 }: {
   productId: string;
   /**
@@ -56,6 +57,8 @@ export function ChangeSlotLink({
   slots: string[];
   etiqueta: string;
   className?: string;
+  /** G2 · una grupal no tiene selector: se vuelve a su ficha, con o sin cuenta. */
+  destino?: string;
 }) {
   const router = useRouter();
   const [soltando, setSoltando] = useState(false);
@@ -68,7 +71,8 @@ export function ChangeSlotLink({
    * perdida por el camino. Sin cuenta se vuelve a la ficha pública, que es de
    * donde salió y donde puede elegir otra hora.
    */
-  const destino = studentId ? `/reservar/${productId}` : `/mentorias/${productId}`;
+  const destino =
+    destinoForzado ?? (studentId ? `/reservar/${productId}` : `/mentorias/${productId}`);
 
   async function salir(e: React.MouseEvent<HTMLAnchorElement>) {
     // Sigue siendo un enlace de verdad: con ctrl/cmd/mayús o el botón central

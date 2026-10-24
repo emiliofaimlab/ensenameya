@@ -10,6 +10,7 @@ import {
   ClockIcon,
   GlobeIcon,
   StarIcon,
+  UsersIcon,
 } from "lucide-react";
 
 import {
@@ -35,6 +36,7 @@ import {
 import {
   getTutorDetail,
   listTutorReviews,
+  productPath,
   tutorIdFrom,
   tutorPath,
 } from "@/lib/catalog/queries";
@@ -195,6 +197,13 @@ export default async function TutorProfilePage({
   ]);
   if (!data) notFound();
   const { tutor, products } = data;
+  // G2 · el panel de reserva solo lleva las 1:1: una grupal se reserva en su
+  // propio selector (RG-01, 24-oct: clases abiertas + horarios libres). M10 ·
+  // si el tutor SOLO da grupales, ese panel decía «Este tutor aún no tiene
+  // mentorías disponibles para reservar»: en su lugar van sus clases grupales.
+  // Son PLANTILLAS (`getTutorDetail` no trae las clases nacidas).
+  const unoAUno = products.filter((p) => p.pricingModel !== "group");
+  const grupales = products.filter((p) => p.pricingModel === "group");
 
   const respuesta = responseTimeLabel(respuestaMin);
   // Escribirse a uno mismo no es una conversación (la RPC lo rechaza igual;
@@ -646,7 +655,10 @@ export default async function TutorProfilePage({
                       className="inline-flex h-[46px] min-w-0 grow-[1.25] basis-0 items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary px-2.5 text-xs font-semibold whitespace-nowrap text-white shadow-[0_6px_18px_rgb(0_0_0/0.18)] lg:hidden"
                     >
                       <CalendarIcon className="size-4 shrink-0" aria-hidden />
-                      Reserva con {nombreCorto}
+                      {/* Q3 · si solo da grupales, #reservar enseña sus clases (M10). */}
+                      {unoAUno.length === 0 && grupales.length > 0
+                        ? "Ver sus clases"
+                        : `Reserva con ${nombreCorto}`}
                     </a>
 
                     {esMiFicha ? null : (
@@ -951,8 +963,46 @@ export default async function TutorProfilePage({
             id="reservar"
             className="max-lg:order-4 max-lg:scroll-mt-44 lg:col-start-2 lg:row-start-1 lg:row-end-3 lg:mt-[69px]"
           >
+            {unoAUno.length === 0 && grupales.length > 0 ? (
+              // M10 · mismo marco que `GrupalPanel`. `Link` sirve: la ficha de
+              // la clase es pública, sin guarda que redirija (regla de oro 13).
+              <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
+                <h2 className="text-lg font-bold text-[#19191f]">
+                  Clases grupales
+                </h2>
+                <ul className="mt-4 flex flex-col gap-3">
+                  {grupales.map((p) => (
+                    <li
+                      key={p.id}
+                      className="rounded-[10px] bg-[#f5f5f5] px-3 py-3"
+                    >
+                      <p className="text-sm font-semibold text-[#19191f]">
+                        {p.title}
+                      </p>
+                      <p className="mt-1 flex items-center gap-2 text-sm text-[#474747]">
+                        <UsersIcon
+                          className="size-4 shrink-0 text-brand"
+                          aria-hidden
+                        />
+                        {(p.packageNumSessions ?? 1) > 1
+                          ? `En grupo · ciclo de ${p.packageNumSessions} fechas`
+                          : "En grupo · eliges el horario"}
+                      </p>
+                      <Link
+                        href={productPath(p)}
+                        className="mt-2 inline-block text-sm font-semibold text-brand underline underline-offset-2"
+                      >
+                        Ver horarios
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </aside>
+            ) : (
             <BookingPanel
-              products={products}
+              // G2 · las grupales no tienen horarios que elegir: salen en la
+              // lista de mentorías con su tarjeta y se inscriben en su ficha.
+              products={unoAUno}
               selectedId={sp.p}
               selectedDay={sp.d}
               selectedTime={sp.h}
@@ -987,6 +1037,7 @@ export default async function TutorProfilePage({
                       hrefRegalar(productId, { user, onboardingComplete })
               }
             />
+            )}
           </div>
         </Container>
       </div>

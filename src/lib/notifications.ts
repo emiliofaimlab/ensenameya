@@ -30,6 +30,16 @@ export type AppNotice = {
   read: boolean;
   /** EY-224 · en qué papel le llega (ver `papelDelAviso`). `null` = de la cuenta. */
   papel: Papel | null;
+  /**
+   * Las filas de `notifications` que representa este aviso. Una sola salvo
+   * después de `agruparAvisos`, que junta varias en una línea: marcarlo leído
+   * tiene que marcarlas TODAS, o el contador no baja.
+   */
+  ids: string[];
+  /** A qué otros avisos se puede juntar (`agruparAvisos`). `null` = va solo. */
+  grupo: string | null;
+  /** Título de la clase grupal, si el payload lo trae: lo usa el texto agrupado. */
+  clase?: string;
 };
 
 /** El papel del destinatario EN ESE AVISO, no su rol de cuenta. */
@@ -64,6 +74,20 @@ const TEXT: Record<string, string> = {
   payment_failed: "Un pago no se pudo cobrar",
   booking_confirmed_student: "Tu reserva quedó confirmada",
   booking_new_tutor: "Tienes una reserva nueva por aceptar",
+  // Grupales · los RESPALDOS: desde el lote 6 el payload trae `clase` (y
+  // `alumno` al tutor) y el texto de verdad lo pone `textoGrupal`. Estos solo
+  // los ve una fila vieja, sin esos campos.
+  group_enrolled_student: "Tu inscripción en la clase grupal quedó confirmada",
+  group_enrolled_tutor: "Alguien se inscribió en tu clase grupal",
+  group_full_tutor: "Tu clase grupal se llenó",
+  group_min_cancelled: "Una clase grupal se canceló por no llegar al mínimo",
+  group_rescheduled: "Cambió la hora de tu clase grupal",
+  group_cancelled: "Se canceló tu clase grupal, una fecha o tu cupo",
+  // NTF-09 grupal · la baja del propio alumno. Antes salía el genérico de 1:1
+  // («se canceló la mentoría… el horario volvió a quedar libre»), que era falso:
+  // la clase sigue (A2).
+  group_left_tutor: "Un alumno se dio de baja de tu clase grupal",
+  group_left_student: "Te diste de baja de una clase grupal",
   cancellation: "Se canceló una reserva",
   refund_processed: "Se procesó un reembolso",
   review_request: "¿Cómo te fue? Deja tu reseña",
@@ -209,6 +233,25 @@ export function rutaFor(
   // sin `para`, caen al alumno, que es lo que hacían antes.
   const alTutor = payload?.para === "tutor";
 
+  // Grupales (Jose, 13-oct) · el aviso grupal al tutor va a SU clase grupal y
+  // no a la reserva de uno de los alumnos. La página es por PRODUCTO, por eso
+  // el payload lleva `product_id` (20261013170000). «Empieza en 15 min» no lo
+  // lleva a propósito: ese sigue yendo a la sala.
+  const productId = payload?.product_id;
+  if (
+    typeof productId === "string" &&
+    ((alTutor && payload?.group_class_id) ||
+      template === "group_enrolled_tutor" ||
+      template === "group_full_tutor" ||
+      template === "group_left_tutor" ||
+      (alTutor && template === "group_min_cancelled") ||
+      // NTF-55 al tutor cuando cancela el admin: sin `booking_id`, así que sin
+      // esta línea caía a `/app`, el panel del ALUMNO.
+      (alTutor && template === "group_cancelled"))
+  ) {
+    return `/tutor/clases-grupales/${productId}`;
+  }
+
   // §14 · reagendar le habla a cualquiera de los dos.
   if (template.startsWith("reschedule_")) {
     const base = alTutor ? "/tutor/reservas" : "/reservas";
@@ -217,7 +260,11 @@ export function rutaFor(
 
   // NTF-07 y NTF-17 · la reserva vista DESDE EL TUTOR, que es otra pantalla y
   // otras acciones (aceptar / rechazar, no pagar / cancelar / reseñar).
-  if (template === "booking_new_tutor" || template === "booking_expiring_tutor") {
+  if (
+    template === "booking_new_tutor" ||
+    template === "booking_expiring_tutor" ||
+    template === "group_enrolled_tutor"
+  ) {
     return typeof bookingId === "string" ? `/tutor/reservas/${bookingId}` : "/tutor/reservas";
   }
 
@@ -277,6 +324,11 @@ export function rutaFor(
  * campana. Mismo filtro (`recipient_id` propio y `FILTRO_AVISOS_VISIBLES`),
  * mismo orden (`created_at desc`) y este mismo límite. Si cambia uno, cambian
  * los tres — si no, la misma cuenta ve una lista u otra según por dónde entre.
+ *
+ * ⚠️ El CONTADOR de no leídos ya NO sale de esta lista (A3): contado sobre los
+ * 8 últimos nunca pasaba de 8 y el «9+» era inalcanzable. Lo trae aparte
+ * `session_bootstrap()` (`notices_unread`) y la campana lo recuenta con un
+ * `count` al abrirse, con el mismo filtro.
  */
 export const NOTICES_LIMIT = 8;
 
@@ -311,6 +363,9 @@ export const FILTRO_AVISOS_VISIBLES = `status.neq.failed,template.not.in.(${PLAN
 const DEL_TUTOR = new Set([
   "booking_new_tutor",
   "booking_expiring_tutor",
+  "group_enrolled_tutor",
+  "group_full_tutor",
+  "group_left_tutor",
   "review_received_tutor",
   "welcome_tutor",
   "payout_paid",
@@ -325,6 +380,10 @@ const DEL_TUTOR = new Set([
 const DEL_ALUMNO = new Set([
   "booking_confirmed_student",
   "booking_pending_student",
+  "group_enrolled_student",
+  "group_rescheduled",
+  "group_cancelled",
+  "group_left_student",
   "payment_receipt",
   "payment_failed",
   "refund_processed",
@@ -398,17 +457,118 @@ function textoPayoutSinLlegar(payload: Record<string, unknown> | null): string |
     : null;
 }
 
+/**
+ * Grupales (A3, P14, P39) · el texto con NOMBRE: la clase y, al tutor, el
+ * alumno —ya enmascarado en SQL, «Elena G.»—. «Alguien se inscribió en tu clase
+ * grupal» tres veces no le dice a la tutora ni quién ni en cuál.
+ *
+ * Sin `clase` en el payload (filas de antes del lote 6) devuelve null y cae al
+ * respaldo de `TEXT`, que es cierto aunque sea vago.
+ */
+function textoGrupal(
+  template: string,
+  payload: Record<string, unknown> | null,
+): string | null {
+  const clase = payload?.clase;
+  if (typeof clase !== "string" || !clase.trim()) return null;
+  const a = payload?.alumno;
+  const alumno = typeof a === "string" && a.trim() ? a : null;
+  switch (template) {
+    case "group_enrolled_tutor":
+      return `${alumno ?? "Alguien"} se inscribió en «${clase}»`;
+    case "group_full_tutor":
+      return `Tu clase grupal «${clase}» se llenó`;
+    case "group_enrolled_student":
+      return `Tu inscripción en «${clase}» quedó confirmada`;
+    case "group_left_tutor": {
+      const inscritos = payload?.inscritos;
+      const cupo = payload?.cupo;
+      const cola =
+        typeof inscritos === "number" && typeof cupo === "number"
+          ? ` · quedan ${inscritos}/${cupo}`
+          : "";
+      return `${alumno ?? "Un alumno"} se dio de baja de «${clase}»${cola}`;
+    }
+    case "group_left_student":
+      return `Te diste de baja de «${clase}»`;
+    case "group_cancelled":
+      // P39 · tres hechos distintos con la misma plantilla: una fecha, la clase
+      // entera (la cancela el tutor o el admin) o solo el cupo de este alumno.
+      if (payload?.fecha) return `Se canceló una fecha de «${clase}»`;
+      if (payload?.alcance === "clase") return `Se canceló la clase «${clase}»`;
+      return `Se canceló tu cupo en «${clase}»`;
+    case "group_min_cancelled":
+      return `Se canceló «${clase}» por no llegar al mínimo`;
+    case "group_rescheduled":
+      return `Cambió la hora de «${clase}»`;
+    default:
+      return null;
+  }
+}
+
 export function toNotice(row: NotificationRow): AppNotice {
+  const productId = row.payload?.product_id;
+  const clase = row.payload?.clase;
   return {
     id: row.id,
     text:
       (row.template === "admin_message" ? textoAdmin(row.payload) : null) ??
       (row.template === "payout_unclaimed" ? textoPayoutSinLlegar(row.payload) : null) ??
+      textoGrupal(row.template, row.payload) ??
       TEXT[row.template] ??
       `Novedad en tu cuenta (${row.type})`,
     href: rutaFor(row.template, row.payload),
     createdAt: row.created_at,
     read: row.read_at !== null,
     papel: papelDelAviso(row.template, row.payload),
+    ids: [row.id],
+    grupo:
+      row.template === "group_enrolled_tutor" && typeof productId === "string"
+        ? `${row.template}:${productId}`
+        : null,
+    ...(typeof clase === "string" && clase.trim() ? { clase } : {}),
   };
+}
+
+/**
+ * A3 · el «Alguien se inscribió en tu clase grupal» TRES VECES. Junta en una
+ * línea las inscripciones a la misma clase: «3 alumnos se inscribieron en «X»».
+ *
+ * Se queda el PRIMERO de cada grupo —la lista viene por `created_at desc`, así
+ * que es el más reciente y conserva su sitio y su fecha— y se le suman los ids
+ * de los demás, para que abrirlo los dé todos por leídos. Solo se junta lo que
+ * está en el mismo estado: una inscripción nueva no se esconde dentro de una
+ * línea ya leída.
+ *
+ * ⚠️ Agrupa dentro de la lista que le den (las 8 de `NOTICES_LIMIT`), no en
+ * toda la tabla: es un resumen de lo visible, no un recuento.
+ */
+export function agruparAvisos(notices: AppNotice[]): AppNotice[] {
+  const out: AppNotice[] = [];
+  const cabeza = new Map<string, number>();
+  for (const n of notices) {
+    if (!n.grupo) {
+      out.push(n);
+      continue;
+    }
+    const clave = `${n.grupo}:${n.read ? "leido" : "nuevo"}`;
+    const i = cabeza.get(clave);
+    if (i === undefined) {
+      cabeza.set(clave, out.length);
+      out.push(n);
+      continue;
+    }
+    const primero = out[i];
+    const ids = [...primero.ids, ...n.ids];
+    const clase = primero.clase ?? n.clase;
+    out[i] = {
+      ...primero,
+      ids,
+      clase,
+      text: clase
+        ? `${ids.length} alumnos se inscribieron en «${clase}»`
+        : `${ids.length} alumnos se inscribieron en tu clase grupal`,
+    };
+  }
+  return out;
 }

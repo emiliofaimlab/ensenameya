@@ -22,6 +22,7 @@ import {
 import { CompartirMentoriaDialog } from "./compartir-mentoria";
 
 type Status = Database["public"]["Enums"]["product_status"];
+type PricingModel = Database["public"]["Enums"]["pricing_model"];
 
 type Action = {
   label: string;
@@ -31,6 +32,8 @@ type Action = {
   done: string;
   needsApproval?: boolean;
   confirm?: string;
+  /** Va en rojo (lo definitivo). Archivar lo es siempre. */
+  destructive?: boolean;
 };
 
 // M3 (Doc 2 §2.6) — transiciones válidas por estado. `archived` es terminal
@@ -82,6 +85,20 @@ const ACTIONS: Record<Status, Action[]> = {
 };
 
 /**
+ * RG-01 (24-oct) · la grupal que aparece aquí es la PLANTILLA: no tiene fechas
+ * ni inscritos propios (los tienen las clases que nacen cuando un alumno elige
+ * hora), así que se publica, pausa y archiva como cualquier mentoría. Pausarla
+ * o archivarla solo impide que se abran clases NUEVAS: las ya nacidas siguen y
+ * se gestionan (cancelar, mover, sacar a alguien) en su ficha,
+ * `/tutor/clases-grupales/<clase>`. El menú propio de M16 (publicar con
+ * fechas, «Cancelar la clase») se retiró con `publicar_clase_grupal`.
+ */
+const DONE_GRUPAL: Partial<Record<Status, string>> = {
+  paused: "Clase pausada. Las clases ya programadas siguen en pie.",
+  archived: "Clase archivada. Las clases ya programadas siguen en pie.",
+};
+
+/**
  * Columnas que viaja una copia. Lista EXPLÍCITA y no un `select("*")`: la tabla
  * tiene `search_vector` (generada, el insert la rechaza), `slug` y `created_at`,
  * y copiar a ciegas rompería el día que alguien añada otra columna calculada.
@@ -97,8 +114,10 @@ const ACTIONS: Record<Status, Action[]> = {
  *     acaba de fallar). Si algún día se borra la vieja al cambiarla, esto tiene
  *     que pasar a copiar el fichero.
  */
+// M16 · `capacity` y `min_seats` también: sin ellos la copia de una grupal
+// violaba el check del cupo y «Duplicar» fallaba. En una 1:1 van nulos.
 const COPIABLES =
-  "title, tutor_id, description, outcome, pricing_model, price_amount, currency, session_duration_min, start_time_increment_min, package_num_sessions, level, language, faqs, requirements, auto_accept_bookings, cancellation_policy, image_path";
+  "title, tutor_id, description, outcome, pricing_model, price_amount, currency, session_duration_min, start_time_increment_min, package_num_sessions, level, language, faqs, requirements, auto_accept_bookings, cancellation_policy, image_path, capacity, min_seats";
 
 /**
  * §2.3 · Las acciones de la tarjeta dejan de ser botones de texto y se meten
@@ -115,6 +134,7 @@ export function ProductStatusActions({
   productId,
   title,
   status,
+  pricingModel,
   isApproved,
   rutaCompartir,
 }: {
@@ -122,6 +142,8 @@ export function ProductStatusActions({
   /** Solo para la etiqueta: con cuatro tarjetas hay cuatro «Más acciones». */
   title: string;
   status: Status;
+  /** RG-01 · en una grupal el aviso dice que las clases ya nacidas siguen. */
+  pricingModel: PricingModel;
   isApproved: boolean;
   /**
    * EY-225 · `/mentorias/<id>` con el `?ref=` del tutor, resuelto en servidor
@@ -133,7 +155,9 @@ export function ProductStatusActions({
   const [busy, setBusy] = useState(false);
   // EY-223 · el diálogo de compartir vive FUERA del menú (ver su cabecera).
   const [compartir, setCompartir] = useState(false);
-  const actions = ACTIONS[status];
+  const actions = ACTIONS[status].map((a) =>
+    pricingModel === "group" && DONE_GRUPAL[a.to] ? { ...a, done: DONE_GRUPAL[a.to]! } : a,
+  );
 
   async function run(a: Action) {
     if (a.needsApproval && !isApproved) {
@@ -303,7 +327,7 @@ export function ProductStatusActions({
                 disabled={busy || blocked}
                 // Archivar y descartar son definitivos: van en rojo para que no
                 // se pulsen por inercia al buscar «Pausar».
-                variant={a.to === "archived" ? "destructive" : "default"}
+                variant={a.to === "archived" || a.destructive ? "destructive" : "default"}
                 onSelect={() => void run(a)}
               >
                 {a.label}

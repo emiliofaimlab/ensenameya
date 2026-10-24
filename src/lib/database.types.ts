@@ -41,12 +41,25 @@ export type Database = {
     Tables: {
       academies: {
         Row: {
+          agreement_notes: string | null
+          agreement_starts_on: string | null
+          allow_public_offers: boolean
           brand_color: string | null
+          commission_pct: number | null
+          cover_path: string | null
           created_at: string
           description: string | null
+          fixed_fee_amount: number | null
+          fixed_fee_currency: string | null
+          fixed_fee_period: string | null
           id: string
+          included_free_classes: string | null
           logo_path: string | null
           name: string
+          owner_id: string | null
+          payout_country: string | null
+          pending_changes: Json | null
+          policies_url: string | null
           slug: string
           status: Database["public"]["Enums"]["academy_status"]
           tagline: string | null
@@ -54,12 +67,25 @@ export type Database = {
           website: string | null
         }
         Insert: {
+          agreement_notes?: string | null
+          agreement_starts_on?: string | null
+          allow_public_offers?: boolean
           brand_color?: string | null
+          commission_pct?: number | null
+          cover_path?: string | null
           created_at?: string
           description?: string | null
+          fixed_fee_amount?: number | null
+          fixed_fee_currency?: string | null
+          fixed_fee_period?: string | null
           id?: string
+          included_free_classes?: string | null
           logo_path?: string | null
           name: string
+          owner_id?: string | null
+          payout_country?: string | null
+          pending_changes?: Json | null
+          policies_url?: string | null
           slug: string
           status?: Database["public"]["Enums"]["academy_status"]
           tagline?: string | null
@@ -67,19 +93,104 @@ export type Database = {
           website?: string | null
         }
         Update: {
+          agreement_notes?: string | null
+          agreement_starts_on?: string | null
+          allow_public_offers?: boolean
           brand_color?: string | null
+          commission_pct?: number | null
+          cover_path?: string | null
           created_at?: string
           description?: string | null
+          fixed_fee_amount?: number | null
+          fixed_fee_currency?: string | null
+          fixed_fee_period?: string | null
           id?: string
+          included_free_classes?: string | null
           logo_path?: string | null
           name?: string
+          owner_id?: string | null
+          payout_country?: string | null
+          pending_changes?: Json | null
+          policies_url?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["academy_status"]
           tagline?: string | null
           updated_at?: string
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "academies_owner_id_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      academy_members: {
+        Row: {
+          academy_id: string
+          accepted_at: string | null
+          created_at: string
+          email: string
+          id: string
+          invited_at: string
+          profile_id: string | null
+          role: string
+          status: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          academy_id: string
+          accepted_at?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          invited_at?: string
+          profile_id?: string | null
+          role: string
+          status?: string
+          token?: string
+          updated_at?: string
+        }
+        Update: {
+          academy_id?: string
+          accepted_at?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          invited_at?: string
+          profile_id?: string | null
+          role?: string
+          status?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "academy_members_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "academy_members_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "academy_members_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       account_deletion_requests: {
         Row: {
@@ -307,6 +418,80 @@ export type Database = {
           },
         ]
       }
+      availability_requests: {
+        Row: {
+          academy_id: string
+          created_at: string
+          date: string
+          decided_at: string | null
+          decided_by: string | null
+          end_time: string | null
+          id: string
+          reason: string | null
+          start_time: string | null
+          status: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          academy_id: string
+          created_at?: string
+          date: string
+          decided_at?: string | null
+          decided_by?: string | null
+          end_time?: string | null
+          id?: string
+          reason?: string | null
+          start_time?: string | null
+          status?: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          academy_id?: string
+          created_at?: string
+          date?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          end_time?: string | null
+          id?: string
+          reason?: string | null
+          start_time?: string | null
+          status?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_requests_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_requests_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_requests_decided_by_fkey"
+            columns: ["decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_requests_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       availability_rules: {
         Row: {
           created_at: string
@@ -350,6 +535,7 @@ export type Database = {
       }
       bookings: {
         Row: {
+          academy_id: string | null
           booking_ref: string | null
           cancel_reason: string | null
           cancellation_policy: Json | null
@@ -358,12 +544,16 @@ export type Database = {
           created_at: string
           currency: string
           id: string
+          mandatory: boolean
+          needs_reassignment: boolean
           num_sessions: number
           order_id: string | null
           payee_country: string | null
           payer_country: string | null
           pricing_model: Database["public"]["Enums"]["pricing_model"]
           product_id: string
+          sacado_at: string | null
+          sacado_por_admin_at: string | null
           session_duration_min: number
           status: Database["public"]["Enums"]["booking_status"]
           student_id: string
@@ -374,6 +564,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          academy_id?: string | null
           booking_ref?: string | null
           cancel_reason?: string | null
           cancellation_policy?: Json | null
@@ -382,12 +573,16 @@ export type Database = {
           created_at?: string
           currency: string
           id?: string
+          mandatory?: boolean
+          needs_reassignment?: boolean
           num_sessions: number
           order_id?: string | null
           payee_country?: string | null
           payer_country?: string | null
           pricing_model: Database["public"]["Enums"]["pricing_model"]
           product_id: string
+          sacado_at?: string | null
+          sacado_por_admin_at?: string | null
           session_duration_min: number
           status?: Database["public"]["Enums"]["booking_status"]
           student_id: string
@@ -398,6 +593,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          academy_id?: string | null
           booking_ref?: string | null
           cancel_reason?: string | null
           cancellation_policy?: Json | null
@@ -406,12 +602,16 @@ export type Database = {
           created_at?: string
           currency?: string
           id?: string
+          mandatory?: boolean
+          needs_reassignment?: boolean
           num_sessions?: number
           order_id?: string | null
           payee_country?: string | null
           payer_country?: string | null
           pricing_model?: Database["public"]["Enums"]["pricing_model"]
           product_id?: string
+          sacado_at?: string | null
+          sacado_por_admin_at?: string | null
           session_duration_min?: number
           status?: Database["public"]["Enums"]["booking_status"]
           student_id?: string
@@ -422,6 +622,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bookings_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies_public"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bookings_order_id_fkey"
             columns: ["order_id"]
@@ -704,9 +918,11 @@ export type Database = {
           blocked_at: string | null
           blocked_reason: string | null
           created_at: string
+          group_product_id: string | null
           id: string
+          kind: string
           last_message_at: string | null
-          student_id: string
+          student_id: string | null
           tutor_id: string
           updated_at: string
         }
@@ -714,9 +930,11 @@ export type Database = {
           blocked_at?: string | null
           blocked_reason?: string | null
           created_at?: string
+          group_product_id?: string | null
           id?: string
+          kind?: string
           last_message_at?: string | null
-          student_id: string
+          student_id?: string | null
           tutor_id: string
           updated_at?: string
         }
@@ -724,13 +942,22 @@ export type Database = {
           blocked_at?: string | null
           blocked_reason?: string | null
           created_at?: string
+          group_product_id?: string | null
           id?: string
+          kind?: string
           last_message_at?: string | null
-          student_id?: string
+          student_id?: string | null
           tutor_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "conversations_group_product_id_fkey"
+            columns: ["group_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "conversations_student_id_fkey"
             columns: ["student_id"]
@@ -900,6 +1127,128 @@ export type Database = {
             foreignKeyName: "google_calendar_connections_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_class_expulsiones: {
+        Row: {
+          created_at: string
+          expulsado_por: string | null
+          group_class_id: string
+          id: string
+          motivo: string | null
+          student_id: string
+        }
+        Insert: {
+          created_at?: string
+          expulsado_por?: string | null
+          group_class_id: string
+          id?: string
+          motivo?: string | null
+          student_id: string
+        }
+        Update: {
+          created_at?: string
+          expulsado_por?: string | null
+          group_class_id?: string
+          id?: string
+          motivo?: string | null
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_class_expulsiones_expulsado_por_fkey"
+            columns: ["expulsado_por"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_class_expulsiones_group_class_id_fkey"
+            columns: ["group_class_id"]
+            isOneToOne: false
+            referencedRelation: "group_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_class_expulsiones_group_class_id_fkey"
+            columns: ["group_class_id"]
+            isOneToOne: false
+            referencedRelation: "group_classes_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_class_expulsiones_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_classes: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          daily_room_name: string | null
+          end_at: string
+          id: string
+          product_id: string
+          recordings_purged_at: string | null
+          rescheduled_at: string | null
+          sequence_no: number
+          start_at: string
+          status: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          daily_room_name?: string | null
+          end_at: string
+          id?: string
+          product_id: string
+          recordings_purged_at?: string | null
+          rescheduled_at?: string | null
+          sequence_no?: number
+          start_at: string
+          status?: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          daily_room_name?: string | null
+          end_at?: string
+          id?: string
+          product_id?: string
+          recordings_purged_at?: string | null
+          rescheduled_at?: string | null
+          sequence_no?: number
+          start_at?: string
+          status?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_classes_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_classes_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -1585,6 +1934,7 @@ export type Database = {
       }
       payouts: {
         Row: {
+          academy_id: string | null
           adjustment_amount: number
           amount: number
           created_at: string
@@ -1606,6 +1956,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          academy_id?: string | null
           adjustment_amount?: number
           amount: number
           created_at?: string
@@ -1627,6 +1978,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          academy_id?: string | null
           adjustment_amount?: number
           amount?: number
           created_at?: string
@@ -1648,6 +2000,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "payouts_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payouts_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies_public"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payouts_tutor_id_fkey"
             columns: ["tutor_id"]
@@ -1722,16 +2088,24 @@ export type Database = {
       }
       products: {
         Row: {
+          academy_id: string | null
+          assignment_mode: string
           auto_accept_bookings: boolean
           cancellation_policy: Json | null
+          capacity: number | null
           created_at: string
           currency: string
           description: string | null
           faqs: Json
+          group_opened_by: string | null
+          group_template_id: string | null
           id: string
           image_path: string | null
+          inscripcion_cierra_at: string | null
           language: string | null
           level: Database["public"]["Enums"]["teaching_level"] | null
+          min_seats: number | null
+          minimo_evaluado_at: string | null
           outcome: string | null
           package_num_sessions: number | null
           price_amount: number
@@ -1746,18 +2120,27 @@ export type Database = {
           title: string
           tutor_id: string
           updated_at: string
+          visibility: string
         }
         Insert: {
+          academy_id?: string | null
+          assignment_mode?: string
           auto_accept_bookings?: boolean
           cancellation_policy?: Json | null
+          capacity?: number | null
           created_at?: string
           currency: string
           description?: string | null
           faqs?: Json
+          group_opened_by?: string | null
+          group_template_id?: string | null
           id?: string
           image_path?: string | null
+          inscripcion_cierra_at?: string | null
           language?: string | null
           level?: Database["public"]["Enums"]["teaching_level"] | null
+          min_seats?: number | null
+          minimo_evaluado_at?: string | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount: number
@@ -1772,18 +2155,27 @@ export type Database = {
           title: string
           tutor_id: string
           updated_at?: string
+          visibility?: string
         }
         Update: {
+          academy_id?: string | null
+          assignment_mode?: string
           auto_accept_bookings?: boolean
           cancellation_policy?: Json | null
+          capacity?: number | null
           created_at?: string
           currency?: string
           description?: string | null
           faqs?: Json
+          group_opened_by?: string | null
+          group_template_id?: string | null
           id?: string
           image_path?: string | null
+          inscripcion_cierra_at?: string | null
           language?: string | null
           level?: Database["public"]["Enums"]["teaching_level"] | null
+          min_seats?: number | null
+          minimo_evaluado_at?: string | null
           outcome?: string | null
           package_num_sessions?: number | null
           price_amount?: number
@@ -1798,8 +2190,37 @@ export type Database = {
           title?: string
           tutor_id?: string
           updated_at?: string
+          visibility?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "products_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_academy_id_fkey"
+            columns: ["academy_id"]
+            isOneToOne: false
+            referencedRelation: "academies_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_group_opened_by_fkey"
+            columns: ["group_opened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_group_template_id_fkey"
+            columns: ["group_template_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "products_tutor_id_fkey"
             columns: ["tutor_id"]
@@ -2197,8 +2618,10 @@ export type Database = {
           daily_room_url: string | null
           end_at: string
           extended_at: string | null
+          group_class_id: string | null
           id: string
           recordings_purged_at: string | null
+          renunciada_at: string | null
           sequence_no: number | null
           session_ref: string | null
           start_at: string
@@ -2218,8 +2641,10 @@ export type Database = {
           daily_room_url?: string | null
           end_at: string
           extended_at?: string | null
+          group_class_id?: string | null
           id?: string
           recordings_purged_at?: string | null
+          renunciada_at?: string | null
           sequence_no?: number | null
           session_ref?: string | null
           start_at: string
@@ -2239,8 +2664,10 @@ export type Database = {
           daily_room_url?: string | null
           end_at?: string
           extended_at?: string | null
+          group_class_id?: string | null
           id?: string
           recordings_purged_at?: string | null
+          renunciada_at?: string | null
           sequence_no?: number | null
           session_ref?: string | null
           start_at?: string
@@ -2255,6 +2682,20 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_group_class_id_fkey"
+            columns: ["group_class_id"]
+            isOneToOne: false
+            referencedRelation: "group_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sessions_group_class_id_fkey"
+            columns: ["group_class_id"]
+            isOneToOne: false
+            referencedRelation: "group_classes_public"
             referencedColumns: ["id"]
           },
           {
@@ -2730,6 +3171,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           faqs: Json
+          group_classes_enabled: boolean
           headline: string | null
           identity_verification_status: Database["public"]["Enums"]["identity_verification_status"]
           payout_country: string | null
@@ -2755,6 +3197,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           faqs?: Json
+          group_classes_enabled?: boolean
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
           payout_country?: string | null
@@ -2780,6 +3223,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           faqs?: Json
+          group_classes_enabled?: boolean
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
           payout_country?: string | null
@@ -3012,6 +3456,47 @@ export type Database = {
         }
         Relationships: []
       }
+      group_classes_public: {
+        Row: {
+          capacity: number | null
+          cupos_apartados: number | null
+          cupos_libres: number | null
+          end_at: string | null
+          group_template_id: string | null
+          id: string | null
+          inscripcion_cierra_at: string | null
+          inscritos_pagados: number | null
+          min_seats: number | null
+          product_id: string | null
+          sequence_no: number | null
+          start_at: string | null
+          title: string | null
+          tutor_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_classes_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_classes_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_group_template_id_fkey"
+            columns: ["group_template_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mis_creditos: {
         Row: {
           amount: number | null
@@ -3168,6 +3653,10 @@ export type Database = {
       }
     }
     Functions: {
+      abrir_clase_grupal: {
+        Args: { p_product: string; p_slots: string[] }
+        Returns: string
+      }
       account_deletion_blockers: { Args: { p_user_id: string }; Returns: Json }
       account_deletion_state: { Args: { p_user_id: string }; Returns: Json }
       account_deletions_pendientes_de_barrido: {
@@ -3213,6 +3702,10 @@ export type Database = {
         }[]
       }
       admin_gmv_weekly: { Args: { p_weeks?: number }; Returns: Json }
+      admin_habilitar_grupales: {
+        Args: { p_activo: boolean; p_tutor: string }
+        Returns: boolean
+      }
       admin_report_thread: {
         Args: { p_limit?: number; p_report_id: string }
         Returns: {
@@ -3224,6 +3717,10 @@ export type Database = {
           sender_id: string
           sender_name: string
         }[]
+      }
+      admin_sacar_de_clase_grupal: {
+        Args: { p_booking: string; p_motivo?: string }
+        Returns: Json
       }
       admin_stats: { Args: { p_from?: string; p_to?: string }; Returns: Json }
       afinidad_peso_reciente: { Args: { p_cuando: string }; Returns: number }
@@ -3239,6 +3736,10 @@ export type Database = {
       avisar_clases_de_manana: { Args: never; Returns: number }
       avisar_clases_que_empiezan: { Args: never; Returns: number }
       avisar_creditos_por_expirar: { Args: never; Returns: Json }
+      avisar_mensaje_nuevo: {
+        Args: { p_conversation: string; p_dest: string }
+        Returns: undefined
+      }
       avisar_payouts_sin_reclamar: {
         Args: { p_dias?: number }
         Returns: number
@@ -3246,6 +3747,14 @@ export type Database = {
       avisar_reservas_por_expirar: {
         Args: { p_horas?: number }
         Returns: number
+      }
+      build_payout_for_academy: {
+        Args: {
+          p_academy: string
+          p_retention_days: number
+          p_status?: Database["public"]["Enums"]["payout_status"]
+        }
+        Returns: string
       }
       build_payout_for_tutor: {
         Args: {
@@ -3264,10 +3773,21 @@ export type Database = {
         Args: { p_booking_id: string; p_reason?: string }
         Returns: Json
       }
+      cancelar_clase_grupal: {
+        Args: { p_motivo?: string; p_product: string }
+        Returns: number
+      }
+      cancelar_fecha_grupal: {
+        Args: { p_group_class: string; p_motivo?: string }
+        Returns: number
+      }
+      cancelar_grupales_sin_minimo: { Args: never; Returns: number }
       cargo_por_servicio: {
         Args: { p_base: number; p_pct: number }
         Returns: number
       }
+      cerrar_clases_grupales_vacias: { Args: never; Returns: number }
+      cierre_de_inscripcion: { Args: { p_product: string }; Returns: string }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
       comprar_regalo: {
@@ -3375,8 +3895,14 @@ export type Database = {
           usable: boolean
         }[]
       }
+      cupos_apartados: { Args: { p_product: string }; Returns: number }
+      cupos_libres: { Args: { p_product: string }; Returns: number }
       datos_de_cobro_del_tutor: { Args: { p_tutor: string }; Returns: Json }
       delete_manual_destination: { Args: { p_channel: string }; Returns: Json }
+      descartar_plantilla_desconocida: {
+        Args: { p_id: string }
+        Returns: boolean
+      }
       destino_connect: { Args: { p_payout_id: string }; Returns: string }
       disparar_correos_pendientes: { Args: never; Returns: undefined }
       emitir_credito_de_referido: {
@@ -3404,11 +3930,20 @@ export type Database = {
         }
         Returns: undefined
       }
+      es_admin_de_academia: { Args: { p_academy: string }; Returns: boolean }
+      es_alumno_de_academia: { Args: { p_academy: string }; Returns: boolean }
       expire_stale_bookings: {
         Args: { p_acceptance_cutoff?: string; p_payment_cutoff?: string }
         Returns: Json
       }
-      extend_session: { Args: { p_session_id: string }; Returns: Json }
+      expulsar_de_clase_grupal: {
+        Args: { p_group_class: string; p_motivo?: string; p_student: string }
+        Returns: undefined
+      }
+      extend_session: {
+        Args: { p_minutos?: number; p_session_id: string }
+        Returns: Json
+      }
       f_unaccent: { Args: { "": string }; Returns: string }
       find_open_order: { Args: { p_lines: Json }; Returns: string }
       fondeo_del_cobro: {
@@ -3448,10 +3983,18 @@ export type Database = {
           user_id: string
         }[]
       }
+      grabacion_de_fecha: {
+        Args: { p_group_class: string }
+        Returns: {
+          end_at: string
+          room_name: string
+        }[]
+      }
       has_role: {
         Args: { _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      hilo_grupal_caducado: { Args: { p_product: string }; Returns: boolean }
       home_stats: { Args: never; Returns: Json }
       home_testimonials: {
         Args: { p_limit?: number }
@@ -3463,7 +4006,18 @@ export type Database = {
           rating: number
         }[]
       }
+      inscritos_de_clase: {
+        Args: { p_product: string }
+        Returns: {
+          avatar_path: string
+          es_tutor: boolean
+          nombre: string
+          user_id: string
+        }[]
+      }
+      inscritos_pagados: { Args: { p_product: string }; Returns: number }
       iso_utc: { Args: { p_momento: string }; Returns: string }
+      join_group_class: { Args: { p_group_class: string }; Returns: Json }
       join_session: { Args: { p_session_id: string }; Returns: Json }
       liberar_credito_de_pago: {
         Args: { p_payment_id: string }
@@ -3520,8 +4074,10 @@ export type Database = {
         Returns: {
           blocked_at: string
           can_chat: boolean
+          group_product_id: string
           has_booking: boolean
           id: string
+          kind: string
           last_booking_id: string
           last_message_at: string
           last_product_title: string
@@ -3552,6 +4108,10 @@ export type Database = {
         Returns: boolean
       }
       pais_de_cobro_por_zona: { Args: { p_timezone: string }; Returns: string }
+      parte_del_tutor: {
+        Args: { p_devuelto: number; p_gross: number; p_importe: number }
+        Returns: number
+      }
       payout_account_check: {
         Args: {
           p_account: string
@@ -3588,7 +4148,9 @@ export type Database = {
           type: string
         }[]
       }
+      politica_de_baja: { Args: { p_booking: string }; Returns: Json }
       pre_booking_message_cap: { Args: never; Returns: number }
+      precio_vigente_grupal: { Args: { p_product: string }; Returns: number }
       process_notifications: { Args: never; Returns: Json }
       process_pending_account_deletions: {
         Args: { p_limit?: number }
@@ -3599,10 +4161,18 @@ export type Database = {
         Args: { p_new_start: string; p_session_id: string }
         Returns: string
       }
+      puede_ver_conversacion: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
       purge_contact_messages: { Args: never; Returns: number }
       purge_expired_messages: { Args: never; Returns: Json }
       purge_tutor_views: { Args: never; Returns: Json }
       quitar_credito: { Args: { p_booking_id: string }; Returns: Json }
+      reagendar_clase_grupal: {
+        Args: { p_group_class: string; p_nuevo_inicio: string }
+        Returns: undefined
+      }
       reclamar_mis_regalos: { Args: never; Returns: number }
       reclamar_regalos_por_correo: { Args: { p_user: string }; Returns: number }
       record_terms_acceptance: {
@@ -3650,6 +4220,12 @@ export type Database = {
         Returns: Json
       }
       refunds_backlog: { Args: never; Returns: Json }
+      regalos_de_clase_a_saldo: {
+        Args: { p_causa: string; p_product: string }
+        Returns: number
+      }
+      regalos_de_grupales_cerradas: { Args: never; Returns: number }
+      renunciar_fecha_grupal: { Args: { p_session: string }; Returns: Json }
       report_conversation: {
         Args: { p_conversation_id: string; p_reason: string }
         Returns: string
@@ -3657,6 +4233,10 @@ export type Database = {
       request_account_deletion: { Args: { p_user_id: string }; Returns: Json }
       request_withdrawal: {
         Args: { p_retention_days?: number }
+        Returns: string
+      }
+      reserva_tras_salir_del_grupo: {
+        Args: { p_conversation_id: string }
         Returns: string
       }
       respond_booking: {
@@ -3707,6 +4287,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      sacado_del_grupo: { Args: { p_booking: string }; Returns: boolean }
       search_product_ids_fuzzy: {
         Args: { p_limit?: number; p_q: string }
         Returns: {
@@ -3715,6 +4296,15 @@ export type Database = {
       }
       send_conversation_message: {
         Args: { p_body: string; p_conversation_id: string }
+        Returns: string
+      }
+      send_group_attachment: {
+        Args: {
+          p_attachment_name: string
+          p_attachment_path: string
+          p_attachment_size: number
+          p_conversation_id: string
+        }
         Returns: string
       }
       send_message: {
@@ -3935,7 +4525,7 @@ export type Database = {
       wise_puede_pagar_a: { Args: { p_tutor: string }; Returns: boolean }
     }
     Enums: {
-      academy_status: "draft" | "active"
+      academy_status: "draft" | "active" | "suspended"
       account_deletion_request_status: "pending" | "completed" | "cancelled"
       app_role: "alumno" | "tutor" | "admin"
       availability_exception_type: "block" | "open"
@@ -3971,7 +4561,7 @@ export type Database = {
         | "paid"
         | "failed"
         | "on_hold"
-      pricing_model: "per_session" | "per_hour" | "per_package"
+      pricing_model: "per_session" | "per_hour" | "per_package" | "group"
       product_status: "draft" | "active" | "paused" | "archived"
       refund_request_status: "pending" | "refunded" | "skipped" | "failed"
       session_status:
@@ -4113,7 +4703,7 @@ export const Constants = {
   },
   public: {
     Enums: {
-      academy_status: ["draft", "active"],
+      academy_status: ["draft", "active", "suspended"],
       account_deletion_request_status: ["pending", "completed", "cancelled"],
       app_role: ["alumno", "tutor", "admin"],
       availability_exception_type: ["block", "open"],
@@ -4153,7 +4743,7 @@ export const Constants = {
         "failed",
         "on_hold",
       ],
-      pricing_model: ["per_session", "per_hour", "per_package"],
+      pricing_model: ["per_session", "per_hour", "per_package", "group"],
       product_status: ["draft", "active", "paused", "archived"],
       refund_request_status: ["pending", "refunded", "skipped", "failed"],
       session_status: [
