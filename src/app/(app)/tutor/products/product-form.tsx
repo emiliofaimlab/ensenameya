@@ -8,7 +8,7 @@ import { InfoIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import { bookingTotal } from "@/lib/booking";
-import { huecosDeFranja, paredAUtc } from "@/lib/availability";
+import { huecosDeFranja } from "@/lib/availability";
 import { formatMoney, storageUrl } from "@/lib/catalog/format";
 import { CANCELLATION_POLICY as P } from "@/lib/policy";
 import {
@@ -17,7 +17,6 @@ import {
   parseRequirements,
 } from "@/lib/product-requirements";
 import { cn } from "@/lib/utils";
-import { zonaLegible } from "@/lib/zona-legible";
 import type { Database } from "@/lib/database.types";
 import { PanelCard } from "@/components/layout/panel-shell";
 import {
@@ -26,7 +25,6 @@ import {
   type AvailabilityScope,
 } from "./availability-blocks";
 import { AcceptanceMode } from "./acceptance-mode";
-import { HorariosLibres } from "./horarios-libres";
 import {
   CoverImagePicker,
   MaterialsPicker,
@@ -59,7 +57,8 @@ const CURRENCY = "USD";
 const INCREMENTOS = [10, 15, 20, 30, 45, 60, 90, 120] as const;
 
 /** Campo del panel (192:46): 45 px, r8, label 12/400 gris. */
-const FIELD = "h-[45px] rounded-[8px] px-3.5 text-sm placeholder:text-[#8c8c8c]";
+const FIELD =
+  "h-[45px] rounded-[8px] px-3.5 text-sm placeholder:text-[#8c8c8c]";
 const LABEL = "text-xs font-normal text-[#6b6b6b]";
 
 const PRICING: { id: PricingModel; label: string }[] = [
@@ -77,10 +76,11 @@ const GRUPAL: { id: PricingModel; label: string } = {
 /** RG-03 · cupo de una grupal: el `check` de `products.capacity`. */
 const CUPO_MIN = 2;
 const CUPO_MAX = 10;
-/** El tope de `publicar_clase_grupal` (`20261008160000`). */
+/**
+ * RG-16 · fechas por ciclo. El tope de 20 viene del modelo viejo (el tutor
+ * publicaba las fechas); hoy las elige el alumno en el selector, una a una.
+ */
 const MAX_FECHAS = 20;
-
-type FechaPared = { fecha: string; hora: string };
 
 /**
  * N-07 · topes de los campos de texto. El `maxLength` del input corta sin
@@ -191,9 +191,6 @@ export function ProductForm({
   onCreated,
   submitLabel,
   groupClassesEnabled = false,
-  groupPublished = false,
-  groupLiveSeats = 0,
-  timezone = "UTC",
 }: {
   userId: string;
   categories: { id: string; name: string }[];
@@ -219,22 +216,9 @@ export function ProductForm({
   submitLabel?: string;
   /** G1 · RG-18: el admin le encendió las clases grupales a este tutor. */
   groupClassesEnabled?: boolean;
-  /** G1 · la grupal ya tiene fechas: se gestionan en su ficha, no aquí. */
-  groupPublished?: boolean;
-  /**
-   * B6 · reservas vivas de la grupal publicada (pagando, por aceptar,
-   * confirmadas o en curso): el cupo no puede bajar de aquí. Es la misma
-   * cuenta de `products_guarda_grupal`, que es quien manda.
-   */
-  groupLiveSeats?: number;
-  /** Zona del tutor: las fechas de una grupal se teclean en SU hora (RN-01). */
-  timezone?: string;
 }) {
   const router = useRouter();
-  // G1 · si la publicación de una grupal choca, el producto ya se creó como
-  // borrador: el reintento tiene que EDITARLO, no crear otro.
-  const [creadoId, setCreadoId] = useState<string | null>(null);
-  const isEdit = !!product || !!creadoId;
+  const isEdit = !!product;
   const [loading, setLoading] = useState(false);
   const [pricingModel, setPricingModel] = useState<PricingModel>(
     product?.pricingModel ?? "per_session",
@@ -305,24 +289,21 @@ export function ProductForm({
   const [minimo, setMinimo] = useState(
     product?.minSeats ? String(product.minSeats) : "",
   );
-  const [fechas, setFechas] = useState<FechaPared[]>([{ fecha: "", hora: "" }]);
+  /**
+   * RG-01 (24-oct) · la hora de una grupal ya no la publica el tutor: la elige
+   * el primer alumno en el selector, como en una 1:1. Aquí solo queda cuántas
+   * fechas tiene el ciclo (`package_num_sessions`, RG-16): una = clase suelta.
+   * Y lo que el tutor edita es la PLANTILLA, que no tiene fechas ni inscritos:
+   * las clases ya nacidas copiaron sus datos y no cambian por debajo (B6).
+   */
+  const [fechasCiclo, setFechasCiclo] = useState(
+    String(
+      product?.pricingModel === "group" ? (product.packageNumSessions ?? 1) : 1,
+    ),
+  );
   const grupal = pricingModel === "group";
-  /**
-   * B6 · con la clase publicada, mínimo, precio y duración quedan fijos
-   * (`products_guarda_grupal` los rechaza): se enseñan deshabilitados y al
-   * guardar viajan los valores de siempre, no los del `FormData` —un input
-   * `disabled` no entra en él—.
-   */
-  const bloqueada = grupal && groupPublished && !!product;
-  /**
-   * P24 · cuántas fechas cubre el precio. Publicada, la lista de fechas no se
-   * pinta (se gestionan en su ficha) y `fechas` se queda en la fila vacía
-   * inicial: el número lo trae el producto, que en una grupal guarda en
-   * `package_num_sessions` el nº de fechas (lo escribe `publicar_clase_grupal`).
-   */
-  const nFechas = groupPublished
-    ? (product?.packageNumSessions ?? 1)
-    : fechas.length;
+  /** P24 · cuántas fechas cubre el precio. */
+  const nFechas = Math.max(1, Math.floor(Number(fechasCiclo) || 1));
   const totalCiclo = Math.round(Number(precio) * 100);
   // Al editar no se cambia entre grupal y no grupal: las fechas y los cupos
   // vendidos no tienen equivalente 1:1 (y la BD lo prohíbe con fechas).
@@ -369,18 +350,12 @@ export function ProductForm({
 
     // Precio en unidades mayores → menores (USD, 2 decimales).
     const priceMajor = Number(form.get("price"));
-    if (!bloqueada && (!Number.isFinite(priceMajor) || priceMajor < 0))
+    if (!Number.isFinite(priceMajor) || priceMajor < 0)
       return toast.error("Indica un precio válido.");
-    const priceAmount =
-      bloqueada && product
-        ? product.priceAmount
-        : Math.round(priceMajor * 100);
+    const priceAmount = Math.round(priceMajor * 100);
 
     // Duración ≥ 30 min (RN-03).
-    const duration =
-      bloqueada && product
-        ? (product.sessionDurationMin ?? 60)
-        : Number(form.get("session_duration_min"));
+    const duration = Number(form.get("session_duration_min"));
     if (!Number.isFinite(duration) || duration < 30)
       return toast.error("La duración mínima es 30 minutos.");
 
@@ -396,10 +371,10 @@ export function ProductForm({
         return toast.error("El intervalo debe estar entre 5 y 240 minutos.");
     }
 
-    // G1 · cupo, mínimo y fechas de la grupal.
+    // G1 · cupo, mínimo y fechas por ciclo de la grupal.
     let capacity: number | null = null;
     let minSeats: number | null = null;
-    let fechasUtc: string[] = [];
+    let fechasPorCiclo: number | null = null;
     if (grupal) {
       capacity = Number(cupo);
       if (
@@ -408,42 +383,18 @@ export function ProductForm({
         capacity > CUPO_MAX
       )
         return toast.error(`El cupo va de ${CUPO_MIN} a ${CUPO_MAX} alumnos.`);
-      if (groupPublished && capacity < groupLiveSeats)
-        return toast.error(
-          `Ya hay ${groupLiveSeats === 1 ? "1 alumno inscrito o pagando" : `${groupLiveSeats} alumnos inscritos o pagando`}: el cupo no puede quedar por debajo.`,
-        );
-      if (bloqueada && product) {
-        minSeats = product.minSeats;
-        if (minSeats != null && capacity < minSeats)
-          return toast.error(`El cupo no puede quedar por debajo del mínimo de ${minSeats} alumnos.`);
-      } else if (minimo.trim()) {
+      if (minimo.trim()) {
         minSeats = Number(minimo);
         if (!Number.isInteger(minSeats) || minSeats < 1 || minSeats > capacity)
           return toast.error("El mínimo tiene que estar entre 1 y el cupo.");
       }
-      if (!groupPublished) {
-        const llenas = fechas.filter((f) => f.fecha || f.hora);
-        if (llenas.length === 0)
-          return toast.error("Agrega al menos una fecha.");
-        if (llenas.some((f) => !f.fecha || !f.hora))
-          return toast.error("A una fecha le falta el día o la hora.");
-        fechasUtc = llenas.map((f) => paredAUtc(f.fecha, f.hora, timezone));
-        if (fechasUtc.some((iso) => new Date(iso) <= new Date()))
-          return toast.error("Las fechas tienen que ser futuras.");
-        if (new Set(fechasUtc).size !== fechasUtc.length)
-          return toast.error("Hay dos fechas repetidas.");
-        // B7 · lo mismo que rechaza `publicar_clase_grupal`: el mínimo se
-        // revisa una vez a las 24 h, y con menos de 48 h la clase no tiene
-        // tiempo de llenarse.
-        if (
-          minSeats !== null &&
-          Math.min(...fechasUtc.map((iso) => new Date(iso).getTime())) <
-            Date.now() + 48 * 3600 * 1000
-        )
-          return toast.error(
-            "Con cupo mínimo, la primera fecha tiene que estar a más de 48 horas.",
-          );
-      }
+      fechasPorCiclo = Number(fechasCiclo);
+      if (
+        !Number.isInteger(fechasPorCiclo) ||
+        fechasPorCiclo < 1 ||
+        fechasPorCiclo > MAX_FECHAS
+      )
+        return toast.error(`Una clase lleva entre 1 y ${MAX_FECHAS} fechas.`);
     }
 
     // Paquete ≥ 1 sesión, solo per_package (RN-22).
@@ -539,9 +490,9 @@ export function ProductForm({
       // para que volver a «cada duración» de verdad limpie la columna en vez de
       // dejar el valor anterior.
       start_time_increment_min: grupal ? null : increment,
-      // En una grupal `package_num_sessions` es el número de fechas y lo
-      // escribe `publicar_clase_grupal`: aquí no se toca.
-      ...(grupal ? {} : { package_num_sessions: packageNum }),
+      // RG-16 · en una grupal `package_num_sessions` es el número de fechas
+      // del ciclo: el alumno que abre la clase elige esas N fechas.
+      package_num_sessions: grupal ? fechasPorCiclo : packageNum,
       capacity,
       min_seats: minSeats,
       // DD-03: opcionales — vacío se guarda como nulo, que es lo que espera el
@@ -572,7 +523,7 @@ export function ProductForm({
     // separadas y no atómicas: no hay transacción de cliente. Mientras el
     // producto no exista se puede abortar limpio (se retira lo del bucket);
     // en cuanto existe, ya no — de ahí lo de abajo.
-    let productId = product?.id ?? creadoId ?? undefined;
+    let productId = product?.id ?? undefined;
     if (isEdit) {
       const { error } = await supabase
         .from("products")
@@ -613,19 +564,17 @@ export function ProductForm({
     // secas dejaba al tutor sin saber si repetir el alta entera o solo volver a
     // adjuntar — que es lo que N-05 pide evitar.
     const aMedias: string[] = [];
-    // M19 · si la grupal no llega a publicarse y el borrador se queda, los
-    // materiales que sí se guardaron dejan de estar pendientes.
-    let materialesGuardados = false;
 
     // M19 · idempotente: un reintento sobre el mismo producto no choca con la
     // PK (product_id, category_id) ni avisa de un fallo que no existe.
     // `ignoreDuplicates` es ON CONFLICT DO NOTHING: basta el grant de insert.
-    const { error: catErr } = await supabase
-      .from("product_categories")
-      .upsert(
-        [...selected].map((category_id) => ({ product_id: productId!, category_id })),
-        { onConflict: "product_id,category_id", ignoreDuplicates: true },
-      );
+    const { error: catErr } = await supabase.from("product_categories").upsert(
+      [...selected].map((category_id) => ({
+        product_id: productId!,
+        category_id,
+      })),
+      { onConflict: "product_id,category_id", ignoreDuplicates: true },
+    );
     if (catErr) aMedias.push("las categorías");
 
     // N-04 · las franjas elegidas. En modo «toda mi disponibilidad» no hay nada
@@ -668,11 +617,6 @@ export function ProductForm({
             ? "el material adjunto"
             : `los ${subidos.length} materiales`,
         );
-      } else if (grupal && !groupPublished && !product) {
-        // M19 · en el alta de una grupal siguen pendientes hasta que se
-        // publique: si choca se borra el producto entero y el reintento los
-        // tiene que volver a subir.
-        materialesGuardados = true;
       } else {
         // Ya no están pendientes. La lista definitiva la trae el servidor en
         // el `router.refresh()` de más abajo, con los ids reales.
@@ -680,76 +624,9 @@ export function ProductForm({
       }
     }
 
-    // G1 · una grupal se publica CON sus fechas, en una sola llamada que no
-    // crea nada si alguna choca (`publicar_clase_grupal`, RG-05).
-    if (grupal && !groupPublished) {
-      const { error: pubErr } = await supabase.rpc("publicar_clase_grupal", {
-        p_product: productId!,
-        p_fechas: fechasUtc,
-      });
-      if (pubErr) {
-        // M19 · «no crea nada» (RG-05): en un ALTA se borra el producto recién
-        // creado —categorías, materiales y franjas caen por cascade— y lo
-        // subido en este intento. Si el borrado falla, el de antes: queda el
-        // borrador y el reintento lo edita (ver `creadoId`).
-        let nada = false;
-        // Solo el producto creado en ESTE intento: un reintento sobre un
-        // borrador anterior (`creadoId`) se llevaría por cascade sus materiales.
-        if (!isEdit) {
-          const { error: delErr } = await supabase
-            .from("products")
-            .delete()
-            .eq("id", productId!);
-          if (!delErr) {
-            await retirar();
-            setCreadoId(null);
-            nada = true;
-          }
-        }
-        if (!nada) {
-          setCreadoId(productId!);
-          if (materialesGuardados) setStagedMaterials([]);
-        }
-        setLoading(false);
-        const choques =
-          pubErr.code === "23P01" && pubErr.details
-            ? pubErr.details
-                .split(", ")
-                .map((iso) =>
-                  new Date(iso).toLocaleString("es", {
-                    timeZone: timezone,
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  }),
-                )
-                .join(" · ")
-            : null;
-        toast.error(
-          choques
-            ? `Estas fechas chocan con tu agenda: ${choques}. Muévelas y vuelve a publicar${nada ? ": no se guardó nada" : ""}.`
-            : nada
-              ? `No se publicó la clase y no se guardó nada: ${pubErr.message}`
-              : `La clase se guardó como borrador, pero no se publicó: ${pubErr.message}`,
-          { duration: 12_000 },
-        );
-        return;
-      }
-      if (aMedias.length > 0)
-        toast.error(
-          `La clase se publicó, pero ${falto(aMedias)} ${enumerar(aMedias)}. Complétalo desde «Editar».`,
-          { duration: 12_000 },
-        );
-      else toast.success("Clase grupal publicada.");
-      setStagedMaterials([]);
-      // P19 · el formulario es largo: sin esto la ficha nueva se abría con el
-      // scroll heredado, en el pie de página.
-      window.scrollTo(0, 0);
-      router.push(`/tutor/clases-grupales/${productId}`);
-      router.refresh();
-      return;
-    }
-
-    if (publishAfter && !grupal) {
+    // RG-01 (24-oct) · una grupal se publica como cualquier mentoría: sin
+    // fechas (las elige el primer alumno). `publicar_clase_grupal` se borró.
+    if (publishAfter) {
       const { error: pubErr } = await supabase
         .from("products")
         .update({ status: "active" })
@@ -985,7 +862,6 @@ export function ProductForm({
               value={precio}
               onChange={(e) => setPrecio(e.target.value)}
               placeholder="40"
-              disabled={bloqueada}
               className={FIELD}
             />
             {/* Mismo patrón que el aviso de «por hora»: lo que paga el alumno
@@ -1000,7 +876,6 @@ export function ProductForm({
                 {formatMoney(Math.round(totalCiclo / nFechas), CURRENCY)} c/u).
               </p>
             ) : null}
-            {bloqueada ? <NotaBloqueada /> : null}
           </div>
           <div className="grid gap-1.5">
             <Label className={LABEL}>Moneda</Label>
@@ -1023,10 +898,8 @@ export function ProductForm({
               required
               value={duracion}
               onChange={(e) => setDuracion(e.target.value)}
-              disabled={bloqueada}
               className={FIELD}
             />
-            {bloqueada ? <NotaBloqueada /> : null}
             {/* Con «por hora» el precio NO es lo que paga el alumno: el servidor
                 multiplica por la duración (RN-10, `create_booking`). Sin decirlo
                 aquí, el tutor pone 40 y 90 min y descubre el cobro de 60 cuando
@@ -1176,7 +1049,7 @@ export function ProductForm({
           <h2 className="text-base font-semibold text-[#19191f]">
             Cupo y fechas
           </h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="grid gap-1.5">
               <Label htmlFor="capacity" className={LABEL}>
                 Cupo máximo ({CUPO_MIN} a {CUPO_MAX} alumnos)
@@ -1184,7 +1057,7 @@ export function ProductForm({
               <Input
                 id="capacity"
                 type="number"
-                min={groupPublished ? Math.max(CUPO_MIN, groupLiveSeats, product?.minSeats ?? 0) : CUPO_MIN}
+                min={CUPO_MIN}
                 max={CUPO_MAX}
                 step={1}
                 required
@@ -1192,22 +1065,6 @@ export function ProductForm({
                 onChange={(e) => setCupo(e.target.value)}
                 className={FIELD}
               />
-              {/* B6 · el cupo puede subir, pero no dejar fuera de la sala a
-                  quien ya pagó. */}
-              {groupPublished && groupLiveSeats > 0 ? (
-                <p
-                  className={cn(
-                    "text-xs",
-                    Number(cupo) < groupLiveSeats
-                      ? "text-[#bf3333]"
-                      : "text-[#6b6b6b]",
-                  )}
-                >
-                  {Number(cupo) < groupLiveSeats
-                    ? `No puede quedar por debajo de ${groupLiveSeats === 1 ? "el alumno ya inscrito o pagando" : `los ${groupLiveSeats} alumnos ya inscritos o pagando`}.`
-                    : `Ya hay ${groupLiveSeats === 1 ? "1 alumno inscrito o pagando" : `${groupLiveSeats} alumnos inscritos o pagando`}: puedes subirlo, no bajarlo de ahí.`}
-                </p>
-              ) : null}
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="min_seats" className={LABEL}>
@@ -1222,126 +1079,39 @@ export function ProductForm({
                 value={minimo}
                 onChange={(e) => setMinimo(e.target.value)}
                 placeholder="Sin mínimo"
-                disabled={bloqueada}
                 className={FIELD}
               />
-              {bloqueada ? (
-                <NotaBloqueada />
-              ) : (
-                <p className="text-xs text-[#6b6b6b]">
-                  Si 24 horas antes de la primera fecha no hay ese número de
-                  inscritos, la clase se cancela sola y todos recuperan el 100 %.
-                  Con mínimo, la primera fecha tiene que estar a más de 48 horas.
-                </p>
-              )}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="fechas_ciclo" className={LABEL}>
+                Fechas por clase
+              </Label>
+              <Input
+                id="fechas_ciclo"
+                type="number"
+                min={1}
+                max={MAX_FECHAS}
+                step={1}
+                required
+                value={fechasCiclo}
+                onChange={(e) => setFechasCiclo(e.target.value)}
+                className={FIELD}
+              />
             </div>
           </div>
-
-          {groupPublished ? (
-            <p className="text-[13px] text-[#6b6b6b]">
-              Las fechas ya están publicadas. Para moverlas o cancelarlas ve a
-              la{" "}
-              <Link
-                href={`/tutor/clases-grupales/${product?.id}`}
-                className="font-medium text-brand underline underline-offset-2"
-              >
-                ficha de la clase
-              </Link>
-              : ahí se avisa a los inscritos.
-            </p>
-          ) : (
-            <fieldset className="grid gap-2">
-              <legend className={LABEL}>
-                Fechas · una para una clase suelta, varias para un ciclo
-              </legend>
-              {/* P4 · el nombre de la zona sale del ICU, y el de Node y el del
-                  navegador pueden no coincidir. */}
-              <p className="text-xs text-[#6b6b6b]" suppressHydrationWarning>
-                Horas en tu zona: {zonaLegible(timezone)}. Cada fecha dura{" "}
-                {duracion} min y deja de ofrecerse en tu agenda 1:1 en cuanto
-                publiques.
-              </p>
-              {/* M18 · elegir viendo la agenda; los inputs siguen debajo. */}
-              <HorariosLibres
-                duracion={Number(duracion)}
-                timezone={timezone}
-                elegidas={fechas
-                  .filter((f) => f.fecha && f.hora)
-                  .map((f) => paredAUtc(f.fecha, f.hora, timezone))}
-                lleno={fechas.length >= MAX_FECHAS}
-                onElegir={(f) =>
-                  setFechas((p) => {
-                    // Se rellena la primera fila vacía; si no hay, una nueva.
-                    const vacia = p.findIndex((x) => !x.fecha && !x.hora);
-                    if (vacia >= 0)
-                      return p.map((x, j) => (j === vacia ? f : x));
-                    return p.length >= MAX_FECHAS ? p : [...p, f];
-                  })
-                }
-              />
-              {fechas.map((f, i) => (
-                <div key={i} className="flex flex-wrap items-center gap-2">
-                  <Input
-                    type="date"
-                    value={f.fecha}
-                    onChange={(e) =>
-                      setFechas((p) =>
-                        p.map((x, j) =>
-                          j === i ? { ...x, fecha: e.target.value } : x,
-                        ),
-                      )
-                    }
-                    aria-label={`Día de la fecha ${i + 1}`}
-                    className={cn(FIELD, "w-auto min-w-0 flex-1")}
-                  />
-                  <Input
-                    type="time"
-                    step={300}
-                    value={f.hora}
-                    onChange={(e) =>
-                      setFechas((p) =>
-                        p.map((x, j) =>
-                          j === i ? { ...x, hora: e.target.value } : x,
-                        ),
-                      )
-                    }
-                    aria-label={`Hora de la fecha ${i + 1}`}
-                    className={cn(FIELD, "w-32")}
-                  />
-                  {fechas.length > 1 ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() =>
-                        setFechas((p) => p.filter((_, j) => j !== i))
-                      }
-                      aria-label={`Quitar la fecha ${i + 1}`}
-                      className="h-9 shrink-0 rounded-[8px] px-3 text-[13px] text-[#bf3333]"
-                    >
-                      Quitar
-                    </Button>
-                  ) : null}
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() =>
-                  setFechas((p) => [...p, { fecha: "", hora: "" }])
-                }
-                disabled={fechas.length >= MAX_FECHAS}
-                className="h-10 self-start rounded-[8px] px-4 text-[13px]"
-              >
-                + Agregar fecha
-              </Button>
-              {fechas.length > 1 ? (
-                <p className="text-xs text-[#6b6b6b]">
-                  Es un ciclo: el alumno paga las {fechas.length} fechas de una
-                  vez y solo puede darse de baja antes de la primera.
-                </p>
-              ) : null}
-            </fieldset>
-          )}
+          {/* RG-01 (24-oct) · el tutor ya no publica fechas: las elige el
+              primer alumno en tu disponibilidad, como en una 1:1. */}
+          <p className="text-xs text-[#6b6b6b]">
+            No publicas fechas: el primer alumno elige la hora dentro de tu
+            disponibilidad y los demás se suman a esa clase hasta llenar el
+            cupo.
+            {nFechas > 1
+              ? ` Con ${nFechas} fechas es un ciclo: quien abre la clase elige las ${nFechas}, cada alumno paga el ciclo completo y solo puede darse de baja antes de la primera.`
+              : ""}
+            {minimo.trim()
+              ? " Si 24 horas antes de la primera fecha no hay ese mínimo de inscritos, la clase se cancela sola y todos recuperan el 100 %; por eso con mínimo solo se abren clases a más de 48 horas."
+              : ""}
+          </p>
         </PanelCard>
       ) : null}
 
@@ -1572,54 +1342,30 @@ export function ProductForm({
         </div>
       </div>
 
-      {grupal && !groupPublished ? (
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap gap-3">
+        {isApproved ? (
           <Button
             type="submit"
-            disabled={loading || !isApproved}
+            disabled={loading}
+            onClick={() => setPublishAfter(true)}
             className="h-[47px] rounded-[8px] px-6 font-semibold"
           >
-            {loading ? "Publicando…" : "Publicar clase"}
+            {loading && publishAfter ? "Publicando…" : "Publicar"}
           </Button>
-          <p className="text-xs text-[#6b6b6b]">
-            Se publica con sus fechas en un solo paso.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-wrap gap-3">
-          {isApproved ? (
-            <Button
-              type="submit"
-              disabled={loading}
-              onClick={() => setPublishAfter(true)}
-              className="h-[47px] rounded-[8px] px-6 font-semibold"
-            >
-              {loading && publishAfter ? "Publicando…" : "Publicar"}
-            </Button>
-          ) : null}
-          <Button
-            type="submit"
-            variant={isApproved ? "outline" : "default"}
-            disabled={loading}
-            onClick={() => setPublishAfter(false)}
-            className="h-[47px] rounded-[8px] px-6 font-medium"
-          >
-            {loading && !publishAfter
-              ? "Guardando…"
-              : (submitLabel ??
-                (isEdit ? "Guardar cambios" : "Guardar borrador"))}
-          </Button>
-        </div>
-      )}
+        ) : null}
+        <Button
+          type="submit"
+          variant={isApproved ? "outline" : "default"}
+          disabled={loading}
+          onClick={() => setPublishAfter(false)}
+          className="h-[47px] rounded-[8px] px-6 font-medium"
+        >
+          {loading && !publishAfter
+            ? "Guardando…"
+            : (submitLabel ??
+              (isEdit ? "Guardar cambios" : "Guardar borrador"))}
+        </Button>
+      </div>
     </form>
-  );
-}
-
-/** B6 · la nota de los campos que una grupal publicada ya no deja cambiar. */
-function NotaBloqueada() {
-  return (
-    <p className="text-xs text-[#6b6b6b]">
-      Con la clase publicada esto ya no se cambia: cancélala y publica otra.
-    </p>
   );
 }

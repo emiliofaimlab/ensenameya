@@ -32,8 +32,6 @@ type Action = {
   done: string;
   needsApproval?: boolean;
   confirm?: string;
-  /** M16 · no cambia el estado: lleva a esta ruta, donde está el paso completo. */
-  href?: string;
   /** Va en rojo (lo definitivo). Archivar lo es siempre. */
   destructive?: boolean;
 };
@@ -87,60 +85,18 @@ const ACTIONS: Record<Status, Action[]> = {
 };
 
 /**
- * M16 · una clase grupal no es una 1:1 con otro precio: tiene fechas e
- * inscritos que han pagado. Archivarla dejaba una clase fantasma —las fechas y
- * los inscritos seguían— y publicarla sin fechas daba el error crudo de la BD.
- *   · Publicar lleva al formulario, a «Cupo y fechas»: se publica CON fechas
- *     (`publicar_clase_grupal`).
- *   · Pausar es «Cerrar inscripciones»: los ya inscritos siguen en la clase.
- *   · No hay Archivar: lo que lo sustituye es «Cancelar la clase», que vive en
- *     su ficha con la confirmación y el reembolso (`cancelar_clase_grupal`).
+ * RG-01 (24-oct) · la grupal que aparece aquí es la PLANTILLA: no tiene fechas
+ * ni inscritos propios (los tienen las clases que nacen cuando un alumno elige
+ * hora), así que se publica, pausa y archiva como cualquier mentoría. Pausarla
+ * o archivarla solo impide que se abran clases NUEVAS: las ya nacidas siguen y
+ * se gestionan (cancelar, mover, sacar a alguien) en su ficha,
+ * `/tutor/clases-grupales/<clase>`. El menú propio de M16 (publicar con
+ * fechas, «Cancelar la clase») se retiró con `publicar_clase_grupal`.
  */
-const CANCELAR_GRUPAL = (productId: string): Action => ({
-  label: "Cancelar la clase",
-  to: "archived",
-  done: "",
-  href: `/tutor/clases-grupales/${productId}`,
-  destructive: true,
-});
-
-// Sin fechas por delante (dada o cancelada) no hay nada que cancelar: la ficha
-// no pinta «Cancelar la clase» y la grupal se quedaba sin forma de archivarse.
-const ARCHIVAR_O_CANCELAR = (productId: string, conFechas: boolean): Action =>
-  conFechas
-    ? CANCELAR_GRUPAL(productId)
-    : (ACTIONS.active.find((a) => a.to === "archived") ?? CANCELAR_GRUPAL(productId));
-
-const ACTIONS_GRUPAL = (productId: string, conFechas: boolean): Record<Status, Action[]> => ({
-  draft: [
-    {
-      label: "Publicar",
-      to: "active",
-      done: "",
-      needsApproval: true,
-      href: `/tutor/products/${productId}/edit#cupo-y-fechas`,
-    },
-    ACTIONS.draft[1],
-  ],
-  active: [
-    {
-      label: "Cerrar inscripciones",
-      to: "paused",
-      done: "Inscripciones cerradas. Los inscritos siguen en la clase.",
-    },
-    ARCHIVAR_O_CANCELAR(productId, conFechas),
-  ],
-  paused: [
-    {
-      label: "Reabrir inscripciones",
-      to: "active",
-      done: "Inscripciones abiertas.",
-      needsApproval: true,
-    },
-    ARCHIVAR_O_CANCELAR(productId, conFechas),
-  ],
-  archived: [],
-});
+const DONE_GRUPAL: Partial<Record<Status, string>> = {
+  paused: "Clase pausada. Las clases ya programadas siguen en pie.",
+  archived: "Clase archivada. Las clases ya programadas siguen en pie.",
+};
 
 /**
  * Columnas que viaja una copia. Lista EXPLÍCITA y no un `select("*")`: la tabla
@@ -181,16 +137,13 @@ export function ProductStatusActions({
   pricingModel,
   isApproved,
   rutaCompartir,
-  conFechasPendientes = true,
 }: {
   productId: string;
   /** Solo para la etiqueta: con cuatro tarjetas hay cuatro «Más acciones». */
   title: string;
   status: Status;
-  /** M16 · una grupal tiene su propio menú (ver `ACTIONS_GRUPAL`). */
+  /** RG-01 · en una grupal el aviso dice que las clases ya nacidas siguen. */
   pricingModel: PricingModel;
-  /** M16 · la grupal aún tiene fechas por delante (si no, se archiva sin más). */
-  conFechasPendientes?: boolean;
   isApproved: boolean;
   /**
    * EY-225 · `/mentorias/<id>` con el `?ref=` del tutor, resuelto en servidor
@@ -202,15 +155,13 @@ export function ProductStatusActions({
   const [busy, setBusy] = useState(false);
   // EY-223 · el diálogo de compartir vive FUERA del menú (ver su cabecera).
   const [compartir, setCompartir] = useState(false);
-  const actions = (pricingModel === "group" ? ACTIONS_GRUPAL(productId, conFechasPendientes) : ACTIONS)[status];
+  const actions = ACTIONS[status].map((a) =>
+    pricingModel === "group" && DONE_GRUPAL[a.to] ? { ...a, done: DONE_GRUPAL[a.to]! } : a,
+  );
 
   async function run(a: Action) {
     if (a.needsApproval && !isApproved) {
       toast.error("Tu perfil de tutor debe estar aprobado para publicar.");
-      return;
-    }
-    if (a.href) {
-      router.push(a.href);
       return;
     }
     if (a.confirm && !window.confirm(a.confirm)) return;

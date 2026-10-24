@@ -32,7 +32,26 @@ export function hrefRegalar(
   productId: string,
   sesion: { user: SessionUser | null; onboardingComplete: boolean },
 ): string {
-  const destino = `/regalar/mentoria/${productId}`;
+  return hrefConGuarda(`/regalar/mentoria/${productId}`, sesion);
+}
+
+/**
+ * RG-01 (24-oct) · «Elegir horario» de una clase grupal desde su ficha
+ * pública: el selector `/reservar/<id>` cuelga de `(app)` con `requireUser()`,
+ * así que se resuelve igual que el regalo (regla de oro 13).
+ */
+export function hrefReservar(
+  productId: string,
+  sesion: { user: SessionUser | null; onboardingComplete: boolean },
+): string {
+  return hrefConGuarda(`/reservar/${productId}`, sesion);
+}
+
+/** Las tres respuestas de `requireUser()`, dadas antes de navegar. */
+function hrefConGuarda(
+  destino: string,
+  sesion: { user: SessionUser | null; onboardingComplete: boolean },
+): string {
   if (!sesion.user) return hrefSignup(destino);
 
   // Cuenta a medias (RN-44). `destinoDeAsistente` distingue al que se registró

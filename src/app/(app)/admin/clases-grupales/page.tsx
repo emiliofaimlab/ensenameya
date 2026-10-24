@@ -26,6 +26,12 @@ const ESTADO: Record<string, { label: string; tone: PillTone }> = {
  *
  * Con el cliente del admin: sus políticas `*_admin` le dejan leer productos,
  * fechas y reservas de todos. Las FK van nombradas (regla de oro 10).
+ *
+ * RG-01 (24-oct) · lista las clases NACIDAS (las abre un alumno al elegir
+ * hora; `group_template_id` no nulo): son las que tienen fechas, inscritos y
+ * dinero. Las plantillas que publica el tutor no tienen nada de eso y se ven
+ * en su ficha de tutor como cualquier mentoría. Aquí no se crean ni se editan
+ * fechas: solo se miran y se gestionan las clases que ya existen.
  */
 export default async function AdminClasesGrupalesPage() {
   await requireRole("admin");
@@ -38,6 +44,7 @@ export default async function AdminClasesGrupalesPage() {
       "id, title, status, capacity, tutor:profiles!products_tutor_id_fkey(full_name), group_classes!group_classes_product_id_fkey(start_at, status), bookings!bookings_product_id_fkey(status)",
     )
     .eq("pricing_model", "group")
+    .not("group_template_id", "is", null)
     .order("created_at", { ascending: false });
   // Regla de oro 10: una lectura caída no es «todavía no hay clases».
   if (error) throw error;
@@ -49,7 +56,7 @@ export default async function AdminClasesGrupalesPage() {
     <AdminShell
       eyebrow="Clases grupales"
       title="Todas las clases"
-      description="Todas las clases grupales de la plataforma, la más nueva primero."
+      description="Las clases grupales que han abierto los alumnos, la más nueva primero."
     >
       {clases.length === 0 ? (
         <PanelCard>

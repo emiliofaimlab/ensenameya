@@ -262,7 +262,7 @@ export default async function RegalarPage({
                     faltan más de 24 h para la primera fecha (`regalable`, el
                     mismo criterio que `comprar_regalo`). Se dice por qué en vez
                     de dejar que el rechazo llegue al pagar. */}
-                {p.pricingModel === "group" && p.grupal && !p.grupal.regalable ? (
+                {p.pricingModel === "group" && !p.grupal?.regalable ? (
                   <>
                     <Button
                       disabled
@@ -271,9 +271,14 @@ export default async function RegalarPage({
                       No se puede regalar
                     </Button>
                     <p className="text-[12.5px] text-[#6b6b6b]">
-                      {p.grupal.cuposLibres <= 0
-                        ? "Esta clase ya no tiene cupos."
-                        : "Falta menos de 24 h para la primera fecha."}
+                      {/* RG-01 (24-oct) · la plantilla no tiene fechas: la
+                          hora la fija quien la reserva, así que no hay cupo
+                          que regalar (`comprar_regalo` la rechaza). */}
+                      {!p.grupal
+                        ? "Las clases grupales no se pueden regalar."
+                        : p.grupal.cuposLibres <= 0
+                          ? "Esta clase ya no tiene cupos."
+                          : "Falta menos de 24 h para la primera fecha."}
                     </p>
                   </>
                 ) : (

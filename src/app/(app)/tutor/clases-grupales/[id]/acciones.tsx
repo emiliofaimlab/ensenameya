@@ -223,8 +223,8 @@ export function CancelarClase({ productId, inscritos }: { productId: string; ins
       <h2 className="text-base font-semibold text-[#19191f]">Cancelar la clase</h2>
       <p className="text-[13px] text-[#6b6b6b]">
         {inscritos > 0
-          ? `${inscritos === 1 ? "El inscrito recupera" : `Los ${inscritos} inscritos recuperan`} el 100 % de lo que ${inscritos === 1 ? "pagó" : "pagaron"}. La clase deja de publicarse.`
-          : "Todavía no hay inscritos. La clase deja de publicarse."}
+          ? `${inscritos === 1 ? "El inscrito recupera" : `Los ${inscritos} inscritos recuperan`} el 100 % de lo que ${inscritos === 1 ? "pagó" : "pagaron"}. Su horario vuelve a tu agenda; tu clase grupal sigue publicada para que otros alumnos abran horarios nuevos.`
+          : "Todavía no hay inscritos. Su horario vuelve a tu agenda; tu clase grupal sigue publicada."}
       </p>
       {abierto ? (
         <div className="flex flex-col gap-2">

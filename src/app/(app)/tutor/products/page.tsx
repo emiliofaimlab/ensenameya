@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { PencilIcon, TriangleAlertIcon, UsersIcon } from "lucide-react";
+import { PencilIcon, TriangleAlertIcon } from "lucide-react";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { getFormatoHora, getUserTimezone } from "@/lib/auth/server";
@@ -115,6 +115,9 @@ export default async function TutorProductsPage() {
         "id, title, status, outcome, image_path, pricing_model, price_amount, currency, package_num_sessions, session_duration_min, auto_accept_bookings, product_categories(categories(name))",
       )
       .eq("tutor_id", userId)
+      // RG-01 (24-oct) · las clases grupales NACIDAS (las abre un alumno al
+      // elegir hora) no son mentorías del tutor: salen bajo su plantilla.
+      .is("group_template_id", null)
       .order("created_at", { ascending: false }),
     // §2.3 · el aviso ámbar necesita saber qué franjas del tutor están VIVAS,
     // no solo cuáles existen: una franja desactivada no genera ni un horario,
@@ -131,29 +134,36 @@ export default async function TutorProductsPage() {
     // «Compartir mi reserva». En paralelo con lo demás: no añade peldaño.
     // Sin código (nunca abrió «Invita y gana») el enlace sale sin `ref`.
     codigoParaCompartir(supabase, userId),
-    // P47 · la próxima fecha de cada grupal y cuántos pagaron, para la línea
-    // «Próxima: … · 3/6 inscritos» de su tarjeta.
+    // P47 · RG-01 (24-oct) · las clases ya nacidas de cada grupal, con su
+    // próxima fecha y cuántos pagaron: «Jue 18:00 · 3/6 inscritos».
     supabase
       .from("group_classes_public")
-      .select("product_id, start_at, capacity, inscritos_pagados")
+      .select("product_id, group_template_id, start_at, capacity, inscritos_pagados")
       .eq("tutor_id", userId)
       .gte("start_at", new Date().toISOString())
       .order("start_at"),
     getUserTimezone(),
     getFormatoHora(),
   ]);
-  // Ordenadas por `start_at`: la primera fila de cada producto es su próxima.
-  // Regla de oro 10 · si la consulta falla, la línea no se pinta (nunca un
+  // Ordenadas por `start_at`: la primera fila de cada clase es su próxima.
+  // Regla de oro 10 · si la consulta falla, las líneas no se pintan (nunca un
   // «0/6» falso), por eso el mapa queda vacío en vez de mirar `data` a ciegas.
-  const proximaDe = new Map<string, { start_at: string; capacity: number; inscritos: number }>();
+  type ClaseNacida = { id: string; start_at: string; capacity: number; inscritos: number };
+  const clasesDe = new Map<string, ClaseNacida[]>();
+  const vistas = new Set<string>();
   if (!errorProximas)
     for (const g of proximas ?? [])
-      if (g.product_id && g.start_at && !proximaDe.has(g.product_id))
-        proximaDe.set(g.product_id, {
+      if (g.product_id && g.group_template_id && g.start_at && !vistas.has(g.product_id)) {
+        vistas.add(g.product_id);
+        const lista = clasesDe.get(g.group_template_id) ?? [];
+        lista.push({
+          id: g.product_id,
           start_at: g.start_at,
           capacity: g.capacity ?? 0,
           inscritos: g.inscritos_pagados ?? 0,
         });
+        clasesDe.set(g.group_template_id, lista);
+      }
   const refQuery = codigoRef ? `?ref=${encodeURIComponent(codigoRef)}` : "";
 
   // Regla de oro 10 · con `const { data }` a secas un fallo de la consulta se
@@ -312,10 +322,10 @@ export default async function TutorProductsPage() {
                 tone: "neutral" as const,
               };
               const grupal = p.pricing_model === "group";
-              // G1 · una grupal no usa las franjas semanales: sus horas son
-              // sus fechas. El aviso de «sin franja» no le aplica.
-              const huerfana = !grupal && sinHorario(p.id);
-              const proxima = proximaDe.get(p.id);
+              // RG-01 (24-oct) · la grupal también vive de las franjas
+              // semanales (el alumno elige hora en ellas): el aviso le aplica.
+              const huerfana = sinHorario(p.id);
+              const clases = clasesDe.get(p.id) ?? [];
               return (
                 <li key={p.id} data-f={filtrosDe(p.status)}>
                   <PanelCard>
@@ -364,10 +374,23 @@ export default async function TutorProductsPage() {
                               : ""}
                             {cats.length ? ` · ${cats.join(", ")}` : ""}
                           </p>
-                          {grupal && proxima ? (
+                          {grupal && clases.length > 0 ? (
+                            <ul className="mt-1 flex flex-col gap-0.5 text-xs text-[#6b6b6b]">
+                              {clases.map((c) => (
+                                <li key={c.id}>
+                                  <Link
+                                    href={`/tutor/clases-grupales/${c.id}`}
+                                    className="underline-offset-2 hover:underline"
+                                  >
+                                    Clase: {formatSessionTime(c.start_at, tz, formato)} ·{" "}
+                                    {c.inscritos}/{c.capacity} inscritos
+                                  </Link>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : grupal ? (
                             <p className="mt-0.5 text-xs text-[#6b6b6b]">
-                              Próxima: {formatSessionTime(proxima.start_at, tz, formato)} ·{" "}
-                              {proxima.inscritos}/{proxima.capacity} inscritos
+                              Sin clases programadas: nacen cuando un alumno elige hora.
                             </p>
                           ) : null}
 
@@ -454,16 +477,6 @@ export default async function TutorProductsPage() {
                         pegados al título; ahora están al otro extremo de la
                         fila (2.4.4). */}
                       <div className="ml-auto flex shrink-0 items-center gap-2">
-                        {grupal ? (
-                          <PanelIconButton
-                            asChild
-                            label={`Fechas e inscritos: ${p.title}`}
-                          >
-                            <Link href={`/tutor/clases-grupales/${p.id}`}>
-                              <UsersIcon aria-hidden className="size-4" />
-                            </Link>
-                          </PanelIconButton>
-                        ) : null}
                         <PanelIconButton
                           asChild
                           label={`Editar mentoría: ${p.title}`}
@@ -477,8 +490,6 @@ export default async function TutorProductsPage() {
                           title={p.title}
                           status={p.status}
                           pricingModel={p.pricing_model}
-                          // Si la consulta falló no se sabe: se ofrece la ficha.
-                          conFechasPendientes={Boolean(errorProximas) || proximaDe.has(p.id)}
                           isApproved={approvalStatus === "approved"}
                           rutaCompartir={`/mentorias/${p.id}${refQuery}`}
                         />

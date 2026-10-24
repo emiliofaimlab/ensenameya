@@ -37,8 +37,8 @@ const SORTS: { value: ProductSort; label: string }[] = [
   { value: "recent", label: "Más relevantes" },
   { value: "price_asc", label: "Precio: de menor a mayor" },
   { value: "price_desc", label: "Precio: de mayor a menor" },
-  // P36 · solo con «Grupal»: las 1:1 no tienen fecha de inicio.
-  { value: "starts_soon", label: "Empiezan antes" },
+  // RG-01 (24-oct) · «Empiezan antes» (P36) se retiró: una grupal ya no tiene
+  // fecha de inicio propia, la elige el alumno como en una 1:1.
 ];
 
 export default async function ClassesPage({
@@ -66,11 +66,7 @@ export default async function ClassesPage({
     level: LEVELS.some((l) => l.id === sp.level) ? sp.level : undefined,
     lang: LANGUAGES.some((l) => l.id === sp.lang) ? sp.lang : undefined,
   };
-  // P36 · «Empiezan antes» solo existe con el filtro «Grupal»; fuera de él se
-  // ignora como cualquier otro valor desconocido.
-  const sorts = SORTS.filter(
-    (s) => s.value !== "starts_soon" || active.model === "group",
-  );
+  const sorts = SORTS;
   const sort = sorts.find((s) => s.value === sp.sort)?.value;
 
   // La moneda del visitante, para que los tramos de precio se lean en la misma
@@ -332,8 +328,7 @@ export default async function ClassesPage({
                       {sorts.find(
                         (s) =>
                           s.value ===
-                          (sort ??
-                            (active.model === "group" ? "starts_soon" : "recent")),
+                          (sort ?? "recent"),
                       )!.label}
                     </span>
                   </span>

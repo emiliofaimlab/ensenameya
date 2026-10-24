@@ -2,7 +2,6 @@ import { notFound } from "next/navigation";
 
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
-import { getUserTimezone } from "@/lib/auth/server";
 import { parseRequirements } from "@/lib/product-requirements";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { ProductForm } from "../../product-form";
@@ -25,9 +24,6 @@ export default async function EditProductPage({
     { data: materials },
     { data: rules },
     { data: ruleLinks },
-    { count: fechasGrupales },
-    { count: reservasVivas },
-    tz,
   ] = await Promise.all([
       supabase
         .from("products")
@@ -36,6 +32,10 @@ export default async function EditProductPage({
         )
         .eq("id", id)
         .eq("tutor_id", userId)
+        // RG-01 (24-oct) · una clase grupal NACIDA no se edita aquí: copió la
+        // plantilla al nacer y lo vendido no cambia por debajo (B6). Se
+        // gestiona en `/tutor/clases-grupales/<id>`.
+        .is("group_template_id", null)
         .maybeSingle(),
       supabase
         .from("categories")
@@ -66,20 +66,6 @@ export default async function EditProductPage({
         .from("product_availability_rules")
         .select("rule_id")
         .eq("product_id", id),
-      // G1 · ¿la grupal ya tiene fechas? Entonces se gestionan en su ficha.
-      supabase
-        .from("group_classes")
-        .select("id", { count: "exact", head: true })
-        .eq("product_id", id),
-      // B6 · reservas vivas: el cupo de una grupal publicada no baja de aquí.
-      // Mismos estados que `products_guarda_grupal`. Si la cuenta falla queda
-      // en 0 y el formulario no frena: frena el trigger, que es quien manda.
-      supabase
-        .from("bookings")
-        .select("id", { count: "exact", head: true })
-        .eq("product_id", id)
-        .in("status", ["pending_payment", "pending_acceptance", "confirmed", "in_progress"]),
-      getUserTimezone(),
     ]);
 
   if (!product) notFound();
@@ -97,9 +83,6 @@ export default async function EditProductPage({
         availabilityRules={rules ?? []}
         materials={materials ?? []}
         isApproved={approvalStatus === "approved"}
-        groupPublished={(fechasGrupales ?? 0) > 0}
-        groupLiveSeats={reservasVivas ?? 0}
-        timezone={tz}
         product={{
           id: product.id,
           title: product.title,

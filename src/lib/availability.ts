@@ -167,9 +167,10 @@ export function buildUsedBy(
 }
 
 /**
- * G1 · hora de PARED en la zona del tutor → instante UTC (ISO). Las fechas de
- * una clase grupal las teclea el tutor («martes 18:00»), y quiere decir SU
- * martes 18:00, no el del navegador ni el de UTC (RN-01/02). Sin librería:
+ * G1 · hora de PARED en la zona del tutor → instante UTC (ISO). Cuando el tutor
+ * MUEVE una fecha de una clase grupal ya nacida (RG-11) teclea «martes 18:00»,
+ * y quiere decir SU martes 18:00, no el del navegador ni el de UTC (RN-01/02).
+ * (Desde el 24-oct ya no publica fechas: la hora la fija el primer alumno.) Sin librería:
  * se calcula el desfase de esa zona en ese instante con `Intl` y se corrige
  * una segunda vez, porque el desfase puede cambiar al cruzar un cambio de
  * horario. Una hora que no existe (el salto de primavera) cae en la siguiente.

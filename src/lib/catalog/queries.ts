@@ -94,7 +94,11 @@ export type ProductCardData = {
   autoAccept: boolean;
   /** Solo lo rellena el listado de P05; `null` donde no se consultó. */
   tutor?: ProductTutor | null;
-  /** G2 · solo en `pricing_model = 'group'`; lo pone `conGrupales`. */
+  /**
+   * G2 · solo en una clase grupal YA NACIDA (con fechas); lo pone
+   * `conGrupales`. En la PLANTILLA (lo que lista el catálogo) es `null`: no
+   * tiene fechas propias, la hora la elige el alumno (RG-01, 24-oct).
+   */
   grupal?: GrupalInfo | null;
 };
 
@@ -124,6 +128,16 @@ export type GrupalInfo = {
 export type ProductDetail = ProductCardData & {
   /** `/mentorias/<slug>`; ver `productPath`. */
   slug: string | null;
+  /**
+   * RG-01 (24-oct) · en una clase grupal NACIDA, la plantilla de la que nació
+   * (`products.group_template_id`). `null` en todo lo demás, plantillas
+   * incluidas. Las fichas y el selector pintan la plantilla; el checkout cobra
+   * la nacida.
+   */
+  groupTemplateId: string | null;
+  /** RG-03/04 · cupo máximo y mínimo; solo en grupales (plantilla o nacida). */
+  capacity: number | null;
+  minSeats: number | null;
   description: string | null;
   tutor: ProductTutor & {
     bio: string | null;
@@ -238,12 +252,17 @@ async function withTutors<T extends ProductCardData & { tutorId: string }>(
  * (`soloInscribibles`): este filtro queda de red para los que no paginan.
  */
 /**
- * M9 · filtro PostgREST: las 1:1 pasan siempre y una grupal solo si su
- * inscripción sigue abierta. En la consulta y no después, para que el `count`
- * y las páginas cuadren (el catálogo decía «3 mentorías» y pintaba 2).
+ * M9 · filtro PostgREST de los listados, en la consulta y no después, para que
+ * el `count` y las páginas cuadren (el catálogo decía «3 mentorías» y pintaba 2).
+ *
+ * RG-01 (24-oct) · desde que la hora de una grupal la fija el primer alumno, el
+ * catálogo lista la PLANTILLA (siempre inscribible, como una 1:1) y NUNCA las
+ * clases que nacieron de ella (`group_template_id` no nulo): esas se ofrecen
+ * dentro del selector de horario de su plantilla. Va en un `.or()` de una sola
+ * rama para no tocar las llamadas.
  */
 export function soloInscribibles(): string {
-  return `pricing_model.neq.group,inscripcion_cierra_at.gt.${new Date().toISOString()}`;
+  return "group_template_id.is.null";
 }
 
 export async function conGrupales<T extends ProductCardData>(
@@ -283,11 +302,75 @@ export async function conGrupales<T extends ProductCardData>(
     info.fechas.push({ startAt: g.start_at, endAt: g.end_at });
     porProducto.set(g.product_id, info);
   }
+  // RG-01 (24-oct) · una grupal SIN fechas es una plantilla: siempre se
+  // ofrece (el alumno elige la hora). Solo una clase nacida cerrada sale fuera.
   return rows
     .map((r) =>
       r.pricingModel === "group" ? { ...r, grupal: porProducto.get(r.id) ?? null } : r,
     )
-    .filter((r) => !soloAbiertas || r.pricingModel !== "group" || r.grupal?.abierta);
+    .filter((r) => !soloAbiertas || r.pricingModel !== "group" || !r.grupal || r.grupal.abierta);
+}
+
+/**
+ * RG-01 (24-oct) · una clase grupal que ya nació de una plantilla y todavía
+ * admite gente: lo que el selector pinta DESTACADO y PRIMERO («Jue 18:00 · 3
+ * inscritos · quedan 5 cupos»). Elegirla es sumarse: su checkout, sin elegir
+ * nada más.
+ */
+export type ClaseAbierta = {
+  /** El producto NACIDO: es el que se paga. */
+  productId: string;
+  fechas: { startAt: string; endAt: string }[];
+  capacity: number;
+  cuposLibres: number;
+  /** Pagados (confirmed | in_progress): «3 inscritos». */
+  inscritos: number;
+  /** M4 · pagos en curso, sin decir de quién. */
+  cuposApartados: number;
+  minSeats: number | null;
+};
+
+/**
+ * Las clases nacidas de `templateId` que siguen abiertas, la más cercana
+ * primero. Una LLENA no se ofrece (encargo del 24-oct), salvo que lo esté solo
+ * por pagos en curso: esa se enseña sin botón, porque en minutos puede volver.
+ *
+ * ⚠️ Mira el `error`: esta lista alimenta lo primero que ve el alumno, y una
+ * lectura caída pintada como «no hay clases» lo mandaría a abrir otra a la
+ * misma hora (regla de oro 10).
+ */
+export async function listClasesAbiertas(templateId: string): Promise<ClaseAbierta[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("group_classes_public")
+    .select("product_id, start_at, end_at, capacity, cupos_libres, inscritos_pagados, cupos_apartados, min_seats, inscripcion_cierra_at")
+    .eq("group_template_id", templateId)
+    .order("start_at");
+  if (error) throw error;
+  const ahora = Date.now();
+  const porClase = new Map<string, ClaseAbierta>();
+  const cierre = new Map<string, number>();
+  for (const g of data ?? []) {
+    if (!g.product_id || !g.start_at || !g.end_at) continue;
+    if (!cierre.has(g.product_id)) {
+      cierre.set(g.product_id, g.inscripcion_cierra_at ? Date.parse(g.inscripcion_cierra_at) : 0);
+    }
+    const c = porClase.get(g.product_id) ?? {
+      productId: g.product_id,
+      fechas: [],
+      capacity: g.capacity ?? 0,
+      cuposLibres: g.cupos_libres ?? 0,
+      inscritos: g.inscritos_pagados ?? 0,
+      cuposApartados: g.cupos_apartados ?? 0,
+      minSeats: g.min_seats ?? null,
+    };
+    c.fechas.push({ startAt: g.start_at, endAt: g.end_at });
+    porClase.set(g.product_id, c);
+  }
+  return [...porClase.values()]
+    // B2 · el corte es la primera fecha no cancelada: un ciclo empezado ya no admite a nadie.
+    .filter((c) => (cierre.get(c.productId) ?? 0) > ahora)
+    .filter((c) => c.cuposLibres > 0 || c.cuposApartados > 0);
 }
 
 /** Categorías activas (para filtros); RLS ya limita a `is_active`. */
@@ -637,6 +720,8 @@ export const getTutorDetail = cache(async (
     .select(TUTOR_PRODUCT_SELECT)
     .eq("tutor_id", id)
     .eq("status", "active")
+    // RG-01 (24-oct) · las clases grupales nacidas no se listan: su plantilla sí.
+    .is("group_template_id", null)
     .order("created_at", { ascending: false });
 
   const products = await conGrupales((prods ?? []).map(mapProductCard));
@@ -815,7 +900,7 @@ export const getProductDetail = cache(async (
   const { data: p } = await supabase
     .from("products")
     .select(
-      "id, slug, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, faqs, requirements, level, language, tutor_id, product_categories(categories(slug, name, icon))",
+      "id, slug, title, description, outcome, pricing_model, price_amount, currency, session_duration_min, package_num_sessions, image_path, auto_accept_bookings, faqs, requirements, level, language, tutor_id, group_template_id, capacity, min_seats, product_categories(categories(slug, name, icon))",
     )
     .eq("id", id)
     .eq("status", "active")
@@ -850,6 +935,9 @@ export const getProductDetail = cache(async (
   const detalle: ProductDetail = {
     id: p.id,
     slug: p.slug,
+    groupTemplateId: p.group_template_id,
+    capacity: p.capacity,
+    minSeats: p.min_seats,
     title: p.title,
     description: p.description,
     outcome: p.outcome,
@@ -982,13 +1070,10 @@ export async function listActiveProducts(opts: {
       ? await base
           .order("price_amount", { ascending: opts.sort === "price_asc" })
           .range(from, from + PAGE_SIZE)
-      : opts.sort === "starts_soon" || (opts.model === "group" && !opts.sort)
-        ? // P36 · la que empieza antes, primero (es el corte de inscripción).
-          await base
-            .order("inscripcion_cierra_at", { ascending: true, nullsFirst: false })
-            .order("created_at", { ascending: false })
-            .range(from, from + PAGE_SIZE)
-        : await base
+      // RG-01 (24-oct) · «starts_soon» (P36) se queda en el tipo por los
+      // enlaces viejos, pero ya ordena como «recent»: una plantilla grupal no
+      // tiene fecha de inicio.
+      : await base
           .order("created_at", { ascending: false })
           .range(from, from + PAGE_SIZE); // 1 fila extra = ¿hay más?
 
@@ -1209,6 +1294,8 @@ export async function searchProducts(
       .from("products")
       .select(PRODUCT_CARD_SELECT)
       .eq("status", "active")
+      // RG-01 (24-oct) · las clases grupales nacidas no se buscan: su plantilla sí.
+      .is("group_template_id", null)
       .textSearch("search_vector", term, {
         type: "websearch",
         config: "spanish",
@@ -1223,13 +1310,18 @@ export async function searchProducts(
       .from("products")
       .select(PRODUCT_CARD_SELECT)
       .eq("status", "active")
+      .is("group_template_id", null)
       .ilike("search_text", `%${likeTerm}%`);
     if (allowedIds) b = b.in("id", allowedIds);
     branches.push(b.limit(PAGE_SIZE));
   }
   if (fuzzyIds.length) {
     branches.push(
-      supabase.from("products").select(PRODUCT_CARD_SELECT).in("id", fuzzyIds),
+      supabase
+        .from("products")
+        .select(PRODUCT_CARD_SELECT)
+        .in("id", fuzzyIds)
+        .is("group_template_id", null),
     );
   }
 
@@ -1571,6 +1663,7 @@ export const getAcademyDetail = cache(async (
       .select(`tutor_id, ${TUTOR_PRODUCT_SELECT}`)
       .in("tutor_id", ids)
       .eq("status", "active")
+      .is("group_template_id", null)
       .order("price_amount", { ascending: true }),
     supabase
       .from("reviews")

@@ -197,18 +197,13 @@ export default async function TutorProfilePage({
   ]);
   if (!data) notFound();
   const { tutor, products } = data;
-  // G2 · las grupales no tienen horarios que elegir: el panel de reserva solo
-  // lleva las 1:1. M10 · y si el tutor SOLO da grupales, ese panel decía «Este
-  // tutor aún no tiene mentorías disponibles para reservar»: en su lugar van
-  // sus próximas clases grupales, la más cercana primero.
+  // G2 · el panel de reserva solo lleva las 1:1: una grupal se reserva en su
+  // propio selector (RG-01, 24-oct: clases abiertas + horarios libres). M10 ·
+  // si el tutor SOLO da grupales, ese panel decía «Este tutor aún no tiene
+  // mentorías disponibles para reservar»: en su lugar van sus clases grupales.
+  // Son PLANTILLAS (`getTutorDetail` no trae las clases nacidas).
   const unoAUno = products.filter((p) => p.pricingModel !== "group");
-  const grupales = products
-    .filter((p) => p.pricingModel === "group" && p.grupal)
-    .sort((a, b) =>
-      (a.grupal?.fechas[0]?.startAt ?? "").localeCompare(
-        b.grupal?.fechas[0]?.startAt ?? "",
-      ),
-    );
+  const grupales = products.filter((p) => p.pricingModel === "group");
 
   const respuesta = responseTimeLabel(respuestaMin);
   // Escribirse a uno mismo no es una conversación (la RPC lo rechaza igual;
@@ -973,48 +968,34 @@ export default async function TutorProfilePage({
               // la clase es pública, sin guarda que redirija (regla de oro 13).
               <aside className="rounded-[18px] border border-[#e0e0e0] bg-card p-6 shadow-[0_12px_32px_rgb(0_0_0/0.08)] lg:sticky lg:top-24">
                 <h2 className="text-lg font-bold text-[#19191f]">
-                  Próximas clases grupales
+                  Clases grupales
                 </h2>
                 <ul className="mt-4 flex flex-col gap-3">
-                  {grupales.map((p) => {
-                    const libres = p.grupal?.cuposLibres ?? 0;
-                    return (
-                      <li
-                        key={p.id}
-                        className="rounded-[10px] bg-[#f5f5f5] px-3 py-3"
+                  {grupales.map((p) => (
+                    <li
+                      key={p.id}
+                      className="rounded-[10px] bg-[#f5f5f5] px-3 py-3"
+                    >
+                      <p className="text-sm font-semibold text-[#19191f]">
+                        {p.title}
+                      </p>
+                      <p className="mt-1 flex items-center gap-2 text-sm text-[#474747]">
+                        <UsersIcon
+                          className="size-4 shrink-0 text-brand"
+                          aria-hidden
+                        />
+                        {(p.packageNumSessions ?? 1) > 1
+                          ? `En grupo · ciclo de ${p.packageNumSessions} fechas`
+                          : "En grupo · eliges el horario"}
+                      </p>
+                      <Link
+                        href={productPath(p)}
+                        className="mt-2 inline-block text-sm font-semibold text-brand underline underline-offset-2"
                       >
-                        <p className="text-sm font-semibold text-[#19191f]">
-                          {p.title}
-                        </p>
-                        {p.grupal?.primeraFecha ? (
-                          <p className="mt-1.5 flex items-center gap-2 text-sm text-[#474747]">
-                            <CalendarIcon
-                              className="size-4 shrink-0 text-brand"
-                              aria-hidden
-                            />
-                            {p.grupal.primeraFecha}
-                          </p>
-                        ) : null}
-                        <p className="mt-1 flex items-center gap-2 text-sm text-[#474747]">
-                          <UsersIcon
-                            className="size-4 shrink-0 text-brand"
-                            aria-hidden
-                          />
-                          {libres === 1
-                            ? "Queda 1 cupo"
-                            : libres > 0
-                              ? `Quedan ${libres} cupos`
-                              : "Clase completa"}
-                        </p>
-                        <Link
-                          href={productPath(p)}
-                          className="mt-2 inline-block text-sm font-semibold text-brand underline underline-offset-2"
-                        >
-                          Ver la clase
-                        </Link>
-                      </li>
-                    );
-                  })}
+                        Ver horarios
+                      </Link>
+                    </li>
+                  ))}
                 </ul>
               </aside>
             ) : (

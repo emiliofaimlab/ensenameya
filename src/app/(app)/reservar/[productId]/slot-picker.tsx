@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CreditCardIcon,
   ShoppingCartIcon,
   XIcon,
 } from "lucide-react";
@@ -29,6 +30,7 @@ import {
   cartHasKeySnapshot,
   cartLineKey,
 } from "@/lib/cart/cookie";
+import { abrirClaseGrupal } from "./actions";
 
 export type Slot = { slot_start: string; slot_end: string };
 
@@ -181,6 +183,7 @@ export function SlotPicker({
   timeZone,
   formato,
   enCarrito: enCarritoInicial,
+  abrirGrupal = false,
 }: {
   productId: string;
   productTitle: string;
@@ -213,8 +216,16 @@ export function SlotPicker({
    * no existiría en el HTML y aparecería de golpe al hidratar.
    */
   enCarrito: number;
+  /**
+   * RG-01 (24-oct) · clase grupal: elegir horario(s) libres ABRE una clase
+   * nueva (`abrir_clase_grupal`) y se va derecho a pagarla. No pasa por el
+   * carrito: la línea sería de la plantilla, que no se puede cobrar, y la clase
+   * tiene que nacer antes para que otro alumno pueda sumarse a ella.
+   */
+  abrirGrupal?: boolean;
 }) {
   const router = useRouter();
+  const [abriendo, startAbrir] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(preselected ? [preselected] : []),
   );
@@ -390,7 +401,44 @@ export function SlotPicker({
     router.refresh();
   }
 
+  /**
+   * RG-01 · abre la clase con lo elegido y va a su checkout. `location.assign`
+   * y no `router.push`: el checkout cuelga de `(checkout)`, otro grupo de
+   * rutas, y puede responder con un `redirect()` (regla de oro 13).
+   */
+  function continuarGrupal() {
+    if (!completa || abriendo) return;
+    startAbrir(async () => {
+      const r = await abrirClaseGrupal(productId, [...selected]);
+      if (!r.ok) {
+        toast.error(r.mensaje);
+        // Lo que se ocupó ya no debe ofrecerse: se repintan los huecos.
+        setSelected(new Set());
+        router.refresh();
+        return;
+      }
+      window.location.assign(`/reservar/${r.productId}/checkout`);
+    });
+  }
+  const accion = abrirGrupal ? continuarGrupal : agregar;
+  const etiquetaAccion = abrirGrupal
+    ? abriendo
+      ? "Abriendo la clase…"
+      : "Continuar al pago"
+    : "Agregar al carrito";
+  const IconoAccion = abrirGrupal ? CreditCardIcon : ShoppingCartIcon;
+
   if (slots.length === 0) {
+    if (abrirGrupal) {
+      return (
+        <PanelCard>
+          <p className="text-[13px] text-[#6b6b6b]">
+            Por ahora el tutor no tiene horarios libres para abrir una clase
+            nueva. Vuelve a intentarlo más tarde.
+          </p>
+        </PanelCard>
+      );
+    }
     return (
       <PanelCard>
         <p className="text-[13px] text-[#6b6b6b]">
@@ -781,19 +829,21 @@ export function SlotPicker({
             <Button
               type="button"
               className="h-[45px] w-full rounded-[10px] text-sm font-semibold"
-              disabled={!completa}
-              onClick={agregar}
+              disabled={!completa || abriendo}
+              onClick={accion}
             >
-              <ShoppingCartIcon
+              <IconoAccion
                 className={cn("size-4", saltos > 0 && "animate-cart-bump")}
               />
-              Agregar al carrito
+              {etiquetaAccion}
             </Button>
 
-            <GoToCart
-              initial={enCarritoInicial}
-              buttonClassName="h-[45px] w-full rounded-[10px] text-sm font-semibold"
-            />
+            {abrirGrupal ? null : (
+              <GoToCart
+                initial={enCarritoInicial}
+                buttonClassName="h-[45px] w-full rounded-[10px] text-sm font-semibold"
+              />
+            )}
 
             {/* Por qué está bloqueado, al lado del botón bloqueado. La píldora
                 de arriba dice cuánto llevas; esto dice cuánto falta, que es la
@@ -801,8 +851,12 @@ export function SlotPicker({
             {!completa ? (
               <p className="text-center text-xs text-[#6b6b6b]">
                 {required - selected.size === 1
-                  ? "Elige 1 horario más para agregarla."
-                  : `Elige ${required - selected.size} horarios más para agregarla.`}
+                  ? abrirGrupal
+                    ? "Elige 1 horario más para seguir."
+                    : "Elige 1 horario más para agregarla."
+                  : abrirGrupal
+                    ? `Elige ${required - selected.size} horarios más para seguir.`
+                    : `Elige ${required - selected.size} horarios más para agregarla.`}
               </p>
             ) : null}
           </div>
@@ -826,9 +880,19 @@ export function SlotPicker({
             tres pantallas es como se llega a que dos mientan.
           */}
           <p className="mt-3 text-xs leading-relaxed text-[#6b6b6b]">
-            Agregar no bloquea el horario: hasta que no entras al pago, otro
-            alumno puede llevárselo. Al pasar al pago te lo reservamos{" "}
-            {HOLD_POLICY.minutes} minutos para que lo completes.
+            {abrirGrupal ? (
+              <>
+                Al continuar abres la clase a esa hora: otros alumnos pueden
+                sumarse hasta llenar el cupo. Tu cupo queda apartado{" "}
+                {HOLD_POLICY.minutes} minutos para que completes el pago.
+              </>
+            ) : (
+              <>
+                Agregar no bloquea el horario: hasta que no entras al pago, otro
+                alumno puede llevárselo. Al pasar al pago te lo reservamos{" "}
+                {HOLD_POLICY.minutes} minutos para que lo completes.
+              </>
+            )}
           </p>
         </PanelCard>
       </div>
@@ -884,20 +948,22 @@ export function SlotPicker({
           <Button
             type="button"
             className="h-[45px] flex-1 rounded-[10px] text-sm font-semibold"
-            disabled={!completa}
-            onClick={agregar}
+            disabled={!completa || abriendo}
+            onClick={accion}
           >
-            <ShoppingCartIcon
+            <IconoAccion
               className={cn("size-4", saltos > 0 && "animate-cart-bump")}
             />
-            Agregar al carrito
+            {etiquetaAccion}
           </Button>
         </div>
 
-        <GoToCart
-          initial={enCarritoInicial}
-          buttonClassName="mt-2 h-[38px] w-full rounded-[10px] text-[13px] font-semibold"
-        />
+        {abrirGrupal ? null : (
+          <GoToCart
+            initial={enCarritoInicial}
+            buttonClassName="mt-2 h-[38px] w-full rounded-[10px] text-[13px] font-semibold"
+          />
+        )}
       </div>
     </div>
   );

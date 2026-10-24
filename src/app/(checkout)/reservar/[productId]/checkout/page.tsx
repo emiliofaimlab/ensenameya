@@ -70,8 +70,34 @@ export default async function CheckoutPage({
   const product = await getProductDetail(productId);
   if (!product) notFound();
 
-  // G2 · en una grupal las fechas no las elige el alumno: salen de la clase
-  // (y `create_booking_line` exige que coincidan). La URL no las trae.
+  // RG-01 (24-oct) · la PLANTILLA grupal no se cobra: no tiene fechas hasta que
+  // un alumno elige la hora (`abrir_clase_grupal`), y lo que se paga es la
+  // clase que nace. Llega aquí un enlace viejo: se le manda a elegir. `<a>`:
+  // `/reservar/<id>` cuelga de `(app)` (regla de oro 13).
+  if (product.pricingModel === "group" && !product.groupTemplateId) {
+    return (
+      <div className="flex flex-col gap-3">
+        <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">
+          Primero elige el horario de tu clase
+        </h1>
+        <p className="text-sm text-[#6b6b6b]">
+          Súmate a una clase ya programada o abre un horario nuevo.
+        </p>
+        <a
+          href={user ? `/reservar/${productId}` : `/mentorias/${productId}`}
+          className="text-sm text-brand underline"
+        >
+          Ver los horarios
+        </a>
+      </div>
+    );
+  }
+  // La ficha y el selector de una clase nacida son los de su plantilla.
+  const fichaGrupal = `/mentorias/${product.groupTemplateId ?? productId}`;
+
+  // G2 · en una clase grupal NACIDA las fechas ya están: salen de la clase
+  // (y `create_booking_line` exige que coincidan). La URL no las trae. Las
+  // eligió el primer alumno en el selector de la plantilla (RG-01, 24-oct).
   const grupal = product.pricingModel === "group" ? product.grupal : null;
   // M4 · la reserva viva de quien mira. Con el cupo apartado (sin pagar) la
   // clase cuenta como llena POR ÉL, y cortarle aquí era no dejarle terminar.
@@ -131,8 +157,9 @@ export default async function CheckoutPage({
               : "Vuelve en unos minutos: si no completan el pago, los cupos se liberan solos."}
           </p>
         ) : null}
-        <Link href={`/mentorias/${productId}`} className="text-sm text-brand underline">
-          Volver a la clase
+        {/* RG-01 · a elegir otro horario de la misma clase. */}
+        <Link href={fichaGrupal} className="text-sm text-brand underline">
+          Ver otros horarios de esta clase
         </Link>
         {/* P37 · no dejarlo en un callejón sin salida. `/tutores/…` es pública. */}
         <Link href={`/tutores/${product.tutor.id}`} className="text-sm text-brand underline">
@@ -250,8 +277,16 @@ export default async function CheckoutPage({
           // Sin cuenta todavía no hay hold que soltar: aquí es un enlace normal.
           studentId={user?.id ?? null}
           slots={slots}
-          etiqueta={grupal ? "Volver a la clase" : "Cambiar horario"}
-          destino={grupal ? `/mentorias/${productId}` : undefined}
+          etiqueta={grupal ? "Cambiar de clase u horario" : "Cambiar horario"}
+          // RG-01 · el selector de la PLANTILLA (clases abiertas + horarios
+          // libres); sin sesión, su ficha pública.
+          destino={
+            grupal
+              ? user && product.groupTemplateId
+                ? `/reservar/${product.groupTemplateId}`
+                : fichaGrupal
+              : undefined
+          }
           className="mb-4 flex w-fit items-center gap-1.5 text-sm text-[#6b6b6b] transition-colors hover:text-foreground"
         />
         <h1 className="text-[28px] font-bold tracking-tight text-[#19191f]">

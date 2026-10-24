@@ -246,7 +246,8 @@ export default async function TutorHomePage() {
       .from("products")
       .select("id", { count: "exact", head: true })
       .eq("tutor_id", userId)
-      .eq("status", "active"),
+      .eq("status", "active")
+      .is("group_template_id", null),
     // ⚠️ NOVENA CONSULTA, Y NO ES UN ADORNO. El documento da `payout_country`
     // como proxy de «cuenta de cobro empezada», pero desde `20260908130000`
     // ese país ya NO lo elige el tutor: lo deduce un trigger de su zona

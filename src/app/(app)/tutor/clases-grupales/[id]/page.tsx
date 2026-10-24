@@ -66,6 +66,11 @@ const FECHA: Record<string, { label: string; tone: PillTone }> = {
  * pantalla solo las llama.
  *
  * `[id]` es el id del PRODUCTO, no de una fecha: la clase es el producto.
+ *
+ * RG-01 (24-oct) · desde que la hora la fija el primer alumno, ese producto es
+ * la clase NACIDA (`group_template_id` = la grupal que publicó el tutor). La
+ * plantilla no tiene fechas: si llega su id, se manda a «Mis mentorías», donde
+ * cada plantilla lista sus clases.
  */
 export default async function ClaseGrupalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -76,7 +81,7 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
   const [productoRes, fechasRes, reservasRes, students, { data: chat, error: chatError }, tier] = await Promise.all([
     supabase
       .from("products")
-      .select("id, title, status, pricing_model, capacity, min_seats, price_amount, currency, package_num_sessions")
+      .select("id, title, status, pricing_model, capacity, min_seats, price_amount, currency, package_num_sessions, group_template_id")
       .eq("id", id)
       .eq("tutor_id", userId)
       .maybeSingle(),
@@ -95,8 +100,8 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
       .eq("product_id", id)
       .order("created_at"),
     studentsOfTutor(supabase),
-    // G3 · el hilo del grupo. Ojo: nace al publicar la clase, no con el primer
-    // pago (P29), por eso la tarjeta mira además si alguien pagó.
+    // G3 · el hilo del grupo. Ojo: nace con la primera reserva, aunque no se
+    // haya pagado (P29), por eso la tarjeta mira además si alguien pagó.
     supabase
       .from("conversations")
       .select("id")
@@ -116,6 +121,24 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
   if (!producto || producto.pricing_model !== "group") notFound();
 
   const fechas = fechasRes.data ?? [];
+  if (!producto.group_template_id && fechas.length === 0) {
+    return (
+      <TutorShell
+        userId={userId}
+        title={producto.title}
+        description="Clase grupal"
+        back={{ href: "/tutor/products", label: "Volver a mis mentorías" }}
+      >
+        <PanelCard>
+          <p className="text-[13px] text-[#6b6b6b]">
+            Esta clase todavía no tiene fechas: nacen cuando un alumno elige un
+            horario de tu disponibilidad. Las clases ya programadas salen en
+            «Mis mentorías», bajo esta clase.
+          </p>
+        </PanelCard>
+      </TutorShell>
+    );
+  }
   // Un pago abandonado (hold caducado o soltado) deja una reserva cancelada sin
   // cobro: esa persona nunca llegó a inscribirse y no se lista como «baja».
   const reservas = ((reservasRes.data ?? []) as unknown as ReservaDeLaClase[]).filter(

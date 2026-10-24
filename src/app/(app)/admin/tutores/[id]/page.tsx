@@ -84,12 +84,14 @@ export default async function AdminTutorPage({
   // US-1103 / RN-06: el tier decide el split de sus próximas reservas.
   const [{ data: tierRows }, { data: grupales }] = await Promise.all([
     supabase.from("tutor_tiers").select("id, name, split_pct").order("split_pct"),
-    // G4 · sus clases grupales, para llegar a la ficha de cada una.
+    // G4 · sus clases grupales, para llegar a la ficha de cada una. Solo las
+    // NACIDAS (RG-01, 24-oct): la plantilla no tiene fechas ni ficha de clase.
     supabase
       .from("products")
       .select("id, title, status")
       .eq("tutor_id", id)
       .eq("pricing_model", "group")
+      .not("group_template_id", "is", null)
       .order("created_at", { ascending: false }),
   ]);
 

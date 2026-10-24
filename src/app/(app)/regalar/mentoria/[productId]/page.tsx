@@ -104,8 +104,9 @@ export default async function ConfirmarRegaloPage({
   const esGrupal = product.pricingModel === "group";
   const g = esGrupal ? (product.grupal ?? null) : null;
   const grupalBloqueada = esGrupal && !g?.regalable;
+  // RG-01 (24-oct) · `g` null es ya la plantilla: sin fechas, sin cupo que regalar.
   const motivoGrupal = !g
-    ? "Esta clase ya no admite inscripciones."
+    ? "Esta es una clase grupal."
     : g.cuposLibres <= 0
       ? "Esta clase ya no tiene cupos."
       : "Falta menos de 24 h para la primera fecha.";

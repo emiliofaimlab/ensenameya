@@ -1,6 +1,5 @@
 import { requireTutorProfile } from "@/lib/auth/tutor";
 import { createClient } from "@/lib/supabase/server";
-import { getUserTimezone } from "@/lib/auth/server";
 import { TutorShell } from "@/components/layout/tutor-shell";
 import { ProductForm } from "../product-form";
 
@@ -14,7 +13,7 @@ export default async function NewProductPage() {
   // N-04 · las franjas del tutor viajan con el formulario para poder elegir
   // cuáles usa la mentoría. Se piden aunque no haya ninguna: el propio selector
   // convierte «no hay» en el aviso de que sin horarios nadie puede reservar.
-  const [{ data: categories }, { data: rules }, { data: perfil }, tz] = await Promise.all([
+  const [{ data: categories }, { data: rules }, { data: perfil }] = await Promise.all([
     supabase
       .from("categories")
       .select("id, name")
@@ -32,7 +31,6 @@ export default async function NewProductPage() {
       .select("group_classes_enabled")
       .eq("profile_id", userId)
       .maybeSingle(),
-    getUserTimezone(),
   ]);
 
   return (
@@ -48,7 +46,6 @@ export default async function NewProductPage() {
         availabilityRules={rules ?? []}
         isApproved={approvalStatus === "approved"}
         groupClassesEnabled={perfil?.group_classes_enabled ?? false}
-        timezone={tz}
       />
     </TutorShell>
   );

@@ -2097,6 +2097,8 @@ export type Database = {
           currency: string
           description: string | null
           faqs: Json
+          group_opened_by: string | null
+          group_template_id: string | null
           id: string
           image_path: string | null
           inscripcion_cierra_at: string | null
@@ -2130,6 +2132,8 @@ export type Database = {
           currency: string
           description?: string | null
           faqs?: Json
+          group_opened_by?: string | null
+          group_template_id?: string | null
           id?: string
           image_path?: string | null
           inscripcion_cierra_at?: string | null
@@ -2163,6 +2167,8 @@ export type Database = {
           currency?: string
           description?: string | null
           faqs?: Json
+          group_opened_by?: string | null
+          group_template_id?: string | null
           id?: string
           image_path?: string | null
           inscripcion_cierra_at?: string | null
@@ -2199,6 +2205,20 @@ export type Database = {
             columns: ["academy_id"]
             isOneToOne: false
             referencedRelation: "academies_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_group_opened_by_fkey"
+            columns: ["group_opened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_group_template_id_fkey"
+            columns: ["group_template_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
           {
@@ -3442,6 +3462,7 @@ export type Database = {
           cupos_apartados: number | null
           cupos_libres: number | null
           end_at: string | null
+          group_template_id: string | null
           id: string | null
           inscripcion_cierra_at: string | null
           inscritos_pagados: number | null
@@ -3465,6 +3486,13 @@ export type Database = {
             columns: ["tutor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_group_template_id_fkey"
+            columns: ["group_template_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]
@@ -3625,6 +3653,10 @@ export type Database = {
       }
     }
     Functions: {
+      abrir_clase_grupal: {
+        Args: { p_product: string; p_slots: string[] }
+        Returns: string
+      }
       account_deletion_blockers: { Args: { p_user_id: string }; Returns: Json }
       account_deletion_state: { Args: { p_user_id: string }; Returns: Json }
       account_deletions_pendientes_de_barrido: {
@@ -3754,6 +3786,7 @@ export type Database = {
         Args: { p_base: number; p_pct: number }
         Returns: number
       }
+      cerrar_clases_grupales_vacias: { Args: never; Returns: number }
       cierre_de_inscripcion: { Args: { p_product: string }; Returns: string }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
@@ -3973,13 +4006,6 @@ export type Database = {
           rating: number
         }[]
       }
-      horarios_libres_del_tutor: {
-        Args: { p_desde?: string; p_duracion: number; p_hasta?: string }
-        Returns: {
-          slot_end: string
-          slot_start: string
-        }[]
-      }
       inscritos_de_clase: {
         Args: { p_product: string }
         Returns: {
@@ -4134,10 +4160,6 @@ export type Database = {
       proponer_reagenda: {
         Args: { p_new_start: string; p_session_id: string }
         Returns: string
-      }
-      publicar_clase_grupal: {
-        Args: { p_fechas: string[]; p_product: string }
-        Returns: undefined
       }
       puede_ver_conversacion: {
         Args: { p_conversation_id: string }
