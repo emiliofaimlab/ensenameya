@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { CheckIcon, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Container } from "@/components/layout/container";
@@ -7,6 +8,9 @@ import { Section } from "@/components/layout/section";
 import { SignupDialog } from "@/components/auth/signup-dialog";
 import { getVisitorState } from "@/components/auth/visitor-state";
 import { cn } from "@/lib/utils";
+
+import { BarraCtaMovil } from "./barra-cta-movil";
+import { LANDING_CIERRE_ID, LANDING_HERO_CTA_ID } from "./ids";
 
 /**
  * EY-236 · Piezas de las landings de campaña `/ensena` y `/aprende`. Sin Figma:
@@ -69,17 +73,42 @@ export async function RegistroYa({
   );
 }
 
-export function LandingHero({
+/** Ancla de «Cómo funciona», para el CTA secundario del hero. */
+export const COMO_FUNCIONA_ID = "como-funciona";
+
+/**
+ * Hero con el CTA principal arriba del pliegue y, debajo, uno secundario de
+ * menos peso (contorno). El secundario solo se ofrece al ANÓNIMO cuando la
+ * página lo pasa: con sesión el principal ya lleva a buscar tutor / a su panel
+ * de tutor, así que el secundario pasa a ser el ancla a «Cómo funciona» y
+ * nunca repite destino.
+ */
+export async function LandingHero({
   para,
   title,
   text,
   image,
+  beneficio,
+  sellos,
+  secundario,
 }: {
   para: Publico;
   title: string;
   text: string;
   image: { src: string; alt: string };
+  /** Línea bajo los botones: lo que cuesta empezar, en concreto. */
+  beneficio?: string;
+  /** Tres señales cortas con check, verificables en el producto. */
+  sellos?: string[];
+  /** CTA secundario para el anónimo. Sin él, el ancla a «Cómo funciona». */
+  secundario?: { href: string; label: string };
 }) {
+  const visitante = await getVisitorState();
+  const sec =
+    visitante.anonimo && secundario
+      ? secundario
+      : { href: `#${COMO_FUNCIONA_ID}`, label: "Ver cómo funciona" };
+
   return (
     <div className="bg-[#f9fafc]">
       <Container>
@@ -91,9 +120,38 @@ export function LandingHero({
             <p className="mt-6 text-pretty text-[17px] text-[#525252] sm:text-[18.6px]">
               {text}
             </p>
-            <div className="mt-8">
+            <div
+              id={LANDING_HERO_CTA_ID}
+              className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center"
+            >
               <RegistroYa para={para} />
+              <Button
+                asChild
+                variant="outline"
+                className="h-[46px] w-full border-brand px-6 text-[15px] font-semibold text-brand-foreground hover:bg-brand-muted hover:text-brand-foreground sm:h-12 sm:w-auto"
+              >
+                <Link href={sec.href}>{sec.label}</Link>
+              </Button>
             </div>
+            {beneficio ? (
+              <p className="mt-3 text-sm text-[#525252]">{beneficio}</p>
+            ) : null}
+            {sellos?.length ? (
+              <ul className="mt-6 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:gap-x-6">
+                {sellos.map((s) => (
+                  <li
+                    key={s}
+                    className="flex items-center gap-2 text-sm font-medium text-foreground"
+                  >
+                    <CheckIcon
+                      aria-hidden
+                      className="size-4 shrink-0 text-brand-foreground"
+                    />
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
           <div className="relative aspect-[592/420] overflow-hidden rounded-[24px] shadow-[0_2px_4px_rgb(0_0_0/0.31)]">
             <Image
@@ -108,6 +166,80 @@ export function LandingHero({
         </Section>
       </Container>
     </div>
+  );
+}
+
+/**
+ * Las garantías en una banda: cada una es algo que el código HACE (la página
+ * dice de dónde sale cada texto). Va justo después del hero, que es donde se
+ * contestan las dudas de «¿me puedo fiar?».
+ */
+export function LandingGarantias({
+  title,
+  items,
+}: {
+  title: string;
+  items: { icon: LucideIcon; title: string; text: string }[];
+}) {
+  return (
+    <div className="bg-brand-muted">
+      <Container>
+        <Section>
+          <h2 className="text-center text-2xl font-semibold text-balance sm:text-[28px]">
+            {title}
+          </h2>
+          <ul className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-6">
+            {items.map(({ icon: Icon, title: t, text }) => (
+              <li key={t} className="flex gap-4 rounded-[16px] bg-card p-5">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-brand-muted text-brand-foreground">
+                  <Icon aria-hidden className="size-5" />
+                </span>
+                <div>
+                  <h3 className="text-[15px] font-semibold">{t}</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">{text}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      </Container>
+    </div>
+  );
+}
+
+/**
+ * El CTA que se repite al pie de un bloque (beneficios, pasos): botón y, si
+ * toca, la nota. Sin `Section` propia: va pegado al bloque que cierra.
+ */
+export function LandingCta({
+  para,
+  nota,
+  className,
+}: {
+  para: Publico;
+  nota?: string;
+  className?: string;
+}) {
+  return (
+    <Container className={className}>
+      <div className="flex flex-col items-center gap-3 pb-10 sm:pb-16">
+        <RegistroYa para={para} />
+        {nota ? <p className="text-sm text-muted-foreground">{nota}</p> : null}
+      </div>
+    </Container>
+  );
+}
+
+/**
+ * La barra fija de móvil. El botón se resuelve AQUÍ, en servidor, y baja ya
+ * pintado a la parte de cliente, que solo decide cuándo se ve.
+ */
+export async function LandingBarraMovil({ para }: { para: Publico }) {
+  const visitante = await getVisitorState();
+  return (
+    <BarraCtaMovil conChat={!visitante.anonimo}>
+      <RegistroYa para={para} />
+    </BarraCtaMovil>
   );
 }
 
@@ -167,7 +299,7 @@ export function LandingCierre({
   nota: string;
 }) {
   return (
-    <div className="bg-brand text-white">
+    <div id={LANDING_CIERRE_ID} className="bg-brand text-white">
       <Container className="flex flex-col items-center gap-4 py-12 text-center sm:gap-6 sm:py-14">
         <h2 className="text-2xl/[30px] font-semibold text-balance sm:text-3xl">
           {title}
