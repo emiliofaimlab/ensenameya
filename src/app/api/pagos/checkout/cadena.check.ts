@@ -253,18 +253,18 @@ assert.deepEqual(
   "y si el único respaldo era PayPal, mejor sin respaldo que cobrando sin permiso",
 );
 
-// 🔑 PERO `cobrador` Y `snapshot` NO SE FILTRAN, y esto es lo contrario de un
-// descuido. Significan «aquí YA hay un cobro de PayPal abierto y pagable».
-// Quitarlos abriría un SEGUNDO cobro con tarjeta al recargar la pantalla.
+// 🔑 Y TAMPOCO por `cobrador` ni `snapshot` (24-oct). Antes sí, y era un
+// callejón: ir a PayPal, volver atrás sin aprobar, y cada carga del checkout
+// redirigía a PayPal sin dejar elegir tarjeta.
 assert.deepEqual(
-  cadenaDeCobro({ cobrador: "paypal", snapshot: "stripe", ruteo: ["stripe", "paypal"] }),
-  ["paypal", "stripe"],
-  "un cobro de PayPal ya abierto se reencuentra, no se duplica con otro riel",
+  cadenaDeCobro({ cobrador: "paypal", snapshot: "paypal", ruteo: ["stripe", "paypal"] }),
+  ["stripe"],
+  "volver de PayPal sin aprobar monta la tarjeta, no redirige otra vez",
 );
 assert.deepEqual(
-  cadenaDeCobro({ cobrador: null, snapshot: "paypal", ruteo: ["stripe", "paypal"] }),
+  cadenaDeCobro({ preferido: "paypal", cobrador: "paypal", snapshot: "stripe", ruteo: ["stripe", "paypal"] }),
   ["paypal", "stripe"],
-  "lo mismo con el snapshot: la reserva se termina por donde empezó",
+  "y si lo vuelve a elegir, el pedido de PayPal se reencuentra",
 );
 assert.deepEqual(
   cadenaDeCobro({ preferido: null, cobrador: null, snapshot: "dlocal", ruteo: ["dlocal", "stripe"] }),

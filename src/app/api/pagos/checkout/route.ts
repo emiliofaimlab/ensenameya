@@ -1753,10 +1753,8 @@ export async function POST(req: Request) {
     // adivinar.
     retencionHasta: retencion,
     // P50 · para prellenar el formulario de Stripe: sin el país salía el de la
-    // geolocalización de Stripe y Link volvía a pedir el correo. El correo es el
-    // del propio usuario y solo vuelve a su navegador. Los parámetros de la
-    // Session no cambian, así que `VERSION_PARAMS` no sube.
+    // geolocalización de Stripe. El correo NO va: ver `stripe-embed.tsx`.
+    // Los parámetros de la Session no cambian, así que `VERSION_PARAMS` no sube.
     paisPagador: cobrar.payerCountry ?? null,
-    correo: user.email ?? null,
   });
 }

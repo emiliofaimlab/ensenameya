@@ -16,9 +16,8 @@ import {
 export type Embed = {
   clientSecret: string;
   publishableKey: string;
-  /** P50 · país del pagador (ISO-2) y correo de la cuenta, para prellenar. */
+  /** P50 · país del pagador (ISO-2), para prellenar. */
   pais?: string | null;
-  correo?: string | null;
 };
 
 /**
@@ -159,7 +158,7 @@ function Formulario() {
   );
 }
 
-export function StripeEmbed({ clientSecret, publishableKey, pais, correo }: Embed) {
+export function StripeEmbed({ clientSecret, publishableKey, pais }: Embed) {
   // La promesa de `loadStripe` se crea UNA vez (inicializador perezoso del
   // estado): rehacerla en cada render remonta el formulario y se pierde lo
   // escrito.
@@ -191,13 +190,17 @@ export function StripeEmbed({ clientSecret, publishableKey, pais, correo }: Embe
     <CheckoutFormProvider
       key={clientSecret}
       stripe={stripe}
-      // P50 · sin esto el país salía «Noruega» (geolocalización de Stripe) y el
-      // bloque de Link volvía a pedir el correo.
+      // P50 · sin esto el país salía «Noruega» (geolocalización de Stripe).
+      //
+      // ⚠️ EL CORREO NO SE PRELLENA, y no es un olvido: la Session siempre nace
+      // con `customer` (`stripe-provider.ts`), que ya lleva el correo, y Stripe
+      // rechaza `defaultValues.email` encima de eso —«You cannot update the
+      // email because a customer… is already set»— y el formulario NO SE PINTA.
+      // Lo metió P50 el 17-oct y tumbó todo pago con tarjeta por Stripe.
       options={{
         clientSecret,
         appearance,
         defaultValues: {
-          ...(correo ? { email: correo } : {}),
           ...(pais ? { billingAddress: { address: { country: pais } } } : {}),
         },
       }}
