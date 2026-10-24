@@ -303,11 +303,15 @@ El interruptor de cobrar dinero real son las claves de Vercel, no las tablas.
 - **`docs/DICTADO-PAGOS.md`** — 🔴 manda en cobro y payout.
 - **`docs/PAGOS-Y-PAYOUTS.md`** — coste real de cada tramo y quién asume cada comisión.
 - **`docs/ACCESO-ADMIN-DEV.md`** — cómo entrar como admin en dev.
-- **`docs/PLAN-ACADEMIAS-Y-GRUPALES.md`** — 🟡 **en construcción** (2-oct-2026) en la rama
-  `feat/grupales-academias`, **solo en dev**. Deroga RN-22: las clases grupales entran en alcance y las
-  gobiernan sus reglas **RG-01…RG-21** (§3). Las de academias (RA-xx) siguen en `REQUERIMIENTOS.md`.
-  ⚠️ Esa rama **no se mergea a `dev` ni a `main`** hasta que se apruebe: el CI aplica migraciones a
-  prod desde las dos. Versiones vivas de lo que se reescribe: `docs/INVENTARIO-FASE-C.md`.
+- **`docs/PLAN-ACADEMIAS-Y-GRUPALES.md`** — ✅ **en `dev` y en `main` (producción) desde el
+  24-oct-2026**; la rama `feat/grupales-academias` ya no existe. Deroga RN-22: las clases grupales entran
+  en alcance y las gobiernan sus reglas **RG-01…RG-21** (§3). Las de academias (RA-xx) siguen en
+  `REQUERIMIENTOS.md`. ⚠️ **RG-01 se reescribió el 24-oct** (`20261024120000`): la grupal del tutor es
+  una **plantilla sin fechas**; el primer alumno elige hora en el selector de las 1:1 y
+  `abrir_clase_grupal` crea la **clase nacida** (otro `products` con `group_template_id`), a la que se
+  suman los demás. Las nacidas no salen en catálogo, sitemap ni contadores: filtra
+  `group_template_id is null` en cualquier listado nuevo de mentorías. Versiones vivas de lo que se
+  reescribió en la Fase C: `docs/INVENTARIO-FASE-C.md`.
 - **`docs/B2B-ACADEMIAS.md`** — estudio del perfil «academia» (B2B). Lo **sustituye** `REQUERIMIENTOS.md`
   vía el plan de arriba; queda como historia de la vitrina del 15-sep.
 
