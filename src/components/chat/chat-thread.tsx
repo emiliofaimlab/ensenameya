@@ -839,7 +839,9 @@ export function ChatThread({
         ref={listaRef}
         className={cn(
           "flex flex-col gap-2 overflow-y-auto rounded-lg border p-4",
-          fill ? "min-h-0 flex-1" : "max-h-[60vh] min-h-64",
+          // EY-237 · altura FIJA, no máxima: con `max-h` la caja crecía con
+          // cada mensaje y la ficha de la reserva se estiraba.
+          fill ? "min-h-0 flex-1" : "h-[60vh] min-h-64",
         )}
       >
         {messages.length === 0 ? (
