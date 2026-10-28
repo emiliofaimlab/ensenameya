@@ -9,6 +9,7 @@ import type { Database } from "@/lib/database.types";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { PanelCardTitle } from "@/components/layout/panel-shell";
 
 type ExcType = Database["public"]["Enums"]["availability_exception_type"];
@@ -185,7 +186,7 @@ export function ExceptionsManager({
         >
           <div className="grid gap-1.5">
             <Label htmlFor="exc-date">Fecha</Label>
-            <Input id="exc-date" type="date" min={today()} value={date} onChange={(e) => setDate(e.target.value)} required />
+            <DateInput id="exc-date" min={today()} value={date} onChange={setDate} required />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="exc-type">Tipo</Label>

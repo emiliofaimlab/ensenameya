@@ -1121,6 +1121,38 @@ function likeSafe(q: string): string {
 }
 
 /**
+ * EY-239 · palabras que NO dicen el tema. El placeholder sugiere «hablar
+ * inglés» / «aprobar cálculo» y la búsqueda exigía la frase entera: ninguna
+ * mentoría se llama así. Quitando el verbo de intención y el relleno queda el
+ * tema («ingles», «calculo»), que es lo que se busca.
+ * ponytail: lista a mano; si se queda corta, se añade la palabra aquí.
+ */
+const RELLENO = new Set(
+  (
+    "que para por con sin los las del una uno unos unas como mas muy mis tus sus " +
+    "busco buscar quiero quisiera necesito ayuda aprender aprendo aprobar pasar " +
+    "hablar dominar mejorar practicar estudiar entender saber hacer lograr " +
+    "clase clases curso cursos mentoria mentorias tutor tutores profesor " +
+    "examen final parcial nivel desde cero fluido basico avanzado hoy"
+  ).split(" "),
+);
+
+/** Palabras clave del término, sin acentos ni relleno, aptas para un `.or()`
+ *  de PostgREST (solo letras y dígitos: no hay gramática que romper). */
+function palabrasClave(q: string): string[] {
+  const palabras = stripAccents(q)
+    .toLowerCase()
+    .split(/[^a-z0-9ñ]+/)
+    .filter((w) => w.length >= 3);
+  const clave = palabras.filter((w) => !RELLENO.has(w));
+  // Todo era relleno («hablar»): mejor buscar lo tecleado que nada.
+  return [...new Set(clave.length ? clave : palabras)].slice(0, 8);
+}
+
+const orIlike = (col: string, palabras: string[]) =>
+  palabras.map((w) => `${col}.ilike.%${w}%`).join(",");
+
+/**
  * US-303 — tutores cuyo **nombre**, headline o bio menciona el término. Busca
  * contra `search_text`, la columna generada sin acentos (EY-109 + R24-04:
  * incluye `display_name`). Al ser una sola columna se acabó el `or(...)`: ya no
@@ -1152,8 +1184,12 @@ export async function searchTutors(
     .select(
       "profile_id, display_name, avatar_path, headline, bio, rating_avg, rating_count, badges",
     )
-    .eq("approval_status", "approved")
-    .ilike("search_text", `%${term}%`);
+    .eq("approval_status", "approved");
+  // EY-239 · basta con que case una palabra clave, no la frase entera.
+  const clave = palabrasClave(q);
+  query = clave.length
+    ? query.or(orIlike("search_text", clave))
+    : query.ilike("search_text", `%${term}%`);
   if (tutorIds) query = query.in("profile_id", tutorIds);
 
   const { data } = await query
@@ -1172,8 +1208,12 @@ export async function searchTutors(
 export async function searchCategories(q: string): Promise<CategoryTag[]> {
   const term = likeSafe(q).toLowerCase();
   if (!term) return [];
+  const clave = palabrasClave(q);
   const all = await listActiveCategories();
-  return all.filter((c) => stripAccents(c.name).toLowerCase().includes(term));
+  return all.filter((c) => {
+    const name = stripAccents(c.name).toLowerCase();
+    return name.includes(term) || clave.some((w) => name.includes(w));
+  });
 }
 
 /** Sugerencias del buscador global (R24-05): tutores/clases/categorías, pocas de
@@ -1315,6 +1355,19 @@ export async function searchProducts(
     if (allowedIds) b = b.in("id", allowedIds);
     branches.push(b.limit(PAGE_SIZE));
   }
+  // EY-239 · rama por palabras clave: «hablar inglés» casa con «Inglés
+  // conversacional». Va detrás de las de frase: solo añade lo que no alcanzaron.
+  const clave = palabrasClave(raw);
+  if (clave.length) {
+    let b = supabase
+      .from("products")
+      .select(PRODUCT_CARD_SELECT)
+      .eq("status", "active")
+      .is("group_template_id", null)
+      .or(orIlike("search_text", clave));
+    if (allowedIds) b = b.in("id", allowedIds);
+    branches.push(b.limit(PAGE_SIZE));
+  }
   if (fuzzyIds.length) {
     branches.push(
       supabase
@@ -1348,9 +1401,7 @@ export async function searchProducts(
   // tsvector, y la rama sin acentos y la difusa quedan detrás, que es el orden
   // en que llegaron.
   const termino = plain.toLowerCase();
-  const palabras = [
-    ...new Set(termino.split(/\s+/).filter((w) => w.length >= 3)),
-  ];
+  const palabras = clave;
   const ordenados = [...seen.values()]
     .map((p, i) => ({ p, i, peso: tituloScore(p.title, termino, palabras) }))
     .sort((a, b) => b.peso - a.peso || a.i - b.i)
