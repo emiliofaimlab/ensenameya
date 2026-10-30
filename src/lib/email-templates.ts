@@ -283,6 +283,10 @@ type Ctx = {
 
 const SOPORTE = "mailto:info@ensenameya.com";
 
+/** EY-242/243 · la mentoría de bienvenida que da el equipo a cada tutor nuevo. */
+const onboarding = (x: Ctx) =>
+  `${x.base}/mentorias/1-bienvenido-a-ensename-ya-onboarding-para-nuevos-tutores`;
+
 /**
  * EY-218 · ¿este correo va al TUTOR de la clase? Las plantillas que se encolan
  * a los dos (NTF-08/09/11/19, `reschedule_*`) llevan `para` en el payload desde
@@ -384,29 +388,33 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     ],
   }),
   welcome_tutor: (x) => ({
-    asunto: "Ya casi puedes enseñar: te faltan dos pasos",
+    asunto: "Te damos la bienvenida: tres pasos y empiezas a enseñar",
     familia: "clase",
     epigrafe: "Bienvenida a tutores",
-    titulo: "Dos pasos y tu perfil sale a buscar alumnos",
-    preheader: "Verifica tu identidad y publica tu primera mentoría.",
+    titulo: "Te damos la bienvenida",
+    preheader: "Tres pasos más y tu perfil ya puede recibir alumnos.",
     motivo: "Recibes este correo porque solicitaste enseñar en Enséñame Ya.",
     baja: true,
     cuerpo: [
       parrafo(
-        "Tu perfil de tutor está creado. Antes de que aparezca en las búsquedas necesitamos dos cosas, y las dos se hacen desde tu panel.",
+        "Tu perfil de tutor está creado. Antes de aparecer en las búsquedas necesitamos tres cosas, y las tres se hacen desde tu panel en minutos.",
       ),
       pasos([
         [
-          "Verifica tu identidad",
-          "Documento de identidad y los títulos que quieras acreditar. Lo revisamos a mano y solemos responder en 48 horas.",
+          "Verifica tu identidad y experiencia",
+          "Si aún no lo has hecho, compártenos tu documento de identidad y los títulos que validen lo que sabes. Una persona los revisa y te respondemos en menos de 48 horas.",
         ],
         [
           "Publica tu primera mentoría",
           "Título, precio y las horas en las que estás disponible. Puedes cambiarlo cuando quieras.",
         ],
+        [
+          "Agenda tu primera sesión de bienvenida con nosotros",
+          "Queremos conocerte mejor y que le saques el máximo provecho a Enséñame Ya.",
+        ],
       ]),
-      boton("Ir a mi panel de tutor", `${x.base}/tutor`),
-      enlaceSecundario("Cómo se calculan tus cobros", `${x.base}/how-it-works`),
+      boton("Agéndate YA", onboarding(x)),
+      boton("Ir a mi panel YA", `${x.base}/tutor`),
     ],
   }),
 
@@ -1580,15 +1588,19 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     asunto: "Recibimos tus documentos",
     familia: "cuenta",
     epigrafe: "Verificación",
-    titulo: "Tus documentos están en revisión",
+    titulo: "Tus documentos ya están en revisión",
     preheader: "Recibimos tus documentos. Los revisamos a mano en unas 48 horas.",
     motivo: "Recibes este correo porque enviaste documentos de verificación.",
     cuerpo: [
       parrafo(
-        "Los tenemos. Los revisa una persona, no un robot, y solemos responder <strong>en 48 horas hábiles</strong>.",
+        "Ya los tenemos. Los revisa una persona, no un robot, y solemos responder <strong>en 48 horas</strong>.",
       ),
-      caja("No tienes que hacer nada más. Te escribimos en cuanto haya respuesta, sea cual sea.", "cuenta"),
-      boton("Ver el estado", `${x.base}/tutor/verification`),
+      parrafo(
+        "Si aún no lo has hecho, agenda tu primera sesión de bienvenida a Enséñame Ya con nosotros para que le saques el máximo provecho a tu conocimiento.",
+      ),
+      boton("Reserva aquí", onboarding(x)),
+      caja("Y si ya lo hiciste, no tienes nada más que hacer. Te escribimos en cuanto haya respuesta, sea cual sea.", "cuenta"),
+      boton("Ver estado", `${x.base}/tutor/verification`),
     ],
   }),
 

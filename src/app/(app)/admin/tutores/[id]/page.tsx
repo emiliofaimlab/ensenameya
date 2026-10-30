@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { parseSocials, socialLabel } from "@/lib/socials";
+import { storageUrl } from "@/lib/catalog/format";
 import {
   PanelCard,
   PanelShell,
@@ -71,7 +72,7 @@ export default async function AdminTutorPage({
   const { data: tutor, error } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, badges, created_at, group_classes_enabled, profiles!tutor_profiles_profile_id_fkey(full_name, timezone, phone)",
+      "profile_id, headline, bio, socials, approval_status, identity_verification_status, approval_notes, tier_id, badges, created_at, group_classes_enabled, profiles!tutor_profiles_profile_id_fkey(full_name, timezone, phone, avatar_path)",
     )
     .eq("profile_id", id)
     .maybeSingle();
@@ -131,6 +132,15 @@ export default async function AdminTutorPage({
   // R29-02: la lista viene como `[{platform, url}]`; `parseSocials` sigue
   // entendiendo los perfiles viejos con forma `{instagram, linkedin}`.
   const socialLinks = parseSocials(tutor.socials);
+  const avatarPath = tutor.profiles?.avatar_path ?? null;
+  const foto = storageUrl("avatars", avatarPath);
+  // «maria-perez.jpg»: que el fichero descargado ya diga de quién es.
+  const fotoNombre = `${(tutor.profiles?.full_name ?? "tutor")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}.${avatarPath?.split(".").pop() ?? "jpg"}`;
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString("es", { day: "numeric", month: "short" });
 
@@ -160,6 +170,28 @@ export default async function AdminTutorPage({
             </div>
 
             <hr className="my-4 border-[#e0e0e0]" />
+
+            {/* EY-241 · la foto para los posts de redes. El bucket ya es
+                público (la ficha del tutor la enseña); `?download=` hace que
+                Storage la sirva como adjunto en vez de abrirla. */}
+            {foto ? (
+              <div className="mb-4 flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={foto}
+                  alt={`Foto de ${tutor.profiles?.full_name ?? "tutor"}`}
+                  className="size-16 rounded-full object-cover"
+                />
+                <a
+                  href={`${foto}?download=${encodeURIComponent(fotoNombre)}`}
+                  className="text-sm font-medium text-[#0080ff] underline"
+                >
+                  Descargar foto
+                </a>
+              </div>
+            ) : (
+              <p className="mb-4 text-sm text-[#6b6b6b]">Sin foto de perfil</p>
+            )}
 
             <BioEditor tutorId={tutor.profile_id} bio={tutor.bio} />
 
