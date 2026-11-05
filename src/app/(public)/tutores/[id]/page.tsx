@@ -49,6 +49,7 @@ import {
   storageUrl,
 } from "@/lib/catalog/format";
 import { PrecioEnLinea } from "@/components/precio/precio";
+import { TextoLargo } from "@/components/ui/texto-largo";
 
 /**
  * "básico e intermedio" — la «y» se vuelve «e» delante de palabra que empieza
@@ -773,9 +774,10 @@ export default async function TutorProfilePage({
 
                 {/* Bio completa, sin recortar y sin los enlaces del tutor:
                     `socials` es para verificación interna, no para publicarlo. */}
-                <p className="mt-3.5 text-[15px] text-pretty text-[#525252]">
-                  {tutor.bio}
-                </p>
+                <TextoLargo
+                  texto={tutor.bio}
+                  className="mt-3.5 text-[15px] text-[#525252]"
+                />
               </div>
             ) : null}
 

@@ -30,6 +30,7 @@ import {
 import { PrecioDesde } from "@/components/precio/precio";
 import { getAcademyDetail } from "@/lib/catalog/queries";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
+import { TextoLargo } from "@/components/ui/texto-largo";
 
 export async function generateMetadata({
   params,
@@ -293,9 +294,10 @@ export default async function AcademyPage({
             <h2 className="text-[20px] font-bold text-[#212121]">
               Sobre {academy.name}
             </h2>
-            <p className="mt-3 text-pretty text-[15px] leading-relaxed whitespace-pre-line text-[#525252]">
-              {academy.description}
-            </p>
+            <TextoLargo
+              texto={academy.description}
+              className="mt-3 text-[15px] leading-relaxed text-[#525252]"
+            />
           </Section>
         ) : null}
 

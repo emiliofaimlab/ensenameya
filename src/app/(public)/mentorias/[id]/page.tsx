@@ -50,6 +50,7 @@ import {
 import { initialsFrom, priceDisplay, storageUrl } from "@/lib/catalog/format";
 import { ImporteEnUsd, ImporteLocal } from "@/components/precio/precio";
 import type { Faq } from "@/lib/tutor-faqs";
+import { bloquesDeTexto } from "@/components/ui/texto-largo";
 
 /**
  * FAQ **de plataforma**: las que contesta Enséñame Ya, no el tutor. Respuestas
@@ -80,46 +81,6 @@ const PRODUCT_FAQ = [
     a: "Son sesiones 1 a 1 en una sala de video privada integrada en la plataforma. Entras desde tu panel a la hora de la sesión; no necesitas instalar nada.",
   },
 ];
-
-type BloqueDescripcion =
-  { tipo: "parrafo"; texto: string } | { tipo: "lista"; items: string[] };
-
-/**
- * §5.9 · «Qué vas a conquistar» sale de un texto libre (`products.description`)
- * y puede traer las dos cosas: párrafos y viñetas.
- *
- * ⚠️ LO QUE ESTABA MAL. `toBullets` trataba como ítem CUALQUIER línea no vacía
- * en cuanto hubiera más de una, así que una descripción de dos párrafos —lo más
- * normal que escribe un tutor— salía como dos ticks verdes, o sea prometiendo
- * como resultados lo que era prosa de presentación. Y al revés: un texto mixto
- * tenía que elegir, porque la función devolvía o lista o nada.
- *
- * Ahora es **ítem solo lo que el tutor marcó como ítem** (`-`, `•` o `*`) y el
- * resto es prosa, en el ORDEN en que lo escribió: un texto mixto pinta párrafo,
- * lista y párrafo si así viene. Las líneas en blanco separan bloques.
- */
-function bloquesDeDescripcion(text: string): BloqueDescripcion[] {
-  const bloques: BloqueDescripcion[] = [];
-  for (const cruda of text.split("\n")) {
-    const linea = cruda.trim();
-    if (!linea) continue;
-    const item = /^[-•*]\s*/.test(linea);
-    const ultimo = bloques[bloques.length - 1];
-    if (item) {
-      const texto = linea.replace(/^[-•*]\s*/, "").trim();
-      if (!texto) continue;
-      // Viñetas consecutivas = una sola lista; una viñeta después de un párrafo
-      // abre lista nueva.
-      if (ultimo?.tipo === "lista") ultimo.items.push(texto);
-      else bloques.push({ tipo: "lista", items: [texto] });
-    } else {
-      // Dos líneas seguidas SIN viñeta son dos párrafos, no uno partido: el
-      // tutor pulsó Intro a propósito y unirlas cambiaría lo que escribió.
-      bloques.push({ tipo: "parrafo", texto: linea });
-    }
-  }
-  return bloques;
-}
 
 export async function generateMetadata({
   params,
@@ -266,7 +227,7 @@ export default async function ProductPage({
   const esMiMentoria = user?.id === product.tutor.id;
 
   const bloques = product.description
-    ? bloquesDeDescripcion(product.description)
+    ? bloquesDeTexto(product.description)
     : [];
 
   /** §5.3 · la valoración del hero es la de ESTA mentoría, no la del tutor. */

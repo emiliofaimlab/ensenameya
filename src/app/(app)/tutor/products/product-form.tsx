@@ -1346,7 +1346,7 @@ export function ProductForm({
               value={descripcion}
               onChange={(e) => setDescripcion(e.target.value)}
               rows={4}
-              placeholder="Explica la metodología y qué incluye la mentoría…"
+              placeholder={"Explica la metodología y qué incluye la mentoría…\n\nPara viñetas, empieza la línea con «- »."}
               className="rounded-[8px] px-3.5 placeholder:text-[#8c8c8c]"
             />
           </div>

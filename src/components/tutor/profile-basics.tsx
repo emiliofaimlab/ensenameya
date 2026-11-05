@@ -114,7 +114,7 @@ export function TutorProfileBasics({
           value={bio}
           disabled={busy}
           onChange={(e) => setBio(e.target.value)}
-          placeholder="Resume tu experiencia y el resultado que ayudas a lograr…"
+          placeholder={"Resume tu experiencia y el resultado que ayudas a lograr…\n\nDeja una línea en blanco entre párrafos. Para viñetas, empieza la línea con «- »."}
           className="rounded-[8px] px-3.5 placeholder:text-[#8c8c8c]"
         />
         {/* Botón explícito y no guardado al perder el foco: el resto de la
