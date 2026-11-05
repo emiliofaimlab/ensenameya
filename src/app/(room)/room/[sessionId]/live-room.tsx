@@ -11,6 +11,13 @@ import type { Database } from "@/lib/database.types";
 import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
 import { RESENA_MIN_ANTES_DEL_FIN } from "@/lib/resena";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AddToCalendar } from "@/components/calendar/add-to-calendar";
 import { ChatThread, type ChatMessage } from "@/components/chat/chat-thread";
 import type { GrupalChat } from "@/components/chat/grupo";
@@ -627,6 +634,21 @@ export function LiveRoom({
   const salaRef = useRef<HTMLDivElement>(null);
   const pantalla = usePantallaCompleta(salaRef);
   const [panelMateriales, setPanelMateriales] = useState(false);
+  // Segunda cámara · el QR (data URL) que el tutor escanea con el celular.
+  const [qrCelular, setQrCelular] = useState<string | null>(null);
+  async function conectarCelular() {
+    if (!joined || joined.simulated) return;
+    const res = await fetch(`/api/room/${sessionId}/celular`, { method: "POST" });
+    const body = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
+    if (!res.ok || !body.token) {
+      toast.error(body.error ?? "No se pudo preparar el celular.");
+      return;
+    }
+    // En el fragmento: el token no viaja a ningún servidor al abrir el enlace.
+    const url = `${window.location.origin}/room/celular#r=${encodeURIComponent(joined.roomUrl)}&t=${encodeURIComponent(body.token)}`;
+    const QR = (await import("qrcode")).default;
+    setQrCelular(await QR.toDataURL(url, { margin: 1, width: 280 }));
+  }
 
   const opens = new Date(opensAt).getTime();
   const closes = new Date(closesAt).getTime();
@@ -1408,6 +1430,23 @@ export function LiveRoom({
               ) : null}
             </div>
 
+            <Dialog open={qrCelular !== null} onOpenChange={(o) => !o && setQrCelular(null)}>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                  <DialogTitle>Conecta tu celular como cámara</DialogTitle>
+                  <DialogDescription>
+                    Escanéalo con la cámara del celular y toca «Conectar cámara». El
+                    alumno verá tu hoja en grande y tu cara en pequeño. El celular
+                    no manda sonido.
+                  </DialogDescription>
+                </DialogHeader>
+                {qrCelular ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- data URL local
+                  <img src={qrCelular} alt="Código QR para conectar el celular" className="mx-auto size-[280px]" />
+                ) : null}
+              </DialogContent>
+            </Dialog>
+
             {isTutor && panelMateriales ? (
               <PanelMateriales
                 sessionId={sessionId}
@@ -1566,9 +1605,11 @@ export function LiveRoom({
           compartir={{
             pantalla: puedeCompartirPantalla
               ? {
-                  activa: Boolean(yo?.pantalla),
+                  // Segunda cámara · la «pantalla» del celular no es un
+                  // compartir: el botón sigue ofreciendo la pantalla de verdad.
+                  activa: Boolean(yo?.pantalla && !yo.celular),
                   alternar: () =>
-                    yo?.pantalla
+                    yo?.pantalla && !yo.celular
                       ? call?.stopScreenShare()
                       : call?.startScreenShare({
                           // Sin la propia pestaña de la sala en la lista: compartirla
@@ -1587,6 +1628,10 @@ export function LiveRoom({
                   dejar: pres.dejarDePresentar,
                 }
               : undefined,
+            celular:
+              isTutor && !esGrupal && !joined.simulated
+                ? { activo: Boolean(yo?.celular), conectar: () => void conectarCelular() }
+                : undefined,
           }}
           mano={miManoDisponible ? { arriba: mano.mia, alternar: mano.alternar } : undefined}
           chat={{ abierto: chatAbierto, sinLeer, alternar: alternarChat }}
