@@ -72,6 +72,19 @@ export function participantEjectAfterSec(startsAt: Date, endsAt: Date): number {
 }
 
 /**
+ * EY-244 · `exp` de la sala de una 1:1: el cierre de la ventana MÁS la extensión
+ * máxima (20 min, `extend_session`). Daily no documenta que mover el `exp` a
+ * mitad de llamada re-programe `eject_at_room_exp` para quien ya está dentro, y
+ * en prod no lo hizo: al extender 20 min, Daily echó a los dos en el cierre
+ * viejo. Así su expulsión nunca llega antes que la de nuestro reloj: quien
+ * cuelga a la hora es la sala (`afterWindow` en `live-room.tsx`), y Daily queda
+ * de red de seguridad, con `eject_after_elapsed` acotando la factura.
+ */
+export function salaExp1a1(closesAt: Date): Date {
+  return new Date(closesAt.getTime() + 20 * 60_000);
+}
+
+/**
  * Crea la sala si no existe y devuelve su URL. Idempotente: si Daily responde
  * que ya existe, se recupera — dos participantes entrando a la vez no chocan.
  * `exp` cierra la sala sola pasada la ventana de acceso (RN-18): aunque alguien

@@ -6,6 +6,7 @@ import {
   isDailyConfigured,
   mintToken,
   participantEjectAfterSec,
+  salaExp1a1,
 } from "@/lib/daily";
 
 /**
@@ -94,7 +95,8 @@ export async function POST(
   // sala viva una semana, pasársela al token sería firmar credenciales de
   // acceso válidas siete días. Si se la vuelves a pasar, deshaces exactamente
   // eso, y no lo va a avisar ni el typecheck: los dos son `Date`.
-  const roomClosesAt = new Date(auth.closes_at);
+  // EY-244 · + la extensión máxima: ver `salaExp1a1`.
+  const roomClosesAt = salaExp1a1(new Date(auth.closes_at));
 
   // La sala se crea con grabación SIEMPRE (regla del 2-sep: obligatoria y
   // notificada). `recording_allowed` devuelve true y se conserva porque es el

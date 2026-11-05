@@ -405,6 +405,9 @@ export function LiveRoom({
   const [endAt, setEndAt] = useState(endAtInicial);
   const [closesAt, setClosesAt] = useState(closesAtInicial);
   const [extendida, setExtendida] = useState(extendidaInicial);
+  /** EY-244 · el `closesAt` que ya se comprobó contra la BD (ver `afterWindow`). */
+  const [cierreReleido, setCierreReleido] = useState<string | null>(null);
+  const releyendoCierre = useRef(false);
   const [joined, setJoined] = useState<Joined | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
@@ -690,10 +693,39 @@ export function LiveRoom({
   // ni "todavía no abre" ni "ya cerró". Así las dos pasadas pintan el mismo
   // árbol y la elección de rama ocurre después de hidratar.
   const beforeWindow = now !== null && now < opens;
-  const afterWindow = now !== null && now > closes;
+  // EY-244 · el cierre solo se da por bueno tras releerlo de la BD: si el
+  // Realtime de la extensión no llegó (le pasó al alumno de Néstor), colgar con
+  // el `closesAt` viejo cortaba la clase extendida a mitad.
+  const afterWindow = now !== null && now > closes && cierreReleido === closesAt;
 
   // "En vivo" es un estado DERIVADO: uniste y la ventana sigue abierta.
   const live = joined !== null && !afterWindow;
+
+  // EY-244 · pasado el cierre que conocemos, una lectura a la BD antes de
+  // colgar. Si el tutor extendió, llega el fin nuevo y la clase sigue; si no,
+  // se confirma el cierre y `afterWindow` cuelga. Una sola lectura por cierre.
+  const pasadoElCierre = now !== null && now > closes;
+  useEffect(() => {
+    if (!pasadoElCierre || cierreReleido === closesAt || releyendoCierre.current) return;
+    releyendoCierre.current = true;
+    void (async () => {
+      const { data } = await createClient()
+        .from("sessions")
+        .select("end_at, access_closes_at, extended_at")
+        .eq("id", sessionId)
+        .maybeSingle();
+      releyendoCierre.current = false;
+      if (data?.access_closes_at && data.access_closes_at !== closesAt
+          && Date.parse(data.access_closes_at) > Date.parse(closesAt)) {
+        setEndAt(data.end_at);
+        setClosesAt(data.access_closes_at);
+        if (data.extended_at) setExtendida(true);
+      } else {
+        // Sin fila (RLS, red) también se confirma: no se deja la sala abierta.
+        setCierreReleido(closesAt);
+      }
+    })();
+  }, [pasadoElCierre, cierreReleido, closesAt, sessionId]);
 
   // La llamada de Daily: se crea al unirse y se destruye al salir/desmontar.
   //

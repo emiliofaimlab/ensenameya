@@ -5,6 +5,7 @@ import {
   ensureRoom,
   isDailyConfigured,
   participantEjectAfterSec,
+  salaExp1a1,
 } from "@/lib/daily";
 
 /**
@@ -49,7 +50,7 @@ export async function POST(
     try {
       await ensureRoom(
         s.room_name,
-        new Date(s.closes_at),
+        salaExp1a1(new Date(s.closes_at)),
         allowed === true,
         participantEjectAfterSec(new Date(s.starts_at), new Date(s.ends_at)),
       );
