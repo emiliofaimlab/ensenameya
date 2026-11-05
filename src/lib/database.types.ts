@@ -3171,6 +3171,7 @@ export type Database = {
           created_at: string
           display_name: string | null
           faqs: Json
+          group_classes_auto_at: string | null
           group_classes_enabled: boolean
           headline: string | null
           identity_verification_status: Database["public"]["Enums"]["identity_verification_status"]
@@ -3197,6 +3198,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           faqs?: Json
+          group_classes_auto_at?: string | null
           group_classes_enabled?: boolean
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
@@ -3223,6 +3225,7 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           faqs?: Json
+          group_classes_auto_at?: string | null
           group_classes_enabled?: boolean
           headline?: string | null
           identity_verification_status?: Database["public"]["Enums"]["identity_verification_status"]
