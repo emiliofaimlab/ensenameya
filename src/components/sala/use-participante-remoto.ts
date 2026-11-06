@@ -3,8 +3,6 @@
 import { useEffect, useState } from "react";
 import type { DailyCall, DailyParticipant, DailyTrackState } from "@daily-co/daily-js";
 
-import { fusionarCelulares } from "./celular";
-
 /**
  * Quién está en la llamada y con qué pistas, para pintar NUESTRAS teselas.
  *
@@ -33,9 +31,6 @@ export type Participante = {
   /** M5 · puede compartir pantalla. En una grupal el alumno entra sin ese
    *  permiso (`canSend` del token) y el tutor se lo concede o se lo quita. */
   puedePantalla: boolean;
-  /** Segunda cámara · `pantalla` es la cámara de su celular, no su pantalla
-   *  (`fusionarCelulares`). */
-  celular?: boolean;
 };
 
 /** Lo que necesitan la mano levantada (1:1) y la ventana flotante. */
@@ -82,7 +77,8 @@ function leer(call: DailyCall): Participante[] {
     /* llamada destruida */
   }
   // Yo primero; el resto en el orden en que entraron.
-  return fusionarCelulares(Object.values(ps).map(aParticipante))
+  return Object.values(ps)
+    .map(aParticipante)
     .sort((a, b) => Number(b.local) - Number(a.local));
 }
 

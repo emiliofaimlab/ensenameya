@@ -15,7 +15,6 @@ import {
   MonitorUpIcon,
   PhoneOffIcon,
   SettingsIcon,
-  SmartphoneIcon,
   UsersIcon,
   VideoIcon,
   VideoOffIcon,
@@ -256,8 +255,6 @@ export type Compartir = {
   pantalla?: { activa: boolean; alternar: () => void };
   /** Solo el tutor presenta documentos. */
   documentos?: { presentando: boolean; elegir: () => void; dejar: () => void };
-  /** Segunda cámara · solo el tutor de una 1:1 con Daily real. */
-  celular?: { activo: boolean; conectar: () => void };
 };
 
 function BotonCompartir({
@@ -268,9 +265,9 @@ function BotonCompartir({
   sustantivo: string;
 }) {
   const { abierto, setAbierto, ref } = useDesplegable();
-  const { pantalla, documentos, celular } = compartir;
-  if (!pantalla && !documentos && !celular) return null;
-  const activo = Boolean(pantalla?.activa || documentos?.presentando || celular?.activo);
+  const { pantalla, documentos } = compartir;
+  if (!pantalla && !documentos) return null;
+  const activo = Boolean(pantalla?.activa || documentos?.presentando);
   const cerrarY = (fn: () => void) => () => {
     setAbierto(false);
     fn();
@@ -312,14 +309,6 @@ function BotonCompartir({
                 </Opcion>
               ) : null}
             </>
-          ) : null}
-          {celular ? (
-            <Opcion
-              icono={<SmartphoneIcon className="size-4" aria-hidden />}
-              onClick={cerrarY(celular.conectar)}
-            >
-              {celular.activo ? "Volver a conectar el celular" : "Cámara del celular"}
-            </Opcion>
           ) : null}
         </Menu>
       ) : null}
