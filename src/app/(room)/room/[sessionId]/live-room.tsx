@@ -649,9 +649,6 @@ export function LiveRoom({
     const QR = (await import("qrcode")).default;
     setQrCelular(await QR.toDataURL(url, { margin: 1, width: 280 }));
   }
-  // En cuanto el celular entra, el QR sobra: se cierra solo (ajuste en el
-  // render, no en un efecto, para no pintar un fotograma de más).
-  if (qrCelular && yo?.celular) setQrCelular(null);
 
   const opens = new Date(opensAt).getTime();
   const closes = new Date(closesAt).getTime();
