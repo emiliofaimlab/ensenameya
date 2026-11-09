@@ -35,7 +35,8 @@
     "check:bots": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/sentry-bot.check.ts",
     "check:dinero": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/dinero.check.ts",
     "check:seo": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/seo.check.ts",
-    "check:horario": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/availability.check.ts"
+    "check:horario": "node --experimental-strip-types --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/availability.check.ts",
+    "check:agentes": "node scripts/agentes/limite.check.mjs"
   },
   "dependencies": {
     "@daily-co/daily-js": "^0.91.0",

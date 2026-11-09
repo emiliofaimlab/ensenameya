@@ -34,5 +34,17 @@
       "Bash(git reset --hard:*)",
       "Bash(rm:*)"
     ]
+  },
+  "hooks": {
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/agentes/limite.mjs\""
+          }
+        ]
+      }
+    ]
   }
 }
