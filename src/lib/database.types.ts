@@ -2940,6 +2940,114 @@ export type Database = {
           },
         ]
       }
+      tutor_download_leads: {
+        Row: {
+          consent_at: string
+          created_at: string
+          download_id: string
+          email: string
+          id: string
+          ip: unknown
+          name: string
+          tutor_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          consent_at?: string
+          created_at?: string
+          download_id: string
+          email: string
+          id?: string
+          ip?: unknown
+          name: string
+          tutor_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          consent_at?: string
+          created_at?: string
+          download_id?: string
+          email?: string
+          id?: string
+          ip?: unknown
+          name?: string
+          tutor_id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_download_leads_download_id_fkey"
+            columns: ["download_id"]
+            isOneToOne: false
+            referencedRelation: "tutor_downloads"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tutor_download_leads_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tutor_downloads: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          file_name: string
+          file_path: string
+          id: string
+          size_bytes: number
+          sort_order: number
+          title: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          file_name: string
+          file_path: string
+          id?: string
+          size_bytes: number
+          sort_order?: number
+          title: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          description?: string | null
+          file_name?: string
+          file_path?: string
+          id?: string
+          size_bytes?: number
+          sort_order?: number
+          title?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tutor_downloads_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "tutor_profiles"
+            referencedColumns: ["profile_id"]
+          },
+          {
+            foreignKeyName: "tutor_downloads_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "tutors_public"
+            referencedColumns: ["profile_id"]
+          },
+        ]
+      }
       tutor_manual_payout_destinations: {
         Row: {
           channel: string

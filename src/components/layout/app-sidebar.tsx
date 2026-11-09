@@ -8,6 +8,7 @@ import {
   BarChart3Icon,
   BellIcon,
   FlagIcon,
+  FileDownIcon,
   BookOpenIcon,
   CalendarPlusIcon,
   ChevronDownIcon,
@@ -242,6 +243,8 @@ export const TUTOR_ITEMS: Item[] = [
   // recurso: el menú es estático y decidir su forma con una consulta por
   // pantalla no compensa; `/tutor/recursos` dice en claro que aún no hay nada.
   { href: "/tutor/recursos", label: "Recursos para redes", icon: MegaphoneIcon },
+  // EY-248 · Los PDFs del perfil público que se bajan a cambio de nombre + email.
+  { href: "/tutor/descargables", label: "Descargables", icon: FileDownIcon },
   // La misma pantalla que ve el alumno, y por el mismo motivo que «Invita y
   // gana»: regalar una mentoría no es una acción de alumno. Sin esta entrada,
   // un tutor que entra a `/regalar` desde su panel se queda con el menú de
@@ -343,6 +346,8 @@ export const ADMIN_ITEMS: Item[] = [
   { href: "/admin/metodos-de-cobro", label: "Métodos de cobro", icon: WalletIcon },
   // EY-222 · Lo que el tutor ve en «Recursos para redes» y a quién se le enseña.
   { href: "/admin/recursos", label: "Recursos para redes", icon: ImagesIcon },
+  // EY-248 · Todos los contactos que dejaron los descargables de los tutores.
+  { href: "/admin/descargables", label: "Leads de descargables", icon: FileDownIcon },
   // Quién entra al panel. Última de la tira a propósito: es la que menos se
   // usa y la única que reparte acceso, así que no conviene tenerla a un dedo
   // de distancia de las de consulta.

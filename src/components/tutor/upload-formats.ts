@@ -210,3 +210,11 @@ export function fileProblem(
   }
   return null;
 }
+
+/* ── Descargables del perfil público → bucket privado `tutor-downloads` (EY-248) ─ */
+/** Espejo de `20261109120000`: solo PDF, 10 MB. Se cambian allí, no aquí. */
+export const DOWNLOAD_MAX_BYTES = 10 * MB;
+export const DOWNLOAD_TYPES = [PDF];
+export const DOWNLOAD_HINT = `PDF · máx. ${maxLabel(DOWNLOAD_MAX_BYTES)}`;
+/** El trigger `tutor_downloads_tope` es quien de verdad lo impone. */
+export const DOWNLOAD_MAX_COUNT = 4;

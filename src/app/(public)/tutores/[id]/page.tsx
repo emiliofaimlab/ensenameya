@@ -50,6 +50,8 @@ import {
 } from "@/lib/catalog/format";
 import { PrecioEnLinea } from "@/components/precio/precio";
 import { TextoLargo } from "@/components/ui/texto-largo";
+import { Descargables } from "@/components/catalog/descargables";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * "básico e intermedio" — la «y» se vuelve «e» delante de palabra que empieza
@@ -187,6 +189,7 @@ export default async function TutorProfilePage({
     { user, onboardingComplete },
     timeZone,
     formato,
+    descargables,
   ] = await Promise.all([
     getTutorDetail(id),
     listTutorReviews(id),
@@ -195,6 +198,18 @@ export default async function TutorProfilePage({
     getViewerTimezone(),
     // 12 h / 24 h: en la MISMA tanda que la zona, por lo mismo que ella.
     getFormatoHora(),
+    // EY-248 · con la clave anon: la RLS pública solo deja ver los vivos de un
+    // tutor aprobado. Un fallo aquí no tumba la ficha: la sección no sale.
+    createClient().then(async (s) =>
+      (
+        await s
+          .from("tutor_downloads")
+          .select("id, title, description")
+          .eq("tutor_id", id)
+          .order("sort_order")
+          .order("created_at")
+      ).data ?? [],
+    ),
   ]);
   if (!data) notFound();
   const { tutor, products } = data;
@@ -898,6 +913,21 @@ export default async function TutorProfilePage({
                 </div>
               )}
             </div>
+
+            {/* EY-248 · los PDFs del tutor, a cambio de nombre + email. Mismo
+                `order` que las mentorías: en móvil van justo debajo. */}
+            {descargables.length > 0 ? (
+              <div className="max-lg:order-3">
+                <h2 className="text-[22px] font-bold text-[#1f1f1f]">
+                  Recursos de {nombreCorto}
+                </h2>
+                <Descargables
+                  items={descargables}
+                  tutor={name}
+                  email={user?.email ?? ""}
+                />
+              </div>
+            ) : null}
 
             <div className="max-lg:order-6">
               <h2 className="text-[22px] font-bold text-[#1f1f1f]">
