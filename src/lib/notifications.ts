@@ -155,6 +155,8 @@ const TEXT: Record<string, string> = {
 const DESTINO: Record<string, string> = {
   welcome_student: "/app",
   welcome_tutor: "/tutor",
+  // NTF-40 (A2) · la guarda de /academia ata la invitación al entrar.
+  academy_admin_invited: "/academia",
   // EY-230 · a «Mis reseñas», dentro del panel. Ni `/tutor` (no enseña
   // ninguna) ni la ficha pública: está en `(public)` y la guarda de `(app)` no
   // se cruza con un enlace a mano (regla de oro 13).

@@ -30,7 +30,7 @@ npm run dev        # → http://localhost:3000 (contra dev cloud)
 | `npm run db:push` | Aplica migraciones al proyecto **dev** enlazado |
 | `npm run db:types` | Regenera `src/lib/database.types.ts` (aborta sin tocar el fichero si falla) |
 | `npm run lint` · `npm run typecheck` | Lint y typecheck |
-| `npm run check:*` | **Diecinueve comprobaciones ejecutables** sin red ni credenciales: `email`, `correos`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel`, `rutas`, `enlaces`, `dinero`, `horario`, `cargo`, `csv`, `bots`, `seo`. Manda `package.json`, no este renglón: ya se quedó corto dos veces |
+| `npm run check:*` | **Comprobaciones ejecutables** sin red ni credenciales: `email`, `correos`, `terms`, `ics`, `chat`, `cadena`, `paypal`, `wise`, `stripe-payout`, `metodo`, `riel`, `rutas`, `enlaces`, `dinero`, `horario`, `cargo`, `csv`, `bots`, `seo`, `agentes`. Manda `package.json`, no este renglón: ya se quedó corto dos veces |
 
 Enlace del CLI a dev: `npx supabase link --project-ref lbtpnszjjsxbeileqsja`.
 Tras tocar el esquema: `npm run db:push` **y** `npm run db:types`. A prod llega por **CI**
@@ -108,6 +108,13 @@ al mergear a `main`.
     calculado, una guarda nueva) lo degrada a una recarga
     `components/layout/red-anti-blanco.tsx`. Y esto **solo se verifica contra
     `npm run build` + `npm start`**, nunca contra `next dev`.
+
+## Salida de los agentes
+
+Los subagentes entregan **≤ 200 palabras de prosa, sin relleno**: hechos, `fichero:línea`
+y decisiones; sin introducción ni cierre. No se repite en ningún prompt: lo impone el hook
+`SubagentStop` (`.claude/settings.json`) con `scripts/agentes/limite.mjs`, que rechaza el
+informe y obliga a reescribirlo. El código entre ``` no cuenta. Lo vigila `npm run check:agentes`.
 
 ## Patrón RLS
 
@@ -226,6 +233,10 @@ src/app/api/cron/             alertas-resumen · notifications-send · payouts-p
                               · recordings-purge · referrals-sync · refunds-process
 src/app/(app)/referidos       «Invita y gana» NATIVA — se pinta desde nuestra base, RF
                               solo por API (misma pantalla para alumno y tutor)
+src/app/(app)/academia      panel de la academia (A2/A3) — reglas propias en su CLAUDE.md;
+                              guarda `requireAcademiaPropia()` en `src/lib/auth/academia.ts`
+src/app/(app)/admin/academias A2: alta, acuerdo, administrador (NTF-40), suspender y
+                              aprobar cambios de perfil — todo por RPC `admin_*` (20261109150000)
 src/app/(app)/admin/referidos qué campañas de RF se ven y con qué texto (+ sus dos
                               Route Handlers en `src/app/api/admin/referidos/`)
 src/app/(public)/terms|privacy|cookies  páginas legales (DD-06)

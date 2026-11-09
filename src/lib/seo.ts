@@ -35,6 +35,9 @@ export const RUTAS_PRIVADAS = [
   "/reservas",
   "/tutor$",
   "/tutor/",
+  // Mismo par que /tutor: /academia a secas cerraría también /academias (pública).
+  "/academia$",
+  "/academia/",
   "/login",
   "/signup",
   "/reset",

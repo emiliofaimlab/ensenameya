@@ -59,6 +59,7 @@ export type Database = {
           owner_id: string | null
           payout_country: string | null
           pending_changes: Json | null
+          pending_changes_rejection: string | null
           policies_url: string | null
           slug: string
           status: Database["public"]["Enums"]["academy_status"]
@@ -66,6 +67,7 @@ export type Database = {
           updated_at: string
           website: string | null
         }
+        ComputedFields: never
         Insert: {
           agreement_notes?: string | null
           agreement_starts_on?: string | null
@@ -85,6 +87,7 @@ export type Database = {
           owner_id?: string | null
           payout_country?: string | null
           pending_changes?: Json | null
+          pending_changes_rejection?: string | null
           policies_url?: string | null
           slug: string
           status?: Database["public"]["Enums"]["academy_status"]
@@ -111,6 +114,7 @@ export type Database = {
           owner_id?: string | null
           payout_country?: string | null
           pending_changes?: Json | null
+          pending_changes_rejection?: string | null
           policies_url?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["academy_status"]
@@ -142,6 +146,7 @@ export type Database = {
           token: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           academy_id: string
           accepted_at?: string | null
@@ -198,7 +203,7 @@ export type Database = {
           completed_at: string | null
           last_check_at: string | null
           last_error: string | null
-          pending_snapshot: Json
+          pending_snapshot: NonNullable<Json>
           prev_active_products: string[]
           prev_approval:
             | Database["public"]["Enums"]["tutor_approval_status"]
@@ -207,12 +212,13 @@ export type Database = {
           status: Database["public"]["Enums"]["account_deletion_request_status"]
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           cancelled_at?: string | null
           completed_at?: string | null
           last_check_at?: string | null
           last_error?: string | null
-          pending_snapshot?: Json
+          pending_snapshot?: NonNullable<Json>
           prev_active_products?: string[]
           prev_approval?:
             | Database["public"]["Enums"]["tutor_approval_status"]
@@ -226,7 +232,7 @@ export type Database = {
           completed_at?: string | null
           last_check_at?: string | null
           last_error?: string | null
-          pending_snapshot?: Json
+          pending_snapshot?: NonNullable<Json>
           prev_active_products?: string[]
           prev_approval?:
             | Database["public"]["Enums"]["tutor_approval_status"]
@@ -249,19 +255,20 @@ export type Database = {
         Row: {
           deleted_at: string
           roles: string[]
-          summary: Json
+          summary: NonNullable<Json>
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           deleted_at?: string
           roles?: string[]
-          summary?: Json
+          summary?: NonNullable<Json>
           user_id: string
         }
         Update: {
           deleted_at?: string
           roles?: string[]
-          summary?: Json
+          summary?: NonNullable<Json>
           user_id?: string
         }
         Relationships: [
@@ -288,6 +295,7 @@ export type Database = {
           suspended_by: string | null
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           had_tutor_role?: boolean
           lifted_at?: string | null
@@ -353,6 +361,7 @@ export type Database = {
           kind: string
           note: string | null
         }
+        ComputedFields: never
         Insert: {
           acked_at?: string
           acked_by: string
@@ -388,6 +397,7 @@ export type Database = {
           tutor_id: string
           type: Database["public"]["Enums"]["availability_exception_type"]
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           date: string
@@ -433,6 +443,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           academy_id: string
           created_at?: string
@@ -503,6 +514,7 @@ export type Database = {
           updated_at: string
           weekday: number
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           end_time: string
@@ -563,6 +575,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           academy_id?: string | null
           booking_ref?: string | null
@@ -673,6 +686,7 @@ export type Database = {
           token: string
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           last_seen_at?: string | null
@@ -707,6 +721,7 @@ export type Database = {
           sort_order: number
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           description?: string | null
@@ -741,6 +756,7 @@ export type Database = {
           path: string
           size_bytes: number
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           file_name: string
@@ -786,6 +802,7 @@ export type Database = {
           updated_at: string
           user_agent: string | null
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           delivered_at?: string | null
@@ -834,6 +851,7 @@ export type Database = {
           last_read_at: string
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           conversation_id: string
           last_read_at?: string
@@ -871,6 +889,7 @@ export type Database = {
           reason: string
           reporter_id: string
         }
+        ComputedFields: never
         Insert: {
           conversation_id: string
           created_at?: string
@@ -926,6 +945,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           blocked_at?: string | null
           blocked_reason?: string | null
@@ -1004,6 +1024,7 @@ export type Database = {
           status: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           amount: number
           beneficiary_email?: string | null
@@ -1108,6 +1129,7 @@ export type Database = {
           updated_at: string
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           google_email?: string | null
@@ -1141,6 +1163,7 @@ export type Database = {
           motivo: string | null
           student_id: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           expulsado_por?: string | null
@@ -1205,6 +1228,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -1270,6 +1294,7 @@ export type Database = {
           provider_refund_id: string | null
           reason: string
         }
+        ComputedFields: never
         Insert: {
           amount: number
           booking_id?: string | null
@@ -1330,6 +1355,7 @@ export type Database = {
           id: string
           sender_id: string
         }
+        ComputedFields: never
         Insert: {
           attachment_name?: string | null
           attachment_path?: string | null
@@ -1384,7 +1410,7 @@ export type Database = {
           created_at: string
           id: string
           idempotency_key: string
-          payload: Json
+          payload: NonNullable<Json>
           read_at: string | null
           recipient_id: string
           sent_at: string | null
@@ -1392,12 +1418,13 @@ export type Database = {
           template: string
           type: string
         }
+        ComputedFields: never
         Insert: {
           channel?: string
           created_at?: string
           id?: string
           idempotency_key: string
-          payload?: Json
+          payload?: NonNullable<Json>
           read_at?: string | null
           recipient_id: string
           sent_at?: string | null
@@ -1410,7 +1437,7 @@ export type Database = {
           created_at?: string
           id?: string
           idempotency_key?: string
-          payload?: Json
+          payload?: NonNullable<Json>
           read_at?: string | null
           recipient_id?: string
           sent_at?: string | null
@@ -1442,6 +1469,7 @@ export type Database = {
           student_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           checkout_amount?: number | null
           checkout_opened_at?: string | null
@@ -1488,6 +1516,7 @@ export type Database = {
           provider: string
           provider_token: string
         }
+        ComputedFields: never
         Insert: {
           brand?: string | null
           created_at?: string
@@ -1530,6 +1559,7 @@ export type Database = {
           priority: number
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           charge_providers: string[]
           created_at?: string
@@ -1564,6 +1594,7 @@ export type Database = {
           event_id: string
           processed_at: string
         }
+        ComputedFields: never
         Insert: {
           booking_id: string
           event_id: string
@@ -1615,6 +1646,7 @@ export type Database = {
           tutor_net_amount: number
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           booking_id: string
           checkout_amount?: number | null
@@ -1715,6 +1747,7 @@ export type Database = {
           payout_id: string
           reason: string
         }
+        ComputedFields: never
         Insert: {
           amount: number
           created_at?: string
@@ -1773,6 +1806,7 @@ export type Database = {
           updated_at: string
           wise_bank_code: string | null
         }
+        ComputedFields: never
         Insert: {
           bank_code: string
           country: string
@@ -1807,7 +1841,7 @@ export type Database = {
         Row: {
           account_help: string
           account_label: string
-          account_patterns: Json
+          account_patterns: NonNullable<Json>
           account_types: string[]
           branch_help: string | null
           branch_label: string | null
@@ -1815,16 +1849,17 @@ export type Database = {
           country: string
           created_at: string
           currency: string
-          document_patterns: Json
+          document_patterns: NonNullable<Json>
           notas: string
           requires_branch: boolean
           updated_at: string
           wise_account_type: string | null
         }
+        ComputedFields: never
         Insert: {
           account_help: string
           account_label: string
-          account_patterns?: Json
+          account_patterns?: NonNullable<Json>
           account_types?: string[]
           branch_help?: string | null
           branch_label?: string | null
@@ -1832,7 +1867,7 @@ export type Database = {
           country: string
           created_at?: string
           currency: string
-          document_patterns: Json
+          document_patterns: NonNullable<Json>
           notas: string
           requires_branch?: boolean
           updated_at?: string
@@ -1841,7 +1876,7 @@ export type Database = {
         Update: {
           account_help?: string
           account_label?: string
-          account_patterns?: Json
+          account_patterns?: NonNullable<Json>
           account_types?: string[]
           branch_help?: string | null
           branch_label?: string | null
@@ -1849,7 +1884,7 @@ export type Database = {
           country?: string
           created_at?: string
           currency?: string
-          document_patterns?: Json
+          document_patterns?: NonNullable<Json>
           notas?: string
           requires_branch?: boolean
           updated_at?: string
@@ -1865,6 +1900,7 @@ export type Database = {
           payment_id: string
           payout_id: string
         }
+        ComputedFields: never
         Insert: {
           amount: number
           created_at?: string
@@ -1908,6 +1944,7 @@ export type Database = {
           sort_order: number
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           channel: string
           created_at?: string
@@ -1955,6 +1992,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           academy_id?: string | null
           adjustment_amount?: number
@@ -2029,6 +2067,7 @@ export type Database = {
           product_id: string
           rule_id: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           product_id: string
@@ -2061,6 +2100,7 @@ export type Database = {
           category_id: string
           product_id: string
         }
+        ComputedFields: never
         Insert: {
           category_id: string
           product_id: string
@@ -2096,7 +2136,7 @@ export type Database = {
           created_at: string
           currency: string
           description: string | null
-          faqs: Json
+          faqs: NonNullable<Json>
           group_opened_by: string | null
           group_template_id: string | null
           id: string
@@ -2110,7 +2150,7 @@ export type Database = {
           package_num_sessions: number | null
           price_amount: number
           pricing_model: Database["public"]["Enums"]["pricing_model"]
-          requirements: Json
+          requirements: NonNullable<Json>
           search_text: string | null
           search_vector: unknown
           session_duration_min: number | null
@@ -2122,6 +2162,7 @@ export type Database = {
           updated_at: string
           visibility: string
         }
+        ComputedFields: never
         Insert: {
           academy_id?: string | null
           assignment_mode?: string
@@ -2131,7 +2172,7 @@ export type Database = {
           created_at?: string
           currency: string
           description?: string | null
-          faqs?: Json
+          faqs?: NonNullable<Json>
           group_opened_by?: string | null
           group_template_id?: string | null
           id?: string
@@ -2145,9 +2186,9 @@ export type Database = {
           package_num_sessions?: number | null
           price_amount: number
           pricing_model: Database["public"]["Enums"]["pricing_model"]
-          requirements?: Json
-          search_text?: string | null
-          search_vector?: unknown
+          requirements?: NonNullable<Json>
+          search_text?: never
+          search_vector?: never
           session_duration_min?: number | null
           slug?: string | null
           start_time_increment_min?: number | null
@@ -2166,7 +2207,7 @@ export type Database = {
           created_at?: string
           currency?: string
           description?: string | null
-          faqs?: Json
+          faqs?: NonNullable<Json>
           group_opened_by?: string | null
           group_template_id?: string | null
           id?: string
@@ -2180,9 +2221,9 @@ export type Database = {
           package_num_sessions?: number | null
           price_amount?: number
           pricing_model?: Database["public"]["Enums"]["pricing_model"]
-          requirements?: Json
-          search_text?: string | null
-          search_vector?: unknown
+          requirements?: NonNullable<Json>
+          search_text?: never
+          search_vector?: never
           session_duration_min?: number | null
           slug?: string | null
           start_time_increment_min?: number | null
@@ -2246,6 +2287,7 @@ export type Database = {
           timezone: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           avatar_path?: string | null
           created_at?: string
@@ -2300,6 +2342,7 @@ export type Database = {
           updated_at: string
           visible: boolean
         }
+        ComputedFields: never
         Insert: {
           audience: string
           created_at?: string
@@ -2352,9 +2395,10 @@ export type Database = {
           qr_url: string | null
           rf_campaign_id: number
           rf_user_id: number
-          sharing: Json
+          sharing: NonNullable<Json>
           url: string
         }
+        ComputedFields: never
         Insert: {
           code: string
           created_at?: string
@@ -2362,7 +2406,7 @@ export type Database = {
           qr_url?: string | null
           rf_campaign_id: number
           rf_user_id: number
-          sharing?: Json
+          sharing?: NonNullable<Json>
           url: string
         }
         Update: {
@@ -2372,7 +2416,7 @@ export type Database = {
           qr_url?: string | null
           rf_campaign_id?: number
           rf_user_id?: number
-          sharing?: Json
+          sharing?: NonNullable<Json>
           url?: string
         }
         Relationships: [
@@ -2410,6 +2454,7 @@ export type Database = {
           reason: string
           status: Database["public"]["Enums"]["refund_request_status"]
         }
+        ComputedFields: never
         Insert: {
           amount: number
           booking_id: string
@@ -2474,6 +2519,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           author_display?: string | null
           booking_id: string
@@ -2535,6 +2581,7 @@ export type Database = {
           session_id: string
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           session_id: string
@@ -2574,6 +2621,7 @@ export type Database = {
           status: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           id?: string
@@ -2630,6 +2678,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           access_closes_at?: string | null
           access_opens_at?: string | null
@@ -2720,6 +2769,7 @@ export type Database = {
           id: string
           ip: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           id?: string
@@ -2754,6 +2804,7 @@ export type Database = {
           tutor_ids: string[]
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           audience?: Database["public"]["Enums"]["social_resource_audience"]
           category?: string | null
@@ -2815,6 +2866,7 @@ export type Database = {
           last_error: string | null
           path: string
         }
+        ComputedFields: never
         Insert: {
           attempts?: number
           bucket_id: string
@@ -2838,6 +2890,7 @@ export type Database = {
           category_id: string
           student_id: string
         }
+        ComputedFields: never
         Insert: {
           category_id: string
           student_id: string
@@ -2871,6 +2924,7 @@ export type Database = {
           user_id: string
           version: string
         }
+        ComputedFields: never
         Insert: {
           accepted_at?: string
           id?: string
@@ -2900,6 +2954,7 @@ export type Database = {
           country: string
           timezone: string
         }
+        ComputedFields: never
         Insert: {
           country: string
           timezone: string
@@ -2915,6 +2970,7 @@ export type Database = {
           category_id: string
           tutor_id: string
         }
+        ComputedFields: never
         Insert: {
           category_id: string
           tutor_id: string
@@ -2952,6 +3008,7 @@ export type Database = {
           tutor_id: string
           user_agent: string | null
         }
+        ComputedFields: never
         Insert: {
           consent_at?: string
           created_at?: string
@@ -3005,6 +3062,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           deleted_at?: string | null
@@ -3059,11 +3117,12 @@ export type Database = {
           updated_at: string
           verified_account_id: string | null
         }
+        ComputedFields: never
         Insert: {
           channel: string
           created_at?: string
           handle: string
-          handle_masked?: string | null
+          handle_masked?: never
           holder_name: string
           tutor_id: string
           updated_at?: string
@@ -3073,7 +3132,7 @@ export type Database = {
           channel?: string
           created_at?: string
           handle?: string
-          handle_masked?: string | null
+          handle_masked?: never
           holder_name?: string
           tutor_id?: string
           updated_at?: string
@@ -3107,6 +3166,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           file_name: string
@@ -3168,9 +3228,10 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           bank_account: string
-          bank_account_last4?: string | null
+          bank_account_last4?: never
           bank_account_type?: string | null
           bank_branch?: string | null
           bank_code: string
@@ -3193,7 +3254,7 @@ export type Database = {
         }
         Update: {
           bank_account?: string
-          bank_account_last4?: string | null
+          bank_account_last4?: never
           bank_account_type?: string | null
           bank_branch?: string | null
           bank_code?: string
@@ -3245,6 +3306,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           method: string
@@ -3278,7 +3340,7 @@ export type Database = {
           bio: string | null
           created_at: string
           display_name: string | null
-          faqs: Json
+          faqs: NonNullable<Json>
           group_classes_auto_at: string | null
           group_classes_enabled: boolean
           headline: string | null
@@ -3289,12 +3351,13 @@ export type Database = {
           rating_count: number
           search_text: string | null
           slug: string | null
-          socials: Json
+          socials: NonNullable<Json>
           stripe_connect_account_id: string | null
           teaching_level: Database["public"]["Enums"]["teaching_level"] | null
           tier_id: string | null
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           academy_id?: string | null
           approval_notes?: string | null
@@ -3305,7 +3368,7 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
-          faqs?: Json
+          faqs?: NonNullable<Json>
           group_classes_auto_at?: string | null
           group_classes_enabled?: boolean
           headline?: string | null
@@ -3314,9 +3377,9 @@ export type Database = {
           profile_id: string
           rating_avg?: number | null
           rating_count?: number
-          search_text?: string | null
+          search_text?: never
           slug?: string | null
-          socials?: Json
+          socials?: NonNullable<Json>
           stripe_connect_account_id?: string | null
           teaching_level?: Database["public"]["Enums"]["teaching_level"] | null
           tier_id?: string | null
@@ -3332,7 +3395,7 @@ export type Database = {
           bio?: string | null
           created_at?: string
           display_name?: string | null
-          faqs?: Json
+          faqs?: NonNullable<Json>
           group_classes_auto_at?: string | null
           group_classes_enabled?: boolean
           headline?: string | null
@@ -3341,9 +3404,9 @@ export type Database = {
           profile_id?: string
           rating_avg?: number | null
           rating_count?: number
-          search_text?: string | null
+          search_text?: never
           slug?: string | null
-          socials?: Json
+          socials?: NonNullable<Json>
           stripe_connect_account_id?: string | null
           teaching_level?: Database["public"]["Enums"]["teaching_level"] | null
           tier_id?: string | null
@@ -3390,6 +3453,7 @@ export type Database = {
           split_pct: number
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           description?: string | null
@@ -3419,6 +3483,7 @@ export type Database = {
           user_id: string
           views: number
         }
+        ComputedFields: never
         Insert: {
           class_views?: number
           first_viewed_at?: string
@@ -3465,6 +3530,7 @@ export type Database = {
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           role: Database["public"]["Enums"]["app_role"]
@@ -3491,6 +3557,7 @@ export type Database = {
           tutor_id: string
           updated_at: string
         }
+        ComputedFields: never
         Insert: {
           created_at?: string
           doc_type: string
@@ -3539,32 +3606,34 @@ export type Database = {
       academies_public: {
         Row: {
           brand_color: string | null
-          created_at: string | null
+          created_at: string
           description: string | null
-          id: string | null
+          id: string
           logo_path: string | null
-          name: string | null
+          name: string
           price_currency: string | null
           price_from: number | null
           product_count: number | null
           rating_avg: number | null
           rating_count: number | null
-          slug: string | null
+          slug: string
           tagline: string | null
           tutor_count: number | null
           website: string | null
         }
+        ComputedFields: never
         Relationships: []
       }
       fondeo_del_ciclo: {
         Row: {
           a_pagar: number | null
-          currency: string | null
+          currency: string
           funding_provider: string | null
           ordenes: number | null
           pone_la_plataforma: number | null
           respaldado_por_caja: number | null
         }
+        ComputedFields: never
         Relationships: []
       }
       group_classes_public: {
@@ -3572,18 +3641,19 @@ export type Database = {
           capacity: number | null
           cupos_apartados: number | null
           cupos_libres: number | null
-          end_at: string | null
+          end_at: string
           group_template_id: string | null
-          id: string | null
+          id: string
           inscripcion_cierra_at: string | null
           inscritos_pagados: number | null
           min_seats: number | null
-          product_id: string | null
-          sequence_no: number | null
-          start_at: string | null
-          title: string | null
-          tutor_id: string | null
+          product_id: string
+          sequence_no: number
+          start_at: string
+          title: string
+          tutor_id: string
         }
+        ComputedFields: never
         Relationships: [
           {
             foreignKeyName: "group_classes_product_id_fkey"
@@ -3610,23 +3680,24 @@ export type Database = {
       }
       mis_creditos: {
         Row: {
-          amount: number | null
-          consumed_amount: number | null
+          amount: number
+          consumed_amount: number
           consumed_at: string | null
-          created_at: string | null
-          currency: string | null
-          destino: string | null
+          created_at: string
+          currency: string
+          destino: string
           expires_at: string | null
           gift_message: string | null
-          id: string | null
+          id: string
           issued_at: string | null
-          kind: string | null
+          kind: string
           product_id: string | null
           referral_campaign_id: number | null
           restante: number | null
-          source: string | null
-          status: string | null
+          source: string
+          status: string
         }
+        ComputedFields: never
         Insert: {
           amount?: number | null
           consumed_amount?: number | null
@@ -3682,20 +3753,21 @@ export type Database = {
       }
       mis_regalos_comprados: {
         Row: {
-          amount: number | null
+          amount: number
           beneficiary_email: string | null
           canjeado: boolean | null
           consumed_at: string | null
-          created_at: string | null
-          currency: string | null
+          created_at: string
+          currency: string
           expires_at: string | null
           gift_message: string | null
-          id: string | null
+          id: string
           issued_at: string | null
           product_id: string | null
-          service_fee_amount: number | null
-          status: string | null
+          service_fee_amount: number
+          status: string
         }
+        ComputedFields: never
         Insert: {
           amount?: number | null
           beneficiary_email?: string | null
@@ -3738,20 +3810,19 @@ export type Database = {
       }
       tutors_public: {
         Row: {
-          approval_status:
-            | Database["public"]["Enums"]["tutor_approval_status"]
-            | null
+          approval_status: Database["public"]["Enums"]["tutor_approval_status"]
           avatar_path: string | null
-          badges: string[] | null
+          badges: string[]
           bio: string | null
           display_name: string | null
           headline: string | null
           price_currency: string | null
           price_from: number | null
-          profile_id: string | null
+          profile_id: string
           rating_avg: number | null
-          rating_count: number | null
+          rating_count: number
         }
+        ComputedFields: never
         Relationships: [
           {
             foreignKeyName: "tutor_profiles_profile_id_fkey"
@@ -3778,13 +3849,62 @@ export type Database = {
           user_id: string
         }[]
       }
+      aceptar_invitacion_de_academia: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       adjuntar_comprobante_payout: {
         Args: { p_nombre: string; p_path: string; p_payout_id: string }
         Returns: undefined
       }
+      admin_academias: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          agreement_notes: string
+          agreement_starts_on: string
+          allow_public_offers: boolean
+          alumnos: number
+          brand_color: string
+          commission_pct: number
+          created_at: string
+          description: string
+          fixed_fee_amount: number
+          fixed_fee_currency: string
+          fixed_fee_period: string
+          id: string
+          included_free_classes: string
+          ingresos_mes: number
+          invited_email: string
+          name: string
+          ofertas: number
+          owner_email: string
+          owner_id: string
+          owner_name: string
+          payout_country: string
+          pending_changes: Json
+          pending_changes_rejection: string
+          policies_url: string
+          reservas: number
+          reservas_mes: number
+          slug: string
+          status: Database["public"]["Enums"]["academy_status"]
+          tagline: string
+          tutores: number
+          ultima_reserva: string
+          website: string
+        }[]
+      }
+      admin_asignar_administrador: {
+        Args: { p_academy: string; p_email: string }
+        Returns: string
+      }
       admin_bookings_by_category: {
         Args: { p_from?: string; p_to?: string }
         Returns: Json
+      }
+      admin_cambiar_estado_academia: {
+        Args: { p_academy: string; p_estado: string }
+        Returns: undefined
       }
       admin_contact_user: {
         Args: { p_message: string; p_report_id?: string; p_user_id: string }
@@ -3812,7 +3932,15 @@ export type Database = {
           reporter_name: string
         }[]
       }
+      admin_eliminar_academia: {
+        Args: { p_academy: string }
+        Returns: undefined
+      }
       admin_gmv_weekly: { Args: { p_weeks?: number }; Returns: Json }
+      admin_guardar_academia: {
+        Args: { p_datos: Json; p_id: string }
+        Returns: string
+      }
       admin_habilitar_grupales: {
         Args: { p_activo: boolean; p_tutor: string }
         Returns: boolean
@@ -3829,6 +3957,10 @@ export type Database = {
           sender_name: string
         }[]
       }
+      admin_resolver_cambios_academia: {
+        Args: { p_academy: string; p_aprobar: boolean; p_motivo: string }
+        Returns: undefined
+      }
       admin_sacar_de_clase_grupal: {
         Args: { p_booking: string; p_motivo?: string }
         Returns: Json
@@ -3844,9 +3976,18 @@ export type Database = {
         Args: { p_tier_id: string; p_tutor_id: string }
         Returns: string
       }
-      avisar_clases_de_manana: { Args: never; Returns: number }
-      avisar_clases_que_empiezan: { Args: never; Returns: number }
-      avisar_creditos_por_expirar: { Args: never; Returns: Json }
+      avisar_clases_de_manana: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      avisar_clases_que_empiezan: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      avisar_creditos_por_expirar: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       avisar_mensaje_nuevo: {
         Args: { p_conversation: string; p_dest: string }
         Returns: undefined
@@ -3875,10 +4016,13 @@ export type Database = {
         }
         Returns: string
       }
-      caducar_creditos: { Args: never; Returns: Json }
-      caducar_notificaciones: { Args: never; Returns: number }
+      caducar_creditos: { Args: Record<PropertyKey, never>; Returns: Json }
+      caducar_notificaciones: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       calendar_feed: { Args: { p_token: string }; Returns: Json }
-      calendar_feed_token: { Args: never; Returns: string }
+      calendar_feed_token: { Args: Record<PropertyKey, never>; Returns: string }
       cancel_account_deletion: { Args: { p_user_id: string }; Returns: Json }
       cancel_booking: {
         Args: { p_booking_id: string; p_reason?: string }
@@ -3892,14 +4036,23 @@ export type Database = {
         Args: { p_group_class: string; p_motivo?: string }
         Returns: number
       }
-      cancelar_grupales_sin_minimo: { Args: never; Returns: number }
+      cancelar_grupales_sin_minimo: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       cargo_por_servicio: {
         Args: { p_base: number; p_pct: number }
         Returns: number
       }
-      cerrar_clases_grupales_vacias: { Args: never; Returns: number }
+      cerrar_clases_grupales_vacias: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       cierre_de_inscripcion: { Args: { p_product: string }; Returns: string }
-      close_expired_sessions: { Args: never; Returns: Json }
+      close_expired_sessions: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       complete_session: { Args: { p_session_id: string }; Returns: string }
       comprar_regalo: {
         Args: {
@@ -4015,12 +4168,18 @@ export type Database = {
         Returns: boolean
       }
       destino_connect: { Args: { p_payout_id: string }; Returns: string }
-      disparar_correos_pendientes: { Args: never; Returns: undefined }
+      disparar_correos_pendientes: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       emitir_credito_de_referido: {
         Args: { p_referido: string }
         Returns: string
       }
-      encolar_comprobantes_huerfanos: { Args: never; Returns: number }
+      encolar_comprobantes_huerfanos: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       enqueue_notification: {
         Args: {
           p_channel: string
@@ -4069,8 +4228,14 @@ export type Database = {
         }
         Returns: Record<string, unknown>
       }
-      gen_calendar_feed_token: { Args: never; Returns: string }
-      generar_referencia_reserva: { Args: never; Returns: string }
+      gen_calendar_feed_token: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      generar_referencia_reserva: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       get_available_slots: {
         Args: { p_from?: string; p_product_id: string; p_to?: string }
         Returns: {
@@ -4078,7 +4243,7 @@ export type Database = {
           slot_start: string
         }[]
       }
-      gift_expiry_days: { Args: never; Returns: number }
+      gift_expiry_days: { Args: Record<PropertyKey, never>; Returns: number }
       google_calendar_eventos: {
         Args: { p_sesiones: string[]; p_user?: string }
         Returns: {
@@ -4106,7 +4271,7 @@ export type Database = {
         Returns: boolean
       }
       hilo_grupal_caducado: { Args: { p_product: string }; Returns: boolean }
-      home_stats: { Args: never; Returns: Json }
+      home_stats: { Args: Record<PropertyKey, never>; Returns: Json }
       home_testimonials: {
         Args: { p_limit?: number }
         Returns: {
@@ -4135,7 +4300,7 @@ export type Database = {
         Returns: number
       }
       listar_admins: {
-        Args: never
+        Args: Record<PropertyKey, never>
         Returns: {
           desde: string
           email: string
@@ -4178,10 +4343,17 @@ export type Database = {
         Returns: undefined
       }
       mask_person_name: { Args: { p_name: string }; Returns: string }
-      my_account_deletion_state: { Args: never; Returns: Json }
-      my_calendar_feed_token: { Args: never; Returns: string }
+      mi_academia: { Args: Record<PropertyKey, never>; Returns: string }
+      my_account_deletion_state: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      my_calendar_feed_token: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       my_conversations: {
-        Args: never
+        Args: Record<PropertyKey, never>
         Returns: {
           blocked_at: string
           can_chat: boolean
@@ -4245,7 +4417,7 @@ export type Database = {
         Args: { p_channel: string; p_payout_id: string }
         Returns: Json
       }
-      payouts_backlog: { Args: never; Returns: Json }
+      payouts_backlog: { Args: Record<PropertyKey, never>; Returns: Json }
       pending_email_notifications: {
         Args: { p_limit?: number }
         Returns: {
@@ -4260,14 +4432,20 @@ export type Database = {
         }[]
       }
       politica_de_baja: { Args: { p_booking: string }; Returns: Json }
-      pre_booking_message_cap: { Args: never; Returns: number }
+      pre_booking_message_cap: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       precio_vigente_grupal: { Args: { p_product: string }; Returns: number }
-      process_notifications: { Args: never; Returns: Json }
+      process_notifications: { Args: Record<PropertyKey, never>; Returns: Json }
       process_pending_account_deletions: {
         Args: { p_limit?: number }
         Returns: Json
       }
-      process_scheduled_payouts: { Args: never; Returns: Json }
+      process_scheduled_payouts: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       proponer_reagenda: {
         Args: { p_new_start: string; p_session_id: string }
         Returns: string
@@ -4276,15 +4454,24 @@ export type Database = {
         Args: { p_conversation_id: string }
         Returns: boolean
       }
-      purge_contact_messages: { Args: never; Returns: number }
-      purge_expired_messages: { Args: never; Returns: Json }
-      purge_tutor_views: { Args: never; Returns: Json }
+      purge_contact_messages: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      purge_expired_messages: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      purge_tutor_views: { Args: Record<PropertyKey, never>; Returns: Json }
       quitar_credito: { Args: { p_booking_id: string }; Returns: Json }
       reagendar_clase_grupal: {
         Args: { p_group_class: string; p_nuevo_inicio: string }
         Returns: undefined
       }
-      reclamar_mis_regalos: { Args: never; Returns: number }
+      reclamar_mis_regalos: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       reclamar_regalos_por_correo: { Args: { p_user: string }; Returns: number }
       record_terms_acceptance: {
         Args: { p_locale?: string; p_version: string }
@@ -4317,7 +4504,7 @@ export type Database = {
         }[]
       }
       referral_invitees: {
-        Args: never
+        Args: Record<PropertyKey, never>
         Returns: {
           converted_at: string
           display_name: string
@@ -4330,12 +4517,15 @@ export type Database = {
         Args: { p_amount?: number; p_payment_id: string }
         Returns: Json
       }
-      refunds_backlog: { Args: never; Returns: Json }
+      refunds_backlog: { Args: Record<PropertyKey, never>; Returns: Json }
       regalos_de_clase_a_saldo: {
         Args: { p_causa: string; p_product: string }
         Returns: number
       }
-      regalos_de_grupales_cerradas: { Args: never; Returns: number }
+      regalos_de_grupales_cerradas: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       renunciar_fecha_grupal: { Args: { p_session: string }; Returns: Json }
       report_conversation: {
         Args: { p_conversation_id: string; p_reason: string }
@@ -4374,7 +4564,10 @@ export type Database = {
         Args: { p_actor: string; p_user: string }
         Returns: Json
       }
-      revoke_calendar_feed_token: { Args: never; Returns: boolean }
+      revoke_calendar_feed_token: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
       run_payout_batch: { Args: { p_retention_days?: number }; Returns: Json }
       ruta_de_pago: {
         Args: { p_payee: string }
@@ -4432,7 +4625,7 @@ export type Database = {
         Args: { p_end: string; p_start: string }
         Returns: unknown
       }
-      session_bootstrap: { Args: never; Returns: Json }
+      session_bootstrap: { Args: Record<PropertyKey, never>; Returns: Json }
       session_live_window: {
         Args: { p_end: string; p_start: string }
         Returns: unknown
@@ -4462,7 +4655,7 @@ export type Database = {
         Args: { p_badges: string[]; p_tutor_id: string }
         Returns: string[]
       }
-      show_limit: { Args: never; Returns: number }
+      show_limit: { Args: Record<PropertyKey, never>; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       slugificar: { Args: { p: string }; Returns: string }
       student_learning_record: {
@@ -4528,7 +4721,10 @@ export type Database = {
         }
         Returns: string
       }
-      submit_documents_for_review: { Args: never; Returns: string }
+      submit_documents_for_review: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       submit_review: {
         Args: {
           p_booking_id: string
@@ -4601,7 +4797,7 @@ export type Database = {
         }[]
       }
       unread_conversation_counts: {
-        Args: never
+        Args: Record<PropertyKey, never>
         Returns: {
           conversation_id: string
           last_message_at: string
@@ -4699,12 +4895,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4728,11 +4924,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4753,11 +4949,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
+  TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4778,11 +4974,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -4795,11 +4991,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

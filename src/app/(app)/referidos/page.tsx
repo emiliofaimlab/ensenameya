@@ -164,7 +164,7 @@ async function ensureMemberships(
           url: u.url,
           // El array `[{social,url}]` de RF cruza tal cual a `jsonb`: se
           // guarda crudo porque sus redes pueden cambiar sin avisarnos.
-          sharing: (u.sharing ?? []) as Json,
+          sharing: (u.sharing ?? []) as NonNullable<Json>,
           qr_url: qrUrlDe(u),
         },
         { onConflict: "profile_id,rf_campaign_id", ignoreDuplicates: true },

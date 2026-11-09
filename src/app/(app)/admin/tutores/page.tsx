@@ -60,7 +60,7 @@ export default async function AdminTutoresPage({
   const { data, error } = await supabase
     .from("tutor_profiles")
     .select(
-      "profile_id, headline, approval_status, identity_verification_status, created_at, profiles!tutor_profiles_profile_id_fkey(full_name)",
+      "profile_id, headline, approval_status, identity_verification_status, created_at, profiles!tutor_profiles_profile_id_fkey(full_name), academy:academies!tutor_profiles_academy_id_fkey(name)",
     )
     .order("created_at", { ascending: true }); // los que más llevan esperando, primero
 
@@ -177,6 +177,12 @@ export default async function AdminTutoresPage({
                     <p className="truncate text-xs text-[#6b6b6b]">
                       {cats || t.headline || "Sin categorías"}
                     </p>
+                    {/* RA-04 · el tutor de academia solo acredita identidad; la competencia la responde la academia. */}
+                    {t.academy ? (
+                      <p className="mt-1 text-xs font-semibold text-[#805710]">
+                        {t.academy.name} · solo identidad
+                      </p>
+                    ) : null}
                   </div>
                   <div>
                     <p className="text-[11.5px] text-[#6b6b6b]">Solicitud</p>

@@ -446,6 +446,39 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     ],
   }),
 
+  /**
+   * NTF-40 · EY nombra administrador de una academia (A2, RA-02).
+   *
+   * ⚠️ NO VA POR LA COLA: lo manda `/api/admin/academias/administrador`, porque
+   * el invitado puede no tener cuenta y `notifications` cuelga de un
+   * `recipient_id`. El botón lleva a `/academia`, cuya guarda pide entrar o
+   * registrarse y luego ata la invitación (`aceptar_invitacion_de_academia`).
+   */
+  academy_admin_invited: (x) => {
+    const academia = typeof x.p?.academia === "string" ? x.p.academia : "";
+    return {
+      asunto: academia
+        ? `Eres el administrador de ${academia} en Enséñame Ya`
+        : "Eres administrador de una academia en Enséñame Ya",
+      familia: "clase",
+      epigrafe: "Academias",
+      titulo: "Tu academia te espera",
+      preheader: "Entra con este correo para gestionar tu academia.",
+      motivo: "Recibes este correo porque el equipo de Enséñame Ya te nombró administrador de una academia.",
+      cuerpo: [
+        parrafo(
+          academia
+            ? `El equipo de Enséñame Ya te nombró administrador de <strong>${esc(academia)}</strong>.`
+            : "El equipo de Enséñame Ya te nombró administrador de una academia.",
+        ),
+        parrafo(
+          "Entra o crea tu cuenta <strong>con esta misma dirección de correo</strong> para gestionar tutores, horarios, ofertas y alumnos.",
+        ),
+        boton("Ir a mi academia", x.url),
+      ],
+    };
+  },
+
   // ══ B · Compra ════════════════════════════════════════════════════════════
 
   /**
