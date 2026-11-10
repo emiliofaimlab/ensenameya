@@ -150,7 +150,13 @@ export function EscenarioSala({
     }
     const p = participantes.find((x) => `pantalla:${x.id}` === clave);
     if (!p?.pantalla) return null;
-    const rotulo = p.local ? "Estás compartiendo tu pantalla" : `Pantalla de ${p.nombre}`;
+    const rotulo = p.celular
+      ? p.local
+        ? "La cámara de tu celular"
+        : `Cámara del celular de ${p.nombre}`
+      : p.local
+        ? "Estás compartiendo tu pantalla"
+        : `Pantalla de ${p.nombre}`;
     return (
       <div
         key={clave}

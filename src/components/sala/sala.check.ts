@@ -1,6 +1,7 @@
 // npm run check:sala — el reloj y el turno de lo compartido en la sala.
 import assert from "node:assert/strict";
 
+import { fusionarCelulares } from "./celular.ts";
 import { actualizarOrden, galeria, ordenados } from "./escenario.ts";
 import { estadoContador, puedeExtender, reloj } from "./tiempo.ts";
 
@@ -87,3 +88,22 @@ assert.deepEqual(galeria(0, 800, 600), { columnas: 1, anchoTesela: 0 });
 assert.deepEqual(galeria(3, 0, 600), { columnas: 1, anchoTesela: 0 });
 
 console.log("check:sala OK");
+
+// ── segunda cámara: el celular se pinta como la «pantalla» de su tutor ──────
+{
+  const pista = {} as MediaStreamTrack;
+  const base = { local: false, owner: false, audio: null, pantalla: null, pantallaAudio: null,
+    camara: true, micro: true, puedePantalla: true, video: null };
+  const tutor = { ...base, id: "a", nombre: "Tutor", userId: "u1", owner: true };
+  const alumno = { ...base, id: "b", nombre: "Alumno", userId: "u2" };
+  const cel = { ...base, id: "c", nombre: "Celular", userId: "u1-cam", video: pista };
+  const r = fusionarCelulares([tutor, alumno, cel]);
+  assert.equal(r.length, 2); // el celular no es un participante más
+  assert.equal(r[0].pantalla, pista);
+  assert.equal(r[0].celular, true);
+  // Si el tutor ya comparte pantalla, gana la pantalla.
+  const otra = {} as MediaStreamTrack;
+  assert.equal(fusionarCelulares([{ ...tutor, pantalla: otra }, cel])[0].pantalla, otra);
+  // Sin su tutor dentro, el celular no se pinta.
+  assert.deepEqual(fusionarCelulares([alumno, cel]), [alumno]);
+}
