@@ -218,3 +218,21 @@ export const DOWNLOAD_TYPES = [PDF];
 export const DOWNLOAD_HINT = `PDF · máx. ${maxLabel(DOWNLOAD_MAX_BYTES)}`;
 /** El trigger `tutor_downloads_tope` es quien de verdad lo impone. */
 export const DOWNLOAD_MAX_COUNT = 4;
+
+/**
+ * EY-249 · Nombre de archivo apto para una CLAVE de Storage.
+ *
+ * Storage solo admite ASCII en las claves: «Guía práctica.pdf» volvía
+ * `400 InvalidKey` y el tutor leía «No se pudo subir…» sin más. Esto toca
+ * SOLO la ruta del objeto; el nombre que ve la gente se guarda tal cual en su
+ * fila (`file_name`, `p_attachment_name`).
+ */
+export function nombreParaClave(name: string): string {
+  return (
+    name
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^\w.-]+/g, "_")
+      .slice(-120) || "archivo"
+  );
+}
