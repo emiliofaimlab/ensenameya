@@ -5,6 +5,7 @@ import {
   ATTACHMENT_TYPES,
   fileProblem,
   humanSize,
+  nombreParaClave,
 } from "@/components/tutor/upload-formats";
 
 /**
@@ -51,7 +52,7 @@ export async function uploadAttachment(
 
   const supabase = createClient();
   // Prefijo aleatorio: dos archivos con el mismo nombre no se pisan.
-  const path = `${bookingId}/${crypto.randomUUID()}-${file.name}`;
+  const path = `${bookingId}/${crypto.randomUUID()}-${nombreParaClave(file.name)}`;
 
   const { error: upErr } = await supabase.storage
     .from("chat-attachments")
@@ -121,7 +122,7 @@ export async function uploadGroupAttachment(
   const productId = conv?.group_product_id;
   if (!productId) return { error: "Este chat no es el de una clase grupal." };
 
-  const path = `grupo/${productId}/${crypto.randomUUID()}-${file.name}`;
+  const path = `grupo/${productId}/${crypto.randomUUID()}-${nombreParaClave(file.name)}`;
 
   const { error: upErr } = await supabase.storage
     .from("chat-attachments")

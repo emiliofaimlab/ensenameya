@@ -35,7 +35,7 @@ import {
   type SavedMaterial,
   type StagedFile,
 } from "@/components/tutor/product-uploads";
-import { PRODUCT_IMAGE_HINT } from "@/components/tutor/upload-formats";
+import { PRODUCT_IMAGE_HINT, nombreParaClave } from "@/components/tutor/upload-formats";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -684,7 +684,7 @@ export function ProductForm({
     // tutor no tendría forma de saber cuáles repetir.
     for (const { file } of stagedMaterials) {
       // Prefijo aleatorio: dos archivos con el mismo nombre no se pisan.
-      const path = `${userId}/${crypto.randomUUID()}-${file.name}`;
+      const path = `${userId}/${crypto.randomUUID()}-${nombreParaClave(file.name)}`;
       const { error } = await supabase.storage
         .from("tutor-materials")
         .upload(path, file, { contentType: file.type });

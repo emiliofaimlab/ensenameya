@@ -40,9 +40,8 @@ const STATUS_PILL: Record<string, { label: string; tone: PillTone }> = {
  * `?f=borradores`). Renombrar uno aquí deja tres entradas del menú cayendo al
  * filtro por defecto, o sea enseñando la lista entera y sin encender su chip.
  *
- * `archived` no tiene chip —el documento fija cuatro— y sigue saliendo en
- * «Todas», que es donde está hoy: es un estado terminal que el tutor consulta,
- * no una bandeja que trabaje.
+ * `archived` no tiene chip ni sale en la lista (EY-251): para el tutor,
+ * descartar o archivar es eliminar.
  */
 const FILTROS: {
   id: string;
@@ -118,6 +117,9 @@ export default async function TutorProductsPage() {
       // RG-01 (24-oct) · las clases grupales NACIDAS (las abre un alumno al
       // elegir hora) no son mentorías del tutor: salen bajo su plantilla.
       .is("group_template_id", null)
+      // EY-251 · «Descartar»/«Archivar» es baja lógica (`archived`, terminal y
+      // sin acciones): si siguiera saliendo, el tutor «elimina» y no pasa nada.
+      .neq("status", "archived")
       .order("created_at", { ascending: false }),
     // §2.3 · el aviso ámbar necesita saber qué franjas del tutor están VIVAS,
     // no solo cuáles existen: una franja desactivada no genera ni un horario,
