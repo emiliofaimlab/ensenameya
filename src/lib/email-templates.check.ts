@@ -359,6 +359,7 @@ assert.equal(
 // desde siempre. Y la RLS no lo tapaba, porque el tutor SÍ puede leer esa fila:
 // la pantalla no daba un 403, renderizaba entera y equivocada.
 assert.equal(rutaFor("booking_new_tutor", { booking_id: "bk-7" }), "/tutor/reservas/bk-7");
+assert.equal(rutaFor("booking_confirmed_tutor", { booking_id: "bk-7" }), "/tutor/reservas/bk-7");
 assert.equal(rutaFor("booking_expiring_tutor", { booking_id: "bk-7" }), "/tutor/reservas/bk-7");
 assert.equal(
   toNotice({
@@ -464,6 +465,7 @@ assert.equal(papelDelAviso("booking_reminder_24h", { para: "alumno" }), "alumno"
 assert.equal(papelDelAviso("booking_reminder_24h", { booking_id: "bk-7" }), null, "fila vieja sin `para`: sin etiqueta inventada");
 assert.equal(papelDelAviso("reschedule_requested", { para: "tutor" }), "tutor");
 assert.equal(papelDelAviso("booking_new_tutor", {}), "tutor");
+assert.equal(papelDelAviso("booking_confirmed_tutor", {}), "tutor");
 assert.equal(papelDelAviso("payout_paid", {}), "tutor");
 assert.equal(papelDelAviso("welcome_tutor", {}), "tutor");
 assert.equal(papelDelAviso("tutor_review_result", {}), "tutor");

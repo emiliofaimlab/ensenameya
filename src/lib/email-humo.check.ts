@@ -106,6 +106,7 @@ const PAYLOADS: Record<string, Record<string, unknown>> = {
   order_receipt: { order_id: "o-2419" },
   booking_pending_student: { booking_id: "b7f3a91c" },
   booking_new_tutor: { booking_id: "b7f3a91c" },
+  booking_confirmed_tutor: { booking_id: "b7f3a91c" },
   booking_expiring_tutor: { booking_id: "b7f3a91c" },
   booking_confirmed_student: { booking_id: "b7f3a91c" },
   // Lote 6 · cada uno es el `jsonb_build_object` de su trigger (P14: la

@@ -45,6 +45,7 @@ const CHANNEL_LABEL: Record<string, string> = {
 const TEMPLATE_LABEL: Record<string, string> = {
   booking_confirmed_student: "Reserva confirmada (alumno)",
   booking_new_tutor: "Reserva nueva por aceptar (tutor)",
+  booking_confirmed_tutor: "Clase nueva confirmada (tutor)",
   cancellation: "Cancelación",
   review_request: "Petición de reseña",
   payment_receipt: "Recibo de pago",

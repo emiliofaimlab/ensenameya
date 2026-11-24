@@ -74,6 +74,7 @@ const TEXT: Record<string, string> = {
   payment_failed: "Un pago no se pudo cobrar",
   booking_confirmed_student: "Tu reserva quedó confirmada",
   booking_new_tutor: "Tienes una reserva nueva por aceptar",
+  booking_confirmed_tutor: "Tienes una clase nueva confirmada",
   // Grupales · los RESPALDOS: desde el lote 6 el payload trae `clase` (y
   // `alumno` al tutor) y el texto de verdad lo pone `textoGrupal`. Estos solo
   // los ve una fila vieja, sin esos campos.
@@ -262,6 +263,7 @@ export function rutaFor(
   // otras acciones (aceptar / rechazar, no pagar / cancelar / reseñar).
   if (
     template === "booking_new_tutor" ||
+    template === "booking_confirmed_tutor" ||
     template === "booking_expiring_tutor" ||
     template === "group_enrolled_tutor"
   ) {
@@ -362,6 +364,7 @@ export const FILTRO_AVISOS_VISIBLES = `status.neq.failed,template.not.in.(${PLAN
 /** Plantillas que solo se le mandan a alguien EN SU PAPEL DE TUTOR. */
 const DEL_TUTOR = new Set([
   "booking_new_tutor",
+  "booking_confirmed_tutor",
   "booking_expiring_tutor",
   "group_enrolled_tutor",
   "group_full_tutor",

@@ -695,6 +695,39 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
   },
 
   /**
+   * NTF-07 cuando la mentoría tiene auto-aceptar (M-02): la reserva pagada nace
+   * `confirmed` y no hay nada que aceptar. Hasta el 24-nov le llegaba
+   * `booking_new_tutor`, con plazo de 24 h y «Aceptar o rechazar»: falso.
+   */
+  booking_confirmed_tutor: (x) => {
+    const corto = cuandoCorto(x.c.inicio, x.tz);
+    return {
+      asunto: con("Clase nueva confirmada", corto),
+      familia: "ok",
+      epigrafe: "Reserva confirmada",
+      titulo: "Tienes una clase nueva confirmada",
+      preheader: x.c.alumno
+        ? `${primerNombre(x.c.alumno)} reservó y ya pagó. La clase quedó confirmada.`
+        : "Un alumno reservó y ya pagó. La clase quedó confirmada.",
+      motivo: "Recibes este correo porque eres tutor en Enséñame Ya.",
+      cuerpo: [
+        parrafo(
+          "Una persona reservó una de tus mentorías y <strong>ya pagó</strong>. La clase quedó confirmada: no tienes que hacer nada más que estar a la hora.",
+        ),
+        persona(x.c.alumno, "Alumno"),
+        tarjetaClase({
+          titulo: x.c.clase,
+          tutor: "Tú",
+          cuando: cuando(x.c.inicio, x.tz),
+          duracion: duracion(x.c.duracion_min),
+          importe: netoTutor(x),
+        }),
+        boton("Ver la reserva", `${x.base}/tutor/reservas/${x.p?.booking_id ?? ""}`),
+      ],
+    };
+  },
+
+  /**
    * NTF-17 · el aviso de que el plazo se acaba.
    *
    * ⚠️ El texto NO cita una hora exacta de «te quedan N horas» sacada del reloj

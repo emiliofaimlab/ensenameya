@@ -99,6 +99,7 @@ function horaEnZona(tz: string, formato: FormatoHora): string | null {
  * cuerpos en `email-templates.ts`. */
 const AVISOS_TUTOR = [
   "Reserva nueva por aceptar", // booking_new_tutor
+  "Clase nueva confirmada", // booking_confirmed_tutor
   "Respuesta a tu solicitud de tutor", // tutor_review_result
   "Documentos recibidos y en revisión", // identity_in_review
   "Pago enviado", // payout_paid
