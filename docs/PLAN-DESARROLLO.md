@@ -2080,3 +2080,14 @@ typecheck, lint y build y solo aparecieron al ejecutar) · 7-ago (relato del 5�
 Resend, Stripe de punta a punta en *test mode*) · 4-ago (pasada de veracidad: el proyecto lleva 8
 sprints, no 4) · 29-jul (las 6 tandas completas) · 27-jul (el plan del 24-jul, 🅐 12/12 y 🅑 11/11).
 El detalle de cada uno está en su sección de este documento y en el `git log`.
+
+## Clasificados · fase 1: propuesta de clase en el chat (24-nov-2026)
+
+Del `Clasificados-EnsenameYa-v1.pdf` de Emilio (opción D, fase 1). El tutor, en un hilo de par,
+elige una oferta suya (1:1, una sesión, pública, sin academia) y un hueco de su agenda; el alumno
+recibe una tarjeta con «Pagar y reservar» que abre el checkout de siempre con todo elegido.
+Migración `20261124140000_propuesta_de_clase` (tabla `class_proposals`, `messages.proposal_id`,
+RPC `proponer_clase`, trigger `bookings_propuesta_pagada`); humo en
+`supabase/humo/propuesta_de_clase.sql`. Pagada desde una propuesta, una oferta de aceptación
+manual queda `confirmed`. La propuesta no gasta los 5 mensajes previos. Salió a producción desde
+`origin/main`, sin la A2 de academias. Las fases 2 y 3 esperan las diez preguntas de Néstor.

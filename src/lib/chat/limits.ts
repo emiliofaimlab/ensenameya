@@ -96,7 +96,8 @@ export function cupoConsulta(
   // Da igual de todos modos: en esas tres el par ya compró y este cupo no se
   // pide nunca.
   const usados = messages.filter(
-    (m) => m.senderId === currentUserId && !m.bookingId,
+    // Una propuesta de clase no gasta cupo: mismo `proposal_id is null` que el SQL.
+    (m) => m.senderId === currentUserId && !m.bookingId && !m.proposalId,
   ).length;
 
   const quedan = Math.max(0, TOPE_POR_LADO - usados);

@@ -59,6 +59,7 @@ export type Database = {
           owner_id: string | null
           payout_country: string | null
           pending_changes: Json | null
+          pending_changes_rejection: string | null
           policies_url: string | null
           slug: string
           status: Database["public"]["Enums"]["academy_status"]
@@ -85,6 +86,7 @@ export type Database = {
           owner_id?: string | null
           payout_country?: string | null
           pending_changes?: Json | null
+          pending_changes_rejection?: string | null
           policies_url?: string | null
           slug: string
           status?: Database["public"]["Enums"]["academy_status"]
@@ -111,6 +113,7 @@ export type Database = {
           owner_id?: string | null
           payout_country?: string | null
           pending_changes?: Json | null
+          pending_changes_rejection?: string | null
           policies_url?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["academy_status"]
@@ -731,6 +734,81 @@ export type Database = {
         }
         Relationships: []
       }
+      class_proposals: {
+        Row: {
+          booking_id: string | null
+          conversation_id: string
+          created_at: string
+          id: string
+          product_id: string
+          start_at: string
+          status: string
+          student_id: string
+          tutor_id: string
+          updated_at: string
+        }
+        Insert: {
+          booking_id?: string | null
+          conversation_id: string
+          created_at?: string
+          id?: string
+          product_id: string
+          start_at: string
+          status?: string
+          student_id: string
+          tutor_id: string
+          updated_at?: string
+        }
+        Update: {
+          booking_id?: string | null
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          product_id?: string
+          start_at?: string
+          status?: string
+          student_id?: string
+          tutor_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_proposals_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_proposals_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_proposals_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_proposals_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_proposals_tutor_id_fkey"
+            columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contact_message_attachments: {
         Row: {
           created_at: string
@@ -1328,6 +1406,7 @@ export type Database = {
           created_at: string
           expires_at: string | null
           id: string
+          proposal_id: string | null
           sender_id: string
         }
         Insert: {
@@ -1340,6 +1419,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          proposal_id?: string | null
           sender_id: string
         }
         Update: {
@@ -1352,6 +1432,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          proposal_id?: string | null
           sender_id?: string
         }
         Relationships: [
@@ -1367,6 +1448,13 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_proposal_id_fkey"
+            columns: ["proposal_id"]
+            isOneToOne: false
+            referencedRelation: "class_proposals"
             referencedColumns: ["id"]
           },
           {
@@ -3778,13 +3866,59 @@ export type Database = {
           user_id: string
         }[]
       }
+      aceptar_invitacion_de_academia: { Args: never; Returns: number }
       adjuntar_comprobante_payout: {
         Args: { p_nombre: string; p_path: string; p_payout_id: string }
         Returns: undefined
       }
+      admin_academias: {
+        Args: never
+        Returns: {
+          agreement_notes: string
+          agreement_starts_on: string
+          allow_public_offers: boolean
+          alumnos: number
+          brand_color: string
+          commission_pct: number
+          created_at: string
+          description: string
+          fixed_fee_amount: number
+          fixed_fee_currency: string
+          fixed_fee_period: string
+          id: string
+          included_free_classes: string
+          ingresos_mes: number
+          invited_email: string
+          name: string
+          ofertas: number
+          owner_email: string
+          owner_id: string
+          owner_name: string
+          payout_country: string
+          pending_changes: Json
+          pending_changes_rejection: string
+          policies_url: string
+          reservas: number
+          reservas_mes: number
+          slug: string
+          status: Database["public"]["Enums"]["academy_status"]
+          tagline: string
+          tutores: number
+          ultima_reserva: string
+          website: string
+        }[]
+      }
+      admin_asignar_administrador: {
+        Args: { p_academy: string; p_email: string }
+        Returns: string
+      }
       admin_bookings_by_category: {
         Args: { p_from?: string; p_to?: string }
         Returns: Json
+      }
+      admin_cambiar_estado_academia: {
+        Args: { p_academy: string; p_estado: string }
+        Returns: undefined
       }
       admin_contact_user: {
         Args: { p_message: string; p_report_id?: string; p_user_id: string }
@@ -3812,7 +3946,15 @@ export type Database = {
           reporter_name: string
         }[]
       }
+      admin_eliminar_academia: {
+        Args: { p_academy: string }
+        Returns: undefined
+      }
       admin_gmv_weekly: { Args: { p_weeks?: number }; Returns: Json }
+      admin_guardar_academia: {
+        Args: { p_datos: Json; p_id: string }
+        Returns: string
+      }
       admin_habilitar_grupales: {
         Args: { p_activo: boolean; p_tutor: string }
         Returns: boolean
@@ -3828,6 +3970,10 @@ export type Database = {
           sender_id: string
           sender_name: string
         }[]
+      }
+      admin_resolver_cambios_academia: {
+        Args: { p_academy: string; p_aprobar: boolean; p_motivo: string }
+        Returns: undefined
       }
       admin_sacar_de_clase_grupal: {
         Args: { p_booking: string; p_motivo?: string }
@@ -4178,6 +4324,7 @@ export type Database = {
         Returns: undefined
       }
       mask_person_name: { Args: { p_name: string }; Returns: string }
+      mi_academia: { Args: never; Returns: string }
       my_account_deletion_state: { Args: never; Returns: Json }
       my_calendar_feed_token: { Args: never; Returns: string }
       my_conversations: {
@@ -4268,6 +4415,14 @@ export type Database = {
         Returns: Json
       }
       process_scheduled_payouts: { Args: never; Returns: Json }
+      proponer_clase: {
+        Args: {
+          p_conversation_id: string
+          p_product_id: string
+          p_start: string
+        }
+        Returns: string
+      }
       proponer_reagenda: {
         Args: { p_new_start: string; p_session_id: string }
         Returns: string

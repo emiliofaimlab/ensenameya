@@ -10,7 +10,7 @@ import {
 import { getProductDetail } from "@/lib/catalog/queries";
 import { AVISO_PRIVACIDAD_GRUPAL } from "@/lib/policy";
 import { perSessionLabel, sessionsLabel } from "@/lib/catalog/format";
-import { bookingFormatLabel, bookingTotal } from "@/lib/booking";
+import { bookingFormatLabel, bookingTotal, tienePropuestaViva } from "@/lib/booking";
 import { metodosDeCheckout, paisDelPagador } from "@/lib/payments";
 import { createClient } from "@/lib/supabase/server";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
@@ -241,6 +241,18 @@ export default async function CheckoutPage({
   const tutorName =
     product.tutor.displayName ?? product.tutor.headline ?? "tu tutor";
 
+  // Clasificados fase 1 · una oferta de aceptación manual pagada desde una
+  // propuesta del tutor se confirma al instante: la pantalla tiene que decirlo.
+  const aceptaSola =
+    product.autoAccept ||
+    (user && !grupal && slots.length === 1 && slots[0]
+      ? await tienePropuestaViva(await createClient(), {
+          studentId: user.id,
+          productId,
+          startAt: slots[0],
+        })
+      : false);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -341,7 +353,7 @@ export default async function CheckoutPage({
         // checkout en el precio de un paquete.
         incluye={sessionsLabel(product)}
         precioPorSesion={perSessionLabel(product)}
-        aceptaSola={product.autoAccept}
+        aceptaSola={aceptaSola}
         avisoGrupal={grupal ? AVISO_PRIVACIDAD_GRUPAL : undefined}
         // M12 · textos de cupo y política de grupal, igual que en la ficha.
         grupal={

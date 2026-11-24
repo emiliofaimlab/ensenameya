@@ -29,6 +29,12 @@ export type ChatMessage = {
    * compró, o sea que ahí no hay topes que contar. Ver `cupoConsulta`.
    */
   bookingId?: string | null;
+  /**
+   * Clasificados fase 1 · el mensaje ES una propuesta de clase: el hilo pinta
+   * su tarjeta en vez del texto, y no cuenta para el tope previo
+   * (`20261124140000`). Opcional por lo mismo que `bookingId`.
+   */
+  proposalId?: string | null;
 };
 
 /** Fila cruda de `messages`, tal y como la devuelven el select y Realtime. */
@@ -41,11 +47,12 @@ export type MessageRow = {
   attachment_path: string | null;
   attachment_name: string | null;
   attachment_size: number | null;
+  proposal_id?: string | null;
 };
 
 /** Las columnas que hay que pedir para poder construir un `ChatMessage`. */
 export const MESSAGE_COLUMNS =
-  "id, sender_id, body, created_at, booking_id, attachment_path, attachment_name, attachment_size";
+  "id, sender_id, body, created_at, booking_id, attachment_path, attachment_name, attachment_size, proposal_id";
 
 /** Fila → mensaje. */
 export function toChatMessage(m: MessageRow): ChatMessage {
@@ -55,6 +62,7 @@ export function toChatMessage(m: MessageRow): ChatMessage {
     body: m.body,
     createdAt: m.created_at,
     bookingId: m.booking_id,
+    proposalId: m.proposal_id ?? null,
     attachment: m.attachment_path
       ? {
           path: m.attachment_path,

@@ -98,6 +98,10 @@ assert.equal(
   "los mensajes etiquetados con una reserva no gastan cupo",
 );
 
+// ── Una propuesta de clase no gasta cupo (`proposal_id is null` en el SQL) ──
+const conPropuesta = [{ ...msg(TUTOR), proposalId: "pr-1" }, msg(TUTOR)];
+assert.equal(cupoConsulta(conPropuesta, TUTOR).usados, 1, "una propuesta no gasta cupo");
+
 // ── Los mensajes del otro no gastan nada mío ────────────────────────────────
 assert.equal(cupoConsulta([msg(TUTOR), msg(TUTOR)], ALUMNO).usados, 0);
 

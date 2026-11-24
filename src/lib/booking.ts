@@ -254,6 +254,31 @@ export type TutorCardData = {
 };
 
 /**
+ * Clasificados fase 1 · ¿este alumno tiene una propuesta de clase VIVA para
+ * esta oferta a esta hora? Si la tiene, al pagar la reserva queda `confirmed`
+ * aunque la oferta sea de aceptación manual (trigger `bookings_propuesta_pagada`,
+ * `20261124140000`), así que el checkout no debe prometer «24 h para aceptar».
+ *
+ * 🔴 SOLO PINTA: quien decide es el trigger. Un fallo de lectura se trata como
+ * «no hay», que es la promesa conservadora.
+ */
+export async function tienePropuestaViva(
+  supabase: SupabaseClient<Database>,
+  p: { studentId: string; productId: string; startAt: string },
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("class_proposals")
+    .select("id")
+    .eq("student_id", p.studentId)
+    .eq("product_id", p.productId)
+    .eq("start_at", p.startAt)
+    .eq("status", "pending")
+    .limit(1);
+  if (error) console.error("[checkout] propuesta viva", error);
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * Fichas públicas de tutores por id (DD-01). Va en consulta aparte a
  * propósito: `products.tutor_id` apunta a `profiles`, que es privado —el alumno
  * solo ve su propia fila—, así que esto hay que leerlo de la copia pública de
