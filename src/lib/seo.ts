@@ -41,7 +41,18 @@ export const RUTAS_PRIVADAS = [
   "/room",
   "/carrito",
   "/search",
+  // Clasificados · el LISTADO (`/clasificados`) es público e indexable; lo que
+  // cuelga —`nuevo`, `mios`, `<id>`— vive en `(app)` con guarda. Barra final
+  // a propósito, por lo mismo que `/tutor/`: cierra los hijos sin el índice.
+  "/clasificados/",
 ] as const;
+
+/**
+ * Carpetas de `(app)` cuyo ÍNDICE es una página pública de `(public)`: se
+ * cierra lo que cuelga pero no la raíz. `check:seo` las exige así, y no
+ * cerradas enteras como el resto de `(app)`.
+ */
+export const INDICES_PUBLICOS = ["/clasificados"] as const;
 
 /**
  * Las públicas sin parámetro. Las de `[slug]`/`[id]` —tutores, mentorías,
@@ -54,6 +65,7 @@ export const RUTAS_FIJAS = [
   "/mentorias",
   "/categorias",
   "/academias",
+  "/clasificados",
   "/nosotros",
   "/como-funciona",
   "/ensena",

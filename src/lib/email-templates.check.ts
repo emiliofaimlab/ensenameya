@@ -498,6 +498,11 @@ assert.equal(rutaFor("welcome_tutor", {}), "/tutor");
 assert.equal(rutaFor("account_deletion_requested", {}), "/account");
 assert.equal(rutaFor("account_deletion_done", {}), "/account");
 assert.equal(rutaFor("admin_alert", {}), "/admin/alertas");
+// Clasificados · al clasificado por `request_id`; NTF-59 (ya no vigente), al listado.
+assert.equal(rutaFor("request_new_tutor", { request_id: "rq-1" }), "/clasificados/rq-1");
+assert.equal(rutaFor("request_application_student", { request_id: "rq-1", proposal_id: "cp-1" }), "/clasificados/rq-1");
+assert.equal(rutaFor("request_expired_student", {}), "/clasificados");
+assert.equal(rutaFor("request_closed_tutor", { request_id: "rq-1" }), "/clasificados");
 
 // Y la campana dice algo para cada plantilla que alguna migración encola: sin
 // su línea en `TEXT`, el aviso in-app sale como «Novedad en tu cuenta (NTF-24)»,

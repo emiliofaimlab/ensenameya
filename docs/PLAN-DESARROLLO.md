@@ -2091,3 +2091,29 @@ RPC `proponer_clase`, trigger `bookings_propuesta_pagada`); humo en
 `supabase/humo/propuesta_de_clase.sql`. Pagada desde una propuesta, una oferta de aceptación
 manual queda `confirmed`. La propuesta no gasta los 5 mensajes previos. Salió a producción desde
 `origin/main`, sin la A2 de academias. Las fases 2 y 3 esperan las diez preguntas de Néstor.
+
+## Clasificados · fases 2 y 3 (25-nov-2026)
+
+Emilio, vía Verónica, autorizó construir sin esperar las diez preguntas a Néstor. Migración
+`20261125120000_clasificados` (humo: `supabase/humo/clasificados.sql`). **Una postulación es una
+propuesta de clase** (`class_proposals.request_id` + `note`): el pago, la confirmación y el chat son
+los de la fase 1. Pantallas: `/clasificados` (público), `/clasificados/nuevo`, `/clasificados/[id]`
+(dueño o tutor), `/clasificados/mios`, `/admin/clasificados`, bloque del home y CTA en búsqueda sin
+resultados y en categorías. Cron `caducar-clasificados` (cada hora).
+
+**Decisiones por defecto, pendientes de confirmar con el cliente** (cada una en un solo sitio):
+
+| # | Pregunta | Por defecto | Dónde se cambia |
+| :-- | :-- | :-- | :-- |
+| 1 | Duración sin fecha límite | 14 días (fecha límite ≤ 90 días) | `clasificado_vigencia()` |
+| 2 | Máximo de postulaciones | 10 tutores por clasificado | `clasificado_max_postulaciones()` |
+| 3 | ¿La postulación gasta los 5 mensajes? | No | `send_conversation_message` + `lib/chat/limits.ts` |
+| 4 | Aviso a tutores | Al instante (campana + correo, NTF-57) | `publicar_clasificado` |
+| 5 | Quién ve el listado | Cualquiera, sin registro y sin datos del alumno | `clasificados_publicos` |
+| 6 | ¿Presupuesto del alumno? | No: el precio sale de la oferta | — |
+| 7 | ¿Fuera de la agenda del tutor? | No | `crear_propuesta` |
+| 8 | ¿Grupales y academias? | Solo 1:1 de una sesión | `postular_a_clasificado` |
+| 9 | ¿Néstor publica por alumnos? | No en este corte | — |
+| 10 | Términos y Privacidad | Los redacta el cliente; sin cambios | — |
+
+Además: 3 clasificados activos por alumno y 30 postulaciones por tutor al día.

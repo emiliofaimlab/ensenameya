@@ -257,6 +257,9 @@ type Propuesta = {
   start_at: string;
   product_id: string;
   booking_id: string | null;
+  /** Clasificados · si es una postulación, su clasificado y el mensaje corto. */
+  request_id: string | null;
+  note: string | null;
   products: Oferta | null;
   /** Calculado al leer (no en el render, que tiene que ser puro). */
   pasada?: boolean;
@@ -286,7 +289,7 @@ export function TarjetaDePropuesta({
       const { data } = await createClient()
         .from("class_proposals")
         .select(
-          "id, status, start_at, product_id, booking_id, products(id, title, pricing_model, price_amount, currency, session_duration_min)",
+          "id, status, start_at, product_id, booking_id, request_id, note, products(id, title, pricing_model, price_amount, currency, session_duration_min)",
         )
         .eq("id", proposalId)
         .maybeSingle();
@@ -324,8 +327,11 @@ export function TarjetaDePropuesta({
   const estado =
     p.status === "paid"
       ? "pagada"
-      : p.status === "withdrawn" || !esLaUltima
+      : !esLaUltima
         ? "reemplazada"
+        : p.status === "withdrawn"
+          ? // Sin otra detrás: la retiró el cierre o el vencimiento de su clasificado.
+            "retirada"
         : pasada
           ? "pasada"
           : "viva";
@@ -344,6 +350,12 @@ export function TarjetaDePropuesta({
         <CalendarCheckIcon className="size-3.5" aria-hidden />
         Propuesta de clase
       </p>
+      {p.request_id ? (
+        <a href={`/clasificados/${p.request_id}`} className="text-[12px] text-brand underline">
+          Responde a {soyAlumno ? "tu" : "su"} clasificado
+        </a>
+      ) : null}
+      {p.note ? <p className="text-[13px] italic">«{p.note}»</p> : null}
       <p className="font-semibold">{o.title}</p>
       <p className="text-[13px] first-letter:uppercase">
         {formatSessionTime(p.start_at, timeZone, formato)}
@@ -371,6 +383,8 @@ export function TarjetaDePropuesta({
         </p>
       ) : estado === "reemplazada" ? (
         <p className="text-[13px] text-muted-foreground">Reemplazada por una propuesta nueva.</p>
+      ) : estado === "retirada" ? (
+        <p className="text-[13px] text-muted-foreground">Esta propuesta ya no está vigente.</p>
       ) : estado === "pasada" ? (
         <p className="text-[13px] text-muted-foreground">Este horario ya pasó.</p>
       ) : soyAlumno ? (

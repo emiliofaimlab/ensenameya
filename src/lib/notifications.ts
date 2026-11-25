@@ -137,6 +137,11 @@ const TEXT: Record<string, string> = {
   reschedule_requested: "Te propusieron otra hora para una mentoría",
   reschedule_accepted: "Aceptaron la nueva hora de tu mentoría",
   reschedule_rejected: "No aceptaron la nueva hora que propusiste",
+  // Clasificados (NTF-57…60, `20261125120000`).
+  request_new_tutor: "Un alumno busca tutor en tu categoría",
+  request_application_student: "Un tutor se postuló a tu clasificado",
+  request_closed_tutor: "Un clasificado al que postulaste se cerró",
+  request_expired_student: "Tu clasificado venció: puedes volver a publicarlo",
 };
 
 /**
@@ -191,6 +196,10 @@ const DESTINO: Record<string, string> = {
   // el único de los dos que lo tiene cuando ya lo reclamó. El correo sí lleva
   // su enlace a «Mis regalos» para el otro caso, que aquí no cabe.
   gift_converted: "/reservas",
+  // Clasificados · NTF-59: su postulación ya no está viva, así que al listado
+  // de los que sí reciben, no al clasificado cerrado. Los otros tres van al
+  // clasificado por `request_id` (ver `rutaFor`).
+  request_closed_tutor: "/clasificados",
   // `gift_expired` no entra aquí a propósito: es el único cuyo destino depende
   // del payload (la copia del comprador lleva `amount`, la del destinatario
   // no), y eso lo resuelve `rutaFor`, no este mapa.
@@ -227,6 +236,12 @@ export function rutaFor(
   // payload primero es exactamente lo que mandaba al tutor a SCR-AL03.
   const fijo = DESTINO[template];
   if (fijo) return fijo;
+
+  // Clasificados (NTF-57/58/60) · al clasificado. Sin `request_id`, al listado.
+  if (template.startsWith("request_")) {
+    const requestId = payload?.request_id;
+    return typeof requestId === "string" ? `/clasificados/${requestId}` : "/clasificados";
+  }
 
   // EY-218 · las plantillas que se encolan a los DOS (reagendar, NTF-08/09/11/
   // 19) llevan `para` en el payload: dice a cuál se le habla. Las filas viejas,
@@ -374,6 +389,8 @@ const DEL_TUTOR = new Set([
   "payout_account_changed",
   "tutor_review_result",
   "identity_in_review",
+  "request_new_tutor",
+  "request_closed_tutor",
 ]);
 
 /** Plantillas que solo se le mandan a alguien EN SU PAPEL DE ALUMNO. */
@@ -397,6 +414,8 @@ const DEL_ALUMNO = new Set([
   "gift_expiring",
   "gift_expired",
   "gift_converted",
+  "request_application_student",
+  "request_expired_student",
 ]);
 
 /**

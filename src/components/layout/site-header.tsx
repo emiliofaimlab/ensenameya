@@ -197,6 +197,7 @@ const navGroups = [
       { href: "/mentorias", label: "Explorar mentorías" },
       { href: "/categorias", label: "Categorías" },
       { href: "/academias", label: "Academias" },
+      { href: "/clasificados", label: "Clasificados" },
     ],
   },
   {
