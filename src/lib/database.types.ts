@@ -740,7 +740,9 @@ export type Database = {
           conversation_id: string
           created_at: string
           id: string
+          note: string | null
           product_id: string
+          request_id: string | null
           start_at: string
           status: string
           student_id: string
@@ -752,7 +754,9 @@ export type Database = {
           conversation_id: string
           created_at?: string
           id?: string
+          note?: string | null
           product_id: string
+          request_id?: string | null
           start_at: string
           status?: string
           student_id: string
@@ -764,7 +768,9 @@ export type Database = {
           conversation_id?: string
           created_at?: string
           id?: string
+          note?: string | null
           product_id?: string
+          request_id?: string | null
           start_at?: string
           status?: string
           student_id?: string
@@ -794,6 +800,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "class_proposals_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "class_requests"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "class_proposals_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -803,6 +816,72 @@ export type Database = {
           {
             foreignKeyName: "class_proposals_tutor_id_fkey"
             columns: ["tutor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      class_requests: {
+        Row: {
+          category_id: string
+          closed_at: string | null
+          created_at: string
+          detail: string | null
+          expires_at: string
+          goal: string
+          id: string
+          needed_by: string | null
+          removed_reason: string | null
+          slots: Json
+          status: string
+          student_id: string
+          timezone: string
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          closed_at?: string | null
+          created_at?: string
+          detail?: string | null
+          expires_at: string
+          goal: string
+          id?: string
+          needed_by?: string | null
+          removed_reason?: string | null
+          slots: Json
+          status?: string
+          student_id: string
+          timezone: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          closed_at?: string | null
+          created_at?: string
+          detail?: string | null
+          expires_at?: string
+          goal?: string
+          id?: string
+          needed_by?: string | null
+          removed_reason?: string | null
+          slots?: Json
+          status?: string
+          student_id?: string
+          timezone?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "class_requests_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "class_requests_student_id_fkey"
+            columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -3920,6 +3999,20 @@ export type Database = {
         Args: { p_academy: string; p_estado: string }
         Returns: undefined
       }
+      admin_clasificados_resumen: {
+        Args: never
+        Returns: {
+          activos: number
+          activos_sin_postulacion: number
+          category_id: string
+          category_name: string
+          con_postulacion: number
+          horas_hasta_primera: number
+          publicados: number
+          reservados: number
+          vencidos_sin_postulacion: number
+        }[]
+      }
       admin_contact_user: {
         Args: { p_message: string; p_report_id?: string; p_user_id: string }
         Returns: string
@@ -3975,6 +4068,10 @@ export type Database = {
         Args: { p_academy: string; p_aprobar: boolean; p_motivo: string }
         Returns: undefined
       }
+      admin_retirar_clasificado: {
+        Args: { p_id: string; p_motivo: string }
+        Returns: undefined
+      }
       admin_sacar_de_clase_grupal: {
         Args: { p_booking: string; p_motivo?: string }
         Returns: Json
@@ -4021,6 +4118,7 @@ export type Database = {
         }
         Returns: string
       }
+      caducar_clasificados: { Args: never; Returns: number }
       caducar_creditos: { Args: never; Returns: Json }
       caducar_notificaciones: { Args: never; Returns: number }
       calendar_feed: { Args: { p_token: string }; Returns: Json }
@@ -4044,7 +4142,31 @@ export type Database = {
         Returns: number
       }
       cerrar_clases_grupales_vacias: { Args: never; Returns: number }
+      cerrar_clasificado: { Args: { p_id: string }; Returns: undefined }
       cierre_de_inscripcion: { Args: { p_product: string }; Returns: string }
+      clasificado_admite: {
+        Args: { p_dur: number; p_req: string; p_start: string }
+        Returns: boolean
+      }
+      clasificado_max_postulaciones: { Args: never; Returns: number }
+      clasificado_vigencia: { Args: never; Returns: string }
+      clasificados_publicos: {
+        Args: { p_category?: string; p_id?: string; p_limit?: number }
+        Returns: {
+          category_id: string
+          category_name: string
+          category_slug: string
+          created_at: string
+          detail: string
+          expires_at: string
+          goal: string
+          id: string
+          needed_by: string
+          postulaciones: number
+          slots: Json
+          timezone: string
+        }[]
+      }
       close_expired_sessions: { Args: never; Returns: Json }
       complete_session: { Args: { p_session_id: string }; Returns: string }
       comprar_regalo: {
@@ -4116,6 +4238,19 @@ export type Database = {
         Returns: string
       }
       country_from_timezone: { Args: { p_tz: string }; Returns: string }
+      crear_propuesta: {
+        Args: {
+          p_conversation: string
+          p_note: string
+          p_product: string
+          p_request: string
+          p_start: string
+          p_student: string
+          p_title: string
+          p_tutor: string
+        }
+        Returns: string
+      }
       create_booking: {
         Args: { p_product_id: string; p_slots: string[] }
         Returns: string
@@ -4215,6 +4350,7 @@ export type Database = {
         }
         Returns: Record<string, unknown>
       }
+      franjas_validas: { Args: { p: Json }; Returns: boolean }
       gen_calendar_feed_token: { Args: never; Returns: string }
       generar_referencia_reserva: { Args: never; Returns: string }
       get_available_slots: {
@@ -4407,6 +4543,15 @@ export type Database = {
         }[]
       }
       politica_de_baja: { Args: { p_booking: string }; Returns: Json }
+      postular_a_clasificado: {
+        Args: {
+          p_note: string
+          p_product: string
+          p_request: string
+          p_start: string
+        }
+        Returns: string
+      }
       pre_booking_message_cap: { Args: never; Returns: number }
       precio_vigente_grupal: { Args: { p_product: string }; Returns: number }
       process_notifications: { Args: never; Returns: Json }
@@ -4425,6 +4570,16 @@ export type Database = {
       }
       proponer_reagenda: {
         Args: { p_new_start: string; p_session_id: string }
+        Returns: string
+      }
+      publicar_clasificado: {
+        Args: {
+          p_category: string
+          p_detail: string
+          p_goal: string
+          p_needed_by: string
+          p_slots: Json
+        }
         Returns: string
       }
       puede_ver_conversacion: {
@@ -4496,6 +4651,7 @@ export type Database = {
         Args: { p_conversation_id: string; p_reason: string }
         Returns: string
       }
+      republicar_clasificado: { Args: { p_id: string }; Returns: undefined }
       request_account_deletion: { Args: { p_user_id: string }; Returns: Json }
       request_withdrawal: {
         Args: { p_retention_days?: number }
@@ -4511,6 +4667,10 @@ export type Database = {
       }
       responder_reagenda: {
         Args: { p_acepta: boolean; p_id: string }
+        Returns: undefined
+      }
+      retirar_postulaciones: {
+        Args: { p_motivo: string; p_request: string }
         Returns: undefined
       }
       revertir_regalo: {
@@ -4693,6 +4853,7 @@ export type Database = {
         }
         Returns: string
       }
+      texto_con_contacto: { Args: { p: string }; Returns: boolean }
       tutor_balance: { Args: { p_retention_days?: number }; Returns: Json }
       tutor_response_time: { Args: { p_tutor_id: string }; Returns: number }
       tutor_students: {
