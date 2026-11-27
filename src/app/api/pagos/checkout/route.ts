@@ -1232,7 +1232,15 @@ export async function POST(req: Request) {
       // exige POR COBRO y sin él no notifica NADA — el cobro se pagaría y nadie
       // se enteraría. Va aquí porque es este archivo el que sabe la URL base
       // del entorno, no el adaptador.
-      notificationUrl: `${base}/api/webhooks/dlocalgo`,
+      // ⚠️ En los previews, Vercel Authentication contesta 401 a dLocal y el
+      // cobro se queda pending hasta que caduca la reserva. El bypass va por
+      // query porque dLocal no deja poner cabeceras; Vercel inyecta la variable
+      // solo si «Protection Bypass for Automation» está activado en el proyecto.
+      notificationUrl: `${base}/api/webhooks/dlocalgo${
+        process.env.VERCEL_ENV === "preview" && process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+          ? `?x-vercel-protection-bypass=${process.env.VERCEL_AUTOMATION_BYPASS_SECRET}`
+          : ""
+      }`,
       // El país del pagador, si `create_booking` llegó a congelarlo. Stripe lo
       // deduce del medio de pago y lo ignora; dLocal lo usa para acotar los
       // métodos locales que ofrece, y si falta se lo pregunta a la persona.
