@@ -10,7 +10,7 @@ export const metadata = { title: "Clasificados · Enséñame Ya" };
 /**
  * Clasificados · lo que pidió Néstor: qué se busca, qué se cubre y qué tutor
  * falta reclutar. Arriba el resumen por categoría (`admin_clasificados_resumen`),
- * debajo los vivos —activos y vencidos sin postulación— con el botón de retirar.
+ * debajo los activos y los vencidos (con o sin postulaciones) y el botón de retirar.
  *
  * El admin lee `class_requests` entera por RLS (`class_requests_select_admin`).
  * Los embeds nombran su FK aunque hoy haya un solo camino (regla de oro 10), y
@@ -125,7 +125,7 @@ export default async function AdminClasificadosPage() {
       </PanelCard>
 
       <PanelCard className="mt-5">
-        <PanelCardTitle>Activos y vencidos sin postulación</PanelCardTitle>
+        <PanelCardTitle>Activos y vencidos</PanelCardTitle>
         {filas.length === 0 ? (
           <p className="mt-4 text-[14px] text-[#525252]">No hay clasificados activos ahora mismo.</p>
         ) : (
