@@ -297,6 +297,14 @@ export default async function SearchPage({
                   variant="text"
                 />
               ) : null}
+              {total === 0 ? (
+                <PideloEnClasificados
+                  href={`/clasificados/nuevo?${new URLSearchParams({
+                    ...(cat ? { categoria: cat } : {}),
+                    q: query,
+                  })}`}
+                />
+              ) : null}
 
               {show("productos") && products.length > 0 ? (
                 <section className="mt-8">
@@ -426,6 +434,27 @@ function SectionHeader({
           Ver los {n} →
         </Link>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Clasificados · la salida cuando la búsqueda no encuentra nada. `<a>` y no
+ * `<Link>`: `/clasificados/nuevo` tiene guarda y esta pantalla se pinta sin
+ * sesión (regla de oro 13).
+ */
+function PideloEnClasificados({ href }: { href: string }) {
+  return (
+    <div className="mt-6 flex flex-col gap-3 rounded-[16px] border border-[#e0e0e0] bg-card p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="font-semibold">¿No encuentras lo que buscas?</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Publica lo que quieres lograr y los tutores te escriben con una propuesta.
+        </p>
+      </div>
+      <Button asChild className="shrink-0 rounded-[8px] font-semibold">
+        <a href={href}>Publicar lo que busco</a>
+      </Button>
     </div>
   );
 }

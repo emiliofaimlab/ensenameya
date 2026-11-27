@@ -13,7 +13,13 @@
  */
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
-import { RUTAS_FIJAS, RUTAS_PRIVADAS, bloqueaA, estaBloqueada } from "./seo.ts";
+import {
+  INDICES_PUBLICOS,
+  RUTAS_FIJAS,
+  RUTAS_PRIVADAS,
+  bloqueaA,
+  estaBloqueada,
+} from "./seo.ts";
 
 /** Grupos de rutas cuyo contenido SIEMPRE exige sesión (o no es indexable). */
 const GRUPOS_CON_GUARDA = [
@@ -72,6 +78,14 @@ const casos: [string, () => void][] = [
           `${grupo} no tiene carpetas: ¿cambió la estructura?`,
         );
         for (const carpeta of carpetas) {
+          // Índice público (p. ej. `/clasificados`): abierto él, cerrados sus hijos.
+          if ((INDICES_PUBLICOS as readonly string[]).includes(`/${carpeta}`)) {
+            assert.ok(
+              !estaBloqueada(`/${carpeta}`) && estaBloqueada(`/${carpeta}/x`),
+              `/${carpeta} es índice público: la raíz abierta y lo que cuelga cerrado`,
+            );
+            continue;
+          }
           assert.ok(
             estaBloqueada(`/${carpeta}`) && estaBloqueada(`/${carpeta}/x`),
             `/${carpeta} vive en ${grupo} (pide sesión) pero el robots.txt la deja abierta — añádela a RUTAS_PRIVADAS`,

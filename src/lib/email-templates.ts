@@ -1359,6 +1359,108 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
     ],
   }),
 
+  // ── Clasificados (NTF-57…60, `20261125120000`) ──────────────────────────
+  //
+  // El payload trae `objetivo` (texto del ALUMNO: siempre por `esc`/`cita`) y,
+  // según el aviso, `categoria` o `motivo`. Nunca el nombre del alumno: el
+  // clasificado es público sin datos personales y el correo no los añade.
+
+  /** NTF-57 · a cada tutor que puede postular: un alumno publicó en su categoría. */
+  request_new_tutor: (x) => {
+    const categoria = textoDe(x.p?.categoria);
+    return {
+      asunto: categoria ? `Un alumno busca tutor de ${categoria}` : "Un alumno busca tutor en tu categoría",
+      familia: "clase",
+      epigrafe: "Clasificados",
+      titulo: "Un alumno busca a alguien como tú",
+      preheader: "Postula con una de tus mentorías y un horario que le encaje.",
+      motivo: "Recibes este correo porque tienes una mentoría publicada en esta categoría.",
+      cuerpo: [
+        parrafo(
+          categoria
+            ? `Un alumno publicó un clasificado en <strong>${esc(categoria)}</strong>. Esto es lo que quiere lograr:`
+            : "Un alumno publicó un clasificado en una categoría donde enseñas. Esto es lo que quiere lograr:",
+        ),
+        cita(textoDe(x.p?.objetivo), "Objetivo del alumno"),
+        parrafo(
+          "Elige una de tus mentorías, un horario dentro de las franjas que indicó y escríbele un mensaje corto. Si le convence, paga y la clase queda reservada.",
+        ),
+        boton("Ver el clasificado", x.url),
+      ],
+    };
+  },
+
+  /** NTF-58 · al alumno: un tutor se postuló a su clasificado. */
+  request_application_student: (x) => {
+    const objetivo = textoDe(x.p?.objetivo);
+    return {
+      asunto: "Un tutor se postuló a tu clasificado",
+      familia: "ok",
+      epigrafe: "Clasificados",
+      titulo: "Tienes una postulación nueva",
+      preheader: "Revisa su propuesta: si te encaja, la pagas y queda reservada.",
+      motivo: "Recibes este correo porque publicaste un clasificado en Enséñame Ya.",
+      cuerpo: [
+        parrafo(
+          objetivo
+            ? `Un tutor se postuló a tu clasificado <strong>«${esc(objetivo)}»</strong> con una propuesta de clase: mentoría, día y hora.`
+            : "Un tutor se postuló a tu clasificado con una propuesta de clase: mentoría, día y hora.",
+        ),
+        parrafo(
+          "Puedes ver su propuesta, escribirle por el chat y, si te convence, pagarla. Al reservar, el clasificado se cierra solo.",
+        ),
+        boton("Ver las postulaciones", x.url),
+      ],
+    };
+  },
+
+  /** NTF-59 · al tutor: su postulación dejó de estar vigente (y por qué). */
+  request_closed_tutor: (x) => {
+    const objetivo = textoDe(x.p?.objetivo);
+    const motivo = MOTIVO_CIERRE[String(x.p?.motivo ?? "")] ?? "ya no recibe postulaciones";
+    return {
+      asunto: "Un clasificado al que postulaste se cerró",
+      familia: "alerta",
+      epigrafe: "Clasificados",
+      titulo: "Tu postulación ya no está vigente",
+      preheader: `El clasificado ${motivo}.`,
+      motivo: "Recibes este correo porque postulaste a este clasificado.",
+      cuerpo: [
+        parrafo(
+          objetivo
+            ? `El clasificado <strong>«${esc(objetivo)}»</strong> ${esc(motivo)}, así que tu propuesta se retiró. No tienes que hacer nada.`
+            : `El clasificado al que postulaste ${esc(motivo)}, así que tu propuesta se retiró. No tienes que hacer nada.`,
+        ),
+        parrafo("Hay otros alumnos buscando tutor: échales un vistazo."),
+        boton("Ver clasificados", x.url),
+      ],
+    };
+  },
+
+  /** NTF-60 · al alumno: su clasificado venció sin reservar. */
+  request_expired_student: (x) => {
+    const objetivo = textoDe(x.p?.objetivo);
+    return {
+      asunto: "Tu clasificado venció",
+      familia: "alerta",
+      epigrafe: "Clasificados",
+      titulo: "Tu clasificado ya no está publicado",
+      preheader: "Llegó a su fecha sin reservar. Puedes volver a publicarlo.",
+      motivo: "Recibes este correo porque publicaste un clasificado en Enséñame Ya.",
+      cuerpo: [
+        parrafo(
+          objetivo
+            ? `Tu clasificado <strong>«${esc(objetivo)}»</strong> llegó a su fecha sin que reservaras ninguna propuesta y dejó de estar publicado.`
+            : "Tu clasificado llegó a su fecha sin que reservaras ninguna propuesta y dejó de estar publicado.",
+        ),
+        parrafo(
+          "Si todavía lo necesitas, vuelve a publicarlo: los tutores de la categoría recibirán el aviso otra vez.",
+        ),
+        boton("Volver a publicarlo", x.url),
+      ],
+    };
+  },
+
   session_starting: (x) => {
     const otro = alTutor(x) ? x.c.alumno : x.c.tutor;
     return {
@@ -2795,6 +2897,19 @@ const PLANTILLAS: Record<string, (x: Ctx) => Plantilla> = {
 };
 
 // ── Ayudas que usan varias plantillas ───────────────────────────────────────
+
+/** Un texto del payload, o null si no viene o viene vacío. */
+function textoDe(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
+/** NTF-59 · `motivo` de `retirar_postulaciones` → la frase que lo cuenta. */
+const MOTIVO_CIERRE: Record<string, string> = {
+  reservado: "ya se reservó con otro tutor",
+  cerrado: "lo cerró el alumno",
+  vencido: "venció",
+  retirado: "lo retiró el equipo de Enséñame Ya",
+};
 
 function primerNombre(nombre: string): string {
   return nombre.trim().split(/\s+/)[0] ?? nombre;

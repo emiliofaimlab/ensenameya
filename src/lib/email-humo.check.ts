@@ -215,6 +215,18 @@ const PAYLOADS: Record<string, Record<string, unknown>> = {
     currency: "USD",
     expires_at: "2026-10-16T12:00:00Z",
   },
+
+  // ── Clasificados (`20261125120000`) · el `jsonb_build_object` de cada uno ──
+  request_new_tutor: {
+    request_id: "rq-5c10", objetivo: "Aprobar el examen final de cálculo", categoria: "Matemáticas",
+  },
+  request_application_student: {
+    request_id: "rq-5c10", objetivo: "Aprobar el examen final de cálculo", proposal_id: "cp-71a2",
+  },
+  request_closed_tutor: {
+    request_id: "rq-5c10", objetivo: "Aprobar el examen final de cálculo", motivo: "reservado",
+  },
+  request_expired_student: { request_id: "rq-5c10", objetivo: "Aprobar el examen final de cálculo" },
 };
 
 /**

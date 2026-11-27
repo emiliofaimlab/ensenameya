@@ -22,6 +22,7 @@ import {
   LogOutIcon,
   MailIcon,
   MegaphoneIcon,
+  NewspaperIcon,
   PercentIcon,
   ReceiptIcon,
   TicketIcon,
@@ -118,6 +119,15 @@ const STUDENT_ITEMS: Item[] = [
   // cliente lo señaló como error. `/agendar` es lo mismo dentro de casa: sus
   // tutores, lo que se le recomienda y su historial.
   { href: "/agendar", label: "Agendar", icon: CalendarPlusIcon },
+  // Clasificados · lo que el alumno publicó para que los tutores se postulen.
+  // `alsoMatch` enciende la entrada también en `/clasificados/nuevo` y en la
+  // ficha de uno suyo, que cuelgan de `/clasificados/` y no de `/mios`.
+  {
+    href: "/clasificados/mios",
+    label: "Mis clasificados",
+    icon: NewspaperIcon,
+    alsoMatch: "/clasificados/",
+  },
   { href: "/pagos", label: "Métodos de pago", icon: CreditCardIcon },
   { href: "/account", label: "Cuenta", icon: UserIcon },
   // «Regalar una mentoría»: comprar para OTRA persona, que elige ella el día y
@@ -203,6 +213,9 @@ export const TUTOR_ITEMS: Item[] = [
   // EY-230 · el aviso de reseña nueva aterriza aquí: antes iba a `/tutor`, que
   // no enseña ninguna, y el tutor tenía que abrir su ficha pública para leerla.
   { href: "/tutor/resenas", label: "Mis reseñas", icon: StarIcon },
+  // Clasificados · lo que buscan los alumnos. El listado es PÚBLICO (sale del
+  // panel, como cualquiera lo vería); postular ya vuelve a `(app)`.
+  { href: "/clasificados", label: "Clasificados", icon: NewspaperIcon },
   // G-01 · «Payouts» pasa a «Mis pagos». Era la única entrada del menú en
   // inglés, y el propio panel ya llamaba «pagos» a lo que hay dentro.
   {
@@ -309,6 +322,8 @@ export const ADMIN_ITEMS: Item[] = [
   // es de Tutores; el de personas redondeado dice «grupo» sin leer la etiqueta.
   { href: "/admin/clases-grupales", label: "Clases grupales", icon: UsersRoundIcon },
   { href: "/admin/academias", label: "Academias", icon: Building2Icon },
+  // Clasificados · la demanda por categoría y la moderación (retirar).
+  { href: "/admin/clasificados", label: "Clasificados", icon: NewspaperIcon },
   { href: "/admin/categorias", label: "Categorías", icon: FolderTreeIcon },
   { href: "/admin/tiers", label: "Tiers", icon: PercentIcon },
   { href: "/admin/stats", label: "Estadísticas", icon: BarChart3Icon },

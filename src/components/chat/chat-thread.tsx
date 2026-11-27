@@ -38,6 +38,7 @@ import {
 import type { GrupalChat, MiembroGrupo } from "./grupo";
 import { asRpc } from "./rpc";
 import { ReportConversation } from "./report-conversation";
+import { ProponerClase, TarjetaDePropuesta } from "./propuesta-de-clase";
 import type { CounterpartRole } from "./types";
 import { markConversationRead, useOpenThread } from "./unread";
 
@@ -416,6 +417,11 @@ export function ChatThread({
   // se le dice igual a quien pregunta que a quien responde. Con el rol sin
   // pasar esto es `false` y cae al texto neutro.
   const soyAlumno = counterpartRole === "tutor";
+  // Clasificados fase 1 · quien mira es el tutor de un hilo de par abierto.
+  const puedeProponer =
+    !grupal && counterpartRole === "student" && !blocked && !soloLectura && Boolean(conversationId);
+  // La propuesta más reciente: las anteriores ya se retiraron al llegar esta.
+  const ultimaPropuesta = [...messages].reverse().find((m) => m.proposalId)?.proposalId ?? null;
 
   // ── El cupo de la consulta previa, en vivo ─────────────────────────────────
   // Se calcula sobre `messages`, o sea sobre lo que ya está pintado: ni una
@@ -906,6 +912,18 @@ export function ChatThread({
                       ⚠️ Nada de `overflow-hidden` aquí: eso no parte la URL, la
                       recorta — el mensaje llegaría cortado y sin manera de leerlo
                       entero. */}
+                  {m.proposalId ? (
+                    // Clasificados fase 1 · la propuesta de clase se pinta como
+                    // tarjeta; el `body` es solo el respaldo de las pantallas
+                    // que no piden `proposal_id`.
+                    <TarjetaDePropuesta
+                      proposalId={m.proposalId}
+                      soyAlumno={!mine}
+                      esLaUltima={m.proposalId === ultimaPropuesta}
+                      timeZone={timeZone}
+                      formato={formato}
+                    />
+                  ) : (
                   <div
                     className={cn(
                       "flex max-w-[80%] min-w-0 flex-col gap-1.5 rounded-2xl px-3 py-2 text-sm wrap-anywhere",
@@ -915,6 +933,7 @@ export function ChatThread({
                     {m.attachment ? <AttachmentLink a={m.attachment} mine={mine} /> : null}
                     {m.body ? <span>{conEnlaces(m.body)}</span> : null}
                   </div>
+                  )}
                   <time className="mt-0.5 text-[11px] text-muted-foreground" dateTime={m.createdAt}>
                     {new Date(m.createdAt).toLocaleTimeString("es", {
                       hour: "2-digit",
@@ -938,6 +957,18 @@ export function ChatThread({
         <p className="text-[11px] text-muted-foreground">
           Todo el grupo lee este chat: el tutor y los inscritos ven lo que escribes.
         </p>
+      ) : null}
+
+      {/* Clasificados fase 1 · solo el TUTOR de un hilo de par, y FUERA del
+          formulario: sigue disponible con su cupo previo agotado, porque una
+          propuesta no gasta cupo (`20261124140000`). */}
+      {puedeProponer ? (
+        <ProponerClase
+          conversationId={conversationId!}
+          tutorId={currentUserId}
+          timeZone={timeZone}
+          formato={formato}
+        />
       ) : null}
 
       {blocked ? (

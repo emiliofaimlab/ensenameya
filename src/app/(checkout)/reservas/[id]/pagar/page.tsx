@@ -9,7 +9,7 @@ import {
 } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
 import { Precio } from "@/components/precio/precio";
-import { bookingFormatLabel, formatSessionTime, tutorCards } from "@/lib/booking";
+import { bookingFormatLabel, formatSessionTime, tienePropuestaViva, tutorCards } from "@/lib/booking";
 import { ResumePayment } from "@/components/checkout/resume-payment";
 import { metodosDeCheckout } from "@/lib/payments";
 import { PaymentPolicy } from "@/components/checkout/payment-policy";
@@ -67,7 +67,7 @@ export default async function PagarReservaPage({
   const { data: booking } = await supabase
     .from("bookings")
     .select(
-      "id, status, total_amount, currency, num_sessions, session_duration_min, payer_country, products(title, tutor_id, auto_accept_bookings), sessions(id, start_at, session_ref)",
+      "id, status, student_id, product_id, total_amount, currency, num_sessions, session_duration_min, payer_country, products(title, tutor_id, auto_accept_bookings), sessions(id, start_at, session_ref)",
     )
     .eq("id", id)
     .maybeSingle();
@@ -99,6 +99,17 @@ export default async function PagarReservaPage({
   const sessions = [...(booking.sessions ?? [])].sort((a, b) =>
     a.start_at.localeCompare(b.start_at),
   );
+  // Clasificados fase 1 · ver `tienePropuestaViva`: pagar una propuesta del
+  // tutor confirma al instante aunque la oferta sea de aceptación manual.
+  const aceptaSola =
+    Boolean(booking.products?.auto_accept_bookings) ||
+    (sessions.length === 1 && booking.product_id
+      ? await tienePropuestaViva(supabase, {
+          studentId: booking.student_id,
+          productId: booking.product_id,
+          startAt: sessions[0]!.start_at,
+        })
+      : false);
 
   return (
     <div className="flex flex-col gap-6">
@@ -190,7 +201,7 @@ export default async function PagarReservaPage({
               componente en las dos, con los números saliendo de `lib/policy.ts`
               —o sea de lo que aplica `cancel_booking`— y no escritos a mano. */}
           <PaymentPolicy
-            aceptaSola={Boolean(booking.products?.auto_accept_bookings)}
+            aceptaSola={aceptaSola}
             className="mt-3.5 border-t border-[#e0e0e0] pt-3.5"
           />
         </PanelCard>

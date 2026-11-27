@@ -15,6 +15,7 @@ import { ThreeSteps } from "@/components/home/three-steps";
 import { FeaturedProducts } from "@/components/home/featured-products";
 import { HomeFaq } from "@/components/home/home-faq";
 import { HomeStats } from "@/components/home/home-stats";
+import { ClasificadosHome, listClasificadosHome } from "@/components/home/clasificados-home";
 import { Testimonials } from "@/components/home/testimonials";
 import { FinalCta } from "@/components/home/final-cta";
 import { hrefSignup } from "@/components/auth/auth-links";
@@ -37,6 +38,7 @@ export default async function HomePage() {
     testimonials,
     academies,
     visitante,
+    clasificados,
   ] = await Promise.all([
     listActiveCategories(),
     listFeaturedTutors(),
@@ -48,6 +50,8 @@ export default async function HomePage() {
     // (CLAUDE.md § Rendimiento: se mide la profundidad, no el número).
     listAcademies(),
     getVisitorState(),
+    // Clasificados · en la misma tanda; nunca lanza (un fallo deja [] y log).
+    listClasificadosHome(),
   ]);
 
   /*
@@ -116,6 +120,10 @@ export default async function HomePage() {
       <ThreeSteps />
       <FeaturedProducts products={products.slice(0, 4)} />
       <HomeStats stats={stats} overlap={products.length > 0} />
+
+      {/* Clasificados · la demanda, justo después de las cifras. Solo con ≥ 1
+          activo; sin ninguno, `null`. */}
+      <ClasificadosHome items={clasificados} />
 
       {/* Después de tutores y mentorías, y no antes: el visitante entra a
           buscar con quién aprender, y las academias son quién los respalda.
