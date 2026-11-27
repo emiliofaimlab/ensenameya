@@ -4,25 +4,97 @@
     {
       "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000
     },
     {
       "name": "dev-3001",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "3001"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3001"
+      ],
       "port": 3001
     },
     {
       "name": "prod-build",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start", "--", "--port", "3002"],
+      "runtimeArgs": [
+        "start",
+        "--",
+        "--port",
+        "3002"
+      ],
       "port": 3002
+    },
+    {
+      "name": "dev-worktree-build",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../ensenameya-dev",
+        "start",
+        "--",
+        "--port",
+        "3004"
+      ],
+      "port": 3004
+    },
+    {
+      "name": "dev-worktree",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../ensenameya-dev",
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "3005"
+      ],
+      "port": 3005
+    },
+    {
+      "name": "resondeo",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../ensenameya-resondeo",
+        "start",
+        "--",
+        "--port",
+        "3008"
+      ],
+      "port": 3008
+    },
+    {
+      "name": "clasificados",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "../ensenameya-clasificados",
+        "start",
+        "--",
+        "--port",
+        "3010"
+      ],
+      "port": 3010
     },
     {
       "name": "qa",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["start", "--", "--port", "3007"],
+      "runtimeArgs": [
+        "start",
+        "--",
+        "--port",
+        "3007"
+      ],
       "port": 3007
     }
   ]
