@@ -16,6 +16,7 @@ import { studentsOfTutor } from "../../students";
 import { tutorTier } from "../../tier";
 import { StudentLink } from "../../student-link";
 import { CancelarClase, FechaAcciones } from "./acciones";
+import { AbrirChatButton } from "@/components/chat/abrir-chat-button";
 
 export const metadata = { title: "Clase grupal · Enséñame Ya" };
 
@@ -398,9 +399,9 @@ export default async function ClaseGrupalPage({ params }: { params: Promise<{ id
             <p className="text-[13px] text-[#474747]">
               Chat del grupo con los inscritos que ya pagaron.
             </p>
-            <Button asChild variant="outline" size="sm" className="h-9 rounded-[8px] px-3.5 text-[13px]">
-              <Link href={`/chat/${chat.id}`}>Abrir chat</Link>
-            </Button>
+            <AbrirChatButton conversationId={chat.id} variant="outline" size="sm" className="h-9 rounded-[8px] px-3.5 text-[13px]">
+              Abrir chat
+            </AbrirChatButton>
           </PanelCard>
         ) : null}
 

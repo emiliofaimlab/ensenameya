@@ -73,3 +73,11 @@ export const CATEGORY_ICON_KEYS = Object.keys(CATEGORY_ICONS);
 export function categoryIcon(icon: string | null | undefined): LucideIcon {
   return (icon && CATEGORY_ICONS[icon]) || SparklesIcon;
 }
+
+/** Arte propia de la categoría (hero de `category-explorer` y portada de los
+ *  clasificados). ponytail: es un asset de diseño, no dato de usuario — vive en
+ *  `public/img/categories/{slug}.jpg` y no pide columna. Sin entrada, cada
+ *  superficie cae a su respaldo (icono de la categoría). */
+export const CATEGORY_HERO: Record<string, string> = {
+  matematicas: "/img/categories/matematicas.jpg",
+};

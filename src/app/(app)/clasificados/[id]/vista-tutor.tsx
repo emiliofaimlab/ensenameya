@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarClockIcon, ClockIcon, HourglassIcon, UsersIcon } from "lucide-react";
+import { CalendarIcon, ClockIcon, HourglassIcon, UsersIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
@@ -8,6 +8,9 @@ import { franjasDe, franjasLabel, zonaLabel } from "@/lib/clasificados";
 import type { FormatoHora } from "@/lib/hora";
 
 import { Postular, type OfertaElegible } from "./postular";
+import { AbrirChatButton } from "@/components/chat/abrir-chat-button";
+import { fechaDeseada } from "@/components/clasificados/clasificado-card";
+import { cajaLateral, DatoFicha, FichaClasificado, SeccionFicha } from "./ficha";
 
 /**
  * Lo que ve de un clasificado quien NO es su dueño: el clasificado sin datos
@@ -22,19 +25,12 @@ export type VistaTutorProps = {
   formato: FormatoHora;
 };
 
-/** `needed_by` es un `date` sin zona: se formatea en UTC para no correrle el día. */
-function fechaSinZona(fecha: string): string {
-  return new Intl.DateTimeFormat("es", { timeZone: "UTC", day: "numeric", month: "long" }).format(
-    new Date(`${fecha}T00:00:00Z`),
-  );
-}
-
 function postulacionesLabel(n: number): string {
   if (n === 0) return "Aún sin postulaciones";
   return n === 1 ? "1 tutor postulado" : `${n} tutores postulados`;
 }
 
-const caja = "rounded-[16px] border border-[#e0e0e0] bg-card p-5";
+const caja = "rounded-[16px] border border-[#ebebeb] bg-card p-6 shadow-[0_8px_22px_rgb(0_0_0/0.04)]";
 
 type PostulacionViva = {
   id: string;
@@ -55,7 +51,7 @@ export async function VistaTutor({ requestId, userId, timeZone, formato }: Vista
 
   if (!c) {
     return (
-      <div className={`${caja} flex flex-col items-start gap-3`}>
+      <div className={`${caja} mx-auto my-10 flex max-w-xl flex-col items-start gap-3`}>
         <h1 className="text-[17px] font-semibold">Este clasificado ya no recibe postulaciones</h1>
         <p className="text-[14px] text-muted-foreground">
           Se reservó, se cerró o venció. Hay otros alumnos buscando tutor.
@@ -73,7 +69,7 @@ export async function VistaTutor({ requestId, userId, timeZone, formato }: Vista
   // Las MISMAS condiciones que exige `postular_a_clasificado`: lo que no
   // pasaría, no se ofrece. Los errores se miran: una lista vacía por un fallo
   // diría «no tienes mentorías», que es una mentira creíble (regla de oro 10).
-  const [perfil, ofertas, viva] = await Promise.all([
+  const [perfil, ofertas, viva, cat] = await Promise.all([
     supabase.from("tutor_profiles").select("approval_status").eq("profile_id", userId).maybeSingle(),
     supabase
       .from("products")
@@ -95,6 +91,7 @@ export async function VistaTutor({ requestId, userId, timeZone, formato }: Vista
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase.from("categories").select("icon").eq("id", c.category_id).maybeSingle(),
   ]);
   if (perfil.error) throw perfil.error;
   if (ofertas.error) throw ofertas.error;
@@ -109,43 +106,49 @@ export async function VistaTutor({ requestId, userId, timeZone, formato }: Vista
   const postulacion = viva.data as PostulacionViva | null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <article className={caja}>
-        <span className="inline-flex items-center rounded-full bg-[#dbedff] px-2.5 py-1 text-xs font-semibold text-[#0063c4]">
-          {c.category_name}
-        </span>
-        <h1 className="mt-3 text-[20px] font-bold text-pretty text-[#19191f]">{c.goal}</h1>
-        {c.detail ? (
-          <p className="mt-2 text-[14px] whitespace-pre-line text-[#525252]">{c.detail}</p>
-        ) : null}
-
-        <ul className="mt-4 space-y-2 text-[14px] text-[#525252]">
+    <FichaClasificado
+      categoria={{ name: c.category_name, slug: c.category_slug, icon: cat.data?.icon ?? null }}
+      titulo={c.goal}
+      datos={
+        <>
+          <DatoFicha>
+            <CalendarIcon className="size-3.5" aria-hidden />
+            {fechaDeseada(c.needed_by)}
+          </DatoFicha>
           {franjas.length > 0 ? (
-            <li className="flex gap-2">
-              <ClockIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-              <span>
-                {franjasLabel(franjas)}, {zonaLabel(c.timezone)}
-              </span>
-            </li>
+            <DatoFicha>
+              <ClockIcon className="size-3.5" aria-hidden />
+              {franjasLabel(franjas)} ({zonaLabel(c.timezone)})
+            </DatoFicha>
           ) : null}
-          {c.needed_by ? (
-            <li className="flex gap-2">
-              <CalendarClockIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-              <span>Para el {fechaSinZona(c.needed_by)}</span>
-            </li>
-          ) : null}
-          <li className="flex gap-2">
-            <HourglassIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
+        </>
+      }
+      lateral={
+        <div className={`${cajaLateral} flex flex-col gap-3 text-[14px] text-[#525252]`}>
+          <p className="text-sm font-bold text-[#242424]">{c.category_name}</p>
+          <p className="flex gap-2">
+            <UsersIcon className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
+            {postulacionesLabel(c.postulaciones)}
+          </p>
+          <p className="flex gap-2">
+            <HourglassIcon className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden />
             <span>
               Recibe postulaciones hasta: {formatSessionTime(c.expires_at, timeZone, formato)}
             </span>
-          </li>
-          <li className="flex gap-2">
-            <UsersIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <span>{postulacionesLabel(c.postulaciones)}</span>
-          </li>
-        </ul>
-      </article>
+          </p>
+          {aprobado && elegibles.length > 0 ? (
+            <Button asChild className="mt-1 w-full">
+              <a href="#postular">{postulacion ? "Cambiar mi postulación" : "Postularme"}</a>
+            </Button>
+          ) : null}
+        </div>
+      }
+    >
+      {c.detail ? (
+        <SeccionFicha titulo="Lo que quiere lograr">
+          <p className="text-[14px] whitespace-pre-line text-[#525252]">{c.detail}</p>
+        </SeccionFicha>
+      ) : null}
 
       {!perfil.data ? (
         <div className={`${caja} flex flex-col items-start gap-3`}>
@@ -181,7 +184,8 @@ export async function VistaTutor({ requestId, userId, timeZone, formato }: Vista
           </Button>
         </div>
       ) : (
-        <div className={`${caja} flex flex-col gap-3`}>
+        <div id="postular" className={`${caja} flex scroll-mt-24 flex-col gap-3`}>
+          <h2 className="text-lg font-bold text-[#242424]">Tu postulación</h2>
           {postulacion ? (
             <div className="flex flex-col gap-2 rounded-[10px] bg-[#e9f7ef] p-3 text-[14px]">
               <p>
@@ -194,9 +198,9 @@ export async function VistaTutor({ requestId, userId, timeZone, formato }: Vista
               <p className="text-[13px] text-[#525252]">
                 El alumno la ve en el chat con su botón de pago.
               </p>
-              <Button asChild variant="outline" className="w-fit">
-                <a href={`/chat/${postulacion.conversation_id}`}>Abrir chat</a>
-              </Button>
+              <AbrirChatButton conversationId={postulacion.conversation_id} variant="outline" className="w-fit">
+                Abrir chat
+              </AbrirChatButton>
             </div>
           ) : null}
           <Postular
@@ -215,6 +219,6 @@ export async function VistaTutor({ requestId, userId, timeZone, formato }: Vista
           />
         </div>
       )}
-    </div>
+    </FichaClasificado>
   );
 }

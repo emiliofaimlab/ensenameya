@@ -1,117 +1,109 @@
-import Link from "next/link";
-import { CalendarClockIcon, ClockIcon, UsersIcon } from "lucide-react";
+import { createElement } from "react";
+import Image from "next/image";
+import { ArrowUpRightIcon, CalendarIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { CATEGORY_HERO, categoryIcon } from "@/components/catalog/category-icons";
 import { createClient } from "@/lib/supabase/server";
-import { franjasDe, franjasLabel, zonaLabel } from "@/lib/clasificados";
 import type { Database } from "@/lib/database.types";
 
 /**
  * Clasificados · la tarjeta pública (listado `/clasificados` y bloque del home).
  *
- * Solo pinta lo que devuelve `clasificados_publicos`: NO hay alumno en la fila,
- * y no se le va a añadir aquí («público sin datos personales»).
+ * 27-nov · misma estructura que `ProductCard` (la de mentoría): portada arriba y
+ * tres datos — categoría, título y fecha deseada. Nada más; el resto vive en el
+ * detalle. La tarjeta ENTERA es el enlace (el `before:inset-0` del `<a>`).
  *
- * ⚠️ «Ver y postular» va con `<a>` y no con `<Link>`: `/clasificados/<id>` vive
- * en `(app)` con guarda, y una navegación de cliente que cruza de grupo hasta un
- * `redirect()` de servidor deja la pantalla en blanco (regla de oro 13).
+ * Solo pinta lo que devuelve `clasificados_publicos`: NO hay alumno en la fila.
+ *
+ * ⚠️ El enlace es `<a>` y no `<Link>`: `/clasificados/<id>` vive en `(app)` con
+ * guarda, y una navegación de cliente que cruza de grupo hasta un `redirect()`
+ * deja la pantalla en blanco (regla de oro 13).
  */
 export type ClasificadoPublico =
-  Database["public"]["Functions"]["clasificados_publicos"]["Returns"][number];
+  Database["public"]["Functions"]["clasificados_publicos"]["Returns"][number] & {
+    /** Icono de la categoría (para la portada sin foto). */
+    category_icon: string | null;
+  };
 
 /** Activos y no vencidos. Lanza si la RPC falla: quien llama decide qué hacer. */
 export async function listarClasificados(limit = 200): Promise<ClasificadoPublico[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("clasificados_publicos", { p_limit: limit });
+  // ponytail: los iconos van en una consulta aparte y no en la RPC — cambiar lo
+  // que devuelve `clasificados_publicos` obliga a drop + create (regla 12).
+  const [{ data, error }, cats] = await Promise.all([
+    supabase.rpc("clasificados_publicos", { p_limit: limit }),
+    supabase.from("categories").select("slug, icon"),
+  ]);
   if (error) throw error;
-  return data ?? [];
-}
-
-/**
- * «hace 3 h». Se calcula en el SERVIDOR al pintar: en un componente cliente el
- * reloj del navegador daría otro texto que el HTML (error de hidratación).
- */
-export function haceCuanto(iso: string, ahora: Date = new Date()): string {
-  const min = Math.floor((ahora.getTime() - new Date(iso).getTime()) / 60_000);
-  if (!Number.isFinite(min) || min < 1) return "hace un momento";
-  if (min < 60) return `hace ${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `hace ${h} h`;
-  const d = Math.floor(h / 24);
-  return d === 1 ? "hace 1 día" : `hace ${d} días`;
+  // Sin iconos la portada cae al genérico: no merece tumbar la página.
+  if (cats.error) console.error("[clasificados] categories", cats.error.message);
+  const icono = new Map((cats.data ?? []).map((c) => [c.slug, c.icon]));
+  return (data ?? []).map((c) => ({ ...c, category_icon: icono.get(c.category_slug) ?? null }));
 }
 
 /** `needed_by` es un `date` sin zona: se formatea en UTC para no correrle el día. */
-function fechaCorta(fecha: string): string {
-  return new Intl.DateTimeFormat("es", { timeZone: "UTC", day: "numeric", month: "long" }).format(
+export function fechaDeseada(fecha: string | null): string {
+  if (!fecha) return "Fecha flexible";
+  const f = new Intl.DateTimeFormat("es", { timeZone: "UTC", day: "numeric", month: "long" }).format(
     new Date(`${fecha}T00:00:00Z`),
+  );
+  return `Para el ${f}`;
+}
+
+/** Portada: la foto de la categoría si la hay; si no, su icono — el mismo
+ *  respaldo que `ProductCover` en la tarjeta de mentoría. */
+export function PortadaCategoria({
+  slug,
+  icon,
+  className,
+}: {
+  slug: string;
+  icon: string | null;
+  className: string;
+}) {
+  const foto = CATEGORY_HERO[slug];
+  if (foto) {
+    return (
+      <Image src={foto} alt="" width={552} height={280} className={`w-full object-cover ${className}`} />
+    );
+  }
+  return (
+    <div
+      aria-hidden="true"
+      className={`grid w-full place-items-center bg-linear-to-br from-primary-muted to-brand-muted text-primary-muted-foreground ${className}`}
+    >
+      <span className="grid size-14 place-items-center">
+        {createElement(categoryIcon(icon), { className: "size-full", strokeWidth: 1.5 })}
+      </span>
+    </div>
   );
 }
 
-function postulacionesLabel(n: number): string {
-  if (n === 0) return "Aún sin postulaciones";
-  return n === 1 ? "1 tutor postulado" : `${n} tutores postulados`;
-}
-
-export function ClasificadoCard({
-  c,
-  compacta = false,
-}: {
-  c: ClasificadoPublico;
-  /** Home: sin detalle ni CTA de tutor, para que quepan seis sin un muro. */
-  compacta?: boolean;
-}) {
-  const franjas = franjasDe(c.slots);
-
+export function ClasificadoCard({ c }: { c: ClasificadoPublico }) {
   return (
-    <article className="flex h-full flex-col rounded-[16px] border border-[#e0e0e0] bg-card p-5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="inline-flex items-center rounded-full bg-[#dbedff] px-2.5 py-1 text-xs font-semibold text-[#0063c4]">
+    <article className="relative flex h-full flex-col overflow-hidden rounded-[16px] border border-[#ebebeb] bg-card shadow-[0_8px_22px_rgb(0_0_0/0.06)] transition-shadow focus-within:ring-2 focus-within:ring-brand/40 hover:shadow-card-hover">
+      <PortadaCategoria slug={c.category_slug} icon={c.category_icon} className="h-[140px]" />
+
+      <div className="flex flex-1 flex-col gap-3 p-[18px]">
+        <span className="w-fit max-w-full truncate rounded-[6px] bg-[#f0f0f0] px-2.5 py-1 text-xs font-medium text-[#5c5c5c]">
           {c.category_name}
         </span>
-        <span className="text-xs text-[#595959]">Publicado {haceCuanto(c.created_at)}</span>
-      </div>
-
-      <h3 className="mt-3 text-[16px] font-bold text-pretty text-[#19191f]">{c.goal}</h3>
-
-      {!compacta && c.detail ? (
-        <p className="mt-2 line-clamp-3 text-[14px] text-[#525252]">{c.detail}</p>
-      ) : null}
-
-      <ul className="mt-3 space-y-1.5 text-[13px] text-[#525252]">
-        {franjas.length > 0 ? (
-          <li className="flex gap-2">
-            <ClockIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>
-              {franjasLabel(franjas)}{" "}
-              <span className="text-[#6b6b6b]">({zonaLabel(c.timezone)})</span>
-            </span>
-          </li>
-        ) : null}
-        {c.needed_by ? (
-          <li className="flex gap-2">
-            <CalendarClockIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>Para el {fechaCorta(c.needed_by)}</span>
-          </li>
-        ) : null}
-        <li className="flex gap-2">
-          <UsersIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-          <span>{postulacionesLabel(c.postulaciones)}</span>
-        </li>
-      </ul>
-
-      <div className="mt-auto flex flex-col gap-2 pt-4">
-        <Button asChild className="w-full">
-          <a href={`/clasificados/${c.id}`}>Ver y postular</a>
-        </Button>
-        {!compacta ? (
-          <Link
-            href="/ensena"
-            className="-my-1 py-1 text-center text-[13px] font-medium text-brand hover:underline"
+        <h3 title={c.goal} className="line-clamp-2 text-base font-bold text-[#242424]">
+          {c.goal}
+        </h3>
+        <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+          <span className="flex items-center gap-1.5 text-[12.5px] text-[#4d4d4d]">
+            <CalendarIcon className="size-3.5 shrink-0 text-brand" aria-hidden />
+            {fechaDeseada(c.needed_by)}
+          </span>
+          <a
+            href={`/clasificados/${c.id}`}
+            aria-label={`Ver el clasificado: ${c.goal}`}
+            className="grid size-8 shrink-0 place-items-center rounded-full bg-brand text-white before:absolute before:inset-0"
           >
-            ¿Sabes enseñar esto? Postúlate como tutor
-          </Link>
-        ) : null}
+            <ArrowUpRightIcon className="size-4" aria-hidden />
+          </a>
+        </div>
       </div>
     </article>
   );

@@ -26,6 +26,7 @@ import { asRpc, type ConversationRow } from "./rpc";
 import { grupalDe, type GrupalChat, type MiembroGrupo } from "./grupo";
 import {
   consumirPeticion,
+  pedirAbrirHilo,
   peticionSnapshot,
   subscribePeticion,
   type PeticionDeHilo,
@@ -219,16 +220,14 @@ export function ChatBubble({
   const boxRef = useRef<HTMLDivElement>(null);
   const ultimoRefresco = useRef(0);
 
-  // En el propio hilo la burbuja sobra (y taparía el composer). El cálculo va
-  // aquí arriba, y no como un `return null` antes de tiempo, porque los hooks
-  // de abajo tienen que llamarse siempre; lo que hace `visible` es apagarles el
-  // trabajo (ni recuento ni websocket) mientras no se pinta nada.
-  // ⚠️ Lo de `/room/` es un cinturón, no una condición viva: desde MN-04 la sala
-  // cuelga del grupo `(room)`, que NO monta el launcher —solo lo montan `(app)`
-  // y `(public)`—, así que esa rama ya no puede darse. Se conserva para que
-  // devolver la ruta a `(app)` no reviva la burbuja flotante encima del vídeo.
-  const visible =
-    !pathname.startsWith("/chat/") && !pathname.startsWith("/room/");
+  // El cálculo va aquí arriba, y no como un `return null` antes de tiempo,
+  // porque los hooks de abajo tienen que llamarse siempre; lo que hace
+  // `visible` es apagarles el trabajo (ni recuento ni websocket).
+  // ⚠️ `/room/` es un cinturón, no una condición viva: desde MN-04 la sala
+  // cuelga del grupo `(room)`, que NO monta el launcher. Se conserva para que
+  // devolver la ruta a `(app)` no reviva la burbuja encima del vídeo.
+  // (27-nov) `/chat/` ya no es una pantalla: es un rebote a `?chat=` (abajo).
+  const visible = !pathname.startsWith("/room/");
 
   const unread = useChatUnread();
 
@@ -458,19 +457,9 @@ export function ChatBubble({
   useEffect(() => {
     if (!peticion) return;
 
-    // Donde la burbuja no se pinta no puede atender nada, y comérselo en
-    // silencio sería el peor de los finales: el usuario pulsa y no pasa NADA.
-    // `/chat/[threadId]` resuelve los dos tipos de id (primero conversación,
-    // luego reserva), así que se delega en la página tal cual, sin traducir.
-    // Pasa de verdad: la campana vive en la cabecera de `(app)` y desde
-    // `/chat/otro-hilo` puede pedir abrir uno distinto.
-    if (!visible) {
-      const id =
-        "conversationId" in peticion ? peticion.conversationId : peticion.bookingId;
-      consumirPeticion();
-      router.push(`/chat/${id}`);
-      return;
-    }
+    // Donde la burbuja no se pinta, la petición se queda en el buzón y la
+    // atiende la primera burbuja que se monte (ver `open-thread.ts`).
+    if (!visible) return;
 
     let cancelado = false;
 
@@ -518,9 +507,20 @@ export function ChatBubble({
     return () => {
       cancelado = true;
     };
-    // `visible` entra en las dependencias porque cambia con la ruta y decide
-    // cuál de las dos ramas atiende la petición. `router` es estable en Next.
-  }, [peticion, visible, router]);
+    // `visible` entra en las dependencias porque cambia con la ruta.
+  }, [peticion, visible]);
+
+  // `?chat=<conversación>` · lo deja el rebote de `/chat/[threadId]` (correos
+  // y enlaces viejos). Se convierte en una petición normal y se borra de la
+  // URL para que recargar no vuelva a abrir el hilo.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const id = url.searchParams.get("chat");
+    if (!id) return;
+    url.searchParams.delete("chat");
+    window.history.replaceState(window.history.state, "", url);
+    pedirAbrirHilo({ conversationId: id });
+  }, []);
 
   function volver() {
     setAbierta(null);

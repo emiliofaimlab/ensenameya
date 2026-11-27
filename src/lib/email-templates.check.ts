@@ -360,6 +360,8 @@ assert.equal(
 // la pantalla no daba un 403, renderizaba entera y equivocada.
 assert.equal(rutaFor("booking_new_tutor", { booking_id: "bk-7" }), "/tutor/reservas/bk-7");
 assert.equal(rutaFor("booking_expiring_tutor", { booking_id: "bk-7" }), "/tutor/reservas/bk-7");
+assert.equal(rutaFor("request_application_student", { request_id: "rq-1", proposal_id: "pr-2" }), "/clasificados/rq-1#postulacion-pr-2");
+assert.equal(rutaFor("request_new_tutor", { request_id: "rq-1" }), "/clasificados/rq-1");
 assert.equal(
   toNotice({
     id: "n-7", type: "NTF-07", template: "booking_new_tutor",
@@ -500,7 +502,6 @@ assert.equal(rutaFor("account_deletion_done", {}), "/account");
 assert.equal(rutaFor("admin_alert", {}), "/admin/alertas");
 // Clasificados · al clasificado por `request_id`; NTF-59 (ya no vigente), al listado.
 assert.equal(rutaFor("request_new_tutor", { request_id: "rq-1" }), "/clasificados/rq-1");
-assert.equal(rutaFor("request_application_student", { request_id: "rq-1", proposal_id: "cp-1" }), "/clasificados/rq-1");
 assert.equal(rutaFor("request_expired_student", {}), "/clasificados");
 assert.equal(rutaFor("request_closed_tutor", { request_id: "rq-1" }), "/clasificados");
 

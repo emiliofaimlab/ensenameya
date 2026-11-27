@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { StarIcon } from "lucide-react";
+import Link from "next/link";
+import { CalendarIcon, ClockIcon, StarIcon, UsersIcon } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { bookingTotal, formatSessionTime, isUpcoming, tutorCards } from "@/lib/booking";
@@ -8,17 +9,14 @@ import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import { listApprovedTutors } from "@/lib/catalog/queries";
 import type { FormatoHora } from "@/lib/hora";
 import type { Json } from "@/lib/database.types";
-import {
-  PanelCard,
-  PanelCardTitle,
-  PanelShell,
-  StatusPill,
-  type PillTone,
-} from "@/components/layout/panel-shell";
+import { StatusPill, type PillTone } from "@/components/layout/panel-shell";
 import { Precio } from "@/components/precio/precio";
 import { TutorCard } from "@/components/catalog/tutor-card";
 import { Button } from "@/components/ui/button";
 import { AccionesClasificado } from "./acciones";
+import { AbrirChatButton } from "@/components/chat/abrir-chat-button";
+import { cajaLateral, DatoFicha, FichaClasificado, SeccionFicha } from "./ficha";
+import { IrAlAncla } from "./ir-al-ancla";
 
 export type ClasificadoPropio = {
   id: string;
@@ -30,7 +28,7 @@ export type ClasificadoPropio = {
   status: string;
   expires_at: string;
   created_at: string;
-  categories: { name: string; slug: string } | null;
+  categories: { name: string; slug: string; icon: string | null } | null;
 };
 
 export const ESTADO_CLASIFICADO: Record<string, { label: string; tone: PillTone }> = {
@@ -88,54 +86,64 @@ export async function VistaAlumno({
   const vivo = r.status === "active";
 
   return (
-    <PanelShell
-      back={{ href: "/clasificados/mios", label: "Mis clasificados" }}
-      eyebrow={categoria?.name ?? "Clasificado"}
-      title={r.goal}
-      actions={
-        <AccionesClasificado
-          id={r.id}
-          puedeCerrar={r.status === "active" || r.status === "expired"}
-          puedeRepublicar={r.status === "expired"}
-        />
+    <FichaClasificado
+      categoria={categoria}
+      titulo={r.goal}
+      datos={
+        <>
+          <DatoFicha>
+            <CalendarIcon className="size-3.5" aria-hidden />
+            {r.needed_by ? `Para el ${fechaCalendario(r.needed_by)}` : "Fecha flexible"}
+          </DatoFicha>
+          {franjas.length > 0 ? (
+            <DatoFicha>
+              <ClockIcon className="size-3.5" aria-hidden />
+              {franjasLabel(franjas)} ({zonaLabel(r.timezone)})
+            </DatoFicha>
+          ) : null}
+          <DatoFicha>
+            <UsersIcon className="size-3.5" aria-hidden />
+            {postulaciones.length === 1 ? "1 postulación" : `${postulaciones.length} postulaciones`}
+          </DatoFicha>
+        </>
       }
-    >
-      <PanelCard className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill tone={estado.tone}>{estado.label}</StatusPill>
+      lateral={
+        <div className={`${cajaLateral} flex flex-col gap-3`}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold text-[#242424]">Tu clasificado</p>
+            <StatusPill tone={estado.tone}>{estado.label}</StatusPill>
+          </div>
           {vivo ? (
-            <span className="text-[13px] text-muted-foreground first-letter:uppercase">
+            <p className="text-[13px] text-muted-foreground first-letter:uppercase">
               Recibe postulaciones hasta el {formatSessionTime(r.expires_at, timeZone, formato)}
-            </span>
+            </p>
           ) : r.status === "expired" ? (
-            <span className="text-[13px] text-muted-foreground">
+            <p className="text-[13px] text-muted-foreground">
               Venció el {formatSessionTime(r.expires_at, timeZone, formato)}. Puedes volver a
               publicarlo.
-            </span>
+            </p>
           ) : null}
+          <AccionesClasificado
+            id={r.id}
+            puedeCerrar={r.status === "active" || r.status === "expired"}
+            puedeRepublicar={r.status === "expired"}
+          />
+          <Link href="/clasificados/mios" className="text-[13px] font-medium text-brand hover:underline">
+            ← Mis clasificados
+          </Link>
         </div>
-        {r.detail ? (
+      }
+    >
+      {r.detail ? (
+        <SeccionFicha titulo="Lo que quieres lograr">
           <p className="text-sm whitespace-pre-line text-[#3d3d3d]">{r.detail}</p>
-        ) : null}
-        <dl className="grid gap-2 text-[13px] sm:grid-cols-[auto_1fr] sm:gap-x-4">
-          <dt className="font-semibold">Horarios</dt>
-          <dd className="text-muted-foreground">
-            {franjasLabel(franjas) || "—"}{" "}
-            <span className="whitespace-nowrap">({zonaLabel(r.timezone)})</span>
-          </dd>
-          {r.needed_by ? (
-            <>
-              <dt className="font-semibold">Para cuándo</dt>
-              <dd className="text-muted-foreground">{fechaCalendario(r.needed_by)}</dd>
-            </>
-          ) : null}
-        </dl>
-      </PanelCard>
+        </SeccionFicha>
+      ) : null}
 
-      <PanelCard className="flex flex-col gap-4">
-        <PanelCardTitle>
-          Postulaciones{postulaciones.length > 0 ? ` (${postulaciones.length})` : ""}
-        </PanelCardTitle>
+      <IrAlAncla />
+      <SeccionFicha
+        titulo={`Postulaciones${postulaciones.length > 0 ? ` (${postulaciones.length})` : ""}`}
+      >
 
         {props.error ? (
           <p className="text-sm text-destructive">
@@ -158,7 +166,7 @@ export async function VistaAlumno({
                 new Date(p.start_at).toISOString(),
               )}`;
               return (
-                <li key={p.id} className="flex flex-col gap-3 rounded-[12px] border border-[#ebebeb] p-4">
+                <li key={p.id} id={`postulacion-${p.id}`} className="flex scroll-mt-24 flex-col gap-3 rounded-[12px] border border-[#ebebeb] p-4 data-destacada:border-brand data-destacada:ring-2 data-destacada:ring-brand/30">
                   <div className="flex items-center gap-3">
                     <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-full bg-muted text-sm font-semibold">
                       {avatar ? (
@@ -238,16 +246,16 @@ export async function VistaAlumno({
                         <a href={checkout}>Pagar y reservar</a>
                       </Button>
                     ) : null}
-                    <Button asChild variant="outline" className="h-9 rounded-[8px] text-[13px]">
-                      <a href={`/chat/${p.conversation_id}`}>Abrir chat</a>
-                    </Button>
+                    <AbrirChatButton conversationId={p.conversation_id} variant="outline" className="h-9 rounded-[8px] text-[13px]">
+                      Abrir chat
+                    </AbrirChatButton>
                   </div>
                 </li>
               );
             })}
           </ul>
         )}
-      </PanelCard>
+      </SeccionFicha>
 
       {categoria && tutores.tutors.length > 0 ? (
         <section className="flex flex-col gap-4">
@@ -260,13 +268,13 @@ export async function VistaAlumno({
           <p className="-mt-2 text-[13px] text-muted-foreground">
             Mientras llegan las postulaciones, también puedes escribirles o reservar directamente.
           </p>
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {tutores.tutors.slice(0, 6).map((t) => (
+          <div className="grid gap-5 sm:grid-cols-2">
+            {tutores.tutors.slice(0, 4).map((t) => (
               <TutorCard key={t.id} tutor={t} />
             ))}
           </div>
         </section>
       ) : null}
-    </PanelShell>
+    </FichaClasificado>
   );
 }

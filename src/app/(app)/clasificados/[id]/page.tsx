@@ -26,7 +26,7 @@ export default async function ClasificadoPage({
   const { data: req, error } = await supabase
     .from("class_requests")
     .select(
-      "id, student_id, goal, detail, slots, timezone, needed_by, status, expires_at, created_at, categories(name, slug)",
+      "id, student_id, goal, detail, slots, timezone, needed_by, status, expires_at, created_at, categories(name, slug, icon)",
     )
     .eq("id", id)
     .maybeSingle();

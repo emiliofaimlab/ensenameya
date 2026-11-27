@@ -1,8 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BadgeCheckIcon, MessageSquareIcon } from "lucide-react";
+import { BadgeCheckIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { initialsFrom, storageUrl } from "@/lib/catalog/format";
 import type { TutorCardData } from "@/lib/booking";
 
@@ -32,14 +31,11 @@ import type { TutorCardData } from "@/lib/booking";
  */
 export function TutorSummary({
   tutor,
-  chatHref,
   perfilHref,
   variant = "card",
 }: {
   /** `undefined` = no legible: al tutor le retiraron la aprobación. */
   tutor?: TutorCardData;
-  /** Hilo con el tutor. Acepta el id de la reserva: ver `/chat/[threadId]`. */
-  chatHref?: string;
   /** Se calcula solo; solo se pasa para forzar otro destino. */
   perfilHref?: string;
   /** `inline` para el checkout y el pago, donde una ficha entera estorba. */
@@ -162,14 +158,6 @@ export function TutorSummary({
           >
             Ver perfil
           </Link>
-        ) : null}
-        {chatHref ? (
-          <Button asChild variant="outline" size="sm" className="relative">
-            <Link href={chatHref}>
-              <MessageSquareIcon className="size-4" />
-              Escribirle
-            </Link>
-          </Button>
         ) : null}
       </div>
     </section>

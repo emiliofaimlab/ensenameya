@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { monedaDelVisitante } from "@/lib/fx";
 import Link from "next/link";
+import { CATEGORY_HERO } from "@/components/catalog/category-icons";
 import { notFound } from "next/navigation";
 import { ChevronDownIcon, SearchIcon } from "lucide-react";
 
@@ -41,11 +42,6 @@ const SORTS: { value: ProductSort; label: string }[] = [
   { value: "price_desc", label: "Precio: de mayor a menor" },
 ];
 
-/** Arte propia de la categoría. ponytail: es un asset de diseño, no dato de
- *  usuario — vive en `public/img/categories/{slug}.jpg` y no pide columna. */
-const CATEGORY_HERO: Record<string, string> = {
-  matematicas: "/img/categories/matematicas.jpg",
-};
 
 export type CategorySearchParams = {
   page?: string;

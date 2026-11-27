@@ -1,21 +1,25 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { SendIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { createClient } from "@/lib/supabase/client";
 import { enFranjas, franjasLabel, zonaLabel, type Franja } from "@/lib/clasificados";
 import { opcionesDeHora, type FormatoHora } from "@/lib/hora";
+import { BookingSelect } from "@/components/catalog/booking-select";
+import { CalendarioMes, MES_VALIDO, mesDe, slotDay } from "@/components/catalog/calendario-mes";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 /**
  * Clasificados · el formulario de POSTULACIÓN del tutor.
  *
- * Mismo patrón de día + hora que `components/chat/propuesta-de-clase.tsx`, con
- * un filtro más: solo se ofrecen los huecos que caben ENTEROS en las franjas
+ * 27-nov · día con el calendario mensual de la reserva (`CalendarioMes`) y hora
+ * y mentoría con su desplegable (`BookingSelect`), igual que la ficha de
+ * mentoría. Como allí, la elección vive en la URL (`?po=&pd=&ph=&pm=`): es como
+ * funcionan esos dos componentes. Los huecos se piden aquí, con un filtro más: solo se ofrecen los huecos que caben ENTEROS en las franjas
  * del alumno (`enFranjas`, réplica de `clasificado_admite`) y antes de que el
  * clasificado venza. Quien decide es `postular_a_clasificado`; su error se
  * enseña tal cual, que ya viene en español.
@@ -30,14 +34,6 @@ export type OfertaElegible = {
   title: string;
   session_duration_min: number | null;
 };
-
-const diaDe = (iso: string, tz?: string) =>
-  new Date(iso).toLocaleDateString("es", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: tz,
-  });
 
 const horaDe = (iso: string, formato: FormatoHora, tz?: string) =>
   new Date(iso).toLocaleTimeString("es", {
@@ -70,48 +66,70 @@ export function Postular({
   actual: { productId: string; note: string } | null;
 }) {
   const router = useRouter();
-  const [abierto, setAbierto] = useState(false);
+  const pathname = usePathname();
+  const params = useSearchParams();
+
+  // La elección, en la URL. `po` = mentoría, `pd` = día, `ph` = hora, `pm` = mes.
+  const poUrl = params.get("po");
+  const ofertaId =
+    poUrl && ofertas.some((o) => o.id === poUrl)
+      ? poUrl
+      : actual && ofertas.some((o) => o.id === actual.productId)
+        ? actual.productId
+        : (ofertas[0]?.id ?? "");
+  const [abierto, setAbierto] = useState(params.has("po"));
   const [busy, setBusy] = useState(false);
-  const [ofertaId, setOfertaId] = useState(
-    actual && ofertas.some((o) => o.id === actual.productId) ? actual.productId : (ofertas[0]?.id ?? ""),
-  );
-  const [huecos, setHuecos] = useState<string[] | null>(null);
-  const [dia, setDia] = useState("");
-  const [hora, setHora] = useState("");
+  const [huecos, setHuecos] = useState<{ para: string; lista: string[] } | null>(null);
   const [nota, setNota] = useState(actual?.note ?? "");
 
-  async function cargarHuecos(productId: string) {
-    setHuecos(null);
-    setDia("");
-    setHora("");
-    if (!productId) return;
-    const duracion = ofertas.find((o) => o.id === productId)?.session_duration_min ?? 60;
-    const hasta = new Date(Date.now() + DIAS * 86_400_000).toISOString().slice(0, 10);
-    const { data, error } = await createClient().rpc("get_available_slots", {
-      p_product_id: productId,
-      p_to: hasta,
-    });
-    if (error) {
-      toast.error("No se pudieron cargar tus horarios.");
-      setHuecos([]);
-      return;
-    }
-    const vence = Date.parse(expiresAt);
-    const lista = (data ?? [])
-      .map((h) => h.slot_start)
-      .filter((h) => Date.parse(h) < vence && enFranjas(h, franjas, zonaAlumno, duracion));
-    setHuecos(lista);
-    const primero = lista[0];
-    if (primero) {
-      setDia(diaDe(primero, timeZone));
-      setHora(primero);
-    }
-  }
+  const href = (q: { po?: string; pd?: string; ph?: string; pm?: string }) => {
+    const u = new URLSearchParams();
+    for (const [k, v] of Object.entries({ po: ofertaId, ...q })) if (v) u.set(k, v);
+    return `${pathname}?${u.toString()}#postular`;
+  };
 
-  function abrir() {
-    setAbierto(true);
-    void cargarHuecos(ofertaId);
-  }
+  // Los huecos de la mentoría elegida. Se piden al abrir y al cambiar de
+  // mentoría; la lista sabe de qué mentoría es (`para`) para no pintar la vieja.
+  useEffect(() => {
+    if (!abierto || !ofertaId) return;
+    let cancelado = false;
+    const duracion = ofertas.find((o) => o.id === ofertaId)?.session_duration_min ?? 60;
+    const hasta = new Date(Date.now() + DIAS * 86_400_000).toISOString().slice(0, 10);
+    void createClient()
+      .rpc("get_available_slots", { p_product_id: ofertaId, p_to: hasta })
+      .then(({ data, error }) => {
+        if (cancelado) return;
+        if (error) toast.error("No se pudieron cargar tus horarios.");
+        const vence = Date.parse(expiresAt);
+        setHuecos({
+          para: ofertaId,
+          lista: (data ?? [])
+            .map((h) => h.slot_start)
+            .filter((h) => Date.parse(h) < vence && enFranjas(h, franjas, zonaAlumno, duracion)),
+        });
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [abierto, ofertaId, ofertas, expiresAt, franjas, zonaAlumno]);
+
+  const lista = huecos?.para === ofertaId ? huecos.lista : null;
+  const dias = new Set((lista ?? []).map((h) => slotDay(h, timeZone)));
+  const primerDia = lista?.[0] ? slotDay(lista[0], timeZone) : undefined;
+  const pdUrl = params.get("pd");
+  const dia = pdUrl && dias.has(pdUrl) ? pdUrl : primerDia;
+  const horasDelDia = (lista ?? []).filter((h) => slotDay(h, timeZone) === dia);
+  const phUrl = params.get("ph");
+  const hora = phUrl && horasDelDia.includes(phUrl) ? phUrl : "";
+  const hoy = mesDe(slotDay(new Date().toISOString(), timeZone));
+  const ultimo = lista?.length ? mesDe(slotDay(lista[lista.length - 1], timeZone)) : hoy;
+  const pmUrl = params.get("pm");
+  const mes =
+    pmUrl && MES_VALIDO.test(pmUrl) && pmUrl >= hoy && pmUrl <= ultimo
+      ? pmUrl
+      : dia
+        ? mesDe(dia)
+        : hoy;
 
   async function enviar() {
     const texto = nota.trim();
@@ -134,22 +152,23 @@ export function Postular({
         : "Postulación enviada. El alumno la verá en el chat con su botón de pago.",
     );
     setAbierto(false);
+    router.replace(`${pathname}#postular`, { scroll: false });
     router.refresh();
   }
 
   if (!abierto) {
     return (
-      <Button type="button" className="w-fit" variant={actual ? "outline" : "default"} onClick={abrir}>
+      <Button
+        type="button"
+        className="w-fit"
+        variant={actual ? "outline" : "default"}
+        onClick={() => setAbierto(true)}
+      >
         <SendIcon aria-hidden />
         {actual ? "Cambiar mi postulación" : "Postular a este clasificado"}
       </Button>
     );
   }
-
-  const dias = huecos ? [...new Set(huecos.map((h) => diaDe(h, timeZone)))] : [];
-  const horasDelDia = huecos ? huecos.filter((h) => diaDe(h, timeZone) === dia) : [];
-  const select =
-    "h-9 w-full rounded-[8px] border border-[#e0e0e0] bg-muted px-2.5 text-[13px] first-letter:uppercase";
 
   return (
     <div className="flex flex-col gap-3 text-[13px]">
@@ -162,61 +181,58 @@ export function Postular({
         </p>
       ) : null}
 
-      <label className="flex flex-col gap-1">
-        <span className="text-muted-foreground">Mentoría</span>
-        <select
-          className={select}
-          value={ofertaId}
-          onChange={(e) => {
-            setOfertaId(e.target.value);
-            void cargarHuecos(e.target.value);
-          }}
-        >
-          {ofertas.map((o) => (
-            <option key={o.id} value={o.id}>
-              {o.title}
-            </option>
-          ))}
-        </select>
-      </label>
+      {ofertas.length > 1 ? (
+        <div>
+          <BookingSelect
+            id="postular-mentoria"
+            label="Mentoría"
+            placeholder="Elige una mentoría"
+            value={ofertaId}
+            options={ofertas.map((o) => ({ value: o.id, label: o.title, href: href({ po: o.id }) }))}
+          />
+        </div>
+      ) : (
+        <p>
+          <span className="text-muted-foreground">Mentoría: </span>
+          <strong>{ofertas[0]?.title}</strong>
+        </p>
+      )}
 
-      {huecos === null ? (
+      {lista === null ? (
         <p className="text-muted-foreground">Cargando tus horarios…</p>
-      ) : huecos.length === 0 ? (
+      ) : lista.length === 0 ? (
         <p className="rounded-[8px] bg-muted p-3 text-muted-foreground">
           Ninguno de tus horarios libres de los próximos {DIAS} días cae dentro de las franjas del
           alumno ({franjasLabel(franjas)}, {zonaLabel(zonaAlumno)}). Amplía tu disponibilidad en
           esos días y horas para poder postular.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
-          <label className="flex flex-col gap-1">
-            <span className="text-muted-foreground">Día</span>
-            <select
-              className={select}
-              value={dia}
-              onChange={(e) => {
-                setDia(e.target.value);
-                setHora(huecos.find((h) => diaDe(h, timeZone) === e.target.value) ?? "");
-              }}
-            >
-              {dias.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-muted-foreground">Hora (la tuya)</span>
-            <select className={select} value={hora} onChange={(e) => setHora(e.target.value)}>
-              {horasDelDia.map((h) => (
-                <option key={h} value={h}>
-                  {horaDe(h, formato, timeZone)}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="grid gap-5 sm:grid-cols-2 sm:items-start">
+          <div className="rounded-[12px] border border-[#e0e0e0] p-3">
+            <CalendarioMes
+              mes={mes}
+              mesMinimo={hoy}
+              mesTope={ultimo}
+              diasLibres={dias}
+              seleccionado={dia}
+              hrefDia={(d) => href({ pd: d })}
+              hrefMes={(m) => href({ pd: dia, ph: hora, pm: m })}
+            />
+          </div>
+          <div>
+            <BookingSelect
+              id="postular-hora"
+              label="Hora"
+              hint="(la tuya)"
+              placeholder="Elige una hora"
+              value={hora}
+              options={horasDelDia.map((h) => ({
+                value: h,
+                label: horaDe(h, formato, timeZone),
+                href: href({ pd: dia, ph: h }),
+              }))}
+            />
+          </div>
         </div>
       )}
 
@@ -251,7 +267,10 @@ export function Postular({
           variant="ghost"
           className="h-9 rounded-[8px] px-3 text-[13px]"
           disabled={busy}
-          onClick={() => setAbierto(false)}
+          onClick={() => {
+            setAbierto(false);
+            router.replace(`${pathname}#postular`, { scroll: false });
+          }}
         >
           Cancelar
         </Button>

@@ -242,7 +242,12 @@ export function rutaFor(
   // Clasificados (NTF-57/58/60) · al clasificado. Sin `request_id`, al listado.
   if (template.startsWith("request_")) {
     const requestId = payload?.request_id;
-    return typeof requestId === "string" ? `/clasificados/${requestId}` : "/clasificados";
+    if (typeof requestId !== "string") return "/clasificados";
+    // NTF-58 · trae `proposal_id`: directo a ESA postulación (ancla en `vista-alumno`).
+    const proposalId = payload?.proposal_id;
+    return typeof proposalId === "string"
+      ? `/clasificados/${requestId}#postulacion-${proposalId}`
+      : `/clasificados/${requestId}`;
   }
 
   // EY-218 · las plantillas que se encolan a los DOS (reagendar, NTF-08/09/11/

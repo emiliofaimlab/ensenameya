@@ -22,6 +22,7 @@ import { studentName, studentOfTutor } from "../../students";
 import { StudentAvatar } from "../../student-avatar";
 import type { Database } from "@/lib/database.types";
 import { classInProgress, roomOpen } from "@/lib/room-window";
+import { AbrirChatButton } from "@/components/chat/abrir-chat-button";
 
 type BookingStatus = Database["public"]["Enums"]["booking_status"];
 
@@ -430,9 +431,9 @@ export default async function TutorBookingDetailPage({
                 <p className="text-[13px] text-[#6b6b6b]">
                   Chat del grupo con los inscritos que ya pagaron.
                 </p>
-                <Button asChild className="h-[43px] w-fit rounded-[8px] px-5 text-sm font-semibold">
-                  <Link href={`/chat/${chatGrupo.id}`}>Abrir chat del grupo</Link>
-                </Button>
+                <AbrirChatButton conversationId={chatGrupo.id} className="h-[43px] w-fit rounded-[8px] px-5 text-sm font-semibold">
+                  Abrir chat del grupo
+                </AbrirChatButton>
               </>
             ) : chatOpen && booking.status === "completed" ? (
               <p className="rounded-lg border border-dashed p-6 text-center text-[13px] text-[#6b6b6b]">
